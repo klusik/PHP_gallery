@@ -338,7 +338,7 @@
     padding: .32rem .5rem;
 }
 
-#music-manager input[type="checkbox"] {
+#music-manager input[type="checkbox"]:not(.ui-switch) {
     width: 1rem;
     height: 1rem;
     accent-color: var(--music-accent);
@@ -948,24 +948,10 @@
     width: 2rem;
     min-width: 2rem;
     padding: .1rem;
-    border: 1px solid color-mix(in srgb, var(--music-accent) 32%, var(--music-line));
-    border-radius: .55rem;
-    background: rgba(255, 255, 255, .7);
-    color: var(--music-accent-dark);
-    font-size: .82rem;
-    line-height: 1;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
     transition: background-color var(--music-control-motion-duration) ease,
         border-color var(--music-control-motion-duration) ease,
         color var(--music-control-motion-duration) ease,
         box-shadow var(--music-control-motion-duration) ease;
-}
-
-#music-manager button:hover:not(:disabled) {
-    border-color: var(--music-accent);
-    background: color-mix(in srgb, var(--music-accent) 9%, white);
-    color: var(--music-accent-dark);
-    box-shadow: 0 2px 7px rgba(37, 99, 235, .12);
 }
 
 #music-manager button:disabled {
@@ -990,9 +976,6 @@
 #music-manager .admin-music-toolbar > .admin-music-search button {
     width: 2rem;
     padding-inline: .1rem;
-    border-color: var(--music-accent);
-    background: var(--music-accent);
-    color: #fff;
 }
 
 .admin-music svg {
@@ -1455,11 +1438,6 @@
     min-width: 28px;
     min-height: 28px;
     padding: 0;
-    border: 1px solid transparent;
-    border-radius: min(var(--radius, 8px), 6px);
-    background: transparent;
-    box-shadow: none;
-    color: var(--ink);
 }
 
 #music-manager .admin-music-player .admin-music-player-actions button[aria-pressed="true"],
@@ -1699,7 +1677,6 @@
     font: inherit;
 }
 
-#music-manager .admin-music-upload-submit,
 #music-manager .admin-music-upload input::file-selector-button {
     display: inline-flex;
     align-items: center;

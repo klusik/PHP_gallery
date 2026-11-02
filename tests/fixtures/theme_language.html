@@ -190,8 +190,10 @@ try {
     await nativeFetch('/__viewport?width=390'); await settle(); tab('settings');
     for(const input of choices.querySelectorAll('input[type=checkbox]')) {
         const style=getComputedStyle(input),label=input.closest('label');
-        check(style.width==='26px' && style.height==='14px' && label.getBoundingClientRect().height>=44,
-            'narrow offered-language controls keep compact switches inside comfortable labels');
+        check(input.classList.contains('ui-switch') && style.width==='26px' && style.height==='14px' && label.getBoundingClientRect().height>=44,
+            'narrow offered-language controls keep compact switches inside comfortable labels: '
+                + JSON.stringify({name:input.name,classes:input.className,
+                    width:style.width,height:style.height,labelHeight:label.getBoundingClientRect().height}));
     }
     window.fetch=nativeFetch;
     document.getElementById('results').textContent='BROWSER PASS '+assertions+' Language assertions';

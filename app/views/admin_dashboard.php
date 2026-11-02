@@ -974,7 +974,7 @@ function view_render_admin_exif_gps_defaults_card(
     );
     echo '</div>';
     echo
-        '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="exif_gps_default_enabled" value="1" aria-label="'
+        '<div class="admin-content-controls"><label class="admin-compact-toggle"><input class="ui-switch" type="checkbox" name="exif_gps_default_enabled" value="1" aria-label="'
             . e(t('admin.dashboard.content_gps_title', 'GPS maps'))
             . '"';
     view_render_admin_dashboard_factory_attributes($model, 'exif_gps_maps_default_enabled');
@@ -1129,7 +1129,7 @@ function view_render_admin_url_rewrite_card(
             $help,
         );
         echo
-            '</div><div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="url_rewrite_enabled" value="1" aria-label="'
+            '</div><div class="admin-content-controls"><label class="admin-compact-toggle"><input class="ui-switch" type="checkbox" name="url_rewrite_enabled" value="1" aria-label="'
                 . e(t(
                     'admin.dashboard.content_rewrite_title',
                     'Clean public URLs',
@@ -1172,7 +1172,7 @@ function view_render_admin_url_rewrite_card(
             ))
             . '</span>';
     echo
-        '<label class="admin-checkbox-row"><input type="checkbox" name="url_rewrite_enabled" value="1"'
+        '<label class="admin-checkbox-row"><input class="ui-switch" type="checkbox" name="url_rewrite_enabled" value="1"'
             . ($enabled ? ' checked' : '')
             . '> <span>'
             . e(t(
@@ -1390,7 +1390,7 @@ function view_render_admin_devmode_card(
         echo '<form method="post" action="' . e(url_for('admin_devmode'))
             . '" class="' . e($className) . '">' . csrf_field()
             . '<input type="hidden" name="maintenance_return" value="system">'
-            . '<label><input type="checkbox" name="dev_mode_enabled" value="1"'
+            . '<label><input class="ui-switch" type="checkbox" name="dev_mode_enabled" value="1"'
             . ($enabled ? ' checked' : '') . '> <span>' . e($title)
             . '</span></label>';
         view_render_admin_dashboard_compact_help(
@@ -1424,7 +1424,7 @@ function view_render_admin_devmode_card(
             ))
             . '</span>';
     echo
-        '<label class="admin-checkbox-row"><input type="checkbox" name="dev_mode_enabled" value="1"'
+        '<label class="admin-checkbox-row"><input class="ui-switch" type="checkbox" name="dev_mode_enabled" value="1"'
             . ($enabled ? ' checked' : '')
             . '> <span>'
             . e(t(

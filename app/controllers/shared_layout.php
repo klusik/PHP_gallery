@@ -94,6 +94,7 @@ function shared_layout_admin_stylesheet_files(): array
     return [
         'assets/styles/base.css',
         'assets/styles/public.css',
+        'assets/styles/ui-button.css',
         'assets/styles/lightbox.css',
         'assets/styles/admin.css',
         'assets/styles/admin-layout.css',
@@ -136,6 +137,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin-navigation.css',
         'assets/styles/breadcrumbs.css',
         'assets/styles/admin-feature-settings.css',
+        'assets/styles/ui-switch.css',
     ];
 }
 
@@ -148,12 +150,14 @@ function shared_layout_public_stylesheet_files(): array
     return [
         'assets/styles/base.css',
         'assets/styles/public.css',
+        'assets/styles/ui-button.css',
         'assets/styles/lightbox.css',
         'assets/styles/public-shared.css',
         'assets/styles/public-content-widgets.css',
         'assets/styles/utilities.css',
         'assets/styles.css',
         'assets/styles/breadcrumbs.css',
+        'assets/styles/ui-switch.css',
     ];
 }
 

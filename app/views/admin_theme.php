@@ -221,9 +221,9 @@ function view_render_admin_theme_live_preview(array $preview): void
     echo
         '<header class="theme-preview-header"><strong data-theme-preview-brand>'
             . e($siteName)
-            . '</strong><nav><span class="theme-preview-link">'
+            . '</strong><nav><span class="theme-preview-link ui-button">'
             . e(t('admin.theme.appearance.preview_home', 'Home'))
-            . '</span><span class="theme-preview-link">'
+            . '</span><span class="theme-preview-link ui-button">'
             . e(t('admin.theme.appearance.preview_galleries', 'Galleries'))
             . '</span></nav></header>';
     echo
@@ -1563,7 +1563,7 @@ function view_render_admin_theme_advanced_appearance(array $model): void
             echo
                 '<input id="'
                     . e($id)
-                    . '" type="checkbox" name="theme_header_transparent" value="1" data-theme-advanced-value'
+                    . '" class="ui-switch" type="checkbox" name="theme_header_transparent" value="1" data-theme-advanced-value'
                     . view_admin_theme_appearance_switch_attributes('theme_header_transparent', $switchDefaults)
                     . ($value === '1' ? ' checked' : '')
                     . '>';
@@ -3150,7 +3150,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
                 . e(t('admin.theme.appearance.gps_pin_legend', 'GPS pin'))
                 . '</legend>';
         echo
-            '<label class="checkbox-label"><input type="checkbox" name="theme_gps_pin_enabled" value="1"'
+            '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="theme_gps_pin_enabled" value="1"'
                 . view_admin_theme_appearance_switch_attributes('theme_gps_pin_enabled', $switchDefaults)
                 . ($gpsPinEnabled ? ' checked' : '')
                 . ' data-theme-override-control data-theme-gps-pin-enabled> '
@@ -3160,7 +3160,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
                 ))
                 . '</label>';
         echo
-            '<label class="checkbox-label"><input type="checkbox" name="theme_gps_pin_background_enabled" value="1"'
+            '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="theme_gps_pin_background_enabled" value="1"'
                 . view_admin_theme_appearance_switch_attributes('theme_gps_pin_background_enabled', $switchDefaults)
                 . ($gpsPinBackgroundEnabled ? ' checked' : '')
                 . ' data-theme-override-control data-theme-gps-pin-background-enabled> '
@@ -3328,7 +3328,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
             ))
             . '</option></select></div>';
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="theme_hero_tag_display_all" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="theme_hero_tag_display_all" value="1"'
             . view_admin_theme_appearance_switch_attributes('theme_hero_tag_display_all', $switchDefaults)
             . ($heroTagDisplayAll ? ' checked' : '')
             . ' data-theme-hero-tag-display-all> '
@@ -3369,7 +3369,7 @@ function view_render_admin_theme_appearance_tab(array $viewModel): void
             )
             . '</div>';
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="theme_hero_tag_scrollbar_enabled" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="theme_hero_tag_scrollbar_enabled" value="1"'
             . view_admin_theme_appearance_switch_attributes('theme_hero_tag_scrollbar_enabled', $switchDefaults)
             . ($heroTagScrollbarEnabled ? ' checked' : '')
             . ' data-theme-hero-tag-scrollbar-enabled> '

@@ -64,21 +64,6 @@
     gap: 0.35rem;
 }
 
-.admin-page .nav a,
-.admin-page .button,
-.admin-page button,
-.admin-page input[type="submit"] {
-    padding: 0.35rem 0.6rem;
-    border-color: #2271b1;
-    background: #2271b1;
-    color: #fff;
-    border-radius: 3px;
-    font-size: 13px;
-    line-height: 1.4;
-}
-
-.admin-page .button.secondary,
-.admin-page button.secondary,
 .admin-page .tree-toggle {
     background: #fff;
     color: #2271b1;
@@ -1405,7 +1390,7 @@ body.has-map-overlay {
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 16px rgba(0, 0, 0, 0.2);
 }
 
-.admin-page .site-header .nav a {
+.admin-page .site-header .nav a:where(:not(.button):not(.ui-button):not(.public-language-button)) {
     border: 1px solid rgba(255, 255, 255, 0.16);
     background: rgba(255, 255, 255, 0.06);
     color: #f4f7fa;
@@ -1867,21 +1852,6 @@ body.has-map-overlay {
 
 .admin-page tr.is-subgallery td {
     background: #fcfdff;
-}
-
-.admin-page .button,
-.admin-page button,
-.admin-page input[type="submit"],
-.admin-page .nav a {
-    border-radius: 7px;
-}
-
-.admin-page .button.secondary,
-.admin-page button.secondary,
-.admin-page .nav a.secondary {
-    border-color: #b8c5d0;
-    background: #ffffff;
-    color: #1f5f8f;
 }
 
 .admin-devmode-panel--secondary {
@@ -2788,6 +2758,11 @@ body.admin-image-order-active {
     --preview-radius: var(--radius, 16px);
     --preview-font-family: var(--font-family, Georgia, Times New Roman, serif);
     --preview-background-opacity: 0.65;
+    /* Make the shared button render the draft public Theme in this Admin sample. */
+    --admin-surface: var(--preview-panel);
+    --admin-brand: var(--preview-accent-dark);
+    --admin-border: color-mix(in srgb, var(--preview-header-text) 18%, transparent);
+    --ui-button-radius: var(--preview-radius);
     position: relative;
     z-index: 1;
     isolation: isolate;
@@ -2895,7 +2870,6 @@ body.admin-image-order-active {
 }
 
 /* Mirrors button and navigation color behavior inside the preview. */
-.theme-preview-link,
 .theme-preview-pagination span {
     display: inline-flex;
     align-items: center;
@@ -3172,12 +3146,6 @@ body.admin-gallery-order-active {
 /* Marks update recovery actions as potentially destructive maintenance operations. */
 .danger-zone {
     border-color: rgba(190, 40, 40, 0.35);
-}
-
-/* Makes the clean reinstall button visually separate from normal update actions. */
-.button.danger,
-button.danger {
-    border-color: rgba(190, 40, 40, 0.65);
 }
 
 .admin-log-table-wrap {
@@ -5517,51 +5485,6 @@ button.gallery-row-action.secondary {
 
 .admin-page .admin-feature-name .admin-feature-switch { flex: 0 0 auto; }
 
-.admin-page .admin-feature-switch input[type="checkbox"] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-    cursor: inherit;
-}
-
-.admin-page .admin-feature-track {
-    display: block;
-    width: 26px;
-    height: 14px;
-    border: 1px solid color-mix(in srgb, var(--ink) 38%, transparent);
-    border-radius: 8px;
-    box-sizing: border-box;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-    pointer-events: none;
-}
-
-.admin-page .admin-feature-track::after {
-    content: "";
-    display: block;
-    width: 8px;
-    height: 8px;
-    margin: 2px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--ink) 65%, var(--panel));
-}
-
-.admin-page .admin-feature-switch input:checked + .admin-feature-track {
-    border-color: color-mix(in srgb, var(--accent) 65%, var(--ink));
-    background: color-mix(in srgb, var(--accent) 24%, transparent);
-}
-
-.admin-page .admin-feature-switch input:checked + .admin-feature-track::after {
-    transform: translateX(12px);
-    background: var(--ink);
-}
-
-.admin-page .admin-feature-switch input:indeterminate + .admin-feature-track::after {
-    transform: translateX(6px);
-}
-
 .admin-page .admin-feature-switch:has(input:disabled) { cursor: wait; opacity: 0.5; }
 .admin-page .is-read-only .admin-feature-switch:has(input:disabled) { cursor: not-allowed; }
 
@@ -5632,14 +5555,6 @@ button.gallery-row-action.secondary {
 }
 
 @media (forced-colors: active) {
-    .admin-page .admin-feature-switch input[type="checkbox"] {
-        position: static;
-        width: auto;
-        height: auto;
-        opacity: 1;
-        appearance: auto;
-    }
-    .admin-page .admin-feature-track { display: none; }
     .admin-page .admin-feature-comparison.is-changed { border-color: Highlight; }
     .admin-page .admin-features .admin-feature-help-panel {
         background: Canvas;

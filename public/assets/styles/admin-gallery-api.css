@@ -261,14 +261,6 @@
     font-weight: 500;
 }
 
-#admin-edit-api .admin-gallery-migration-card .admin-checkbox-row input[type="checkbox"] {
-    width: 0.95rem;
-    height: 0.95rem;
-    min-height: 0;
-    margin: 0;
-    padding: 0;
-}
-
 #admin-edit-api .admin-gallery-api-field-help {
     display: inline-block;
 }
@@ -433,17 +425,6 @@ dialog.admin-simbrief-dispatch-dialog footer {
     justify-content: flex-end;
     padding-top: 0.8rem;
     border-top: 1px solid #e2e8f0;
-}
-dialog.admin-simbrief-dispatch-dialog button {
-    background: #1d4ed8;
-    color: #fff;
-    border: 1px solid #1d4ed8;
-    min-height: 2.5rem;
-}
-dialog.admin-simbrief-dispatch-dialog button.secondary {
-    background: #f1f5f9;
-    color: #0f172a;
-    border-color: #94a3b8;
 }
 @media (max-width: 520px) {
     dialog.admin-simbrief-dispatch-dialog { width: calc(100vw - 0.5rem); max-height: 96dvh; }

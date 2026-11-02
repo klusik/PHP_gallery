@@ -55,7 +55,7 @@ function public_layout_document(): string
     echo
         '<style id="fixture-theme-css">'
             . theme_fixture_css([])
-            . '</style></head><body class="public-page"><header class="site-header"><a href="#home" class="brand">Fixture logo</a><nav class="nav"><a href="#gallery">Gallery</a><a href="#admin">Admin</a></nav><div class="public-language-switcher"><a href="#en">EN</a></div></header><main class="site-main"><section class="hero"><h1>Public gallery</h1><p>Hero backdrop stays present.</p></section><section class="grid pagination-grid-columns-1">';
+            . '</style></head><body class="public-page"><header class="site-header"><a href="#home" class="brand">Fixture logo</a><nav class="nav"><a href="#gallery">Gallery</a><a href="#admin">Admin</a><div class="public-language-switcher" style="--language-button-bg:#102030;--language-selector-text:#e0d0c0;--language-selector-active-bg:#405060;--language-selector-active-text:#fff;--language-selector-border:#708090;--language-button-radius:13px;--language-button-padding-x:14px"><a class="public-language-button" href="#en">EN</a><a class="public-language-button is-active" href="#cs" aria-current="true">CS</a></div></nav><div class="public-language-switcher"><a href="#en">EN</a></div></header><main class="site-main"><section class="hero"><h1>Public gallery</h1><p>Hero backdrop stays present.</p></section><section class="grid pagination-grid-columns-1">';
     $id = 500;
     foreach (['vertical', 'horizontal'] as $layout) {
         foreach (['progressive', 'responsive'] as $renderer) {

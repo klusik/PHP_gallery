@@ -658,7 +658,7 @@ function view_render_admin_settings_input(
                 . e($inputId)
                 . '"><input id="'
                 . e($inputId)
-                . '" type="checkbox" name="settings['
+                . '" class="ui-switch" type="checkbox" name="settings['
                 . e($id)
                 . ']" value="1"'
                 . ($checked ? ' checked' : '')

@@ -24,19 +24,9 @@
 .admin-page .admin-telemetry-page[data-telemetry-workspace] :is(h1, p, form, label) {
     margin: 0;
 }
-.admin-page .admin-telemetry-page[data-telemetry-workspace] :is(button, .button, a) {
+.admin-page .admin-telemetry-page[data-telemetry-workspace] a:not(.button):not(.ui-button) {
     color: var(--ink);
-    background: transparent;
-    box-shadow: none;
     text-decoration: none;
-}
-.admin-page .admin-telemetry-page[data-telemetry-workspace] button {
-    font: inherit;
-    min-height: 28px;
-    padding: .15rem .4rem;
-    border: 1px solid var(--telemetry-line);
-    border-radius: min(var(--radius, 8px), 8px);
-    cursor: pointer;
 }
 .admin-page .admin-telemetry-page[data-telemetry-workspace] [hidden] {
     display: none !important;
@@ -300,37 +290,6 @@
     font-weight: 400;
     text-align: right;
 }
-.admin-page .telemetry-preference input[type="checkbox"] {
-    appearance: none;
-    position: relative;
-    flex: 0 0 26px;
-    width: 26px;
-    height: 14px;
-    min-height: 0;
-    margin: 0;
-    padding: 0;
-    border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
-    border-radius: 7px;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-    cursor: pointer;
-}
-.admin-page .telemetry-preference input[type="checkbox"]::before {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--ink) 72%, transparent);
-}
-.admin-page .telemetry-preference input[type="checkbox"]:checked {
-    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-    background: color-mix(in srgb, var(--accent) 23%, transparent);
-}
-.admin-page .telemetry-preference input[type="checkbox"]:checked::before {
-    transform: translateX(12px);
-}
 .telemetry-preference [disabled] {
     opacity: .6;
     cursor: wait;
@@ -519,13 +478,6 @@
     }
 }
 @media (forced-colors: active) {
-    .admin-page .telemetry-preference input[type="checkbox"] {
-        appearance: auto;
-        background: Canvas;
-    }
-    .admin-page .telemetry-preference input[type="checkbox"]::before {
-        display: none;
-    }
     .telemetry-group,
     .telemetry-tabs,
     .admin-telemetry-page .admin-dashboard-help-panel {

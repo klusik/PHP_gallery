@@ -160,7 +160,7 @@ function view_admin_music_settings(array $model): void
         . '<input type="hidden" name="revision" value="'
         . e((string) $model['revision']) . '"><input type="hidden" name="action"'
         . ' value="extensions"><label class="admin-music-check"><input'
-        . ' type="checkbox" name="show_extensions" value="1"'
+        . ' class="ui-switch" type="checkbox" name="show_extensions" value="1"'
         . (!empty($model['extensions']) ? ' checked' : '') . '>'
         . e(t('admin.music.show_extensions', 'Show file extensions in song titles'))
         . '</label><button type="submit" title="' . e(t('admin.music.save', 'Save'))

@@ -127,7 +127,7 @@ function view_render_language_design_checkbox(
             . e($id)
             . '"><input id="'
             . e($id)
-            . '" type="checkbox" name="'
+            . '" class="ui-switch" type="checkbox" name="'
             . e($name)
             . '" value="1" data-language-design-field data-default-value="'
             . ($default ? '1' : '0')
@@ -211,7 +211,7 @@ function view_render_language_design_value(
                 . e($transparentId)
                 . '"><input id="'
                 . e($transparentId)
-                . '" type="checkbox" name="'
+                . '" class="ui-switch" type="checkbox" name="'
                 . e($transparentName)
                 . '" value="1" data-language-design-field data-language-design-transparent data-default-value="'
                 . ((string) $default === 'transparent' ? '1' : '0')
@@ -348,7 +348,7 @@ function view_render_public_language_selector_settings_panel(array $model = []):
                 . e($enabledId)
                 . '"><input id="'
                 . e($enabledId)
-                . '" type="checkbox" name="'
+                . '" class="ui-switch" type="checkbox" name="'
                 . e($enabledName)
                 . '" value="1"'
                 . ($themeEditor && array_key_exists('factory_enabled', $model)
@@ -426,7 +426,7 @@ function view_render_public_language_selector_settings_panel(array $model = []):
                     . e($languageId)
                     . '"><input id="'
                     . e($languageId)
-                    . '" type="checkbox" name="'
+                    . '" class="ui-switch" type="checkbox" name="'
                     . e($languagesName)
                     . '" value="'
                     . e($language)

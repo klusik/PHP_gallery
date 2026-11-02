@@ -128,7 +128,7 @@ function view_render_admin_gallery_migration_panel(
                 . e(t('gallery_migration.target_api_key', 'Target API key'))
                 . '<input name="target_api_key" type="password" autocomplete="off" required></label>';
         echo
-            '<div class="admin-gallery-api-checkbox"><label class="admin-checkbox-row"><input name="include_subgalleries" type="checkbox" value="1" checked> <span>'
+            '<div class="admin-gallery-api-checkbox"><label class="admin-checkbox-row"><input class="ui-switch" name="include_subgalleries" type="checkbox" value="1" checked> <span>'
                 . e(t(
                     'gallery_migration.include_subgalleries',
                     'Include subgalleries',
@@ -237,7 +237,7 @@ function view_render_admin_gallery_migration_panel(
             . e(t('gallery_migration.source_api_key', 'Source API key'))
             . '<input name="source_api_key" type="password" autocomplete="off" required></label>';
     echo
-        '<div class="admin-gallery-api-checkbox"><label class="admin-checkbox-row"><input name="include_subgalleries" type="checkbox" value="1" checked> <span>'
+        '<div class="admin-gallery-api-checkbox"><label class="admin-checkbox-row"><input class="ui-switch" name="include_subgalleries" type="checkbox" value="1" checked> <span>'
             . e(t(
                 'gallery_migration.include_subgalleries',
                 'Include subgalleries',

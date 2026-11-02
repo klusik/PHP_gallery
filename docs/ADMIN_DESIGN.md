@@ -335,6 +335,24 @@ Keep Documents visibly reserved and disabled until PDF tagging is implemented;
 never present its placeholder as an available editor or verified empty catalog.
 
 
+### Shared button appearance
+
+`public/assets/styles/ui-button.css` owns the common visual foundation for
+native buttons and submit/button inputs on public and Admin pages. Existing
+button-like links use `.button`; use `.ui-button` for new explicit button-like
+links. These selectors share the same Theme-based styling without changing
+native form or link behavior. Use `.secondary` or `.ui-button--secondary` for
+secondary actions, and `.danger` or `.ui-button--danger` for destructive ones.
+
+Keep controls compact, with a light Theme surface, subtle border, accent text
+and visible keyboard focus and disabled states. The shared default is at least 28px high on desktop and 44px on narrow
+or touch screens. Context owners may adjust the placement and geometry of
+specialized icon controls. Table sorting and small contextual actions such as
+row Play use the borderless `.ui-button--quiet` variant; existing scoped table
+controls may use the same shared rule without changing their native markup.
+Targeted user custom CSS can override the shared defaults. The public language selector
+retains its own configured colors, padding, radius and active-state design.
+
 ### Switches and row anatomy
 
 Render binary preferences as switches, with no visible square checkbox in
@@ -342,6 +360,12 @@ normal themes. Retain the native input's checked/disabled state, associated
 label, keyboard activation and form submission; a styled `input[type=checkbox]`
 is the reference implementation. Under forced colors, preserve the visible
 native control when needed for system contrast.
+
+Use `ui-switch` on the native checkbox for existing and new switch controls.
+`public/assets/styles/ui-switch.css` owns their shared track, thumb, focus,
+disabled, mixed-state and forced-color presentation for public and Admin pages.
+Keep placement and tap-target layout with the surrounding interface; keep
+selection checkboxes, form submission and persistence with their existing owners.
 
 The reference switch has a `26px` by `14px` track and an `8px` thumb. Its quiet
 off track mixes `--ink` at 8%; the on track mixes `--accent` at 23%, with a

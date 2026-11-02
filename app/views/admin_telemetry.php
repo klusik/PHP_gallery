@@ -296,6 +296,7 @@ function view_render_telemetry_preference(
     }
     echo '<input id="' . e($id) . '" data-telemetry-input name="' . e($key)
         . '" type="' . ($checkbox ? 'checkbox' : 'number')
+        . ($checkbox ? '" class="ui-switch' : '')
         . '" title="' . e($factory) . '" aria-description="' . e($factory) . '"';
     if ($checkbox) {
         echo ' value="1"' . ($field['current'] === '1' ? ' checked' : '');

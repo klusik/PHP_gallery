@@ -1,0 +1,171 @@
+/*
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/ui-button.css
+ * Module Type: Shared UI Stylesheet
+ * Purpose: Provide a common visual foundation for public and Admin actions.
+ * Responsibilities:
+ *   - Style native buttons, submit inputs and button-like links consistently.
+ *   - Preserve destructive, focus and disabled states and legacy variants.
+ *   - Leave specialized control geometry to its owning interface.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+/* Native controls and the established .button class use the same component
+ * without requiring JavaScript or changing form and link behavior. Admin
+ * scope outranks legacy site-wide button rules; targeted custom rules can
+ * still override these defaults. */
+button,
+input[type="submit"],
+input[type="button"],
+.button,
+.ui-button,
+.nav a:where(:not(.public-language-button):not(.public-header-action)),
+.admin-page .nav a:where(:not(.public-language-button):not(.public-header-action)),
+.admin-page button,
+.admin-page input[type="submit"],
+.admin-page input[type="button"],
+.admin-page .button,
+.admin-page .ui-button,
+.admin-side-panel button,
+.admin-side-panel input[type="submit"],
+.admin-side-panel input[type="button"],
+.admin-side-panel .button,
+.admin-side-panel .ui-button {
+    box-sizing: border-box;
+    min-height: 28px;
+    padding: 5px 9px;
+    border: 1px solid var(--admin-border, color-mix(in srgb, var(--ink) 18%, transparent));
+    border-radius: min(var(--ui-button-radius, var(--radius, 8px)), 8px);
+    background: var(--admin-surface, var(--panel));
+    color: var(--admin-brand, var(--accent-dark, var(--accent)));
+    box-shadow: none;
+    font: inherit;
+    font-size: .82rem;
+    font-weight: 700;
+    line-height: 1.35;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Links need a layout box for the same minimum target as native controls. */
+.button,
+.ui-button,
+.nav a:where(:not(.public-language-button):not(.public-header-action)) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+button.danger,
+input[type="submit"].danger,
+input[type="button"].danger,
+.button.danger,
+.ui-button--danger,
+.admin-page button.danger,
+.admin-page input[type="submit"].danger,
+.admin-page input[type="button"].danger,
+.admin-page .button.danger,
+.admin-page .ui-button--danger,
+.admin-side-panel button.danger,
+.admin-side-panel input[type="submit"].danger,
+.admin-side-panel input[type="button"].danger,
+.admin-side-panel .button.danger,
+.admin-side-panel .ui-button--danger {
+    border-color: color-mix(in srgb, var(--admin-danger, #b42318) 40%, transparent);
+    color: var(--admin-danger, #b42318);
+}
+
+:where(button, input[type="submit"], input[type="button"], .button, .ui-button, .nav a:where(:not(.public-language-button):not(.public-header-action))):hover:where(:not(:disabled):not([aria-disabled="true"])),
+.admin-page :where(button, input[type="submit"], input[type="button"], .button, .ui-button, .nav a:where(:not(.public-language-button):not(.public-header-action))):hover:where(:not(:disabled):not([aria-disabled="true"])),
+.admin-side-panel :where(button, input[type="submit"], input[type="button"], .button, .ui-button, .nav a:where(:not(.public-language-button):not(.public-header-action))):hover:where(:not(:disabled):not([aria-disabled="true"])) {
+    background: color-mix(in srgb, var(--accent) 8%, var(--admin-surface, var(--panel)));
+}
+
+/* Table sorting and compact contextual actions should read as part of the row,
+ * while retaining native activation and the shared focus and touch targets. */
+.ui-button--quiet,
+.admin-page .ui-button--quiet,
+.admin-page table th button,
+.admin-page .cron-overview td button.cron-icon,
+.admin-page #music-manager .admin-music-row-play,
+.admin-page [data-admin-log-results] .admin-log-icon-button,
+.admin-page .admin-gallery-workspace .gallery-row-actions .gallery-row-action,
+#admin-edit-images .admin-image-row-actions .public-admin-edit-button,
+#admin-edit-images .admin-image-row-actions .public-admin-card-action-button {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+}
+
+:where(button, input[type="submit"], input[type="button"], .button, .ui-button, .nav a:where(:not(.public-language-button):not(.public-header-action))):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+:where(button, input[type="submit"], input[type="button"], .button, .ui-button, .nav a:where(:not(.public-language-button):not(.public-header-action))):is(:disabled, [aria-disabled="true"]) {
+    opacity: .5;
+    cursor: default;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    button,
+    input[type="submit"],
+    input[type="button"],
+    .button,
+    .ui-button,
+    .nav a:where(:not(.public-language-button):not(.public-header-action)),
+    .admin-page .nav a:where(:not(.public-language-button):not(.public-header-action)),
+    .admin-page button,
+    .admin-page input[type="submit"],
+    .admin-page input[type="button"],
+    .admin-page .button,
+    .admin-page .ui-button,
+    .admin-side-panel button,
+    .admin-side-panel input[type="submit"],
+    .admin-side-panel input[type="button"],
+    .admin-side-panel .button,
+    .admin-side-panel .ui-button {
+        min-height: 44px;
+    }
+}
+
+@media (forced-colors: active) {
+    button,
+    input[type="submit"],
+    input[type="button"],
+    .button,
+    .ui-button,
+    .nav a:where(:not(.public-language-button):not(.public-header-action)),
+    .admin-page .nav a:where(:not(.public-language-button):not(.public-header-action)),
+    button.danger,
+    input[type="submit"].danger,
+    input[type="button"].danger,
+    .button.danger,
+    .ui-button--danger,
+    .admin-page button,
+    .admin-page input[type="submit"],
+    .admin-page input[type="button"],
+    .admin-page .button,
+    .admin-page .ui-button,
+    .admin-page button.danger,
+    .admin-page input[type="submit"].danger,
+    .admin-page input[type="button"].danger,
+    .admin-page .button.danger,
+    .admin-page .ui-button--danger,
+    .admin-side-panel button,
+    .admin-side-panel input[type="submit"],
+    .admin-side-panel input[type="button"],
+    .admin-side-panel .button,
+    .admin-side-panel .ui-button,
+    .admin-side-panel button.danger,
+    .admin-side-panel input[type="submit"].danger,
+    .admin-side-panel input[type="button"].danger,
+    .admin-side-panel .button.danger,
+    .admin-side-panel .ui-button--danger {
+        border-color: ButtonText;
+        color: ButtonText;
+    }
+}

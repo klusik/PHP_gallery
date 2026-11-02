@@ -70,21 +70,6 @@
     gap: 0.35rem;
 }
 
-.admin-page .nav a,
-.admin-page .button,
-.admin-page button,
-.admin-page input[type="submit"] {
-    padding: 0.35rem 0.6rem;
-    border-color: #2271b1;
-    background: #2271b1;
-    color: #fff;
-    border-radius: 3px;
-    font-size: 13px;
-    line-height: 1.4;
-}
-
-.admin-page .button.secondary,
-.admin-page button.secondary,
 .admin-page .tree-toggle {
     background: #fff;
     color: #2271b1;
@@ -135,7 +120,7 @@
     font-weight: 600;
 }
 
-.admin-page input,
+.admin-page input:where(:not([type="submit"]):not([type="button"])),
 .admin-page textarea,
 .admin-page select {
     min-height: 2rem;
@@ -1471,7 +1456,7 @@ body.has-map-overlay {
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05), 0 2px 16px rgba(0, 0, 0, 0.2);
 }
 
-.admin-page .site-header .nav a {
+.admin-page .site-header .nav a:where(:not(.button):not(.ui-button):not(.public-language-button)) {
     border: 1px solid rgba(255, 255, 255, 0.16);
     background: rgba(255, 255, 255, 0.06);
     color: #f4f7fa;

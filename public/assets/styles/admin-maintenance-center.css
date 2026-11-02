@@ -577,50 +577,6 @@
     margin: .08rem 0;
 }
 
-.admin-page [data-maintenance-center] input[type="checkbox"][role="switch"] {
-    appearance: none;
-    position: relative;
-    flex: 0 0 32px;
-    width: 32px;
-    min-width: 32px;
-    max-width: 32px;
-    height: 18px;
-    min-height: 18px;
-    max-height: 18px;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 2rem;
-    background: color-mix(in srgb, currentColor 15%, transparent);
-    cursor: pointer;
-}
-
-.admin-page [data-maintenance-center] input[type="checkbox"][role="switch"]::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    right: auto;
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    border: 0;
-    transform: none;
-    border-radius: 50%;
-    background: var(--panel, white);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
-}
-
-.admin-page [data-maintenance-center] input[type="checkbox"][role="switch"]:checked {
-    border-color: var(--accent, #4664df);
-    background: var(--accent, #4664df);
-}
-
-.admin-page [data-maintenance-center] input[type="checkbox"][role="switch"]:checked::after {
-    right: 2px;
-    left: auto;
-}
-
 .maintenance-center-task input[role="switch"]:disabled {
     cursor: default;
     opacity: .6;

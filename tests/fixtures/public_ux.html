@@ -15,8 +15,10 @@ License: MIT License (see LICENSE file in repository)
 <title>Public UX regression</title>
 <link rel="stylesheet" href="/public/assets/styles/base.css">
 <link rel="stylesheet" href="/public/assets/styles/public.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
 <link rel="stylesheet" href="/public/assets/styles/lightbox.css">
 <link rel="stylesheet" href="/public/assets/styles/public-shared.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
 <link rel="stylesheet" href="/public/assets/styles/public-content-widgets.css">
 <link rel="stylesheet" href="/public/assets/styles/utilities.css">
 <link rel="stylesheet" href="/public/assets/styles.css">
@@ -84,7 +86,7 @@ License: MIT License (see LICENSE file in repository)
             <div class="leaflet-top leaflet-left"><div class="leaflet-control leaflet-bar gallery-map-viewport-control">
                 <button title="Reset map zoom">Reset</button><button title="Zoom in">+</button>
                 <button title="Zoom out">−</button>
-                <label class="gallery-map-viewport-checkbox"><input type="checkbox">
+                <label class="gallery-map-viewport-checkbox"><input class="ui-switch" type="checkbox">
                     <span>Keep current centered</span></label>
             </div></div>
         </div><p class="map-attribution-note">Map data © OpenStreetMap.</p>
@@ -117,7 +119,7 @@ License: MIT License (see LICENSE file in repository)
 </div>
 <script type="module">
 import {setupGalleryLightbox, teardownGalleryLightbox}
-    from '/public/assets/gallery-modules/lightbox.js?v=20261102-repeat-modes-v1';
+    from '/public/assets/gallery-modules/lightbox.js?v=20261102-shared-switch-v1';
 import {openPublicModal, closePublicModal}
     from '/public/assets/gallery-modules/public-modal-lifecycle.js?v=20261030-smart-paint-v5';
 import {setupGalleryMediaPanels}

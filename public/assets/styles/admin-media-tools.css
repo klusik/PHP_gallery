@@ -28,12 +28,6 @@
     border-color: rgba(190, 40, 40, 0.35);
 }
 
-/* Makes the clean reinstall button visually separate from normal update actions. */
-.button.danger,
-button.danger {
-    border-color: rgba(190, 40, 40, 0.65);
-}
-
 .admin-log-table-wrap {
     overflow-x: auto;
 }

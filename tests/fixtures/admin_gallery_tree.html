@@ -12,6 +12,7 @@ License: MIT License (see LICENSE file in repository)
 <html lang="en"><head><meta charset="utf-8"><title>Gallery tree regression</title>
 <link rel="stylesheet" href="/public/assets/styles/base.css">
 <link rel="stylesheet" href="/public/assets/styles/public.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
 <link rel="stylesheet" href="/public/assets/styles/admin.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-layout.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css">
@@ -110,6 +111,11 @@ try {
     check(!host.textContent.includes('Warning:') && row(1).querySelectorAll('.admin-gallery-feature').length === 5 && !!host.querySelector('option[value="maps_inherit"]'), 'complete feature and access-ready render has no warnings and preserves GPS inheritance');
     check(row(1).querySelector('.admin-gallery-title-link').textContent === 'Alpha <safe>' && !row(1).querySelector('safe'), 'prepared title remains escaped');
     check(getComputedStyle(row(1).querySelector('.gallery-row-actions')).display === 'table-cell', 'actions retain table-cell alignment');
+    const rowActions = [...row(1).querySelectorAll('.gallery-row-action')];
+    check(rowActions.length > 0 && rowActions.every(action =>
+        getComputedStyle(action).borderStyle === 'none'
+        && getComputedStyle(action).backgroundColor === 'rgba(0, 0, 0, 0)'),
+        'Compact gallery row actions use the borderless contextual variant');
     check(row(1).getBoundingClientRect().height < 80, `real full-feature gallery row remains compact (${row(1).getBoundingClientRect().height}px)`);
     const rootPreview = row(1).querySelector('.admin-gallery-preview').getBoundingClientRect();
     const childPreview = row(2).querySelector('.admin-gallery-preview').getBoundingClientRect();

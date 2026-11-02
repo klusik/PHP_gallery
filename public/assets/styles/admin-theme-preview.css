@@ -716,6 +716,11 @@ body.admin-image-order-active {
     --preview-radius: var(--radius, 16px);
     --preview-font-family: var(--font-family, Georgia, Times New Roman, serif);
     --preview-background-opacity: 0.65;
+    /* Make the shared button render the draft public Theme in this Admin sample. */
+    --admin-surface: var(--preview-panel);
+    --admin-brand: var(--preview-accent-dark);
+    --admin-border: color-mix(in srgb, var(--preview-header-text) 18%, transparent);
+    --ui-button-radius: var(--preview-radius);
     position: relative;
     z-index: 1;
     isolation: isolate;
@@ -823,7 +828,6 @@ body.admin-image-order-active {
 }
 
 /* Mirrors button and navigation color behavior inside the preview. */
-.theme-preview-link,
 .theme-preview-pagination span {
     display: inline-flex;
     align-items: center;

@@ -103,6 +103,11 @@ try {
     edit('[data-theme-color-hex]','a1b2c3');
     check(color.value==='#a1b2c3','HEX changes native persisted color');
     check(find('[data-theme-preview-page]').style.getPropertyValue('--preview-accent')==='#a1b2c3','HEX changes actual live preview');
+    const previewAction=find('.theme-preview-link');
+    check(previewAction.classList.contains('ui-button')
+        && getComputedStyle(previewAction).backgroundColor===getComputedStyle(find('.theme-preview-card:not(.theme-preview-gallery-card)')).backgroundColor
+        && getComputedStyle(previewAction).color!=='rgb(255, 253, 248)',
+        'Live preview actions use the shared button and staged Theme surface');
     check(find('[data-theme-controls-changed]').value==='1','HEX stages theme overrides');
     edit('[data-theme-preview-color="accent"]','#112233');
     check(hex.value==='#112233','native picker synchronizes HEX');
@@ -215,6 +220,13 @@ try {
         check(advanced.scrollWidth<=advanced.clientWidth+1 && advanced.getBoundingClientRect().right<=innerWidth+1,width+' advanced controls have no horizontal overflow');
         for(const control of advanced.querySelectorAll('input[type="number"],select,button')) check(control.getBoundingClientRect().width>0 && control.getBoundingClientRect().right<=innerWidth+1,width+' numeric alternatives and resets remain usable');
         const doc=publicFrame.contentDocument, css=doc.querySelector('#fixture-theme-css'), header=doc.querySelector('.site-header'), hero=doc.querySelector('.hero');
+        const languageButtons=header.querySelectorAll('.public-language-button');
+        const languageStyle=getComputedStyle(languageButtons[0]);
+        check(languageStyle.backgroundColor==='rgb(16, 32, 48)'
+            && languageStyle.color==='rgb(224, 208, 192)'
+            && languageStyle.borderRadius==='13px' && languageStyle.paddingLeft==='14px'
+            && getComputedStyle(languageButtons[1]).backgroundColor==='rgb(64, 80, 96)',
+            width+' language selector retains its configured inactive/active colors and geometry with generated Theme CSS');
         const originalCss=css.textContent, opaqueHeader=getComputedStyle(header).backgroundColor, heroBackdrop=getComputedStyle(hero).backgroundColor, headerHeight=header.getBoundingClientRect().height;
         const typeTargets=[doc.querySelector('.site-main'),hero.querySelector('h1'),hero.querySelector('p'),doc.querySelector('.gallery-card-body h2'),doc.querySelector('.gallery-card.is-gallery-description-horizontal .gallery-card-body h2'),doc.querySelector('.gallery-card.is-gallery-description-horizontal .gallery-card-description')];
         const defaultTypeSizes=typeTargets.map(element=>parseFloat(getComputedStyle(element).fontSize));
@@ -313,8 +325,12 @@ try {
             'enhanced narrow subsection and any completion feedback fit '+name);
     }
     for(const input of document.querySelectorAll('#admin-theme-tab-appearance input[type=checkbox]')) {
-        check(getComputedStyle(input).width==='26px' && getComputedStyle(input).height==='14px'
-            && input.title.startsWith('Factory default:'),'binary controls retain compact tracks and declared factory metadata');
+        const style=getComputedStyle(input);
+        check(input.classList.contains('ui-switch') && style.width==='26px' && style.height==='14px'
+            && input.title.startsWith('Factory default:'),
+            'binary controls retain compact tracks and declared factory metadata: '
+                + JSON.stringify({name:input.name,classes:input.className,
+                    width:style.width,height:style.height,title:input.title}));
     }
     window.fetch=nativeFetch;
     document.getElementById('results').textContent='BROWSER PASS '+assertions+' Appearance assertions';

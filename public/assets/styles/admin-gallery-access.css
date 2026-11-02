@@ -163,43 +163,6 @@
     font-size: 0.82rem;
 }
 
-#admin-edit-access .admin-access-inline-options input[type="checkbox"] {
-    appearance: none;
-    flex: 0 0 auto;
-    width: 26px;
-    height: 14px;
-    min-height: 14px;
-    margin: 0;
-    padding: 0;
-    border: 1px solid var(--admin-border, #cad5e0);
-    border-radius: 9px;
-    background: transparent;
-    cursor: pointer;
-}
-
-#admin-edit-access .admin-access-inline-options input[type="checkbox"]::before {
-    content: "";
-    display: block;
-    width: 8px;
-    height: 8px;
-    margin: 2px;
-    border-radius: 50%;
-    background: currentColor;
-}
-
-#admin-edit-access .admin-access-inline-options input[type="checkbox"]:checked {
-    background: color-mix(in srgb, var(--admin-accent, #3159ac) 18%, transparent);
-}
-
-#admin-edit-access .admin-access-inline-options input[type="checkbox"]:checked::before {
-    transform: translateX(12px);
-}
-
-#admin-edit-access .admin-access-inline-options input[type="checkbox"]:focus-visible {
-    outline: 2px solid var(--admin-accent, #3159ac);
-    outline-offset: 3px;
-}
-
 .admin-access-share {
     display: grid;
     gap: 0.45rem;
@@ -247,15 +210,6 @@
     margin: 0;
     padding: 0.5rem 0.65rem;
     font-size: 0.8rem;
-}
-
-@media (forced-colors: active) {
-    #admin-edit-access .admin-access-inline-options input[type="checkbox"] {
-        appearance: auto;
-    }
-    #admin-edit-access .admin-access-inline-options input[type="checkbox"]::before {
-        display: none;
-    }
 }
 
 @media (max-width: 640px) {

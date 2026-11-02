@@ -129,7 +129,9 @@ const originalUrl = location.href;
 
 /** Capture the visual state owned by the canonical cover-star button.
  * @param {HTMLButtonElement|null} star Current mounted cover-star control.
- * @returns {{state:string,background:string,color:string,border:string}|null} Computed star appearance or null when the selector is absent.
+ * @returns {{state:string,background:string,color:string,border:string,borderStyle:string}|null}
+ *   Selection state, computed background/foreground, border color and border
+ *   style; null when the star control is absent.
  */
 function coverStarVisual(star) {
     if (!(star instanceof HTMLButtonElement)) return null;
@@ -137,6 +139,7 @@ function coverStarVisual(star) {
     return {
         state: star.dataset.coverState || '',
         background: style.backgroundColor,
+        borderStyle: style.borderStyle,
         color: style.color,
         border: style.borderTopColor,
     };
@@ -214,8 +217,10 @@ assert.equal(editForm.contains(mediaCover), false,
         '[data-admin-image-cover-star][data-image-id="2"]',
     ));
     assert.equal(initialOffVisual?.state, 'off', 'The neutral star starts off');
-    assert.equal(initialOffVisual?.background, 'rgb(248, 250, 252)',
-        'The off star uses the neutral Admin action surface under the real Admin button cascade');
+    assert.equal(initialOffVisual?.background, 'rgba(0, 0, 0, 0)',
+        'The off star keeps the transparent contextual action surface');
+    assert.equal(initialOffVisual?.borderStyle, 'none',
+        'The off star has no button border under the shared Admin cascade');
     assert.equal(initialSingleVisual?.state, 'single', 'The prepared cover starts as one selected star');
     assert.equal(initialSingleVisual?.background, 'rgb(255, 244, 194)',
         'The exclusive cover has its distinct gold surface under the real Admin button cascade');

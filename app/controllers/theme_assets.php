@@ -236,7 +236,7 @@ function cms_link_favicon_asset(): void
 /**
  * Render dynamic theme CSS without using HTML style attributes.
  *
- * @return void
+ * @return void Emit the generated stylesheet and immutable asset headers.
  */
 function cms_theme_css(): void
 {
@@ -378,11 +378,7 @@ function cms_theme_css(): void
     echo
         '.brand{color:var(--header-text, var(--ink));font-family:var(--font-family);line-height:var(--type-tight-line-height);letter-spacing:var(--type-tracking-tight);}';
     echo '.admin-page .brand{color:var(--ink);font-family:var(--font-family);}';
-    echo
-        '.nav a,.button,button,input[type="submit"]{border-color:var(--accent-dark);background:var(--accent);color:#fffdf8;border-radius:var(--radius);}';
     echo '.pagination-link{border-radius:var(--radius)!important;}';
-    echo
-        '.nav a:hover,.button:hover,button:hover,input[type="submit"]:hover{border-color:var(--accent-dark);background:var(--accent-dark);}';
     echo
         '.lightbox .lightbox-stage-link,.lightbox .lightbox-stage-link:hover,.lightbox .lightbox-stage-link:focus,.lightbox .lightbox-stage-link:focus-visible,.lightbox .lightbox-stage-link:active{border:0!important;background:transparent!important;color:inherit!important;box-shadow:none!important;text-decoration:none!important;outline:0!important;}';
     echo
@@ -402,8 +398,6 @@ function cms_theme_css(): void
         '.lightbox .lightbox-toolbar .lightbox-vote-panel button::before{content:"\25B2";display:block!important;color:#fffdf8!important;font-size:.72rem!important;line-height:1!important;transform:translateY(-1px)!important;}';
     echo
         '.lightbox .lightbox-toolbar .lightbox-vote-panel button.is-active{border-color:rgba(255,253,248,.9)!important;background:var(--accent)!important;color:#fffdf8!important;}';
-    echo
-        '.button.secondary,button.secondary{border-color:var(--accent-dark);background:transparent;color:var(--accent-dark);}';
     echo
         '.hero,.panel,.gallery-card,.image-card,.admin-page .hero,.admin-page .panel{background:var(--panel);border-color:var(--line);border-radius:var(--radius);}';
     echo

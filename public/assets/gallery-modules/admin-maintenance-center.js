@@ -481,6 +481,7 @@ function setupOneMaintenanceCenter(root) {
                 card.className = `maintenance-center-task${task.available ? '' : ' is-unavailable'}`;
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
+                checkbox.className = 'ui-switch';
                 checkbox.setAttribute('role', 'switch');
                 checkbox.dataset.maintenanceTask = String(task.key || '');
                 checkbox.disabled = !task.available || Boolean(task.required) || status !== 'ready';

@@ -380,7 +380,7 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
     echo '</div><div class="admin-access-inline-options">';
     if ($accessReady && $hasPassword) {
         echo
-            '<label class="checkbox-label"><input type="checkbox" name="clear_access_password" value="1"> '
+            '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="clear_access_password" value="1"> '
                 . e(
                     (string) (
                         $labels['clear_password']
@@ -391,7 +391,7 @@ function view_render_admin_gallery_access_fields(array $viewModel): void
     }
     if ($nsfwState === 'available') {
         echo
-            '<input type="hidden" name="nsfw_field_present" value="1"><label class="checkbox-label"><input type="checkbox" name="nsfw_enabled" value="1"'
+            '<input type="hidden" name="nsfw_field_present" value="1"><label class="checkbox-label"><input class="ui-switch" type="checkbox" name="nsfw_enabled" value="1"'
                 . (
                     (bool) ($viewModel['nsfw_enabled'] ?? false)
                         ? ' checked'
@@ -880,7 +880,7 @@ function view_render_admin_gallery_display_switch(
     bool $autosave = true,
 ): void {
     echo '<div class="admin-display-switch-row"><label class="checkbox-label">'
-        . '<input type="checkbox" name="' . e($name) . '" value="1"'
+        . '<input class="ui-switch" type="checkbox" name="' . e($name) . '" value="1"'
         . (!empty($item['checked']) ? ' checked' : '')
         . (isset($item['factory'])
             ? ' title="' . e($item['factory']) . '" aria-description="'
@@ -1005,7 +1005,7 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
                         $grid['reset_default_label'] ?? 'Reset to default'
                     ),
                 )
-                . '</button><label class="checkbox-label admin-grid-override-fallback" data-gallery-grid-override-fallback><input type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled'
+                . '</button><label class="checkbox-label admin-grid-override-fallback" data-gallery-grid-override-fallback><input class="ui-switch" type="checkbox" name="grid_override_enabled" value="1" data-gallery-grid-override-enabled'
                 . (
                     (bool) ($grid['override_enabled'] ?? false)
                         ? ' checked'
@@ -1035,7 +1035,7 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
                 . (int) ($grid['rows'] ?? 1)
                 . '" data-gallery-grid-rows></label></div>';
         echo
-            '<div class="admin-display-grid-footer"><label class="checkbox-label"><input type="checkbox" name="grid_use_for_subgalleries" value="1"'
+            '<div class="admin-display-grid-footer"><label class="checkbox-label"><input class="ui-switch" type="checkbox" name="grid_use_for_subgalleries" value="1"'
                 . (
                     (bool) ($grid['use_for_subgalleries'] ?? true)
                         ? ' checked'
@@ -1246,7 +1246,7 @@ function view_render_admin_gallery_images_tab(array $viewModel): void
             . '<input type="hidden" name="preference" value="newest_uploads_first">'
             . '<input type="hidden" name="value" value="0">'
             . '<div class="admin-display-switch-row"><label class="checkbox-label">'
-            . '<input type="checkbox" name="value" value="1"'
+            . '<input class="ui-switch" type="checkbox" name="value" value="1"'
             . (!empty($preference['checked']) ? ' checked' : '')
             . ' data-gallery-display-preference="newest_uploads_first"'
             . ' title="' . e((string) ($preference['factory'] ?? ''))
@@ -1300,7 +1300,7 @@ function view_render_admin_gallery_images_tab(array $viewModel): void
             . e((string) ($viewModel['reorder_url'] ?? ''))
             . '">';
     echo
-        '<div class="admin-image-view-controls"><label class="admin-compact-toggle"><input type="checkbox" data-admin-image-names-toggle checked> <span>'
+        '<div class="admin-image-view-controls"><label class="admin-compact-toggle"><input class="ui-switch" type="checkbox" data-admin-image-names-toggle checked> <span>'
             . e((string) ($labels['show_names'] ?? 'Show filenames'))
             . '</span></label><button type="button" class="secondary admin-image-default-button" data-admin-image-names-default data-saved-message="'
             . e((string) ($labels['names_default_saved'] ?? ''))
@@ -1448,7 +1448,7 @@ function view_render_admin_gallery_archive_preferences(
             . e($kind) . '">'
             . '<input type="hidden" name="archive_media_scope" value="gallery">'
             . '<input type="hidden" name="archive_media_enabled" value="0">'
-            . '<label><input type="checkbox" role="switch"'
+            . '<label><input class="ui-switch" type="checkbox" role="switch"'
             . ' name="archive_media_enabled" value="1"'
             . ($saved ? ' checked' : '')
             . '> ' . e($label) . '</label>'
@@ -1624,7 +1624,7 @@ function view_render_admin_gallery_presentation(array $model): void
             echo
                 '<label class="gallery-presentation-setting"><span>'
                     . e(t($label))
-                    . '</span><input type="checkbox" role="switch"'
+                    . '</span><input class="ui-switch" type="checkbox" role="switch"'
                     . ' name="gallery_presentation_'
                     . $key
                     . '" value="1"'

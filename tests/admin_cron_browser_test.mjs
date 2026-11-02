@@ -38,6 +38,7 @@ const markup = execFileSync(process.env.PHP_BINARY || 'php',
 const html = String.raw`<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/public/assets/styles/base.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
 <link rel="stylesheet" href="/public/assets/styles/admin.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cron.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
@@ -139,6 +140,11 @@ try {
     }
     check(getComputedStyle(view.querySelector('[data-cron-sort="name"]')).backgroundColor
         === 'rgba(0, 0, 0, 0)', 'Late Admin theme must retain transparent sorting');
+    const tableActions = [view.querySelector('[data-cron-sort="name"]'),
+        ...view.querySelectorAll('tbody .cron-play')];
+    check(tableActions.every(action => getComputedStyle(action).borderStyle === 'none'
+        && getComputedStyle(action).backgroundColor === 'rgba(0, 0, 0, 0)'),
+        'Sorting and row Play remain unobtrusive borderless table controls');
     const firstRow = view.querySelector('tbody tr');
     check(firstRow.cells.length === 5 && firstRow.cells[0].querySelector('.cron-play'),
         'Play must precede the task name without a separate action column');
@@ -271,6 +277,7 @@ const server = createServer(async (request, response) => {
     }
     const files = new Map([
         ['/public/assets/styles/base.css', 'public/assets/styles/base.css'],
+        ['/public/assets/styles/ui-button.css', 'public/assets/styles/ui-button.css'],
         ['/public/assets/styles/admin.css', 'public/assets/styles/admin.css'],
         ['/public/assets/styles/admin-cron.css', 'public/assets/styles/admin-cron.css'],
         ['/public/assets/styles/admin-cinematic.css', 'public/assets/styles/admin-cinematic.css'],

@@ -567,7 +567,8 @@
     font-weight: 650;
 }
 
-.admin-page #admin-theme-tab-language :is(button, .button, input, select, textarea) {
+.admin-page #admin-theme-tab-language :is(input:not(.ui-switch):not([type="submit"]):not([type="button"]),
+        select, textarea) {
     box-sizing: border-box;
     min-height: 28px;
     margin: 0;
@@ -582,10 +583,6 @@
 }
 
 .admin-page #admin-theme-tab-language :is(a, button, summary) { text-decoration: none; }
-.admin-page #admin-theme-tab-language :is(button, .button):hover {
-    background: var(--language-tint);
-    color: var(--ink);
-}
 
 .admin-page #admin-theme-tab-language :is(a, button, input, select, textarea, summary):focus-visible {
     outline: 2px solid var(--accent);
@@ -797,17 +794,6 @@
     [data-language-autosave-ready='1'] #admin-theme-language-subtab-settings:not([hidden]))
     .admin-theme-save-panel { display: none; }
 
-.admin-page #admin-theme-form:has(#admin-theme-tab-language:not([hidden]))
-    .admin-theme-save-panel :is(button, .button) {
-    min-height: 28px;
-    padding: 3px 7px;
-    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-    border-radius: min(var(--radius, 8px), 6px);
-    background: transparent;
-    color: var(--ink);
-    box-shadow: none;
-    font-size: .8rem;
-}
 
 @media (max-width: 640px), (pointer: coarse) {
     .admin-page #admin-theme-tab-language :is(button, .button, select,
@@ -875,34 +861,6 @@
     right: 0;
 }
 
-/* All Language checkboxes retain native values/checked state in compact tracks. */
-.admin-page #admin-theme-tab-language input[type='checkbox'] {
-    appearance: none;
-    position: relative;
-    flex: 0 0 26px;
-    width: 26px;
-    height: 14px;
-    min-height: 14px;
-    padding: 0;
-    border: 1px solid var(--language-line);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-.admin-page #admin-theme-tab-language input[type='checkbox']::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--ink);
-}
-.admin-page #admin-theme-tab-language input[type='checkbox']:checked {
-    border-color: color-mix(in srgb, var(--accent) 65%, var(--ink));
-    background: color-mix(in srgb, var(--accent) 23%, transparent);
-}
-.admin-page #admin-theme-tab-language input[type='checkbox']:checked::after { left: 14px; }
 .admin-page #admin-theme-tab-language [data-language-design-reset-field] {
     flex: 0 0 28px;
     width: 28px;
@@ -1020,11 +978,4 @@
         min-width: 44px;
         min-height: 44px;
     }
-}
-@media (forced-colors: active) {
-    .admin-page #admin-theme-tab-language input[type='checkbox'] {
-        appearance: auto;
-        background: Canvas;
-    }
-    .admin-page #admin-theme-tab-language input[type='checkbox']::after { content: none; }
 }

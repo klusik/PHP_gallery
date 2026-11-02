@@ -106,7 +106,7 @@ import { setupAdminStorageStatistics } from './gallery-modules/admin-storage-sta
 import { setupAdminGalleryReport } from './gallery-modules/admin-gallery-report.js?v=20260920-admin-gallery-report-policy-v3';
 import { setupGalleryConsistency } from './gallery-modules/gallery-consistency.js?v=20261101-consistency-findings-v8';
 import { setupAdminCron } from './gallery-modules/admin-cron.js?v=20261023-cron-v6';
-import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261024-cache-continuation-v6';
+import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261102-shared-switch-v1';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
 import { setupAdminSearchDiagnostics } from './gallery-modules/admin-search-diagnostics.js?v=20260913-search-diagnostics-v1';
 import { setupAdminTestRun } from './gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3';

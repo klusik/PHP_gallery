@@ -1,0 +1,83 @@
+/*
+ * Project: PHP Gallery
+ * Repository: https://github.com/klusik/PHP_gallery
+ * File: public/assets/styles/ui-switch.css
+ * Module Type: Shared UI Stylesheet
+ * Purpose: Provide one visual treatment for native binary switch controls.
+ * Responsibilities:
+ *   - Render checked, mixed, disabled and keyboard-focus states.
+ *   - Retain native system controls in forced-color mode.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
+ */
+
+/* Labels and surrounding layouts own the larger desktop and touch targets. */
+input[type="checkbox"].ui-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    display: inline-block;
+    box-sizing: border-box;
+    flex: 0 0 26px;
+    width: 26px;
+    min-width: 26px;
+    max-width: 26px;
+    height: 14px;
+    min-height: 14px;
+    max-height: 14px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--ink) 38%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    vertical-align: middle;
+    cursor: pointer;
+}
+
+input[type="checkbox"].ui-switch::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--ink) 65%, var(--panel));
+}
+
+input[type="checkbox"].ui-switch:checked {
+    border-color: color-mix(in srgb, var(--accent) 65%, var(--ink));
+    background: color-mix(in srgb, var(--accent) 23%, transparent);
+}
+
+input[type="checkbox"].ui-switch:checked::before {
+    left: 14px;
+    background: var(--ink);
+}
+
+input[type="checkbox"].ui-switch:indeterminate::before {
+    left: 8px;
+}
+
+input[type="checkbox"].ui-switch:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+input[type="checkbox"].ui-switch:disabled {
+    opacity: .55;
+    cursor: default;
+}
+
+@media (forced-colors: active) {
+    input[type="checkbox"].ui-switch {
+        appearance: auto;
+        -webkit-appearance: auto;
+        background: Canvas;
+        border-color: ButtonText;
+    }
+
+    input[type="checkbox"].ui-switch::before {
+        content: none;
+    }
+}

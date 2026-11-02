@@ -442,29 +442,10 @@
     min-width: 0;
     min-height: 1.75rem;
     margin: 0;
-    padding: 0.25rem 0.5rem;
-    border: 0;
-    border-radius: 5px;
-    color: var(--admin-accent, #315f9b);
-    background: transparent;
-    box-shadow: none;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-decoration: none;
 }
-[data-gallery-upload-form] [data-gallery-upload-submit],
-#admin-edit-media .gallery-media-upload-toolbar .button,
-.admin-tabs .admin-gallery-top-save {
-    background: color-mix(in srgb, var(--accent) 9%, transparent);
-}
+
 [data-gallery-upload-form] .admin-side-panel-actions .button.primary {
     min-width: 0;
-}
-[data-gallery-upload-form] :is(button, .button):hover,
-#admin-edit-images :is(button, .button):hover,
-#admin-edit-media .gallery-media-upload-toolbar .button:hover,
-.admin-tabs .admin-gallery-top-save:hover {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .admin-tabs:has(.admin-gallery-top-save) {
     display: flex;
@@ -1811,7 +1792,7 @@ body.has-admin-side-panel {
     margin: 0;
     font-size: 0.78rem;
 }
-.admin-gallery-images input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; flex: 0 0 auto; }
+.admin-gallery-images input[type="checkbox"]:not(.ui-switch) { width: 1rem; height: 1rem; margin: 0; flex: 0 0 auto; }
 .admin-gallery-images .admin-image-bulk-primary > label:has(select) {
     display: flex;
     align-items: center;
@@ -1957,11 +1938,7 @@ body.has-admin-side-panel {
     min-width: 2rem;
     min-height: 2rem;
     padding: 0;
-    border-radius: 7px;
-    border-color: #d5dde7;
-    background: #f8fafc;
     color: #334155;
-    box-shadow: none;
     font-size: 0.9rem;
 }
 #admin-edit-images .admin-image-row-actions .public-admin-edit-button:hover,
@@ -3518,36 +3495,6 @@ body.has-admin-side-panel {
     margin: 0;
     font-weight: 600;
 }
-#admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"] {
-    appearance: none;
-    position: relative;
-    box-sizing: border-box;
-    flex: 0 0 26px;
-    width: 26px;
-    height: 14px;
-    min-height: 0;
-    margin: 0;
-    padding: 0;
-    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-    cursor: pointer;
-}
-#admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"]::before {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 3px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--ink);
-}
-#admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"]:checked {
-    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-    background: color-mix(in srgb, var(--accent) 23%, transparent);
-}
-#admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"]:checked::before { left: 13px; }
 #admin-edit-images .admin-display-switch-row input:disabled { opacity: .55; cursor: wait; }
 #admin-edit-images [data-gallery-display-status] { font-size: .75rem; }
 #admin-edit-images [data-gallery-display-status]:empty { display: none; }
@@ -3574,14 +3521,6 @@ body.has-admin-side-panel {
     #admin-edit-images .admin-image-maintenance { margin-left: 0; }
 }
 
-@media (forced-colors: active) {
-    #admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"] {
-        appearance: auto;
-    }
-    #admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"]::before {
-        display: none;
-    }
-}
 @media (max-width: 640px), (pointer: coarse) {
     #admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) label {
         min-height: 44px;

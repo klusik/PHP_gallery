@@ -628,7 +628,7 @@ function view_render_admin_maintenance_center_page(array $model): void
             . e($strings['automatic_checks'])
             . '</summary><div data-maintenance-automatic-tasks></div></details></div></details></div><div data-maintenance-plan-warnings></div><div class="maintenance-center-task-tabs" data-maintenance-task-tabs role="tablist" aria-label="'
             . e($strings['review_title'])
-            . '"></div><div class="maintenance-center-task-panels" data-maintenance-task-panels></div><div class="maintenance-center-full-optimize" data-maintenance-full-optimize-wrap hidden><label><input type="checkbox" role="switch" data-maintenance-full-optimize> <span>'
+            . '"></div><div class="maintenance-center-task-panels" data-maintenance-task-panels></div><div class="maintenance-center-full-optimize" data-maintenance-full-optimize-wrap hidden><label><input class="ui-switch" type="checkbox" role="switch" data-maintenance-full-optimize> <span>'
             . e($strings['full_optimize_short'])
             . '</span></label><details class="admin-inline-help"><summary aria-label="'
             . e($strings['full_optimize'])

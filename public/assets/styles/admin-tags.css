@@ -109,7 +109,7 @@
     :is(a, button, summary) { text-decoration: none; }
 
 .admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
-    :is(button, .button, select, input, textarea) {
+    :is(select, input:not([type="submit"]):not([type="button"]), textarea) {
     box-sizing: border-box;
     min-height: 28px;
     max-width: 100%;
@@ -123,9 +123,6 @@
     font: inherit;
     line-height: 1.4;
 }
-
-.admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
-    :is(button, .button):hover:not(:disabled) { background: var(--tag-tint); }
 
 .admin-page :is(#admin-tags-workspace, .admin-tags-panel-stack)
     :is(a, button, input, textarea, select):focus-visible {

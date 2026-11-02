@@ -185,6 +185,8 @@ try {
             'Attachment actions must retain narrow touch targets');
         await originalFetch('/__key?key=Escape'); await frame();
         const switchStyle = getComputedStyle(input);
+        check(input.classList.contains('ui-switch'),
+            'Display preferences must use the shared switch class');
         check(switchStyle.width === '26px' && switchStyle.height === '14px',
             'Switch must retain the compact approved geometry');
         if (width === 390) check(input.closest('label').getBoundingClientRect().height >= 44,
