@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{0.149.3}
-\newcommand{\manualdate}{1~november~2026}
+\newcommand{\version}{0.150.0}
+\newcommand{\manualdate}{2~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1048,6 +1048,34 @@ testkompatibilitet och anropas inte av webbläsaråtgärder. Mer information fin
 i \codeword{docs/GALLERY\_PDF.md}.
 
 \subsubsection{Musikhanteraren}
+
+Varje låt har~en~egen Spela/Pausa-knapp. Den~kompakta spelaren erbjuder
+Föregående, Spela/Pausa, Stopp, Nästa, Upprepa och~Stäng av~ljudet. Tidslinjen
+visar aktuell tid och~originalets längd; klicka, dra eller använd tangentbordet
+för~att söka. Sökning under paus behåller pausen; Spela fortsätter vid~samma
+position. Stopp frigör källan och~nollställer tidslinjen. Lyssning ändrar inte
+medlemskap eller galleriets standardval. Upprepa växlar Alla, En, Av och~Alla
+igen. Alla är~på~från början och~följer hela den~sparade ordningen, även utanför
+den~visade sidan. En startar samma låt igen; Av stoppar efter sista låten.
+Aktiva lägen har~accentton och~linje; En lägger till en~1 och~Av stryker över
+pilarna. Verktygstipset visar aktuellt läge. Växling behåller paus och~position;
+Nästa/Föregående väljer fortfarande andra låtar. Varje lista behåller sitt val
+vid~spelarbyte; omladdning återställer Alla. Om~katalogen ändras under
+fortsättning ska~du~ladda om~den först. Avstängt ljud följer med mellan
+spelarområden på~samma sida. Kontrollerna kräver JavaScript; vanliga formulär
+för~redigering och~uppladdning fungerar även utan det.
+
+Välj eller skapa ett~album under \ui{Album och~spellistor} och~använd
+\ui{Ladda upp filer} under det~befintliga valet av~kataloglåtar. Båda sätten
+att~lägga till låtar finns kvar. Välj högst tjugo ljudfiler, högst 64~MiB
+per~fil, och~tryck på~\ui{Ladda upp}; inget galleri behövs. Webbhotellets
+gränser gäller också. Identiska original återanvänder samma låt även efter
+namnbyte. En~låt kan~tillhöra flera album oberoende av~varandra; originalet
+stannar i~katalogen när sista medlemskapet tas~bort. Upprepad uppladdning
+bevarar en~befintlig medlems position. Förlopp och~enskilda resultat visas;
+ett~fel stoppar fler filer. Ladda om~sidan före ett~nytt försök efter ett
+obekräftat resultat. Utan JavaScript skickar det~vanliga formuläret hela
+urvalet i~en~begäran. Uppladdning startar ingen uppspelning.
 
 Öppna \ui{Admin > Gallerier > Musikhanteraren} för~den~kompakta globala
 katalogen. Stäm av~befintliga spellistor i~begränsade omgångar; original

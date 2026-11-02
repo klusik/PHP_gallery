@@ -242,7 +242,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.149.3';
+const CMS_VERSION = '0.150.0';
 ```
 
 Update-related code uses:
@@ -573,7 +573,36 @@ fragment replacement.
 
 The compact `admin_music` controller delegates catalog operations to
 `app/services/music_catalog.php`; its model owns SQL and revision-locked
-transactions. The music capability gates the route and navigation together.
+transactions. The album detail retains its existing catalog-song selector and
+adds a native multiple-file upload. Its Controller validates PHP upload provenance; the
+catalog Service reuses the existing audio validator, repository, quota and
+revision owners. The Model resolves exact original digests without merging
+existing logical identities. Asset registration and append-only album
+membership share one catalog transaction. The browser serializes originals,
+carries fresh revisions and retains canonical acknowledgments through its
+single owned fragment refresh. Unknown outcomes stop replay until passive
+reload. There is no new PHP file, route, schema or logical runtime owner;
+expected closure deltas are zero against the existing 98-module plan and
+unchanged limits. See [album upload semantics](docs/GALLERY_MUSIC.md).
+
+The manager also exposes authenticated, read-only original previews and bounded
+album playback pages through its existing route. Controller-prepared URLs and
+inert JSON bind the catalog and album to distinct player scopes. The existing
+exclusive Audio owner adds pause/resume, native seeking, in-memory mute and
+three-state repeat controls without changing public control markup. The Admin
+scope retains its All/One/Off choice in its rendered control when the exclusive
+owner changes; public players without that control retain repeat-all. One
+restarts the current original without paging, and explicit navigation remains
+independent. This adds no dependency edge, PHP file, module or schema change;
+the existing 98-module plan and limits remain unchanged. A complete album uses
+revision-pinned pages rather than copying all membership into the document;
+source replacement and Stop cancel pending reads. The gallery and Admin preview
+controllers share the HTTP helper's verified-audio responder, preserving the
+existing public GET/HEAD/range protocol. The expected runtime delta is one
+existing HTTP-helper file in the Admin closure, no new source file or logical
+module, against the existing 98-module plan and unchanged ratchets.
+
+The music capability gates the route and navigation together.
 The model batches existing gallery path fields for song usages and repository
 origins. The controller prepares canonical, localized public URLs for both
 rendered links and mutation contexts; a missing gallery contributes no URL.

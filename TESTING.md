@@ -263,6 +263,16 @@ insert-only empty-seed races, and safe omission for missing/unknown schemas.
 Cleanup must remove only fixture-owned asset identities; it never sweeps the
 shared `data/music/` folder.
 
+Its direct album-upload cases cover an original without gallery assignment,
+renamed identical bytes in two albums, repeated membership, stale revision
+refusal and retention after the last membership is removed. The global manager
+browser fixture covers multiple original File objects sent serially, fresh
+revision propagation, repeated-submit exclusion, acknowledged-file feedback,
+retained album tab/URL and a lost later response with no automatic replay.
+Live localhost acceptance uses only the web controls and never activates Play;
+codec playback, mobile devices and hosting-specific transfer limits require
+separate coverage.
+
 `admin_gallery_music_browser_test.mjs` renders the real Media/music view and
 uses production styles and mutation handlers on desktop and narrow screens.
 It covers scoped nested tabs, direct/live source groups, chooser replacement
@@ -313,6 +323,33 @@ large-library timing, device codecs and installation-specific backup recovery
 remain manual acceptance; localhost debugging does not qualify deployment.
 
 ## Global Music Manager
+
+Administrator playback is covered through the production exclusive player and
+silent Audio adapters. `gallery_music_browser_test.mjs` verifies pause/resume
+without source reset, active seek while paused, finite metadata, all three
+repeat modes, mode changes during Pause, explicit Next while repeating one,
+local repeat-one at a page boundary, repeat OFF at the album end,
+whole-album page boundaries, Previous wrap, pinned-revision refusal and a late
+page response after Stop. `admin_music_browser_test.mjs` drives the real rendered
+row actions and toolbar, source identity, Mute before activation, timeline input,
+Previous/Next/Stop and unchanged catalog selection under production CSS.
+It also verifies the repeat cycle's localized names, distinct visible icons,
+pressed states and actual active/inactive backgrounds, without native sound.
+Paged browser phases await their terminal source/error state after native JSON
+body decoding. Responsive row assertions retain all three membership actions,
+check the separate Play/drag controls and reserve readable title space; narrow
+screens move the membership forms to a second row.
+The render adapter resolves key-only icon names from the real English catalog;
+unknown labels remain empty and fail the retained accessibility assertions.
+`admin_music_gallery_url_test.php` retains canonical URL cases and checks that
+unauthenticated, anonymous-preview, minor, disabled-capability and wrong-method
+requests cannot reach original lookup; absent GET/HEAD previews remain opaque.
+The public HTTP fixture now loads the real shared response owner and retains
+its existing HEAD/range/If-Range assertions. Repository database coverage adds
+one song beyond the existing page bound and refuses a stale continuation.
+Live localhost QA must mute before any Play, retain the visible pressed Mute
+state and avoid unmuting during playback. Adapter results do not qualify audible
+codec output or physical devices.
 
 `music_catalog_database_test.php` uses the serial, owned disposable database
 fixture to exercise stable gallery/track identities, a real index bridge across
@@ -1226,7 +1263,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.149.3. Release verification uses the
+This guide applies to PHP Gallery Version 0.150.0. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -7256,7 +7293,10 @@ confirmed-empty onboarding, coupled upload settings, mobile one-time credential
 retention, CSS rollback, orientation replay and update/navdata budgets.
 
 Theme advanced appearance and manual overrides use the same hosted central
-browser/source qualification. `theme_advanced_appearance_test.php` covers
+browser/source qualification. The Appearance fixture awaits rendering frames
+before asserting the production invalid-field focus, preserving its strict
+focus and blocked-submit checks without a timer/frame race.
+`theme_advanced_appearance_test.php` covers
 unchanged upgrade defaults, corrupt-value fallback, bounds, batch normalization,
 scoped header CSS and independent reset. `custom_css_preservation_test.php`
 exercises the actual copied service in owned temporary storage: UTF-8 round

@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{0.149.3}
-\newcommand{\manualdate}{1.~November~2026}
+\newcommand{\version}{0.150.0}
+\newcommand{\manualdate}{2.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1121,6 +1121,37 @@ der CLI- und Testkompatibilität und wird von keiner Browseraktion aufgerufen.
 Einzelheiten stehen in \codeword{docs/GALLERY\_PDF.md}.
 
 \subsubsection{Musikverwaltung}
+
+Jeder Song besitzt eine eigene Wiedergabe/Pause-Aktion. Der~kompakte Player
+bietet Zurück, Wiedergabe/Pause, Stop, Weiter, Wiederholen und~Stummschalten.
+Die~Zeitleiste zeigt Position und~Originallänge; klicken, ziehen oder nutzen
+Sie~die~Tastatur zum~Suchen. Suchen während Pause erhält die~Pause; Wiedergabe
+setzt am~gleichen Punkt fort. Stop gibt die~Quelle frei und~setzt die~Zeitleiste
+zurück. Anhören ändert keine Zuordnung oder Galerie-Vorgabe. Wiederholen
+wechselt zwischen Alle, Einzeltitel, Aus und~wieder Alle. Alle ist~anfangs aktiv
+und~folgt dem~vollständigen Album über die~angezeigte Seite hinaus.
+Einzeltitel startet denselben Song erneut; Aus stoppt nach dem~letzten Song.
+Aktive Modi besitzen Akzenttönung und~Linie; Einzeltitel ergänzt eine~1,
+Aus durchstreicht die~Pfeile. Der~Tooltip nennt den~aktuellen Modus.
+Umschalten erhält Pause und~Position; Weiter/Zurück wählen weiterhin andere
+Songs. Jede Liste behält ihre Wahl beim Playerwechsel; Neuladen setzt Alle.
+Ändert sich der~Katalog bei einer Fortsetzung, laden Sie~ihn zuerst neu.
+Stummschalten bleibt zwischen Playerbereichen derselben Seite erhalten.
+Die~Steuerung benötigt JavaScript; native Bearbeitungs- und~Uploadformulare
+bleiben ohne JavaScript verfügbar.
+
+Wählen oder erstellen Sie im~Tab \ui{Alben \& Wiedergabelisten} ein Album
+und~nutzen Sie \ui{Dateien hochladen} unter der~bestehenden Songauswahl aus
+dem~Katalog. Beide Möglichkeiten bleiben verfügbar. Wählen Sie bis~zu~zwanzig
+Audiodateien mit~höchstens 64~MiB je~Datei und~drücken Sie \ui{Hochladen};
+eine Galerie ist~nicht erforderlich. Hostinggrenzen gelten zusätzlich.
+Identische Originalbytes verwenden auch nach Umbenennung denselben Song.
+Ein~Song kann mehreren Alben unabhängig angehören; nach Entfernen der~letzten
+Zuordnung bleibt das~Original im~Katalog. Erneutes Hochladen erhält die~Position
+eines vorhandenen Mitglieds. Fortschritt und~Einzelergebnisse bleiben sichtbar;
+ein~Fehler stoppt weitere Dateien. Laden Sie vor~einem erneuten Versuch nach
+ungeprüftem Ergebnis die~Seite neu. Ohne JavaScript sendet das~native Formular
+die~gesamte Auswahl in~einer Anfrage. Hochladen startet keine Wiedergabe.
 
 Unter \ui{Admin > Galerien > Musikverwaltung} steht der~kompakte globale
 Katalog. Vorhandene Playlists werden in~begrenzten Schritten abgeglichen;

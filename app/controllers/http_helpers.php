@@ -567,3 +567,88 @@ function cms_not_found(): void
     );
     render_footer();
 }
+
+/** Read only the Range field applicable to this native media request.
+ * HEAD ignores Range; without validators, If-Range selects a complete GET.
+ * @return string Requested GET range, or empty for a complete representation.
+ */
+function http_media_range_header(): string
+{
+    return request_method() === 'GET' && !isset($_SERVER['HTTP_IF_RANGE'])
+        ? (string) ($_SERVER['HTTP_RANGE'] ?? '') : '';
+}
+
+/** Stream an already authorized audio original with a prepared byte range.
+ * Callers own authorization, original verification and range interpretation.
+ * @param array{path:string,track:array{filename:string,mime:string,size:int}}|null $document Verified original, or null for an opaque missing response.
+ * @param array{start:int,end:int,partial:bool}|null $range Prepared complete or partial range, or null for an unsatisfiable request.
+ * @param bool $download Whether delivery is an attachment instead of inline.
+ * @return void Emits private GET/HEAD audio, 404, 405 or 416 without exposing paths.
+ */
+function stream_verified_audio_document(
+    ?array $document,
+    ?array $range,
+    bool $download = false,
+): void {
+    $method = \Gallery\Core\request_method();
+    clear_response_cache_headers();
+    header('Cache-Control: private, no-store, max-age=0');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('Referrer-Policy: same-origin');
+    if (!in_array($method, ['GET', 'HEAD'], true)) {
+        header('Allow: GET, HEAD');
+        http_response_code(405);
+        return;
+    }
+    $handle = $document !== null ? @fopen($document['path'], 'rb') : false;
+    if ($document === null || $handle === false) {
+        http_response_code(404);
+        header('Content-Type: text/plain; charset=utf-8');
+        if ($method !== 'HEAD')
+            echo 'Not found';
+        return;
+    }
+    try {
+        $size = $document['track']['size'];
+        header('Accept-Ranges: bytes');
+        if ($range === null) {
+            http_response_code(416);
+            header('Content-Range: bytes */' . $size);
+            header('Content-Length: 0');
+            return;
+        }
+        header('Content-Type: ' . $document['track']['mime']);
+        $disposition = $download ? 'attachment' : 'inline';
+        header(
+            'Content-Disposition: '
+                . $disposition
+                . '; filename="audio"; filename*=UTF-8\'\''
+                . rawurlencode($document['track']['filename']),
+        );
+        $length = $range['end'] - $range['start'] + 1;
+        header('Content-Length: ' . $length);
+        if ($range['partial']) {
+            http_response_code(206);
+            header(
+                'Content-Range: bytes '
+                    . $range['start']
+                    . '-'
+                    . $range['end']
+                    . '/'
+                    . $size,
+            );
+        }
+        if (session_status() === PHP_SESSION_ACTIVE)
+            session_write_close();
+        if ($method === 'GET' && fseek($handle, $range['start']) === 0) {
+            $output = fopen('php://output', 'wb');
+            if ($output !== false) {
+                stream_copy_to_stream($handle, $output, $length);
+                fclose($output);
+            }
+        }
+    } finally {
+        fclose($handle);
+    }
+}

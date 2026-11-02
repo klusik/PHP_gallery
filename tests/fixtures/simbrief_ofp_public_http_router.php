@@ -246,18 +246,6 @@ namespace Gallery\Services {
     }
 }
 
-namespace Gallery\Controllers {
-    /** Strip session-cache defaults as the real HTTP response helper would.
-     * @return void Remove inherited cache-control headers.
-     */
-    function clear_response_cache_headers(): void
-    {
-        header_remove('Cache-Control');
-        header_remove('Pragma');
-        header_remove('Expires');
-    }
-}
-
 namespace {
     $routePath = (string) parse_url(
         (string) ($_SERVER['REQUEST_URI'] ?? ''),
@@ -278,6 +266,7 @@ namespace {
     require_once
         dirname(__DIR__, 2) . '/app/services/simbrief_ofp_attachments.php';
     require_once dirname(__DIR__, 2) . '/app/controllers/public_media.php';
+    require_once dirname(__DIR__, 2) . '/app/controllers/http_helpers.php';
     require_once dirname(__DIR__, 2) . '/app/controllers/gallery_music.php';
     require_once
         dirname(__DIR__, 2) . '/app/controllers/public_gallery_controls.php';

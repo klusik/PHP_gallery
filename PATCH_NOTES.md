@@ -1,5 +1,123 @@
 # Patch notes
 
+## Version 0.150.0
+
+Expanded Music Manager into a place to upload and listen to music directly.
+Administrators gained multiple-file uploads into albums, independent playback
+controls for catalog songs and album members, an active seek timeline, and
+clearly indicated repeat modes. Existing catalog assignment, shared originals
+and independent album memberships remained available.
+
+### Highlights
+
+#### Uploaded music directly into albums
+
+- Added Upload files beside the existing album workflow. Administrators could
+  create or select an album, choose several audio originals and upload them
+  without first placing the files in a gallery. Preserved Add song for choosing
+  music already in the catalog.
+- Reused the existing song and original for identical bytes, even after a
+  filename change. Kept different bytes with the same filename separate and
+  preserved each song's independent membership in zero, one or several albums.
+- Added acknowledged-file progress and explicit failure feedback. Stopped a
+  batch at its first failure, retained confirmed uploads and refused automatic
+  replay when the server outcome could not be confirmed.
+
+#### Played songs and whole albums from administration
+
+- Added independent row Play/Pause actions and a compact player with Previous,
+  Play/Pause, Stop, Next and Mute. Kept playback separate from selection and
+  catalog editing, so listening did not assign songs or alter gallery defaults.
+- Added elapsed time, original duration and a native seek range supporting
+  pointer, touch and keyboard input. Preserved the current original and cursor
+  when pausing or resuming; seeking during Pause kept playback paused.
+- Followed the complete saved album order across displayed pages. Cancelled
+  pending playback and page reads on Stop or teardown, and stopped continuation
+  when the catalog revision changed instead of mixing playlist snapshots.
+
+#### Made repeat modes visible and predictable
+
+- Added the All, One, Off cycle, starting at All. Repeated the current original
+  in One mode and stopped after the final song in Off mode. Preserved explicit
+  Next/Previous navigation in every mode.
+- Added separate loop, numbered-loop and crossed-loop icons with localized
+  names and tooltips. Fixed the CSS cascade that hid active styling, and added
+  a Theme accent tint and line for enabled repeat modes.
+- Retained each list's repeat choice while switching exclusive player ownership.
+  Kept mode changes from starting stopped audio or changing a paused cursor;
+  fresh playlist markup reset the mode to All.
+
+### Technical Details
+
+#### Backend and storage
+
+- Extended `app/controllers/admin_music.php`, `app/services/music_catalog.php`
+  and `app/models/music_catalog.php` for album upload admission and ordered
+  membership writes. Reused existing SHA-256/size matching, supported MIME and
+  extension checks, the 64 MiB per-original bound and linked-gallery capacity
+  checks. Bounded a selection to twenty files; hosting limits still applied.
+- Required verified existing catalog and repository schemas before ingestion.
+  Missing or unknown schema refused the upload. Registered new originals and
+  membership under the catalog revision transaction; removed only proven
+  unregistered rollback bytes and retained uncertain outcomes for reconciliation.
+- Added authenticated preview and bounded album-playlist actions to the existing
+  `admin_music` route. Kept Admin authentication, the music capability,
+  anonymous-preview exclusion and the known-under-18 boundary ahead of original
+  lookup. Read-only preview did not promote, copy or assign a source.
+- Shared the verified-audio responder in `app/controllers/http_helpers.php`
+  between Admin previews and public music streaming. Retained opaque missing
+  responses, private/no-store delivery, MIME and disposition metadata, HEAD,
+  byte ranges and If-Range behavior.
+- Reused existing catalog, repository and album membership tables without adding
+  a schema migration. Kept one revision-pinned playback page of at most one
+  hundred members in the browser and refused stale continuation.
+
+#### Browser interface and compatibility
+
+- Extended `public/assets/gallery-modules/admin-music.js` with sequential
+  uploads carrying acknowledged catalog revisions. Preserved native multipart
+  forms without JavaScript; uncertain responses locked further editor writes
+  until reload rather than resubmitting the selection.
+- Extended the existing exclusive Audio owner in
+  `public/assets/gallery-modules/gallery-music-player.js` for pause, seeking,
+  mute and repeat modes. Disabled seeking for unknown or infinite duration;
+  repeated one original without fetching another album page.
+- Kept the new controls on compact Theme glass surfaces with visible keyboard
+  focus and narrow-screen touch targets. Updated the complete shared import
+  revision chain and retained public players' repeat-all default.
+- Updated English, Czech, German and Swedish catalogs, all four manual source
+  editions, and the permanent music, architecture, database, testing and
+  compatibility documentation.
+
+#### Regression coverage
+
+- Extended database coverage for direct album uploads, duplicate reuse,
+  independent memberships, retained originals, bounded album pages and stale
+  revisions.
+- Added silent player and rendered Admin control coverage for pause/resume,
+  active seeking, all repeat modes, explicit navigation, scope retention,
+  distinct icons, active styling, cancellation and page boundaries.
+- Added request-boundary coverage for denied and missing previews, and retained
+  real public HTTP streaming assertions through the shared responder. Updated
+  the Appearance fixture to await rendering frames before checking invalid-field
+  focus, preserving its strict focus and blocked-submission assertions.
+
+### User Impact
+
+#### For administrators
+
+- Removed the need to use a gallery as an intermediate upload destination for
+  album music. Preserved existing catalog assignment and reusable originals.
+- Added direct listening, seeking and controlled album repetition within Music
+  Manager, with clear feedback for each repeat mode and uncertain upload result.
+
+#### For visitors and Windows companion users
+
+- Preserved public playback markup and existing media delivery behavior. Added
+  no new visitor-facing playback workflow or persisted gallery preference.
+- Left Windows companion source and its independent `0.11.2` version unchanged.
+  Increased the gallery minor version from `0.149.3` to `0.150.0`.
+
 ## Version 0.149.3
 
 Made Gallery consistency reports easier to understand before selecting repairs.

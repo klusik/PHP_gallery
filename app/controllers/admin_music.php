@@ -15,6 +15,8 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+require_once __DIR__ . '/http_helpers.php';
+
 use Throwable;
 use function Gallery\Core\admin_mutation_descriptor;
 use function Gallery\Core\admin_mutation_error_envelope;
@@ -39,6 +41,7 @@ use function Gallery\Services\music_catalog_album_song_add;
 use function Gallery\Services\music_catalog_album_song_remove;
 use function Gallery\Services\music_catalog_album_tree;
 use function Gallery\Services\music_catalog_album_update;
+use function Gallery\Services\music_catalog_album_upload;
 use function Gallery\Services\music_catalog_list;
 use function Gallery\Services\music_catalog_dirty_status;
 use function Gallery\Services\music_catalog_merge;
@@ -110,6 +113,9 @@ function cms_admin_music(): void
         http_response_code(404);
         return;
     }
+    if (admin_music_playback_read()) {
+        return;
+    }
 
     $query = trim((string) ($_GET['q'] ?? ''));
     $albumId = max(0, (int) ($_GET['album_id'] ?? 0));
@@ -144,12 +150,21 @@ function cms_admin_music(): void
         );
         $action = (string) ($_POST['action'] ?? '');
         $revision = (string) ($_POST['revision'] ?? '');
+        $upload = null;
         unset($_SESSION['admin_music_created_album_id']);
         $contexts = in_array($action, ['title', 'merge', 'split'], true)
             ? admin_music_gallery_contexts(admin_music_action_song_ids($action))
             : [];
         try {
-            $notice = admin_music_mutate($action, $revision);
+            if ($action === 'album_upload') {
+                $upload = admin_music_upload_album_files($revision);
+                $notice = t('admin.music.upload_complete', [
+                    'count' => count($upload['songs']),
+                ]);
+                $error = $upload['error'];
+            } else {
+                $notice = admin_music_mutate($action, $revision);
+            }
             if ($action === 'album_create') {
                 $albumId = max(
                     0,
@@ -170,7 +185,7 @@ function cms_admin_music(): void
                 'merge' => admin_music_post_song_ids('song_ids'),
                 'title', 'tags', 'split' => [max(0, (int) ($_POST['song_id'] ?? 0))],
                 'album_update', 'album_delete', 'album_move', 'album_add_song',
-                'album_remove_song' => [max(0, (int) ($_POST['album_id'] ?? 0))],
+                'album_remove_song', 'album_upload' => [max(0, (int) ($_POST['album_id'] ?? 0))],
                 'album_reorder_song' => [max(0, (int) ($_POST['album_id'] ?? 0))],
                 'album_create' => [(int) ($_SESSION['admin_music_created_album_id'] ?? 0)],
                 default => [],
@@ -200,7 +215,7 @@ function cms_admin_music(): void
                 'album_offset' => $albumOffset,
                 'offset' => $offset,
             ]);
-            admin_music_json_response(admin_mutation_success_envelope(
+            $payload = admin_mutation_success_envelope(
                 $notice,
                 $descriptor,
                 admin_mutation_panel_metadata(
@@ -219,7 +234,11 @@ function cms_admin_music(): void
                 ),
                 $error === '' ? $contexts : [],
                 ['redirect_url' => $redirectUrl],
-            ));
+            );
+            if ($upload !== null) {
+                $payload['upload'] = $upload;
+            }
+            admin_music_json_response($payload);
         }
         flash_message($error === '' ? 'admin_music_notice' : 'admin_music_error',
             $error === '' ? $notice : $error);
@@ -380,8 +399,136 @@ function cms_admin_music(): void
         'notice' => $notice,
         'error' => $error,
         'fragment' => (string) ($_GET['fragment'] ?? '') === '1',
+        'playback' => admin_music_playback_model(
+            $catalog['songs'], $albumId, $revision,
+        ),
+        'upload' => [
+            'max_files' => \Gallery\Services\MUSIC_CATALOG_UPLOAD_FILES,
+            'max_bytes' => \Gallery\Services\GALLERY_MUSIC_MAX_BYTES,
+            'accept' => implode(',', array_map(
+                static fn(string $extension): string => '.' . $extension,
+                array_keys(\Gallery\Services\gallery_music_formats()),
+            )),
+        ],
     ];
     view_render_admin_music($model);
+}
+
+/** Handle administrator-only original streaming and bounded album page reads.
+ * @return bool True after emitting a playback response; false for manager requests.
+ */
+function admin_music_playback_read(): bool
+{
+    $action = (string) ($_GET['action'] ?? '');
+    if (!in_array($action, ['music_preview', 'album_playlist'], true)) {
+        return false;
+    }
+    $allowed = !\Gallery\Core\admin_anonymous_preview_active()
+        && !\Gallery\Services\current_user_is_known_under_18();
+    $method = request_method();
+    if ($action === 'music_preview') {
+        $document = null;
+        if ($allowed && in_array($method, ['GET', 'HEAD'], true)) {
+            try {
+                $document = \Gallery\Services\music_repository_preview_song(
+                    max(0, (int) ($_GET['song_id'] ?? 0)),
+                );
+            } catch (Throwable) {
+                // Media delivery remains opaque; no path or storage exception escapes.
+            }
+        }
+        $range = $document !== null
+            ? \Gallery\Services\gallery_music_byte_range(
+                http_media_range_header(), $document['track']['size'],
+            ) : null;
+        stream_verified_audio_document($document, $range);
+        return true;
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    if (!$allowed || $method !== 'GET') {
+        http_response_code($allowed ? 405 : 404);
+        if ($allowed) header('Allow: GET');
+        echo json_encode(['ok' => false]);
+        return true;
+    }
+    try {
+        $page = \Gallery\Services\music_catalog_album_playback_page(
+            max(0, (int) ($_GET['album_id'] ?? 0)),
+            max(0, (int) ($_GET['position'] ?? 0)),
+            (string) ($_GET['revision'] ?? ''),
+        );
+        $page['tracks'] = admin_music_playback_tracks($page['tracks']);
+        echo json_encode(['ok' => true] + $page,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch (Throwable $error) {
+        http_response_code(409);
+        echo json_encode([
+            'ok' => false, 'message' => admin_music_error($error),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+    return true;
+}
+
+/** Prepare protected same-installation previews for one bounded song page.
+ * @param list<array{id:int|string,title:string}> $songs Ordered catalog or album rows.
+ * @return list<array{id:string,title:string,url:string}> Stable logical track IDs and authenticated preview URLs.
+ */
+function admin_music_playback_tracks(array $songs): array
+{
+    return array_map(static fn(array $song): array => [
+        'id' => 'catalog-song-' . (int) $song['id'],
+        'title' => (string) $song['title'],
+        'url' => url_for('admin_music', [
+            'action' => 'music_preview', 'song_id' => (int) $song['id'],
+        ]),
+    ], $songs);
+}
+
+/** Prepare isolated catalog and whole-album player scopes without audio reads.
+ * @param list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}> $songs Current bounded catalog page.
+ * @param int $albumId Selected album, or zero without a selection.
+ * @param string $revision Catalog revision observed by the manager query.
+ * @return array{allowed:bool,catalog:array{galleryId:int,enabled:bool,tracks:list<array{id:string,title:string,url:string}>},album:array{galleryId:int,enabled:bool,tracks:list<array{id:string,title:string,url:string}>,pagination:array{url:string,offset:int,total:int,pageSize:int,revision:string}}|null,error:string} Presentation-only playback data and any album read refusal.
+ */
+function admin_music_playback_model(
+    array $songs,
+    int $albumId,
+    string $revision,
+): array {
+    $allowed = !\Gallery\Core\admin_anonymous_preview_active()
+        && !\Gallery\Services\current_user_is_known_under_18();
+    $model = [
+        'allowed' => $allowed,
+        // Zero and negative IDs identify Admin-only player scopes, never galleries.
+        'catalog' => ['galleryId' => 0, 'enabled' => false,
+            'tracks' => $allowed ? admin_music_playback_tracks($songs) : []],
+        'album' => null,
+        'error' => '',
+    ];
+    if (!$allowed || $albumId < 1) return $model;
+    try {
+        $page = \Gallery\Services\music_catalog_album_playback_page(
+            $albumId, 0, $revision,
+        );
+        $model['album'] = [
+            'galleryId' => -$albumId,
+            'enabled' => false,
+            'tracks' => admin_music_playback_tracks($page['tracks']),
+            'pagination' => [
+                'url' => url_for('admin_music', [
+                    'action' => 'album_playlist', 'album_id' => $albumId,
+                ]),
+                'offset' => 0,
+                'total' => $page['total'],
+                'pageSize' => \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE,
+                'revision' => $page['revision'],
+            ],
+        ];
+    } catch (Throwable $error) {
+        $model['error'] = admin_music_error($error);
+    }
+    return $model;
 }
 
 /** Resolve the selected manager section, including legacy album deep links.
@@ -500,6 +647,68 @@ function admin_music_mutate(string $action, string $revision): string
         'album_remove_song' => admin_music_remove_album_song($albumId, $songId, $revision),
         default => throw new \InvalidArgumentException('invalid_action'),
     };
+}
+
+/** Admit a bounded native selection and upload its originals in chooser order.
+ * JavaScript submits one member of this same multipart contract per request.
+ * @param string $revision Expected catalog revision before the first original.
+ * @return array{revision:string,songs:list<array{filename:string,song_id:int,reused:bool}>,error:string} Acknowledged originals, next revision and any stopped-batch error.
+ * @throws \RuntimeException When the multipart selection is missing or malformed.
+ */
+function admin_music_upload_album_files(string $revision): array
+{
+    $files = $_FILES['music_files'] ?? null;
+    $limit = \Gallery\Services\MUSIC_CATALOG_UPLOAD_FILES;
+    if (!is_array($files)
+        || !is_array($files['name'] ?? null)
+        || !is_array($files['tmp_name'] ?? null)
+        || !is_array($files['error'] ?? null)
+        || !array_is_list($files['name'])
+        || count($files['name']) < 1
+        || count($files['name']) > $limit
+        || count($files['tmp_name']) !== count($files['name'])
+        || count($files['error']) !== count($files['name'])
+        || (isset($_POST['upload_count'])
+            && (int) $_POST['upload_count'] !== count($files['name']))) {
+        throw new \RuntimeException(t('admin.music.upload_invalid'));
+    }
+    foreach ($files['name'] as $index => $filename) {
+        if (!is_string($filename)
+            || !is_string($files['tmp_name'][$index] ?? null)
+            || ($files['error'][$index] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+            || !is_uploaded_file($files['tmp_name'][$index])) {
+            throw new \RuntimeException(t('music.invalid_file'));
+        }
+    }
+    $songs = [];
+    $error = '';
+    foreach ($files['name'] as $index => $filename) {
+        try {
+            $result = music_catalog_album_upload(
+                max(0, (int) ($_POST['album_id'] ?? 0)),
+                $files['tmp_name'][$index],
+                $filename,
+                $revision,
+            );
+            $revision = $result['revision'];
+            $songs[] = [
+                'filename' => $filename,
+                'song_id' => $result['song_id'],
+                'reused' => $result['reused'],
+            ];
+        } catch (Throwable $exception) {
+            $error = admin_music_error($exception);
+            if (!admin_wants_json()) {
+                $error = t('admin.music.upload_stopped', [
+                    'count' => count($songs),
+                    'filename' => $filename,
+                    'reason' => $error,
+                ]);
+            }
+            break;
+        }
+    }
+    return ['revision' => $revision, 'songs' => $songs, 'error' => $error];
 }
 
 /**
@@ -830,6 +1039,8 @@ function admin_music_error(Throwable $exception): string
         ]);
     }
     return match ($exception->getMessage()) {
+        t('music.invalid_file') => t('music.invalid_file'),
+        t('admin.music.upload_invalid') => t('admin.music.upload_invalid'),
         'music.original_unavailable' => t('music.original_unavailable'),
         'music.source_reconcile_required' => t('music.catalog_sync_required'),
         'music.conflict' => t('admin.music.error_stale', 'The catalog changed. Reload before saving.'),
@@ -850,7 +1061,7 @@ function admin_music_error(Throwable $exception): string
 /**
  * Send a JSON response and terminate the request.
  *
- * @param array{ok:bool,message:string,error?:string,error_code?:string,mutation:array{type:string,entity:string,action:string,entity_ids:list<int>},panel:array{workflow:string,refresh_url:string,keep_open:bool}|null,contexts:list<array{type:string,gallery_id:int,render_url:string,render_mode:string,postcondition:null}>,fallback:array{redirect_url?:string}} $payload Canonical music mutation success or refusal envelope.
+ * @param array{ok:bool,message:string,error?:string,error_code?:string,mutation:array{type:string,entity:string,action:string,entity_ids:list<int>},panel:array{workflow:string,refresh_url:string,keep_open:bool}|null,contexts:list<array{type:string,gallery_id:int,render_url:string,render_mode:string,postcondition:null}>,fallback:array{redirect_url?:string},upload?:array{revision:string,songs:list<array{filename:string,song_id:int,reused:bool}>,error:string}} $payload Canonical music mutation success or refusal envelope.
  * @param int $status HTTP response status.
  * @return never Encodes the response and exits.
  */

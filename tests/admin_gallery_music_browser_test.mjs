@@ -203,8 +203,8 @@ window.addEventListener('unhandledrejection', event => {
 });
 </script>
 <script type="module">
-import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261024-catalog-workspace-v3';
-import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261024-catalog-workspace-v3';
+import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261102-repeat-modes-v1';
+import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-repeat-modes-v1';
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 import {setupAdminGalleryMigration} from '/public/assets/gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
 

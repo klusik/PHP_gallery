@@ -91,7 +91,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.149.3. Version 0.97 adds the recoverable gallery-trash
+application version 0.150.0. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -311,6 +311,16 @@ snapshot for catalog usage; the sidecar remains the gallery selection authority.
 Live membership comes from current `music_album_songs`, so it is never copied
 into a physical-instance snapshot. Merge/split preserve shared-asset identity.
 Removing a gallery or assignment does not delete central assets.
+
+Music Manager album uploads use these same tables without a migration or a
+physical gallery row. Exact uploaded SHA-256/size matches reuse a central song;
+a clean active legacy match retains its identity through ordinary promotion.
+This is explicit ingestion deduplication, not automatic merging of existing
+catalog identities. Asset registration and ordered album membership commit
+under one catalog revision lock. The composite membership key permits
+independent membership in multiple albums and prevents repeated membership in
+one album. A song and its central original survive removal from every album.
+
 Removing a still-local catalogued selection registers and verifies its original
 centrally before the gallery index changes, retaining the existing song ID.
 After repository migration, bounded catalog cleanup removes only `music_songs`
@@ -318,6 +328,13 @@ without any `music_repository_assets` row and without active or dirty-snapshot
 track references. Existing foreign keys cascade inactive instances, album
 membership and song tags; no schema change or audio-file deletion is involved.
 An asset row remains protective even if its physical bytes need restoration.
+
+Administrator playback adds no persistence. Ordered playback pages reuse the
+album node's existing membership count and bounded `music_album_songs` reads.
+The global catalog revision is checked before and after preparing a page and
+pinned across continuation requests. Preview resolves a verified repository or
+current legacy source without promoting, assigning or rewriting it. Pause,
+seek, mute and repeat remain browser-only state.
 
 Repository readiness is observed separately from the old catalog schema.
 Central writes require complete verified repository storage. Confirmed missing

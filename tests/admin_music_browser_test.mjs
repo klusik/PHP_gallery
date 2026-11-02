@@ -90,7 +90,9 @@ body.admin-page {
 </style>
 </head><body class="admin-page"><pre id="results"></pre><main id="mount">${markup}</main>
 <script type="module">
-import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261027-appearance-state-v1';
+import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261102-album-upload-v2';
+import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261027-appearance-state-v1';
+import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-repeat-modes-v1';
 import {normalizeAdminMutationEnvelope} from '/public/assets/gallery-modules/admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const ACTION_TIMEOUT_MS = ${ACTION_TIMEOUT_MS};
@@ -119,15 +121,21 @@ async function waitForBrowserState(isReady, failure) {
     }
     throw new Error(failure);
 }
-/** Check that album members keep their drag handle and three icon actions on one row without constraining the title. @param {HTMLElement} manager Rendered production manager root. @returns {boolean} True when every member control is visible and inside its row. */
+/** Check the independent playback and membership rows without squeezing titles.
+ * @param {HTMLElement} manager Rendered production manager root.
+ * @returns {boolean} True when every control fits, playback stays beside the
+ * drag handle and the three membership actions share their responsive row.
+ */
 function albumMemberActionsFit(manager) {
     const members = Array.from(manager.querySelectorAll(
         '.admin-music-album-members > li',
     ));
-    return members.length > 0 && members.every(/** Check one member's controls only; title wrapping is intentionally unconstrained. @param {HTMLLIElement} member Rendered album member row. @returns {boolean} True when its three icon buttons share one row. */ member => {
+    return members.length > 0 && members.every(member => {
         const buttons = Array.from(member.querySelectorAll(
-            'button:not([data-admin-music-album-drag-handle])',
+            ':scope > form button',
         ));
+        const play = member.querySelector(':scope > .admin-music-row-play');
+        const title = member.querySelector('.admin-music-album-member-title');
         const dragHandle = member.querySelector(
             'button[data-admin-music-album-drag-handle]',
         );
@@ -136,22 +144,35 @@ function albumMemberActionsFit(manager) {
         const row = member.getBoundingClientRect();
         const controls = buttons.map(button => button.getBoundingClientRect());
         const dragBounds = dragHandle?.getBoundingClientRect();
+        const playBounds = play?.getBoundingClientRect();
+        // Three forms retain their original membership actions; playback is
+        // independent. The 480px production breakpoint moves only the forms.
         return controls.length === 3
             && dragHandle instanceof HTMLButtonElement
             && dragBounds !== undefined
+            && play instanceof HTMLButtonElement
+            && playBounds !== undefined
+            && playBounds.width > 0
+            && playBounds.left >= row.left && playBounds.right <= row.right
+            && shareVerticalRow(dragHandle, play)
+            && title instanceof HTMLElement
+            && title.getBoundingClientRect().width > playBounds.width
             && Boolean(dragHandle.getAttribute('aria-label')?.trim())
             && dragHandle.getAttribute('aria-grabbed') === 'false'
             && dragHandle.draggable
             && dragStyle?.touchAction === 'none'
             && dragStyle.cursor === 'grab'
             && dragBounds.width > 0
-            && dragBounds.top === controls[0].top
+            && (innerWidth > 480
+                ? shareVerticalRow(dragHandle, buttons[0])
+                : controls[0].top >= dragBounds.bottom)
             && dragBounds.left >= row.left
             && dragBounds.right <= row.right
             && controls.every(rect => rect.width > 0
                 && rect.top === controls[0].top
                 && rect.left >= row.left
-                && rect.right <= row.right);
+                && rect.right <= row.right
+                && rect.bottom <= row.bottom);
     });
 }
 /** Test whether two controls occupy the same visible row without imposing cosmetic pixel thresholds. @param {Element} first First control. @param {Element} second Second control. @returns {boolean} True when their vertical bounds overlap. */
@@ -181,11 +202,122 @@ function dispatchAlbumPointer(target, type, point) {
         buttons: pressed ? 1 : 0,
     }));
 }
+/** Silent native-audio substitute for production Admin control interactions.
+ * No instance decodes media or produces audio; source and cursor stay observable.
+ */
+class AdminMusicAudioFixture extends EventTarget {
+    static instances = [];
+    source = '';
+    paused = true;
+    muted = false;
+    currentTime = 0;
+    duration = 83;
+    error = null;
+    /** Register one silent player for exclusive-owner assertions.
+     * @returns {void} Initializes its observable EventTarget lifecycle.
+     */
+    constructor() { super(); AdminMusicAudioFixture.instances.push(this); }
+    /** Read the selected protected preview URL.
+     * @returns {string} Source URL, or empty after disposal.
+     */
+    get src() { return this.source; }
+    /** Replace a source with the native cursor-reset semantics.
+     * @param {string} value Selected protected source URL.
+     * @returns {void} Resets the cursor without fetching the source.
+     */
+    set src(value) { this.source = value; this.currentTime = 0; }
+    /** Simulate successful playback without a decoder or audio device.
+     * @returns {Promise<void>} Acknowledges the observable playing state.
+     */
+    play() { this.paused = false; return Promise.resolve(); }
+    /** Suspend the controlled source.
+     * @returns {void} Retains the observable source and cursor.
+     */
+    pause() { this.paused = true; }
+    /** Remove only the native source attribute used by production disposal.
+     * @param {string} name Attribute selected by the production player.
+     * @returns {void} Clears source identity without external media work.
+     */
+    removeAttribute(name) { if (name === 'src') this.source = ''; }
+    /** Model the native reset after a detached source.
+     * @returns {void} Clears its cursor after Stop or disposal.
+     */
+    load() { if (!this.source) this.currentTime = 0; }
+}
+window.Audio = AdminMusicAudioFixture;
+
 try {
     const freshMusicMarkup = document.querySelector('#mount').innerHTML;
     setupAdminMusic();
     setupAdminMusic();
+    setupGalleryMusicPlayback();
+    setupGalleryMusicPlayback();
     let root = document.querySelector('[data-admin-music]');
+    const catalogPlayer = root.querySelector('.admin-music-catalog');
+    const muteControl = catalogPlayer.querySelector('[data-music-action="mute"]');
+    muteControl.click();
+    const adminAudio = AdminMusicAudioFixture.instances.at(-1);
+    check(adminAudio.muted && adminAudio.src === ''
+        && muteControl.getAttribute('aria-pressed') === 'true',
+        'Admin Mute must apply before any source is activated.');
+    const repeatControl = catalogPlayer.querySelector('[data-music-action="repeat"]');
+    repeatControl.click();
+    const activeRepeatBackground = getComputedStyle(repeatControl).backgroundColor;
+    check(repeatControl.dataset.musicRepeatMode === 'one'
+        && repeatControl.getAttribute('aria-pressed') === 'true'
+        && repeatControl.getAttribute('aria-label') === 'Repeat one'
+        && repeatControl.querySelector('[data-music-repeat-icon="one"]:not([hidden])')
+        && repeatControl.querySelectorAll('[data-music-repeat-icon]:not([hidden])').length === 1,
+        'Repeat ONE must expose its localized name, active state and distinct single icon.');
+    repeatControl.click();
+    check(repeatControl.dataset.musicRepeatMode === 'none'
+        && repeatControl.getAttribute('aria-pressed') === 'false'
+        && repeatControl.title === 'Repeat off'
+        && repeatControl.querySelector('[data-music-repeat-icon="none"]:not([hidden])')
+        && getComputedStyle(repeatControl).backgroundColor !== activeRepeatBackground,
+        'Repeat OFF must change its icon, name and actual production active styling.');
+    repeatControl.click();
+    check(repeatControl.dataset.musicRepeatMode === 'all'
+        && repeatControl.getAttribute('aria-label') === 'Repeat all'
+        && repeatControl.getAttribute('aria-pressed') === 'true'
+        && repeatControl.querySelector('[data-music-repeat-icon="all"]:not([hidden])')
+        && adminAudio.src === '' && adminAudio.paused,
+        'The cycle must restore ALL without loading or playing an original.');
+    const rowPlay = catalogPlayer.querySelector('[data-music-track-id="catalog-song-101"]');
+    rowPlay.click();
+    check(!adminAudio.paused && adminAudio.src.includes('action=music_preview')
+        && adminAudio.src.includes('song_id=101'),
+        'Row Play must use the authenticated global preview without assignment.');
+    adminAudio.currentTime = 25;
+    adminAudio.dispatchEvent(new Event('timeupdate'));
+    const adminSeek = catalogPlayer.querySelector('[data-music-seek]');
+    check(Number(adminSeek.value) === 25 && !adminSeek.disabled,
+        'The Admin progress control must reflect native currentTime.');
+    rowPlay.click();
+    adminSeek.value = '60';
+    adminSeek.dispatchEvent(new Event('input', {bubbles: true}));
+    check(adminAudio.paused && adminAudio.currentTime === 60,
+        'The active seek range must preserve Pause while changing the native cursor.');
+    catalogPlayer.querySelector('.admin-music-player [data-music-action="pause-toggle"]').click();
+    check(!adminAudio.paused && adminAudio.currentTime === 60,
+        'The toolbar must resume at the paused cursor.');
+    catalogPlayer.querySelector('[data-music-action="next"]').click();
+    check(adminAudio.src.includes('song_id=102'), 'Admin Next did not choose the next song.');
+    repeatControl.click();
+    adminAudio.currentTime = adminAudio.duration;
+    adminAudio.dispatchEvent(new Event('ended'));
+    check(adminAudio.src.includes('song_id=102') && adminAudio.currentTime === 0
+        && !adminAudio.paused && adminAudio.muted,
+        'The actual Repeat ONE button must restart the current song silently.');
+    catalogPlayer.querySelector('[data-music-action="previous"]').click();
+    check(adminAudio.src.includes('song_id=101'), 'Admin Previous did not return to the prior song.');
+    catalogPlayer.querySelector('[data-music-action="stop"]').click();
+    check(adminAudio.paused && adminAudio.src === '' && adminSeek.disabled
+        && Number(adminSeek.value) === 0
+        && !root.querySelector('input[name="song_ids[]"]:checked'),
+        'Stop must release audio and timeline without changing catalog selection.');
+    repeatControl.click();
+    repeatControl.click();
     const originalUrl = location.href;
     let expectedPageUrl = originalUrl;
     check(root && root.querySelectorAll('tbody tr').length === 3,
@@ -272,6 +404,7 @@ try {
         && shareVerticalRow(searchForm, reconcileButton)
         && shareVerticalRow(searchForm, mergeSummary),
         'Desktop search, import, and merge controls must share one toolbar row.');
+    repeatControl.click();
     albumsTab.click();
     const returnTabInputs = Array.from(
         root.querySelectorAll('form input[name="return_tab"]'),
@@ -284,6 +417,14 @@ try {
         && returnTabInputs.every(input => input.value === 'admin-music-tab-albums'),
         'Selecting Albums must use the shared URL mode, switch panels, and update every hidden return_tab.');
     const albumDetail = root.querySelector('.admin-music-album-detail');
+    const albumRepeat = albumDetail.querySelector('[data-music-action="repeat"]');
+    albumRepeat.click();
+    albumRepeat.click();
+    check(albumRepeat.dataset.musicRepeatMode === 'none'
+        && repeatControl.dataset.musicRepeatMode === 'one'
+        && repeatControl.getAttribute('aria-pressed') === 'true'
+        && AdminMusicAudioFixture.instances.at(-1).src === '',
+        'Inactive catalog repeat state must survive an independent album mode change without audio.');
     const albumContext = albumDetail?.querySelector(
         ':scope > header.admin-music-album-heading > details.admin-music-album-options',
     );
@@ -318,6 +459,11 @@ try {
     check(albumMemberActionsFit(root),
         'Desktop album member icon actions must fit one row while titles may wrap.');
     songsTab.click();
+    repeatControl.click();
+    check(repeatControl.dataset.musicRepeatMode === 'none'
+        && albumRepeat.dataset.musicRepeatMode === 'none',
+        'Reactivated catalog ownership must continue its saved ONE mode to OFF.');
+    repeatControl.click();
     check(songsTab.getAttribute('aria-selected') === 'true'
         && songsPanel.hidden === false
         && albumsPanel.hidden === true
@@ -712,6 +858,7 @@ try {
     let olderSearchBodyRead = false;
     let releaseMutation = null;
     let mode = 'hold-success';
+    let uploadWrites = 0;
     let confirmText = '';
     window.confirm = /** Capture the real merge confirmation text. @param {string} question Production confirmation contents. @returns {boolean} Accept the fixture action. */ question => { confirmText = question; return true; };
     const nativeFetch = window.fetch.bind(window);
@@ -728,6 +875,10 @@ try {
                 albumId: body.get('album_id'),
                 position: body.get('position'),
                 returnTab: body.get('return_tab'),
+                revision: body.get('revision'),
+                uploadName: body.get('music_files[]')?.name,
+                uploadBytes: body.get('action') === 'album_upload'
+                    ? await body.get('music_files[]').text() : null,
             });
             check(url === '/index.php?page=admin_music', 'Mutation used an unexpected endpoint.');
             check(options.credentials === 'same-origin'
@@ -735,6 +886,32 @@ try {
                 && body.get('csrf_token') === 'music-fixture'
                 && body.get('ajax') === '1',
                 'Mutation lost its protected same-origin canonical request.');
+            if (body.get('action') === 'album_upload') {
+                uploadWrites++;
+                check(body.getAll('music_files[]').length === 1
+                    && body.get('upload_count') === '1',
+                    'Album uploads must send one original per multipart request.');
+                if (mode === 'upload-unknown' && uploadWrites === 2) {
+                    throw new TypeError('Fixture lost upload response');
+                }
+                const uploadResponse = new Response(JSON.stringify({
+                    ok: true, message: 'Song added to album.',
+                    mutation: {type: 'music.album_upload', entity: 'music_catalog',
+                        action: 'album_upload', entity_ids: [8]},
+                    panel: {workflow: 'admin-music', refresh_url: '/music-fragment',
+                        keep_open: true}, contexts: [],
+                    fallback: {redirect_url: '/index.php?page=admin_music'},
+                    upload: {revision: String(200 + uploadWrites), error: '',
+                        songs: [{filename: body.get('music_files[]').name,
+                            song_id: 101, reused: uploadWrites > 1}]},
+                }), {headers: {'Content-Type': 'application/json'}});
+                if (mode === 'upload-hold' && uploadWrites === 1) {
+                    return new Promise(resolve => {
+                        releaseMutation = () => resolve(uploadResponse);
+                    });
+                }
+                return uploadResponse;
+            }
             if (mode === 'reject') {
                 return new Response(JSON.stringify({ok: false, message: 'Fixture rejected'}),
                     {status: 409, headers: {'Content-Type': 'application/json'}});
@@ -1375,10 +1552,55 @@ try {
     searchedRootBeforeTabSwitch.querySelector(
         '.admin-music-tabs [data-admin-tab-target="admin-music-tab-songs"]',
     ).click();
-    const postSearchUrl = location.href;
+    mode = 'upload-hold';
+    uploadWrites = 0;
+    root = document.querySelector('[data-admin-music]');
+    root.querySelector('[data-admin-tab-target="admin-music-tab-albums"]').click();
+    const beforeUploadUrl = location.href;
+    const uploadForm = root.querySelector('[data-admin-music-upload]');
+    check(uploadForm?.enctype === 'multipart/form-data'
+        && uploadForm.querySelector('input[type="file"]').multiple
+        && root.querySelector('.admin-music-album-add-song select[name="song_id"]'),
+        'Multipart uploads must be an additional option beside existing catalog Add.');
+    const uploadButton = uploadForm.querySelector('button[type="submit"]');
+    const uploadButtonBounds = uploadButton.getBoundingClientRect();
+    const uploadFormBounds = uploadForm.getBoundingClientRect();
+    check(uploadButtonBounds.right <= uploadFormBounds.right
+        && uploadButton.scrollWidth <= uploadButton.clientWidth,
+        'The Upload label must fit its action instead of inheriting an icon-only width.');
+    // Two distinct source occurrences prove serial writes and fresh revision use.
+    const uploadSelection = new DataTransfer();
+    uploadSelection.items.add(new File(['first-original'], 'first.wav', {type: 'audio/wav'}));
+    uploadSelection.items.add(new File(['second-original'], 'second.wav', {type: 'audio/wav'}));
+    uploadForm.querySelector('input[type="file"]').files = uploadSelection.files;
+    const beforeUploadWrites = writeBodies.length;
+    uploadForm.requestSubmit(uploadForm.querySelector('button[type="submit"]'));
+    await waitForBrowserState(() => uploadWrites === 1,
+        'The first album upload did not reach its protected endpoint.');
+    check(root.dataset.busy === '1'
+        && writeBodies.length === beforeUploadWrites + 1,
+        'A held first original must prevent the second upload from starting.');
+    uploadForm.requestSubmit();
+    check(writeBodies.length === beforeUploadWrites + 1,
+        'A repeated submit must not replay an active upload selection.');
+    releaseMutation();
+    await waitForIdle();
+    root = document.querySelector('[data-admin-music]');
+    const sentUploads = writeBodies.slice(beforeUploadWrites);
+    check(sentUploads.length === 2
+        && sentUploads[0].uploadBytes === 'first-original'
+        && sentUploads[1].uploadBytes === 'second-original'
+        && sentUploads[1].revision === '201'
+        && root.querySelectorAll('.admin-music-upload-results li').length === 2
+        && root.querySelector('[data-admin-music-upload-status]').textContent
+            .includes('Processed files: 2')
+        && root.querySelector('#admin-music-tab-albums').hidden === false
+        && location.href === beforeUploadUrl,
+        'Upload completion must retain original bytes, fresh revisions, results, album tab and URL.');
+    root.querySelector('[data-admin-tab-target="admin-music-tab-songs"]').click();
 
+    const postSearchUrl = location.href;
     mode = 'unsynchronized';
-    root = editorRaceRoot;
     root.querySelector('input[name="show_extensions"]').form.requestSubmit(
         root.querySelector('input[name="show_extensions"]').form.querySelector('button')
     );
@@ -1392,6 +1614,25 @@ try {
         'Failed synchronization did not lock writes and show the reload warning.');
     check(location.href === postSearchUrl,
         'Music Manager mutation changed the browser URL.');
+    // A new server fragment is the passive state reconciliation boundary.
+    const unknownTemplate = document.createElement('template');
+    unknownTemplate.innerHTML = freshMusicMarkup;
+    const unknownRoot = unknownTemplate.content.querySelector('[data-admin-music]');
+    root.replaceWith(unknownRoot);
+    setupAdminTabsInRoot(unknownRoot);
+    unknownRoot.querySelector('[data-admin-tab-target="admin-music-tab-albums"]').click();
+    const unknownForm = unknownRoot.querySelector('[data-admin-music-upload]');
+    unknownForm.querySelector('input[type="file"]').files = uploadSelection.files;
+    mode = 'upload-unknown';
+    uploadWrites = 0;
+    unknownForm.requestSubmit(unknownForm.querySelector('button[type="submit"]'));
+    await waitForIdle();
+    root = document.querySelector('[data-admin-music]');
+    check(uploadWrites === 2 && root.dataset.stale === '1'
+        && root.querySelectorAll('.admin-music-upload-results li').length === 1
+        && root.querySelector('[data-admin-music-status]').textContent
+            .includes('could not be verified'),
+        'A lost second response must preserve the first acknowledgment, stop the queue and lock replay.');
     document.getElementById('results').textContent = 'BROWSER PASS Admin Music Manager layout, disclosure, mutation, refresh, rejection, and stale lock';
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL ' + (error.stack || String(error));

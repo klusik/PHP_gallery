@@ -196,6 +196,8 @@ namespace {
     use function Gallery\Services\music_catalog_album_song_add;
     use function Gallery\Services\music_catalog_album_song_remove;
     use function Gallery\Services\music_catalog_album_update;
+    use function Gallery\Services\music_catalog_album_upload;
+    use function Gallery\Services\music_catalog_album_playback_page;
     use function Gallery\Services\music_catalog_list;
     use function Gallery\Services\music_catalog_revision;
     use function Gallery\Services\music_catalog_song_details;
@@ -1867,6 +1869,135 @@ namespace {
                 && !isset($deletedOriginGalleryRows[$sourceId]),
             'Deleting a source gallery must preserve destination playback and its central asset without returning a URL row for the deleted origin.',
         );
+
+        // A unique PCM payload avoids reusing other fixture-owned originals.
+        $albumUploadSource = $directory . '/album-upload.wav';
+        $fixtureSourcePaths[] = $albumUploadSource;
+        file_put_contents($albumUploadSource, $wav . $token . 'album-upload');
+        $uploadAlbum = music_catalog_album_create(
+            'Direct upload ' . $token, null, music_catalog_revision(),
+        );
+        $fixtureAlbumIds[] = (int) $uploadAlbum['album_id'];
+        $albumUpload = music_catalog_album_upload(
+            (int) $uploadAlbum['album_id'], $albumUploadSource,
+            'Direct upload ' . $token . '.wav', $uploadAlbum['revision'],
+        );
+        $fixtureSongIds[] = $albumUpload['song_id'];
+        $albumUploadAssets = \Gallery\Models\music_repository_model_assets_for_song(
+            $albumUpload['song_id'],
+        );
+        foreach ($albumUploadAssets as $asset) {
+            $fixtureAssetIds[] = $asset['id'];
+            $fixtureAssetPaths[] = music_repository_directory() . '/'
+                . $asset['id'] . '.bin';
+        }
+        check(!$albumUpload['reused'] && count($albumUploadAssets) === 1
+            && music_catalog_album_members((int) $uploadAlbum['album_id'])[0]['id']
+                === $albumUpload['song_id'],
+            'Album upload must create one central song without a gallery assignment.',
+        );
+        $otherUploadAlbum = music_catalog_album_create(
+            'Second upload album ' . $token, null, $albumUpload['revision'],
+        );
+        $fixtureAlbumIds[] = (int) $otherUploadAlbum['album_id'];
+        $reusedUpload = music_catalog_album_upload(
+            (int) $otherUploadAlbum['album_id'], $albumUploadSource,
+            'Renamed identical original.wav', $otherUploadAlbum['revision'],
+        );
+        check($reusedUpload['reused']
+            && $reusedUpload['song_id'] === $albumUpload['song_id']
+            && count(\Gallery\Models\music_repository_model_assets_for_song(
+                $albumUpload['song_id'],
+            )) === 1
+            && count(music_catalog_usage($albumUpload['song_id'])['albums']) === 2,
+            'Renamed identical bytes must share one song and original across albums.',
+        );
+        $repeatedUpload = music_catalog_album_upload(
+            (int) $uploadAlbum['album_id'], $albumUploadSource,
+            'Repeated original.wav', $reusedUpload['revision'],
+        );
+        check(count(music_catalog_album_members((int) $uploadAlbum['album_id'])) === 1,
+            'Reupload into the same album must not duplicate its membership.',
+        );
+        $unchangedRevision = $repeatedUpload['revision'];
+        try {
+            music_catalog_album_upload(
+                (int) $uploadAlbum['album_id'], $albumUploadSource,
+                'Stale upload.wav', $albumUpload['revision'],
+            );
+            throw new \RuntimeException('Stale album upload was accepted.');
+        } catch (\RuntimeException $error) {
+            check($error->getMessage() === 'music.conflict'
+                && music_catalog_revision() === $unchangedRevision,
+                'A stale album upload must preserve catalog state.',
+            );
+        }
+        music_catalog_album_song_remove(
+            (int) $uploadAlbum['album_id'], $albumUpload['song_id'],
+            $unchangedRevision,
+        );
+        check(music_catalog_album_members((int) $uploadAlbum['album_id']) === []
+            && count(music_catalog_album_members((int) $otherUploadAlbum['album_id'])) === 1
+            && music_repository_asset_path($albumUploadAssets[0]) !== null,
+            'Removing one album membership must preserve other memberships and bytes.',
+        );
+        music_catalog_album_song_remove(
+            (int) $otherUploadAlbum['album_id'], $albumUpload['song_id'],
+            music_catalog_revision(),
+        );
+        check(music_catalog_usage($albumUpload['song_id'])['albums'] === []
+            && music_repository_asset_path($albumUploadAssets[0]) !== null,
+            'Uploaded songs must remain reusable with zero album memberships.',
+        );
+
+        $playbackAlbum = music_catalog_album_create(
+            'Paged playback ' . $token, null, music_catalog_revision(),
+        );
+        $playbackAlbumId = (int) $playbackAlbum['album_id'];
+        $fixtureAlbumIds[] = $playbackAlbumId;
+        $insertPlaybackSong = $pdo->prepare(
+            'INSERT INTO music_songs (title, created_at, updated_at) VALUES (?, NOW(), NOW())',
+        );
+        $insertPlaybackMember = $pdo->prepare(
+            'INSERT INTO music_album_songs (album_id, song_id, sort_order) VALUES (?, ?, ?)',
+        );
+        $playbackSongIds = [];
+        // One track beyond the existing page bound proves full-album continuation.
+        for ($position = 0;
+            $position <= \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE;
+            $position++) {
+            $insertPlaybackSong->execute(['Playback ' . $position . ' ' . $token]);
+            $id = (int) $pdo->lastInsertId();
+            $fixtureSongIds[] = $id;
+            $playbackSongIds[] = $id;
+            $insertPlaybackMember->execute([$playbackAlbumId, $id, $position]);
+        }
+        $playbackRevision = music_catalog_revision();
+        $firstPlaybackPage = music_catalog_album_playback_page(
+            $playbackAlbumId, 0, $playbackRevision,
+        );
+        $lastPlaybackPage = music_catalog_album_playback_page(
+            $playbackAlbumId, \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE,
+            $playbackRevision,
+        );
+        check(count($firstPlaybackPage['tracks']) === \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE
+            && count($lastPlaybackPage['tracks']) === 1
+            && $lastPlaybackPage['offset'] === \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE
+            && $firstPlaybackPage['total'] === count($playbackSongIds)
+            && array_merge(array_column($firstPlaybackPage['tracks'], 'id'),
+                array_column($lastPlaybackPage['tracks'], 'id')) === $playbackSongIds,
+            'Album playback must preserve global order across bounded pages.',
+        );
+        music_catalog_album_song_remove(
+            $playbackAlbumId, $playbackSongIds[0], $playbackRevision,
+        );
+        try {
+            music_catalog_album_playback_page($playbackAlbumId, 0, $playbackRevision);
+            throw new \RuntimeException('A stale playback snapshot was accepted.');
+        } catch (\RuntimeException $error) {
+            check($error->getMessage() === 'music.conflict',
+                'A changed album must refuse continuation of the earlier revision.');
+        }
 
         echo "Music repository database contracts passed.\n";
     } finally {

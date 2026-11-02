@@ -33,6 +33,30 @@
  */
 
 return [
+    'music.pause' => 'Pause',
+    'music.seek' => 'Playback position',
+    'music.mute' => 'Mute',
+    'music.repeat_all' => 'Repeat all',
+    'music.repeat_one' => 'Repeat one',
+    'music.repeat_none' => 'Repeat off',
+    'music.play_song' => 'Play: {title}',
+    'music.pause_song' => 'Pause: {title}',
+    'admin.music.player_loading' => 'Loading album…',
+    'admin.music.player_error' => 'Playback is unavailable. Reload the catalog before trying again.',
+    'admin.music.player_js' => 'Enable JavaScript to use album playback and seeking.',
+    'admin.music.upload_unknown' => 'The upload result could not be verified. Reload the catalog before retrying.',
+    'admin.music.upload_reload' => 'Reload catalog before continuing',
+    'admin.music.upload_files' => 'Upload files',
+    'admin.music.upload' => 'Upload',
+    'admin.music.upload_help_label' => 'About uploading songs',
+    'admin.music.upload_help' => 'Select several audio files. Identical originals reuse the existing song. Songs can belong to several albums; other memberships stay intact.',
+    'admin.music.upload_limits' => 'Up to {count} files per selection, {size} MiB per file. Hosting upload limits also apply. Without JavaScript, the whole selection must fit one request.',
+    'admin.music.upload_invalid' => 'Select 1–20 supported audio files, each no larger than 64 MiB. The full selection must fit the hosting upload limits.',
+    'admin.music.upload_progress' => 'Uploading {count}/{total}: {filename}',
+    'admin.music.upload_complete' => 'Processed files: {count}.',
+    'admin.music.upload_reused' => 'Existing song reused',
+    'admin.music.upload_added' => 'Added to album',
+    'admin.music.upload_stopped' => 'Processed files: {count}. Stopped at {filename}: {reason}',
     'admin.consistency.browser_notice' =>
         'Thumbnail repairs use browser workers. Keep this tab open; the '
             . 'server validates and stores only the requested variants.',

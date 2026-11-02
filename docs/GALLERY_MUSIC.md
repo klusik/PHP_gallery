@@ -1,5 +1,91 @@
 # Gallery music
 
+## Administrator playback and seeking
+
+Music Manager provides an independent Play/Pause action beside each catalog
+song and album member. The compact player above each list has Previous,
+Play/Pause, Stop, Next, Repeat and Mute. Its native range shows the
+current position, elapsed time and finite original duration; click, drag or use
+the keyboard to seek. Seeking while paused retains Pause. Play resumes the same
+cursor; Stop releases the original and resets its timeline. Playback and file
+selection are independent: listening never assigns a song to an album/gallery
+or writes a playback preference.
+
+Repeat cycles **All → One → Off → All**, starting at All. All uses the loop
+arrows; One adds a visible **1**; Off crosses the arrows out. Both active modes
+have a Theme accent tint and line, with the current mode in the accessible name
+and tooltip. Changing mode preserves playback, Pause and the current cursor;
+it never starts stopped audio. One restarts the current original at its end,
+without another album page read. Explicit Next/Previous still select another
+song. Each list retains its mode while switching exclusive player ownership;
+reloading or replacing its playlist resets All. Nothing is persisted.
+
+In All mode the player follows the complete saved album order,
+including members beyond the displayed list page. It keeps at most one existing
+100-song catalog page and loads another only at a boundary or when a selected
+row lies outside that page. Previous wraps across the album start. Turning
+Repeat Off stops after the final song. Continuations retain the observed global
+catalog revision; a changed snapshot stops with a visible reload message rather
+than combining different album versions. Stop, source replacement, mutation,
+search replacement and page teardown invalidate pending reads and Play promises.
+
+The existing page-wide exclusive Audio owner also owns these Admin controls.
+Pause never replaces its source. One timeline event updates just the clocks and
+range, without rescanning all song rows. Unknown or infinite duration disables
+seek. Mute is applied directly before source activation and retained in memory
+when switching player scopes on the same page; it is not a saved gallery
+preference. JavaScript is required for these controls; native catalog and album
+editing/upload forms retain their supported fallback.
+
+The existing `admin_music` route serves protected GET/HEAD previews and bounded
+album-page JSON. Administrator authentication, the music capability, anonymous
+preview exclusion and the known-under-18 boundary precede repository lookup.
+Read-only preview never promotes an original or changes membership. The public
+music route and the Admin route reuse one HTTP audio responder with the existing
+MIME, inline disposition, private/no-store, HEAD, byte-range and If-Range rules.
+Missing originals stay opaque. There is no new SQL table, source PHP file,
+logical runtime owner or public playback UI. The existing HTTP helper is the
+shared transport owner; the expected Admin closure addition is that existing
+file, under unchanged route/duplicate budgets and the consumed 98-module limit.
+Hosted preparation establishes actual closure counts.
+
+## Upload directly into an album
+
+In **Admin → Galleries → Music Manager → Albums & playlists**, select or
+create an album and use **Upload files** below the existing catalog-song
+selector. The selector and its Add action remain available. Select up to twenty
+supported audio originals, then Upload. No gallery is required. Each original
+retains the existing 64 MiB, extension and content-detected MIME checks.
+Hosting upload limits still apply. JavaScript sends one original at a time,
+retains each acknowledgment and carries the returned catalog revision to the
+next request. The native multipart form also works without JavaScript, within
+one hosting request's total upload limits.
+
+Exact SHA-256 and size matches reuse an existing central song. Current active
+legacy sources can be promoted through the existing repository owner before
+reuse; dirty snapshots never establish a duplicate. Renaming identical bytes
+therefore creates neither another song nor another stored original. Different
+bytes with the same filename remain separate. This explicit upload admission
+does not merge pre-existing identities or use acoustic fingerprints. A song may
+belong to zero, one or several albums independently. Uploading an existing
+member preserves its position; removing membership retains the original and
+other memberships.
+
+Registration and the ordered membership write share the catalog revision
+transaction. Album uploads check every linked gallery's existing capacity before
+creating an original. Legacy promotion and gallery quota locks precede that
+transaction. A proven rollback removes only this attempt's verified unregistered
+bytes; an ambiguous commit or unreadable database retains them. Missing or
+unknown schema refuses ingestion. No new schema, route or runtime owner is
+introduced; expected PHP file/module closure deltas are zero against the
+existing 98-module plan and unchanged limits. Hosted preparation establishes
+actual counts.
+
+The batch stops at the first failure and displays acknowledged files separately.
+A lost or invalid response never triggers automatic upload retry; the editor
+locks further writes until the user reloads its actual persisted state. Saved
+members remain saved. This workflow never starts music playback.
+
 ## Shared originals and live gallery playlists
 
 **Edit gallery → Media management** combines photographs, presentation, PDF documents

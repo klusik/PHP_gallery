@@ -856,6 +856,64 @@ bounded diagnostic; database visibility remains authoritative, matching the
 existing editor sidecar-write boundary. Hosted BASIC is source evidence only;
 runtime, migration, browser and deployed behavior need their own qualification.
 
+## Administrator music transport and paged playback
+
+Owners: the existing Music Manager Controller/View, music catalog Service,
+shared HTTP response helper and exclusive `gallery-music-player.js` owner.
+Administrator playback adds no persisted setting or public player markup.
+The public gallery stream wrapper remains supported and delegates to the same
+verified-original HTTP responder as the new global Admin preview. Its existing
+GET/HEAD, Range, If-Range, private-cache and opaque-missing semantics remain
+permanent; no migration of URLs, identity or original files is required.
+
+Album playback retains one bounded catalog page and its global revision.
+A changed snapshot stops rather than mixing membership generations. Pause and
+seeking preserve the current original; Stop, teardown and editor replacement
+invalidate pending Play/page work. Unknown duration disables seeking rather
+than estimating. Mute is browser-memory state shared across current-page scopes
+and never changes gallery defaults. JavaScript is required for the new controls;
+existing no-script editing/upload forms remain supported.
+
+The Admin repeat control cycles All, One and Off, retaining the existing All
+default. Current-control state preserves a list's choice when exclusive playback
+switches scopes; fresh/replaced markup resets it. Public playlists without the
+Admin control permanently retain their repeat-all default. Repeat One restarts
+the selected original locally; explicit Next/Previous remain available, and
+changing a mode never activates stopped audio or changes a paused cursor.
+Existing bounded original-error handling remains supported in every mode;
+repeat does not create an automatic retry loop for unavailable files.
+
+Regression owners are the music browser, Admin manager browser, manager request
+boundary, public media HTTP and repository database fixtures. Deployed browser,
+codec and device usage remains unknown. Silent adapters and muted interface
+acceptance are distinct from audible playback qualification. No support path is
+being retired.
+
+## Direct album uploads and retained native forms
+
+Owners: the existing global Music Manager Controller/View/browser module,
+`music_catalog` Model/Service and `music_repository` Service. Album uploads
+retain the existing catalog-song Add control and all gallery upload entry
+points. The native multipart form is permanently supported for environments
+without JavaScript; its aggregate selection must fit the hosting POST/file
+limits. Enhanced uploads send one original per request and retain each canonical
+acknowledgment. Unverified responses stop the queue and lock replay until a
+passive reload; no automatic retry can duplicate a pending write.
+
+Exact original-byte reuse applies only to explicit upload admission and never
+collapses existing manually split/merged catalog identities. Existing MIME,
+source-size, schema-readiness and live-gallery quota policies remain owners.
+A proven SQL rollback permits deletion only of the attempt-owned, verified,
+unregistered original; ambiguous commits retain bytes permanently until the
+ordinary storage owner can prove safe cleanup. Songs with zero album
+memberships remain catalog entries backed by their central originals.
+
+Regression owners: `music_repository_database_test.php` and
+`admin_music_browser_test.mjs`; deployed usage and real network-failure rates
+are unknown. The required hosted matrix and silent localhost interface check
+must be reported separately from codec/device playback. No fallback retirement
+is proposed.
+
 ## Shared music originals and live gallery assignments
 
 Gallery music failures retain a non-secret response/Admin-log reference, with

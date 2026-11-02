@@ -48,15 +48,25 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
-    /** Return the view's English fallback label without application services.
+    /** Resolve explicit English fallbacks and key-only production icon labels.
      * @param string $key Translation key.
      * @param string $fallback English fixture label.
      * @param array<string,string|int> $parameters Optional interpolation values.
-     * @return string Deterministic fallback label.
+     * @return string Interpolated explicit fallback or actual English catalog
+     * label; empty for an unknown key so accessibility assertions still fail.
      */
     function t(string $key, string $fallback = '', array $parameters = []): string
     {
-        return $fallback;
+        static $messages = null;
+        if ($messages === null) {
+            $messages = require dirname(__DIR__, 2) . '/app/lang/en.php';
+        }
+        $replace = [];
+        foreach ($parameters as $name => $value) {
+            $replace['{' . $name . '}'] = (string) $value;
+        }
+        return strtr($fallback !== '' ? $fallback : ($messages[$key] ?? ''),
+            $replace);
     }
 }
 
@@ -248,6 +258,34 @@ namespace {
             . \Gallery\Core\e('admin-music-tab-' . $tab) . '">',
         'action_url' => '/index.php?page=admin_music',
         'notice' => '', 'error' => '', 'fragment' => isset($argv[1]),
+        // Prepared production limits, not independent fixture policy defaults.
+        'upload' => ['max_files' => 20, 'max_bytes' => 64 * 1024 * 1024,
+            'accept' => '.mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,.flac,.webm,.weba'],
+    ];
+    $previewTracks = array_map(static fn(array $song): array => [
+        'id' => 'catalog-song-' . (int) $song['id'],
+        'title' => (string) $song['title'],
+        'url' => '/index.php?page=admin_music&action=music_preview&song_id='
+            . (int) $song['id'],
+    ], $songs);
+    $albumTracks = array_map(static fn(array $song): array => [
+        'id' => 'catalog-song-' . (int) $song['id'],
+        'title' => (string) $song['title'],
+        'url' => '/index.php?page=admin_music&action=music_preview&song_id='
+            . (int) $song['id'],
+    ], $model['album_members']);
+    $model['playback'] = [
+        'allowed' => true,
+        'catalog' => ['galleryId' => 0, 'enabled' => false, 'tracks' => $previewTracks],
+        'album' => ['galleryId' => -$albumId, 'enabled' => false,
+            'tracks' => $albumTracks, 'pagination' => [
+                'url' => '/index.php?page=admin_music&action=album_playlist&album_id='
+                    . $albumId,
+                'offset' => 0, 'total' => count($albumTracks),
+                // Mirrors MUSIC_CATALOG_PAGE_SIZE in the prepared server model.
+                'pageSize' => 100, 'revision' => 'fixture-rev',
+            ]],
+        'error' => '',
     ];
     $model['catalog']['songs'] = $songs;
     $model['catalog']['total'] = count($songs);
