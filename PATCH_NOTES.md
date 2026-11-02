@@ -1,5 +1,62 @@
 # Patch notes
 
+## Version 0.150.5
+
+Made the Admin gallery inventory more compact and added immediate per-gallery
+feature controls while retaining map inheritance and existing voting data.
+
+### Highlights
+
+#### Compact gallery controls
+
+- Replaced visible state and feature labels with localized, accessible icons for
+  visibility, password protection, maps, background, file names, voting and
+  Picture Game. Background remained a status indicator.
+- Saved map, file-name, voting and Picture Game changes immediately for the
+  selected gallery, without a separate confirmation step.
+- Distinguished inherited, enabled and disabled map settings. An explicit map
+  disable overriding an inherited enabled state appeared orange and crossed out;
+  inherited disabled maps remained muted without a slash.
+- Kept the existing dependency between Picture Game and voting: enabling the
+  game enabled voting, while disabling voting disabled the game. Existing votes
+  and game results were retained.
+
+### Technical Details
+
+#### Backend
+
+- Extended the existing feature-plan service with single-gallery scope and a
+  nullable map override, while retaining atomic snapshot revalidation, schema
+  checks and the existing subtree plan behavior.
+- Resolved the inherited map baseline from the gallery hierarchy or global
+  default and kept password and direct-link token states distinguishable.
+
+#### Frontend
+
+- Added compact icon styling, localized tooltips, keyboard focus indicators and
+  larger touch targets. Gallery rows refreshed after acknowledged changes.
+- Preserved canonical mutation completion and reloaded authoritative state
+  without replaying a write when its response could not be confirmed.
+
+#### Tests
+
+- Extended feature-plan, dashboard and browser fixtures for individual gallery
+  scope, map override states, coupled game and voting changes, dynamic refresh,
+  password icons and uncertain responses.
+
+### User Impact
+
+#### For administrators
+
+- Reduced horizontal space used by gallery states and made common settings
+  available directly in each gallery row.
+
+#### For visitors
+
+- Existing votes and game results remained available when their features were
+  disabled and enabled again; gallery display changed only when an administrator
+  changed the corresponding setting.
+
 ## Version 0.150.4
 
 Improved gallery administration with faster name filtering and a grouped bulk
