@@ -92,7 +92,7 @@ body.admin-page {
 <script type="module">
 import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261102-album-upload-v2';
 import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261027-appearance-state-v1';
-import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-admin-music-player-v2';
+import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-repeat-modes-v1';
 import {normalizeAdminMutationEnvelope} from '/public/assets/gallery-modules/admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const ACTION_TIMEOUT_MS = ${ACTION_TIMEOUT_MS};
@@ -260,6 +260,29 @@ try {
     check(adminAudio.muted && adminAudio.src === ''
         && muteControl.getAttribute('aria-pressed') === 'true',
         'Admin Mute must apply before any source is activated.');
+    const repeatControl = catalogPlayer.querySelector('[data-music-action="repeat"]');
+    repeatControl.click();
+    const activeRepeatBackground = getComputedStyle(repeatControl).backgroundColor;
+    check(repeatControl.dataset.musicRepeatMode === 'one'
+        && repeatControl.getAttribute('aria-pressed') === 'true'
+        && repeatControl.getAttribute('aria-label') === 'Repeat one'
+        && repeatControl.querySelector('[data-music-repeat-icon="one"]:not([hidden])')
+        && repeatControl.querySelectorAll('[data-music-repeat-icon]:not([hidden])').length === 1,
+        'Repeat ONE must expose its localized name, active state and distinct single icon.');
+    repeatControl.click();
+    check(repeatControl.dataset.musicRepeatMode === 'none'
+        && repeatControl.getAttribute('aria-pressed') === 'false'
+        && repeatControl.title === 'Repeat off'
+        && repeatControl.querySelector('[data-music-repeat-icon="none"]:not([hidden])')
+        && getComputedStyle(repeatControl).backgroundColor !== activeRepeatBackground,
+        'Repeat OFF must change its icon, name and actual production active styling.');
+    repeatControl.click();
+    check(repeatControl.dataset.musicRepeatMode === 'all'
+        && repeatControl.getAttribute('aria-label') === 'Repeat all'
+        && repeatControl.getAttribute('aria-pressed') === 'true'
+        && repeatControl.querySelector('[data-music-repeat-icon="all"]:not([hidden])')
+        && adminAudio.src === '' && adminAudio.paused,
+        'The cycle must restore ALL without loading or playing an original.');
     const rowPlay = catalogPlayer.querySelector('[data-music-track-id="catalog-song-101"]');
     rowPlay.click();
     check(!adminAudio.paused && adminAudio.src.includes('action=music_preview')
@@ -280,6 +303,12 @@ try {
         'The toolbar must resume at the paused cursor.');
     catalogPlayer.querySelector('[data-music-action="next"]').click();
     check(adminAudio.src.includes('song_id=102'), 'Admin Next did not choose the next song.');
+    repeatControl.click();
+    adminAudio.currentTime = adminAudio.duration;
+    adminAudio.dispatchEvent(new Event('ended'));
+    check(adminAudio.src.includes('song_id=102') && adminAudio.currentTime === 0
+        && !adminAudio.paused && adminAudio.muted,
+        'The actual Repeat ONE button must restart the current song silently.');
     catalogPlayer.querySelector('[data-music-action="previous"]').click();
     check(adminAudio.src.includes('song_id=101'), 'Admin Previous did not return to the prior song.');
     catalogPlayer.querySelector('[data-music-action="stop"]').click();
@@ -287,6 +316,8 @@ try {
         && Number(adminSeek.value) === 0
         && !root.querySelector('input[name="song_ids[]"]:checked'),
         'Stop must release audio and timeline without changing catalog selection.');
+    repeatControl.click();
+    repeatControl.click();
     const originalUrl = location.href;
     let expectedPageUrl = originalUrl;
     check(root && root.querySelectorAll('tbody tr').length === 3,
@@ -373,6 +404,7 @@ try {
         && shareVerticalRow(searchForm, reconcileButton)
         && shareVerticalRow(searchForm, mergeSummary),
         'Desktop search, import, and merge controls must share one toolbar row.');
+    repeatControl.click();
     albumsTab.click();
     const returnTabInputs = Array.from(
         root.querySelectorAll('form input[name="return_tab"]'),
@@ -385,6 +417,14 @@ try {
         && returnTabInputs.every(input => input.value === 'admin-music-tab-albums'),
         'Selecting Albums must use the shared URL mode, switch panels, and update every hidden return_tab.');
     const albumDetail = root.querySelector('.admin-music-album-detail');
+    const albumRepeat = albumDetail.querySelector('[data-music-action="repeat"]');
+    albumRepeat.click();
+    albumRepeat.click();
+    check(albumRepeat.dataset.musicRepeatMode === 'none'
+        && repeatControl.dataset.musicRepeatMode === 'one'
+        && repeatControl.getAttribute('aria-pressed') === 'true'
+        && AdminMusicAudioFixture.instances.at(-1).src === '',
+        'Inactive catalog repeat state must survive an independent album mode change without audio.');
     const albumContext = albumDetail?.querySelector(
         ':scope > header.admin-music-album-heading > details.admin-music-album-options',
     );
@@ -419,6 +459,11 @@ try {
     check(albumMemberActionsFit(root),
         'Desktop album member icon actions must fit one row while titles may wrap.');
     songsTab.click();
+    repeatControl.click();
+    check(repeatControl.dataset.musicRepeatMode === 'none'
+        && albumRepeat.dataset.musicRepeatMode === 'none',
+        'Reactivated catalog ownership must continue its saved ONE mode to OFF.');
+    repeatControl.click();
     check(songsTab.getAttribute('aria-selected') === 'true'
         && songsPanel.hidden === false
         && albumsPanel.hidden === true

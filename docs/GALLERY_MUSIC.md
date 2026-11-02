@@ -4,18 +4,27 @@
 
 Music Manager provides an independent Play/Pause action beside each catalog
 song and album member. The compact player above each list has Previous,
-Play/Pause, Stop, Next, Repeat playlist and Mute. Its native range shows the
+Play/Pause, Stop, Next, Repeat and Mute. Its native range shows the
 current position, elapsed time and finite original duration; click, drag or use
 the keyboard to seek. Seeking while paused retains Pause. Play resumes the same
 cursor; Stop releases the original and resets its timeline. Playback and file
 selection are independent: listening never assigns a song to an album/gallery
 or writes a playback preference.
 
-Album repeat starts enabled. The player follows the complete saved album order,
+Repeat cycles **All → One → Off → All**, starting at All. All uses the loop
+arrows; One adds a visible **1**; Off crosses the arrows out. Both active modes
+have a Theme accent tint and line, with the current mode in the accessible name
+and tooltip. Changing mode preserves playback, Pause and the current cursor;
+it never starts stopped audio. One restarts the current original at its end,
+without another album page read. Explicit Next/Previous still select another
+song. Each list retains its mode while switching exclusive player ownership;
+reloading or replacing its playlist resets All. Nothing is persisted.
+
+In All mode the player follows the complete saved album order,
 including members beyond the displayed list page. It keeps at most one existing
 100-song catalog page and loads another only at a boundary or when a selected
 row lies outside that page. Previous wraps across the album start. Turning
-Repeat off stops after the final song. Continuations retain the observed global
+Repeat Off stops after the final song. Continuations retain the observed global
 catalog revision; a changed snapshot stops with a visible reload message rather
 than combining different album versions. Stop, source replacement, mutation,
 search replacement and page teardown invalidate pending reads and Play promises.

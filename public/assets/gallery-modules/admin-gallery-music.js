@@ -10,7 +10,7 @@
  * License: MIT License (see LICENSE file in repository)
  */
 import {completeAdminMutation} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
-import {stopGalleryMusicViewer} from './gallery-music-player.js?v=20261102-admin-music-player-v2';
+import {stopGalleryMusicViewer} from './gallery-music-player.js?v=20261102-repeat-modes-v1';
 
 /** Bound one lazy album read without holding an editor indefinitely.
  * Type: number. Units: milliseconds. Scope: one catalog album page request.

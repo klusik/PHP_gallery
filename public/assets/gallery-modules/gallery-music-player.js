@@ -5,7 +5,7 @@
  * Module Type: Browser Module
  * Purpose: Share exclusive audio between gallery tables, the viewer and
  *     slideshow.
- * Responsibilities: Own playback, repeat-all, compact control state and
+ * Responsibilities: Own playback, repeat modes, compact control state and
  *     disposal.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -73,7 +73,16 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     let sourceActive = false;
     let loading = false;
     let playlistStale = false;
-    let repeat = true;
+    const repeatControl = Array.from(root.querySelectorAll(
+        '[data-music-action="repeat"]'
+    )).find(button => button.closest('[data-gallery-music]')
+        ?.dataset.musicGallery === String(playlist.galleryId));
+    const requestedRepeat = repeatControl?.dataset.musicRepeatMode;
+    // Retain this Admin scope's visible choice when exclusive ownership moves
+    // between lists. Public playlists without the control permanently retain
+    // their established repeat-all default; no setting is persisted.
+    let repeatMode = ['all', 'one', 'none'].includes(requestedRepeat)
+        ? requestedRepeat : 'all';
     let index = 0;
     let generation = 0;
     let handledFailure = -1;
@@ -187,13 +196,25 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
             const own = identity === String(playlist.galleryId);
             const active = playing && selected && own;
             const action = button.dataset.musicAction;
-            if (action === 'mute' || action === 'repeat') {
-                const pressed = action === 'mute' ? audio.muted : own && repeat;
-                button.setAttribute('aria-pressed', pressed ? 'true' : 'false');
-                if (action === 'mute') {
-                    button.querySelector('[data-music-volume-on]')?.toggleAttribute('hidden', audio.muted);
-                    button.querySelector('[data-music-volume-off]')?.toggleAttribute('hidden', !audio.muted);
+            if (action === 'repeat') {
+                if (!own) continue;
+                button.dataset.musicRepeatMode = repeatMode;
+                button.setAttribute('aria-pressed', repeatMode !== 'none'
+                    ? 'true' : 'false');
+                const label = button.getAttribute(
+                    `data-music-repeat-${repeatMode}-label`
+                );
+                if (label) {
+                    button.setAttribute('aria-label', label);
+                    button.title = label;
                 }
+                for (const icon of button.querySelectorAll('[data-music-repeat-icon]')) {
+                    icon.hidden = icon.dataset.musicRepeatIcon !== repeatMode;
+                }
+            } else if (action === 'mute') {
+                button.setAttribute('aria-pressed', audio.muted ? 'true' : 'false');
+                button.querySelector('[data-music-volume-on]')?.toggleAttribute('hidden', audio.muted);
+                button.querySelector('[data-music-volume-off]')?.toggleAttribute('hidden', !audio.muted);
             } else if (action === 'toggle' || action === 'pause-toggle') {
                 const label = active ? (action === 'pause-toggle'
                     ? button.dataset.musicPauseLabel : button.dataset.musicStopLabel)
@@ -354,8 +375,9 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     audio.addEventListener('ended', () => {
         if (disposed || !playing || tracks.length === 0) return;
         failed.clear();
+        if (repeatMode === 'one') { void play(); return; }
         const next = pageOffset + index + 1;
-        if (!repeat && next >= total) { release(); sync(); return; }
+        if (repeatMode === 'none' && next >= total) { release(); sync(); return; }
         void selectTrack(next % total);
     }, {signal: listener.signal});
     audio.addEventListener('error', () => {
@@ -449,7 +471,8 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
         },
         /**
          * Execute one explicit compact player or row-control action.
-         * @param {string} action Play, pause-toggle, stop, toggle, next, previous, mute or repeat.
+         * @param {string} action Play, pause-toggle, stop, toggle, next, previous,
+         *     mute or repeat (cycles all, one, none without changing the source).
          * @param {string} trackId Optional opaque row track identity.
          * @param {boolean} viewer Whether the control belongs to the
          *     photo viewer.
@@ -464,7 +487,11 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
                 musicMuted = audio.muted;
                 sync(); return;
             }
-            if (action === 'repeat') { repeat = !repeat; sync(); return; }
+            if (action === 'repeat') {
+                repeatMode = repeatMode === 'all' ? 'one'
+                    : repeatMode === 'one' ? 'none' : 'all';
+                sync(); return;
+            }
             if (action === 'stop') { release(); sync(); return; }
             if (tracks.length === 0 || playlistStale || loading) return;
             if (!['play', 'toggle', 'pause-toggle', 'next', 'previous'].includes(action)) return;

@@ -68,8 +68,8 @@ body { margin: 8px; font: 16px sans-serif; }
 import {
     createGalleryMusicPlayer, setupGalleryMusicPlayback,
     getGalleryMusicPlayer, formatMusicDuration,
-} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-admin-music-player-v2';
-import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261102-admin-music-player-v2';
+} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-repeat-modes-v1';
+import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261102-repeat-modes-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 /**
  * Yield one browser task so native form/promise completion can settle.
@@ -254,10 +254,32 @@ try {
     timelineAudio.dispatchEvent(new Event('loadedmetadata'));
     timelinePlayer.command('repeat');
     timelineAudio.dispatchEvent(new Event('ended'));
+    check(timelineAudio.src === '/track-one' && !timelineAudio.paused,
+        'Repeat ONE must restart the same original instead of advancing.');
+    timelinePlayer.command('next');
+    timelineAudio.dispatchEvent(new Event('ended'));
+    check(timelineAudio.src === '/track-two',
+        'Explicit Next must work in Repeat ONE and repeat the newly selected original.');
+    timelinePlayer.command('previous');
+    timelinePlayer.command('pause-toggle');
+    timelineAudio.currentTime = 35;
+    const repeatCalls = timelineAudio.calls.length;
+    timelinePlayer.command('repeat');
+    check(timelineAudio.paused && timelineAudio.currentTime === 35
+        && timelineAudio.calls.length === repeatCalls,
+        'Changing repeat mode must preserve the source, paused cursor and silence.');
+    timelinePlayer.command('pause-toggle');
+    timelineAudio.dispatchEvent(new Event('ended'));
     check(timelineAudio.src === '/track-two', 'Repeat OFF must still advance within an album.');
     timelineAudio.dispatchEvent(new Event('ended'));
     check(timelineAudio.src === '' && timelineAudio.paused && Number(seek.value) === 0,
         'The last track with repeat OFF must stop and clear its timeline.');
+    timelinePlayer.command('repeat');
+    check(timelineAudio.src === '', 'Cycling from OFF to ALL must not start stopped audio.');
+    timelinePlayer.command('play');
+    timelineAudio.dispatchEvent(new Event('ended'));
+    check(timelineAudio.src === '/track-one',
+        'Cycling back to ALL must restore end-of-playlist wrapping.');
     timelinePlayer.command('mute');
     timelinePlayer.destroy();
 
@@ -312,6 +334,14 @@ try {
         'Previous did not finish activation of the final page.');
     check(pageAudio.src === '/track-three' && pageReads.at(-1) === 2,
         'Previous from the album start must cross to the final page.');
+    const repeatPageReads = pageReads.length;
+    paged.command('repeat');
+    pageAudio.dispatchEvent(new Event('ended'));
+    check(pageAudio.src === '/track-three' && pageReads.length === repeatPageReads,
+        'Repeat ONE at a page boundary must restart locally without fetching another page.');
+    // Restore ALL through NONE before exercising stale continuation refusal.
+    paged.command('repeat');
+    paged.command('repeat');
     pageMode = 'stale';
     pageAudio.dispatchEvent(new Event('ended'));
     await waitForMusicState(() => transport.querySelector(

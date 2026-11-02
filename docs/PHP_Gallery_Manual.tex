@@ -1034,13 +1034,18 @@ compatibility only and~is~not~called by~browser actions. See
 \subsubsection{Global Music Manager}
 
 Each song has~an~independent Play/Pause action. The~compact player provides
-Previous, Play/Pause, Stop, Next, Repeat playlist and~Mute. Its~timeline shows
+Previous, Play/Pause, Stop, Next, Repeat and~Mute. Its~timeline shows
 elapsed time and~the~original duration; click, drag or~use the~keyboard to~seek.
 Seeking while paused keeps playback paused; Play resumes the~same cursor.
 Stop releases the~source and~resets its~timeline. Listening never assigns files
-or~changes gallery defaults. Album repeat starts enabled and~follows the~whole
-saved album, including songs beyond the~displayed page. Turning repeat off
-stops after the~last song. If~the~catalog changes during a~continuation, reload
+or~changes gallery defaults. Repeat cycles All, One, Off and~back to~All.
+All starts enabled and~follows the~whole saved album, including songs beyond
+the~displayed page. One restarts the~current song; Off stops after the~last song.
+Active modes have an~accent tint and~line; the~One icon adds~1 and~Off crosses
+the~loop arrows out. Tooltips name the~current mode. Changing mode preserves
+Pause and~the~cursor; Next/Previous still select another song. Each list retains
+its~choice when switching players; reloading resets All. If~the~catalog changes
+during a~continuation, reload
 before continuing. Mute carries between player scopes on~the~same page, while
 JavaScript is~required for~these controls. Native editing and~upload forms
 remain available without JavaScript.

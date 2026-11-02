@@ -589,7 +589,12 @@ The manager also exposes authenticated, read-only original previews and bounded
 album playback pages through its existing route. Controller-prepared URLs and
 inert JSON bind the catalog and album to distinct player scopes. The existing
 exclusive Audio owner adds pause/resume, native seeking, in-memory mute and
-repeat controls without changing public control markup. A complete album uses
+three-state repeat controls without changing public control markup. The Admin
+scope retains its All/One/Off choice in its rendered control when the exclusive
+owner changes; public players without that control retain repeat-all. One
+restarts the current original without paging, and explicit navigation remains
+independent. This adds no dependency edge, PHP file, module or schema change;
+the existing 98-module plan and limits remain unchanged. A complete album uses
 revision-pinned pages rather than copying all membership into the document;
 source replacement and Stop cancel pending reads. The gallery and Admin preview
 controllers share the HTTP helper's verified-audio responder, preserving the

@@ -874,6 +874,15 @@ than estimating. Mute is browser-memory state shared across current-page scopes
 and never changes gallery defaults. JavaScript is required for the new controls;
 existing no-script editing/upload forms remain supported.
 
+The Admin repeat control cycles All, One and Off, retaining the existing All
+default. Current-control state preserves a list's choice when exclusive playback
+switches scopes; fresh/replaced markup resets it. Public playlists without the
+Admin control permanently retain their repeat-all default. Repeat One restarts
+the selected original locally; explicit Next/Previous remain available, and
+changing a mode never activates stopped audio or changes a paused cursor.
+Existing bounded original-error handling remains supported in every mode;
+repeat does not create an automatic retry loop for unavailable files.
+
 Regression owners are the music browser, Admin manager browser, manager request
 boundary, public media HTTP and repository database fixtures. Deployed browser,
 codec and device usage remains unknown. Silent adapters and muted interface

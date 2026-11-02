@@ -174,6 +174,8 @@ function view_admin_menu_icon(string $icon): string
         'volume' => '<path d="M4 9h4l5-5v16l-5-5H4Zm12-2a7 7 0 0 1 0 10m3-13a11 11 0 0 1 0 16"/>',
         'muted' => '<path d="M4 9h4l5-5v16l-5-5H4Zm13 0 5 6m0-6-5 6"/>',
         'repeat' => '<path d="M4 9V6h14l-3-3m3 3-3 3M20 15v3H6l3 3m-3-3 3-3"/>',
+        'repeat-one' => '<path d="M4 9V6h14l-3-3m3 3-3 3M20 15v3H6l3 3m-3-3 3-3"/><text x="12" y="17" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="700" fill="currentColor" stroke="none">1</text>',
+        'repeat-none' => '<path d="M4 9V6h14l-3-3m3 3-3 3M20 15v3H6l3 3m-3-3 3-3M3 3l18 18"/>',
         'up' => '<path d="M12 20V4m-6 6 6-6 6 6"/>',
         'drag' => '<circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="19" r="1"/>',
         'move' => '<path d="M12 2v20m-4-4 4 4 4-4M8 6l4-4 4 4M2 12h20m-4-4 4 4-4 4M6 8l-4 4 4 4"/>',

@@ -1012,7 +1012,7 @@ function view_admin_music_play_button(
         . view_admin_menu_icon('pause') . '</span></button>';
 }
 
-/** Render a silent-until-activated player with a native keyboard seek range.
+/** Render an explicit player with a keyboard seek range and three repeat modes.
  * @param array{galleryId:int,enabled:bool,tracks:list<array{id:string,title:string,url:string}>,pagination?:array{url:string,offset:int,total:int,pageSize:int,revision:string}} $playlist Prepared authenticated sources and optional bounded whole-album paging.
  * @return void Emits controls, timeline and inert JSON; never requests playback.
  */
@@ -1030,7 +1030,7 @@ function view_admin_music_player(array $playlist): void
     foreach (['previous', 'pause-toggle', 'stop', 'next', 'repeat', 'mute'] as $action) {
         $label = match ($action) {
             'pause-toggle' => t('music.play', 'Play'),
-            'repeat' => t('music.repeat_all', 'Repeat playlist'),
+            'repeat' => t('music.repeat_all', 'Repeat all'),
             'mute' => t('music.mute', 'Mute'),
             default => t('music.' . $action),
         };
@@ -1051,9 +1051,26 @@ function view_admin_music_player(array $playlist): void
                 . view_admin_menu_icon('volume')
                 . '</span><span data-music-volume-off hidden>'
                 . view_admin_menu_icon('muted') . '</span>';
+        } elseif ($action === 'repeat') {
+            echo ' aria-pressed="true" data-music-repeat-mode="all"';
+            foreach (['all', 'one', 'none'] as $mode) {
+                $modeLabel = match ($mode) {
+                    'all' => t('music.repeat_all', 'Repeat all'),
+                    'one' => t('music.repeat_one', 'Repeat one'),
+                    'none' => t('music.repeat_none', 'Repeat off'),
+                };
+                echo ' data-music-repeat-' . $mode . '-label="'
+                    . e($modeLabel) . '"';
+            }
+            echo '>';
+            foreach (['all', 'one', 'none'] as $mode) {
+                echo '<span data-music-repeat-icon="' . $mode . '"'
+                    . ($mode === 'all' ? '' : ' hidden') . '>'
+                    . view_admin_menu_icon($mode === 'all'
+                        ? 'repeat' : 'repeat-' . $mode) . '</span>';
+            }
         } else {
-            echo ($action === 'repeat' ? ' aria-pressed="true"' : '') . '>'
-                . view_admin_menu_icon($action);
+            echo '>' . view_admin_menu_icon($action);
         }
         echo '</button>';
     }

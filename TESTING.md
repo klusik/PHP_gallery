@@ -326,11 +326,15 @@ remain manual acceptance; localhost debugging does not qualify deployment.
 
 Administrator playback is covered through the production exclusive player and
 silent Audio adapters. `gallery_music_browser_test.mjs` verifies pause/resume
-without source reset, active seek while paused, finite metadata, repeat OFF,
+without source reset, active seek while paused, finite metadata, all three
+repeat modes, mode changes during Pause, explicit Next while repeating one,
+local repeat-one at a page boundary, repeat OFF at the album end,
 whole-album page boundaries, Previous wrap, pinned-revision refusal and a late
 page response after Stop. `admin_music_browser_test.mjs` drives the real rendered
 row actions and toolbar, source identity, Mute before activation, timeline input,
 Previous/Next/Stop and unchanged catalog selection under production CSS.
+It also verifies the repeat cycle's localized names, distinct visible icons,
+pressed states and actual active/inactive backgrounds, without native sound.
 Paged browser phases await their terminal source/error state after native JSON
 body decoding. Responsive row assertions retain all three membership actions,
 check the separate Play/drag controls and reserve readable title space; narrow

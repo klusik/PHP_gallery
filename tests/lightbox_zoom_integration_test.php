@@ -208,11 +208,11 @@ foreach ([
 lightbox_zoom_integration_assert(
     str_contains(
         $publicEntrypointSource,
-        'lightbox-deferred.js?v=20261102-admin-music-player-v2',
+        'lightbox-deferred.js?v=20261102-repeat-modes-v1',
     )
         && str_contains(
             $authenticatedEntrypointSource,
-            'lightbox-deferred.js?v=20261102-admin-music-player-v2',
+            'lightbox-deferred.js?v=20261102-repeat-modes-v1',
         ),
     'Anonymous and authenticated browser entrypoints must invalidate the deferred lightbox cache together.',
 );
