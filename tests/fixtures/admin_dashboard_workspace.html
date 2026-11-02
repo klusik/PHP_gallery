@@ -97,9 +97,9 @@ function json(html) { return new Response(JSON.stringify({ok:true,html,total_gal
 function galleryMarkup() {
     return `<form data-gallery-bulk-form data-admin-gallery-order-form><input type="hidden" name="csrf_token" value="fixture">
         <div data-admin-gallery-order-toolbar data-reorder-url="/fixture-reorder"><span data-admin-gallery-order-status></span></div>
-        <select data-gallery-visibility-filter><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select>
+        <label><input type="search" data-gallery-name-filter></label><select data-gallery-visibility-filter><option value="all">All</option><option value="public">Public</option><option value="private">Private</option></select>
         <span data-gallery-filter-summary></span><input type="checkbox" data-select-all="gallery_ids[]">
-        <section data-feature-plan-url="/fixture-plan" data-feature-apply-url="/fixture-apply"><table data-admin-gallery-order-table><tbody>${['public','unpublished','private'].map(/** Render one synthetic gallery row. @param {string} visibility State. @param {number} i Row index. @return {string} Row markup. */ (visibility, i) => `<tr data-gallery-row data-gallery-id="${i+1}" data-parent-id="0" data-depth="0" data-gallery-visibility="${visibility}"><td><input type="checkbox" name="gallery_ids[]" value="${i+1}"></td><td>Gallery ${i+1}<button type="button" data-gallery-feature-key="voting" data-gallery-feature-root-id="${i+1}" data-gallery-feature-state="off" data-gallery-feature-own-state="off" data-on-count="0" data-total-count="1">Voting</button></td></tr>`).join('')}</tbody></table><div data-gallery-feature-pending hidden><span data-gallery-feature-pending-status></span><button type="button" data-gallery-feature-review>Review</button><button type="button" data-gallery-feature-discard>Discard</button></div><dialog data-gallery-feature-dialog></dialog></section></form>`;
+        <section data-feature-plan-url="/fixture-plan" data-feature-apply-url="/fixture-apply"><table data-admin-gallery-order-table><tbody>${['public','unpublished','private'].map(/** Render one synthetic gallery row. @param {string} visibility State. @param {number} i Row index. @return {string} Row markup. */ (visibility, i) => `<tr data-gallery-row data-gallery-id="${i+1}" data-parent-id="0" data-depth="0" data-gallery-title="Gallery ${i+1}" data-gallery-visibility="${visibility}"><td><input type="checkbox" name="gallery_ids[]" value="${i+1}"></td><td>Gallery ${i+1}<button type="button" data-gallery-feature-key="voting" data-gallery-feature-root-id="${i+1}" data-gallery-feature-state="off" data-gallery-feature-own-state="off" data-on-count="0" data-total-count="1">Voting</button></td></tr>`).join('')}</tbody></table><div data-gallery-feature-pending hidden><span data-gallery-feature-pending-status></span><button type="button" data-gallery-feature-review>Review</button><button type="button" data-gallery-feature-discard>Discard</button></div><dialog data-gallery-feature-dialog></dialog></section></form>`;
 }
 /** Build an external-form log selection list with non-item controls nearby. @return {string} Fixture markup. */
 function logSelectionMarkup() {
@@ -238,6 +238,8 @@ try {
     check(!location.hash, 'Overview navigation must not create an anchor or scroll jump');
     history.replaceState(null, '', '?dashboard_tab=galleries#admin-tab-galleries'); dispatchEvent(new PopStateEvent('popstate'));
     check(!document.querySelector('#admin-tab-galleries').hidden && document.querySelector('#admin-tab-overview').hidden, 'Browser history restores the existing tab workflow');
+    const nameSearch = document.querySelector('[data-gallery-name-filter]');
+    nameSearch.value = 'Gallery 3'; nameSearch.dispatchEvent(new Event('input', {bubbles:true}));
     const selectedRow = document.querySelector('[data-gallery-id="3"] input'); selectedRow.checked = true;
     document.querySelector('[data-gallery-feature-root-id="3"]').click();
     check(galleryReads === 2 && !document.querySelector('[data-gallery-feature-pending]').hidden, 'Preparing a feature remains local inside the stable gallery read owner');
@@ -252,6 +254,7 @@ try {
     releaseGalleries();
     await until(/** Observe authoritative row replacement. @return {boolean} Whether the table changed. */ () => document.querySelector('[data-admin-gallery-order-table]') !== oldTable);
     check(document.querySelector('[data-gallery-visibility-filter]').value === 'private' && document.querySelector('[data-gallery-id="3"] input').checked, 'Owned metadata refresh preserves the filter and eligible bulk selection');
+    check(document.querySelector('[data-gallery-name-filter]').value === 'Gallery 3', 'Owned metadata refresh preserves the name search');
     check(document.querySelector('[data-gallery-feature-root-id="3"]').hasAttribute('data-feature-prepared'), 'Local prepared feature intentions survive quick-action fragment replacement');
     document.body.insertAdjacentHTML('beforeend', logSelectionMarkup());
     const logChoices = Array.from(document.querySelectorAll('input[name="log_ids[]"]'));

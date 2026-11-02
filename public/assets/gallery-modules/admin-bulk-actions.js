@@ -203,7 +203,7 @@ export function setupAdminBulkSelection() {
         targets.forEach((item) => {
             // Variable `row` stores this steps working value.
             const row = item.closest('tr');
-            if (row && row.hidden) {
+            if (item.matches(':disabled') || (row && row.hidden)) {
                 return;
             }
             item.checked = checkbox.checked;
@@ -222,7 +222,7 @@ export function setupAdminBulkSelection() {
         if (!(target instanceof Element)
             || target.closest('[data-admin-log-filter-form]')
             || target.matches(
-                '[data-gallery-visibility-filter], [data-media-renamer-search], '
+                '[data-gallery-visibility-filter], [data-gallery-name-filter], [data-media-renamer-search], '
                 + '[data-admin-log-page-input], [data-admin-log-severity-filter] input',
             )) {
             resetAdminBulkSelectionRangeAnchor();
