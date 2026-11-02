@@ -248,6 +248,9 @@ namespace {
             . \Gallery\Core\e('admin-music-tab-' . $tab) . '">',
         'action_url' => '/index.php?page=admin_music',
         'notice' => '', 'error' => '', 'fragment' => isset($argv[1]),
+        // Prepared production limits, not independent fixture policy defaults.
+        'upload' => ['max_files' => 20, 'max_bytes' => 64 * 1024 * 1024,
+            'accept' => '.mp3,.m4a,.aac,.ogg,.oga,.opus,.wav,.flac,.webm,.weba'],
     ];
     $model['catalog']['songs'] = $songs;
     $model['catalog']['total'] = count($songs);

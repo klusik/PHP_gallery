@@ -287,6 +287,29 @@ function music_repository_asset_path(array $asset): ?string
     return $path;
 }
 
+/** Remove only a caller-owned upload whose SQL rollback is proven complete.
+ * A lost commit response or unreadable database preserves the immutable bytes.
+ * @param array{id:string,song_id:int,filename:string,indexed_title:string,mime:string,byte_size:int,sha256:string} $asset Original created by this upload attempt.
+ * @return void Removes verified unregistered bytes, or retains uncertain state.
+ */
+function music_repository_remove_unregistered_asset(array $asset): void
+{
+    try {
+        if (\Gallery\Models\music_repository_model_asset($asset['id']) !== null) {
+            return;
+        }
+        $path = music_repository_asset_path($asset);
+        if ($path !== null) {
+            storage_observer_call(
+                'fs.unlink.music_asset_rolled_back',
+                static fn(): bool => @unlink($path),
+            );
+        }
+    } catch (\Throwable) {
+        // Permanent ambiguous-commit support: absence must be proven first.
+    }
+}
+
 /** Resolve a song for an already-authorized administrator's read-only preview.
  * No promotion, copy, assignment or catalog reconciliation occurs here.
  * @param int $songId Positive canonical catalog song identity.

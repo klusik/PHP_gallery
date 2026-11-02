@@ -196,6 +196,7 @@ namespace {
     use function Gallery\Services\music_catalog_album_song_add;
     use function Gallery\Services\music_catalog_album_song_remove;
     use function Gallery\Services\music_catalog_album_update;
+    use function Gallery\Services\music_catalog_album_upload;
     use function Gallery\Services\music_catalog_list;
     use function Gallery\Services\music_catalog_revision;
     use function Gallery\Services\music_catalog_song_details;
@@ -1866,6 +1867,86 @@ namespace {
                 && music_repository_asset_path($survivingSourceAsset) !== null
                 && !isset($deletedOriginGalleryRows[$sourceId]),
             'Deleting a source gallery must preserve destination playback and its central asset without returning a URL row for the deleted origin.',
+        );
+
+        // A unique PCM payload avoids reusing other fixture-owned originals.
+        $albumUploadSource = $directory . '/album-upload.wav';
+        $fixtureSourcePaths[] = $albumUploadSource;
+        file_put_contents($albumUploadSource, $wav . $token . 'album-upload');
+        $uploadAlbum = music_catalog_album_create(
+            'Direct upload ' . $token, null, music_catalog_revision(),
+        );
+        $fixtureAlbumIds[] = (int) $uploadAlbum['album_id'];
+        $albumUpload = music_catalog_album_upload(
+            (int) $uploadAlbum['album_id'], $albumUploadSource,
+            'Direct upload ' . $token . '.wav', $uploadAlbum['revision'],
+        );
+        $fixtureSongIds[] = $albumUpload['song_id'];
+        $albumUploadAssets = \Gallery\Models\music_repository_model_assets_for_song(
+            $albumUpload['song_id'],
+        );
+        foreach ($albumUploadAssets as $asset) {
+            $fixtureAssetIds[] = $asset['id'];
+            $fixtureAssetPaths[] = music_repository_directory() . '/'
+                . $asset['id'] . '.bin';
+        }
+        check(!$albumUpload['reused'] && count($albumUploadAssets) === 1
+            && music_catalog_album_members((int) $uploadAlbum['album_id'])[0]['id']
+                === $albumUpload['song_id'],
+            'Album upload must create one central song without a gallery assignment.',
+        );
+        $otherUploadAlbum = music_catalog_album_create(
+            'Second upload album ' . $token, null, $albumUpload['revision'],
+        );
+        $fixtureAlbumIds[] = (int) $otherUploadAlbum['album_id'];
+        $reusedUpload = music_catalog_album_upload(
+            (int) $otherUploadAlbum['album_id'], $albumUploadSource,
+            'Renamed identical original.wav', $otherUploadAlbum['revision'],
+        );
+        check($reusedUpload['reused']
+            && $reusedUpload['song_id'] === $albumUpload['song_id']
+            && count(\Gallery\Models\music_repository_model_assets_for_song(
+                $albumUpload['song_id'],
+            )) === 1
+            && count(music_catalog_usage($albumUpload['song_id'])['albums']) === 2,
+            'Renamed identical bytes must share one song and original across albums.',
+        );
+        $repeatedUpload = music_catalog_album_upload(
+            (int) $uploadAlbum['album_id'], $albumUploadSource,
+            'Repeated original.wav', $reusedUpload['revision'],
+        );
+        check(count(music_catalog_album_members((int) $uploadAlbum['album_id'])) === 1,
+            'Reupload into the same album must not duplicate its membership.',
+        );
+        $unchangedRevision = $repeatedUpload['revision'];
+        try {
+            music_catalog_album_upload(
+                (int) $uploadAlbum['album_id'], $albumUploadSource,
+                'Stale upload.wav', $albumUpload['revision'],
+            );
+            throw new \RuntimeException('Stale album upload was accepted.');
+        } catch (\RuntimeException $error) {
+            check($error->getMessage() === 'music.conflict'
+                && music_catalog_revision() === $unchangedRevision,
+                'A stale album upload must preserve catalog state.',
+            );
+        }
+        music_catalog_album_song_remove(
+            (int) $uploadAlbum['album_id'], $albumUpload['song_id'],
+            $unchangedRevision,
+        );
+        check(music_catalog_album_members((int) $uploadAlbum['album_id']) === []
+            && count(music_catalog_album_members((int) $otherUploadAlbum['album_id'])) === 1
+            && music_repository_asset_path($albumUploadAssets[0]) !== null,
+            'Removing one album membership must preserve other memberships and bytes.',
+        );
+        music_catalog_album_song_remove(
+            (int) $otherUploadAlbum['album_id'], $albumUpload['song_id'],
+            music_catalog_revision(),
+        );
+        check(music_catalog_usage($albumUpload['song_id'])['albums'] === []
+            && music_repository_asset_path($albumUploadAssets[0]) !== null,
+            'Uploaded songs must remain reusable with zero album memberships.',
         );
 
         echo "Music repository database contracts passed.\n";

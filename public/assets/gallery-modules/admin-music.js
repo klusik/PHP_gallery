@@ -8,7 +8,7 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
-import {completeAdminMutation} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
+import {completeAdminMutation, normalizeAdminMutationEnvelope} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 import {setupAdminTabsInRoot} from './admin-tabs.js?v=20261027-appearance-state-v1';
 import {setupAdminMusicAlbumOrdering} from './admin-music-album-order.js?v=20261020-album-order-v4';
 
@@ -23,6 +23,15 @@ import {setupAdminMusicAlbumOrdering} from './admin-music-album-order.js?v=20261
  * Value: 20000 milliseconds.
  */
 const ADMIN_MUSIC_REQUEST_TIMEOUT_MS = 20000;
+
+/** Allow one original to transfer before declaring its outcome unverified.
+ * Type: number. Units: milliseconds. Scope: one album upload HTTP request.
+ * Consumers: uploadAdminMusicAlbumFiles.
+ * Rationale: 120 seconds accommodates the existing 64 MiB audio bound on
+ * slower connections without replaying an upload after a lost response.
+ * Value: 120000 milliseconds per file, independently of fragment reads.
+ */
+const ADMIN_MUSIC_UPLOAD_TIMEOUT_MS = 120000;
 
 /**
  * Wait briefly after the latest keystroke before requesting filtered rows.
@@ -452,19 +461,22 @@ function positionAdminMusicTitleEditor(popup, trigger, anchor) {
     popup.style.top = `${clampedTop - cellBounds.top}px`;
 }
 
-/** Place an opened row popup within the viewport before its first paint.
- * @param {HTMLDetailsElement} disclosure Open song-row disclosure.
+/** Place an opened row or upload-help popup within the visible viewport.
+ * @param {HTMLDetailsElement} disclosure Open song-row or album-help disclosure.
  * @returns {void} Places its list or form using animation-independent dimensions.
  */
 function positionAdminMusicRowDisclosure(disclosure) {
-    const popup = disclosure.querySelector(':scope > ul, :scope > form');
+    const popup = disclosure.querySelector(
+        ':scope > ul, :scope > form, :scope > .admin-music-upload-help-panel',
+    );
     const summary = disclosure.querySelector(':scope > summary');
     if (!(popup instanceof HTMLElement)
         || !(summary instanceof HTMLElement)
         || !disclosure.open) return;
     if (!disclosure.isConnected || !disclosure.open) return;
-    const cell = disclosure.closest('td');
-    if (!(cell instanceof HTMLTableCellElement)) return;
+    const cell = disclosure.closest('td')
+        || (disclosure.matches('.admin-music-upload-help') ? disclosure : null);
+    if (!(cell instanceof HTMLElement)) return;
     const cellBounds = cell.getBoundingClientRect();
     const summaryBounds = summary.getBoundingClientRect();
     popup.style.margin = '0';
@@ -495,7 +507,7 @@ function adminMusicOverlayDisclosure(target) {
         '.admin-music-tags, .admin-music-variants, '
         + '.admin-music-locations, .admin-music-song-edit, '
         + '.admin-music-preferences, .admin-music-merge, '
-        + '.admin-music-split, .admin-music-album-options',
+        + '.admin-music-split, .admin-music-album-options, .admin-music-upload-help',
     );
     return disclosure instanceof HTMLDetailsElement
         ? disclosure : null;
@@ -514,7 +526,8 @@ function closeOtherAdminMusicOverlays(retained) {
         + '[data-admin-music] .admin-music-preferences[open], '
         + '[data-admin-music] .admin-music-merge[open], '
         + '[data-admin-music] .admin-music-split[open], '
-        + '[data-admin-music] .admin-music-album-options[open]',
+        + '[data-admin-music] .admin-music-album-options[open], '
+        + '[data-admin-music] .admin-music-upload-help[open]',
     ));
     for (const disclosure of openDisclosures) {
         if (disclosure !== retained
@@ -554,6 +567,98 @@ function resumePendingAdminMusicSearch() {
     if (!(form instanceof HTMLFormElement) || !(input instanceof HTMLInputElement)) return;
     input.value = pending.state.query;
     void requestAdminMusicSearch(form, pending.state, pending.generation);
+}
+
+/** Upload selected originals serially while retaining every acknowledgment.
+ * @param {HTMLFormElement} form Native album multipart form with CSRF and limits.
+ * @param {HTMLElement} root Connected manager owning this batch's busy state.
+ * @param {File[]} files Original chooser occurrences in their selected order.
+ * @returns {Promise<{result:import('./admin-side-panel.js').AdminPanelResponse|null,message:string,uncertain:boolean}>} Canonical aggregate of acknowledged writes and any terminal failure; no upload is retried.
+ */
+async function uploadAdminMusicAlbumFiles(form, root, files) {
+    const status = root.querySelector('[data-admin-music-upload-status]');
+    const list = root.querySelector('.admin-music-upload-results');
+    status.hidden = false;
+    list.hidden = false;
+    list.replaceChildren();
+    const envelopes = [];
+    let revision = String(form.querySelector('[name="revision"]').value);
+    let failure = '';
+    let uncertain = false;
+    for (const file of files) {
+        if (!root.isConnected) break;
+        status.textContent = String(form.dataset.progress || '')
+            .replace('{count}', String(envelopes.length + 1))
+            .replace('{total}', String(files.length))
+            .replace('{filename}', file.name);
+        const body = new FormData(form);
+        body.delete('music_files[]');
+        body.set('music_files[]', file, file.name);
+        body.set('upload_count', '1');
+        body.set('revision', revision);
+        body.set('ajax', '1');
+        const controller = new AbortController();
+        const timer = setTimeout(
+            () => controller.abort(), ADMIN_MUSIC_UPLOAD_TIMEOUT_MS,
+        );
+        let refusal = '';
+        try {
+            const response = await fetch(form.getAttribute('action'), {
+                method: 'POST', body, credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                signal: controller.signal,
+            });
+            const result = await response.json();
+            if (!response.ok || result.ok !== true) {
+                refusal = result.ok === false
+                    ? String(result.message || root.dataset.error) : '';
+                throw new Error(refusal);
+            }
+            normalizeAdminMutationEnvelope(result);
+            if (!/^\d+$/.test(result.upload?.revision)
+                || result.upload?.songs?.length !== 1
+                || !Number.isSafeInteger(result.upload.songs[0].song_id)
+                || result.upload.songs[0].song_id < 1) {
+                throw new Error(String(form.dataset.unknown));
+            }
+            revision = result.upload.revision;
+            envelopes.push(result);
+            const item = document.createElement('li');
+            item.textContent = `${file.name} · ${result.upload.songs[0].reused
+                ? form.dataset.reused : form.dataset.added}`;
+            list.append(item);
+        } catch {
+            uncertain = true;
+            failure = `${file.name}: ${controller.signal.aborted
+                ? root.dataset.timeoutError
+                : refusal || form.dataset.unknown}`;
+            break;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    const summary = String(form.dataset.complete || '')
+        .replace('{count}', String(envelopes.length));
+    status.textContent = `${summary}${failure ? ` ${failure}` : ''}`;
+    const last = envelopes[envelopes.length - 1];
+    if (!last) {
+        return {result: null, message: status.textContent, uncertain};
+    }
+    const contexts = new Map();
+    for (const envelope of envelopes) {
+        for (const context of envelope.contexts) {
+            contexts.set(JSON.stringify(context), context);
+        }
+    }
+    return {
+        result: {...last, message: summary,
+            mutation_envelopes: envelopes, contexts: [...contexts.values()]},
+        message: status.textContent,
+        uncertain,
+    };
 }
 
 /**
@@ -617,7 +722,8 @@ export function setupAdminMusic() {
         const summary = target.closest('summary');
         const rowDisclosure = summary?.parentElement;
         if (rowDisclosure instanceof HTMLDetailsElement
-            && rowDisclosure.closest('.admin-music-table-wrap td')
+            && (rowDisclosure.closest('.admin-music-table-wrap td')
+                || rowDisclosure.matches('.admin-music-upload-help'))
             && !rowDisclosure.matches('.admin-music-song-edit')) {
             event.preventDefault();
             rowDisclosure.open = !rowDisclosure.open;
@@ -717,7 +823,8 @@ export function setupAdminMusic() {
                     + '[data-admin-music] .admin-music-preferences[open], '
                     + '[data-admin-music] .admin-music-merge[open], '
                     + '[data-admin-music] .admin-music-split[open], '
-                    + '[data-admin-music] .admin-music-album-options[open]',
+                    + '[data-admin-music] .admin-music-album-options[open], '
+                    + '[data-admin-music] .admin-music-upload-help[open]',
                 );
             if (openDisclosure instanceof HTMLDetailsElement) {
                 event.preventDefault();
@@ -745,6 +852,8 @@ export function setupAdminMusic() {
         }
     }, true);
     window.addEventListener('resize', /** Reflow and clamp the active title editor after viewport resizing. @returns {void} Recalculates its width, wrapped height and placement. */ () => {
+        document.querySelectorAll('.admin-music-upload-help[open]')
+            .forEach(positionAdminMusicRowDisclosure);
         const active = activeAdminMusicTitleEditor;
         const titleField = active?.titleField;
         if (titleField instanceof HTMLTextAreaElement) {
@@ -752,6 +861,8 @@ export function setupAdminMusic() {
         }
     });
     window.addEventListener('scroll', /** Keep an active title popup at its saved viewport anchor while its table cell moves. @returns {void} Recomputes cell-relative popup offsets. */ () => {
+        document.querySelectorAll('.admin-music-upload-help[open]')
+            .forEach(positionAdminMusicRowDisclosure);
         const active = activeAdminMusicTitleEditor;
         if (active) {
             positionAdminMusicTitleEditor(
@@ -809,6 +920,18 @@ export function setupAdminMusic() {
         event.stopImmediatePropagation();
         const root = form.closest('[data-admin-music]');
         if (!root || root.dataset.busy === '1' || root.dataset.stale === '1') return;
+        const isUpload = form.matches('[data-admin-music-upload]');
+        const files = isUpload
+            ? Array.from(form.querySelector('input[type="file"]').files) : [];
+        if (isUpload && (files.length < 1
+            || files.length > Number(form.dataset.maxFiles)
+            || files.some(file => file.size < 1
+                || file.size > Number(form.dataset.maxBytes)))) {
+            const status = root.querySelector('[data-admin-music-upload-status]');
+            status.hidden = false;
+            status.textContent = form.dataset.invalid;
+            return;
+        }
         pendingAdminMusicSearch = null;
         invalidateAdminMusicSearch();
         let question = form.querySelector('[data-confirm]')?.dataset.confirm
@@ -854,7 +977,7 @@ export function setupAdminMusic() {
         const buttons = Array.from(root.querySelectorAll('button'));
         const previous = buttons.map(/** Capture one button's prior state for request cleanup. @param {HTMLButtonElement} button Manager action button. @returns {boolean} Whether the button was already disabled. */ button => button.disabled);
         const requestController = new AbortController();
-        const requestTimer = setTimeout(
+        let requestTimer = isUpload ? null : setTimeout(
             /** Stop a write or owned refresh that exceeded its request budget. @returns {void} Aborts the active fetch. */
             () => requestController.abort(),
             ADMIN_MUSIC_REQUEST_TIMEOUT_MS,
@@ -863,14 +986,23 @@ export function setupAdminMusic() {
         buttons.forEach(/** Prevent concurrent submissions while this mutation is pending. @param {HTMLButtonElement} button Manager action button. @returns {void} Disables the pending action. */ button => { button.disabled = true; });
         try {
             const endpoint = form.getAttribute('action');
-            const response = await fetch(endpoint, {
+            const batch = isUpload
+                ? await uploadAdminMusicAlbumFiles(form, root, files) : null;
+            if (batch && !batch.result) throw new Error(batch.message);
+            const response = batch ? null : await fetch(endpoint, {
                 method: 'POST', body, credentials: 'same-origin',
                 headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
                 signal: requestController.signal,
             });
-            const result = await response.json();
-            if (!response.ok || result.ok !== true) {
+            const result = batch ? batch.result : await response.json();
+            if ((!batch && !response.ok) || result.ok !== true) {
                 throw new Error(String(result.message || root.dataset.error || ''));
+            }
+            if (isUpload) {
+                requestTimer = setTimeout(
+                    () => requestController.abort(),
+                    ADMIN_MUSIC_REQUEST_TIMEOUT_MS,
+                );
             }
             const completion = await completeAdminMutation(result, {
                 refreshPanel: async (panel, envelope, guard) => {
@@ -891,7 +1023,17 @@ export function setupAdminMusic() {
                     notice.setAttribute('role', 'status');
                     notice.setAttribute('aria-live', 'polite');
                     notice.textContent = String(envelope.message || '');
-                    replacement.prepend(notice);
+                    if (!batch) replacement.prepend(notice);
+                    if (batch) {
+                        const report = replacement.querySelector('[data-admin-music-upload-status]');
+                        const results = replacement.querySelector('.admin-music-upload-results');
+                        report.hidden = false;
+                        report.textContent = batch.message;
+                        results.hidden = false;
+                        results.replaceChildren(...Array.from(root.querySelector(
+                            '.admin-music-upload-results',
+                        ).children).map(item => item.cloneNode(true)));
+                    }
                     if (activeAdminMusicTitleEditor
                         && root.contains(activeAdminMusicTitleEditor.popup)) {
                         closeAdminMusicTitleEditor();
@@ -905,7 +1047,7 @@ export function setupAdminMusic() {
                     return true;
                 },
             });
-            if (completion.synchronized !== true) {
+            if (completion.synchronized !== true || batch?.uncertain) {
                 const activeRoot = document.querySelector('[data-admin-music]');
                 if (activeRoot instanceof HTMLElement) {
                     activeRoot.dataset.stale = '1';
@@ -916,13 +1058,21 @@ export function setupAdminMusic() {
                         activeRoot.prepend(status);
                     }
                     status.setAttribute('role', 'alert');
-                    status.textContent = String(activeRoot.dataset.refreshError || '');
+                    status.textContent = batch?.uncertain
+                        ? batch.message
+                        : String(activeRoot.dataset.refreshError || '');
+                    if (batch) {
+                        const reload = document.createElement('a');
+                        reload.href = form.getAttribute('action');
+                        reload.textContent = form.dataset.reloadLabel;
+                        status.append(' ', reload);
+                    }
                     activeRoot.querySelectorAll('button, input, select, textarea')
                         .forEach(/** Lock every write and navigation control until the user reloads. @param {HTMLButtonElement|HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} control Manager form control. @returns {void} Prevents replay after an acknowledged save. */ control => { control.disabled = true; });
                 }
             }
         } catch (error) {
-            const timedOut = requestController.signal.aborted;
+            const timedOut = requestController.signal.aborted || isUpload;
             if (timedOut && root.isConnected) {
                 root.dataset.stale = '1';
                 root.querySelectorAll('button, input, select, textarea')
@@ -935,10 +1085,18 @@ export function setupAdminMusic() {
                 status.setAttribute('role', 'alert');
                 root.prepend(status);
             }
-            status.textContent = timedOut
+            status.textContent = isUpload
+                ? String(error instanceof Error ? error.message : root.dataset.error)
+                : timedOut
                 ? String(root.dataset.timeoutError || root.dataset.refreshError || '')
                 : error instanceof Error
                     ? error.message : String(root.dataset.error || '');
+            if (isUpload) {
+                const reload = document.createElement('a');
+                reload.href = form.getAttribute('action');
+                reload.textContent = form.dataset.reloadLabel;
+                status.append(' ', reload);
+            }
         } finally {
             clearTimeout(requestTimer);
             root.dataset.busy = '0';

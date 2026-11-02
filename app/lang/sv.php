@@ -33,6 +33,19 @@
  */
 
 return [
+    'admin.music.upload_unknown' => 'Uppladdningens resultat kunde inte bekräftas. Ladda om katalogen innan du försöker igen.',
+    'admin.music.upload_reload' => 'Ladda om katalogen innan du fortsätter',
+    'admin.music.upload_files' => 'Ladda upp filer',
+    'admin.music.upload' => 'Ladda upp',
+    'admin.music.upload_help_label' => 'Om uppladdning av låtar',
+    'admin.music.upload_help' => 'Välj flera ljudfiler. Identiska original återanvänder den befintliga låten. Låtar kan tillhöra flera album; andra medlemskap bevaras.',
+    'admin.music.upload_limits' => 'Högst {count} filer per urval, {size} MiB per fil. Webbhotellets uppladdningsgränser gäller också. Utan JavaScript måste hela urvalet rymmas i en begäran.',
+    'admin.music.upload_invalid' => 'Välj 1–20 ljudfiler som stöds, högst 64 MiB per fil. Hela urvalet måste rymmas inom webbhotellets uppladdningsgränser.',
+    'admin.music.upload_progress' => 'Laddar upp {count}/{total}: {filename}',
+    'admin.music.upload_complete' => 'Behandlade filer: {count}.',
+    'admin.music.upload_reused' => 'Befintlig låt återanvänd',
+    'admin.music.upload_added' => 'Tillagd i album',
+    'admin.music.upload_stopped' => 'Behandlade filer: {count}. Stoppad vid {filename}: {reason}',
     'admin.consistency.browser_notice' =>
         'Miniatyrreparationer använder webbläsarworkers. Låt fliken '
             . 'vara öppen; servern validerar och lagrar endast begärda '

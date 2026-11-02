@@ -263,6 +263,16 @@ insert-only empty-seed races, and safe omission for missing/unknown schemas.
 Cleanup must remove only fixture-owned asset identities; it never sweeps the
 shared `data/music/` folder.
 
+Its direct album-upload cases cover an original without gallery assignment,
+renamed identical bytes in two albums, repeated membership, stale revision
+refusal and retention after the last membership is removed. The global manager
+browser fixture covers multiple original File objects sent serially, fresh
+revision propagation, repeated-submit exclusion, acknowledged-file feedback,
+retained album tab/URL and a lost later response with no automatic replay.
+Live localhost acceptance uses only the web controls and never activates Play;
+codec playback, mobile devices and hosting-specific transfer limits require
+separate coverage.
+
 `admin_gallery_music_browser_test.mjs` renders the real Media/music view and
 uses production styles and mutation handlers on desktop and narrow screens.
 It covers scoped nested tabs, direct/live source groups, chooser replacement

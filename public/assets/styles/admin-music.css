@@ -1374,6 +1374,161 @@
     opacity: .7;
 }
 
+/* The album workspace follows the approved visitor/media glass surface. */
+#music-manager .admin-music-album-sidebar,
+#music-manager .admin-music-album-detail {
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    box-shadow: none;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+}
+
+#music-manager .admin-music-upload {
+    order: 4;
+    min-width: 0;
+    margin-block: .5rem;
+    padding-block: .4rem;
+    border-block: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    font-size: .82rem;
+}
+
+#music-manager .admin-music-upload-heading {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    margin-bottom: .2rem;
+    font-weight: 600;
+}
+
+#music-manager .admin-music-upload > form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .35rem;
+}
+
+#music-manager .admin-music-album-detail .admin-music-upload input[type="file"] {
+    width: 100%;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font: inherit;
+}
+
+#music-manager .admin-music-upload-submit,
+#music-manager .admin-music-upload input::file-selector-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+    min-height: 28px;
+    padding: .15rem .5rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: transparent;
+    color: var(--ink);
+    box-shadow: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+#music-manager .admin-music-upload-submit {
+    width: auto;
+    min-width: max-content;
+    white-space: nowrap;
+}
+
+#music-manager .admin-music-upload-submit svg {
+    width: 16px;
+    height: 16px;
+    color: var(--accent);
+}
+
+#music-manager .admin-music-upload button:disabled {
+    opacity: .5;
+    cursor: wait;
+}
+
+#music-manager .admin-music-upload-help {
+    position: relative;
+    z-index: 35;
+    font-weight: 400;
+}
+
+#music-manager .admin-music-upload-help > summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    list-style: none;
+    cursor: pointer;
+}
+
+#music-manager .admin-music-upload-help > summary::-webkit-details-marker {
+    display: none;
+}
+
+#music-manager .admin-music-upload-help-panel {
+    position: absolute;
+    z-index: 40;
+    width: min(22rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 1rem);
+    overflow: auto;
+    box-sizing: border-box;
+    padding: .5rem .65rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: .82rem;
+    line-height: 1.45;
+}
+
+#music-manager .admin-music-upload-help-panel p,
+#music-manager [data-admin-music-upload-status] {
+    margin: .25rem 0;
+    overflow-wrap: anywhere;
+}
+
+#music-manager .admin-music-upload-results {
+    margin: .25rem 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--music-muted);
+}
+
+#music-manager .admin-music-upload-results li {
+    display: block;
+    padding: .2rem 0;
+    border: 0;
+    overflow-wrap: anywhere;
+}
+
+#music-manager .admin-music-upload :is(input, button, summary):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    #music-manager .admin-music-upload :is(button, summary),
+    #music-manager .admin-music-upload input[type="file"],
+    #music-manager .admin-music-upload input::file-selector-button {
+        min-height: 44px;
+    }
+}
+
 @media (max-width: 850px) {
     #music-manager .admin-music-albums-layout {
         grid-template-columns: minmax(0, 1fr);

@@ -33,6 +33,19 @@
  */
 
 return [
+    'admin.music.upload_unknown' => 'Výsledek nahrávání nelze ověřit. Před dalším pokusem obnovte katalog.',
+    'admin.music.upload_reload' => 'Před pokračováním obnovit katalog',
+    'admin.music.upload_files' => 'Nahrát soubory',
+    'admin.music.upload' => 'Nahrát',
+    'admin.music.upload_help_label' => 'O nahrávání skladeb',
+    'admin.music.upload_help' => 'Vyberte více hudebních souborů. Totožný originál znovu použije existující skladbu. Skladba může být ve více albech; ostatní členství zůstane zachováno.',
+    'admin.music.upload_limits' => 'Nejvýše {count} souborů ve výběru, {size} MiB na soubor. Platí také limity hostingu. Bez JavaScriptu se celý výběr musí vejít do jednoho požadavku.',
+    'admin.music.upload_invalid' => 'Vyberte 1–20 podporovaných hudebních souborů, každý nejvýše 64 MiB. Celý výběr se musí vejít do limitů hostingu.',
+    'admin.music.upload_progress' => 'Nahrávání {count}/{total}: {filename}',
+    'admin.music.upload_complete' => 'Zpracované soubory: {count}.',
+    'admin.music.upload_reused' => 'Použita existující skladba',
+    'admin.music.upload_added' => 'Přidáno do alba',
+    'admin.music.upload_stopped' => 'Zpracované soubory: {count}. Zastaveno u {filename}: {reason}',
     'admin.consistency.browser_notice' =>
         'Opravy náhledů používají browser workers. Nech tento tab '
             . 'otevřený; server ověří a uloží jen požadované varianty.',

@@ -469,6 +469,36 @@ function music_repository_model_register_asset(array $asset, ?int $songId, ?arra
     }
 }
 
+/** Find a reusable song for an explicit upload of identical original bytes.
+ * Existing identities are never merged; prefer a stable central identity,
+ * then an active legacy source whose snapshot is known to be current.
+ * @param string $sha256 Validated original SHA-256 digest.
+ * @param int $bytes Validated original size in bytes.
+ * @return int|null Existing song identity, or null for a new original.
+ */
+function music_repository_model_upload_song(string $sha256, int $bytes): ?int
+{
+    $central = db()->prepare(
+        'SELECT song_id FROM music_repository_assets'
+        . ' WHERE sha256 = ? AND byte_size = ? ORDER BY id LIMIT 1',
+    );
+    $central->execute([$sha256, $bytes]);
+    $songId = $central->fetchColumn();
+    if ($songId !== false) {
+        return (int) $songId;
+    }
+    $legacy = db()->prepare(
+        'SELECT i.song_id FROM music_track_instances i'
+        . ' WHERE i.file_sha256 = ? AND i.active = 1'
+        . ' AND NOT EXISTS (SELECT 1 FROM music_catalog_dirty_galleries d'
+        . ' WHERE d.gallery_id = i.gallery_id)'
+        . ' ORDER BY i.gallery_id, i.track_id LIMIT 1',
+    );
+    $legacy->execute([$sha256]);
+    $songId = $legacy->fetchColumn();
+    return $songId === false ? null : (int) $songId;
+}
+
 /** Read active gallery-local originals available for explicit Admin promotion.
  * @param int $songId Stable normalized song identity.
  * @return list<array{gallery_id:int,folder_path:string,track_id:string,filename:string,indexed_title:string,sha256:string}> Legacy source records; MIME and size come from the locked authoritative playlist.

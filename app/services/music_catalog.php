@@ -106,6 +106,15 @@ const MUSIC_CATALOG_TAG_TEXT_BYTES = 2000;
  */
 const MUSIC_CATALOG_DESCRIPTION_BYTES = 4000;
 
+/** Bound one native album upload selection and its browser queue.
+ * Type: int. Units: files. Scope: one Music Manager upload selection.
+ * Consumers: admin_music_upload_album_files and the prepared upload form.
+ * Rationale: twenty matches PHP's usual multipart file bound; JavaScript sends
+ * one original per request so aggregate bytes do not consume that POST limit.
+ * Value: 20 files per selection.
+ */
+const MUSIC_CATALOG_UPLOAD_FILES = 20;
+
 /** Validate a prospective parent chain for loops and bounded nesting.
  * @param int $albumId Album being moved, or zero while creating a new album.
  * @param int|null $parentId Proposed parent album, or null for a root album.
@@ -1470,6 +1479,89 @@ function music_catalog_album_song_remove(int $albumId, int $songId, string $revi
         ['albums' => [$albumId]],
     );
     return $result['revision'];
+}
+
+/** Upload or reuse one original and append its song to an album atomically.
+ * Validation, legacy promotion and gallery quota locks precede the catalog
+ * transaction. Registration and membership share its revision lock, so racing
+ * album uploads cannot allocate two songs from the same expected revision.
+ * @param int $albumId Existing destination album identity.
+ * @param string $source Controller-validated temporary upload path.
+ * @param string $filename Original display filename, never a storage path.
+ * @param string $revision Expected decimal catalog revision.
+ * @return array{revision:string,song_id:int,reused:bool} Committed identity and
+ *     whether the original was already in the catalog.
+ * @throws \RuntimeException When validation, schema, quota or revision fails.
+ */
+function music_catalog_album_upload(
+    int $albumId,
+    string $source,
+    string $filename,
+    string $revision,
+): array {
+    music_catalog_assert_schema_ready('catalog.album_upload');
+    music_repository_assert_schema_ready('catalog.album_upload');
+    if (!hash_equals(music_catalog_revision(), $revision)) {
+        throw new \RuntimeException('music.conflict');
+    }
+    if ($albumId < 1
+        || !\Gallery\Models\music_catalog_model_album_exists($albumId)) {
+        throw new \RuntimeException('music.album_missing');
+    }
+    $validated = gallery_music_validate_source($source, $filename);
+    $songId = \Gallery\Models\music_repository_model_upload_song(
+        $validated['sha256'],
+        $validated['size'],
+    );
+    // Promotion can take a gallery lock; never acquire it under the SQL lock.
+    $existing = $songId !== null
+        ? music_repository_prepare_song($songId) : null;
+    music_catalog_assert_album_growth_quota(
+        $albumId,
+        $songId ?? 0,
+        $validated['size'],
+    );
+    $created = null;
+    $reused = $existing !== null;
+    try {
+        $result = music_catalog_commit_mutation(
+            $revision,
+            'catalog.album_upload',
+            static function () use (
+                $albumId, $source, $filename, $validated, $songId,
+                &$created, &$reused,
+            ): int {
+                $currentSong = \Gallery\Models\music_repository_model_upload_song(
+                    $validated['sha256'], $validated['size'],
+                );
+                if ($currentSong !== $songId) {
+                    throw new \RuntimeException('music.conflict');
+                }
+                if ($currentSong !== null) {
+                    $reused = true;
+                    $selectedSong = $currentSong;
+                } else {
+                    $created = music_repository_store_source($source, $filename);
+                    $selectedSong = $created['song_id'];
+                }
+                \Gallery\Models\music_catalog_model_album_mutate(
+                    'song_add', $albumId, $selectedSong, null, '',
+                );
+                return $selectedSong;
+            },
+            ['albums' => [$albumId]],
+        );
+    } catch (\Throwable $error) {
+        if ($created !== null) {
+            music_repository_remove_unregistered_asset($created);
+        }
+        throw $error;
+    }
+    return [
+        'revision' => $result['revision'],
+        'song_id' => (int) $result['value'],
+        'reused' => $reused,
+    ];
 }
 
 /** Refuse album growth that would overflow any currently linked gallery.

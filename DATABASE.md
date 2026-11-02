@@ -311,6 +311,16 @@ snapshot for catalog usage; the sidecar remains the gallery selection authority.
 Live membership comes from current `music_album_songs`, so it is never copied
 into a physical-instance snapshot. Merge/split preserve shared-asset identity.
 Removing a gallery or assignment does not delete central assets.
+
+Music Manager album uploads use these same tables without a migration or a
+physical gallery row. Exact uploaded SHA-256/size matches reuse a central song;
+a clean active legacy match retains its identity through ordinary promotion.
+This is explicit ingestion deduplication, not automatic merging of existing
+catalog identities. Asset registration and ordered album membership commit
+under one catalog revision lock. The composite membership key permits
+independent membership in multiple albums and prevents repeated membership in
+one album. A song and its central original survive removal from every album.
+
 Removing a still-local catalogued selection registers and verifies its original
 centrally before the gallery index changes, retaining the existing song ID.
 After repository migration, bounded catalog cleanup removes only `music_songs`

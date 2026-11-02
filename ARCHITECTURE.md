@@ -573,7 +573,19 @@ fragment replacement.
 
 The compact `admin_music` controller delegates catalog operations to
 `app/services/music_catalog.php`; its model owns SQL and revision-locked
-transactions. The music capability gates the route and navigation together.
+transactions. The album detail retains its existing catalog-song selector and
+adds a native multiple-file upload. Its Controller validates PHP upload provenance; the
+catalog Service reuses the existing audio validator, repository, quota and
+revision owners. The Model resolves exact original digests without merging
+existing logical identities. Asset registration and append-only album
+membership share one catalog transaction. The browser serializes originals,
+carries fresh revisions and retains canonical acknowledgments through its
+single owned fragment refresh. Unknown outcomes stop replay until passive
+reload. There is no new PHP file, route, schema or logical runtime owner;
+expected closure deltas are zero against the existing 98-module plan and
+unchanged limits. See [album upload semantics](docs/GALLERY_MUSIC.md).
+
+The music capability gates the route and navigation together.
 The model batches existing gallery path fields for song usages and repository
 origins. The controller prepares canonical, localized public URLs for both
 rendered links and mutation contexts; a missing gallery contributes no URL.

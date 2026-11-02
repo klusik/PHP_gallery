@@ -33,6 +33,19 @@
  */
 
 return [
+    'admin.music.upload_unknown' => 'Das Ergebnis des Uploads konnte nicht bestätigt werden. Laden Sie den Katalog vor einem erneuten Versuch neu.',
+    'admin.music.upload_reload' => 'Katalog vor dem Fortfahren neu laden',
+    'admin.music.upload_files' => 'Dateien hochladen',
+    'admin.music.upload' => 'Hochladen',
+    'admin.music.upload_help_label' => 'Über das Hochladen von Songs',
+    'admin.music.upload_help' => 'Wählen Sie mehrere Audiodateien. Identische Originale verwenden den vorhandenen Song wieder. Songs können mehreren Alben angehören; andere Zuordnungen bleiben erhalten.',
+    'admin.music.upload_limits' => 'Bis zu {count} Dateien pro Auswahl, {size} MiB je Datei. Die Uploadgrenzen des Hostings gelten ebenfalls. Ohne JavaScript muss die gesamte Auswahl in eine Anfrage passen.',
+    'admin.music.upload_invalid' => 'Wählen Sie 1–20 unterstützte Audiodateien mit jeweils höchstens 64 MiB. Die gesamte Auswahl muss die Uploadgrenzen des Hostings einhalten.',
+    'admin.music.upload_progress' => 'Hochladen {count}/{total}: {filename}',
+    'admin.music.upload_complete' => 'Verarbeitete Dateien: {count}.',
+    'admin.music.upload_reused' => 'Vorhandener Song wiederverwendet',
+    'admin.music.upload_added' => 'Zum Album hinzugefügt',
+    'admin.music.upload_stopped' => 'Verarbeitete Dateien: {count}. Abgebrochen bei {filename}: {reason}',
     'admin.consistency.browser_notice' =>
         'Vorschaubildreparaturen verwenden Browser-Worker. Diesen Tab '
             . 'offen lassen; der Server prüft und speichert nur angeforderte '

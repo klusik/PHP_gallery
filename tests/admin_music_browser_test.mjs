@@ -90,7 +90,8 @@ body.admin-page {
 </style>
 </head><body class="admin-page"><pre id="results"></pre><main id="mount">${markup}</main>
 <script type="module">
-import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261027-appearance-state-v1';
+import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261102-album-upload-v2';
+import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261027-appearance-state-v1';
 import {normalizeAdminMutationEnvelope} from '/public/assets/gallery-modules/admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const ACTION_TIMEOUT_MS = ${ACTION_TIMEOUT_MS};
@@ -712,6 +713,7 @@ try {
     let olderSearchBodyRead = false;
     let releaseMutation = null;
     let mode = 'hold-success';
+    let uploadWrites = 0;
     let confirmText = '';
     window.confirm = /** Capture the real merge confirmation text. @param {string} question Production confirmation contents. @returns {boolean} Accept the fixture action. */ question => { confirmText = question; return true; };
     const nativeFetch = window.fetch.bind(window);
@@ -728,6 +730,10 @@ try {
                 albumId: body.get('album_id'),
                 position: body.get('position'),
                 returnTab: body.get('return_tab'),
+                revision: body.get('revision'),
+                uploadName: body.get('music_files[]')?.name,
+                uploadBytes: body.get('action') === 'album_upload'
+                    ? await body.get('music_files[]').text() : null,
             });
             check(url === '/index.php?page=admin_music', 'Mutation used an unexpected endpoint.');
             check(options.credentials === 'same-origin'
@@ -735,6 +741,32 @@ try {
                 && body.get('csrf_token') === 'music-fixture'
                 && body.get('ajax') === '1',
                 'Mutation lost its protected same-origin canonical request.');
+            if (body.get('action') === 'album_upload') {
+                uploadWrites++;
+                check(body.getAll('music_files[]').length === 1
+                    && body.get('upload_count') === '1',
+                    'Album uploads must send one original per multipart request.');
+                if (mode === 'upload-unknown' && uploadWrites === 2) {
+                    throw new TypeError('Fixture lost upload response');
+                }
+                const uploadResponse = new Response(JSON.stringify({
+                    ok: true, message: 'Song added to album.',
+                    mutation: {type: 'music.album_upload', entity: 'music_catalog',
+                        action: 'album_upload', entity_ids: [8]},
+                    panel: {workflow: 'admin-music', refresh_url: '/music-fragment',
+                        keep_open: true}, contexts: [],
+                    fallback: {redirect_url: '/index.php?page=admin_music'},
+                    upload: {revision: String(200 + uploadWrites), error: '',
+                        songs: [{filename: body.get('music_files[]').name,
+                            song_id: 101, reused: uploadWrites > 1}]},
+                }), {headers: {'Content-Type': 'application/json'}});
+                if (mode === 'upload-hold' && uploadWrites === 1) {
+                    return new Promise(resolve => {
+                        releaseMutation = () => resolve(uploadResponse);
+                    });
+                }
+                return uploadResponse;
+            }
             if (mode === 'reject') {
                 return new Response(JSON.stringify({ok: false, message: 'Fixture rejected'}),
                     {status: 409, headers: {'Content-Type': 'application/json'}});
@@ -1375,10 +1407,55 @@ try {
     searchedRootBeforeTabSwitch.querySelector(
         '.admin-music-tabs [data-admin-tab-target="admin-music-tab-songs"]',
     ).click();
-    const postSearchUrl = location.href;
+    mode = 'upload-hold';
+    uploadWrites = 0;
+    root = document.querySelector('[data-admin-music]');
+    root.querySelector('[data-admin-tab-target="admin-music-tab-albums"]').click();
+    const beforeUploadUrl = location.href;
+    const uploadForm = root.querySelector('[data-admin-music-upload]');
+    check(uploadForm?.enctype === 'multipart/form-data'
+        && uploadForm.querySelector('input[type="file"]').multiple
+        && root.querySelector('.admin-music-album-add-song select[name="song_id"]'),
+        'Multipart uploads must be an additional option beside existing catalog Add.');
+    const uploadButton = uploadForm.querySelector('button[type="submit"]');
+    const uploadButtonBounds = uploadButton.getBoundingClientRect();
+    const uploadFormBounds = uploadForm.getBoundingClientRect();
+    check(uploadButtonBounds.right <= uploadFormBounds.right
+        && uploadButton.scrollWidth <= uploadButton.clientWidth,
+        'The Upload label must fit its action instead of inheriting an icon-only width.');
+    // Two distinct source occurrences prove serial writes and fresh revision use.
+    const uploadSelection = new DataTransfer();
+    uploadSelection.items.add(new File(['first-original'], 'first.wav', {type: 'audio/wav'}));
+    uploadSelection.items.add(new File(['second-original'], 'second.wav', {type: 'audio/wav'}));
+    uploadForm.querySelector('input[type="file"]').files = uploadSelection.files;
+    const beforeUploadWrites = writeBodies.length;
+    uploadForm.requestSubmit(uploadForm.querySelector('button[type="submit"]'));
+    await waitForBrowserState(() => uploadWrites === 1,
+        'The first album upload did not reach its protected endpoint.');
+    check(root.dataset.busy === '1'
+        && writeBodies.length === beforeUploadWrites + 1,
+        'A held first original must prevent the second upload from starting.');
+    uploadForm.requestSubmit();
+    check(writeBodies.length === beforeUploadWrites + 1,
+        'A repeated submit must not replay an active upload selection.');
+    releaseMutation();
+    await waitForIdle();
+    root = document.querySelector('[data-admin-music]');
+    const sentUploads = writeBodies.slice(beforeUploadWrites);
+    check(sentUploads.length === 2
+        && sentUploads[0].uploadBytes === 'first-original'
+        && sentUploads[1].uploadBytes === 'second-original'
+        && sentUploads[1].revision === '201'
+        && root.querySelectorAll('.admin-music-upload-results li').length === 2
+        && root.querySelector('[data-admin-music-upload-status]').textContent
+            .includes('Processed files: 2')
+        && root.querySelector('#admin-music-tab-albums').hidden === false
+        && location.href === beforeUploadUrl,
+        'Upload completion must retain original bytes, fresh revisions, results, album tab and URL.');
+    root.querySelector('[data-admin-tab-target="admin-music-tab-songs"]').click();
 
+    const postSearchUrl = location.href;
     mode = 'unsynchronized';
-    root = editorRaceRoot;
     root.querySelector('input[name="show_extensions"]').form.requestSubmit(
         root.querySelector('input[name="show_extensions"]').form.querySelector('button')
     );
@@ -1392,6 +1469,25 @@ try {
         'Failed synchronization did not lock writes and show the reload warning.');
     check(location.href === postSearchUrl,
         'Music Manager mutation changed the browser URL.');
+    // A new server fragment is the passive state reconciliation boundary.
+    const unknownTemplate = document.createElement('template');
+    unknownTemplate.innerHTML = freshMusicMarkup;
+    const unknownRoot = unknownTemplate.content.querySelector('[data-admin-music]');
+    root.replaceWith(unknownRoot);
+    setupAdminTabsInRoot(unknownRoot);
+    unknownRoot.querySelector('[data-admin-tab-target="admin-music-tab-albums"]').click();
+    const unknownForm = unknownRoot.querySelector('[data-admin-music-upload]');
+    unknownForm.querySelector('input[type="file"]').files = uploadSelection.files;
+    mode = 'upload-unknown';
+    uploadWrites = 0;
+    unknownForm.requestSubmit(unknownForm.querySelector('button[type="submit"]'));
+    await waitForIdle();
+    root = document.querySelector('[data-admin-music]');
+    check(uploadWrites === 2 && root.dataset.stale === '1'
+        && root.querySelectorAll('.admin-music-upload-results li').length === 1
+        && root.querySelector('[data-admin-music-status]').textContent
+            .includes('could not be verified'),
+        'A lost second response must preserve the first acknowledgment, stop the queue and lock replay.');
     document.getElementById('results').textContent = 'BROWSER PASS Admin Music Manager layout, disclosure, mutation, refresh, rejection, and stale lock';
 } catch (error) {
     document.getElementById('results').textContent = 'BROWSER FAIL ' + (error.stack || String(error));

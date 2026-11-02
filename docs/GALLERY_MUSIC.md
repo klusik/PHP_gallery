@@ -1,5 +1,42 @@
 # Gallery music
 
+## Upload directly into an album
+
+In **Admin → Galleries → Music Manager → Albums & playlists**, select or
+create an album and use **Upload files** below the existing catalog-song
+selector. The selector and its Add action remain available. Select up to twenty
+supported audio originals, then Upload. No gallery is required. Each original
+retains the existing 64 MiB, extension and content-detected MIME checks.
+Hosting upload limits still apply. JavaScript sends one original at a time,
+retains each acknowledgment and carries the returned catalog revision to the
+next request. The native multipart form also works without JavaScript, within
+one hosting request's total upload limits.
+
+Exact SHA-256 and size matches reuse an existing central song. Current active
+legacy sources can be promoted through the existing repository owner before
+reuse; dirty snapshots never establish a duplicate. Renaming identical bytes
+therefore creates neither another song nor another stored original. Different
+bytes with the same filename remain separate. This explicit upload admission
+does not merge pre-existing identities or use acoustic fingerprints. A song may
+belong to zero, one or several albums independently. Uploading an existing
+member preserves its position; removing membership retains the original and
+other memberships.
+
+Registration and the ordered membership write share the catalog revision
+transaction. Album uploads check every linked gallery's existing capacity before
+creating an original. Legacy promotion and gallery quota locks precede that
+transaction. A proven rollback removes only this attempt's verified unregistered
+bytes; an ambiguous commit or unreadable database retains them. Missing or
+unknown schema refuses ingestion. No new schema, route or runtime owner is
+introduced; expected PHP file/module closure deltas are zero against the
+existing 98-module plan and unchanged limits. Hosted preparation establishes
+actual counts.
+
+The batch stops at the first failure and displays acknowledged files separately.
+A lost or invalid response never triggers automatic upload retry; the editor
+locks further writes until the user reloads its actual persisted state. Saved
+members remain saved. This workflow never starts music playback.
+
 ## Shared originals and live gallery playlists
 
 **Edit gallery → Media management** combines photographs, presentation, PDF documents
