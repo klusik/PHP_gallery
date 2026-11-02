@@ -1,5 +1,49 @@
 # Patch notes
 
+## Version 0.150.1
+
+Enabled administrators to edit song titles and tags directly from album
+member rows, while preserving the album view and its reorder controls.
+
+### Highlights
+
+#### Edited song metadata in albums
+
+- Added title and tag editors to album-member rows, reusing the catalog editing
+  controls and shared mutation pipeline.
+- Kept the album tab open after saves and preserved album reorder controls.
+- Loaded tag data for album members even when they were outside the displayed
+  catalog page or search results.
+
+### Technical Details
+
+#### Backend and frontend
+
+- Updated `app/controllers/admin_music.php` and `app/views/admin_music.php`
+  to provide album-row editing and an explicitly labelled tag input.
+- Updated `public/assets/gallery-modules/admin-music.js`,
+  `public/assets/styles/admin-music.css`, and `public/assets/gallery.js` for
+  the editing interactions and presentation.
+
+#### Tests and documentation
+
+- Extended `tests/admin_music_browser_test.mjs` to cover opening and saving
+  title and tag editors from album rows, retaining album-tab state, and
+  preserving reorder controls.
+- Documented album-row title and tag editing in `TESTING.md` and the English,
+  Czech, German, and Swedish manuals.
+
+### User Impact
+
+#### For administrators
+
+- Made song titles and tags editable directly in album rows without leaving
+  the album view.
+
+#### For visitors
+
+- Public visitor behavior did not change.
+
 ## Version 0.150.0
 
 Expanded Music Manager into a place to upload and listen to music directly.

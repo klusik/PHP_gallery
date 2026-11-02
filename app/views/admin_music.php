@@ -522,9 +522,15 @@ function view_admin_music_album_path(array $albums, int $albumId): string
  * @param array{query:string,tab:string,return_tab:string,tab_urls:array{songs:string,albums:string},offset:int,limit:int,sort:string,direction:string,sort_urls:array{title:string,files:string,locations:string,tags:string},catalog:array{revision:string,songs:list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}>,total:int|string},song_details:array<int,array{tracks:list<array{gallery_id:int,track_id:string,filename:string,asset_id:?string}>,repository_assets:list<array{id:string,filename:string,byte_size:int,sha256:string,origin_gallery_id:?int,origin_track_id:?string}>,direct_galleries:list<array{song_id:int,gallery_id:int|string,title:string,track_count:int|string}>,albums:list<array{song_id:int,album_id:int|string,title:string,track_count:int|string}>,live_albums:list<array{song_id:int,gallery_id:int,gallery_title:string,album_id:int,album_title:string,track_count:int|string}>,galleries:array<int,array{id:int|string,url_path:string|null,slug:string|null,folder_path:string|null,title:string|null}>}>,albums:list<array{id:int|string,parent_id:int|string|null,title:string,description:string,sort_order:int|string,revision:int|string,song_count:int|string}>,album_id:int,album_offset:int,album_members:list<array{id:int|string,title:string,custom_title:string,indexed_title:string,filename:string}>,revision:string,extensions:bool,song_tags:array<int,string>,song_tag_labels:array<int,list<string>>,gallery_urls:array<int,string>,reconcile_cursor:int,dirty_status:array{state:string,count:int|null},csrf_html:string,action_url:string,notice:string,error:string,fragment:bool,merge_minimum:int,upload:array{max_files:int,max_bytes:int,accept:string},playback:array{allowed:bool,catalog:array{galleryId:int,enabled:bool,tracks:list<array{id:string,title:string,url:string}>},album:array{galleryId:int,enabled:bool,tracks:list<array{id:string,title:string,url:string}>,pagination:array{url:string,offset:int,total:int,pageSize:int,revision:string}}|null,error:string}} $model Page state.
  * @param int $songId Logical song identifier.
  * @param string $title Current catalog title.
+ * @param bool $albumMember Whether to show the album row's tag shortcut only.
  * @return void Emits title, album-assignment and row-context controls.
  */
-function view_admin_music_title_form(array $model, int $songId, string $title): void
+function view_admin_music_title_form(
+    array $model,
+    int $songId,
+    string $title,
+    bool $albumMember = false,
+): void
 {
     $existingAlbumIds = [];
     foreach (($model['song_details'][$songId]['albums'] ?? []) as $albumUsage) {
@@ -546,6 +552,17 @@ function view_admin_music_title_form(array $model, int $songId, string $title): 
         . ' maxlength="240">' . e($title) . '</textarea></label>'
         . '<button type="submit" title="' . e(t('admin.music.save_title', 'Save title'))
         . '" aria-label="' . e(t('admin.music.save_title', 'Save title')) . '">' . view_admin_menu_icon('update') . '</button></form>';
+    if ($albumMember) {
+        echo '<div class="admin-music-context-actions">'
+            . '<button type="button" class="admin-music-context-button"'
+            . ' data-admin-music-context="tags" title="'
+            . e(t('admin.music.tags', 'Tags')) . '" aria-label="'
+            . e(t('admin.music.tags', 'Tags')) . '">'
+            . view_admin_menu_icon('tags') . '<span>'
+            . e(t('admin.music.tags', 'Tags')) . '</span></button>'
+            . '</div></div></details>';
+        return;
+    }
     if (($model['albums'] ?? []) !== []) {
         echo '<form method="post" action="' . e((string) $model['action_url'])
             . '" data-admin-music-form class="admin-music-album-add-song">'
@@ -617,7 +634,8 @@ function view_admin_music_tag_form(
         . e((string) $model['revision']) . '"><input type="hidden" name="action"'
         . ' value="tags"><input type="hidden" name="song_id" value="' . $songId
         . '"><label><span class="sr-only">' . e(t('admin.music.tags', 'Tags'))
-        . '</span><input name="tags" value="' . e($tags) . '" maxlength="2000"></label>'
+        . '</span><input name="tags" aria-label="' . e(t('admin.music.tags', 'Tags'))
+        . '" value="' . e($tags) . '" maxlength="2000"></label>'
         . '<button type="submit" title="' . e(t('admin.music.save', 'Save'))
         . '" aria-label="' . e(t('admin.music.save', 'Save')) . '">' . view_admin_menu_icon('update') . '</button></form></details>';
 }
@@ -929,9 +947,14 @@ function view_admin_music_album_detail(
                 $songId, (string) $member['title'], $absolutePosition,
             );
         }
-        echo '<span class="admin-music-album-member-title">'
-            . e((string) $member['title']) . '</span>'
-            . '<form method="post" action="' . e((string) $model['action_url'])
+        echo '<div class="admin-music-album-member-title">';
+        view_admin_music_title_form($model, $songId, (string) $member['title'], true);
+        view_admin_music_tag_form(
+            $model,
+            $songId,
+            (string) ($model['song_tags'][$songId] ?? ''),
+        );
+        echo '</div><form method="post" action="' . e((string) $model['action_url'])
             . '" data-admin-music-form>' . $model['csrf_html']
             . '<input type="hidden" name="revision" value="'
             . e((string) $model['revision']) . '"><input type="hidden" name="action"'

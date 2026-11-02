@@ -1157,9 +1157,43 @@
 }
 
 .admin-music-album-member-title {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: .25rem;
     min-width: 0;
     color: var(--music-ink);
     overflow-wrap: anywhere;
+}
+
+/* Album rows reuse the catalog editor and keep its tag disclosure contextual. */
+#music-manager .admin-music-album-member-title > .admin-music-song-edit {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#music-manager .admin-music-album-member-title > .admin-music-tags > form {
+    position: absolute;
+    z-index: 60;
+    box-sizing: border-box;
+    display: flex;
+    gap: .4rem;
+    width: min(24rem, calc(100vw - 2rem));
+    padding: .55rem;
+    border: 1px solid var(--music-line);
+    border-radius: calc(var(--music-radius) * .7);
+    background: var(--music-panel);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .14);
+}
+
+#music-manager .admin-music-album-member-title > .admin-music-tags > form label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#music-manager .admin-music-album-member-title > .admin-music-tags > form input {
+    box-sizing: border-box;
+    width: 100%;
 }
 
 .admin-music-album-members > li > form {

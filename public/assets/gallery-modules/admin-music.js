@@ -422,11 +422,11 @@ function sizeAdminMusicTitleEditor(titleField) {
  * @param {HTMLElement} popup Row-local title popover container.
  * @param {HTMLElement} trigger Native title disclosure summary.
  * @param {AdminMusicTitleEditorAnchor} anchor Pointer or keyboard position captured at open.
- * @returns {void} Applies bounded offsets relative to the editor's owning cell.
+ * @returns {void} Applies bounded offsets relative to the editor's row anchor.
  */
 function positionAdminMusicTitleEditor(popup, trigger, anchor) {
-    const cell = popup.closest('td');
-    if (!(cell instanceof HTMLTableCellElement)) return;
+    const cell = popup.closest('td, .admin-music-album-member-title');
+    if (!(cell instanceof HTMLElement)) return;
     const cellBounds = cell.getBoundingClientRect();
     const triggerBounds = trigger.getBoundingClientRect();
     const desiredLeft = (anchor.kind === 'pointer' ? anchor.x : triggerBounds.left)
@@ -474,7 +474,7 @@ function positionAdminMusicRowDisclosure(disclosure) {
         || !(summary instanceof HTMLElement)
         || !disclosure.open) return;
     if (!disclosure.isConnected || !disclosure.open) return;
-    const cell = disclosure.closest('td')
+    const cell = disclosure.closest('td, .admin-music-album-member-title')
         || (disclosure.matches('.admin-music-upload-help') ? disclosure : null);
     if (!(cell instanceof HTMLElement)) return;
     const cellBounds = cell.getBoundingClientRect();
@@ -688,7 +688,7 @@ export function setupAdminMusic() {
         }
         const contextAction = target.closest('[data-admin-music-context]');
         if (contextAction instanceof HTMLButtonElement) {
-            const row = contextAction.closest('tr');
+            const row = contextAction.closest('tr, .admin-music-album-members > li');
             const disclosureSelector = {
                 tags: '.admin-music-tags',
                 files: '.admin-music-variants',
@@ -723,6 +723,7 @@ export function setupAdminMusic() {
         const rowDisclosure = summary?.parentElement;
         if (rowDisclosure instanceof HTMLDetailsElement
             && (rowDisclosure.closest('.admin-music-table-wrap td')
+                || rowDisclosure.matches('.admin-music-album-member-title > .admin-music-tags')
                 || rowDisclosure.matches('.admin-music-upload-help'))
             && !rowDisclosure.matches('.admin-music-song-edit')) {
             event.preventDefault();
