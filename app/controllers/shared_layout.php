@@ -136,6 +136,7 @@ function shared_layout_admin_stylesheet_files(): array
         'assets/styles/admin-navigation.css',
         'assets/styles/breadcrumbs.css',
         'assets/styles/admin-feature-settings.css',
+        'assets/styles/ui-switch.css',
     ];
 }
 
@@ -154,6 +155,7 @@ function shared_layout_public_stylesheet_files(): array
         'assets/styles/utilities.css',
         'assets/styles.css',
         'assets/styles/breadcrumbs.css',
+        'assets/styles/ui-switch.css',
     ];
 }
 

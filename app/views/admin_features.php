@@ -101,7 +101,7 @@ function view_render_admin_feature_group(array $group): void
     echo '<section class="admin-feature-group" id="' . e($id) . '">'
         . '<header class="admin-feature-group-heading">'
         . '<label class="admin-feature-switch admin-feature-group-switch">'
-        . '<input type="checkbox" data-feature-group="' . e($group['key'])
+        . '<input class="ui-switch" type="checkbox" data-feature-group="' . e($group['key'])
         . '" id="' . e($id) . '-switch" aria-label="'
         . e($group['toggle_label']) . '" data-mixed="'
         . ($group['configured_count'] > 0
@@ -109,7 +109,7 @@ function view_render_admin_feature_group(array $group): void
         . '"' . ($group['configured_count'] === $group['editable_count']
             ? ' checked' : '')
         . ($group['editable_count'] === 0 ? ' disabled' : '')
-        . '><span class="admin-feature-track" aria-hidden="true"></span>'
+        . '>'
         . '</label><div class="admin-feature-group-title">'
         . '<h2 id="' . e($id) . '-title">'
         . e($group['label']) . '</h2></div>';
@@ -143,12 +143,11 @@ function view_render_admin_feature_card(array $feature): void
     echo '<tr class="admin-feature-row' . e($feature['card_class'])
         . '" data-feature-row="' . e($feature['key']) . '"><th scope="row">'
         . '<div class="admin-feature-name">';
-    echo '<label class="admin-feature-switch"><input type="checkbox"'
+    echo '<label class="admin-feature-switch"><input class="ui-switch" type="checkbox"'
         . ' name="enabled_features[]" value="' . e($feature['key'])
         . '" id="' . e($id) . '" aria-label="' . e($feature['label']) . '"'
         . ($feature['configured'] ? ' checked' : '')
         . ($feature['editable'] ? '' : ' disabled') . '>'
-        . '<span class="admin-feature-track" aria-hidden="true"></span>'
         . '</label>';
     if ($feature['settings_url'] !== '') {
         $panelAttributes = $feature['settings_panel']

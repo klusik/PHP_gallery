@@ -157,6 +157,11 @@ assert_public_asset_contains(
     $anonymousPublicStyles,
     'anonymous public styles include shared breadcrumb presentation',
 );
+assert_public_asset_contains(
+    'assets/styles/ui-switch.css',
+    $anonymousPublicStyles,
+    'anonymous public styles include shared switch presentation',
+);
 
 foreach (shared_layout_admin_stylesheet_files() as $styleFile) {
     if (in_array(
@@ -168,6 +173,7 @@ foreach (shared_layout_admin_stylesheet_files() as $styleFile) {
             'assets/styles/utilities.css',
             'assets/styles.css',
             'assets/styles/breadcrumbs.css',
+            'assets/styles/ui-switch.css',
         ],
         true,
     )) {

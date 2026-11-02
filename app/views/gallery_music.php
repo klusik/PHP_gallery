@@ -155,7 +155,7 @@ function view_render_gallery_music(array $model): void
         view_render_gallery_music_form_start($model, 'gallery-music-settings');
         echo
             '<label class="gallery-presentation-setting">'
-                . '<input type="checkbox" role="switch"'
+                . '<input class="ui-switch" type="checkbox" role="switch"'
                 . ' data-music-default-switch name="music_enabled" value="1"'
                 . ($model['enabled'] ? ' checked' : '')
                 . '><span>'

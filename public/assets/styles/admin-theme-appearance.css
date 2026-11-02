@@ -37,7 +37,8 @@
     color: var(--appearance-muted);
     font-size: .75rem;
 }
-.admin-page #admin-theme-tab-appearance :is(button, .button, input, select) {
+.admin-page #admin-theme-tab-appearance :is(button, .button,
+    input:not(.ui-switch), select) {
     box-sizing: border-box;
     min-height: 28px;
     margin: 0;
@@ -226,33 +227,6 @@
     border: 0;
     background: var(--accent);
 }
-.admin-page #admin-theme-tab-appearance input[type='checkbox'] {
-    appearance: none;
-    position: relative;
-    flex: 0 0 26px;
-    width: 26px;
-    height: 14px;
-    min-height: 14px;
-    padding: 0;
-    border: 1px solid var(--appearance-line);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-.admin-page #admin-theme-tab-appearance input[type='checkbox']::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--ink);
-}
-.admin-page #admin-theme-tab-appearance input[type='checkbox']:checked {
-    border-color: color-mix(in srgb, var(--accent) 65%, var(--ink));
-    background: color-mix(in srgb, var(--accent) 23%, transparent);
-}
-.admin-page #admin-theme-tab-appearance input[type='checkbox']:checked::after { left: 14px; }
 .admin-page #admin-theme-tab-appearance [data-theme-appearance-switch]:disabled {
     opacity: .55;
     cursor: not-allowed;
@@ -398,7 +372,6 @@
 }
 @media (forced-colors: active) {
     .admin-page #admin-theme-tab-appearance input:is([type='checkbox'], [type='range']) { appearance: auto; }
-    .admin-page #admin-theme-tab-appearance input[type='checkbox']::after { content: none; }
     .admin-page #admin-theme-tab-appearance :is(.theme-appearance-group,
         .theme-appearance-preview, .theme-appearance-help-panel) { background: Canvas; backdrop-filter: none; }
 }

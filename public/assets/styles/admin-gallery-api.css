@@ -261,14 +261,6 @@
     font-weight: 500;
 }
 
-#admin-edit-api .admin-gallery-migration-card .admin-checkbox-row input[type="checkbox"] {
-    width: 0.95rem;
-    height: 0.95rem;
-    min-height: 0;
-    margin: 0;
-    padding: 0;
-}
-
 #admin-edit-api .admin-gallery-api-field-help {
     display: inline-block;
 }

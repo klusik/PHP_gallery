@@ -338,7 +338,7 @@
     padding: .32rem .5rem;
 }
 
-#music-manager input[type="checkbox"] {
+#music-manager input[type="checkbox"]:not(.ui-switch) {
     width: 1rem;
     height: 1rem;
     accent-color: var(--music-accent);

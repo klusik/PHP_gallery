@@ -488,7 +488,7 @@ function render_admin_trash_settings_form(array $settings = []): void
             . e(t('admin.features.reload_state', 'Reload state')) . '">'
             . csrf_field();
     echo
-        '<div class="admin-trash-setting"><label><input type="checkbox" name="gallery_trash_enabled" value="1"'
+        '<div class="admin-trash-setting"><label><input class="ui-switch" type="checkbox" name="gallery_trash_enabled" value="1"'
             . (!empty($settings['enabled']) ? ' checked' : '')
             . '> ';
     echo
@@ -506,7 +506,7 @@ function render_admin_trash_settings_form(array $settings = []): void
     );
     echo '</div>';
     echo
-        '<div class="admin-trash-setting"><label><input type="checkbox" name="gallery_trash_auto_purge_enabled" value="1"'
+        '<div class="admin-trash-setting"><label><input class="ui-switch" type="checkbox" name="gallery_trash_auto_purge_enabled" value="1"'
             . (!empty($settings['auto_purge_enabled']) ? ' checked' : '')
             . '> ';
     echo

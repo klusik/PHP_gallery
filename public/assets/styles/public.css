@@ -2462,46 +2462,6 @@ button:disabled,
     background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
-/* Compact switch geometry: the 26x14px track holds an 8px thumb, with
-   3px edge clearance at either end. The surrounding label owns the larger
-   interaction target. Keep the native checkbox for keyboard/form behavior. */
-.public-page .public-home-search-context input {
-    appearance: none;
-    -webkit-appearance: none;
-    flex: 0 0 auto;
-    width: 26px;
-    height: 14px;
-    min-height: 0;
-    margin: 0;
-    padding: 0;
-    border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
-    border-radius: 999px;
-    background-color: color-mix(in srgb, var(--ink) 10%, transparent);
-    background-image: radial-gradient(
-        circle at 6px center, var(--ink) 4px, transparent 4.5px
-    );
-    cursor: pointer;
-}
-
-.public-page .public-home-search-context input:checked {
-    border-color: color-mix(in srgb, var(--accent-dark) 50%, transparent);
-    background-color: color-mix(in srgb, var(--accent) 16%, var(--panel));
-    background-image: radial-gradient(
-        circle at 18px center, var(--ink) 4px, transparent 4.5px
-    );
-}
-
-/* System colors own the control in forced-color environments so its checked
-   state remains visible when the browser suppresses background images. */
-@media (forced-colors: active) {
-    .public-page .public-home-search-context input,
-    .public-page .public-home-search-context input:checked {
-        appearance: auto;
-        -webkit-appearance: auto;
-        background-image: none;
-    }
-}
-
 .public-home-search-context span {
     overflow: hidden;
     text-overflow: ellipsis;

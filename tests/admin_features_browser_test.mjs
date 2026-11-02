@@ -64,6 +64,7 @@ const html = String.raw`<!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="/public/assets/styles/base.css">
 <link rel="stylesheet" href="/public/assets/styles/admin.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
 </head><body class="admin-page"><pre id="results"></pre><main>${initial.html}</main>
 <script type="module">
 import {setupAdminFeatures} from '/public/assets/gallery-modules/admin-features.js';
@@ -155,6 +156,10 @@ try {
     check(document.querySelector('table thead tr').children.length === 2, 'State became a separate column');
     const name = feature('downloads').closest('.admin-feature-name');
     check(name.firstElementChild.contains(feature('downloads')), 'Switch must precede the feature name');
+    check(feature('downloads').classList.contains('ui-switch')
+        && getComputedStyle(feature('downloads')).width === '26px'
+        && getComputedStyle(feature('downloads')).height === '14px',
+    'Features must use the shared compact switch.');
     const help = document.querySelector('.admin-feature-help');
     check(getComputedStyle(help).backgroundColor === 'rgba(0, 0, 0, 0)', 'Legacy filled help button won the cascade');
     check(document.documentElement.scrollWidth <= innerWidth, 'Feature table overflows viewport');
@@ -177,6 +182,10 @@ try {
 
     feature('image_voting').click(); await settled();
     check(feature('picture_game').checked && feature('picture_game').closest('tr').querySelector('.admin-feature-blocked'), 'Dependency changed configured preference or hid blocker');
+    const mixed = document.getElementById('admin-feature-group-public_display-switch');
+    check(mixed.classList.contains('ui-switch') && mixed.indeterminate
+        && getComputedStyle(mixed, '::before').left === '8px',
+    'A partially enabled group must expose the shared mixed-state thumb.');
     const groupId = 'admin-feature-group-maps_flightsim-switch';
     document.getElementById(groupId).click(); await settled();
     check(!feature('gallery_maps').checked && !feature('navigation_data').checked && !feature('downloads').checked, 'Group save touched wrong scope');
@@ -207,6 +216,7 @@ const files = new Map([
     ['/public/assets/styles/base.css', 'public/assets/styles/base.css'],
     ['/public/assets/styles/admin.css', 'public/assets/styles/admin.css'],
     ['/public/assets/styles/admin-cinematic.css', 'public/assets/styles/admin-cinematic.css'],
+    ['/public/assets/styles/ui-switch.css', 'public/assets/styles/ui-switch.css'],
     ['/public/assets/gallery-modules/admin-features.js', 'public/assets/gallery-modules/admin-features.js'],
 ]);
 const server = createServer(async (request, response) => {

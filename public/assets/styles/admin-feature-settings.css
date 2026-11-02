@@ -121,61 +121,6 @@
     font-weight: 400;
 }
 
-/* Only preference checkboxes become switches. Music row selections retain
- * their native selection boxes; radios, ranges and hidden fields are untouched. */
-.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
-    #admin-maintenance-content, #admin-maintenance-media,
-    #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"],
-.admin-page #music-manager .admin-music-preferences input[type="checkbox"] {
-    appearance: none;
-    position: relative;
-    flex: 0 0 26px;
-    width: 26px;
-    min-width: 26px;
-    height: 14px;
-    min-height: 14px;
-    margin: 0;
-    padding: 0;
-    border: 1px solid color-mix(in srgb, var(--ink) 38%, transparent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-    vertical-align: middle;
-    cursor: pointer;
-}
-
-.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
-    #admin-maintenance-content, #admin-maintenance-media,
-    #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"]::after,
-.admin-page #music-manager .admin-music-preferences
-    input[type="checkbox"]::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--ink) 65%, var(--panel));
-}
-
-.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
-    #admin-maintenance-content, #admin-maintenance-media,
-    #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"]:checked,
-.admin-page #music-manager .admin-music-preferences
-    input[type="checkbox"]:checked {
-    border-color: color-mix(in srgb, var(--accent) 65%, var(--ink));
-    background: color-mix(in srgb, var(--accent) 23%, transparent);
-}
-
-.admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
-    #admin-maintenance-content, #admin-maintenance-media,
-    #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"]:checked::after,
-.admin-page #music-manager .admin-music-preferences
-    input[type="checkbox"]:checked::after {
-    left: 14px;
-    background: var(--ink);
-}
-
 .admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
     #admin-maintenance-content, #admin-maintenance-media,
     #admin-maintenance-system, .admin-trash-workspace) label:has(input[type="checkbox"]),
@@ -1572,21 +1517,6 @@ html[data-admin-trash-preferences-ready='1'] .admin-trash-settings
 
 /* Native system controls remain the supported high-contrast presentation. */
 @media (forced-colors: active) {
-    .admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
-        #admin-maintenance-content, #admin-maintenance-media,
-        #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"],
-    .admin-page #music-manager .admin-music-preferences input[type="checkbox"] {
-        appearance: auto;
-        background: Canvas;
-        border-color: ButtonText;
-    }
-
-    .admin-page :is(.admin-settings-page, .admin-smart-gallery-editor,
-        #admin-maintenance-content, #admin-maintenance-media,
-        #admin-maintenance-system, .admin-trash-workspace) input[type="checkbox"]::after,
-    .admin-page #music-manager .admin-music-preferences
-        input[type="checkbox"]::after { content: none; }
-
     .admin-settings-help-panel, .admin-dashboard-help-panel,
     .admin-trash-help-panel {
         background: Canvas;

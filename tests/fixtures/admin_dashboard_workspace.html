@@ -14,6 +14,7 @@ License: MIT
 <link rel="stylesheet" href="/public/assets/styles/admin-dashboard.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-feature-settings.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
 <body class="admin-page"><main>
 <div class="admin-dashboard-page" data-admin-dashboard-workspace>
 <header class="admin-dashboard-toolbar"><h1>Overview</h1><button id="primary-action">Primary action</button></header>
@@ -29,19 +30,19 @@ License: MIT
 <section id="admin-tab-galleries" class="panel admin-tab-panel" data-admin-tab-panel><div data-dashboard-read="galleries" data-endpoint="/fixture-galleries" data-error="Galleries unavailable" data-retry="Retry">Loading galleries</div></section>
 <section id="admin-tab-maintenance" class="panel admin-tab-panel" data-admin-tab-panel>
 <div id="admin-maintenance-content" data-dashboard-content-settings data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unknown; reload" data-reload-label="Reload state">
-<form class="admin-content-row" action="/fixture-content-search" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input type="checkbox" name="public_home_search_enabled" checked title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save search">Save</button></div></form>
-<form class="admin-content-row" action="/fixture-content-gps" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input type="checkbox" name="exif_gps_default_enabled" checked title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save GPS">Save</button></div></form>
-<form class="admin-content-row" action="/fixture-content-crawler" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input type="checkbox" name="seo_request_guard_enabled" checked></label><label><input type="checkbox" name="seo_request_guard_logging_enabled" title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save crawler">Save</button></div></form>
+<form class="admin-content-row" action="/fixture-content-search" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input class="ui-switch" type="checkbox" name="public_home_search_enabled" checked title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save search">Save</button></div></form>
+<form class="admin-content-row" action="/fixture-content-gps" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input class="ui-switch" type="checkbox" name="exif_gps_default_enabled" checked title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save GPS">Save</button></div></form>
+<form class="admin-content-row" action="/fixture-content-crawler" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input class="ui-switch" type="checkbox" name="seo_request_guard_enabled" checked></label><label><input class="ui-switch" type="checkbox" name="seo_request_guard_logging_enabled" title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save crawler">Save</button></div></form>
 </div>
 <div id="admin-maintenance-system" data-dashboard-content-settings data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unknown; reload" data-reload-label="Reload state">
-<form class="admin-content-row admin-health-devmode" action="/fixture-system-devmode" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="system"><label><input type="checkbox" name="dev_mode_enabled">Viewer diagnostics</label><div class="admin-content-actions"><button type="submit">Save diagnostics</button></div></form>
+<form class="admin-content-row admin-health-devmode" action="/fixture-system-devmode" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="system"><label><input class="ui-switch" type="checkbox" name="dev_mode_enabled">Viewer diagnostics</label><div class="admin-content-actions"><button type="submit">Save diagnostics</button></div></form>
 </div>
 <div id="admin-maintenance-media" data-dashboard-content-settings data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unknown; reload" data-reload-label="Reload state">
 <article class="admin-site-maintenance-card"><p><span data-dashboard-schedule-state data-enabled-label="Enabled" data-disabled-label="Disabled">Enabled</span><span data-dashboard-schedule-time>00:00</span></p>
 <form action="/fixture-media-schedule" method="post" data-dashboard-schedule-preferences>
 <input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="site_maintenance_action" value="save">
-<label><input type="checkbox" name="site_maintenance_enabled" checked>Schedule</label>
-<label><input type="checkbox" name="site_maintenance_request_trigger_enabled" checked>Requests</label>
+<label><input class="ui-switch" type="checkbox" name="site_maintenance_enabled" checked>Schedule</label>
+<label><input class="ui-switch" type="checkbox" name="site_maintenance_request_trigger_enabled" checked>Requests</label>
 <label>UTC<input type="time" name="site_maintenance_utc_time" value="00:00"></label>
 <label>Window<input type="number" name="site_maintenance_window_hours" min="0.25" max="24" step="0.25" value="3"></label>
 <label>Batch<input type="number" name="site_maintenance_batch_size" min="1" max="50" value="20"></label>

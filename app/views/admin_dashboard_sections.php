@@ -3213,7 +3213,7 @@ function view_render_admin_dashboard_public_search_card(
     );
     echo '</div>';
     echo
-        '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="public_home_search_enabled" value="1" aria-label="'
+        '<div class="admin-content-controls"><label class="admin-compact-toggle"><input class="ui-switch" type="checkbox" name="public_home_search_enabled" value="1" aria-label="'
             . e(t('admin.dashboard.content_search_title', 'Public search'))
             . '"';
     view_render_admin_dashboard_factory_attributes($model, 'public_home_search_enabled');
@@ -3344,7 +3344,7 @@ function view_render_admin_dashboard_seo_guard_card(
     );
     echo '</div>';
     echo
-        '<div class="admin-content-controls"><label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_enabled" value="1"';
+        '<div class="admin-content-controls"><label class="admin-compact-toggle"><input class="ui-switch" type="checkbox" name="seo_request_guard_enabled" value="1"';
     view_render_admin_dashboard_factory_attributes($model, 'seo_request_guard_enabled');
     echo (!empty($status['enabled']) ? ' checked' : '')
             . '> <span>'
@@ -3354,7 +3354,7 @@ function view_render_admin_dashboard_seo_guard_card(
             ))
             . '</span></label>';
     echo
-        '<label class="admin-compact-toggle"><input type="checkbox" name="seo_request_guard_logging_enabled" value="1"';
+        '<label class="admin-compact-toggle"><input class="ui-switch" type="checkbox" name="seo_request_guard_logging_enabled" value="1"';
     view_render_admin_dashboard_factory_attributes($model, 'seo_request_guard_logging_enabled');
     echo (!empty($status['logging_enabled']) ? ' checked' : '')
             . '> <span>'
@@ -3791,7 +3791,7 @@ function view_render_admin_dashboard_thumbnail_card(
             . '" class="admin-thumbnail-cache-actions-form" data-thumbnail-maintenance-action-form data-thumbnail-progress-target="#admin-dashboard-thumbnail-progress">'
             . csrf_field();
     echo
-        '<label class="admin-compact-toggle browser-thumbnail-rebuild-toggle"><input type="checkbox" name="browser_thumbnail_rebuild" value="1" data-browser-thumbnail-rebuild-toggle data-browser-thumbnail-rebuild-config="'
+        '<label class="admin-compact-toggle browser-thumbnail-rebuild-toggle"><input class="ui-switch" type="checkbox" name="browser_thumbnail_rebuild" value="1" data-browser-thumbnail-rebuild-toggle data-browser-thumbnail-rebuild-config="'
             . e($browserRebuildJson)
             . '"'
             . ($browserRebuildDisabled ? ' disabled' : ' checked')
@@ -4154,7 +4154,7 @@ function view_render_admin_dashboard_site_maintenance_card(
             . csrf_field();
     echo '<input type="hidden" name="site_maintenance_action" value="save">';
     echo
-        '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_enabled" value="1"'
+        '<label class="admin-compact-toggle"><input class="ui-switch" type="checkbox" name="site_maintenance_enabled" value="1"'
             . ($enabled ? ' checked' : '')
             . '> <span>'
             . e(t(
@@ -4163,7 +4163,7 @@ function view_render_admin_dashboard_site_maintenance_card(
             ))
             . '</span></label>';
     echo
-        '<label class="admin-compact-toggle"><input type="checkbox" name="site_maintenance_request_trigger_enabled" value="1"'
+        '<label class="admin-compact-toggle"><input class="ui-switch" type="checkbox" name="site_maintenance_request_trigger_enabled" value="1"'
             . ($requestTriggerEnabled ? ' checked' : '')
             . '> <span>'
             . e(t(

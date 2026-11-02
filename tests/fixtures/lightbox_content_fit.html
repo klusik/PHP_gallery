@@ -20,6 +20,7 @@ License: MIT License (see LICENSE file in repository)
 <link rel="stylesheet" href="../../public/assets/styles/public.css">
 <link rel="stylesheet" href="../../public/assets/styles/lightbox.css">
 <link rel="stylesheet" href="../../public/assets/styles/public-shared.css">
+<link rel="stylesheet" href="../../public/assets/styles/ui-switch.css">
 <link rel="stylesheet" href="../../public/assets/styles/mobile-gallery.css">
 <style>
     /* Deliberately conspicuous gallery content behind the real viewer shell. */
@@ -65,7 +66,7 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
 </div>
 <script type="module">
     import {setupGalleryLightbox, teardownGalleryLightbox}
-        from '../../public/assets/gallery-modules/lightbox.js?v=20261102-repeat-modes-v1';
+        from '../../public/assets/gallery-modules/lightbox.js?v=20261102-shared-switch-v1';
 
     // Bound asynchronous fixture checkpoints, independently of slideshow speed.
     // Type: number. Units: milliseconds. Scope: one fixture checkpoint.

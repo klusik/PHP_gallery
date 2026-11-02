@@ -190,7 +190,7 @@
     color: var(--admin-muted, #667085);
     font-size: 0.74rem;
 }
-#admin-edit-media .gallery-music-settings input[type="checkbox"] {
+#admin-edit-media .gallery-music-settings input[type="checkbox"]:not(.ui-switch) {
     flex: 0 0 auto;
     width: auto;
     margin: 0;
@@ -789,13 +789,6 @@
     min-width: 6rem;
     max-width: 10rem;
 }
-#admin-edit-media .gallery-presentation-setting input[role="switch"] {
-    flex: 0 0 2.4rem;
-    width: 2.4rem;
-    min-width: 2.4rem;
-    height: 1.4rem;
-    min-height: 1.4rem;
-}
 #admin-edit-media .gallery-presentation-actions {
     display: inline-flex;
     flex: 0 0 auto;
@@ -1234,37 +1227,6 @@
     font-size: 0.82rem;
 }
 
-:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"] {
-    appearance: none;
-    flex: 0 0 26px;
-    width: 26px;
-    min-width: 26px;
-    height: 14px;
-    min-height: 14px;
-    margin: 0;
-    padding: 2px;
-    border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-
-:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"]::before {
-    content: "";
-    display: block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--ink);
-}
-
-:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"]:checked {
-    background: color-mix(in srgb, var(--accent) 23%, transparent);
-}
-
-:is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"]:checked::before {
-    transform: translateX(12px);
-}
-
 :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1389,116 +1351,14 @@
     }
 }
 
-@media (forced-colors: active) {
-    :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"] {
-        appearance: auto;
-    }
-
-    :is(#admin-edit-media, #admin-edit-api) .admin-gallery-migration-card input[type="checkbox"]::before {
-        display: none;
-    }
-}
-
-/* One gallery-editor preference switch matches Display and Images. Keep this
- * scoped to binary settings: catalog, photo selection and confirmations retain
- * their own semantics. Public playback and share overlays own their styling. */
-:is(#admin-edit-access .admin-access-inline-options,
-    #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-    #admin-edit-media .gallery-music-settings .gallery-presentation-setting,
-    #admin-edit-media .admin-gallery-migration-card,
-    #admin-edit-media .gallery-archive-options) input[type="checkbox"] {
-    appearance: none;
-    position: relative;
-    box-sizing: border-box;
-    flex: 0 0 26px;
-    width: 26px;
-    min-width: 26px;
-    height: 14px;
-    min-height: 0;
-    margin: 0;
-    padding: 0;
-    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-    cursor: pointer;
-}
-:is(#admin-edit-access .admin-access-inline-options,
-    #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-    #admin-edit-media .gallery-music-settings .gallery-presentation-setting,
-    #admin-edit-media .admin-gallery-migration-card,
-    #admin-edit-media .gallery-archive-options) input[type="checkbox"]::before {
-    content: "";
-    position: absolute;
-    display: block;
-    top: 2px;
-    left: 3px;
-    width: 8px;
-    height: 8px;
-    margin: 0;
-    border-radius: 50%;
-    background: var(--ink);
-    transform: none;
-}
-:is(#admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-    #admin-edit-media .gallery-music-settings .gallery-presentation-setting) input[role="switch"]::after {
-    content: none;
-}
-:is(#admin-edit-access .admin-access-inline-options,
-    #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-    #admin-edit-media .gallery-music-settings .gallery-presentation-setting,
-    #admin-edit-media .admin-gallery-migration-card,
-    #admin-edit-media .gallery-archive-options) input[type="checkbox"]:checked {
-    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-    background: color-mix(in srgb, var(--accent) 23%, transparent);
-}
-:is(#admin-edit-access .admin-access-inline-options,
-    #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-    #admin-edit-media .gallery-music-settings .gallery-presentation-setting,
-    #admin-edit-media .admin-gallery-migration-card,
-    #admin-edit-media .gallery-archive-options) input[type="checkbox"]:checked::before {
-    left: 13px;
-    transform: none;
-}
-:is(#admin-edit-access .admin-access-inline-options,
-    #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-    #admin-edit-media .gallery-music-settings .gallery-presentation-setting,
-    #admin-edit-media .admin-gallery-migration-card,
-    #admin-edit-media .gallery-archive-options) input[type="checkbox"]:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-}
-:is(#admin-edit-access .admin-access-inline-options,
-    #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-    #admin-edit-media .gallery-music-settings .gallery-presentation-setting,
-    #admin-edit-media .admin-gallery-migration-card,
-    #admin-edit-media .gallery-archive-options) input[type="checkbox"]:disabled {
-    opacity: .55;
-    cursor: default;
-}
+/* Put the switch next to its own label before the following setting starts. */
 @media (max-width: 640px), (pointer: coarse) {
     #admin-edit-media :is(.gallery-presentation-setting,
         .admin-gallery-migration-card label, .gallery-archive-options label) {
         min-height: 44px;
     }
 }
-@media (forced-colors: active) {
-    :is(#admin-edit-access .admin-access-inline-options,
-        #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-        #admin-edit-media .gallery-music-settings .gallery-presentation-setting,
-        #admin-edit-media .admin-gallery-migration-card,
-        #admin-edit-media .gallery-archive-options) input[type="checkbox"] {
-        appearance: auto;
-    }
-    :is(#admin-edit-access .admin-access-inline-options,
-        #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting,
-        #admin-edit-media .gallery-music-settings .gallery-presentation-setting,
-        #admin-edit-media .admin-gallery-migration-card,
-        #admin-edit-media .gallery-archive-options) input[type="checkbox"]::before {
-        display: none;
-    }
-}
 
-/* Put the switch next to its own label before the following setting starts. */
 #admin-edit-media .gallery-presentation-settings > .gallery-presentation-setting:has(input[role="switch"]) {
     margin-inline-end: .75rem;
 }

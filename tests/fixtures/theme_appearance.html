@@ -313,8 +313,12 @@ try {
             'enhanced narrow subsection and any completion feedback fit '+name);
     }
     for(const input of document.querySelectorAll('#admin-theme-tab-appearance input[type=checkbox]')) {
-        check(getComputedStyle(input).width==='26px' && getComputedStyle(input).height==='14px'
-            && input.title.startsWith('Factory default:'),'binary controls retain compact tracks and declared factory metadata');
+        const style=getComputedStyle(input);
+        check(input.classList.contains('ui-switch') && style.width==='26px' && style.height==='14px'
+            && input.title.startsWith('Factory default:'),
+            'binary controls retain compact tracks and declared factory metadata: '
+                + JSON.stringify({name:input.name,classes:input.className,
+                    width:style.width,height:style.height,title:input.title}));
     }
     window.fetch=nativeFetch;
     document.getElementById('results').textContent='BROWSER PASS '+assertions+' Appearance assertions';

@@ -11,6 +11,7 @@ License: MIT License (see LICENSE file in repository)
 -->
 <html lang="en"><meta charset="utf-8"><title>Trash confirmation fixture</title>
 <link rel="stylesheet" href="/public/assets/styles/admin-feature-settings.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
 <body class="admin-page"><main id="workspace"></main><pre id="results">BROWSER PENDING</pre>
 <script type="module">
 import {setupAdminTrashActions} from '/public/assets/gallery-modules/admin-trash.js';
@@ -45,8 +46,8 @@ function panelMarkup() {
     return '<section class="admin-trash-workspace" data-admin-trash-panel data-admin-trash-refresh-url="/fixture-trash-refresh"><p data-admin-trash-status hidden></p>'
         + '<form class="admin-trash-settings" method="post" action="/fixture-trash-settings" data-admin-trash-settings-form data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unverified; reload" data-reload-label="Reload state">'
         + '<input type="hidden" name="csrf_token" value="fixture-authority">'
-        + '<label><input type="checkbox" name="gallery_trash_enabled" value="1"' + (settingsPersisted.gallery_trash_enabled ? ' checked' : '') + '>Trash</label>'
-        + '<label><input type="checkbox" name="gallery_trash_auto_purge_enabled" value="1"' + (settingsPersisted.gallery_trash_auto_purge_enabled ? ' checked' : '') + '>Auto purge</label>'
+        + '<label><input class="ui-switch" type="checkbox" name="gallery_trash_enabled" value="1"' + (settingsPersisted.gallery_trash_enabled ? ' checked' : '') + '>Trash</label>'
+        + '<label><input class="ui-switch" type="checkbox" name="gallery_trash_auto_purge_enabled" value="1"' + (settingsPersisted.gallery_trash_auto_purge_enabled ? ' checked' : '') + '>Auto purge</label>'
         + '<label>Days<input type="number" name="gallery_trash_retention_days" min="1" max="365" value="' + settingsPersisted.gallery_trash_retention_days + '"></label>'
         + '<label>Batch<input type="number" name="gallery_trash_purge_batch" min="1" max="100" value="' + settingsPersisted.gallery_trash_purge_batch + '"></label>'
         + '<button type="submit">Save</button><span role="status" data-admin-trash-settings-status></span></form>'

@@ -300,7 +300,7 @@ function view_render_smart_gallery_editor(array $viewModel): void
             . '</p></fieldset>';
 
     echo
-        '<section class="admin-smart-gallery-status"><div class="admin-smart-gallery-options"><label class="admin-smart-gallery-enabled"><input type="checkbox" name="enabled" value="1"'
+        '<section class="admin-smart-gallery-status"><div class="admin-smart-gallery-options"><label class="admin-smart-gallery-enabled"><input class="ui-switch" type="checkbox" name="enabled" value="1"'
             . (!empty($viewModel['enabled']) ? ' checked' : '')
             . '> '
             . e(t('smart_gallery.active_label', 'Gallery active'))
@@ -565,7 +565,7 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
             . e(t('smart_gallery.presentation', 'Presentation'))
             . '</legend>';
     echo
-        '<label class="admin-smart-gallery-presentation-toggle"><input type="checkbox" name="presentation_override_enabled" value="1" data-smart-gallery-presentation-toggle'
+        '<label class="admin-smart-gallery-presentation-toggle"><input class="ui-switch" type="checkbox" name="presentation_override_enabled" value="1" data-smart-gallery-presentation-toggle'
             . (!empty($viewModel['has_override']) ? ' checked' : '')
             . '> '
             . e(t(
@@ -618,7 +618,7 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
             . '" data-gallery-grid-rows data-smart-gallery-grid-rows></label>';
     echo '</div>';
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="presentation_pagination_enabled" value="1" data-smart-gallery-pagination-toggle'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="presentation_pagination_enabled" value="1" data-smart-gallery-pagination-toggle'
             . ($paginationEnabled ? ' checked' : '')
             . '> '
             . e(t('smart_gallery.pagination_enabled', 'Use pagination'))
@@ -731,7 +731,7 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
             ))
             . '</p>';
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="presentation_metadata_visible" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="presentation_metadata_visible" value="1"'
             . (!empty($presentation['metadata_visible']) ? ' checked' : '')
             . '> '
             . e(t(
@@ -740,7 +740,7 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
             ))
             . '</label>';
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="presentation_source_gallery_visible" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="presentation_source_gallery_visible" value="1"'
             . (
                 !empty($presentation['source_gallery_visible'])
                     ? ' checked'
@@ -760,7 +760,7 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
             . e(t('smart_gallery.viewer_features', 'Viewer features'))
             . '</h3>';
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="presentation_map_enabled" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="presentation_map_enabled" value="1"'
             . (!empty($presentation['map_enabled']) ? ' checked' : '')
             . '> '
             . e(t('smart_gallery.map_enabled', 'Enable aggregate GPS map'))
@@ -775,7 +775,7 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
                 . '</p>';
     }
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="presentation_lightbox_enabled" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="presentation_lightbox_enabled" value="1"'
             . (!empty($presentation['lightbox_enabled']) ? ' checked' : '')
             . '> '
             . e(t('smart_gallery.lightbox_enabled', 'Enable lightbox'))
@@ -805,7 +805,7 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
     }
     echo '</select></label>';
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="presentation_slideshow_enabled" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="presentation_slideshow_enabled" value="1"'
             . (!empty($presentation['slideshow_enabled']) ? ' checked' : '')
             . '> '
             . e(t(
@@ -814,14 +814,14 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
             ))
             . '</label>';
     echo
-        '<label class="checkbox-label"><input type="checkbox"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox"'
             . ' name="presentation_music_enabled" value="1"'
             . (!empty($presentation['music_enabled']) ? ' checked' : '')
             . '> '
             . e(t('music.default'))
             . '</label>';
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="presentation_voting_enabled" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="presentation_voting_enabled" value="1"'
             . (!empty($presentation['voting_enabled']) ? ' checked' : '')
             . '> '
             . e(t(
@@ -839,7 +839,7 @@ function view_render_smart_gallery_presentation_controls(array $viewModel): void
                 . '</p>';
     }
     echo
-        '<label class="checkbox-label"><input type="checkbox" name="presentation_download_enabled" value="1"'
+        '<label class="checkbox-label"><input class="ui-switch" type="checkbox" name="presentation_download_enabled" value="1"'
             . (!empty($presentation['download_enabled']) ? ' checked' : '')
             . '> '
             . e(t(

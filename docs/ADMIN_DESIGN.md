@@ -343,6 +343,12 @@ label, keyboard activation and form submission; a styled `input[type=checkbox]`
 is the reference implementation. Under forced colors, preserve the visible
 native control when needed for system contrast.
 
+Use `ui-switch` on the native checkbox for existing and new switch controls.
+`public/assets/styles/ui-switch.css` owns their shared track, thumb, focus,
+disabled, mixed-state and forced-color presentation for public and Admin pages.
+Keep placement and tap-target layout with the surrounding interface; keep
+selection checkboxes, form submission and persistence with their existing owners.
+
 The reference switch has a `26px` by `14px` track and an `8px` thumb. Its quiet
 off track mixes `--ink` at 8%; the on track mixes `--accent` at 23%, with a
 restrained accent border. State remains distinguishable by the thumb position.

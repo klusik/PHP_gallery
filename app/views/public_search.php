@@ -41,7 +41,13 @@ use function Gallery\Core\e;
 /**
  * Render the optional thin public search bar above public gallery content.
  *
- * @param array<string, mixed> $viewModel Prepared public-search presentation data.
+ * @param array{enabled?:bool,search_id?:string,context_id?:string,
+ *     gallery_id?:int,aria_label?:string,placeholder?:string,search_url?:string,
+ *     min_length?:int,delay_ms?:int,media_delay_ms?:int,
+ *     descriptive_delay_ms?:int,deep_delay_ms?:int,loading_label?:string,
+ *     empty_label?:string,error_label?:string,context_label?:string,
+ *     clear_label?:string} $viewModel Prepared search controls and labels.
+ * @return void Emit the search bar when enabled; otherwise emit nothing.
  */
 function view_render_public_search_bar(array $viewModel): void
 {
@@ -104,7 +110,7 @@ function view_render_public_search_bar(array $viewModel): void
                 . e($contextId)
                 . '"><input id="'
                 . e($contextId)
-                . '" type="checkbox" checked data-public-home-search-context> <span>'
+                . '" class="ui-switch" type="checkbox" checked data-public-home-search-context> <span>'
                 . e((string) ($viewModel['context_label'] ?? ''))
                 . '</span></label>';
     }

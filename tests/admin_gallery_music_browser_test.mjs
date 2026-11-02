@@ -184,6 +184,7 @@ const page = String.raw`<!doctype html><html lang="en"><head>
 <link rel="stylesheet" href="/public/assets/styles/admin-gallery-display.css">
 <link rel="stylesheet" href="/public/assets/styles/admin-gallery-media.css">
 <link rel="stylesheet" href="/public/assets/styles/breadcrumbs.css">
+<link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
 <style>
 body.admin-page { margin: 1rem; }
 #results { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -790,6 +791,9 @@ try {
     check(musicSwitch instanceof HTMLInputElement
         && presentationSwitch instanceof HTMLInputElement,
     'Music and Presentation must expose native preference switches.');
+    check(musicSwitch.classList.contains('ui-switch')
+        && presentationSwitch.classList.contains('ui-switch'),
+    'Music and Presentation must use the shared switch class.');
     const switchStates = [musicSwitch.checked, presentationSwitch.checked];
     for (const checked of [false, true]) {
         musicSwitch.checked = checked;
@@ -907,6 +911,7 @@ try {
         + '<link rel="stylesheet" href="/public/assets/styles/utilities.css">'
         + '<link rel="stylesheet" href="/public/assets/styles.css">'
         + '<link rel="stylesheet" href="/public/assets/styles/breadcrumbs.css">'
+        + '<link rel="stylesheet" href="/public/assets/styles/ui-switch.css">'
         + '</head><body><div class="gallery-attachment-applets"></div></body></html>';
     const drawerReady = new Promise((resolve, reject) => {
         drawerFrame.addEventListener('load', resolve, {once: true});
@@ -933,7 +938,7 @@ try {
         && !drawerPdf.closest('#admin-edit-media')
         && drawerDisclosure?.tagName === 'DETAILS'
         && drawerDisclosure.open
-        && drawerStylesheets.length === 8
+        && drawerStylesheets.length === 9
         && drawerStylesheets.every(link => link.sheet)
         && iconStylesAreCompact(drawerIcons, PUBLIC_ICON_HITBOX_MAX_PX),
     'Public drawer actions must retain native disclosure behavior and compact visible SVG controls under the public stylesheet stack: '

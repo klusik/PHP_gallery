@@ -2276,38 +2276,6 @@ body.has-map-overlay {
     font: 600 .75rem/1.35 var(--font-family, sans-serif);
 }
 
-.public-page .gallery-map-viewport-checkbox input {
-    appearance: none;
-    position: relative;
-    box-sizing: border-box;
-    width: 26px;
-    height: 14px;
-    margin: 0;
-    border: 1px solid var(--public-map-line);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-
-.public-page .gallery-map-viewport-checkbox input::before {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 3px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--ink);
-}
-
-.public-page .gallery-map-viewport-checkbox input:checked {
-    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-    background: color-mix(in srgb, var(--accent) 23%, transparent);
-}
-
-.public-page .gallery-map-viewport-checkbox input:checked::before {
-    left: 13px;
-}
-
 .public-page .gallery-map-viewport-control button:hover,
 .public-page .gallery-map-viewport-checkbox:hover {
     background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -2342,14 +2310,6 @@ body.has-map-overlay {
         background: Canvas;
         color: CanvasText;
         border-color: CanvasText;
-    }
-
-    .public-page .gallery-map-viewport-checkbox input {
-        appearance: auto;
-    }
-
-    .public-page .gallery-map-viewport-checkbox input::before {
-        display: none;
     }
 }
 .exif-admin-summary dl {

@@ -7378,12 +7378,12 @@ export function setupGalleryLightbox() {
         return button;
     }
 
-        /**
+    /**
      * Create one Leaflet checkbox control.
      *
      * @param {string} labelText Visible label text.
      * @param {boolean} checked Whether the checkbox starts enabled.
-     * @param {Function} onChange Change handler receiving the checked state.
+     * @param {function(boolean):void} onChange Handler receiving the checked state.
      * @return {HTMLLabelElement} Prepared checkbox label.
      */
     function createMapCheckboxControl(labelText, checked, onChange) {
@@ -7391,6 +7391,7 @@ export function setupGalleryLightbox() {
         label.className = 'gallery-map-viewport-checkbox';
         const input = document.createElement('input');
         input.type = 'checkbox';
+        input.className = 'ui-switch';
         input.checked = checked;
         input.setAttribute('aria-label', labelText);
         const text = document.createElement('span');

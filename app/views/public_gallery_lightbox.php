@@ -612,7 +612,7 @@ function view_presentation_share(string $url, string $identity, string $csrf = '
             . e(t($translation))
             . '"><span>'
             . e(t($compact))
-            . '</span><input type="checkbox" role="switch"'
+            . '</span><input class="ui-switch" type="checkbox" role="switch"'
             . ' aria-label="'
             . e(t($translation))
             . '"'

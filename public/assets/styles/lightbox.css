@@ -2691,36 +2691,6 @@ body:not([data-media-panels-bound]) .gallery-media-close { display: none; }
     min-width: 7rem;
     background: rgba(255, 255, 255, 0.16);
 }
-.gallery-presentation-setting input[role="switch"] {
-    appearance: none;
-    flex: 0 0 auto;
-    position: relative;
-    width: 2.4rem;
-    height: 1.4rem;
-    padding: 0;
-    border: 1px solid var(--line);
-    border-radius: 2rem;
-    background: color-mix(in srgb, var(--ink) 22%, transparent);
-    cursor: pointer;
-}
-.gallery-presentation-setting input[role="switch"]::after {
-    content: '';
-    position: absolute;
-    top: 0.1rem;
-    left: 0.1rem;
-    width: 1.05rem;
-    height: 1.05rem;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 0.1rem 0.25rem #0003;
-}
-.gallery-presentation-setting input[role="switch"]:checked {
-    background: var(--accent, #4664df);
-}
-.gallery-presentation-setting input[role="switch"]:checked::after {
-    left: auto;
-    right: 0.1rem;
-}
 .gallery-presentation-settings .music-icon {
     display: inline-flex;
     align-items: center;
@@ -2812,36 +2782,6 @@ body:not([data-media-panels-bound]) .gallery-media-close { display: none; }
     border: 0;
     font-size: 0.75rem;
     font-weight: 500;
-}
-.presentation-share-panel .gallery-presentation-setting input[role="switch"] {
-    box-sizing: border-box;
-    flex: 0 0 var(--presentation-switch-width);
-    width: var(--presentation-switch-width);
-    min-width: var(--presentation-switch-width);
-    height: var(--presentation-switch-height);
-    min-height: var(--presentation-switch-height);
-    margin: 0;
-    padding: 0;
-    border-color: color-mix(in srgb, var(--ink) 28%, transparent);
-    background: color-mix(in srgb, var(--ink) 6%, transparent);
-    box-shadow: none;
-}
-.presentation-share-panel .gallery-presentation-setting input[role="switch"]::after {
-    top: 2px;
-    left: 2px;
-    right: auto;
-    width: var(--presentation-switch-thumb);
-    height: var(--presentation-switch-thumb);
-    background: var(--presentation-ink);
-    box-shadow: none;
-}
-.presentation-share-panel .gallery-presentation-setting input[role="switch"]:checked {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--presentation-line));
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.presentation-share-panel .gallery-presentation-setting input[role="switch"]:checked::after {
-    left: calc(var(--presentation-switch-width) - var(--presentation-switch-thumb) - 4px);
-    right: auto;
 }
 .presentation-share-speed {
     display: grid;
@@ -2982,13 +2922,6 @@ body:not([data-media-panels-bound]) .gallery-media-close { display: none; }
 #admin-edit-media .presentation-share-panel .gallery-presentation-setting span {
     white-space: normal;
 }
-#admin-edit-media .presentation-share-panel .gallery-presentation-setting input[role="switch"] {
-    flex-basis: var(--presentation-switch-width);
-    width: var(--presentation-switch-width);
-    min-width: var(--presentation-switch-width);
-    height: var(--presentation-switch-height);
-    min-height: var(--presentation-switch-height);
-}
 #admin-edit-media .presentation-share-panel.gallery-media-panel .presentation-share-speed input,
 #admin-edit-media .presentation-share-panel.gallery-media-panel .presentation-share-link input {
     height: var(--presentation-control-height);
@@ -3023,14 +2956,10 @@ body:not([data-media-panels-bound]) .gallery-media-close { display: none; }
     }
 }
 @media (forced-colors: active) {
-    .presentation-share-panel .gallery-presentation-setting input[role="switch"],
     .presentation-share-speed input {
         appearance: auto;
         -webkit-appearance: auto;
         background: Canvas;
-    }
-    .presentation-share-panel .gallery-presentation-setting input[role="switch"]::after {
-        display: none;
     }
     .presentation-share-panel.gallery-media-panel {
         background: Canvas;
