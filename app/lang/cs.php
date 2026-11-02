@@ -2263,4 +2263,7 @@ return [
         . 'změnou zkontrolujte uvedené soubory a katalog. Nález zůstává k '
         . 'ručnímu posouzení a žádné soubory se nemažou.',
     'admin.consistency.finding_help' => 'Vysvětlení nálezu',
+    'admin.gallery_editor.newest_uploads_first' => 'Nejnovější nahrané fotografie první',
+    'admin.gallery_editor.newest_uploads_first_help' => 'Po nahrání nebo změně při skenování se fotografie v této galerii seřadí podle času vložení od nejnovější. Existující fotografie lze seřadit také ve Správě médií. Ruční řazení vydrží do dalšího nahrání nebo změněného skenu.',
+    'admin.gallery_editor.sort_newest_uploads' => 'Seřadit od nejnovějších',
 ];

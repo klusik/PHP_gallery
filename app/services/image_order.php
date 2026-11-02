@@ -41,6 +41,21 @@ use function Gallery\Core\now_sql;
 use function Gallery\Models\image_order_model_save;
 
 /**
+ * Derive newest-first direct image IDs using stored registration timestamps.
+ *
+ * @param list<array{id:int|string,created_at:string}> $rows Current direct images.
+ * @return list<int> Complete IDs ordered by descending timestamp and ID.
+ */
+function image_order_newest_first_ids(array $rows): array
+{
+    usort($rows, static function (array $left, array $right): int {
+        $time = strcmp((string) $right['created_at'], (string) $left['created_at']);
+        return $time !== 0 ? $time : (int) $right['id'] <=> (int) $left['id'];
+    });
+    return array_map(static fn(array $row): int => (int) $row['id'], $rows);
+}
+
+/**
  * Persists a complete image order for one gallery.
  *
  * @param int $galleryId Gallery whose direct image order is being saved.

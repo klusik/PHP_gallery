@@ -56,7 +56,7 @@ use function Gallery\Views\view_render_admin_gallery_image_rows;
  * Render the Images tab panel.
  *
  * @param array{id:int|string,folder_path:string,title?:string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,edit_revision?:int|string|null,visibility?:string,access_mode?:string,access_listing?:int|string|null,url_path?:string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null} $gallery Stored editor identity, three-state cover choice, revision and thumbnail URL policy inputs.
- * @param list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,sort_order?:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> $images Ordered direct rows mapped to canonical presentation fields.
+ * @param list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,visibility:string,created_at?:string,sort_order?:int|string,exif_taken_at?:string|null,title?:string|null,width?:int|string|null,height?:int|string|null,updated_at?:string|null,modified_at?:string|null,thumbnail_source_identity_version?:int|string|null,thumbnail_derivative_version?:int|string|null,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null}> $images Ordered direct rows mapped to canonical presentation fields.
  * @param string $activeEditTab Currently selected editor tab.
  * @param bool $rowsOnly Whether only canonical table rows are requested.
  * @param bool $deferred Whether thumbnail requests are reserved for the preload queue.
@@ -137,6 +137,7 @@ function admin_edit_gallery_render_images_tab(
                 ? thumbnail_editor_preview_url($image, $gallery)
                 : thumbnail_url($image, 900),
             'capture_date' => (string) ($image['exif_taken_at'] ?? ''),
+            'created_at' => (string) ($image['created_at'] ?? ''),
             'move_aria' => t('admin.image_order.move_aria', 'Move {file}', [
                 'file' => $relativePath,
             ]),
@@ -202,6 +203,10 @@ function admin_edit_gallery_render_images_tab(
                 'Sort photos by name from A to Z',
             ),
             'name' => t('admin.gallery_editor.name', 'Name'),
+            'newest_first' => t(
+                'admin.gallery_editor.sort_newest_uploads',
+                'Sort newest uploads first',
+            ),
             'file_names_shown' => t(
                 'admin.gallery_editor.file_names_shown',
                 'File names shown',

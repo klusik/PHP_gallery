@@ -143,6 +143,13 @@ namespace {
             'label' => 'File names',
             'help' => 'Raw names are optional.',
         ],
+        'newest_uploads_first' => [
+            'ready' => true,
+            'checked' => false,
+            'label' => 'Newest uploads first',
+            'help' => 'New registrations are ordered first.',
+            'factory' => 'Factory default: Disabled',
+        ],
         'picture_game' => [
             'visible' => true,
             'checked' => false,
@@ -337,6 +344,10 @@ namespace {
         'Display must expose flowing groups and all supported native format choices.',
     );
     display_editor_assert(
+        str_contains($html, 'aria-description="Factory default: Disabled"'),
+        'The ordering switch must expose its factory default to assistive technology.',
+    );
+    display_editor_assert(
         str_contains($html, 'data-default-columns="4" data-default-rows="5"')
             && str_contains(
                 $html,
@@ -355,6 +366,7 @@ namespace {
         'grid_use_for_subgalleries',
         'voting_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'gps_map_enabled',
         'description_layout',
         'count_badge_visibility',

@@ -8026,3 +8026,11 @@ fixture exercises delegated help on focus/hover, pinning, Escape/focus return,
 outside dismissal and restoration before result replacement. Live IAB review
 uses 6.1-terra on desktop/narrow views with the production CSS cascade and a
 read-only copy of report findings; it never starts repairs for visual testing.
+
+## Gallery registration-order coverage
+
+`admin_gallery_images_deferred_test.php` exercises descending registration time,
+the equal-time ID tie break, direct-gallery scope and transactional rollback.
+The Display editor fixture renders the opt-in setting. Hosted integration must
+also verify classic and browser uploads, WebDAV scanning, setting autosave,
+one-time ordering, private photos, drawer persistence and narrow layouts.

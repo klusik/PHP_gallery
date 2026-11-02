@@ -8376,5 +8376,8 @@
     "admin.consistency.why_content": "Content comparison is either unavailable or only a visual similarity warning. It cannot prove which pixels belong to a photo. Review the original and preview manually; this does not authorize automatic replacement.",
     "admin.consistency.why_pending": "A previous move has not reached a verified final state. Resolve that operation in its recovery workflow before starting another repair. This report does not replay an uncertain move.",
     "admin.consistency.why_manual": "Availability, access or exclusive ownership is not established. Check the reported files and catalog before changing anything. The report preserves this finding for manual review and does not delete files.",
-    "admin.consistency.finding_help": "Finding explanation"
+    "admin.consistency.finding_help": "Finding explanation",
+    "admin.gallery_editor.newest_uploads_first": "Newest uploads first",
+    "admin.gallery_editor.newest_uploads_first_help": "After an upload or a changed scan, reorder this gallery by registration time, newest first. Existing photos can be sorted now in Media management. Manual ordering remains available until the next upload or changed scan.",
+    "admin.gallery_editor.sort_newest_uploads": "Sort newest uploads first"
 }

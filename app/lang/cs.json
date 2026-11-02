@@ -8376,5 +8376,8 @@
     "admin.consistency.why_content": "Porovnání obsahu buď nebylo možné, nebo jde pouze o varování podle vizuální podobnosti. Neprokazuje, které pixely patří ke konkrétní fotografii. Originál a náhled zkontrolujte ručně; automatická výměna se nenavrhuje.",
     "admin.consistency.why_pending": "Předchozí přesun nemá ověřený konečný stav. Nejprve jej dořešte v jeho workflow obnovy, teprve pak spusťte další opravu. Report nejistý přesun sám neopakuje.",
     "admin.consistency.why_manual": "Není ověřená dostupnost, přístup nebo jednoznačné přiřazení. Před změnou zkontrolujte uvedené soubory a katalog. Nález zůstává k ručnímu posouzení a žádné soubory se nemažou.",
-    "admin.consistency.finding_help": "Vysvětlení nálezu"
+    "admin.consistency.finding_help": "Vysvětlení nálezu",
+    "admin.gallery_editor.newest_uploads_first": "Nejnovější nahrané fotografie první",
+    "admin.gallery_editor.newest_uploads_first_help": "Po nahrání nebo změně při skenování se fotografie v této galerii seřadí podle času vložení od nejnovější. Existující fotografie lze seřadit také ve Správě médií. Ruční řazení vydrží do dalšího nahrání nebo změněného skenu.",
+    "admin.gallery_editor.sort_newest_uploads": "Seřadit od nejnovějších"
 }

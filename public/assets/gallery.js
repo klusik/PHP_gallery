@@ -136,7 +136,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261102-repeat-modes-v1';
+} from './gallery-modules/admin-operations.js?v=20261102-newest-order-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

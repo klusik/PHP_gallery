@@ -336,6 +336,14 @@ foreach ($applicationMetrics as $probeId => $routeMetrics) {
 }
 $applicationInventory =
     \PhpGallery\Audit\runtime_plan_inventory_metrics($applicationPlan);
+$expect(
+    in_array(
+        'http-not-found',
+        $applicationPlan['modules']['domain-admin-images-reorder']['depends'],
+        true,
+    ),
+    'Image reorder must reuse its contained not-found response owner.',
+);
 $trackedInventory =
     \PhpGallery\Audit\runtime_plan_baseline_inventory($trackedBaseline);
 $inventoryProblems = \PhpGallery\Audit\runtime_plan_inventory_problems(

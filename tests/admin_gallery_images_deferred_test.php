@@ -406,6 +406,7 @@ namespace {
         'CREATE TABLE images (id INTEGER PRIMARY KEY, gallery_id INTEGER, relative_path TEXT, filename TEXT, visibility TEXT, sort_order INTEGER, exif_taken_at TEXT, updated_at TEXT)',
     );
     require_once dirname(__DIR__) . '/app/models/images.php';
+    require_once dirname(__DIR__) . '/app/services/image_order.php';
     require_once dirname(__DIR__) . '/app/models/galleries.php';
     require_once dirname(__DIR__) . '/app/services/gallery_lookup.php';
     require_once
@@ -636,6 +637,44 @@ namespace {
         deferred_editor_assert(
             $error->getMessage() === 'Unauthorized fixture.',
             'Authentication precedes all batch rendering.',
+        );
+    }
+    // Equal timestamps establish the descending-ID tie break; nested and other
+    // gallery rows must remain outside the direct-image operation.
+    $db->exec('ALTER TABLE images ADD COLUMN created_at TEXT');
+    $db->exec('DELETE FROM images');
+    $db->exec("INSERT INTO images (id, gallery_id, relative_path, filename, visibility, sort_order, created_at, updated_at) VALUES
+        (1, 1, 'old.jpg', 'old.jpg', 'public', 10, '2026-01-01 10:00:00', 'old'),
+        (2, 1, 'a.jpg', 'a.jpg', 'private', 20, '2026-01-02 10:00:00', 'old'),
+        (3, 1, 'b.jpg', 'b.jpg', 'public', 30, '2026-01-02 10:00:00', 'old'),
+        (4, 1, 'child/c.jpg', 'c.jpg', 'public', 40, '2026-01-03 10:00:00', 'old'),
+        (5, 2, 'other.jpg', 'other.jpg', 'public', 50, '2026-01-03 10:00:00', 'old')");
+    \Gallery\Models\image_model_order_newest_first(1, '2026-01-04 10:00:00');
+    $ordered = $db->query(
+        "SELECT id FROM images WHERE gallery_id = 1 AND relative_path NOT LIKE '%/%' ORDER BY sort_order",
+    )->fetchAll(\PDO::FETCH_COLUMN);
+    deferred_editor_assert(
+        array_map('intval', $ordered) === [3, 2, 1]
+            && (int) $db->query('SELECT sort_order FROM images WHERE id = 4')->fetchColumn() === 40
+            && (int) $db->query('SELECT sort_order FROM images WHERE id = 5')->fetchColumn() === 50,
+        'Newest ordering uses registration time and ID without touching other scopes.',
+    );
+    $directRows = $db->query(
+        "SELECT id, created_at FROM images WHERE gallery_id = 1 AND relative_path NOT LIKE '%/%'",
+    )->fetchAll();
+    deferred_editor_assert(
+        \Gallery\Services\image_order_newest_first_ids($directRows) === [3, 2, 1],
+        'The one-time action agrees with persisted automatic ordering.',
+    );
+    $db->exec("CREATE TRIGGER fail_newest BEFORE UPDATE ON images WHEN OLD.id = 2 BEGIN SELECT RAISE(ABORT, 'fixture failure'); END");
+    $before = $db->query('SELECT id, sort_order, updated_at FROM images ORDER BY id')->fetchAll();
+    try {
+        \Gallery\Models\image_model_order_newest_first(1, '2026-01-05 10:00:00');
+        throw new \RuntimeException('Expected ordering failure.');
+    } catch (\PDOException) {
+        deferred_editor_assert(
+            $db->query('SELECT id, sort_order, updated_at FROM images ORDER BY id')->fetchAll() === $before,
+            'A failed ordering rolls back all direct image updates.',
         );
     }
     echo

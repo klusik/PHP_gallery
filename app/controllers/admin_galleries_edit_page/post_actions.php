@@ -267,6 +267,8 @@ function admin_edit_gallery_save_display_preference(
         $allowed = [
             'show_filenames' =>
                 \Gallery\Services\gallery_filename_display_schema_ready(),
+            'newest_uploads_first' =>
+                array_key_exists('newest_uploads_first', $gallery),
             'voting_enabled' => !empty($capabilities['voting_ready']),
             'picture_game_enabled' => !empty($capabilities['picture_game_ready']),
             'gps_map_enabled' => !empty($capabilities['gps_map_ready'])
@@ -302,6 +304,8 @@ function admin_edit_gallery_save_display_preference(
         );
         $payload['setting_values'] = [
             'show_filenames' => (int) ($gallery['show_filenames'] ?? 0) === 1,
+            'newest_uploads_first' =>
+                (int) ($gallery['newest_uploads_first'] ?? 0) === 1,
             'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0) === 1,
             'picture_game_enabled' =>
                 (int) ($gallery['picture_game_enabled'] ?? 0) === 1,

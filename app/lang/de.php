@@ -2218,4 +2218,7 @@ return [
         . 'Befund bleibt zur manuellen Prüfung erhalten; Dateien werden nicht '
         . 'gelöscht.',
     'admin.consistency.finding_help' => 'Erklärung des Befunds',
+    'admin.gallery_editor.newest_uploads_first' => 'Neueste Uploads zuerst',
+    'admin.gallery_editor.newest_uploads_first_help' => 'Nach einem Upload oder einem geänderten Scan werden die Fotos dieser Galerie nach Registrierungszeit absteigend sortiert. Vorhandene Fotos können in der Medienverwaltung sofort sortiert werden. Die manuelle Reihenfolge bleibt bis zum nächsten Upload oder geänderten Scan erhalten.',
+    'admin.gallery_editor.sort_newest_uploads' => 'Neueste Uploads zuerst sortieren',
 ];

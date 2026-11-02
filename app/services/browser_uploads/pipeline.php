@@ -706,11 +706,15 @@ function browser_upload_store_prepared_zip_batch_owned(
             . $changed
             . '.',
     );
-    $orderedRows = browser_upload_apply_source_sort_order(
-        $galleryId,
-        $sourceIndexByFilename,
-        $sortBase,
-    );
+    // The scanner has already applied the gallery's opt-in registration order.
+    // Do not overwrite it with the upload session's source order.
+    $orderedRows = (int) ($gallery['newest_uploads_first'] ?? 0) === 1
+        ? 0
+        : browser_upload_apply_source_sort_order(
+            $galleryId,
+            $sourceIndexByFilename,
+            $sortBase,
+        );
     if ($orderedRows > 0) {
         $events[] = browser_upload_progress_event(
             $startedAt,

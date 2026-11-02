@@ -219,6 +219,10 @@ return [
         'domain-admin-galleries-edit-page' => [
             'domain-admin-galleries-edit-metadata',
         ],
+        // Image reorder already owns the entire not-found response closure.
+        // Reuse its existing module when the writer lease is loaded rather
+        // than duplicating files or widening this route's actual closure.
+        'domain-admin-images-reorder' => ['http-not-found'],
         // Theme's gallery picker/preview already contains the complete access
         // policy closure. Reuse its established owner without adding files or
         // logical modules when scoped saves load canonical mutation responses.

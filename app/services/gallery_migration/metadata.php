@@ -56,7 +56,7 @@ use function Gallery\Core\unique_slug;
  * Return manifest-safe gallery settings with their orientation semantics marker.
  *
  * @param array{id?:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,content_language?:string|null,title?:string,slug?:string,description?:string} $gallery Persisted gallery identity, cover choice and editable metadata fields.
- * @return array{description_layout_semantics_version:int,tags:string,cover_source_id:int,cover_selection_source_ids?:list<int>,content_language?:string|null,translations?:array<int,array<string,array{owner_id:int|string,language_code:string,title:string|null,description:string|null,created_at:string,updated_at:string}>>,title?:string,slug?:string,description?:string,sort_order?:int|string,visibility?:string,voting_enabled?:int|string,show_filenames?:int|string,gallery_date?:string|null,gallery_date_end?:string|null,description_layout?:string|null,count_badge_visibility?:string|null,picture_game_enabled?:int|string,gps_map_enabled?:int|string,grid_columns?:int|string|null,grid_rows?:int|string|null,grid_use_for_subgalleries?:int|string,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null,background_source?:string|null,banner_image_path?:string|null,logo_image_path?:string|null,separator_image_path?:string|null,cover_image_path?:string|null,nsfw_enabled?:int|string} Manifest gallery metadata with selected source IDs retained for the normal image map.
+ * @return array{description_layout_semantics_version:int,tags:string,cover_source_id:int,cover_selection_source_ids?:list<int>,content_language?:string|null,translations?:array<int,array<string,array{owner_id:int|string,language_code:string,title:string|null,description:string|null,created_at:string,updated_at:string}>>,title?:string,slug?:string,description?:string,sort_order?:int|string,visibility?:string,voting_enabled?:int|string,show_filenames?:int|string,newest_uploads_first?:int|string,gallery_date?:string|null,gallery_date_end?:string|null,description_layout?:string|null,count_badge_visibility?:string|null,picture_game_enabled?:int|string,gps_map_enabled?:int|string,grid_columns?:int|string|null,grid_rows?:int|string|null,grid_use_for_subgalleries?:int|string,thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null,background_source?:string|null,banner_image_path?:string|null,logo_image_path?:string|null,separator_image_path?:string|null,cover_image_path?:string|null,nsfw_enabled?:int|string} Manifest gallery metadata with selected source IDs retained for the normal image map.
  */
 function gallery_migration_gallery_metadata(array $gallery): array
 {
@@ -76,6 +76,7 @@ function gallery_migration_gallery_metadata(array $gallery): array
         'visibility',
         'voting_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'gallery_date',
         'gallery_date_end',
         'description_layout',

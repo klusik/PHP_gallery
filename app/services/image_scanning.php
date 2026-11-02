@@ -50,6 +50,7 @@ use function Gallery\Models\image_model_find_by_path_hash;
 use function Gallery\Models\image_model_increment_thumbnail_derivative_version;
 use function Gallery\Models\image_model_insert_scan_row;
 use function Gallery\Models\image_model_next_sort_order;
+use function Gallery\Models\image_model_order_newest_first;
 use function Gallery\Models\image_model_update_scan_display_metadata;
 use function Gallery\Models\image_model_update_scan_row;
 
@@ -849,16 +850,19 @@ function scan_gallery_image_file_entry(
 /**
  * Refresh gallery-level derived data after scanner changes.
  *
- * @param array{id:int|string,folder_path?:string|null,title?:string|null,cover_image?:string|null} $gallery Gallery identity and fields used to refresh its derived cover and paths.
+ * @param array{id:int|string,folder_path?:string|null,title?:string|null,cover_image?:string|null,newest_uploads_first?:int|string} $gallery Gallery identity, ordering preference and fields used to refresh its derived cover and paths.
  * @param int $count Number of changed image rows.
  * @param array{public_path_scope?:string} $options Optional targeted public-path refresh scope.
- * @return void Refreshes gallery cover and public paths affected by scanner changes.
+ * @return void Applies configured ordering and refreshes derived gallery data.
  */
 function scan_gallery_refresh_after_changes(
     array $gallery,
     int $count,
     array $options = [],
 ): void {
+    if ($count > 0 && (int) ($gallery['newest_uploads_first'] ?? 0) === 1) {
+        image_model_order_newest_first((int) $gallery['id'], now_sql());
+    }
     apply_gallery_cover_from_sidecar($gallery);
     ensure_gallery_cover((int) $gallery['id']);
     if ($count > 0 && public_path_schema_ready()) {

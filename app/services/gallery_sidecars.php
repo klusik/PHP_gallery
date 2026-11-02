@@ -437,7 +437,7 @@ function public_gallery_metadata(array $gallery): array
  * An explicit cover selection is stored as owned gallery-relative filenames in
  * cover_images so another installation can remap it through its image index.
  *
- * @param array{id:int|string,folder_path:string,title:string,description:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,content_language?:string|null,parent_id?:int|string|null} $gallery Persisted gallery identity, required sidecar fields and optional cover selection/asset metadata.
+ * @param array{id:int|string,folder_path:string,title:string,description:string,visibility:string,sort_order:int|string,newest_uploads_first?:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,content_language?:string|null,parent_id?:int|string|null} $gallery Persisted identity, ordering preference, required fields and optional cover metadata.
  * @return bool Whether the sidecar was written; existing callers may ignore the result.
  */
 function write_gallery_sidecar(array $gallery): bool
@@ -457,6 +457,10 @@ function write_gallery_sidecar(array $gallery): bool
         'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($gallery['show_filenames'] ?? 0),
     ];
+    if (array_key_exists('newest_uploads_first', $gallery)) {
+        $data['newest_uploads_first'] =
+            (int) $gallery['newest_uploads_first'];
+    }
     if (content_localization_schema_ready('gallery')) {
         $data['content_language'] = content_language_normalize(
             $gallery['content_language'] ?? null,
@@ -618,7 +622,7 @@ function write_gallery_sidecar(array $gallery): bool
  * @return array{folder_path:string,title:mixed,description:mixed,
  *     content_language:?string,translations:array<array-key,mixed>,
  *     gallery_date:?string,gallery_date_end:?string,visibility:string,
- *     voting_enabled:int,show_filenames:int,description_layout:?string,
+ *     voting_enabled:int,show_filenames:int,newest_uploads_first:?int,description_layout:?string,
  *     count_badge_visibility:?string,lightbox_browsing_mode:?string,
  *     presentation_json:?string,breadcrumb_style:string,photo_card_ratio:string,
  *     grid_columns:?int,
@@ -664,6 +668,9 @@ function gallery_folder_candidate_metadata(string $folderPath): array
         ),
         'voting_enabled' => (int) ($metadata['voting_enabled'] ?? 0),
         'show_filenames' => (int) ($metadata['show_filenames'] ?? 0),
+        'newest_uploads_first' => array_key_exists('newest_uploads_first', $metadata)
+            ? (int) !empty($metadata['newest_uploads_first'])
+            : null,
         'description_layout' => gallery_description_layout_storage_value(
             $metadata['description_layout'] ?? null,
         ),
@@ -766,6 +773,20 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
 
     // Variable $candidate stores this steps working value.
     $candidate = gallery_folder_candidate_metadata($folderPath);
+    $newestOrderAvailable = false;
+    if ($candidate['newest_uploads_first'] !== null) {
+        $newestOrderAvailable = mutation_schema_optional_column_available(
+            'mutation.gallery_sidecar_import',
+            'galleries',
+            'newest_uploads_first',
+            'gallery_sidecar_import.newest_uploads_first',
+        );
+        if (!$newestOrderAvailable && $candidate['newest_uploads_first'] === 1) {
+            throw new \RuntimeException(
+                'Importing automatic image ordering requires the current gallery schema.',
+            );
+        }
+    }
     if (($candidate['presentation_json'] ?? null) !== null) {
         gallery_presentation_assert_writable(
             'gallery_sidecar_import.presentation',
@@ -867,6 +888,9 @@ function create_gallery_row_for_folder_owned(string $folderPath): ?array
     ];
     if (gallery_filename_display_schema_ready()) {
         $fields['show_filenames'] = $showFilenames;
+    }
+    if ($newestOrderAvailable) {
+        $fields['newest_uploads_first'] = $candidate['newest_uploads_first'];
     }
     if (content_localization_schema_ready('gallery')) {
         $fields['content_language'] = content_language_normalize(

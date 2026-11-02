@@ -1194,6 +1194,14 @@ function admin_save_gallery_from_input(
     string $returnTab,
     bool $completeForm = true,
 ): array {
+    if (
+        array_key_exists('newest_uploads_first', $input)
+        && !array_key_exists('newest_uploads_first', $gallery)
+    ) {
+        throw new RuntimeException(
+            'Automatic image ordering requires the current gallery schema.',
+        );
+    }
     if (array_key_exists('gallery_photo_card_ratio', $input)) {
         $input['gallery_photo_card_ratio'] = gallery_photo_card_ratio_validate(
             $input['gallery_photo_card_ratio'],
@@ -1243,6 +1251,14 @@ function admin_save_gallery_owned_input(
     string $returnTab,
     bool $completeForm,
 ): array {
+    if (
+        array_key_exists('newest_uploads_first', $input)
+        && !array_key_exists('newest_uploads_first', $gallery)
+    ) {
+        throw new RuntimeException(
+            'Automatic image ordering requires the current gallery schema.',
+        );
+    }
     // Validate publication intent before any folder/upload effects.
     if (($input['visibility'] ?? $gallery['visibility']) === 'public') {
         \Gallery\Services\gallery_publication_manual_storage_available();
@@ -2047,6 +2063,19 @@ function admin_save_gallery_owned_input(
     }
     if (gallery_filename_display_schema_ready()) {
         $fields['show_filenames'] = $showFilenames;
+    }
+    if (
+        array_key_exists('newest_uploads_first', $gallery)
+        && (
+            array_key_exists('newest_uploads_first', $input)
+            || !empty($input['newest_uploads_first_present'])
+        )
+    ) {
+        $fields['newest_uploads_first'] = admin_gallery_checkbox_input(
+            $input,
+            'newest_uploads_first',
+            false,
+        );
     }
     if (gallery_description_layout_schema_ready()) {
         $fields['description_layout'] = $descriptionLayoutOverride;

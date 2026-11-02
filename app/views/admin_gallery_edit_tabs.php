@@ -868,8 +868,8 @@ function view_render_admin_gallery_display_help(
  * Render a gallery-owned binary preference or staged bulk-intent switch.
  *
  * @param string $name Existing submitted field name.
- * @param array{label:string,checked?:bool,help?:string} $item Prepared localized
- *     label, checked state and optional contextual explanation.
+ * @param array{label:string,checked?:bool,help?:string,factory?:string} $item Prepared localized
+ *     label, checked state, factory description and contextual explanation.
  * @param bool $autosave Whether this is an independently persisted preference;
  *     false retains explicit full-form saving for recursive bulk intent.
  * @return void Emit the native switch, help and an accessible local save status.
@@ -882,6 +882,10 @@ function view_render_admin_gallery_display_switch(
     echo '<div class="admin-display-switch-row"><label class="checkbox-label">'
         . '<input type="checkbox" name="' . e($name) . '" value="1"'
         . (!empty($item['checked']) ? ' checked' : '')
+        . (isset($item['factory'])
+            ? ' title="' . e($item['factory']) . '" aria-description="'
+                . e($item['factory']) . '"'
+            : '')
         . ($autosave ? ' data-gallery-display-preference' : '')
         . '> <span>' . e($item['label']) . '</span></label>';
     view_render_admin_gallery_display_help(
@@ -940,6 +944,7 @@ function view_render_admin_gallery_display_select(string $name, array $item): vo
  *         options:list<array{value:string,label:string,ratio:string}>},
  *     filenames?:array{ready?:bool,checked?:bool,label:string,help?:string,
  *         migration_message?:string},
+ *     newest_uploads_first?:array{ready?:bool,checked?:bool,label:string,help?:string,factory?:string},
  *     voting?:array{visible?:bool,checked?:bool,label:string,help?:string},
  *     picture_game?:array{visible?:bool,checked?:bool,label:string},
  *     gps?:array{state?:string,current_mode?:string,label?:string,help?:string,
@@ -1078,6 +1083,14 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
     if (!empty($filenames['ready'])) {
         view_render_admin_gallery_display_switch('show_filenames', $filenames);
     }
+    $newestUploads = (array) ($viewModel['newest_uploads_first'] ?? []);
+    if (!empty($newestUploads['ready'])) {
+        echo '<input type="hidden" name="newest_uploads_first_present" value="1">';
+        view_render_admin_gallery_display_switch(
+            'newest_uploads_first',
+            $newestUploads,
+        );
+    }
     echo '</section>';
 
     echo '<section class="admin-display-group"><h3>'
@@ -1190,7 +1203,7 @@ function view_render_admin_gallery_display_tab(array $viewModel): void
 /**
  * Render the Images tab from controller-prepared rows and URLs.
  *
- * @param array{active:bool,deferred?:bool,gallery_id:int,csrf_html:string,bulk_action_url:string,reorder_url:string,bulk_toolbar_html:string,scan_action:array{url:string,label:string},intro:array{kicker:string,title:string,actions:list<array{label:string,url:string,class:string,attributes:array<string,string|bool>}>,actions_html?:string},images:list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,move_aria:string,cover_label:string,cover_state?:'off'|'single'|'multi',cover_mode?:'legacy'|'single'|'automatic'|'multi',cover_multi_supported?:bool,edit_url:string,panel_url:string}>,cover_selection_mode?:'legacy'|'single'|'automatic'|'multi',cover_selection_revision?:string,cover_multi_supported?:bool,edit_revision?:string,labels:array<string,string>} $viewModel Prepared image rows, three-state cover revision, read-only preload choice, trusted form fragments, localized labels and authorized action URLs.
+ * @param array{active:bool,deferred?:bool,gallery_id:int,csrf_html:string,bulk_action_url:string,reorder_url:string,bulk_toolbar_html:string,scan_action:array{url:string,label:string},intro:array{kicker:string,title:string,actions:list<array{label:string,url:string,class:string,attributes:array<string,string|bool>}>,actions_html?:string},images:list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,created_at?:string,move_aria:string,cover_label:string,cover_state?:'off'|'single'|'multi',cover_mode?:'legacy'|'single'|'automatic'|'multi',cover_multi_supported?:bool,edit_url:string,panel_url:string}>,cover_selection_mode?:'legacy'|'single'|'automatic'|'multi',cover_selection_revision?:string,cover_multi_supported?:bool,edit_revision?:string,labels:array<string,string>} $viewModel Prepared image rows, three-state cover revision, read-only preload choice, trusted form fragments, localized labels and authorized action URLs.
  * @return void Render compact image controls using the shared public-card renderers.
  */
 function view_render_admin_gallery_images_tab(array $viewModel): void
@@ -1272,7 +1285,11 @@ function view_render_admin_gallery_images_tab(array $viewModel): void
             . e((string) ($labels['sort_capture_date'] ?? ''))
             . '">'
             . e((string) ($labels['capture_date'] ?? 'Date taken'))
-            . ' <span aria-hidden="true">↕</span></button><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">'
+            . ' <span aria-hidden="true">↕</span></button><button type="submit" class="admin-image-name-sort" data-admin-image-newest-sort name="order_mode" value="newest" formaction="'
+            . e((string) ($viewModel['reorder_url'] ?? ''))
+            . '">'
+            . e((string) ($labels['newest_first'] ?? 'Sort newest uploads first'))
+            . '</button><span class="admin-image-order-status" data-admin-image-order-status aria-live="polite">'
             . e((string) ($labels['order_unchanged'] ?? ''))
             . '</span><details class="admin-inline-help"><summary title="'
             . e((string) ($labels['drag_help'] ?? ''))
@@ -2129,7 +2146,7 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
 
 /**
  * Render canonical image rows for a complete table or a bounded deferred batch.
- * @param list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,move_aria:string,cover_label:string,cover_state?:'off'|'single'|'multi',cover_mode?:'legacy'|'single'|'automatic'|'multi',cover_multi_supported?:bool,edit_url:string,panel_url:string}> $images Prepared row presentation data including the canonical star state.
+ * @param list<array{id:int,relative_path:string,visibility:string,thumbnail_url:string,preview_url:string,capture_date:string,created_at?:string,move_aria:string,cover_label:string,cover_state?:'off'|'single'|'multi',cover_mode?:'legacy'|'single'|'automatic'|'multi',cover_multi_supported?:bool,edit_url:string,panel_url:string}> $images Prepared row presentation data including the canonical star state and registration time.
  * @param array<string,string> $labels Localized row control labels.
  * @param bool $deferred Whether thumbnail sources belong to the bounded preload owner.
  * @return void Emit identical row actions while optionally withholding thumbnail requests.
@@ -2176,6 +2193,8 @@ function view_render_admin_gallery_image_rows(
                 . e($relativePath)
                 . '" data-image-captured-at="'
                 . e((string) ($image['capture_date'] ?? ''))
+                . '" data-image-created-at="'
+                . e((string) ($image['created_at'] ?? ''))
                 . '"><td class="admin-image-order-cell"><span class="admin-image-drag-handle" data-admin-image-drag-handle role="button" tabindex="0" aria-label="'
                 . e((string) ($image['move_aria'] ?? ''))
                 . '" title="'

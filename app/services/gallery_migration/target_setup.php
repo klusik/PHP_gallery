@@ -365,7 +365,7 @@ function gallery_migration_target_gallery_id(
  * @param int $targetGalleryId Target gallery id identifier.
  * @param array{gallery?:array{title?:string,description?:string,slug?:string,
  *     sort_order?:int,visibility?:string,voting_enabled?:bool|int,
- *     show_filenames?:bool|int,gallery_date?:string|null,
+ *     show_filenames?:bool|int,newest_uploads_first?:bool|int,gallery_date?:string|null,
  *     gallery_date_end?:string|null,description_layout?:string,
  *     description_layout_semantics_version?:int,
  *     count_badge_visibility?:string|null,
@@ -404,6 +404,7 @@ function gallery_migration_apply_gallery_metadata(
         'visibility',
         'voting_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'gallery_date',
         'gallery_date_end',
         'description_layout',
@@ -441,6 +442,11 @@ function gallery_migration_apply_gallery_metadata(
             $column,
             'gallery_migration.apply_gallery_metadata',
         )) {
+            if ($column === 'newest_uploads_first' && !empty($metadata[$column])) {
+                throw new RuntimeException(
+                    'Importing automatic image ordering requires the current gallery schema.',
+                );
+            }
             continue;
         }
         $updates[$column] = gallery_migration_gallery_column_value(
@@ -509,6 +515,7 @@ function gallery_migration_gallery_column_value(
         [
             'voting_enabled',
             'show_filenames',
+            'newest_uploads_first',
             'picture_game_enabled',
             'gps_map_enabled',
             'grid_use_for_subgalleries',
