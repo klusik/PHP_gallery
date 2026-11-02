@@ -1,5 +1,50 @@
 # Patch notes
 
+## Version 0.150.3
+
+Unified the appearance of switches and buttons across public and Admin
+interfaces while retaining their existing behavior and configurable language
+selector design.
+
+### Highlights
+
+#### Shared interface controls
+
+- Unified binary preference switches with a shared track and thumb appearance
+  across public and Admin interfaces.
+- Applied a shared light, bordered button style to common actions while keeping
+  compact table actions and column sorting unobtrusive and borderless.
+- Updated the Theme live preview to show the shared button appearance and
+  preserved the configured appearance of language choices.
+
+### Technical Details
+
+#### Frontend
+
+- Added `public/assets/styles/ui-switch.css` and
+  `public/assets/styles/ui-button.css` as shared presentation owners.
+- Updated the public and Admin stylesheet stacks and removed overlapping
+  control styles, while retaining native inputs, form behavior and contextual
+  selected, disabled and destructive states.
+- Kept language selector settings and targeted custom CSS overrides available.
+
+#### Tests
+
+- Extended browser and asset-loading coverage for shared controls, Theme
+  preview and language appearance, compact table actions, and cover states.
+
+### User Impact
+
+#### For visitors
+
+- Public switches and common buttons received a more consistent appearance;
+  language choices retained their configured design.
+
+#### For administrators
+
+- Settings and common actions shared a consistent presentation across Admin,
+  while small row actions remained compact and visually distinct.
+
 ## Version 0.150.2
 
 Added an optional newest-first photo order and made gallery editor preferences
