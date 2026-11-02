@@ -119,6 +119,7 @@ $safeState = \Gallery\Services\gallery_editor_quick_access_state($gallery
     + $disabled);
 quick_access_check(
     $safeState['access_label'] === 'Direct-link token'
+        && $safeState['token_only'] === true
         && $safeState['visibility_label'] === 'private',
     'Acknowledged state lost bounded localized token/visibility labels.',
 );

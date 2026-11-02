@@ -271,8 +271,8 @@ function cms_admin_dashboard_fragment(): void
 
 /**
  * Prepare transport metadata for gallery controls without exposing stored credentials.
- * @param array<string,mixed> $model Prepared dashboard domain data.
- * @return array<string,mixed> Dashboard with single-gallery widget and feature-plan destinations.
+ * @param array{galleries?:list<array{id:int|string,title:string,view_edit_revision?:int|null,view_quick_access_ready?:bool,view_visibility?:string,view_own_password_enabled?:bool,access_mode?:string,...}>,...} $model Prepared dashboard domain data and gallery rows.
+ * @return array{galleries?:list<array{id:int|string,title:string,...}>,gallery_controls:array{feature_plan_url:string,feature_apply_url:string},...} Dashboard with credential-free row controls and feature-plan destinations.
  */
 function admin_dashboard_prepare_gallery_controls(array $model): array
 {
@@ -298,6 +298,8 @@ function admin_dashboard_prepare_gallery_controls(array $model): array
                 'gallery_id' => $id,
                 'edit_revision' => $revision,
                 'enabled' => !empty($gallery['view_own_password_enabled']),
+                'token_only' => empty($gallery['view_own_password_enabled'])
+                    && (string) ($gallery['access_mode'] ?? 'normal') === 'password',
             ];
         }
     }

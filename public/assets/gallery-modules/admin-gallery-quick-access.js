@@ -97,7 +97,7 @@ function positionOpenPopups() {
  * Apply acknowledged credential-free state to the existing row's controls.
  *
  * @param {HTMLElement} row Existing gallery table row.
- * @param {Record<string, *>} state Server-owned safe gallery state.
+ * @param {{id:number,visibility:string,visibility_label:string,edit_revision:string,own_password_enabled:boolean,token_only?:boolean,access_label:string}} state Server-owned credential-free gallery state.
  * @return {void}
  */
 function applyState(row, state) {
@@ -130,7 +130,18 @@ function applyState(row, state) {
     if (password) {
         password.dataset.passwordEnabled = state.own_password_enabled ? '1' : '0';
         const toggle = password.querySelector('[data-admin-gallery-password-toggle]');
-        if (toggle && typeof state.access_label === 'string') toggle.textContent = state.access_label;
+        if (toggle && typeof state.access_label === 'string') {
+            toggle.title = state.access_label;
+            toggle.setAttribute('aria-label', state.access_label);
+            const label = toggle.querySelector('[data-password-label]');
+            if (label) label.textContent = state.access_label;
+            const locked = toggle.querySelector('[data-password-locked-icon]');
+            const unlocked = toggle.querySelector('[data-password-unlocked-icon]');
+            const token = toggle.querySelector('[data-password-token-icon]');
+            if (locked) locked.hidden = !state.own_password_enabled;
+            if (unlocked) unlocked.hidden = Boolean(state.own_password_enabled || state.token_only);
+            if (token) token.hidden = !state.token_only;
+        }
     }
     const visibility = row.querySelector('[data-admin-gallery-visibility]');
     if (visibility) {
@@ -148,6 +159,11 @@ function applyState(row, state) {
                 /** Match the visual marker to acknowledged visibility. @param {string} value Canonical visibility. @return {void} */
                 (value) => icon.classList.toggle(`public-admin-visibility-icon-${value}`, value === state.visibility)
             );
+        }
+        const summary = visibility.querySelector('summary');
+        if (summary && typeof state.visibility_label === 'string') {
+            summary.title = state.visibility_label;
+            summary.setAttribute('aria-label', state.visibility_label);
         }
         visibility.open = false;
         const popup = visibility.querySelector('.public-admin-visibility-options');

@@ -205,6 +205,8 @@ namespace {
             'view_visibility' => $id === 6 ? 'private' : 'public',
             'image_count' => $id * 2,
             'view_gps_map_enabled' => ($id % 2) === 1,
+            'gps_map_enabled' => in_array($id, [1, 4], true) ? null : ($id % 2),
+            'view_gps_map_override_off_enabled' => $id === 2,
             'view_background_source_set' => $id === 2,
             'show_filenames' => 1,
             'voting_enabled' => $id % 2,

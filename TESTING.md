@@ -8037,6 +8037,11 @@ one-time ordering, private photos, drawer persistence and narrow layouts.
 
 ### Admin gallery search and bulk actions
 
+The gallery feature plan and browser fixtures cover single-gallery immediate
+updates, the three map override states, voting/game coupling, stale snapshots,
+fragment replacement and lost replies without automatic write replay. The real
+installation still needs desktop and narrow-screen visual and interaction checks.
+
 The existing gallery tree browser fixture covers partial and approximate names,
 accent normalization, collapsed ancestors, status intersection, safe bulk
 selection, restored collapse state, and the grouped action disclosure. The

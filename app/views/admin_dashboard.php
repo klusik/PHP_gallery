@@ -180,7 +180,7 @@ function view_render_admin_dashboard(array $model): void
 /**
  * Render the gallery workspace from prepared rows, also used by its deferred endpoint.
  *
- * @param array<string,mixed> $model Gallery rows, feature/schema readiness, collapse map and Trash settings.
+ * @param array{galleries?:list<array{id:int|string,title:string,folder_path:string,...}>,picture_game_ready?:bool,gps_map_ready?:bool,gps_map_override_ready?:bool,voting_ready?:bool,filename_display_ready?:bool,access_ready?:bool,background_source_ready?:bool,collapsed_ids?:array<int,int>,children_by_parent?:array<int,list<int>>,gallery_trash_enabled?:bool,gallery_trash_auto_purge_enabled?:bool,gallery_trash_retention_days?:int,gallery_controls?:array{feature_plan_url?:string,feature_apply_url?:string},...} $model Prepared gallery rows, readiness, hierarchy and Trash settings.
  * @return void Outputs the existing filter, bulk-action and reorder controls.
  */
 function view_render_admin_dashboard_galleries_panel(array $model): void
@@ -470,7 +470,7 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
                 )
                 . '</div></div></td>';
         echo
-            '<td class="admin-gallery-state-cell"><span class="admin-gallery-status-pill is-'
+            '<td class="admin-gallery-state-cell"><span class="admin-gallery-status-pill admin-visually-hidden is-'
                 . e((string) ($gallery['view_visibility'] ?? 'unpublished'))
                 . '">'
                 . e(
@@ -485,6 +485,17 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
             view_render_public_admin_visibility_menu(
                 $gallery['view_visibility_menu'],
             );
+        } else {
+            $visibilityLabel = (string) ($gallery['view_visibility_label']
+                ?? $gallery['view_visibility'] ?? 'unpublished');
+            $visibility = (string) ($gallery['view_visibility'] ?? 'unpublished');
+            $visibility = in_array($visibility, ['public', 'private', 'unpublished'], true)
+                ? $visibility : 'unpublished';
+            echo '<span class="admin-gallery-visibility-fallback is-'
+                . e($visibility) . '" role="img" '
+                . 'aria-label="' . e($visibilityLabel) . '" title="'
+                . e($visibilityLabel) . '">'
+                . view_admin_menu_icon('gallery-eye') . '</span>';
         }
         if ($accessReady) {
             // $accessLabel stores an intermediate value used by the surrounding gallery workflow.
@@ -505,6 +516,7 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
             view_render_admin_gallery_password_control(
                 (array) ($gallery['view_password_control'] ?? []),
                 $accessLabel,
+                (string) ($gallery['access_mode'] ?? 'normal') === 'password',
             );
         }
         $galleryGpsMapsEnabled =
@@ -613,24 +625,19 @@ function view_render_admin_dashboard_galleries_panel(array $model): void
                 . '</span></button>';
         echo '</div></td></tr>';
     }
-    echo
-        '</tbody></table></div><div class="admin-gallery-feature-pending" data-gallery-feature-pending hidden><span data-gallery-feature-pending-status aria-live="polite"></span><button type="button" data-gallery-feature-review>'
-            . e(t('admin.gallery_list.review_changes', 'Review changes'))
-            . '</button><button type="button" class="secondary" data-gallery-feature-discard>'
-            . e(t('admin.gallery_list.discard_changes', 'Discard'))
-            . '</button></div><dialog class="admin-gallery-feature-dialog" data-gallery-feature-dialog aria-label="'
-            . e(t('admin.gallery_list.review_title', 'Confirm gallery changes'))
-            . '"></dialog></section></form>';
+    echo '</tbody></table></div><p class="admin-gallery-feature-feedback" '
+        . 'data-gallery-feature-status role="status" aria-live="polite"></p>'
+        . '</section></form>';
 }
 
 /**
- * Render an aggregate feature state and an optional local preparation button.
- * @param array<string,mixed> $gallery Prepared row with subtree states and counts.
+ * Render one gallery's compact feature state and optional immediate action.
+ * @param array{id:int|string,gps_map_enabled?:int|string|null,view_gps_map_override_off_enabled?:bool,...} $gallery Prepared identity, map override and inherited baseline.
  * @param string $key Canonical feature identifier.
  * @param string $label Localized feature name.
- * @param bool $directEnabled Presentation fallback for historical fixtures.
- * @param bool $writable Whether this verified feature supports staged changes.
- * @return string Escaped control; clicking prepares an intent without submitting the bulk form.
+ * @param bool $directEnabled Effective state prepared by the domain owner.
+ * @param bool $writable Whether this verified feature supports immediate changes.
+ * @return string Escaped icon and accessible current state.
  */
 function view_render_admin_gallery_feature_control(
     array $gallery,
@@ -639,37 +646,51 @@ function view_render_admin_gallery_feature_control(
     bool $directEnabled,
     bool $writable,
 ): string {
-    $state = (string) (
-        $gallery['view_feature_states'][$key] ?? ($directEnabled ? 'on' : 'off')
-    );
-    $state = in_array($state, ['on', 'off', 'mixed'], true) ? $state : 'off';
-    $counts = (array) (
-        $gallery['view_feature_counts'][$key] ?? [
-            'on' => $directEnabled ? 1 : 0,
-            'total' => 1,
-        ]
-    );
-    $total = max(1, (int) ($counts['total'] ?? 1));
-    $on = max(0, min($total, (int) ($counts['on'] ?? 0)));
-    $description = $state === 'mixed'
-        ? t(
-            'admin.gallery_list.feature_mixed',
-            'Enabled in {on} of {total} galleries',
-            ['on' => $on, 'total' => $total],
-        )
-        : (
-            $state === 'on'
-                ? t(
-                    'admin.gallery_list.feature_all_on',
-                    'Enabled in all {count} galleries',
-                    ['count' => $total],
-                )
-                : t(
-                    'admin.gallery_list.feature_all_off',
-                    'Disabled in all {count} galleries',
-                    ['count' => $total],
-                )
+    $state = $key === 'maps' && $writable
+        && array_key_exists('gps_map_enabled', $gallery)
+        && $gallery['gps_map_enabled'] === null
+        ? 'inherit'
+        : ($directEnabled ? 'on' : 'off');
+    $description = $state === 'inherit'
+        ? t('admin.gallery_features.inherit_effective', 'Inherited ({state})', [
+            'state' => $directEnabled
+                ? t('admin.gallery_features.on', 'On')
+                : t('admin.gallery_features.off', 'Off'),
+        ])
+        : ($directEnabled
+            ? t('admin.gallery_features.on', 'On')
+            : t('admin.gallery_features.off', 'Off'));
+    $overridesEnabled = $key === 'maps' && $state === 'off'
+        && !empty($gallery['view_gps_map_override_off_enabled']);
+    if ($overridesEnabled) {
+        $description .= ' · ' . t(
+            'admin.gallery_features.overrides_enabled',
+            'Overrides inherited on.',
         );
+    }
+    if ($writable && $key === 'maps') {
+        $description .= ' · ' . t(
+            'admin.gallery_features.quick_maps_hint',
+            'Click to cycle inherited, on and off.',
+        );
+    } elseif ($writable && $key === 'voting') {
+        $description .= ' · ' . t(
+            'admin.gallery_features.quick_voting_hint',
+            'Turning voting off also turns off Picture Game; votes are kept.',
+        );
+    } elseif ($writable && $key === 'game') {
+        $description .= ' · ' . t(
+            'admin.gallery_features.quick_game_hint',
+            'Turning Picture Game on also enables voting; results are kept.',
+        );
+    }
+    $icon = [
+        'maps' => 'gallery-map',
+        'background' => 'gallery-background',
+        'filenames' => 'logs',
+        'voting' => 'gallery-voting',
+        'game' => 'gallery-game',
+    ][$key] ?? 'features';
     $tag = $writable ? 'button' : 'span';
     $attributes = $writable
         ? ' type="button" data-gallery-feature-key="'
@@ -679,33 +700,29 @@ function view_render_admin_gallery_feature_control(
         . '" data-gallery-feature-state="'
         . e($state)
         . '" data-gallery-feature-own-state="'
-        . ($directEnabled ? 'on' : 'off')
-        . '" data-on-count="'
-        . $on
-        . '" data-total-count="'
-        . $total
+        . e($state)
         . '" aria-pressed="'
-        . ($state === 'mixed' ? 'mixed' : ($state === 'on' ? 'true' : 'false'))
+        . ($state === 'inherit' ? 'mixed' : ($state === 'on' ? 'true' : 'false'))
         . '"'
-        : '';
-    $marker = $state === 'on'
-        ? '&#10003;'
-        : ($state === 'mixed' ? '&#8722;' : '&#9675;');
+        : ' role="img"';
     return (
         '<'
             . $tag
-            . ' class="admin-gallery-feature is-'
+            . ' class="admin-gallery-feature '
+            . ($directEnabled ? 'is-effective-on ' : 'is-effective-off ')
+            . ($overridesEnabled ? 'is-overriding-on ' : '')
+            . 'is-'
             . e($state)
             . '"'
             . $attributes
             . ' title="'
             . e($label . ': ' . $description)
-            . '"><span>'
-            . e($label)
-            . '</span><span class="admin-gallery-feature-marker" aria-hidden="true">'
-            . $marker
-            . '</span><span class="admin-visually-hidden">: '
-            . e($description)
+            . '" aria-label="'
+            . e($label . ': ' . $description)
+            . '">'
+            . view_admin_menu_icon($icon)
+            . '<span class="admin-visually-hidden">'
+            . e($label . ': ' . $description)
             . '</span></'
             . $tag
             . '>'
@@ -714,17 +731,21 @@ function view_render_admin_gallery_feature_control(
 
 /**
  * Render a single-gallery password control without putting a password in the bulk form.
- * @param array<string,mixed> $control Controller-prepared safe destination and revision.
+ * @param array{action_url?:string,gallery_id?:int,edit_revision?:int,enabled?:bool,token_only?:bool} $control Prepared safe destination and revision, or an empty array for read-only state.
  * @param string $label Current localized access label.
+ * @param bool $protected Whether the gallery has local password or token protection.
  * @return void Emits a local editor or the read-only label when storage is unavailable.
  */
 function view_render_admin_gallery_password_control(
     array $control,
     string $label,
+    bool $protected,
 ): void {
     if ($control === []) {
-        echo
-            '<span class="admin-gallery-access-label">' . e($label) . '</span>';
+        echo '<span class="admin-gallery-access-label" title="' . e($label)
+            . '" aria-label="' . e($label) . '">'
+            . view_admin_menu_icon($protected ? 'gallery-lock' : 'gallery-unlock')
+            . '</span>';
         return;
     }
     echo
@@ -743,8 +764,20 @@ function view_render_admin_gallery_password_control(
             ))
             . '" data-password-required="'
             . e(t('gallery.password_required', 'Enter a gallery password.'))
-            . '"><button type="button" class="admin-gallery-access-label" data-admin-gallery-password-toggle>'
-            . e($label)
+            . '"><button type="button" class="admin-gallery-access-label" data-admin-gallery-password-toggle title="'
+            . e($label) . '" aria-label="' . e($label) . '">'
+            . '<span data-password-locked-icon'
+            . (empty($control['enabled']) ? ' hidden' : '') . '>'
+            . view_admin_menu_icon('gallery-lock') . '</span>'
+            . '<span data-password-unlocked-icon'
+            . (!empty($control['enabled']) || !empty($control['token_only'])
+                ? ' hidden' : '') . '>'
+            . view_admin_menu_icon('gallery-unlock') . '</span>'
+            . '<span data-password-token-icon'
+            . (empty($control['token_only']) ? ' hidden' : '') . '>'
+            . view_admin_menu_icon('link') . '</span>'
+            . '<span class="admin-visually-hidden" data-password-label>'
+            . e($label) . '</span>'
             . '</button>';
     echo
         '<div class="admin-gallery-password-editor" data-admin-gallery-password-editor hidden><label>'

@@ -4,7 +4,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: app/services/gallery_feature_plans.php
  * Module Type: Service
- * Purpose: Preview and revalidate ordered subtree feature intentions before atomic application.
+ * Purpose: Preview and revalidate gallery or subtree feature intentions before atomic application.
  * Responsibilities: Enforce existing capabilities, schema authority, coupling and stale-plan refusal.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
@@ -21,8 +21,8 @@ use function Gallery\Models\gallery_model_set_voting_enabled;
 use function Gallery\Models\gallery_model_set_picture_game_enabled;
 
 /** Normalize a bounded ordered list without coalescing meaningful overlapping intentions.
- * @param array<mixed> $intents Untrusted semantic intentions.
- * @return list<array{root_id:int,feature:string,enabled:bool}> Valid ordered intentions.
+ * @param array<array-key,array{root_id?:int,feature?:string,enabled?:bool|null,scope?:string}> $intents Untrusted semantic intentions, checked before use.
+ * @return list<array{root_id:int,feature:string,enabled:bool|null,scope?:string}> Ordered intentions; null means inherited maps and omitted scope means subtree.
  */
 function gallery_feature_plan_normalize(array $intents): array
 {
@@ -35,11 +35,8 @@ function gallery_feature_plan_normalize(array $intents): array
     foreach ($intents as $intent) {
         if (
             !is_array($intent)
-            || !isset(
-                $intent['root_id'],
-                $intent['feature'],
-                $intent['enabled'],
-            )
+            || !isset($intent['root_id'], $intent['feature'])
+            || !array_key_exists('enabled', $intent)
             || !is_int($intent['root_id'])
             || $intent['root_id'] < 1
             || !is_string($intent['feature'])
@@ -48,7 +45,10 @@ function gallery_feature_plan_normalize(array $intents): array
                 ['maps', 'filenames', 'voting', 'game'],
                 true,
             )
-            || !is_bool($intent['enabled'])
+            || (!is_bool($intent['enabled'])
+                && !($intent['feature'] === 'maps' && $intent['enabled'] === null))
+            || (isset($intent['scope'])
+                && !in_array($intent['scope'], ['gallery', 'subtree'], true))
         ) {
             throw new \InvalidArgumentException(
                 'Invalid gallery feature change.',
@@ -59,12 +59,15 @@ function gallery_feature_plan_normalize(array $intents): array
             'feature' => $intent['feature'],
             'enabled' => $intent['enabled'],
         ];
+        if (isset($intent['scope'])) {
+            $normalized[array_key_last($normalized)]['scope'] = $intent['scope'];
+        }
     }
     return $normalized;
 }
 
 /** Resolve owned columns and coupled dependencies before observing optional storage.
- * @param list<array{root_id:int,feature:string,enabled:bool}> $intents Normalized intentions.
+ * @param list<array{root_id:int,feature:string,enabled:bool|null,scope?:string}> $intents Normalized intentions, with optional gallery-only scope.
  * @return list<string> Required semantic fields in deterministic order.
  */
 function gallery_feature_plan_preflight(array $intents): array
@@ -163,10 +166,10 @@ function gallery_feature_plan_preflight(array $intents): array
 }
 
 /** Prepare exact scope and effective changes from a single authoritative snapshot.
- * @param list<array{root_id:int,feature:string,enabled:bool}> $intents Normalized chronological intentions.
- * @param list<array<string,mixed>> $snapshot Non-secret model rows.
+ * @param list<array{root_id:int,feature:string,enabled:bool|null,scope?:string}> $intents Normalized chronological intentions with optional gallery-only scope.
+ * @param list<array{id:int|string,parent_id:int|string|null,title:string,folder_path:string,sort_order:int|string,edit_revision:int|string,gps_map_enabled?:int|string|null,show_filenames?:int|string,voting_enabled?:int|string,picture_game_enabled?:int|string}> $snapshot Non-secret catalog rows with preflight-selected feature columns.
  * @param bool $mapsDefault Current inherited GPS preference.
- * @return array<string,mixed> Safe preview plus comparison fingerprint.
+ * @return array{intents:list<array{root_id:int,feature:string,enabled:bool|null,scope?:string}>,fingerprint:string,gallery_count:int,changed_gallery_count:int,change_count:int,scope:list<array{id:int,title:string,parent_id:int}>,rows:list<array{id:int,title:string,parent_id:int,changes:list<array{feature:string,current:bool,next:bool|null,side_effect:bool,inherited:bool}>}>} Safe exact scope and changes plus comparison fingerprint.
  */
 function gallery_feature_plan_build(
     array $intents,
@@ -212,8 +215,10 @@ function gallery_feature_plan_build(
                     'side_effect' => true,
                 ];
             }
-            foreach ($children[$id] ?? [] as $child) {
-                $queue[] = $child;
+            if (($intent['scope'] ?? 'subtree') === 'subtree') {
+                foreach ($children[$id] ?? [] as $child) {
+                    $queue[] = $child;
+                }
             }
         }
     }
@@ -263,14 +268,12 @@ function gallery_feature_plan_build(
                     },
                 );
             }
-            // An explicit map setting also changes inherited storage when its visible state already matches.
-            if (
-                $current !== $target['next']
-                || (
-                    $feature === 'maps'
-                    && $stored === null
-                )
-            ) {
+            // Map overrides compare stored preference, not its inherited effective value.
+            $storedState = $stored === null ? null : (int) $stored === 1;
+            $changed = $feature === 'maps'
+                ? $storedState !== $target['next']
+                : $current !== $target['next'];
+            if ($changed) {
                 $changes[] = [
                     'feature' => $feature,
                     'current' => $current,
@@ -299,9 +302,9 @@ function gallery_feature_plan_build(
     ];
 }
 
-/** Preview ordered subtree changes without acquiring writer locks or persisting anything.
- * @param array<mixed> $intents Browser intentions.
- * @return array<string,mixed> Exact safe preview.
+/** Preview ordered gallery or subtree changes without acquiring writer locks or persisting anything.
+ * @param array<array-key,array{root_id?:int,feature?:string,enabled?:bool|null,scope?:string}> $intents Untrusted browser intentions.
+ * @return array{intents:list<array{root_id:int,feature:string,enabled:bool|null,scope?:string}>,fingerprint:string,gallery_count:int,changed_gallery_count:int,change_count:int,scope:list<array{id:int,title:string,parent_id:int}>,rows:list<array{id:int,title:string,parent_id:int,changes:list<array{feature:string,current:bool,next:bool|null,side_effect:bool,inherited:bool}>}>} Exact safe preview and fingerprint.
  */
 function gallery_feature_plan_preview(array $intents): array
 {
@@ -315,7 +318,7 @@ function gallery_feature_plan_preview(array $intents): array
 }
 
 /** Revalidate a reviewed snapshot under locks and apply only its exact final per-row changes.
- * @param array<mixed> $intents Confirmed chronological intentions.
+ * @param array<array-key,array{root_id?:int,feature?:string,enabled?:bool|null,scope?:string}> $intents Chronological intentions revalidated against the fingerprint.
  * @param string $fingerprint Reviewed snapshot digest.
  * @return array{entity_ids:list<int>,sidecar_refresh_failed:bool} Committed result, never a false failure after commit.
  */

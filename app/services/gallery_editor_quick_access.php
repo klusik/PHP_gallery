@@ -25,8 +25,8 @@ final class GalleryQuickAccessRefusal extends RuntimeException {}
 /**
  * Project acknowledged gallery access state without returning credentials or unrelated fields.
  *
- * @param array<string,mixed> $gallery Authoritative row after the editor mutation.
- * @return array{id:int,visibility:string,visibility_label:string,own_password_enabled:bool,access_label:string,edit_revision:string} Bounded localized transport state.
+ * @param array{id:int|string,access_mode?:string,access_password_hash?:string|null,visibility?:string,edit_revision?:int|string,...} $gallery Authoritative row after the editor mutation.
+ * @return array{id:int,visibility:string,visibility_label:string,own_password_enabled:bool,token_only:bool,access_label:string,edit_revision:string} Bounded localized transport state without credentials.
  */
 function gallery_editor_quick_access_state(array $gallery): array
 {
@@ -39,6 +39,8 @@ function gallery_editor_quick_access_state(array $gallery): array
         'visibility' => $visibility,
         'visibility_label' => gallery_visibility_label($visibility),
         'own_password_enabled' => $ownPassword,
+        'token_only' => !$ownPassword
+            && (string) ($gallery['access_mode'] ?? 'normal') === 'password',
         'access_label' => (string) ($gallery['access_mode'] ?? 'normal')
         === 'password'
             ? (

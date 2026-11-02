@@ -71,6 +71,25 @@ then scroll the notification list, with the heading and bulk actions retained.
 - Do not underline Admin UI text, labels, links, or controls. Use color,
   spacing, icons, and borders to communicate hierarchy and interaction.
 
+## Gallery inventory controls
+
+Keep gallery visibility, own password and feature controls as compact unboxed
+icons with localized accessible names and tooltips. Enlarge the glyphs without
+adding colored backgrounds; use Theme foreground/accent, a clear disabled slash,
+an inheritance marker and visible keyboard focus. An inherited effective-off map
+is muted without a slash; an explicitly disabled map also carries the slash.
+When an explicit OFF overrides an inherited ON, show the slash and icon in
+orange at full opacity. Derive that baseline from the nearest ancestor override
+or the global default, never from the local effective value.
+The map icon cycles inherited, on and off for the selected row; descendants
+with inherited settings resolve the new preference
+through their normal policy. Other feature icons save one gallery immediately.
+Background remains a status indicator. Preserve the existing voting/game
+dependency, stored results, token-only access indication and the owned workspace
+refresh. Never replay a write whose response was lost; reload authoritative state.
+On narrow or coarse screens retain 44px action targets within the scrollable
+gallery table.
+
 ## Public search and pagination
 
 Public search and pagination follow the same compact visual language as the
