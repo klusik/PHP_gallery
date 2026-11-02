@@ -197,6 +197,7 @@ namespace {
     use function Gallery\Services\music_catalog_album_song_remove;
     use function Gallery\Services\music_catalog_album_update;
     use function Gallery\Services\music_catalog_album_upload;
+    use function Gallery\Services\music_catalog_album_playback_page;
     use function Gallery\Services\music_catalog_list;
     use function Gallery\Services\music_catalog_revision;
     use function Gallery\Services\music_catalog_song_details;
@@ -1948,6 +1949,55 @@ namespace {
             && music_repository_asset_path($albumUploadAssets[0]) !== null,
             'Uploaded songs must remain reusable with zero album memberships.',
         );
+
+        $playbackAlbum = music_catalog_album_create(
+            'Paged playback ' . $token, null, music_catalog_revision(),
+        );
+        $playbackAlbumId = (int) $playbackAlbum['album_id'];
+        $fixtureAlbumIds[] = $playbackAlbumId;
+        $insertPlaybackSong = $pdo->prepare(
+            'INSERT INTO music_songs (title, created_at, updated_at) VALUES (?, NOW(), NOW())',
+        );
+        $insertPlaybackMember = $pdo->prepare(
+            'INSERT INTO music_album_songs (album_id, song_id, sort_order) VALUES (?, ?, ?)',
+        );
+        $playbackSongIds = [];
+        // One track beyond the existing page bound proves full-album continuation.
+        for ($position = 0;
+            $position <= \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE;
+            $position++) {
+            $insertPlaybackSong->execute(['Playback ' . $position . ' ' . $token]);
+            $id = (int) $pdo->lastInsertId();
+            $fixtureSongIds[] = $id;
+            $playbackSongIds[] = $id;
+            $insertPlaybackMember->execute([$playbackAlbumId, $id, $position]);
+        }
+        $playbackRevision = music_catalog_revision();
+        $firstPlaybackPage = music_catalog_album_playback_page(
+            $playbackAlbumId, 0, $playbackRevision,
+        );
+        $lastPlaybackPage = music_catalog_album_playback_page(
+            $playbackAlbumId, \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE,
+            $playbackRevision,
+        );
+        check(count($firstPlaybackPage['tracks']) === \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE
+            && count($lastPlaybackPage['tracks']) === 1
+            && $lastPlaybackPage['offset'] === \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE
+            && $firstPlaybackPage['total'] === count($playbackSongIds)
+            && array_merge(array_column($firstPlaybackPage['tracks'], 'id'),
+                array_column($lastPlaybackPage['tracks'], 'id')) === $playbackSongIds,
+            'Album playback must preserve global order across bounded pages.',
+        );
+        music_catalog_album_song_remove(
+            $playbackAlbumId, $playbackSongIds[0], $playbackRevision,
+        );
+        try {
+            music_catalog_album_playback_page($playbackAlbumId, 0, $playbackRevision);
+            throw new \RuntimeException('A stale playback snapshot was accepted.');
+        } catch (\RuntimeException $error) {
+            check($error->getMessage() === 'music.conflict',
+                'A changed album must refuse continuation of the earlier revision.');
+        }
 
         echo "Music repository database contracts passed.\n";
     } finally {

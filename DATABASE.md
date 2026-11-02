@@ -329,6 +329,13 @@ track references. Existing foreign keys cascade inactive instances, album
 membership and song tags; no schema change or audio-file deletion is involved.
 An asset row remains protective even if its physical bytes need restoration.
 
+Administrator playback adds no persistence. Ordered playback pages reuse the
+album node's existing membership count and bounded `music_album_songs` reads.
+The global catalog revision is checked before and after preparing a page and
+pinned across continuation requests. Preview resolves a verified repository or
+current legacy source without promoting, assigning or rewriting it. Pause,
+seek, mute and repeat remain browser-only state.
+
 Repository readiness is observed separately from the old catalog schema.
 Central writes require complete verified repository storage. Confirmed missing
 repository schema preserves legacy reads and documented old-index operations;

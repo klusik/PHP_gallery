@@ -892,74 +892,9 @@ function gallery_music_stream_document(
     ?array $document,
     bool $download = false,
 ): void {
-    $method = \Gallery\Core\request_method();
-    clear_response_cache_headers();
-    header('Cache-Control: private, no-store, max-age=0');
-    header('X-Content-Type-Options: nosniff');
-    header('X-Robots-Tag: noindex, nofollow');
-    header('Referrer-Policy: same-origin');
-    if (!in_array($method, ['GET', 'HEAD'], true)) {
-        header('Allow: GET, HEAD');
-        http_response_code(405);
-        return;
-    }
-    $handle = $document !== null ? @fopen($document['path'], 'rb') : false;
-    if ($document === null || $handle === false) {
-        http_response_code(404);
-        header('Content-Type: text/plain; charset=utf-8');
-        if ($method !== 'HEAD')
-            echo 'Not found';
-        return;
-    }
-    try {
-        $size = $document['track']['size'];
-        // Without validators, If-Range means a complete representation. HEAD
-        // reports GET metadata without interpreting its ignored Range field.
-        $rangeHeader = $method === 'GET' && !isset($_SERVER['HTTP_IF_RANGE'])
-            ? (string) ($_SERVER['HTTP_RANGE'] ?? '')
-            : '';
-        $range = \Gallery\Services\gallery_music_byte_range(
-            $rangeHeader,
-            $size,
-        );
-        header('Accept-Ranges: bytes');
-        if ($range === null) {
-            http_response_code(416);
-            header('Content-Range: bytes */' . $size);
-            header('Content-Length: 0');
-            return;
-        }
-        header('Content-Type: ' . $document['track']['mime']);
-        $disposition = $download ? 'attachment' : 'inline';
-        header(
-            'Content-Disposition: '
-                . $disposition
-                . '; filename="audio"; filename*=UTF-8\'\''
-                . rawurlencode($document['track']['filename']),
-        );
-        $length = $range['end'] - $range['start'] + 1;
-        header('Content-Length: ' . $length);
-        if ($range['partial']) {
-            http_response_code(206);
-            header(
-                'Content-Range: bytes '
-                    . $range['start']
-                    . '-'
-                    . $range['end']
-                    . '/'
-                    . $size,
-            );
-        }
-        if (session_status() === PHP_SESSION_ACTIVE)
-            session_write_close();
-        if ($method === 'GET' && fseek($handle, $range['start']) === 0) {
-            $output = fopen('php://output', 'wb');
-            if ($output !== false) {
-                stream_copy_to_stream($handle, $output, $length);
-                fclose($output);
-            }
-        }
-    } finally {
-        fclose($handle);
-    }
+    $range = $document !== null
+        ? \Gallery\Services\gallery_music_byte_range(
+            http_media_range_header(), $document['track']['size'],
+        ) : null;
+    stream_verified_audio_document($document, $range, $download);
 }

@@ -14,6 +14,33 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    /** Refuse controller dispatch when this isolated request is not an Admin.
+     * @return void Allows only the fixture-owned administrator state.
+     * @throws \RuntimeException When a caller attempts anonymous dispatch.
+     */
+    function require_admin(): void
+    {
+        if (empty($GLOBALS['music_preview_fixture_admin'])) {
+            throw new \RuntimeException('Fixture Admin required.');
+        }
+    }
+
+    /** Read the fixture's explicit HTTP verb without a real web request.
+     * @return string Uppercase method selected by the transport boundary test.
+     */
+    function request_method(): string
+    {
+        return (string) ($GLOBALS['music_preview_fixture_method'] ?? 'GET');
+    }
+
+    /** Resolve anonymous preview only from test-owned request state.
+     * @return bool Whether fixture playback must ignore Admin authority.
+     */
+    function admin_anonymous_preview_active(): bool
+    {
+        return (bool) ($GLOBALS['music_preview_fixture_anonymous'] ?? false);
+    }
+
     /**
      * Build the isolated fallback route URL for the shared public URL helper.
      *
@@ -50,6 +77,34 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /** Resolve the music capability from this isolated boundary's state.
+     * @param string $key Capability requested by the production controller.
+     * @return bool True only for enabled fixture music.
+     */
+    function feature_capability_effective_enabled(string $key): bool
+    {
+        return $key === 'gallery_music'
+            && ($GLOBALS['music_preview_fixture_enabled'] ?? false);
+    }
+
+    /** Keep the production age boundary observable in the request fixture.
+     * @return bool Whether the isolated account is explicitly under eighteen.
+     */
+    function current_user_is_known_under_18(): bool
+    {
+        return (bool) ($GLOBALS['music_preview_fixture_minor'] ?? false);
+    }
+
+    /** Capture authorized original lookup without reading installed media.
+     * @param int $songId Logical identity passed by the production controller.
+     * @return null Deliberately absent original for opaque transport tests.
+     */
+    function music_repository_preview_song(int $songId): ?array
+    {
+        $GLOBALS['music_preview_fixture_reads'][] = $songId;
+        return null;
+    }
+
     /**
      * Return the fixture URL rewrite setting.
      *
@@ -74,6 +129,7 @@ namespace Gallery\Services {
 namespace {
     require_once __DIR__ . '/../app/helpers_public_urls.php';
     require_once __DIR__ . '/../app/controllers/admin_music.php';
+    require_once __DIR__ . '/../app/controllers/http_helpers.php';
 
     /**
      * Assert one exact URL value.
@@ -111,4 +167,45 @@ namespace {
         'https://gallery.example/index.php?page=gallery&public_path=highway-set&lang=cs',
         \Gallery\Controllers\admin_music_gallery_url($gallery),
     );
+
+    $GLOBALS['music_preview_fixture_reads'] = [];
+    $GLOBALS['music_preview_fixture_enabled'] = true;
+    $_GET = ['action' => 'music_preview', 'song_id' => '17'];
+    try {
+        \Gallery\Controllers\cms_admin_music();
+        throw new \RuntimeException('Anonymous music preview was admitted.');
+    } catch (\RuntimeException $error) {
+        admin_music_gallery_url_assert_same(
+            'Fixture Admin required.', $error->getMessage(),
+        );
+    }
+    $GLOBALS['music_preview_fixture_admin'] = true;
+    foreach (['anonymous', 'minor', 'disabled', 'method'] as $refusal) {
+        $GLOBALS['music_preview_fixture_anonymous'] = $refusal === 'anonymous';
+        $GLOBALS['music_preview_fixture_minor'] = $refusal === 'minor';
+        $GLOBALS['music_preview_fixture_enabled'] = $refusal !== 'disabled';
+        $GLOBALS['music_preview_fixture_method'] = $refusal === 'method' ? 'POST' : 'GET';
+        ob_start();
+        \Gallery\Controllers\cms_admin_music();
+        ob_end_clean();
+        admin_music_gallery_url_assert_same(
+            $refusal === 'method' ? '405' : '404', (string) http_response_code(),
+        );
+        admin_music_gallery_url_assert_same('0',
+            (string) count($GLOBALS['music_preview_fixture_reads']));
+    }
+    $GLOBALS['music_preview_fixture_anonymous'] = false;
+    $GLOBALS['music_preview_fixture_minor'] = false;
+    $GLOBALS['music_preview_fixture_enabled'] = true;
+    foreach (['GET', 'HEAD'] as $method) {
+        $GLOBALS['music_preview_fixture_method'] = $method;
+        ob_start();
+        \Gallery\Controllers\cms_admin_music();
+        $body = (string) ob_get_clean();
+        admin_music_gallery_url_assert_same('404', (string) http_response_code());
+        admin_music_gallery_url_assert_same($method === 'GET' ? 'Not found' : '', $body);
+    }
+    admin_music_gallery_url_assert_same('17,17',
+        implode(',', $GLOBALS['music_preview_fixture_reads']));
+    http_response_code(200);
 }

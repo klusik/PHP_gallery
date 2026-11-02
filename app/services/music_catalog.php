@@ -1234,6 +1234,52 @@ function music_catalog_assignment_choices(string $query, int $limit = MUSIC_CATA
     return ['revision' => music_catalog_revision(), 'songs' => $songs, 'albums' => $albums];
 }
 
+/** Read one bounded ordered album page under a stable catalog revision.
+ * @param int $albumId Existing album selected for administrator playback.
+ * @param int $position Zero-based requested song position across the album.
+ * @param string $revision Expected revision, or empty for initial presentation.
+ * @return array{revision:string,offset:int,total:int,tracks:list<array{id:int,title:string}>} One playback page and complete album count, without reading audio bytes.
+ * @throws \RuntimeException When the album, schema or expected revision is unavailable.
+ */
+function music_catalog_album_playback_page(
+    int $albumId,
+    int $position,
+    string $revision = '',
+): array {
+    music_catalog_assert_schema_ready('catalog.album_playback');
+    music_repository_assert_schema_ready('catalog.album_playback');
+    $current = music_catalog_revision();
+    if ($revision !== '' && !hash_equals($current, $revision)) {
+        throw new \RuntimeException('music.conflict');
+    }
+    $album = \Gallery\Models\music_catalog_model_album_nodes([$albumId])[0] ?? null;
+    if ($albumId < 1 || $album === null) {
+        throw new \RuntimeException('music.album_missing');
+    }
+    $total = (int) $album['song_count'];
+    if ($position < 0 || ($total > 0 && $position >= $total)) {
+        throw new \RuntimeException('music.conflict');
+    }
+    // Page alignment is positional arithmetic, not another membership limit.
+    $offset = intdiv($position, MUSIC_CATALOG_PAGE_SIZE)
+        * MUSIC_CATALOG_PAGE_SIZE;
+    $members = music_catalog_album_members(
+        $albumId, MUSIC_CATALOG_PAGE_SIZE, $offset,
+    );
+    if (!hash_equals($current, music_catalog_revision())) {
+        throw new \RuntimeException('music.conflict');
+    }
+    return [
+        'revision' => $current,
+        'offset' => $offset,
+        'total' => $total,
+        'tracks' => array_map(static fn(array $member): array => [
+            'id' => (int) $member['id'],
+            'title' => (string) $member['title'],
+        ], $members),
+    ];
+}
+
 /** Mark chooser rows already included by authoritative gallery source groups.
  * @param int $galleryId Physical gallery identity.
  * @param list<array{id:string,type:string,song_id:?int,album_id:?int}>

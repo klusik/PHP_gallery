@@ -184,7 +184,7 @@ All four consumers import
 `./admin-interaction-policy.js?v=20260920-admin-interaction-policy-v1`.
 `gallery.js` now references the corresponding refreshed Settings/navigation
 imports, title completion `20260920-gallery-title-completion-policy-v4`, and
-`admin-operations.js?v=20260920-panel-lifecycle-interaction-policy-v2`.
+`admin-operations.js?v=20261102-admin-music-player-v2`.
 The operations facade refreshes its navigation-data-update export while
 retaining
 other agents' unrelated export changes.

@@ -15,6 +15,8 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+require_once __DIR__ . '/http_helpers.php';
+
 use Throwable;
 use function Gallery\Core\admin_mutation_descriptor;
 use function Gallery\Core\admin_mutation_error_envelope;
@@ -109,6 +111,9 @@ function cms_admin_music(): void
     require_admin();
     if (!feature_capability_effective_enabled('gallery_music')) {
         http_response_code(404);
+        return;
+    }
+    if (admin_music_playback_read()) {
         return;
     }
 
@@ -394,6 +399,9 @@ function cms_admin_music(): void
         'notice' => $notice,
         'error' => $error,
         'fragment' => (string) ($_GET['fragment'] ?? '') === '1',
+        'playback' => admin_music_playback_model(
+            $catalog['songs'], $albumId, $revision,
+        ),
         'upload' => [
             'max_files' => \Gallery\Services\MUSIC_CATALOG_UPLOAD_FILES,
             'max_bytes' => \Gallery\Services\GALLERY_MUSIC_MAX_BYTES,
@@ -404,6 +412,123 @@ function cms_admin_music(): void
         ],
     ];
     view_render_admin_music($model);
+}
+
+/** Handle administrator-only original streaming and bounded album page reads.
+ * @return bool True after emitting a playback response; false for manager requests.
+ */
+function admin_music_playback_read(): bool
+{
+    $action = (string) ($_GET['action'] ?? '');
+    if (!in_array($action, ['music_preview', 'album_playlist'], true)) {
+        return false;
+    }
+    $allowed = !\Gallery\Core\admin_anonymous_preview_active()
+        && !\Gallery\Services\current_user_is_known_under_18();
+    $method = request_method();
+    if ($action === 'music_preview') {
+        $document = null;
+        if ($allowed && in_array($method, ['GET', 'HEAD'], true)) {
+            try {
+                $document = \Gallery\Services\music_repository_preview_song(
+                    max(0, (int) ($_GET['song_id'] ?? 0)),
+                );
+            } catch (Throwable) {
+                // Media delivery remains opaque; no path or storage exception escapes.
+            }
+        }
+        $range = $document !== null
+            ? \Gallery\Services\gallery_music_byte_range(
+                http_media_range_header(), $document['track']['size'],
+            ) : null;
+        stream_verified_audio_document($document, $range);
+        return true;
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    if (!$allowed || $method !== 'GET') {
+        http_response_code($allowed ? 405 : 404);
+        if ($allowed) header('Allow: GET');
+        echo json_encode(['ok' => false]);
+        return true;
+    }
+    try {
+        $page = \Gallery\Services\music_catalog_album_playback_page(
+            max(0, (int) ($_GET['album_id'] ?? 0)),
+            max(0, (int) ($_GET['position'] ?? 0)),
+            (string) ($_GET['revision'] ?? ''),
+        );
+        $page['tracks'] = admin_music_playback_tracks($page['tracks']);
+        echo json_encode(['ok' => true] + $page,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    } catch (Throwable $error) {
+        http_response_code(409);
+        echo json_encode([
+            'ok' => false, 'message' => admin_music_error($error),
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+    return true;
+}
+
+/** Prepare protected same-installation previews for one bounded song page.
+ * @param list<array{id:int|string,title:string}> $songs Ordered catalog or album rows.
+ * @return list<array{id:string,title:string,url:string}> Stable logical track IDs and authenticated preview URLs.
+ */
+function admin_music_playback_tracks(array $songs): array
+{
+    return array_map(static fn(array $song): array => [
+        'id' => 'catalog-song-' . (int) $song['id'],
+        'title' => (string) $song['title'],
+        'url' => url_for('admin_music', [
+            'action' => 'music_preview', 'song_id' => (int) $song['id'],
+        ]),
+    ], $songs);
+}
+
+/** Prepare isolated catalog and whole-album player scopes without audio reads.
+ * @param list<array{id:int|string,title:string,track_count:int|string,album_count:int|string,direct_gallery_count:int|string}> $songs Current bounded catalog page.
+ * @param int $albumId Selected album, or zero without a selection.
+ * @param string $revision Catalog revision observed by the manager query.
+ * @return array{allowed:bool,catalog:array{galleryId:int,enabled:bool,tracks:list<array{id:string,title:string,url:string}>},album:array{galleryId:int,enabled:bool,tracks:list<array{id:string,title:string,url:string}>,pagination:array{url:string,offset:int,total:int,pageSize:int,revision:string}}|null,error:string} Presentation-only playback data and any album read refusal.
+ */
+function admin_music_playback_model(
+    array $songs,
+    int $albumId,
+    string $revision,
+): array {
+    $allowed = !\Gallery\Core\admin_anonymous_preview_active()
+        && !\Gallery\Services\current_user_is_known_under_18();
+    $model = [
+        'allowed' => $allowed,
+        // Zero and negative IDs identify Admin-only player scopes, never galleries.
+        'catalog' => ['galleryId' => 0, 'enabled' => false,
+            'tracks' => $allowed ? admin_music_playback_tracks($songs) : []],
+        'album' => null,
+        'error' => '',
+    ];
+    if (!$allowed || $albumId < 1) return $model;
+    try {
+        $page = \Gallery\Services\music_catalog_album_playback_page(
+            $albumId, 0, $revision,
+        );
+        $model['album'] = [
+            'galleryId' => -$albumId,
+            'enabled' => false,
+            'tracks' => admin_music_playback_tracks($page['tracks']),
+            'pagination' => [
+                'url' => url_for('admin_music', [
+                    'action' => 'album_playlist', 'album_id' => $albumId,
+                ]),
+                'offset' => 0,
+                'total' => $page['total'],
+                'pageSize' => \Gallery\Services\MUSIC_CATALOG_PAGE_SIZE,
+                'revision' => $page['revision'],
+            ],
+        ];
+    } catch (Throwable $error) {
+        $model['error'] = admin_music_error($error);
+    }
+    return $model;
 }
 
 /** Resolve the selected manager section, including legacy album deep links.

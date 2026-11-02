@@ -37,7 +37,7 @@ import {openPublicModal, closePublicModal} from './public-modal-lifecycle.js?v=2
 import {galleryPresentationOptions, galleryPresentationRequested} from './gallery-presentation.js?v=20261024-short-presentation-v1';
 import {
     stopGalleryMusicViewer,
-} from './gallery-music-player.js?v=20261024-catalog-workspace-v3';
+} from './gallery-music-player.js?v=20261102-admin-music-player-v2';
 
 const lightboxModuleUrl = (() => {
     const moduleUrl = new URL('./lightbox.js', import.meta.url);

@@ -13,6 +13,23 @@
 let currentPlayer = null;
 let currentSignature = '';
 let currentSource = null;
+let musicMuted = false;
+
+/** Bound one explicit next-page read during administrator album playback.
+ * Type: number. Units: milliseconds. Scope: one playlist page request.
+ * Consumers: createGalleryMusicPlayer/selectTrack.
+ * Rationale: ten seconds stops a stalled read without retrying or advancing
+ * against an unverified album snapshot. Value: 10000 milliseconds.
+ */
+const MUSIC_PLAYLIST_READ_TIMEOUT_MS = 10000;
+
+/** Mirror the catalog owner's existing bounded album page size.
+ * Type: number. Units: tracks. Scope: one received administrator playlist page.
+ * Consumers: createGalleryMusicPlayer pagination admission.
+ * Rationale: 100 matches MUSIC_CATALOG_PAGE_SIZE and bounds browser allocations
+ * independently of the complete album count. Value: 100 tracks per page.
+ */
+const MUSIC_PLAYLIST_PAGE_LIMIT = 100;
 
 /**
  * @typedef {'playing'|'silent'|'blocked'|'failed'|'cancelled'} MusicPlaybackResult
@@ -25,7 +42,8 @@ let currentSource = null;
  * @param {Document|HTMLElement} root Document or isolated fixture control
  *     owner.
  * @param {{galleryId:number, enabled:boolean, tracks:Array<{id:string,
- *     url:string, title:string}>}} playlist Authorized same-origin originals
+ *     url:string, title:string}>,pagination?:{url:string,offset:number,total:number,
+ *     pageSize:number,revision:string}}} playlist Authorized same-origin originals
  *     in saved order.
  * @param {HTMLAudioElement} audio Native audio instance, injectable for
  *     lifecycle fixtures.
@@ -34,12 +52,13 @@ let currentSource = null;
  *     stop:function():void,
  *     closeViewer:function():void, destroy:function():void,
  *     resumeRequested:function():void,
- *     command:function(string, string=, boolean=):void}} Shared activation,
+ *     seek:function(number):void,
+ *     command:function(string, string=, boolean=, number=):void}} Shared activation,
  *     slideshow boundaries, disposal and explicit control actions.
  */
 export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     const listener = new AbortController();
-    const tracks = Array.isArray(playlist?.tracks) ? playlist.tracks.filter(track => {
+    let tracks = Array.isArray(playlist?.tracks) ? playlist.tracks.filter(track => {
         try {
             return typeof track.id === 'string'
                 && typeof track.title === 'string' && typeof track.url === 'string'
@@ -50,6 +69,11 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     let slideshow = false;
     let disposed = false;
     let playing = false;
+    let paused = false;
+    let sourceActive = false;
+    let loading = false;
+    let playlistStale = false;
+    let repeat = true;
     let index = 0;
     let generation = 0;
     let handledFailure = -1;
@@ -57,6 +81,21 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     let awaitingGesture = false;
     const failed = new Set();
     audio.preload = 'none';
+    audio.muted = audio.muted === true || musicMuted;
+    const pagination = playlist.pagination || null;
+    if (pagination && (
+        new URL(pagination.url, location.href).origin !== location.origin
+        || !Number.isSafeInteger(pagination.pageSize)
+        || pagination.pageSize < 1 || pagination.pageSize > MUSIC_PLAYLIST_PAGE_LIMIT
+        || !Number.isSafeInteger(pagination.total) || pagination.total < 0
+        || pagination.offset !== 0
+        || tracks.length !== Math.min(pagination.pageSize, pagination.total)
+        || typeof pagination.revision !== 'string'
+    )) throw new TypeError('Invalid bounded music playlist.');
+    let pageOffset = 0;
+    const total = pagination ? pagination.total : tracks.length;
+    /** @type {AbortController|null} Current bounded page read, cancelled on disposal. */
+    let pageController = null;
 
     /**
      * Release the current native request and invalidate outstanding play
@@ -69,9 +108,42 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
         message = '';
         generation += 1;
         playing = false;
+        paused = false;
+        sourceActive = false;
+        loading = false;
+        pageController?.abort();
+        pageController = null;
         audio.pause();
         audio.removeAttribute('src');
         audio.load();
+    }
+
+    /** Reflect native time without rescanning table rows at every time update.
+     * @returns {void} Updates only this player's timelines and elapsed/duration text.
+     */
+    function syncTimeline() {
+        const duration = sourceActive && Number.isFinite(audio.duration)
+            && audio.duration > 0 ? audio.duration : null;
+        const time = sourceActive && Number.isFinite(audio.currentTime)
+            ? Math.max(0, audio.currentTime) : 0;
+        for (const group of root.querySelectorAll('[data-gallery-music-controls]')) {
+            const own = group.closest('[data-gallery-music]')
+                ?.dataset.musicGallery === String(playlist.galleryId);
+            const seek = group.querySelector('[data-music-seek]');
+            const elapsed = group.querySelector('[data-music-elapsed]');
+            const length = group.querySelector('[data-music-length]');
+            if (elapsed) elapsed.textContent = formatMusicDuration(own ? time : 0);
+            if (length) length.textContent = formatMusicDuration(own ? duration : null);
+            if (seek instanceof HTMLInputElement) {
+                seek.disabled = !own || duration === null || loading;
+                seek.max = String(duration ?? 0);
+                seek.value = String(own ? Math.min(time, duration ?? 0) : 0);
+                seek.setAttribute('aria-valuetext', `${formatMusicDuration(own ? time : 0)} / ${formatMusicDuration(own ? duration : null)}`);
+                // One hundred is the structural conversion from ratio to percent.
+                seek.style.setProperty('--music-progress',
+                    `${own && duration ? Math.min(time / duration, 1) * 100 : 0}%`);
+            }
+        }
     }
 
     /**
@@ -95,10 +167,15 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
             if (title) title.textContent = own ? tracks[index]?.title || '' : '';
             const status = group.querySelector('[data-music-playback-status]');
             if (status) status.textContent = own ? message : '';
+            const position = group.querySelector('[data-music-queue-position]');
+            if (position) position.textContent = own && total > 0
+                ? `${pageOffset + index + 1} / ${total}` : '';
         }
         const buttons = root.querySelectorAll(
             '[data-music-action="play"], [data-music-action="stop"], '
-            + '[data-music-action="toggle"]'
+            + '[data-music-action="toggle"], [data-music-action="pause-toggle"], '
+            + '[data-music-action="mute"], [data-music-action="repeat"], '
+            + '[data-music-action="next"], [data-music-action="previous"]'
         );
         for (const button of buttons) {
             const selected = !button.dataset.musicTrackId
@@ -109,17 +186,32 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
                 || group?.dataset.musicGallery;
             const own = identity === String(playlist.galleryId);
             const active = playing && selected && own;
-            if (button.dataset.musicAction === 'toggle') {
-                const label = active ? button.dataset.musicStopLabel
+            const action = button.dataset.musicAction;
+            if (action === 'mute' || action === 'repeat') {
+                const pressed = action === 'mute' ? audio.muted : own && repeat;
+                button.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+                if (action === 'mute') {
+                    button.querySelector('[data-music-volume-on]')?.toggleAttribute('hidden', audio.muted);
+                    button.querySelector('[data-music-volume-off]')?.toggleAttribute('hidden', !audio.muted);
+                }
+            } else if (action === 'toggle' || action === 'pause-toggle') {
+                const label = active ? (action === 'pause-toggle'
+                    ? button.dataset.musicPauseLabel : button.dataset.musicStopLabel)
                     : button.dataset.musicPlayLabel;
+                if (action === 'pause-toggle') button.disabled = own
+                    ? total === 0 || loading || playlistStale
+                    : button.dataset.musicUnavailable === '1';
                 button.setAttribute('aria-pressed', active ? 'true' : 'false');
                 button.setAttribute('aria-label', label || '');
                 button.title = label || '';
-                button.querySelector('[data-music-toggle-play]').hidden = active;
-                button.querySelector('[data-music-toggle-stop]').hidden = !active;
+                button.querySelector('[data-music-toggle-play]')?.toggleAttribute('hidden', active);
+                button.querySelector('[data-music-toggle-stop], [data-music-toggle-pause]')?.toggleAttribute('hidden', !active);
             } else if (button.dataset.musicAction === 'play') {
                 button.setAttribute('aria-pressed', active ? 'true' : 'false');
-            } else button.disabled = !active;
+            } else if (action === 'next' || action === 'previous') {
+                button.disabled = own ? total === 0 || loading || playlistStale
+                    : button.dataset.musicUnavailable === '1';
+            } else button.disabled = !own || (!sourceActive && !loading);
         }
         for (const row of root.querySelectorAll('[data-music-track]')) {
             const own = row.closest('[data-gallery-music]')
@@ -128,6 +220,75 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
                 && own && row.dataset.musicTrack === tracks[index]?.id);
         }
         observeMusicTitles(root);
+        syncTimeline();
+    }
+
+    /** Select a global album position while retaining at most one bounded page.
+     * @param {number} position Zero-based song position across the complete playlist.
+     * @returns {Promise<void>} Loads one page if needed, then plays; stale reads stop visibly.
+     */
+    async function selectTrack(position) {
+        if (disposed || playlistStale || total === 0) return;
+        if (position >= pageOffset && position < pageOffset + tracks.length) {
+            index = position - pageOffset;
+            await play();
+            return;
+        }
+        if (!pagination) return;
+        release();
+        const token = generation;
+        const controller = new AbortController();
+        pageController = controller;
+        loading = true;
+        message = root.querySelector('[data-music-playback-loading]')
+            ?.dataset.musicPlaybackLoading || '';
+        sync();
+        const timeout = setTimeout(() => controller.abort(), MUSIC_PLAYLIST_READ_TIMEOUT_MS);
+        let refusal = '';
+        try {
+            const url = new URL(pagination.url, location.href);
+            url.searchParams.set('position', String(position));
+            url.searchParams.set('revision', pagination.revision);
+            const response = await fetch(url.href, {
+                credentials: 'same-origin', cache: 'no-store',
+                headers: {'Accept': 'application/json'}, signal: controller.signal,
+            });
+            if (disposed || token !== generation) return;
+            const page = await response.json();
+            if (disposed || token !== generation) return;
+            if (!response.ok || page.ok !== true) {
+                playlistStale = response.status === 409;
+                refusal = String(page.message || '');
+                throw new Error('Playlist page refused.');
+            }
+            const offset = Math.floor(position / pagination.pageSize) * pagination.pageSize;
+            if (page.revision !== pagination.revision || page.offset !== offset
+                || page.total !== total || !Array.isArray(page.tracks)
+                || page.tracks.length !== Math.min(pagination.pageSize, total - offset)
+                || page.tracks.some(track => typeof track.id !== 'string'
+                    || typeof track.title !== 'string' || typeof track.url !== 'string'
+                    || new URL(track.url, location.href).origin !== location.origin)) {
+                playlistStale = true;
+                throw new Error('Playlist page changed.');
+            }
+            tracks = page.tracks;
+            pageOffset = offset;
+            index = position - offset;
+            failed.clear();
+            loading = false;
+            pageController = null;
+            message = '';
+            await play();
+        } catch {
+            if (disposed || token !== generation) return;
+            release();
+            message = refusal || root.querySelector('[data-music-playback-error]')
+                ?.dataset.musicPlaybackError || '';
+            sync();
+        } finally {
+            clearTimeout(timeout);
+            if (pageController === controller) pageController = null;
+        }
     }
 
     /**
@@ -165,17 +326,19 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     }
 
     /**
-     * Start the selected original synchronously within the triggering
-     *     user task.
+     * Start or resume the selected original within the triggering user task.
+     * @param {boolean} restart Whether to replace the source and restart its timeline.
      * @returns {Promise<MusicPlaybackResult>} Settle playback, activation refusal,
      *     exhaustion or cancellation without leaking native rejections.
      */
-    function play() {
+    function play(restart = true) {
         if (disposed || tracks.length === 0) return Promise.resolve('cancelled');
         awaitingGesture = false;
-        audio.pause();
+        if (restart) audio.pause();
         const token = ++generation;
-        audio.src = tracks[index].url;
+        if (restart) audio.src = tracks[index].url;
+        sourceActive = true;
+        paused = false;
         playing = true;
         sync();
         try {
@@ -191,12 +354,16 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
     audio.addEventListener('ended', () => {
         if (disposed || !playing || tracks.length === 0) return;
         failed.clear();
-        index = (index + 1) % tracks.length;
-        play();
+        const next = pageOffset + index + 1;
+        if (!repeat && next >= total) { release(); sync(); return; }
+        void selectTrack(next % total);
     }, {signal: listener.signal});
     audio.addEventListener('error', () => {
         if (audio.error && playing) failure(null, generation);
     }, {signal: listener.signal});
+    for (const event of ['loadedmetadata', 'durationchange', 'timeupdate', 'seeked']) {
+        audio.addEventListener(event, syncTimeline, {signal: listener.signal});
+    }
     sync();
 
     return {
@@ -205,6 +372,17 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
          * @returns {void} Reflect current playback without changing its source.
          */
         refresh: sync,
+        /** Move the native cursor only after finite metadata is available.
+         * @param {number} seconds Requested position in seconds, clamped to the original.
+         * @returns {void} Seeks without changing playback/pause state or loading another source.
+         */
+        seek(seconds) {
+            if (disposed || !sourceActive || !Number.isFinite(seconds)
+                || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+            try { audio.currentTime = Math.max(0, Math.min(seconds, audio.duration)); }
+            catch { return; }
+            syncTimeline();
+        },
         /**
          * Apply the saved default or the visitor's explicit soundtrack launch.
          * @param {boolean} force Whether this launch explicitly requests music.
@@ -271,29 +449,49 @@ export function createGalleryMusicPlayer(root, playlist, audio = new Audio()) {
         },
         /**
          * Execute one explicit compact player or row-control action.
-         * @param {string} action Play, stop, toggle, next or previous.
+         * @param {string} action Play, pause-toggle, stop, toggle, next, previous, mute or repeat.
          * @param {string} trackId Optional opaque row track identity.
          * @param {boolean} viewer Whether the control belongs to the
          *     photo viewer.
+         * @param {number} position Optional global album position; -1 selects by track ID.
          * @returns {void} Select and exclusively play, or release,
          *     the requested track.
          */
-        command(action, trackId = '', viewer = false) {
-            if (disposed || tracks.length === 0) return;
+        command(action, trackId = '', viewer = false, position = -1) {
+            if (disposed) return;
+            if (action === 'mute') {
+                audio.muted = !audio.muted;
+                musicMuted = audio.muted;
+                sync(); return;
+            }
+            if (action === 'repeat') { repeat = !repeat; sync(); return; }
             if (action === 'stop') { release(); sync(); return; }
-            if (!['play', 'toggle', 'next', 'previous'].includes(action)) return;
+            if (tracks.length === 0 || playlistStale || loading) return;
+            if (!['play', 'toggle', 'pause-toggle', 'next', 'previous'].includes(action)) return;
             const selected = trackId ? tracks.findIndex(track => track.id === trackId) : -1;
-            if (trackId && selected < 0) return;
+            if (trackId && selected < 0 && position < 0) return;
+            const same = position >= 0 ? position === pageOffset + index
+                : selected === index || !trackId;
+            if (action === 'pause-toggle' && same && playing) {
+                generation += 1;
+                playing = false;
+                paused = true;
+                audio.pause(); sync(); return;
+            }
+            if ((action === 'pause-toggle' || action === 'play') && same && paused) {
+                void play(false); return;
+            }
             if (action === 'toggle' && playing && selected === index) {
                 release(); sync(); return;
             }
-            if (selected >= 0) index = selected;
-            else if (action === 'next') index = (index + 1) % tracks.length;
-            else if (action === 'previous') index = (index - 1 + tracks.length) % tracks.length;
+            let target = position >= 0 ? position : pageOffset + (selected >= 0 ? selected : index);
+            if (action === 'next') target = (pageOffset + index + 1) % total;
+            else if (action === 'previous') target = (pageOffset + index - 1 + total) % total;
+            if (!Number.isSafeInteger(target) || target < 0 || target >= total) return;
             owner = viewer ? (slideshow ? 'slideshow' : 'viewer') : 'page';
             failed.clear();
             message = '';
-            play();
+            void selectTrack(target);
         },
     };
 }
@@ -375,7 +573,18 @@ export function setupGalleryMusicPlayback() {
         const card = button.closest('[data-gallery-music]');
         const player = getGalleryMusicPlayer(card);
         player?.command(button.dataset.musicAction, button.dataset.musicTrackId || '',
-            Boolean(button.closest('[data-lightbox]')));
+            Boolean(button.closest('[data-lightbox]')),
+            Number.parseInt(button.dataset.musicPosition || '-1', 10));
+    }, true);
+    document.addEventListener('input', event => {
+        const seek = event.target;
+        if (!(seek instanceof HTMLInputElement) || seek.disabled
+            || !seek.matches('[data-music-seek]')) return;
+        // Refreshing an existing player synchronizes its range; capture the
+        // user's requested cursor before that readback can replace the value.
+        const seconds = Number(seek.value);
+        getGalleryMusicPlayer(seek.closest('[data-gallery-music]'))
+            ?.seek(seconds);
     }, true);
     document.addEventListener('php-gallery:mutation-complete', () => {
         const source = document.querySelector(

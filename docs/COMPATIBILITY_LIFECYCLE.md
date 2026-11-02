@@ -856,6 +856,30 @@ bounded diagnostic; database visibility remains authoritative, matching the
 existing editor sidecar-write boundary. Hosted BASIC is source evidence only;
 runtime, migration, browser and deployed behavior need their own qualification.
 
+## Administrator music transport and paged playback
+
+Owners: the existing Music Manager Controller/View, music catalog Service,
+shared HTTP response helper and exclusive `gallery-music-player.js` owner.
+Administrator playback adds no persisted setting or public player markup.
+The public gallery stream wrapper remains supported and delegates to the same
+verified-original HTTP responder as the new global Admin preview. Its existing
+GET/HEAD, Range, If-Range, private-cache and opaque-missing semantics remain
+permanent; no migration of URLs, identity or original files is required.
+
+Album playback retains one bounded catalog page and its global revision.
+A changed snapshot stops rather than mixing membership generations. Pause and
+seeking preserve the current original; Stop, teardown and editor replacement
+invalidate pending Play/page work. Unknown duration disables seeking rather
+than estimating. Mute is browser-memory state shared across current-page scopes
+and never changes gallery defaults. JavaScript is required for the new controls;
+existing no-script editing/upload forms remain supported.
+
+Regression owners are the music browser, Admin manager browser, manager request
+boundary, public media HTTP and repository database fixtures. Deployed browser,
+codec and device usage remains unknown. Silent adapters and muted interface
+acceptance are distinct from audible playback qualification. No support path is
+being retired.
+
 ## Direct album uploads and retained native forms
 
 Owners: the existing global Music Manager Controller/View/browser module,

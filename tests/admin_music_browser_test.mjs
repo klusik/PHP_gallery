@@ -92,6 +92,7 @@ body.admin-page {
 <script type="module">
 import {setupAdminMusic} from '/public/assets/gallery-modules/admin-music.js?v=20261102-album-upload-v2';
 import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261027-appearance-state-v1';
+import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-admin-music-player-v2';
 import {normalizeAdminMutationEnvelope} from '/public/assets/gallery-modules/admin-mutation-completion.js?v=20261016-three-state-covers-v1';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const ACTION_TIMEOUT_MS = ${ACTION_TIMEOUT_MS};
@@ -120,15 +121,21 @@ async function waitForBrowserState(isReady, failure) {
     }
     throw new Error(failure);
 }
-/** Check that album members keep their drag handle and three icon actions on one row without constraining the title. @param {HTMLElement} manager Rendered production manager root. @returns {boolean} True when every member control is visible and inside its row. */
+/** Check the independent playback and membership rows without squeezing titles.
+ * @param {HTMLElement} manager Rendered production manager root.
+ * @returns {boolean} True when every control fits, playback stays beside the
+ * drag handle and the three membership actions share their responsive row.
+ */
 function albumMemberActionsFit(manager) {
     const members = Array.from(manager.querySelectorAll(
         '.admin-music-album-members > li',
     ));
-    return members.length > 0 && members.every(/** Check one member's controls only; title wrapping is intentionally unconstrained. @param {HTMLLIElement} member Rendered album member row. @returns {boolean} True when its three icon buttons share one row. */ member => {
+    return members.length > 0 && members.every(member => {
         const buttons = Array.from(member.querySelectorAll(
-            'button:not([data-admin-music-album-drag-handle])',
+            ':scope > form button',
         ));
+        const play = member.querySelector(':scope > .admin-music-row-play');
+        const title = member.querySelector('.admin-music-album-member-title');
         const dragHandle = member.querySelector(
             'button[data-admin-music-album-drag-handle]',
         );
@@ -137,22 +144,35 @@ function albumMemberActionsFit(manager) {
         const row = member.getBoundingClientRect();
         const controls = buttons.map(button => button.getBoundingClientRect());
         const dragBounds = dragHandle?.getBoundingClientRect();
+        const playBounds = play?.getBoundingClientRect();
+        // Three forms retain their original membership actions; playback is
+        // independent. The 480px production breakpoint moves only the forms.
         return controls.length === 3
             && dragHandle instanceof HTMLButtonElement
             && dragBounds !== undefined
+            && play instanceof HTMLButtonElement
+            && playBounds !== undefined
+            && playBounds.width > 0
+            && playBounds.left >= row.left && playBounds.right <= row.right
+            && shareVerticalRow(dragHandle, play)
+            && title instanceof HTMLElement
+            && title.getBoundingClientRect().width > playBounds.width
             && Boolean(dragHandle.getAttribute('aria-label')?.trim())
             && dragHandle.getAttribute('aria-grabbed') === 'false'
             && dragHandle.draggable
             && dragStyle?.touchAction === 'none'
             && dragStyle.cursor === 'grab'
             && dragBounds.width > 0
-            && dragBounds.top === controls[0].top
+            && (innerWidth > 480
+                ? shareVerticalRow(dragHandle, buttons[0])
+                : controls[0].top >= dragBounds.bottom)
             && dragBounds.left >= row.left
             && dragBounds.right <= row.right
             && controls.every(rect => rect.width > 0
                 && rect.top === controls[0].top
                 && rect.left >= row.left
-                && rect.right <= row.right);
+                && rect.right <= row.right
+                && rect.bottom <= row.bottom);
     });
 }
 /** Test whether two controls occupy the same visible row without imposing cosmetic pixel thresholds. @param {Element} first First control. @param {Element} second Second control. @returns {boolean} True when their vertical bounds overlap. */
@@ -182,11 +202,91 @@ function dispatchAlbumPointer(target, type, point) {
         buttons: pressed ? 1 : 0,
     }));
 }
+/** Silent native-audio substitute for production Admin control interactions.
+ * No instance decodes media or produces audio; source and cursor stay observable.
+ */
+class AdminMusicAudioFixture extends EventTarget {
+    static instances = [];
+    source = '';
+    paused = true;
+    muted = false;
+    currentTime = 0;
+    duration = 83;
+    error = null;
+    /** Register one silent player for exclusive-owner assertions.
+     * @returns {void} Initializes its observable EventTarget lifecycle.
+     */
+    constructor() { super(); AdminMusicAudioFixture.instances.push(this); }
+    /** Read the selected protected preview URL.
+     * @returns {string} Source URL, or empty after disposal.
+     */
+    get src() { return this.source; }
+    /** Replace a source with the native cursor-reset semantics.
+     * @param {string} value Selected protected source URL.
+     * @returns {void} Resets the cursor without fetching the source.
+     */
+    set src(value) { this.source = value; this.currentTime = 0; }
+    /** Simulate successful playback without a decoder or audio device.
+     * @returns {Promise<void>} Acknowledges the observable playing state.
+     */
+    play() { this.paused = false; return Promise.resolve(); }
+    /** Suspend the controlled source.
+     * @returns {void} Retains the observable source and cursor.
+     */
+    pause() { this.paused = true; }
+    /** Remove only the native source attribute used by production disposal.
+     * @param {string} name Attribute selected by the production player.
+     * @returns {void} Clears source identity without external media work.
+     */
+    removeAttribute(name) { if (name === 'src') this.source = ''; }
+    /** Model the native reset after a detached source.
+     * @returns {void} Clears its cursor after Stop or disposal.
+     */
+    load() { if (!this.source) this.currentTime = 0; }
+}
+window.Audio = AdminMusicAudioFixture;
+
 try {
     const freshMusicMarkup = document.querySelector('#mount').innerHTML;
     setupAdminMusic();
     setupAdminMusic();
+    setupGalleryMusicPlayback();
+    setupGalleryMusicPlayback();
     let root = document.querySelector('[data-admin-music]');
+    const catalogPlayer = root.querySelector('.admin-music-catalog');
+    const muteControl = catalogPlayer.querySelector('[data-music-action="mute"]');
+    muteControl.click();
+    const adminAudio = AdminMusicAudioFixture.instances.at(-1);
+    check(adminAudio.muted && adminAudio.src === ''
+        && muteControl.getAttribute('aria-pressed') === 'true',
+        'Admin Mute must apply before any source is activated.');
+    const rowPlay = catalogPlayer.querySelector('[data-music-track-id="catalog-song-101"]');
+    rowPlay.click();
+    check(!adminAudio.paused && adminAudio.src.includes('action=music_preview')
+        && adminAudio.src.includes('song_id=101'),
+        'Row Play must use the authenticated global preview without assignment.');
+    adminAudio.currentTime = 25;
+    adminAudio.dispatchEvent(new Event('timeupdate'));
+    const adminSeek = catalogPlayer.querySelector('[data-music-seek]');
+    check(Number(adminSeek.value) === 25 && !adminSeek.disabled,
+        'The Admin progress control must reflect native currentTime.');
+    rowPlay.click();
+    adminSeek.value = '60';
+    adminSeek.dispatchEvent(new Event('input', {bubbles: true}));
+    check(adminAudio.paused && adminAudio.currentTime === 60,
+        'The active seek range must preserve Pause while changing the native cursor.');
+    catalogPlayer.querySelector('.admin-music-player [data-music-action="pause-toggle"]').click();
+    check(!adminAudio.paused && adminAudio.currentTime === 60,
+        'The toolbar must resume at the paused cursor.');
+    catalogPlayer.querySelector('[data-music-action="next"]').click();
+    check(adminAudio.src.includes('song_id=102'), 'Admin Next did not choose the next song.');
+    catalogPlayer.querySelector('[data-music-action="previous"]').click();
+    check(adminAudio.src.includes('song_id=101'), 'Admin Previous did not return to the prior song.');
+    catalogPlayer.querySelector('[data-music-action="stop"]').click();
+    check(adminAudio.paused && adminAudio.src === '' && adminSeek.disabled
+        && Number(adminSeek.value) === 0
+        && !root.querySelector('input[name="song_ids[]"]:checked'),
+        'Stop must release audio and timeline without changing catalog selection.');
     const originalUrl = location.href;
     let expectedPageUrl = originalUrl;
     check(root && root.querySelectorAll('tbody tr').length === 3,

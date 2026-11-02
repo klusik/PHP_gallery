@@ -33,6 +33,15 @@
  */
 
 return [
+    'music.pause' => 'Pausa',
+    'music.seek' => 'Uppspelningsposition',
+    'music.mute' => 'Stäng av ljudet',
+    'music.repeat_all' => 'Upprepa spellistan',
+    'music.play_song' => 'Spela: {title}',
+    'music.pause_song' => 'Pausa: {title}',
+    'admin.music.player_loading' => 'Laddar album…',
+    'admin.music.player_error' => 'Uppspelning är inte tillgänglig. Ladda om katalogen innan du försöker igen.',
+    'admin.music.player_js' => 'Aktivera JavaScript för albumuppspelning och för att söka i låten.',
     'admin.music.upload_unknown' => 'Uppladdningens resultat kunde inte bekräftas. Ladda om katalogen innan du försöker igen.',
     'admin.music.upload_reload' => 'Ladda om katalogen innan du fortsätter',
     'admin.music.upload_files' => 'Ladda upp filer',

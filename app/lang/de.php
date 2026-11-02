@@ -33,6 +33,15 @@
  */
 
 return [
+    'music.pause' => 'Pause',
+    'music.seek' => 'Wiedergabeposition',
+    'music.mute' => 'Stummschalten',
+    'music.repeat_all' => 'Wiedergabeliste wiederholen',
+    'music.play_song' => 'Abspielen: {title}',
+    'music.pause_song' => 'Pause: {title}',
+    'admin.music.player_loading' => 'Album wird geladen…',
+    'admin.music.player_error' => 'Die Wiedergabe ist nicht verfügbar. Laden Sie den Katalog vor einem erneuten Versuch neu.',
+    'admin.music.player_js' => 'Aktivieren Sie JavaScript für Albumwiedergabe und Positionswahl.',
     'admin.music.upload_unknown' => 'Das Ergebnis des Uploads konnte nicht bestätigt werden. Laden Sie den Katalog vor einem erneuten Versuch neu.',
     'admin.music.upload_reload' => 'Katalog vor dem Fortfahren neu laden',
     'admin.music.upload_files' => 'Dateien hochladen',

@@ -2960,7 +2960,8 @@ return array (
         53 => 'app/views/layout.php',
         54 => 'app/controllers/admin_music.php',
         55 => 'app/controllers/admin_tags.php',
-        56 => 'app/controllers/shared_layout.php',
+        56 => 'app/controllers/http_helpers.php',
+        57 => 'app/controllers/shared_layout.php',
       ),
     ),
     'domain-admin-telemetry' =>

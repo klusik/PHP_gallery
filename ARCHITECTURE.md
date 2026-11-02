@@ -585,6 +585,18 @@ reload. There is no new PHP file, route, schema or logical runtime owner;
 expected closure deltas are zero against the existing 98-module plan and
 unchanged limits. See [album upload semantics](docs/GALLERY_MUSIC.md).
 
+The manager also exposes authenticated, read-only original previews and bounded
+album playback pages through its existing route. Controller-prepared URLs and
+inert JSON bind the catalog and album to distinct player scopes. The existing
+exclusive Audio owner adds pause/resume, native seeking, in-memory mute and
+repeat controls without changing public control markup. A complete album uses
+revision-pinned pages rather than copying all membership into the document;
+source replacement and Stop cancel pending reads. The gallery and Admin preview
+controllers share the HTTP helper's verified-audio responder, preserving the
+existing public GET/HEAD/range protocol. The expected runtime delta is one
+existing HTTP-helper file in the Admin closure, no new source file or logical
+module, against the existing 98-module plan and unchanged ratchets.
+
 The music capability gates the route and navigation together.
 The model batches existing gallery path fields for song usages and repository
 origins. The controller prepares canonical, localized public URLs for both

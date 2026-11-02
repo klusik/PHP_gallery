@@ -1,5 +1,45 @@
 # Gallery music
 
+## Administrator playback and seeking
+
+Music Manager provides an independent Play/Pause action beside each catalog
+song and album member. The compact player above each list has Previous,
+Play/Pause, Stop, Next, Repeat playlist and Mute. Its native range shows the
+current position, elapsed time and finite original duration; click, drag or use
+the keyboard to seek. Seeking while paused retains Pause. Play resumes the same
+cursor; Stop releases the original and resets its timeline. Playback and file
+selection are independent: listening never assigns a song to an album/gallery
+or writes a playback preference.
+
+Album repeat starts enabled. The player follows the complete saved album order,
+including members beyond the displayed list page. It keeps at most one existing
+100-song catalog page and loads another only at a boundary or when a selected
+row lies outside that page. Previous wraps across the album start. Turning
+Repeat off stops after the final song. Continuations retain the observed global
+catalog revision; a changed snapshot stops with a visible reload message rather
+than combining different album versions. Stop, source replacement, mutation,
+search replacement and page teardown invalidate pending reads and Play promises.
+
+The existing page-wide exclusive Audio owner also owns these Admin controls.
+Pause never replaces its source. One timeline event updates just the clocks and
+range, without rescanning all song rows. Unknown or infinite duration disables
+seek. Mute is applied directly before source activation and retained in memory
+when switching player scopes on the same page; it is not a saved gallery
+preference. JavaScript is required for these controls; native catalog and album
+editing/upload forms retain their supported fallback.
+
+The existing `admin_music` route serves protected GET/HEAD previews and bounded
+album-page JSON. Administrator authentication, the music capability, anonymous
+preview exclusion and the known-under-18 boundary precede repository lookup.
+Read-only preview never promotes an original or changes membership. The public
+music route and the Admin route reuse one HTTP audio responder with the existing
+MIME, inline disposition, private/no-store, HEAD, byte-range and If-Range rules.
+Missing originals stay opaque. There is no new SQL table, source PHP file,
+logical runtime owner or public playback UI. The existing HTTP helper is the
+shared transport owner; the expected Admin closure addition is that existing
+file, under unchanged route/duplicate budgets and the consumed 98-module limit.
+Hosted preparation establishes actual closure counts.
+
 ## Upload directly into an album
 
 In **Admin → Galleries → Music Manager → Albums & playlists**, select or

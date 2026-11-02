@@ -31,8 +31,14 @@ function find(selector) { const element=document.querySelector(selector); if (!e
 function edit(selector,value) { const element=find(selector); element.value=value; element.dispatchEvent(new Event('input',{bubbles:true})); element.dispatchEvent(new Event('change',{bubbles:true})); return element; }
 /** Activate one retained subsection. @param {string} name Retained subsection suffix. @return {void} Uses the actual native tab control. */
 function tab(name) { find(`[data-admin-subtab-target="admin-theme-appearance-subtab-${name}"]`).click(); }
-/** Wait for layout and browser event processing. @return {Promise<void>} Resolves on a task boundary. */
-function settle() { return new Promise(/** Continue after layout tasks. @param {function():void} resolve Completion callback. @return {number} Timer identifier. */ resolve=>setTimeout(resolve,30)); }
+/** Await pending tab layout and the production validation-focus frame.
+ * @return {Promise<void>} Resolves after two rendering frames, so a timer cannot
+ * overtake the requestAnimationFrame that reveals and focuses an invalid field.
+ */
+function settle() {
+    return new Promise(resolve => requestAnimationFrame(() =>
+        requestAnimationFrame(resolve)));
+}
 
 /**
  * Apply a harness viewport and await resize observers before layout assertions.

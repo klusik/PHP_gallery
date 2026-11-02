@@ -1,4 +1,13 @@
 {
+    "music.pause": "Pause",
+    "music.seek": "Playback position",
+    "music.mute": "Mute",
+    "music.repeat_all": "Repeat playlist",
+    "music.play_song": "Play: {title}",
+    "music.pause_song": "Pause: {title}",
+    "admin.music.player_loading": "Loading album…",
+    "admin.music.player_error": "Playback is unavailable. Reload the catalog before trying again.",
+    "admin.music.player_js": "Enable JavaScript to use album playback and seeking.",
     "admin.music.upload_unknown": "The upload result could not be verified. Reload the catalog before retrying.",
     "admin.music.upload_reload": "Reload catalog before continuing",
     "admin.music.upload_files": "Upload files",

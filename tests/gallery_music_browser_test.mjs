@@ -68,8 +68,8 @@ body { margin: 8px; font: 16px sans-serif; }
 import {
     createGalleryMusicPlayer, setupGalleryMusicPlayback,
     getGalleryMusicPlayer, formatMusicDuration,
-} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261024-catalog-workspace-v3';
-import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261024-catalog-workspace-v3';
+} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-admin-music-player-v2';
+import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261102-admin-music-player-v2';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 /**
  * Yield one browser task so native form/promise completion can settle.
@@ -80,6 +80,34 @@ const check = (condition, message) => { if (!condition) throw new Error(message)
 const MUSIC_FIXTURE_TURN_MS = 0;
 const turn = () => new Promise(resolve => setTimeout(resolve, MUSIC_FIXTURE_TURN_MS));
 
+/** Bound observation of a native Response body and its player continuation.
+ * Type: number. Units: milliseconds. Scope: one paged-playback fixture phase.
+ * Consumers: waitForMusicState.
+ * Rationale: five seconds admits asynchronous body decoding while preserving
+ * the fixture's existing total browser deadline. Value: 5000 milliseconds.
+ */
+const MUSIC_FIXTURE_STATE_TIMEOUT_MS = 5000;
+/** Yield between terminal-state observations without assuming a task count.
+ * Type: number. Units: milliseconds. Scope: paged-playback state observations.
+ * Consumers: waitForMusicState.
+ * Rationale: ten milliseconds allows Response tasks to settle without busy
+ * polling or delaying a state that has already completed. Value: 10 milliseconds.
+ */
+const MUSIC_FIXTURE_STATE_POLL_MS = 10;
+
+/** Await a page's terminal player state before asserting or changing its mock.
+ * @param {function():boolean} isReady Passive predicate for this exact phase.
+ * @param {string} failure Description of the unobserved terminal state.
+ * @returns {Promise<void>} Resolves at completion; rejects within the state deadline.
+ */
+async function waitForMusicState(isReady, failure) {
+    const deadline = Date.now() + MUSIC_FIXTURE_STATE_TIMEOUT_MS;
+    while (!isReady()) {
+        if (Date.now() >= deadline) throw new Error(failure);
+        await new Promise(resolve => setTimeout(resolve, MUSIC_FIXTURE_STATE_POLL_MS));
+    }
+}
+
 /** Native EventTarget audio adapter retaining observable source and play work. */
 class AudioAdapter extends EventTarget {
     src = '';
@@ -88,6 +116,8 @@ class AudioAdapter extends EventTarget {
     results = [];
     paused = true;
     duration = 123;
+    currentTime = 0;
+    muted = false;
     static instances = [];
     /**
      * Retain each native substitute for exclusive-playback assertions.
@@ -121,6 +151,7 @@ class AudioAdapter extends EventTarget {
      * @returns {void} Queue metadata only when a metadata source is present.
      */
     load() {
+        if (!this.src) this.currentTime = 0;
         if (this.src && this.preload === 'metadata') {
             queueMicrotask(() => this.dispatchEvent(new Event('loadedmetadata')));
         }
@@ -173,6 +204,146 @@ try {
     player.command('play');
     check(audio.calls.length === count && audio.src === '',
         'Destroyed player retained work');
+
+    const transport = document.createElement('section');
+    transport.dataset.galleryMusic = '1';
+    transport.dataset.musicGallery = '42';
+    transport.innerHTML = '<div data-gallery-music-controls '
+        + 'data-music-playback-error="Reload playlist" '
+        + 'data-music-playback-loading="Loading">'
+        + '<input type="range" data-music-seek min="0" max="0" step="1">'
+        + '<output data-music-elapsed></output><output data-music-length></output>'
+        + '<output data-music-playback-status></output></div>';
+    document.body.append(transport);
+    const timelineAudio = new AudioAdapter();
+    const timelinePlayer = createGalleryMusicPlayer(transport,
+        {galleryId: 42, enabled: false, tracks}, timelineAudio);
+    const seek = transport.querySelector('[data-music-seek]');
+    check(seek.disabled && timelineAudio.calls.length === 0,
+        'An inactive timeline must not load audio or invent finite metadata.');
+    timelinePlayer.command('mute');
+    check(timelineAudio.muted && timelineAudio.calls.length === 0,
+        'Mute must take effect before a source or native Play request exists.');
+    timelinePlayer.command('pause-toggle');
+    timelineAudio.currentTime = 12;
+    timelineAudio.dispatchEvent(new Event('timeupdate'));
+    check(!seek.disabled && Number(seek.value) === 12
+        && transport.querySelector('[data-music-elapsed]').textContent === '0:12',
+        'Native time updates must drive the active range and elapsed clock.');
+    timelinePlayer.command('pause-toggle');
+    const pausedCalls = timelineAudio.calls.length;
+    timelinePlayer.seek(35);
+    check(timelineAudio.paused && timelineAudio.currentTime === 35
+        && timelineAudio.calls.length === pausedCalls,
+        'Seeking while paused must move only the native cursor.');
+    timelinePlayer.command('pause-toggle');
+    check(!timelineAudio.paused && timelineAudio.currentTime === 35
+        && timelineAudio.src === '/track-one',
+        'Resume must preserve the paused original and its cursor.');
+    timelinePlayer.seek(-1);
+    check(timelineAudio.currentTime === 0, 'Seek must clamp below zero.');
+    timelinePlayer.seek(timelineAudio.duration + 1);
+    check(timelineAudio.currentTime === timelineAudio.duration,
+        'Seek must clamp above the native duration.');
+    timelineAudio.duration = Infinity;
+    timelineAudio.dispatchEvent(new Event('durationchange'));
+    check(seek.disabled
+        && transport.querySelector('[data-music-length]').textContent === '—',
+        'Infinite metadata must disable seek instead of fabricating a duration.');
+    timelineAudio.duration = 123;
+    timelineAudio.dispatchEvent(new Event('loadedmetadata'));
+    timelinePlayer.command('repeat');
+    timelineAudio.dispatchEvent(new Event('ended'));
+    check(timelineAudio.src === '/track-two', 'Repeat OFF must still advance within an album.');
+    timelineAudio.dispatchEvent(new Event('ended'));
+    check(timelineAudio.src === '' && timelineAudio.paused && Number(seek.value) === 0,
+        'The last track with repeat OFF must stop and clear its timeline.');
+    timelinePlayer.command('mute');
+    timelinePlayer.destroy();
+
+    const nativePlaylistFetch = window.fetch;
+    const pageReads = [];
+    let pageMode = 'success';
+    let releasePage = null;
+    let pendingPage = null;
+    // Two tracks per page plus a third track exercise both page boundaries.
+    window.fetch = async (input, options) => {
+        const url = new URL(String(input), location.href);
+        check(url.origin === location.origin && options.credentials === 'same-origin'
+            && options.cache === 'no-store' && url.searchParams.get('revision') === 'snapshot',
+            'Album continuation must retain origin, credentials and its pinned revision.');
+        pageReads.push(Number(url.searchParams.get('position')));
+        if (pageMode === 'stale') return new Response(JSON.stringify({
+            ok: false, message: 'Catalog changed. Reload.',
+        }), {status: 409});
+        const offset = pageReads.at(-1) >= 2 ? 2 : 0;
+        const result = new Response(JSON.stringify({ok: true,
+            revision: 'snapshot', offset, total: 3,
+            tracks: offset === 0 ? tracks : [{id: 'three',
+                title: 'Three', url: '/track-three'}],
+        }));
+        if (pageMode === 'held') {
+            pendingPage = new Promise(resolve => {
+                releasePage = () => resolve(result);
+            });
+            return pendingPage;
+        }
+        return result;
+    };
+    const pageAudio = new AudioAdapter();
+    const paged = createGalleryMusicPlayer(transport, {
+        galleryId: 42, enabled: false, tracks,
+        pagination: {url: '/album-page', offset: 0, total: 3,
+            pageSize: 2, revision: 'snapshot'},
+    }, pageAudio);
+    paged.command('play', 'two');
+    pageAudio.dispatchEvent(new Event('ended'));
+    await waitForMusicState(() => pageAudio.src === '/track-three',
+        'The second album page did not finish playback activation.');
+    check(pageAudio.src === '/track-three' && pageReads.join(',') === '2',
+        'Whole-album playback must continue beyond the initial bounded page.');
+    pageAudio.dispatchEvent(new Event('ended'));
+    await waitForMusicState(() => pageAudio.src === '/track-one',
+        'Repeat-all did not finish activation of the first page.');
+    check(pageAudio.src === '/track-one' && pageReads.join(',') === '2,0',
+        'Repeat-all must load and wrap to the first album page.');
+    paged.command('previous');
+    await waitForMusicState(() => pageAudio.src === '/track-three',
+        'Previous did not finish activation of the final page.');
+    check(pageAudio.src === '/track-three' && pageReads.at(-1) === 2,
+        'Previous from the album start must cross to the final page.');
+    pageMode = 'stale';
+    pageAudio.dispatchEvent(new Event('ended'));
+    await waitForMusicState(() => transport.querySelector(
+        '[data-music-playback-status]'
+    ).textContent === 'Catalog changed. Reload.',
+    'A refused snapshot did not reach its terminal error state.');
+    const staleReadCount = pageReads.length;
+    paged.command('next');
+    check(pageAudio.src === '' && pageAudio.paused
+        && pageReads.length === staleReadCount
+        && transport.querySelector('[data-music-playback-status]').textContent
+            === 'Catalog changed. Reload.',
+        'A stale album snapshot must stop and prevent automatic or repeated continuation.');
+    paged.destroy();
+    pageMode = 'held';
+    const cancelledAudio = new AudioAdapter();
+    const cancelled = createGalleryMusicPlayer(transport, {
+        galleryId: 42, enabled: false, tracks,
+        pagination: {url: '/album-page', offset: 0, total: 3,
+            pageSize: 2, revision: 'snapshot'},
+    }, cancelledAudio);
+    cancelled.command('play', 'two');
+    cancelledAudio.dispatchEvent(new Event('ended'));
+    cancelled.command('stop');
+    releasePage();
+    await pendingPage;
+    await turn();
+    check(cancelledAudio.src === '' && cancelledAudio.paused,
+        'Stop must invalidate an in-flight page before its late response can play.');
+    cancelled.destroy();
+    window.fetch = nativePlaylistFetch;
+    transport.remove();
 
     const silentAudio = new AudioAdapter();
     const silent = createGalleryMusicPlayer(

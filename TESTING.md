@@ -324,6 +324,29 @@ remain manual acceptance; localhost debugging does not qualify deployment.
 
 ## Global Music Manager
 
+Administrator playback is covered through the production exclusive player and
+silent Audio adapters. `gallery_music_browser_test.mjs` verifies pause/resume
+without source reset, active seek while paused, finite metadata, repeat OFF,
+whole-album page boundaries, Previous wrap, pinned-revision refusal and a late
+page response after Stop. `admin_music_browser_test.mjs` drives the real rendered
+row actions and toolbar, source identity, Mute before activation, timeline input,
+Previous/Next/Stop and unchanged catalog selection under production CSS.
+Paged browser phases await their terminal source/error state after native JSON
+body decoding. Responsive row assertions retain all three membership actions,
+check the separate Play/drag controls and reserve readable title space; narrow
+screens move the membership forms to a second row.
+The render adapter resolves key-only icon names from the real English catalog;
+unknown labels remain empty and fail the retained accessibility assertions.
+`admin_music_gallery_url_test.php` retains canonical URL cases and checks that
+unauthenticated, anonymous-preview, minor, disabled-capability and wrong-method
+requests cannot reach original lookup; absent GET/HEAD previews remain opaque.
+The public HTTP fixture now loads the real shared response owner and retains
+its existing HEAD/range/If-Range assertions. Repository database coverage adds
+one song beyond the existing page bound and refuses a stale continuation.
+Live localhost QA must mute before any Play, retain the visible pressed Mute
+state and avoid unmuting during playback. Adapter results do not qualify audible
+codec output or physical devices.
+
 `music_catalog_database_test.php` uses the serial, owned disposable database
 fixture to exercise stable gallery/track identities, a real index bridge across
 three playlist sources, revision conflicts, song merging and splitting, nested
@@ -7266,7 +7289,10 @@ confirmed-empty onboarding, coupled upload settings, mobile one-time credential
 retention, CSS rollback, orientation replay and update/navdata budgets.
 
 Theme advanced appearance and manual overrides use the same hosted central
-browser/source qualification. `theme_advanced_appearance_test.php` covers
+browser/source qualification. The Appearance fixture awaits rendering frames
+before asserting the production invalid-field focus, preserving its strict
+focus and blocked-submit checks without a timer/frame race.
+`theme_advanced_appearance_test.php` covers
 unchanged upgrade defaults, corrupt-value fallback, bounds, batch normalization,
 scoped header CSS and independent reset. `custom_css_preservation_test.php`
 exercises the actual copied service in owned temporary storage: UTF-8 round

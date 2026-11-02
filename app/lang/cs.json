@@ -1,4 +1,13 @@
 {
+    "music.pause": "Pozastavit",
+    "music.seek": "Pozice přehrávání",
+    "music.mute": "Ztlumit",
+    "music.repeat_all": "Opakovat playlist",
+    "music.play_song": "Přehrát: {title}",
+    "music.pause_song": "Pozastavit: {title}",
+    "admin.music.player_loading": "Načítání alba…",
+    "admin.music.player_error": "Přehrávání není dostupné. Před dalším pokusem obnovte katalog.",
+    "admin.music.player_js": "Pro přehrávání alba a posouvání ve skladbě zapněte JavaScript.",
     "admin.music.upload_unknown": "Výsledek nahrávání nelze ověřit. Před dalším pokusem obnovte katalog.",
     "admin.music.upload_reload": "Před pokračováním obnovit katalog",
     "admin.music.upload_files": "Nahrát soubory",
