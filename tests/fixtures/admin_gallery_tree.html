@@ -145,6 +145,20 @@ try {
     check(row(2).querySelector('.admin-gallery-path').title === 'child', 'left unnesting removes stale parent from path tooltip');
     reset(); row(1).querySelector('[data-gallery-toggle]').click(); await settle();
     check(row(2).hidden && row(3).hidden && getComputedStyle(row(2)).display === 'none', 'collapsed descendants stay visually hidden');
+    // 410ms is a non-default fixture value proving the Theme setting is inherited.
+    document.body.style.setProperty('--admin-side-panel-motion-duration', '410ms');
+    row(1).querySelector('[data-gallery-toggle]').click();
+    check(!row(2).hidden && getComputedStyle(row(2)).animationDuration === '0.41s'
+        && getComputedStyle(row(2)).animationName === 'admin-gallery-tree-reveal',
+        'Expansion immediately exposes descendants and uses the configured Admin motion');
+    row(1).querySelector('[data-gallery-toggle]').click();
+    // Zero is the supported setting that disables motion.
+    document.body.style.setProperty('--admin-side-panel-motion-duration', '0ms');
+    host.querySelector('[data-gallery-tree-action="expand-all"]').click();
+    check(!row(2).hidden && getComputedStyle(row(2)).animationDuration === '0s',
+        'Expand all respects disabled Admin motion');
+    row(1).querySelector('[data-gallery-toggle]').click();
+    document.body.style.removeProperty('--admin-side-panel-motion-duration');
     await drag(1, null); payload([[4,0],[5,4],[6,0],[1,0],[2,1],[3,2]]);
     check(row(2).hidden && row(3).hidden, 'collapsed moved subtree preserves hidden descendants');
     reset(); row(1).querySelector('[data-gallery-toggle]').click(); await settle();

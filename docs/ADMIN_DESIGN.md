@@ -73,6 +73,10 @@ then scroll the notification list, with the heading and bulk actions retained.
 
 ## Gallery inventory controls
 
+Show an indeterminate, accessible activity cue while the deferred Galleries
+workspace loads, including a retry. Reveal newly expanded gallery rows using
+the Admin side-panel motion duration; honor zero duration and reduced motion.
+
 Keep gallery visibility, own password and feature controls as compact unboxed
 icons with localized accessible names and tooltips. Enlarge the glyphs without
 adding colored backgrounds; use Theme foreground/accent, a clear disabled slash,

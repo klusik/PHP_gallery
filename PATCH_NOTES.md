@@ -1,5 +1,42 @@
 # Patch notes
 
+## Version 0.150.6
+
+Added loading feedback and configurable motion to the Admin gallery workspace while preserving reduced-motion preferences and existing gallery state.
+
+### Highlights
+
+#### Admin gallery loading and expansion
+
+- Added an accessible loading cue to the Admin Galleries workspace and restored it when loading was retried.
+- Animated newly revealed gallery rows when expanding a gallery or using Expand all, using the configured Admin side-panel motion duration.
+- Disabled loading and expansion animations when reduced motion was preferred; zero duration also disabled the row reveal.
+
+### Technical Details
+
+#### Frontend
+
+- Updated `public/assets/gallery-modules/admin-dashboard-workspace.js` and `public/assets/styles/admin-dashboard.css` for the loading cue.
+- Updated `public/assets/gallery-modules/admin-gallery-list.js` and `public/assets/styles/admin-gallery-list.css` for tree expansion and toggle-indicator motion.
+
+#### Documentation
+
+- Documented the loading cue and expansion behavior in `docs/ADMIN_DESIGN.md` and the English, Czech, German, and Swedish manuals.
+
+#### Tests
+
+- Updated fixtures to cover loading-indicator restoration on retry and expansion with configured and zero motion duration.
+
+### User Impact
+
+#### For administrators
+
+- Admins received visible feedback while galleries loaded and when gallery rows appeared after expansion, with motion respecting their reduced-motion preference.
+
+#### For visitors
+
+- Public visitor behavior did not change.
+
 ## Version 0.150.5
 
 Made the Admin gallery inventory more compact and added immediate per-gallery

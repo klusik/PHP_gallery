@@ -439,6 +439,18 @@ export function setupAdminGalleryTree() {
         document.dispatchEvent(new Event('galleryRowsChanged'));
     }
 
+    /**
+     * Animate only rows made visible by an explicit tree expansion.
+     * @param {Set<HTMLElement>} previouslyHidden Rows hidden before the command.
+     * @return {void} Restarts the Theme-timed reveal on newly visible rows.
+     */
+    function revealNewRows(previouslyHidden) {
+        const revealed = currentRows().filter(row => previouslyHidden.has(row) && !row.hidden);
+        revealed.forEach(row => row.classList.remove('is-tree-revealing'));
+        if (revealed.length) void table.offsetWidth;
+        revealed.forEach(row => row.classList.add('is-tree-revealing'));
+    }
+
     table.addEventListener('click', /**
      * Toggle one gallery subtree and synchronize its named disclosure control.
      * @param {MouseEvent} event Delegated click from the gallery table.
@@ -455,10 +467,19 @@ export function setupAdminGalleryTree() {
         }
         // Variable `collapsed` stores this steps working value.
         const collapsed = !row.classList.contains('is-collapsed');
+        const previouslyHidden = new Set(currentRows().filter(candidate => candidate.hidden));
         row.classList.toggle('is-collapsed', collapsed);
         syncTogglePresentation(button, row);
         refreshVisibility();
+        if (!collapsed) revealNewRows(previouslyHidden);
         save();
+    });
+
+    table.addEventListener('animationend', event => {
+        if (event.animationName === 'admin-gallery-tree-reveal'
+            && event.target instanceof HTMLElement) {
+            event.target.classList.remove('is-tree-revealing');
+        }
     });
 
     document.querySelectorAll('[data-gallery-tree-action]').forEach(/**
@@ -472,6 +493,7 @@ export function setupAdminGalleryTree() {
          */ () => {
             // Variable `collapse` stores this steps working value.
             const collapse = button.dataset.galleryTreeAction === 'collapse-all';
+            const previouslyHidden = new Set(currentRows().filter(row => row.hidden));
             syncTreeControls();
             currentRows().forEach(/**
              * Synchronize one current parent's state and accessible chevron.
@@ -487,6 +509,7 @@ export function setupAdminGalleryTree() {
                 syncTogglePresentation(toggle, row);
             });
             refreshVisibility();
+            if (!collapse) revealNewRows(previouslyHidden);
             save();
         });
     });

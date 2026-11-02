@@ -64,7 +64,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.150.5}
+\newcommand{\version}{0.150.6}
 \newcommand{\manualdate}{2 November 2026}
 
 \hypersetup{
@@ -5265,7 +5265,8 @@ an~accessible link, including without JavaScript.
 The~\ui{Animations} subsection sets the~opening and~closing duration
 for~the~public information panel on~gallery cards and~the~Admin side panel. Each
 value ranges from~0~to~800~ms; 0 disables that motion. The~defaults are~320~ms
-and~260~ms respectively. The~public panel contains the~gallery title,
+and~260~ms respectively. The~Admin value also times gallery-tree expansion;
+reduced motion disables that reveal. The~public panel contains the~gallery title,
 description, date, and~complete tag list. Its native disclosure works without
 JavaScript; with~JavaScript, the~panel stays within the~viewport
 and~can~be~dismissed by~clicking elsewhere or~pressing Escape. The~interaction

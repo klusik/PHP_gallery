@@ -79,6 +79,31 @@
 .admin-dashboard-page #admin-tab-overview .admin-action-card .nav { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .admin-dashboard-page #admin-tab-overview .admin-action-card > .thumbnail-progress { grid-column: 1 / -1; }
 .admin-dashboard-page .admin-dashboard-read[aria-busy="true"] { cursor: progress; }
+
+/* A read has no measurable completion percentage; show an indeterminate cue.
+   Type: CSS time. Units: milliseconds. Scope: gallery loading indicator.
+   Consumers: admin-dashboard-loading. Value: 800ms.
+   Rationale: a calm continuous turn signals activity without implying progress. */
+.admin-dashboard-page [data-dashboard-read="galleries"][aria-busy="true"] > p[role="status"]::before {
+    content: "";
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    margin-inline-end: 0.55em;
+    border: 2px solid color-mix(in srgb, var(--ink) 20%, transparent);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    vertical-align: -0.1em;
+    animation: admin-dashboard-loading 800ms linear infinite;
+}
+
+@keyframes admin-dashboard-loading { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-dashboard-page [data-dashboard-read="galleries"][aria-busy="true"] > p[role="status"]::before {
+        animation: none;
+    }
+}
 @media (max-width: 1050px) {
     .admin-dashboard-page #admin-tab-overview .admin-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .admin-dashboard-page #admin-tab-overview .admin-action-card { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }

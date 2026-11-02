@@ -41,7 +41,7 @@ import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from '
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20261027-appearance-state-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261102-newest-order-v1';
 import { setupAdminGalleryImages, coverStarActionForState, applyCoverSelectionPresentation } from './admin-gallery-images.js?v=20261020-shift-range-v1';
-import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261102-gallery-search-v2';
+import { setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261102-gallery-motion-v1';
 import { appendUploadProgressLog, escapeHtmlAttribute, escapeHtmlText, i18n, i18nForElement, loadAdminI18nScope, isThumbnailSubmission, thumbnailEndpoint, updateBasicProgress, updateThumbnailProgress, ensureThumbnailProgress, updateUploadProgressMetrics } from './admin-core.js?v=20261003-scoped-i18n-v1';
 import { browserUploadRequested, browserUploadZipSelected, runBrowserGalleryUpload } from './admin-browser-upload.js?v=20261029-manual-zip-v1';
 import {setupIcloudSources, beginIcloudUpload, endIcloudUpload, icloudUploadRequested, runIcloudGalleryUpload} from './admin-icloud-source.js?v=20261029-manual-zip-v1';

@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{0.150.5}
+\newcommand{\version}{0.150.6}
 \newcommand{\manualdate}{2~november~2026}
 
 \hypersetup{
@@ -5375,7 +5375,8 @@ förblir nåbara när sökvägen radbryts och även utan JavaScript.
 Underfliken \ui{Animationer} ställer in öppnings- och stängningstiden för den
 offentliga informationsrutan på gallerikort och Admin-sidopanelen. Båda värdena
 kan vara 0--800~ms; 0 stänger av respektive rörelse. Standardvärdena är 320~ms
-respektive 260~ms. Den offentliga panelen innehåller galleriets titel,
+respektive 260~ms. Admin-värdet styr även utfällning av galleriträdet;
+minskad rörelse stänger av den animationen. Den offentliga panelen innehåller galleriets titel,
 beskrivning, datum och hela tagglistan. Den inbyggda utfällningen fungerar även
 utan JavaScript; med JavaScript hålls panelen inom visningsområdet och kan
 stängas genom att klicka utanför eller trycka på Escape. Interaktionen följer
