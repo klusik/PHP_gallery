@@ -92,7 +92,7 @@ import { setupAdminTelemetryWorkspace } from './gallery-modules/admin-telemetry-
 import { setupAdminTagsWorkspace } from './gallery-modules/admin-tags-workspace.js?v=20261027-compact-tags-v2';
 import { setupAdminFeatures } from './gallery-modules/admin-features.js?v=20261027-compact-factory-v2';
 import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261027-compact-feature-settings-v1';
-import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261102-compact-controls-v3';
+import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261102-gallery-motion-v1';
 import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261009-visual-editor-overlay-routing';
 import { setupAdminLanguageSelectorDesign } from './gallery-modules/admin-language-selector-design.js?v=20261002-theme-language-v1';
 import { setupAdminSmartGalleries } from './gallery-modules/admin-smart-galleries.js?v=20261021-smart-photo-tags-v2';
@@ -136,7 +136,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261102-gallery-search-v2';
+} from './gallery-modules/admin-operations.js?v=20261102-gallery-motion-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

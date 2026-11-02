@@ -33,7 +33,7 @@ button, .button, input[type="submit"] { background: rgb(1, 2, 3); }
 <div data-dashboard-read="overview" data-endpoint="/fixture-overview" data-error="Summary unavailable" data-retry="Retry">Loading summary</div>
 <div class="admin-action-grid"><article class="admin-action-card"><strong>Settings</strong><span>Global preferences</span><div class="nav"><a href="#settings">Open</a></div></article></div>
 </section>
-<section id="admin-tab-galleries" class="panel admin-tab-panel" data-admin-tab-panel><div data-dashboard-read="galleries" data-endpoint="/fixture-galleries" data-error="Galleries unavailable" data-retry="Retry">Loading galleries</div></section>
+<section id="admin-tab-galleries" class="panel admin-tab-panel" data-admin-tab-panel><div data-dashboard-read="galleries" data-endpoint="/fixture-galleries" data-error="Galleries unavailable" data-retry="Retry"><p class="muted" role="status">Loading galleries</p></div></section>
 <section id="admin-tab-maintenance" class="panel admin-tab-panel" data-admin-tab-panel>
 <div id="admin-maintenance-content" data-dashboard-content-settings data-saving-label="Saving" data-saved-label="Saved" data-failed-label="Unknown; reload" data-reload-label="Reload state">
 <form class="admin-content-row" action="/fixture-content-search" method="post"><input type="hidden" name="csrf_token" value="fixture"><input type="hidden" name="maintenance_return" value="content"><div class="admin-content-controls"><label><input class="ui-switch" type="checkbox" name="public_home_search_enabled" checked title="Factory default: Enabled"></label></div><div class="admin-content-actions"><button type="submit" aria-label="Save search">Save</button></div></form>
@@ -218,6 +218,10 @@ try {
     check(galleryReads === 1 && !document.querySelector('#admin-tab-galleries').hidden, 'Failed gallery reads keep the active tab usable with retry');
     const beforeRetry = location.href;
     document.querySelector('[data-dashboard-read="galleries"] button').click(); await until(/** Observe the held gallery retry. @return {boolean} Whether the read started. */ () => releaseGalleries !== null);
+    const loadingStatus = document.querySelector('[data-dashboard-read="galleries"] > p[role="status"]');
+    check(loadingStatus?.textContent === 'Loading galleries'
+        && getComputedStyle(loadingStatus, '::before').animationName === 'admin-dashboard-loading',
+        'Retry restores the accessible indeterminate loading indicator');
     tab('overview'); tab('galleries');
     await new Promise(/** Allow production animation frames to run. @param {function():void} resolve Ready callback. @return {number} Timer handle. */ resolve => setTimeout(resolve, 40));
     check(galleryReads === 2 && summaryReads === 1, 'Pending reads are deduplicated across rapid tab changes');

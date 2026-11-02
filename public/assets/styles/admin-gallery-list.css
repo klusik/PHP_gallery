@@ -777,6 +777,27 @@ button.gallery-row-action.secondary {
     border-right: 1.5px solid currentColor;
     border-bottom: 1.5px solid currentColor;
     transform: rotate(-45deg);
+    transition: transform var(--admin-side-panel-motion-duration, 260ms) ease;
+}
+
+/* Reveal newly visible descendants without delaying their thumbnail requests. */
+.admin-gallery-workspace .admin-gallery-tree-table tr.is-tree-revealing {
+    animation: admin-gallery-tree-reveal
+        var(--admin-side-panel-motion-duration, 260ms) ease both;
+}
+
+@keyframes admin-gallery-tree-reveal {
+    from { opacity: 0; clip-path: inset(0 0 100% 0); }
+    to { opacity: 1; clip-path: inset(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-gallery-workspace .admin-gallery-tree-table tr.is-tree-revealing {
+        animation: none;
+    }
+    .admin-gallery-workspace .tree-toggle::before {
+        transition: none;
+    }
 }
 
 .admin-gallery-workspace .tree-toggle[aria-expanded="true"]::before, .admin-gallery-order-ghost .tree-toggle[aria-expanded="true"]::before {

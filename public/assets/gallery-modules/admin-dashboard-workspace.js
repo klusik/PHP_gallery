@@ -11,7 +11,7 @@
  * Load read-only Overview totals after paint and gallery previews only when their tab is opened.
  * Existing tab/bulk modules and authenticated domain routes retain their authority.
  */
-import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261102-gallery-search-v2';
+import { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering } from './admin-gallery-list.js?v=20261102-gallery-motion-v1';
 import { setupAdminGalleryFeatures } from './admin-gallery-features.js?v=20261102-compact-controls-v3';
 import { setupAdminGalleryQuickAccess } from './admin-gallery-quick-access.js?v=20261102-compact-controls-v3';
 import { setupAdminCacheCleanup } from './admin-cache-cleanup.js?v=20261021-smart-photo-tags-v2';
@@ -385,10 +385,15 @@ export function setupAdminDashboardWorkspace() {
 
     const reads = Array.from(root.querySelectorAll('[data-dashboard-read]'));
     const states = new WeakMap();
+    const placeholders = new WeakMap();
     const refreshAgain = new WeakSet();
     let galleryGestureActive = false;
     for (const region of reads) {
         if (region.dataset.dashboardLoaded === '1') states.set(region, 'loaded');
+        else if (region.dataset.dashboardRead === 'galleries') {
+            const status = region.querySelector('p[role="status"]');
+            if (status) placeholders.set(region, status.cloneNode(true));
+        }
     }
     setupAdminGalleryFeatures();
     setupAdminGalleryQuickAccess();
@@ -493,6 +498,10 @@ export function setupAdminDashboardWorkspace() {
             retry.addEventListener('click', /** Retry only this failed read without navigation or other calculations. @return {void} Restarts the owned request. */ () => {
                 states.delete(region);
                 retry.disabled = true;
+                const placeholder = placeholders.get(region);
+                if (!retainContent && placeholder) {
+                    region.replaceChildren(placeholder.cloneNode(true));
+                }
                 void load(region);
             });
             if (retainContent) {
