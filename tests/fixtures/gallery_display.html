@@ -23,7 +23,7 @@ const originalUrl = location.href;
 const requests = [];
 let rejectSave = false;
 let revision = 1;
-const values = {show_filenames: true, voting_enabled: false,
+const values = {show_filenames: true, newest_uploads_first: false, voting_enabled: false,
     picture_game_enabled: false, gps_map_enabled: false};
 /** Allow subpixel raster rounding in aspect-ratio comparisons.
  * Type: number. Units: ratio difference. Scope: photo-slot geometry assertions.
@@ -48,7 +48,7 @@ function frame() {
 }
 /** Wait for the production switch feedback to settle within a frame budget.
  * @param {Element} row Row owning the switch operation.
- * @return {Promise<void>} Resolve when saved/unknown; throw after the frame cap.
+ * @return {Promise<void>} Resolve after save unlock or unknown; throw after the frame cap.
  */
 async function saved(row) {
     // Type: number. Units: animation frames. Scope: synthetic save completion.
@@ -56,7 +56,9 @@ async function saved(row) {
     // at ordinary refresh rates without loosening the production write deadline.
     const MAX_SAVE_FRAMES = 120;
     for (let index = 0; index < MAX_SAVE_FRAMES; index++) {
-        if (['saved', 'unknown'].includes(row.dataset.displaySaveState)) return;
+        if (row.dataset.displaySaveState === 'unknown'
+            || (row.dataset.displaySaveState === 'saved'
+                && !row.querySelector('[data-gallery-display-preference]').disabled)) return;
         await frame();
     }
     throw new Error('Switch feedback did not settle');
@@ -141,6 +143,29 @@ try {
     form.querySelector('[name="title"]').click(); await frame();
     check(!help.open, 'Outside click must dismiss help');
 
+    const newest = form.querySelector('[name="newest_uploads_first"]');
+    let mirror = document.querySelector('#admin-edit-images [data-gallery-display-preference]');
+    newest.click(); await saved(newest.closest('.admin-display-switch-row'));
+    check(mirror.checked && !mirror.disabled
+        && requests.at(-1).preference === 'newest_uploads_first',
+        'Display must update the Images copy through the same preference');
+    mirror.click(); await saved(mirror.closest('.admin-display-switch-row'));
+    check(!newest.checked && requests.at(-1).value === '0'
+        && form.querySelector('[name="title"]').value === 'Unsaved draft',
+        'Images must update Display without submitting other drafts');
+    const staleFragment = mirror.form.cloneNode(true);
+    staleFragment.querySelector('[type="checkbox"]').checked = true;
+    mirror.form.replaceWith(staleFragment); await frame();
+    mirror = staleFragment.querySelector('[type="checkbox"]');
+    check(!mirror.checked, 'A refreshed Images fragment must follow the live setting');
+    const mediaHelp = staleFragment.querySelector('.admin-inline-help');
+    mediaHelp.querySelector('summary').click(); await frame();
+    const mediaBox = mediaHelp.querySelector('.admin-inline-help-content').getBoundingClientRect();
+    check(mediaHelp.open && mediaBox.left >= 0 && mediaBox.right <= innerWidth,
+        'Images help must stay anchored inside the viewport');
+    await originalFetch('/__key?key=Escape'); await frame();
+    check(!mediaHelp.open, 'Escape must close Images help');
+
     const iframe = document.createElement('iframe');
     iframe.title = 'Public photo cards';
     iframe.style.cssText = 'width:100%;height:800px;border:0';
@@ -200,17 +225,18 @@ try {
         'Replaced editor fragments retain attachment controls without rebinding');
     const reinjected = form.querySelector('[name="show_filenames"]');
     reinjected.click(); await saved(reinjected.closest('.admin-display-switch-row'));
-    check(requests.length === 2 && requests[1].edit_revision === '2'
+    check(requests.length === 4 && requests[3].edit_revision === '4'
         && form.querySelector('[name="title"]').value === 'Unsaved draft'
         && location.href === originalUrl,
         'Dynamically replaced editors must retain delegated saves and drafts');
     rejectSave = true;
-    const voting = form.querySelector('[name="voting_enabled"]');
-    voting.click(); await saved(voting.closest('.admin-display-switch-row'));
-    check(voting.disabled && voting.checked, 'Lost reply must preserve intent and lock its switch');
+    const uncertain = form.querySelector('[name="newest_uploads_first"]');
+    uncertain.click(); await saved(uncertain.closest('.admin-display-switch-row'));
+    check(uncertain.disabled && uncertain.checked && mirror.disabled && mirror.checked,
+        'Lost replies must preserve intent and lock both copies of the switch');
     const submit = new Event('submit', {bubbles: true, cancelable: true});
     form.dispatchEvent(submit);
-    check(submit.defaultPrevented && requests.length === 3,
+    check(submit.defaultPrevented && requests.length === 5,
         'Unverified writes must block full-form replay without automatic retry');
     document.getElementById('results').textContent = 'BROWSER PASS ' + assertions + ' Display assertions';
 } catch (error) {

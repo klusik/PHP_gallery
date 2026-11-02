@@ -65,6 +65,16 @@ namespace Gallery\Services {
 }
 
 namespace Gallery\Views {
+    /** Render a compact fixture heading for the production Images view.
+     * @param array{title?:string} $model Prepared fixture title.
+     * @return void Emit the heading without unrelated action dependencies.
+     */
+    function view_render_admin_tab_intro(array $model): void
+    {
+        echo '<header class="admin-tab-intro"><h2>'
+            . \Gallery\Core\e((string) ($model['title'] ?? '')) . '</h2></header>';
+    }
+
     /** Capture a production-shaped tab panel. @param string $id Tab ID. @param string $contentHtml Rendered controls. @param bool $active Whether visible. @return void Emit fixture panel. */
     function view_render_admin_tab_panel(
         string $id,
@@ -142,6 +152,13 @@ namespace {
             'checked' => true,
             'label' => 'File names',
             'help' => 'Raw names are optional.',
+        ],
+        'newest_uploads_first' => [
+            'ready' => true,
+            'checked' => false,
+            'label' => 'Newest uploads first',
+            'help' => 'New registrations are ordered first.',
+            'factory' => 'Factory default: Disabled',
         ],
         'picture_game' => [
             'visible' => true,
@@ -247,6 +264,28 @@ namespace {
         'Unavailable placement storage must not submit an attachment replacement.',
     );
 
+    ob_start();
+    \Gallery\Views\view_render_admin_gallery_images_tab([
+        'active' => true, 'gallery_id' => 42,
+        'csrf_html' => '<input type="hidden" name="csrf_token" value="display-fixture">',
+        'preference_url' => '/fixture-display', 'edit_revision' => '1',
+        'newest_uploads_first' => [
+            'ready' => true, 'checked' => false, 'label' => 'Newest uploads first',
+            'help' => 'New registrations are ordered first.',
+            'factory' => 'Factory default: Disabled', 'save_label' => 'Save gallery',
+        ],
+        'bulk_action_url' => '/fixture-bulk', 'reorder_url' => '/fixture-order',
+        'bulk_toolbar_html' => '', 'scan_action' => [],
+        'intro' => ['title' => 'Photos and ordering'], 'images' => [], 'labels' => [],
+    ]);
+    $imagesHtml = (string) ob_get_clean();
+    display_editor_assert(
+        str_contains($imagesHtml, 'data-gallery-preference-editor="admin-gallery-settings-42"')
+            && str_contains($imagesHtml, 'name="preference" value="newest_uploads_first"')
+            && str_contains($imagesHtml, '<noscript><button type="submit">'),
+        'Images must submit the same preference through its own guarded fallback form.',
+    );
+
     if (in_array('--render', $argv ?? [], true)) {
         require_once dirname(__DIR__) . '/app/controllers/shared_layout.php';
         require_once dirname(__DIR__) . '/app/views/public_gallery_pages.php';
@@ -254,12 +293,13 @@ namespace {
             echo '<link rel="stylesheet" href="/public/'
                 . \Gallery\Core\e($stylesheet) . '">';
         }
-        echo '<form class="admin-edit-gallery-form" action="/fixture-display">'
+        echo '<form id="admin-gallery-settings-42" class="admin-edit-gallery-form" action="/fixture-display">'
             . '<input type="hidden" name="id" value="42">'
             . '<input type="hidden" name="csrf_token" value="display-fixture">'
             . '<input type="hidden" name="edit_revision" value="1">'
             . '<label>Unsaved title <input name="title" value="Unsaved draft"></label>'
-            . $smartHtml . $html . '<button type="submit">Save gallery</button></form>';
+            . $smartHtml . $html . '<button type="submit">Save gallery</button></form>'
+            . '<section id="admin-edit-media">' . $imagesHtml . '</section>';
         echo '<template id="fixture-public-markup"><div class="public-page">';
         foreach (\Gallery\Controllers\shared_layout_public_stylesheet_files() as $stylesheet) {
             echo '<link rel="stylesheet" href="/public/'
@@ -337,6 +377,10 @@ namespace {
         'Display must expose flowing groups and all supported native format choices.',
     );
     display_editor_assert(
+        str_contains($html, 'aria-description="Factory default: Disabled"'),
+        'The ordering switch must expose its factory default to assistive technology.',
+    );
+    display_editor_assert(
         str_contains($html, 'data-default-columns="4" data-default-rows="5"')
             && str_contains(
                 $html,
@@ -355,6 +399,7 @@ namespace {
         'grid_use_for_subgalleries',
         'voting_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'gps_map_enabled',
         'description_layout',
         'count_badge_visibility',

@@ -1265,7 +1265,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.150.1. Release verification uses the
+This guide applies to PHP Gallery Version 0.150.2. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -8026,3 +8026,11 @@ fixture exercises delegated help on focus/hover, pinning, Escape/focus return,
 outside dismissal and restoration before result replacement. Live IAB review
 uses 6.1-terra on desktop/narrow views with the production CSS cascade and a
 read-only copy of report findings; it never starts repairs for visual testing.
+
+## Gallery registration-order coverage
+
+`admin_gallery_images_deferred_test.php` exercises descending registration time,
+the equal-time ID tie break, direct-gallery scope and transactional rollback.
+The Display editor fixture renders the opt-in setting. Hosted integration must
+also verify classic and browser uploads, WebDAV scanning, setting autosave,
+one-time ordering, private photos, drawer persistence and narrow layouts.

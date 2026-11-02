@@ -326,6 +326,28 @@ export function setupAdminImageReordering() {
         sortImageRows(button, 'capture-date', direction);
     }
 
+    /**
+     * Apply the same registration-time and ID order used by automatic uploads.
+     *
+     * @param {MouseEvent} event Click from the one-time ordering control.
+     * @return {void} Reorders displayed rows and submits the complete set.
+     */
+    function handleNewestUploadSortClick(event) {
+        if (draggedRow) return;
+        event.preventDefault();
+        const rows = Array.from(body.querySelectorAll('[data-admin-image-order-row]'));
+        rows.sort((left, right) => {
+            const leftTime = left.dataset.imageCreatedAt || '';
+            const rightTime = right.dataset.imageCreatedAt || '';
+            if (leftTime !== rightTime) return leftTime < rightTime ? 1 : -1;
+            const leftId = BigInt(left.dataset.imageId || '0');
+            const rightId = BigInt(right.dataset.imageId || '0');
+            return leftId === rightId ? 0 : (leftId < rightId ? 1 : -1);
+        });
+        rows.forEach((row) => body.appendChild(row));
+        saveOrder('newest');
+    }
+
         /**
      * Creates a placeholder row with the same height and column count as the dragged row.
      *
@@ -397,9 +419,10 @@ export function setupAdminImageReordering() {
      * Sends the current row order to PHP and persists sort_order in the database.
      * Capture the originating drawer before network work so completion cannot own a later editor.
      *
+     * @param {'manual'|'newest'} [mode='manual'] Manual row order or server-derived newest order.
      * @return {Promise<void>} Resolves after the existing save/completion event or error status.
      */
-    async function saveOrder() {
+    async function saveOrder(mode = 'manual') {
         const panelOwner = captureAdminPanelOwner(form.closest('[data-admin-side-panel]'));
         if (saveController) {
             saveController.abort();
@@ -408,6 +431,7 @@ export function setupAdminImageReordering() {
         bodyData.set('csrf_token', csrfInput.value);
         bodyData.set('gallery_id', galleryInput.value);
         bodyData.set('image_order', JSON.stringify(currentImageOrder()));
+        bodyData.set('order_mode', mode);
         bodyData.set('ajax', '1');
 
         const controller = new AbortController();
@@ -640,6 +664,7 @@ export function setupAdminImageReordering() {
 
     const nameSortButton = toolbar.querySelector('[data-admin-image-name-sort]');
     const captureDateSortButton = toolbar.querySelector('[data-admin-image-capture-date-sort]');
+    const newestSortButton = toolbar.querySelector('[data-admin-image-newest-sort]');
     if (nameSortButton instanceof HTMLButtonElement) {
         restoreImageSortHeader(nameSortButton, 'name');
         nameSortButton.addEventListener('click', handleNameSortClick);
@@ -647,6 +672,9 @@ export function setupAdminImageReordering() {
     if (captureDateSortButton instanceof HTMLButtonElement) {
         restoreImageSortHeader(captureDateSortButton, 'capture-date');
         captureDateSortButton.addEventListener('click', handleCaptureDateSortClick);
+    }
+    if (newestSortButton instanceof HTMLButtonElement) {
+        newestSortButton.addEventListener('click', handleNewestUploadSortClick);
     }
 
     body.querySelectorAll('[data-admin-image-drag-handle]').forEach((handle) => {

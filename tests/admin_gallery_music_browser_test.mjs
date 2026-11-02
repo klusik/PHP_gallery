@@ -781,6 +781,35 @@ try {
         && presentationShare instanceof HTMLDetailsElement
         && presentationShare.open === false,
     'Presentation controls must remain compact direct settings with a closed contextual help disclosure.');
+    // The same preference control is used in Media subtabs; compare both
+    // checked states without dispatching changes or modifying saved settings.
+    const musicSwitch = manager.querySelector('.gallery-music-settings input[role="switch"]');
+    const presentationSwitch = presentation.querySelector(
+        ':scope > .gallery-presentation-setting input[role="switch"]',
+    );
+    check(musicSwitch instanceof HTMLInputElement
+        && presentationSwitch instanceof HTMLInputElement,
+    'Music and Presentation must expose native preference switches.');
+    const switchStates = [musicSwitch.checked, presentationSwitch.checked];
+    for (const checked of [false, true]) {
+        musicSwitch.checked = checked;
+        presentationSwitch.checked = checked;
+        const musicStyle = getComputedStyle(musicSwitch);
+        const presentationStyle = getComputedStyle(presentationSwitch);
+        const musicThumb = getComputedStyle(musicSwitch, '::before');
+        const presentationThumb = getComputedStyle(presentationSwitch, '::before');
+        check(musicStyle.width === '26px' && musicStyle.height === '14px'
+            && musicStyle.width === presentationStyle.width
+            && musicStyle.height === presentationStyle.height
+            && musicStyle.backgroundColor === presentationStyle.backgroundColor
+            && musicStyle.borderColor === presentationStyle.borderColor
+            && musicThumb.width === '8px' && musicThumb.height === '8px'
+            && musicThumb.left === presentationThumb.left
+            && getComputedStyle(presentationSwitch, '::after').content === 'none',
+        'Music and Presentation must use identical compact switches in both states.');
+    }
+    musicSwitch.checked = switchStates[0];
+    presentationSwitch.checked = switchStates[1];
     const presentationIcons = iconStyleSnapshots(
         document,
         '#admin-edit-media .gallery-presentation-settings .music-icon',

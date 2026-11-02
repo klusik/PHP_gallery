@@ -2270,4 +2270,7 @@ return [
         . 'report preserves this finding for manual review and does not '
         . 'delete files.',
     'admin.consistency.finding_help' => 'Finding explanation',
+    'admin.gallery_editor.newest_uploads_first' => 'Newest uploads first',
+    'admin.gallery_editor.newest_uploads_first_help' => 'After an upload or a changed scan, reorder this gallery by registration time, newest first. Existing photos can be sorted now in Media management. Manual ordering remains available until the next upload or changed scan.',
+    'admin.gallery_editor.sort_newest_uploads' => 'Sort newest uploads first',
 ];

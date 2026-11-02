@@ -2206,4 +2206,7 @@ return [
         . 'verifierat. Kontrollera filer och katalog före ändringar. Fyndet '
         . 'finns kvar för manuell granskning; inga filer tas bort.',
     'admin.consistency.finding_help' => 'Förklaring av fyndet',
+    'admin.gallery_editor.newest_uploads_first' => 'Senaste uppladdningar först',
+    'admin.gallery_editor.newest_uploads_first_help' => 'Efter en uppladdning eller en ändrad skanning sorteras galleriets foton efter registreringstid, med de senaste först. Befintliga foton kan sorteras direkt i Mediehantering. Manuell ordning gäller till nästa uppladdning eller ändrade skanning.',
+    'admin.gallery_editor.sort_newest_uploads' => 'Sortera senaste uppladdningar först',
 ];

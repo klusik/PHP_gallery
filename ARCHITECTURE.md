@@ -242,7 +242,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.150.1';
+const CMS_VERSION = '0.150.2';
 ```
 
 Update-related code uses:
@@ -1867,6 +1867,20 @@ Key service families:
 | AI | `ai_image_analysis.php`, `openai_text_assist.php` | Local AI metadata queue, OpenAI text/image-description integration. |
 | Telemetry | `telemetry.php`, `telemetry_privacy.php`, `telemetry_settings.php`, `telemetry_rollup.php`, `database_observer.php` | Anonymous usage events, media serving metrics, privacy bucketing and rollups. |
 | Admin operations | `admin_dashboard.php`, `admin_render_profiler.php`, `logs.php`, `admin_log_archives.php`, `updates.php`, `github.php`, `gallery_migration.php`, `site_maintenance.php` | Dashboard model, diagnostics, grouped and exportable audit logs, protected day archives, GitHub update checks, API migration and resumable scheduled maintenance. |
+
+The optional per-gallery `newest_uploads_first` preference is off by default.
+While enabled, a changed image scan persists the complete direct-image order by
+registration timestamp and descending ID, including private images. Browser
+upload batches retain this order instead of applying their source order. The
+Images editor can also request the same ordering once; its authenticated reorder
+endpoint holds the gallery writer lease while reading and saving the full set.
+Its runtime module reuses the already-contained `http-not-found` owner, keeping
+the same route closure without duplicating that response's files.
+Manual order remains possible until a later changed scan. Missing pre-migration
+columns keep the historic order; a submitted preference requires the column.
+The timestamp is the local image registration time, not EXIF capture time or
+filesystem modification time. A re-import that creates new image rows gives
+them new local registration timestamps.
 
 ### Split Modules
 

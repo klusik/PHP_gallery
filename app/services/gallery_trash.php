@@ -836,6 +836,7 @@ function gallery_trash_restorable_gallery_columns(): array
         'voting_enabled',
         'picture_game_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'gps_map_enabled',
         'content_language',
         'gallery_date',

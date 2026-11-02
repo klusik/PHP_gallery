@@ -80,7 +80,7 @@ import {
     setupGalleryMediaPanels,
 } from './gallery-modules/gallery-media-panels.js?v=20261024-short-presentation-v1';
 import { setupAdminRouteNavdata } from './gallery-modules/admin-route-navdata.js?v=20261021-smart-photo-tags-v2';
-import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261029-smart-attachments-v3';
+import { setupAdminGalleryCompactEditor } from './gallery-modules/admin-gallery-compact-editor.js?v=20261102-images-preference-v2';
 import { setupAdminGalleryImages } from './gallery-modules/admin-gallery-images.js?v=20261020-shift-range-v1';
 import { setupAdminNavigationDataPanel } from './gallery-modules/admin-navdata-panel.js?v=20261002-navdata-layout-v1';
 import { setupOpenAITextAssist } from './gallery-modules/admin-openai-text-assist.js?v=20261003-admin-scoped-i18n-v1';
@@ -136,7 +136,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261102-repeat-modes-v1';
+} from './gallery-modules/admin-operations.js?v=20261102-newest-order-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

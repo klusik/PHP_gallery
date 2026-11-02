@@ -91,7 +91,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.150.1. Version 0.97 adds the recoverable gallery-trash
+application version 0.150.2. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -596,6 +596,7 @@ Current migration sequence:
 | `202610200002_music_catalog.php` | Adds logical songs, stable physical links, albums, song tags, revision state and pending snapshot reconciliation. |
 | `202610200003_music_repository.php` | Adds immutable shared audio assets, direct asset references and derived live gallery/album usage links. |
 | `202610210001_admin_support_access.php` | Adds single-use, revocable, UTC-expiring temporary Admin grants with hashed invitation/session authority and owner/delegate lifecycle audit. |
+| `202611020001_gallery_newest_uploads_first.php` | Adds an opt-in gallery ordering preference with a non-disruptive off default. |
 
 ## Entity Relationship Overview
 
@@ -930,6 +931,7 @@ Important columns:
 | `gps_map_enabled` | Nullable EXIF/GPS display override. `NULL` inherits `app_settings.exif_gps_maps_default_enabled`, `1` forces EXIF/GPS map and coordinate display on for the gallery branch, and `0` forces it off. |
 | `voting_enabled` | Enables image voting. |
 | `show_filenames` | Shows filenames in public UI. |
+| `newest_uploads_first` | Opt-in automatic direct-photo ordering, default `0`; a changed scan sorts by `images.created_at DESC, images.id DESC`. |
 | `description_layout` | `vertical` (photo above text) or `horizontal` (photo beside text), nullable for inheritance; legacy explicit values are converted by the semantics migration. |
 | `count_badge_visibility` | `show` or `hide`, nullable for inherited/default behavior. |
 | `lightbox_browsing_mode` | `single`, `picture_strip`, or `3d_carousel`, nullable for inherited Theme behavior. |

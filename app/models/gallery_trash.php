@@ -533,6 +533,7 @@ function gallery_trash_model_update_gallery_metadata(
         'voting_enabled',
         'picture_game_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'gps_map_enabled',
         'content_language',
         'gallery_date',

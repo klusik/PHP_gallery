@@ -1,5 +1,51 @@
 # Patch notes
 
+## Version 0.150.2
+
+Added an optional newest-first photo order and made gallery editor preferences
+more consistent across tabs.
+
+### Highlights
+
+#### Gallery photo ordering
+
+- Added a per-gallery option to order photos by registration time, newest first,
+  after uploads or scans that change the gallery. The option was off by default.
+- Added an action in Media management to sort existing photos immediately.
+  Manual ordering remained available until the next upload or changed scan.
+- Made the automatic ordering preference available in both Display and Media
+  management, and refreshed the Images header and preference switches.
+
+### Technical Details
+
+#### Backend and database
+
+- Added `database/migrations/202611020001_gallery_newest_uploads_first.php`
+  for the opt-in gallery preference and preserved it in transfer, sidecar and
+  restore metadata.
+- Updated upload and scan workflows to apply the stored ordering, with image ID
+  as a tie-breaker for matching registration times.
+- Updated the authenticated reorder action to support a one-time newest-first
+  sort for the full gallery.
+
+#### Frontend and tests
+
+- Updated the gallery editor controls and localized the new ordering options.
+- Extended gallery workflow, editor layout and browser coverage for ordering
+  and preference controls; updated all four manual sources.
+
+### User Impact
+
+#### For visitors
+
+- Galleries configured by administrators could show recently registered photos
+  first after uploads or changed scans.
+
+#### For administrators
+
+- Administrators could enable automatic ordering per gallery or sort existing
+  photos once from Media management, while keeping manual ordering available.
+
 ## Version 0.150.1
 
 Enabled administrators to edit song titles and tags directly from album

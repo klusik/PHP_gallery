@@ -51,6 +51,9 @@ use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_images;
 use function Gallery\Services\admin_save_image_order;
+use function Gallery\Services\gallery_edit_writer_begin;
+use function Gallery\Services\gallery_edit_writer_end;
+use function Gallery\Services\image_order_newest_first_ids;
 
 /**
  * Handle an administrator image reorder request.
@@ -66,6 +69,30 @@ function cms_admin_reorder_images(): void
 {
     require_admin();
     verify_csrf();
+    try {
+        $writerLock = gallery_edit_writer_begin();
+    } catch (Throwable) {
+        admin_reorder_images_response(
+            false,
+            'Image order could not be verified. Reload the gallery and try again.',
+            (int) ($_POST['gallery_id'] ?? 0),
+        );
+        return;
+    }
+    try {
+        admin_reorder_images_owned();
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Validate and save a complete or visible-page order under the writer lease.
+ *
+ * @return void Emits the authenticated reorder response.
+ */
+function admin_reorder_images_owned(): void
+{
     // Variable $galleryId stores the gallery whose direct image order is being changed.
     $galleryId = (int) ($_POST['gallery_id'] ?? 0);
     // Variable $gallery stores the database row for the submitted gallery id.
@@ -97,6 +124,15 @@ function cms_admin_reorder_images(): void
     );
     // $reorderScope stores whether this request is the full Admin table or the public visible-page path.
     $reorderScope = (string) ($_POST['reorder_scope'] ?? 'full');
+    $orderMode = (string) ($_POST['order_mode'] ?? 'manual');
+    if (!in_array($orderMode, ['manual', 'newest'], true)
+        || ($orderMode === 'newest' && $reorderScope !== 'full')) {
+        admin_reorder_images_response(false, 'Invalid image ordering mode.', $galleryId);
+        return;
+    }
+    if ($orderMode === 'newest') {
+        $submittedIds = image_order_newest_first_ids($currentRows);
+    }
 
     if (
         $reorderScope === 'visible_page'

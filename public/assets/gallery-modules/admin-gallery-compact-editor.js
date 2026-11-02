@@ -133,16 +133,60 @@ function addSmartAttachment(root, id) {
 const displaySaves = new WeakMap();
 
 /**
+ * Find the mounted copies owned by one guarded gallery settings form.
+ * @param {HTMLFormElement} form Canonical settings form and revision owner.
+ * @return {HTMLInputElement[]} Its Display and independently submitted mirrors.
+ */
+function galleryDisplayControls(form) {
+    // A named `id` input can mask the form's ID property in the DOM.
+    const formId = form.getAttribute('id');
+    return Array.from(document.querySelectorAll('[data-gallery-display-preference]'))
+        .filter(control => control instanceof HTMLInputElement
+            && (control.form === form
+                || (formId && control.form?.dataset.galleryPreferenceEditor === formId)));
+}
+
+/**
+ * Resolve the canonical preference name of a Display control or its mirror.
+ * @param {HTMLInputElement} input Mounted preference switch.
+ * @return {string} Server preference key, independent of its native form name.
+ */
+function galleryDisplayKey(input) {
+    return input.dataset.galleryDisplayPreference || input.name;
+}
+
+/**
+ * Reconcile a newly injected Images fragment with its live settings form.
+ * @return {void} Reflect pending, saved and locked state without changing drafts.
+ */
+function synchronizeGalleryDisplayMirrors() {
+    for (const mirror of document.querySelectorAll('[data-gallery-preference-editor]')) {
+        const form = document.getElementById(mirror.dataset.galleryPreferenceEditor);
+        if (!(form instanceof HTMLFormElement)) continue;
+        const input = mirror.querySelector('[data-gallery-display-preference]');
+        if (!(input instanceof HTMLInputElement)) continue;
+        const source = galleryDisplayControls(form).find(control =>
+            control.form === form && galleryDisplayKey(control) === galleryDisplayKey(input));
+        if (!source) continue;
+        input.checked = source.checked;
+        input.disabled = source.disabled;
+        const revision = mirror.querySelector('[name="edit_revision"]');
+        if (revision) revision.value = form.querySelector('[name="edit_revision"]')?.value || '';
+    }
+}
+
+/**
  * Persist one switch through the editor's authenticated isolated-save action.
  * @param {HTMLInputElement} input Original mounted native binary control.
  * @param {boolean} desired Captured intent, retained while other saves finish.
  * @param {{pending:number, failed:boolean, tail:Promise<void>}} state Shared
  *     form queue; a failed write stops later queued writes and full-form replay.
+ * @param {HTMLFormElement} form Canonical settings form and revision owner.
  * @return {Promise<void>} Update canonical switches/revision and public context;
  *     preserve other drafts and lock uncertain results until editor review.
  */
-async function saveGalleryDisplayPreference(input, desired, state) {
-    const form = input.form;
+async function saveGalleryDisplayPreference(input, desired, state, form) {
+    const key = galleryDisplayKey(input);
     const row = input.closest('.admin-display-switch-row');
     const status = row?.querySelector('[data-gallery-display-status]');
     const text = (key, fallback) => i18nForElement(input, key, fallback);
@@ -163,7 +207,7 @@ async function saveGalleryDisplayPreference(input, desired, state) {
     body.set('id', String(form.querySelector('input[name="id"]')?.value || ''));
     body.set('csrf_token', String(form.querySelector('input[name="csrf_token"]')?.value || ''));
     body.set('edit_revision', expected);
-    body.set('preference', input.name);
+    body.set('preference', key);
     body.set('value', desired ? '1' : '0');
     body.set('ajax', '1');
     row.dataset.displaySaveState = 'saving';
@@ -178,7 +222,7 @@ async function saveGalleryDisplayPreference(input, desired, state) {
         });
         const result = await response.json();
         if (!response.ok || result.ok !== true
-            || typeof result.setting_values?.[input.name] !== 'boolean'
+            || typeof result.setting_values?.[key] !== 'boolean'
             || !/^[1-9][0-9]*$/.test(String(result.edit_revision || ''))) {
             throw new Error('Unverified Display save');
         }
@@ -189,13 +233,15 @@ async function saveGalleryDisplayPreference(input, desired, state) {
                 submission.draft = null;
                 acknowledgeAdminPanelSave(submission, result);
             } else if (revision) revision.value = result.edit_revision;
-            for (const control of form.querySelectorAll('[data-gallery-display-preference]')) {
+            for (const control of galleryDisplayControls(form)) {
                 const peer = control.closest('.admin-display-switch-row');
-                if (typeof result.setting_values[control.name] === 'boolean'
-                    && (control === input || !['queued', 'saving'].includes(peer?.dataset.displaySaveState))) {
-                    control.checked = result.setting_values[control.name];
+                const peerKey = galleryDisplayKey(control);
+                if (typeof result.setting_values[peerKey] === 'boolean'
+                    && (peerKey === key || !['queued', 'saving'].includes(peer?.dataset.displaySaveState))) {
+                    control.checked = result.setting_values[peerKey];
                 }
             }
+            synchronizeGalleryDisplayMirrors();
         }
         row.dataset.displaySaveState = 'saved';
         status.textContent = text('admin.features.saved', 'Saved');
@@ -207,9 +253,21 @@ async function saveGalleryDisplayPreference(input, desired, state) {
         } catch {
             status.textContent = text('admin.side_panel.sync_failed_after_success', 'Saved. The public preview could not be refreshed.');
         }
-        input.disabled = false;
+        for (const control of galleryDisplayControls(form)) {
+            if (galleryDisplayKey(control) === key) control.disabled = false;
+        }
     } catch {
         state.failed = true;
+        for (const control of galleryDisplayControls(form)) {
+            if (galleryDisplayKey(control) !== key) continue;
+            control.disabled = true;
+            const peer = control.closest('.admin-display-switch-row');
+            if (peer && peer !== row) {
+                peer.dataset.displaySaveState = 'unknown';
+                const peerStatus = peer.querySelector('[data-gallery-display-status]');
+                if (peerStatus) peerStatus.textContent = text('admin.features.save_unknown', 'The save could not be verified. Reload current values before saving again.');
+            }
+        }
         row.dataset.displaySaveState = 'unknown';
         status.textContent = text('admin.features.save_unknown', 'The save could not be verified. Reload current values before saving again.');
         const latest = document.createElement('a');
@@ -261,8 +319,11 @@ export function setupAdminGalleryCompactEditor() {
     document.body.dataset.adminGalleryCompactEditorBound = '1';
 
     setupSmartAttachments();
-    new MutationObserver(setupSmartAttachments)
-        .observe(document.body, {childList: true, subtree: true});
+    synchronizeGalleryDisplayMirrors();
+    new MutationObserver(() => {
+        setupSmartAttachments();
+        synchronizeGalleryDisplayMirrors();
+    }).observe(document.body, {childList: true, subtree: true});
     document.addEventListener('input', event => {
         if (event.target instanceof Element && event.target.matches('[data-smart-attachment-search]')) {
             renderSmartAttachmentResults(event.target.closest('[data-smart-attachments]'));
@@ -303,17 +364,25 @@ export function setupAdminGalleryCompactEditor() {
     document.addEventListener('change', (event) => {
         const input = event.target;
         if (!(input instanceof HTMLInputElement)
-            || !input.matches('#admin-edit-display [data-gallery-display-preference]')
+            || !input.matches('#admin-edit-display [data-gallery-display-preference], #admin-edit-images [data-gallery-display-preference]')
             || !input.form) return;
-        const form = input.form;
+        const form = input.form.dataset.galleryPreferenceEditor
+            ? document.getElementById(input.form.dataset.galleryPreferenceEditor)
+            : input.form;
+        if (!(form instanceof HTMLFormElement)) return;
         const state = displaySaves.get(form)
             || {pending: 0, failed: false, tail: Promise.resolve()};
         displaySaves.set(form, state);
         const desired = input.checked;
-        input.disabled = true;
+        for (const control of galleryDisplayControls(form)) {
+            if (galleryDisplayKey(control) === galleryDisplayKey(input)) {
+                control.checked = desired;
+                control.disabled = true;
+            }
+        }
         input.closest('.admin-display-switch-row').dataset.displaySaveState = 'queued';
         state.pending++;
-        state.tail = state.tail.then(() => saveGalleryDisplayPreference(input, desired, state));
+        state.tail = state.tail.then(() => saveGalleryDisplayPreference(input, desired, state, form));
     });
     document.addEventListener('submit', (event) => {
         const state = displaySaves.get(event.target);
@@ -326,7 +395,7 @@ export function setupAdminGalleryCompactEditor() {
     document.addEventListener('toggle', (event) => {
         const help = event.target;
         if (!(help instanceof HTMLDetailsElement)
-            || !help.matches('#admin-edit-display .admin-inline-help, .admin-gallery-smart-attachments .admin-inline-help')) return;
+            || !help.matches('#admin-edit-display .admin-inline-help, #admin-edit-images .admin-inline-help, .admin-gallery-smart-attachments .admin-inline-help')) return;
         const content = help.querySelector('.admin-inline-help-content');
         if (help.open) {
             positionDisplayHelp(help);
@@ -339,13 +408,13 @@ export function setupAdminGalleryCompactEditor() {
             && content.matches(':popover-open')) content.hidePopover();
     }, true);
     document.addEventListener('click', (event) => {
-        for (const help of document.querySelectorAll('#admin-edit-display .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]')) {
+        for (const help of document.querySelectorAll('#admin-edit-display .admin-inline-help[open], #admin-edit-images .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]')) {
             if (!help.contains(event.target)) help.open = false;
         }
     });
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
-        const help = document.querySelector('#admin-edit-display .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]');
+        const help = document.querySelector('#admin-edit-display .admin-inline-help[open], #admin-edit-images .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]');
         if (!help) return;
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -354,7 +423,7 @@ export function setupAdminGalleryCompactEditor() {
     }, true);
     for (const type of ['scroll', 'resize']) {
         window.addEventListener(type, () => {
-            document.querySelectorAll('#admin-edit-display .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]')
+            document.querySelectorAll('#admin-edit-display .admin-inline-help[open], #admin-edit-images .admin-inline-help[open], .admin-gallery-smart-attachments .admin-inline-help[open]')
                 .forEach(positionDisplayHelp);
         }, true);
     }

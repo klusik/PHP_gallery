@@ -116,6 +116,7 @@ function gallery_edit_comparison(array $gallery): array
         'thumbnail_max_size',
         'voting_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'count_badge_visibility',
         'lightbox_browsing_mode',
         'presentation_json',

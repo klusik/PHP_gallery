@@ -41,12 +41,13 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
     let runId = 0;
     let postCount = 0;
     let imageBatchRequestCount = 0;
+    let newestOrderRequests = 0;
     const gates = [];
     const metrics = [];
     let panel = null;
     const shell = id => '<section id="admin-edit-images" data-admin-tab-panel><div class="admin-gallery-images"><form data-admin-image-bulk-form action="/__images_bulk">'
         + '<input name="gallery_id" value="' + id + '"><input name="csrf_token" value="fixture"><input name="return_tab" value="admin-edit-images">'
-        + '<div data-admin-image-order-toolbar data-reorder-url="/__images_order"><span data-admin-image-order-status></span></div>'
+        + '<div data-admin-image-order-toolbar data-reorder-url="/__images_order"><button type="submit" data-admin-image-newest-sort name="order_mode" value="newest">Newest</button><span data-admin-image-order-status></span></div>'
         + '<table data-admin-image-order-table><thead></thead><tbody></tbody></table></form></div></section>';
     const markup = (id, total, requested = false) => '<div data-admin-edit-panel-workspace="gallery-edit">'
         + '<nav data-admin-tabs><a role="tab" data-admin-tab-target="admin-edit-identity" href="#admin-edit-identity" aria-selected="' + !requested + '">Identity</a>'
@@ -91,6 +92,15 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
     };
     window.fetch = async (input, options = {}) => {
         const url = new URL(String(input), location.href);
+        if (url.pathname === '/__images_order') {
+            newestOrderRequests += 1;
+            check(options.body.get('order_mode') === 'newest',
+                'One-time ordering requests the authoritative server order.');
+            return new Response(JSON.stringify({ok: true, message: 'Saved',
+                mutation: {type: 'image.reorder', entity: 'image', action: 'reorder', entity_ids: []},
+                panel: null, contexts: [], fallback: {}}),
+            {headers: {'Content-Type': 'application/json'}});
+        }
         if (url.pathname === '/__images_save') {
             postCount += 1;
             check(options.body.get('visibility') === 'public' && options.body.get('edit_revision') === '1', 'Pending-photo Save preserves visibility/revision transport.');
@@ -285,6 +295,15 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
                 check(resources.peak <= 6 && (total < 2 || resources.peak > 1), 'Actual loopback thumbnail requests obey six-worker parallelism.');
                 metrics.push({images: total, cache, completion_ms: Math.round(performance.now() - started), peak: resources.peak});
             }
+        }
+        for (const id of [42, 43]) {
+            widget = mount(3, true, id);
+            await waitFor(() => widget.dataset.preloadState === 'ready');
+            const beforeNewest = newestOrderRequests;
+            panel.querySelector('[data-admin-image-newest-sort]').click();
+            await waitFor(() => newestOrderRequests === beforeNewest + 1);
+            check(!panel.hidden && location.href === previousUrl,
+                'One-time ordering stays in the current drawer after replacement.');
         }
         runId += 1;
         failThumbnail = true;

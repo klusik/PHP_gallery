@@ -49,6 +49,15 @@ use function Gallery\Core\db;
  */
 const IMAGE_MODEL_AUTOMATIC_COVER_CANDIDATE_LIMIT = 2;
 
+/**
+ * Keep newly sorted image positions compatible with manual reordering.
+ * Type: int. Units: sort-order points. Scope: one gallery's direct images.
+ * Consumers: image_model_order_newest_first().
+ * Rationale: A step of ten matches the existing manual reorder writer and
+ * leaves space between neighboring positions.
+ */
+const IMAGE_MODEL_ORDER_STEP = 10;
+
 /** Select bounded potential thumbnail-name conflicts through indexed semantic identities.
  * Non-ASCII characters widen to single-character patterns so binary database
  * collations cannot hide case-equivalent names. Services filter the bounded superset.
@@ -756,6 +765,51 @@ function image_model_next_sort_order(int $galleryId): int
     );
     $stmt->execute([$galleryId]);
     return (int) $stmt->fetchColumn() + 10;
+}
+
+/**
+ * Persist direct images in descending registration order for one gallery.
+ *
+ * Equal timestamps are resolved by descending image ID because registration
+ * timestamps have second precision. Callers serialize gallery writers.
+ *
+ * @param int $galleryId Gallery whose direct images are being ordered.
+ * @param string $now SQL timestamp written to the reordered rows.
+ * @return void Saves the complete order in an owned or existing transaction.
+ */
+function image_model_order_newest_first(int $galleryId, string $now): void
+{
+    $pdo = db();
+    $ownsTransaction = !$pdo->inTransaction();
+    try {
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+        $select = $pdo->prepare(
+            "SELECT id FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%' ORDER BY created_at DESC, id DESC",
+        );
+        $select->execute([$galleryId]);
+        $ids = $select->fetchAll(\PDO::FETCH_COLUMN);
+        $update = $pdo->prepare(
+            'UPDATE images SET sort_order = ?, updated_at = ? WHERE gallery_id = ? AND id = ?',
+        );
+        foreach ($ids as $index => $id) {
+            $update->execute([
+                ($index + 1) * IMAGE_MODEL_ORDER_STEP,
+                $now,
+                $galleryId,
+                (int) $id,
+            ]);
+        }
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+    } catch (\Throwable $exception) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
 }
 
 /**

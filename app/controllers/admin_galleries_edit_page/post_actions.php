@@ -254,7 +254,8 @@ function admin_edit_gallery_handle_post(
  * @param array{voting_ready?:bool,picture_game_ready?:bool,gps_map_ready?:bool,
  *     gps_map_override_ready?:bool,...} $capabilities Resolved control readiness.
  * @return void Emit a canonical mutation envelope with read-back switch values
- *     and the new edit revision, or a safe refusal with no automatic retry.
+ *     and the new edit revision, or redirect a native form with safe feedback.
+ *     Refused or unverified saves are never retried automatically.
  */
 function admin_edit_gallery_save_display_preference(
     array $gallery,
@@ -267,6 +268,8 @@ function admin_edit_gallery_save_display_preference(
         $allowed = [
             'show_filenames' =>
                 \Gallery\Services\gallery_filename_display_schema_ready(),
+            'newest_uploads_first' =>
+                array_key_exists('newest_uploads_first', $gallery),
             'voting_enabled' => !empty($capabilities['voting_ready']),
             'picture_game_enabled' => !empty($capabilities['picture_game_ready']),
             'gps_map_enabled' => !empty($capabilities['gps_map_ready'])
@@ -302,13 +305,17 @@ function admin_edit_gallery_save_display_preference(
         );
         $payload['setting_values'] = [
             'show_filenames' => (int) ($gallery['show_filenames'] ?? 0) === 1,
+            'newest_uploads_first' =>
+                (int) ($gallery['newest_uploads_first'] ?? 0) === 1,
             'voting_enabled' => (int) ($gallery['voting_enabled'] ?? 0) === 1,
             'picture_game_enabled' =>
                 (int) ($gallery['picture_game_enabled'] ?? 0) === 1,
             'gps_map_enabled' => (int) ($gallery['gps_map_enabled'] ?? 0) === 1,
         ];
     } catch (Throwable) {
-        http_response_code(409);
+        if (admin_wants_json()) {
+            http_response_code(409);
+        }
         $payload = admin_mutation_error_envelope(
             t(
                 'admin.features.save_unknown',
@@ -322,6 +329,10 @@ function admin_edit_gallery_save_display_preference(
                 [$galleryId],
             ),
         );
+    }
+    if (!admin_wants_json()) {
+        flash_message('admin_notice', (string) ($payload['message'] ?? ''));
+        redirect_to(admin_edit_gallery_tab_url($galleryId, 'admin-edit-images'));
     }
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');

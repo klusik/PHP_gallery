@@ -56,7 +56,7 @@
  *   cover_image_ids?:string|null,
  *   sort_order:int|string,visibility:string,created_at:string,updated_at:string,
  *   scheduled_publish_at?:string|null,
- *   voting_enabled?:int|string,show_filenames?:int|string,picture_game_enabled?:int|string,
+ *   voting_enabled?:int|string,show_filenames?:int|string,newest_uploads_first?:int|string,picture_game_enabled?:int|string,
  *   gps_map_enabled?:int|string|null,nsfw_enabled?:int|string,content_language?:string|null,
  *   url_slug?:string|null,url_path?:string|null,url_path_hash?:string|null,
  *   gallery_date?:string|null,gallery_date_end?:string|null,description_layout?:string|null,
@@ -865,7 +865,7 @@ function gallery_model_slug_exists_on_connection(
  * @param array{
  *   title?:string,description?:string|null,slug?:string,visibility?:string,sort_order?:int,
  *   parent_id?:int|null,cover_image_id?:int|null,cover_image_ids?:string|null,gallery_date?:string|null,gallery_date_end?:string|null,
- *   picture_game_enabled?:int,gps_map_enabled?:int|null,voting_enabled?:int,show_filenames?:int,
+ *   picture_game_enabled?:int,gps_map_enabled?:int|null,voting_enabled?:int,show_filenames?:int,newest_uploads_first?:int,
  *   description_layout?:string|null,count_badge_visibility?:string|null,lightbox_browsing_mode?:string|null,
  *   presentation_json?:string|null,
  *   nsfw_enabled?:int,grid_columns?:int|null,grid_rows?:int|null,grid_use_for_subgalleries?:int,
@@ -904,6 +904,7 @@ function gallery_model_update_fields(
         'gps_map_enabled',
         'voting_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'description_layout',
         'count_badge_visibility',
         'lightbox_browsing_mode',
@@ -1592,7 +1593,7 @@ function gallery_model_unique_slug(
  *
  * @param array{
  *   parent_id?:int|null,folder_path?:string,folder_path_hash?:string,slug?:string,title?:string,
- *   description?:string|null,sort_order?:int,visibility?:string,voting_enabled?:int,show_filenames?:int,
+ *   description?:string|null,sort_order?:int,visibility?:string,voting_enabled?:int,show_filenames?:int,newest_uploads_first?:int,
  *   content_language?:string|null,description_layout?:string|null,count_badge_visibility?:string|null,
  *   lightbox_browsing_mode?:string|null,presentation_json?:string|null,
  *   gallery_date?:string|null,gallery_date_end?:string|null,
@@ -1623,6 +1624,7 @@ function gallery_model_insert(array $fields): int
         'visibility',
         'voting_enabled',
         'show_filenames',
+        'newest_uploads_first',
         'content_language',
         'description_layout',
         'count_badge_visibility',

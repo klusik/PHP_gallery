@@ -2755,6 +2755,7 @@ try {
     copy($sample, $rawImportFolder . '/imported.jpg');
     file_put_contents($rawImportFolder . '/gallery.json', json_encode([
         'title' => 'Conflicting Sidecar Title', 'visibility' => 'unpublished',
+        'newest_uploads_first' => 1,
     ], JSON_THROW_ON_ERROR));
     $import = $admin->request('/index.php?page=admin_import', [
         'csrf_token' => $csrf, 'folders' => [$rawImport],
@@ -2767,15 +2768,99 @@ try {
         'import-disk-name',
     ]);
     check($importedDisk['title'] === $rawImport
+        && (int) $importedDisk['newest_uploads_first'] === 1
         && is_file($directory . '/galleries/import-disk-name/imported.jpg')
         && !is_dir($rawImportFolder),
         'Import must take its title from disk and canonicalize the actual folder.');
     $importedSidecar = json_decode((string) file_get_contents(
         $directory . '/galleries/import-disk-name/gallery.json',
     ), true, 512, JSON_THROW_ON_ERROR);
-    check($importedSidecar['title'] === $rawImport,
+    check($importedSidecar['title'] === $rawImport
+        && (int) $importedSidecar['newest_uploads_first'] === 1,
         'Conflicting imported sidecar title survived disk normalization.');
     echo "PASS gallery workflow disk-authoritative import and canonical folder\n";
+
+    $stage = 'opt-in newest-upload order and explicit reorder';
+    $orderingFields = array_replace($fields, [
+        'title' => 'Upload ordering',
+        'folder_name' => 'upload-ordering',
+        'operation_key' => $admin->operationKey(
+            '/index.php?page=admin_new_gallery&panel=1',
+        ),
+    ]);
+    $orderingCreated = envelope(
+        $admin->request('/index.php?page=admin_new_gallery', $orderingFields, true),
+        'Create ordering gallery',
+    );
+    $orderingId = (int) $orderingCreated['gallery_id'];
+    $orderingGallery = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$orderingId]);
+    check((int) $orderingGallery['newest_uploads_first'] === 0,
+        'New galleries must preserve manual order by default.');
+    $orderingRoute = '/index.php?page=admin_edit_gallery&id=' . $orderingId;
+    $preference = [
+        'csrf_token' => $csrf,
+        'id' => (string) $orderingId,
+        'action' => 'save_display_preference',
+        'preference' => 'newest_uploads_first',
+        'value' => '1',
+        'edit_revision' => (string) $orderingGallery['edit_revision'],
+        'ajax' => '1',
+    ];
+    $preferenceResult = envelope(
+        $admin->request($orderingRoute, $preference, true),
+        'Enable newest ordering',
+    );
+    check(($preferenceResult['setting_values']['newest_uploads_first'] ?? null) === true,
+        'Display must return the confirmed saved ordering preference.');
+    // The Images form works without script and must use the same guarded row.
+    $withoutScript = $preference;
+    unset($withoutScript['ajax']);
+    $withoutScript['value'] = '0';
+    $withoutScript['edit_revision'] = (string) $preferenceResult['edit_revision'];
+    $fallbackResponse = $admin->request($orderingRoute, $withoutScript);
+    $fallbackGallery = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$orderingId]);
+    check($fallbackResponse['status'] === 302
+        && (int) $fallbackGallery['newest_uploads_first'] === 0,
+        'The native Images form must save and redirect without JavaScript.');
+    $withoutScript['value'] = '1';
+    $withoutScript['edit_revision'] = (string) $fallbackGallery['edit_revision'];
+    check($admin->request($orderingRoute, $withoutScript)['status'] === 302
+        && (int) row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$orderingId])['newest_uploads_first'] === 1,
+        'The native Images form must also enable the same saved preference.');
+    foreach (['first.jpg', 'second.jpg'] as $uploadName) {
+        $orderingUpload = [
+            'csrf_token' => $csrf,
+            'gallery_id' => (string) $orderingId,
+            'upload_mode' => 'existing',
+            'images[]' => new CURLFile($sample, 'image/jpeg', $uploadName),
+            'operation_key' => $admin->operationKey(
+                '/index.php?page=admin_upload&gallery_id=' . $orderingId,
+            ),
+        ];
+        envelope($admin->request('/index.php?page=admin_upload', $orderingUpload, true),
+            'Upload for newest ordering');
+    }
+    $orderQuery = $pdo->prepare(
+        'SELECT id FROM images WHERE gallery_id = ? ORDER BY sort_order, filename',
+    );
+    $orderQuery->execute([$orderingId]);
+    $newestOrder = array_map('intval', $orderQuery->fetchAll(PDO::FETCH_COLUMN));
+    check(count($newestOrder) === 2 && $newestOrder[0] > $newestOrder[1],
+        'The later classic upload must precede the earlier one.');
+    $reorderRoute = '/index.php?page=admin_reorder_images';
+    $reorder = [
+        'csrf_token' => $csrf,
+        'gallery_id' => (string) $orderingId,
+        'image_order' => json_encode(array_reverse($newestOrder), JSON_THROW_ON_ERROR),
+        'ajax' => '1',
+    ];
+    envelope($admin->request($reorderRoute, $reorder, true), 'Manual order');
+    envelope($admin->request($reorderRoute, $reorder + ['order_mode' => 'newest'], true),
+        'Force newest order');
+    $orderQuery->execute([$orderingId]);
+    check(array_map('intval', $orderQuery->fetchAll(PDO::FETCH_COLUMN)) === $newestOrder,
+        'Explicit newest sorting must restore the complete persisted order.');
+    echo "PASS gallery workflow opt-in upload and explicit newest ordering\n";
     $beforeDelete = countRows($pdo, 'galleries');
 
     $stage = 'expired session';

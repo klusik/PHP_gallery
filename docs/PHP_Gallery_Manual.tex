@@ -64,7 +64,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.150.1}
+\newcommand{\version}{0.150.2}
 \newcommand{\manualdate}{2 November 2026}
 
 \hypersetup{
@@ -862,6 +862,12 @@ their indented songs. Preview does~not~assign music. Batch additions run
 in~order and~report partial progress if~an~item fails. Removing a~gallery
 source restores available Add actions without deleting shared originals.
 The~shared header holds the~player and~gallery-wide slideshow music switch.
+In~\ui{Display}, \ui{Newest uploads first} is~off by~default. When enabled,
+an~upload or~changed scan orders this gallery by~registration time, newest
+first. Equal timestamps use the~image ID. The~same preference is~available in
+\ui{Media management > Images}; both switches control one saved setting.
+Without JavaScript, use the~adjacent save button. Images also offers a~one-time sort; manual order lasts until the~next changed scan.
+Registration time is~local to~the~image row; re-import can assign a~new time.
 In~\ui{Media management > Images}, a~large
 existing thumbnail does~not~replace the~required 300px preview. Use
 the~thumbnail tools to~create gallery thumbnails, then retry Images when

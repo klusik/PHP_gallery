@@ -88,7 +88,7 @@ use function Gallery\Views\render_admin_thumbnail_bound_slider;
  *     grid_rows?:int|string|null,grid_use_for_subgalleries?:int|string,
  *     thumbnail_min_size?:int|string|null,thumbnail_max_size?:int|string|null,
  *     picture_game_enabled?:int|string,voting_enabled?:int|string,
- *     show_filenames?:int|string} $gallery Identity and saved Display fields.
+ *     show_filenames?:int|string,newest_uploads_first?:int|string} $gallery Identity and saved Display fields.
  * @param string $activeEditTab Currently selected editor tab.
  * @param array{gps_map_override_ready:bool,gps_map_ready:bool,
  *     lightbox_mode_ready:bool,lightbox_mode_feature_enabled:bool,
@@ -509,6 +509,24 @@ function admin_edit_gallery_render_display_tab(
             'migration_message' => t(
                 'admin.gallery_editor.filename_display_migration_hidden',
                 'File name display control will be available after the database migration is applied.',
+            ),
+        ],
+        'newest_uploads_first' => [
+            'ready' => array_key_exists('newest_uploads_first', $gallery),
+            'checked' => (int) ($gallery['newest_uploads_first'] ?? 0) === 1,
+            // The migration declares the same default for new and upgraded rows.
+            'factory' => t(
+                'admin.dashboard.content_factory_tooltip',
+                'Factory default: {value}',
+                ['value' => t('admin.common.disabled', 'Disabled')],
+            ),
+            'label' => t(
+                'admin.gallery_editor.newest_uploads_first',
+                'Newest uploads first',
+            ),
+            'help' => t(
+                'admin.gallery_editor.newest_uploads_first_help',
+                'After an upload or a changed scan, reorder this gallery by registration time, newest first. Existing photos can be sorted now in Media management. Manual ordering remains available until the next upload or changed scan.',
             ),
         ],
         'gps' => $gps,

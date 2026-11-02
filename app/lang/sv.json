@@ -8376,5 +8376,8 @@
     "admin.consistency.why_content": "Innehållsjämförelsen var otillgänglig eller ger endast en varning om visuell likhet. Den bevisar inte vilka pixlar som hör till ett foto. Granska original och miniatyr manuellt; automatisk ersättning föreslås inte.",
     "admin.consistency.why_pending": "En tidigare flytt saknar verifierat sluttillstånd. Lös först den åtgärdens återställningsflöde. Rapporten upprepar ingen osäker flytt.",
     "admin.consistency.why_manual": "Tillgänglighet, åtkomst eller entydigt ägarskap är inte verifierat. Kontrollera filer och katalog före ändringar. Fyndet finns kvar för manuell granskning; inga filer tas bort.",
-    "admin.consistency.finding_help": "Förklaring av fyndet"
+    "admin.consistency.finding_help": "Förklaring av fyndet",
+    "admin.gallery_editor.newest_uploads_first": "Senaste uppladdningar först",
+    "admin.gallery_editor.newest_uploads_first_help": "Efter en uppladdning eller en ändrad skanning sorteras galleriets foton efter registreringstid, med de senaste först. Befintliga foton kan sorteras direkt i Mediehantering. Manuell ordning gäller till nästa uppladdning eller ändrade skanning.",
+    "admin.gallery_editor.sort_newest_uploads": "Sortera senaste uppladdningar först"
 }

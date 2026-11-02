@@ -3479,3 +3479,111 @@ body.has-admin-side-panel {
         align-items: center;
     }
 }
+
+/* Images controls share the editor's compact translucent surfaces; the
+ * photo table remains separate so selection and drag handles stay legible. */
+#admin-edit-images .admin-image-header,
+#admin-edit-images .admin-edit-image-toolbar,
+#admin-edit-images .admin-image-order-toolbar {
+    box-sizing: border-box;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    background: color-mix(in srgb, var(--panel) 70%, transparent);
+    backdrop-filter: blur(12px);
+}
+#admin-edit-images .admin-image-header {
+    padding: .6rem .7rem;
+    border-radius: 9px 9px 0 0;
+}
+#admin-edit-images .admin-tab-intro {
+    margin: 0;
+    align-items: center;
+}
+#admin-edit-images .admin-image-order-preference {
+    margin-top: .35rem;
+    padding-top: .35rem;
+    border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+}
+#admin-edit-images .admin-display-switch-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem;
+}
+#admin-edit-images .admin-display-switch-row label,
+#admin-edit-images .admin-image-view-controls label {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    min-height: 28px;
+    margin: 0;
+    font-weight: 600;
+}
+#admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"] {
+    appearance: none;
+    position: relative;
+    box-sizing: border-box;
+    flex: 0 0 26px;
+    width: 26px;
+    height: 14px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    cursor: pointer;
+}
+#admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"]::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink);
+}
+#admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"]:checked {
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    background: color-mix(in srgb, var(--accent) 23%, transparent);
+}
+#admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"]:checked::before { left: 13px; }
+#admin-edit-images .admin-display-switch-row input:disabled { opacity: .55; cursor: wait; }
+#admin-edit-images [data-gallery-display-status] { font-size: .75rem; }
+#admin-edit-images [data-gallery-display-status]:empty { display: none; }
+#admin-edit-images .admin-edit-image-toolbar {
+    margin: 0;
+    padding: .5rem .7rem;
+    border-top: 0;
+    border-radius: 0;
+}
+#admin-edit-images .admin-image-order-toolbar {
+    margin: 0 0 .5rem;
+    padding: .45rem .7rem;
+    border-top: 0;
+    border-radius: 0 0 9px 9px;
+}
+#admin-edit-images :is(button, summary, label, a):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+@media (max-width: 600px) {
+    #admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) label,
+    #admin-edit-images :is(.admin-image-bulk-primary, .admin-image-sort-controls) :is(button, summary),
+    #admin-edit-images .admin-image-default-button { min-height: 44px; }
+    #admin-edit-images .admin-image-maintenance { margin-left: 0; }
+}
+
+@media (forced-colors: active) {
+    #admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"] {
+        appearance: auto;
+    }
+    #admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) input[type="checkbox"]::before {
+        display: none;
+    }
+}
+@media (max-width: 640px), (pointer: coarse) {
+    #admin-edit-images :is(.admin-display-switch-row, .admin-image-view-controls) label {
+        min-height: 44px;
+    }
+}
