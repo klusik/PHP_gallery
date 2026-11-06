@@ -851,6 +851,8 @@ class WatchedUploadLocationTests(unittest.TestCase):
                 network and native work replaced by test doubles.
         """
         watcher = object.__new__(self.main.WatcherThread)
+        watcher.linked_target = None
+        watcher._linked_lease = None
         watcher.config = self.main.WatcherConfig(gallery_url="https://example.test", api_key="test-key", delete_uploaded_files=False)
         watcher.events = queue.Queue()
         watcher.stop_event = threading.Event()
@@ -878,8 +880,12 @@ class WatchedUploadLocationTests(unittest.TestCase):
         watcher.upload_watched_file = mock.Mock(return_value={"uploaded": 1, "scanned": 1})
         return watcher
 
-    def test_location_failure_and_unexpected_exception_do_not_block_upload(self):
-        """Complete upload and state recording despite unavailable or unexpectedly broken geolocation."""
+    def test_location_failure_and_unexpected_exception_do_not_block_upload(self) -> None:
+        """Keep the upload working when geolocation is unavailable or broken.
+
+        Returns:
+            None: Confirms upload and its per-worker duplicate tracking.
+        """
         for result in ((None, "simulator is not running"), RuntimeError("native provider failed")):
             with self.subTest(result=str(result)), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -893,7 +899,9 @@ class WatchedUploadLocationTests(unittest.TestCase):
                 watcher.scan_once(root, "https://example.test/?route=api/upload")
                 watcher.upload_watched_file.assert_called_once()
                 self.assertEqual({}, watcher.upload_watched_file.call_args.args[2])
-                watcher.state.mark_uploaded.assert_called_once()
+                watcher.state.mark_uploaded.assert_not_called()
+                self.assertIn((photo, self.main.hashlib.sha256(b"watched image").hexdigest()),
+                              watcher.remote_skipped_paths)
                 watcher.state.mark_failure.assert_not_called()
 
     def test_aircraft_source_is_internal_and_preserves_existing_form_contract(self):

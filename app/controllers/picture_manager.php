@@ -40,6 +40,7 @@ namespace Gallery\Controllers;
 
 use RuntimeException;
 use Throwable;
+use Gallery\Services\LinkedGalleryReservationUnavailable;
 use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\current_user;
 use function Gallery\Core\gallery_public_url;
@@ -50,6 +51,9 @@ use function Gallery\Services\delete_gallery_images;
 use function Gallery\Services\delete_gallery_subtrees;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_count_badge_storage_value;
+use function Gallery\Services\gallery_edit_writer_begin;
+use function Gallery\Services\gallery_edit_writer_end;
+use function Gallery\Services\gallery_linked_reservation_assert_admin_write;
 use function Gallery\Services\gallery_shows_filenames;
 use function Gallery\Services\gallery_trash_available;
 use function Gallery\Services\gallery_trash_enabled;
@@ -60,6 +64,7 @@ use function Gallery\Services\move_gallery_subtrees_to_trash;
 use function Gallery\Services\picture_manager_assert_destination_outside_gallery_selection
 ;
 use function Gallery\Services\picture_manager_copy_gallery_subtrees;
+use function Gallery\Services\picture_manager_cleanup_lease_owned;
 use function Gallery\Services\picture_manager_normalize_gallery_ids;
 use function Gallery\Services\picture_manager_normalize_image_ids;
 use function Gallery\Services\picture_manager_owned_galleries_for_selection;
@@ -433,6 +438,8 @@ function cms_picture_manager_create_gallery(): void
     $createdGalleryId = 0;
     // $selectionCopied becomes true only after every requested physical copy completed successfully.
     $selectionCopied = false;
+    // Keep one lease across creation, both copy phases, and failure cleanup.
+    $writerLock = null;
     try {
         // $sourceGallery stores the gallery currently shown in the public view.
         $sourceGallery = picture_manager_source_gallery_from_post();
@@ -497,6 +504,9 @@ function cms_picture_manager_create_gallery(): void
                 $galleryIds,
             );
         }
+
+        $writerLock = gallery_edit_writer_begin();
+        gallery_linked_reservation_assert_admin_write();
 
         // $createdGallery stores the physical destination root at the user-selected location.
         $createdGallery = create_empty_gallery([
@@ -589,6 +599,10 @@ function cms_picture_manager_create_gallery(): void
             ['category' => 'other', 'severity' => 'info'],
         );
 
+        // A reported lease-release error must precede the success response.
+        $releasedLock = $writerLock;
+        $writerLock = null;
+        gallery_edit_writer_end($releasedLock);
         picture_manager_json_response([
             'ok' => true,
             'message' => t(
@@ -613,10 +627,30 @@ function cms_picture_manager_create_gallery(): void
         ]);
     } catch (Throwable $exception) {
         if ($createdGalleryId > 0 && !$selectionCopied) {
+            if ($writerLock !== null && picture_manager_cleanup_lease_owned($writerLock)) {
+                try {
+                    // This root was created exclusively for the failed operation, so rollback bypasses trash.
+                    delete_gallery_subtrees([$createdGalleryId]);
+                } catch (Throwable) {
+                }
+            } else {
+                // The prior operation may have written data; do not infer rollback.
+                $exception = new RuntimeException(t(
+                    'admin.gallery_editor.edit_connection_lost',
+                    'The gallery operation connection was interrupted. Reopen the gallery and verify its state before trying again.',
+                ), 0, $exception);
+            }
+        }
+        if ($writerLock !== null) {
+            $releasedLock = $writerLock;
+            $writerLock = null;
             try {
-                // This root was created exclusively for the failed operation, so rollback bypasses trash.
-                delete_gallery_subtrees([$createdGalleryId]);
+                gallery_edit_writer_end($releasedLock);
             } catch (Throwable) {
+                $exception = new RuntimeException(t(
+                    'admin.gallery_editor.edit_connection_lost',
+                    'The gallery operation connection was interrupted. Reopen the gallery and verify its state before trying again.',
+                ), 0, $exception);
             }
         }
         admin_log_event(
@@ -635,7 +669,12 @@ function cms_picture_manager_create_gallery(): void
         );
         picture_manager_json_response([
             'ok' => false,
-            'message' => 'Create gallery failed: ' . $exception->getMessage(),
+            'message' => $exception instanceof LinkedGalleryReservationUnavailable
+                ? t(
+                    'admin.operation.operation_needs_reconciliation',
+                    'An earlier attempt may have changed gallery data. Keep its key and reconcile that attempt before starting replacement work.',
+                )
+                : 'Create gallery failed: ' . $exception->getMessage(),
         ], 422);
     }
 }

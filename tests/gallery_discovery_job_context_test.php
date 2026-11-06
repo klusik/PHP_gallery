@@ -12,12 +12,55 @@
  */
 declare(strict_types=1);
 
+namespace Gallery\Core {
+    /**
+     * Preserve an already normalized fixture path.
+     * @param string $path Synthetic relative path.
+     * @return string The same path.
+     */
+    function normalize_relative_path(string $path): string
+    {
+        return $path;
+    }
+}
+
+namespace Gallery\Services {
+    const LINKED_VISIBILITY_PENDING_MARKER = '.gallery-visibility-pending.json';
+
+    /**
+     * Simulate bounded marker observation without a filesystem or database.
+     * @param string $relativePath Synthetic marker path.
+     * @param int|null $remainingEntries Shared entry budget, decremented by reference.
+     * @return string Central missing or unknown observation state.
+     */
+    function gallery_creation_target_observation(
+        string $relativePath,
+        ?int &$remainingEntries = null,
+    ): string {
+        $cost = $GLOBALS['discovery_fixture_costs'][$relativePath] ?? 1;
+        if ($remainingEntries !== null && $cost >= $remainingEntries) {
+            $remainingEntries = 0;
+            return \Gallery\Core\FILESYSTEM_OBSERVATION_UNKNOWN;
+        }
+        if ($remainingEntries !== null) {
+            $remainingEntries -= $cost;
+        }
+        return in_array($relativePath, $GLOBALS['discovery_fixture_unknown'] ?? [], true)
+            ? \Gallery\Core\FILESYSTEM_OBSERVATION_UNKNOWN
+            : \Gallery\Core\FILESYSTEM_OBSERVATION_MISSING;
+    }
+}
+
+namespace {
 require_once dirname(__DIR__) . '/app/services/admin_gallery_discovery.php';
 use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS;
 use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_RETAINED_JOB_LIMIT;
 use function Gallery\Services\admin_gallery_discovery_cleanup_jobs;
+use function Gallery\Services\admin_gallery_discovery_begin_marker_validation;
 use function Gallery\Services\admin_gallery_discovery_job_status;
+use function Gallery\Services\admin_gallery_discovery_public_state;
 use function Gallery\Services\admin_gallery_discovery_read_job;
+use function Gallery\Services\admin_gallery_discovery_validate_marker_batch;
 use function Gallery\Services\admin_gallery_discovery_write_job;
 
 /**
@@ -98,4 +141,55 @@ discovery_context_assert(
     !str_contains($source, '$_SESSION'),
     'Discovery domain module still extracts session transport.',
 );
+$candidates = [
+    ['folder_path' => 'one'],
+    ['folder_path' => 'two/child'],
+    ['folder_path' => 'three'],
+];
+$verification = admin_gallery_discovery_begin_marker_validation([
+    'status' => 'complete', 'candidates' => $candidates,
+]);
+foreach ([1, 2] as $expectedCursor) {
+    $verification = admin_gallery_discovery_validate_marker_batch($verification, 1);
+    discovery_context_assert(
+        $verification['status'] === 'running'
+            && $verification['marker_validation_cursor'] === $expectedCursor
+            && admin_gallery_discovery_public_state($verification, true)['candidates'] === [],
+        'Partial marker batches must advance without exposing candidate rows.',
+    );
+}
+$verification = admin_gallery_discovery_validate_marker_batch($verification, 1);
+discovery_context_assert(
+    $verification['status'] === 'complete'
+        && $verification['marker_validation_complete'] === true
+        && $verification['candidates'] === $candidates,
+    'Only fully verified batches may publish the complete candidate snapshot.',
+);
+discovery_context_assert(
+    admin_gallery_discovery_begin_marker_validation($verification) === $verification,
+    'An already verified checkpoint must not restart validation on status reads.',
+);
+$GLOBALS['discovery_fixture_unknown'] = ['two/.gallery-visibility-pending.json'];
+$verification = admin_gallery_discovery_begin_marker_validation([
+    'status' => 'complete', 'candidates' => $candidates,
+]);
+$verification = admin_gallery_discovery_validate_marker_batch($verification, 3);
+discovery_context_assert(
+    $verification['status'] === 'error' && $verification['candidates'] === [],
+    'A marker or unknown ancestor must fail without exposing earlier rows.',
+);
+$GLOBALS['discovery_fixture_unknown'] = [];
+$GLOBALS['discovery_fixture_costs'] = [
+    'one/.gallery-visibility-pending.json' =>
+        \Gallery\Services\ADMIN_GALLERY_DISCOVERY_MARKER_ENTRY_BUDGET,
+];
+$verification = admin_gallery_discovery_begin_marker_validation([
+    'status' => 'complete', 'candidates' => $candidates,
+]);
+$verification = admin_gallery_discovery_validate_marker_batch($verification, 3);
+discovery_context_assert(
+    $verification['status'] === 'error' && $verification['candidates'] === [],
+    'Entry-budget exhaustion cannot masquerade as confirmed marker absence.',
+);
 echo "Gallery discovery caller-context checks passed.\n";
+}

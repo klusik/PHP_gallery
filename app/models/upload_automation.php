@@ -187,3 +187,23 @@ function upload_automation_model_release_gallery_lock(int $galleryId): void
     $stmt = db()->prepare('SELECT RELEASE_LOCK(?)');
     $stmt->execute([$lockName]);
 }
+
+/**
+ * Verify that the current database connection still owns both inventory leases.
+ *
+ * @param int $galleryId Positive gallery identity for the upload lock.
+ * @param string $writerLock Global gallery writer lock name from its owner.
+ * @return bool True only when both named locks belong to the current connection.
+ */
+function upload_automation_model_inventory_locks_owned(int $galleryId, string $writerLock): bool
+{
+    if ($galleryId <= 0 || $writerLock === '') {
+        return false;
+    }
+    $galleryLock = 'php_gallery_upload_automation_' . $galleryId;
+    $statement = db()->prepare(
+        'SELECT IS_USED_LOCK(?) = CONNECTION_ID() AND IS_USED_LOCK(?) = CONNECTION_ID()',
+    );
+    $statement->execute([$galleryLock, $writerLock]);
+    return (int) $statement->fetchColumn() === 1;
+}

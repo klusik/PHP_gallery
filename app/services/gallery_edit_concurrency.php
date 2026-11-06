@@ -23,6 +23,164 @@ use function Gallery\Models\gallery_edit_model_reserve;
 
 require_once dirname(__DIR__) . '/models/gallery_edit_concurrency.php';
 
+/**
+ * Keep the unqualified filesystem fence unavailable to application writers.
+ * Type: bool. Units: boolean. Scope: filesystem-fence admission.
+ * Consumers: GalleryEditFilesystemFence::acquire.
+ * Rationale: false prevents use until writer coverage and locking are qualified.
+ */
+const GALLERY_EDIT_FILESYSTEM_FENCE_ENABLED = false;
+
+/**
+ * Name the stable pre-provisioned filesystem-fence lock without replacing it.
+ * Type: string. Units: one filename component. Scope: trusted fence directory.
+ * Consumers: GalleryEditFilesystemFence.
+ * Rationale: .gallery-edit-writer.lock identifies one persistent shared inode.
+ */
+const GALLERY_EDIT_FILESYSTEM_FENCE_FILENAME = '.gallery-edit-writer.lock';
+
+/**
+ * Prototype one reentrant filesystem fence without creating or changing its file.
+ *
+ * The public admission is deliberately closed. The private primitive is not
+ * integrated into any writer and does not qualify cross-host flock behavior.
+ */
+final class GalleryEditFilesystemFence
+{
+    private mixed $handle = null;
+    private int $depth = 0;
+    private int $device = 0;
+    private int $inode = 0;
+    private int $directoryDevice = 0;
+    private int $directoryInode = 0;
+
+    /**
+     * Hold a canonical directory selected by a trusted future deployment owner.
+     *
+     * @param string $directory Canonical absolute directory containing the stable lock file.
+     * @return void Constructs an inactive prototype without touching the filesystem.
+     */
+    public function __construct(private readonly string $directory)
+    {
+    }
+
+    /**
+     * Refuse admission until all writers and supported filesystems are qualified.
+     *
+     * @return void Never returns while the fixed admission gate remains false.
+     * @throws RuntimeException When the filesystem fence is unavailable.
+     */
+    public function acquire(): void
+    {
+        if (!GALLERY_EDIT_FILESYSTEM_FENCE_ENABLED) {
+            throw new RuntimeException('Gallery filesystem fence is unavailable.');
+        }
+        $this->acquireOwned();
+    }
+
+    /**
+     * Acquire or reenter the same identified file without writing or replacing it.
+     *
+     * @return void Holds one reentrant acquisition on the open file handle.
+     * @throws RuntimeException When identity, availability or exclusive locking is uncertain.
+     */
+    private function acquireOwned(): void
+    {
+        if ($this->depth > 0) {
+            $this->assertOwned();
+            if ($this->depth === PHP_INT_MAX) {
+                throw new RuntimeException('Gallery filesystem fence depth is unavailable.');
+            }
+            $this->depth++;
+            return;
+        }
+        clearstatcache(true);
+        $directory = @lstat($this->directory);
+        $path = $this->directory . DIRECTORY_SEPARATOR . GALLERY_EDIT_FILESYSTEM_FENCE_FILENAME;
+        $before = @lstat($path);
+        if (!is_array($directory) || is_link($this->directory) || !is_dir($this->directory)
+            || realpath($this->directory) !== $this->directory
+            || !is_array($before) || is_link($path) || !is_file($path)
+            || ($before['nlink'] ?? 0) !== 1 || ($before['ino'] ?? 0) <= 0) {
+            throw new RuntimeException('Gallery filesystem fence is unavailable.');
+        }
+        $handle = @fopen($path, 'rb');
+        if ($handle === false) {
+            throw new RuntimeException('Gallery filesystem fence is unavailable.');
+        }
+        try {
+            $opened = fstat($handle);
+            if (!is_array($opened) || ($opened['nlink'] ?? 0) !== 1
+                || $opened['dev'] !== $before['dev'] || $opened['ino'] !== $before['ino']
+                || !flock($handle, LOCK_EX | LOCK_NB)) {
+                throw new RuntimeException('Gallery filesystem fence is unavailable.');
+            }
+            $this->handle = $handle;
+            $this->depth = 1;
+            $this->device = $before['dev'];
+            $this->inode = $before['ino'];
+            $this->directoryDevice = $directory['dev'];
+            $this->directoryInode = $directory['ino'];
+            $this->assertOwned();
+        } catch (Throwable $error) {
+            $this->handle = null;
+            $this->depth = 0;
+            fclose($handle);
+            throw $error;
+        }
+    }
+
+    /**
+     * Verify that the open handle and both stable directory entries still match.
+     *
+     * @return void Returns only for the original single-link lock and directory.
+     * @throws RuntimeException When the retained identity cannot be proven.
+     */
+    private function assertOwned(): void
+    {
+        if (!is_resource($this->handle) || $this->depth <= 0) {
+            throw new RuntimeException('Gallery filesystem fence is unavailable.');
+        }
+        $path = $this->directory . DIRECTORY_SEPARATOR . GALLERY_EDIT_FILESYSTEM_FENCE_FILENAME;
+        clearstatcache(true);
+        $directory = @lstat($this->directory);
+        $entry = @lstat($path);
+        $opened = fstat($this->handle);
+        if (!is_array($directory) || is_link($this->directory) || !is_dir($this->directory)
+            || realpath($this->directory) !== $this->directory
+            || $directory['dev'] !== $this->directoryDevice
+            || $directory['ino'] !== $this->directoryInode
+            || !is_array($entry) || is_link($path) || !is_file($path)
+            || !is_array($opened) || ($entry['nlink'] ?? 0) !== 1
+            || ($opened['nlink'] ?? 0) !== 1 || $entry['dev'] !== $this->device
+            || $entry['ino'] !== $this->inode || $opened['dev'] !== $this->device
+            || $opened['ino'] !== $this->inode) {
+            throw new RuntimeException('Gallery filesystem fence identity changed.');
+        }
+    }
+
+    /**
+     * Release one acquisition without deleting or rewriting the stable lock file.
+     *
+     * @return void Releases the handle only after the last matching acquisition.
+     * @throws RuntimeException When the held identity or unlock is uncertain.
+     */
+    public function release(): void
+    {
+        $this->assertOwned();
+        if ($this->depth > 1) {
+            $this->depth--;
+            return;
+        }
+        if (!flock($this->handle, LOCK_UN)) {
+            throw new RuntimeException('Gallery filesystem fence release is unavailable.');
+        }
+        fclose($this->handle);
+        $this->handle = null;
+        $this->depth = 0;
+    }
+}
+
 /** A refused stale/busy edit, carrying only the approved non-secret comparison projection. */
 final class GalleryEditConflict extends RuntimeException
 {

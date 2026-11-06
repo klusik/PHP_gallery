@@ -108,6 +108,9 @@ class StartupPreferenceTests(unittest.TestCase):
         app.start_with_windows_var = mock.Mock()
         app.start_with_windows_var.get.return_value = False
         app.config_store = mock.Mock()
+        # Model a successful mode-owner admission by executing its save thunk.
+        app.mode_owner = mock.Mock()
+        app.mode_owner.save.side_effect = lambda save, **_kwargs: save()
         app.api_key_revoke_running = False
         app.current_config = mock.Mock(side_effect=AssertionError("unsaved form"))
         app.apply_startup_registration = mock.Mock()
@@ -117,6 +120,7 @@ class StartupPreferenceTests(unittest.TestCase):
         self.assertEqual("saved-key", saved.api_key)
         app.current_config.assert_not_called()
         app.apply_startup_registration.assert_called_once_with()
+        app.mode_owner.save.assert_called_once()
 
     def test_registry_denial_reaches_the_caller(self) -> None:
         """Retain an actionable failure instead of reporting registration success.
@@ -148,12 +152,16 @@ class StartupPreferenceTests(unittest.TestCase):
         app.start_with_windows_var.get.return_value = False
         app.api_key_revoke_running = False
         app.config_store = mock.Mock()
+        # Keep the real save callback active so storage errors reach the GUI.
+        app.mode_owner = mock.Mock()
+        app.mode_owner.save.side_effect = lambda save, **_kwargs: save()
         app.apply_startup_registration = mock.Mock()
         app.updates = mock.Mock()
         app.updates.blocked.return_value = True
         app.save_startup_preference()
         app.start_with_windows_var.set.assert_called_with(True)
         app.config_store.save.assert_not_called()
+        app.mode_owner.save.assert_not_called()
         app.updates.blocked.return_value = False
         app.config_store.save.side_effect = OSError("disk unavailable")
         with mock.patch.object(MAIN, "messagebox") as messages:
@@ -161,6 +169,7 @@ class StartupPreferenceTests(unittest.TestCase):
             messages.showerror.assert_called_once()
         self.assertTrue(app.config.start_with_windows)
         app.apply_startup_registration.assert_not_called()
+        app.mode_owner.save.assert_called_once()
 
     def test_installer_mode_reconciles_opt_out_without_ui(self) -> None:
         """Apply both initial defaults and saved opt-out from installer bootstrap.
@@ -201,9 +210,13 @@ class InstanceCoordinationTests(unittest.TestCase):
         kernel.CreateMutexW.return_value = 0x100000002
         with (
             mock.patch.object(startup, "IS_WINDOWS", True),
+            mock.patch.object(startup, "WindowsDirectoryAnchor") as directory_anchor,
             mock.patch.object(startup.ctypes, "WinDLL", return_value=kernel, create=True),
             mock.patch.object(startup.ctypes, "get_last_error", return_value=0, create=True) as error,
         ):
+            # Native identity is exercised separately on a real Windows runner;
+            # this case specifically models event/mutex HANDLE behavior.
+            directory_anchor.return_value.identity = b"p" * 24
             owner = startup.WindowsInstance(WINAPP_DIR / "isolated-profile")
             self.assertTrue(owner.acquire())
             self.assertTrue(owner.owned)
@@ -393,7 +406,9 @@ class NativeInstanceTests(unittest.TestCase):
             reader.start()
             try:
                 self.assertTrue(ready.wait(CHILD_TIMEOUT_SECONDS))
-                self.assertEqual([b"ready\n"], ready_line)
+                # Python text stdout may encode its single newline as CRLF
+                # on Windows even though the pipe itself reads raw bytes.
+                self.assertIn(ready_line, ([b"ready\n"], [b"ready\r\n"]))
                 self.assertFalse(secondary.acquire())
                 child.kill()
                 child.wait(timeout=CHILD_TIMEOUT_SECONDS)

@@ -108,7 +108,9 @@ class InstallerBuildTests(unittest.TestCase):
                 """
                 calls.append(command)
                 work = Path(kwargs["cwd"])
-                self.assertEqual(source, work.parent)
+                # Windows may spell the same Temp directory as an 8.3 alias.
+                # Compare real filesystem identity, not path presentation.
+                self.assertTrue(source.samefile(work.parent))
                 self.assertEqual(str(work / "temp"), kwargs["env"]["TEMP"])
                 self.assertNotIn("PYTHONPATH", kwargs["env"])
                 if use_installed_dependencies:
@@ -148,7 +150,14 @@ class InstallerBuildTests(unittest.TestCase):
                 if command[0] == "ISCC.exe":
                     self.assertTrue(any("--self-update-smoke" in call for call in calls))
                     self.assertIn("/DAppVersion=0.1.0", command)
-                    self.assertIn(f"/DSourceRoot={source}", command)
+                    source_roots = [
+                        Path(argument[len("/DSourceRoot="):])
+                        for argument in command if argument.startswith("/DSourceRoot=")
+                    ]
+                    self.assertEqual(1, len(source_roots))
+                    # The 8.3 and long-name spellings must resolve to the
+                    # same real directory, not merely have identical text.
+                    self.assertTrue(source_roots[0].samefile(source))
                     self.assertTrue((source / "SimConnect.dll").is_file())
                     installer = work / "installer" / output.name
                     installer.parent.mkdir()
@@ -188,7 +197,9 @@ class InstallerBuildTests(unittest.TestCase):
                     with self.assertRaisesRegex(OSError, "publication failure"):
                         BUILD.build_installer("ISCC.exe", source, use_installed_dependencies)
                 else:
-                    self.assertEqual(output, BUILD.build_installer("ISCC.exe", source, use_installed_dependencies))
+                    self.assertTrue(output.samefile(
+                        BUILD.build_installer("ISCC.exe", source, use_installed_dependencies)
+                    ))
                     self.assertEqual(b"complete installer", output.read_bytes())
                     self.assertEqual({"assets": [{
                         "name": output.name, "version": "0.1.0",

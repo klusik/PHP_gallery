@@ -10,6 +10,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Protocol fixtures for the gallery-scoped flight report delivery client."""
 
+import io
 import json
 import sys
 import tempfile
@@ -299,6 +300,107 @@ class FlightDeliveryTests(unittest.TestCase):
             "report": report if found else None,
         }
 
+    def test_host_checkpoint_refuses_capability_and_destination_before_connect(self) -> None:
+        """Do not open either inventory request after host admission fails.
+
+        Returns:
+            None: Both request owners preserve the refusal without networking.
+        """
+        def refused() -> None:
+            """Simulate unavailable host evidence without exposing its details.
+
+            Returns:
+                None: Never returns successfully in this negative fixture.
+
+            Raises:
+                OSError: Synthetic host storage failure with private text.
+            """
+            raise OSError('private checkpoint detail')
+
+        with mock.patch.object(DELIVERY, '_connection_target') as connect:
+            for action in ('capability', 'destination'):
+                with self.subTest(action=action):
+                    with self.assertRaises(DELIVERY.FlightRequestAdmissionError) as error:
+                        if action == 'capability':
+                            DELIVERY.check_report_capability(
+                                'https://gallery.test/upload', 'key', refused,
+                            )
+                        else:
+                            DELIVERY.saved_report_destination(
+                                'https://gallery.test/upload', 'key', 'Gallery', refused,
+                            )
+                    self.assertNotIn('private checkpoint detail', str(error.exception))
+            connect.assert_not_called()
+
+    def test_host_checkpoint_precedes_each_report_attempt(self) -> None:
+        """Stop status, multipart or reconciliation without a hidden replay.
+
+        Returns:
+            None: Refusal opens no next connection and retains local PDF bytes.
+        """
+        for denied_attempt in (1, 2, 3):
+            with self.subTest(denied_attempt=denied_attempt):
+                status = FakeConnection(FakeResponse(200, self._status_response(False)))
+                upload = FakeConnection(FakeResponse(503, {'ok': False, 'error': 'unavailable'}))
+                attempts = [0]
+
+                def checkpoint() -> None:
+                    """Refuse one exact request using a synthetic vault failure.
+
+                    Returns:
+                        None: Earlier attempts remain permitted.
+
+                    Raises:
+                        OSError: The selected attempt has unavailable evidence.
+                    """
+                    attempts[0] += 1
+                    if attempts[0] == denied_attempt:
+                        raise OSError('private checkpoint detail')
+
+                with mock.patch.object(
+                    DELIVERY, '_connection_target',
+                    side_effect=[(status, '/upload'), (upload, '/upload')],
+                ) as connect:
+                    with self.assertRaises(DELIVERY.FlightRequestAdmissionError):
+                        DELIVERY.deliver_report(
+                            'https://gallery.test/upload', 'key', self.pdf,
+                            'session-01', 'en', 'report-01',
+                            before_request=checkpoint,
+                        )
+                self.assertEqual(denied_attempt, attempts[0])
+                self.assertEqual(denied_attempt - 1, connect.call_count)
+                self.assertEqual(self.pdf_bytes, self.pdf.read_bytes())
+                if denied_attempt == 3:
+                    self.assertIn(self.pdf_bytes, bytes(upload.sent))
+                    self.assertTrue(upload.closed)
+
+    def test_host_checkpoint_permits_current_status_and_upload(self) -> None:
+        """Allow a report when both independently checked attempts remain valid.
+
+        Returns:
+            None: The status and multipart requests each use the host callback.
+        """
+        status = FakeConnection(FakeResponse(200, self._status_response(False)))
+        upload = FakeConnection(FakeResponse(200, {
+            'ok': True, 'action': 'flight_report', 'found': True, 'conflict': False,
+            'report': {
+                'id': 'b' * 32, 'sha256': self.digest,
+                'size': len(self.pdf_bytes), 'filename': 'flight-report-b-en.pdf',
+            },
+        }))
+        checkpoint = mock.Mock()
+        with mock.patch.object(
+            DELIVERY, '_connection_target',
+            side_effect=[(status, '/upload'), (upload, '/upload')],
+        ):
+            receipt = DELIVERY.deliver_report(
+                'https://gallery.test/upload', 'key', self.pdf,
+                'session-01', 'en', 'report-01', before_request=checkpoint,
+            )
+        self.assertEqual(2, checkpoint.call_count)
+        self.assertEqual(self.digest, receipt['sha256'])
+        self.assertIn(self.pdf_bytes, bytes(upload.sent))
+
     def test_invalid_response_names_action_http_type_and_redacts_credentials(self) -> None:
         """Retain actionable HTML/PHP response context without leaking the key.
 
@@ -403,6 +505,7 @@ class FlightDeliveryTests(unittest.TestCase):
                     "ok": True,
                     "action": "flight_report",
                     "found": True,
+                    "conflict": False,
                     "report": {
                         "id": "b" * 32,
                         "sha256": self.digest,
@@ -543,6 +646,194 @@ class FlightDeliveryTests(unittest.TestCase):
                     "report-03",
                 )
         self.assertEqual(request.call_count, 1)
+
+    def test_incomplete_status_cannot_start_a_report_upload(self) -> None:
+        """Refuse ambiguous absence without issuing a multipart request.
+
+        Returns:
+            None: Each malformed status leaves the local PDF untouched.
+        """
+        responses = (
+            {"ok": True},
+            {"ok": True, "action": "inventory", "found": False,
+             "conflict": False, "report": None},
+            {"ok": True, "action": "flight_report_status", "found": "false",
+             "conflict": False, "report": None},
+            {"ok": True, "action": "flight_report_status", "found": False,
+             "report": None},
+            {"ok": True, "action": "flight_report_status", "found": False,
+             "conflict": False, "report": {"id": "a" * 32}},
+        )
+        for response in responses:
+            with self.subTest(response=response), mock.patch.object(
+                DELIVERY, "_perform_request", return_value=response,
+            ) as request:
+                with self.assertRaises(DELIVERY.FlightDeliveryError):
+                    DELIVERY.deliver_report(
+                        "https://gallery.test/upload", "key", self.pdf,
+                        "session-01", "en", "report-01",
+                    )
+                self.assertEqual(request.call_count, 1)
+                self.assertEqual(self.pdf_bytes, self.pdf.read_bytes())
+
+    def test_duplicate_status_keys_are_rejected_before_upload(self) -> None:
+        """Do not interpret an ambiguous JSON object as confirmed absence.
+
+        Returns:
+            None: The client closes the connection and sends no PDF.
+        """
+        response = FakeResponse(200, {})
+        response.body = (
+            b'{"ok":true,"action":"flight_report_status","found":true,'
+            b'"found":false,"conflict":false,"report":null}'
+        )
+        connection = FakeConnection(response)
+        with mock.patch.object(
+            DELIVERY, "_connection_target", return_value=(connection, "/upload"),
+        ) as request:
+            with self.assertRaises(DELIVERY.FlightDeliveryError):
+                DELIVERY.deliver_report(
+                    "https://gallery.test/upload", "key", self.pdf,
+                    "session-01", "en", "report-01",
+                )
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(b"", bytes(connection.sent))
+        self.assertTrue(connection.closed)
+        self.assertEqual(self.pdf_bytes, self.pdf.read_bytes())
+
+    def test_found_receipt_requires_the_exact_pdf_size(self) -> None:
+        """Do not confirm a same-digest receipt with contradictory length.
+
+        Returns:
+            None: A bad receipt stops before upload and leaves the PDF intact.
+        """
+        response = self._status_response(True)
+        assert response["report"] is not None
+        response["report"]["size"] = len(self.pdf_bytes) + 1
+        with mock.patch.object(DELIVERY, "_perform_request", return_value=response) as request:
+            with self.assertRaises(DELIVERY.FlightDeliveryError):
+                DELIVERY.deliver_report(
+                    "https://gallery.test/upload", "key", self.pdf,
+                    "session-01", "en", "report-01",
+                )
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(self.pdf_bytes, self.pdf.read_bytes())
+
+    def test_invalid_upload_receipt_never_retries_multipart(self) -> None:
+        """A malformed response after upload cannot count as success or replay.
+
+        Returns:
+            None: One status, one upload and one status leave unknown outcome.
+        """
+        malformed_receipt = {
+            "ok": True, "action": "flight_report", "found": True,
+            "conflict": False,
+            "report": {"id": "a" * 32, "sha256": self.digest,
+                       "size": len(self.pdf_bytes) + 1, "filename": "test.pdf"},
+        }
+        responses = [self._status_response(False), malformed_receipt,
+                     self._status_response(False)]
+        with mock.patch.object(DELIVERY, "_perform_request", side_effect=responses) as request:
+            with self.assertRaisesRegex(DELIVERY.FlightDeliveryError, "outcome is unknown"):
+                DELIVERY.deliver_report(
+                    "https://gallery.test/upload", "key", self.pdf,
+                    "session-01", "en", "report-01",
+                )
+        self.assertEqual(request.call_count, 3)
+        self.assertIsNotNone(request.call_args_list[1].kwargs.get("pdf_path"))
+        self.assertIsNone(request.call_args_list[2].kwargs.get("pdf_path"))
+        self.assertEqual(self.pdf_bytes, self.pdf.read_bytes())
+
+    def test_upload_422_can_follow_server_commit(self) -> None:
+        """Reconcile a rejected upload response without resending PDF bytes.
+
+        Returns:
+            None: A matching passive status produces the authoritative receipt.
+        """
+        responses = [self._status_response(False),
+                     DELIVERY.FlightDeliveryError("post-commit failure", 422),
+                     self._status_response(True)]
+        with mock.patch.object(DELIVERY, "_perform_request", side_effect=responses) as request:
+            receipt = DELIVERY.deliver_report(
+                "https://gallery.test/upload", "key", self.pdf,
+                "session-01", "en", "report-01",
+            )
+        self.assertTrue(receipt["already_present"])
+        self.assertEqual(request.call_count, 3)
+        self.assertIsNotNone(request.call_args_list[1].kwargs.get("pdf_path"))
+        self.assertIsNone(request.call_args_list[2].kwargs.get("pdf_path"))
+        self.assertEqual(self.pdf_bytes, self.pdf.read_bytes())
+
+    def test_expected_digest_must_match_before_any_request(self) -> None:
+        """Refuse a report that changed after the caller captured its hash.
+
+        Returns:
+            None: No status or upload is sent and the local PDF remains.
+        """
+        with mock.patch.object(DELIVERY, "_perform_request") as request:
+            with self.assertRaises(DELIVERY.FlightDeliveryError):
+                DELIVERY.deliver_report(
+                    "https://gallery.test/upload", "key", self.pdf,
+                    "session-01", "en", "report-01", expected_sha256="f" * 64,
+                )
+        request.assert_not_called()
+        self.assertEqual(self.pdf_bytes, self.pdf.read_bytes())
+
+    def test_digest_rejects_a_file_growing_past_the_read_limit(self) -> None:
+        """Stop a growing stream even when its initial file stat was small.
+
+        Returns:
+            None: The bounded digest refuses bytes beyond the test limit.
+        """
+        limit = len(self.pdf_bytes) + 8
+        growing = io.BytesIO(self.pdf_bytes + b"x" * 9)
+        with mock.patch.object(DELIVERY, "FLIGHT_DELIVERY_MAX_PDF_BYTES", limit), \
+                mock.patch.object(Path, "open", return_value=growing):
+            with self.assertRaises(ValueError):
+                DELIVERY.flight_report_digest(self.pdf)
+
+    def test_report_changed_during_status_is_not_acknowledged(self) -> None:
+        """Refuse to mark the changed source as confirmed by an old receipt.
+
+        Returns:
+            None: The changed PDF is retained and no upload is attempted.
+        """
+        response = self._status_response(True)
+        changed = b"%PDF-1.4\nchanged report bytes\n%%EOF\n"
+
+        def status(
+            url: str, api_key: str,
+            payload: Optional[FlightReportStatusRequest] = None,
+            pdf_path: Optional[Path] = None,
+            fields: Optional[FlightReportUploadFields] = None,
+            emit: Optional[Callable[[int, int], None]] = None,
+            file_size: int = 0,
+        ) -> FlightReportStatusResponse:
+            """Change only the isolated fixture before returning prior status.
+
+            Args:
+                url (str): Unused fixture endpoint.
+                api_key (str): Unused fixture key.
+                payload (Optional[FlightReportStatusRequest]): Status request.
+                pdf_path (Optional[Path]): Unused multipart source.
+                fields (Optional[FlightReportUploadFields]): Unused form fields.
+                emit (Optional[Callable[[int, int], None]]): Unused progress.
+                file_size (int): Unused multipart length.
+
+            Returns:
+                FlightReportStatusResponse: Receipt for the earlier PDF bytes.
+            """
+            self.pdf.write_bytes(changed)
+            return response
+
+        with mock.patch.object(DELIVERY, "_perform_request", side_effect=status) as request:
+            with self.assertRaises(DELIVERY.FlightDeliveryError):
+                DELIVERY.deliver_report(
+                    "https://gallery.test/upload", "key", self.pdf,
+                    "session-01", "en", "report-01", expected_sha256=self.digest,
+                )
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(changed, self.pdf.read_bytes())
 
 
 if __name__ == "__main__":

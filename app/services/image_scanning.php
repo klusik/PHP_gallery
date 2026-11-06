@@ -630,6 +630,7 @@ function scan_gallery_image_row_by_path(
  * @param bool $exifSchemaReady Whether EXIF and GPS columns are available.
  * @param int $nextSortOrder Next append sort order for newly inserted images.
  * @param array{upload_fast_path?:bool,metadata?:array<string,mixed>,...} $options Scanner options; upload_fast_path skips expensive metadata reads.
+ * @param int|null $createdRowId Optional output for a newly inserted row; unchanged for updates and skips.
  * @return int Number of changed image rows.
  */
 function scan_gallery_image_file_entry(
@@ -640,6 +641,7 @@ function scan_gallery_image_file_entry(
     bool $exifSchemaReady,
     int &$nextSortOrder,
     array $options = [],
+    ?int &$createdRowId = null,
 ): int {
     $galleryId = (int) ($gallery['id'] ?? 0);
     if (
@@ -744,6 +746,7 @@ function scan_gallery_image_file_entry(
             ];
         }
         $createdImageId = image_model_insert_scan_row($fields);
+        $createdRowId = $createdImageId;
         thumbnail_legacy_identity_cache_clear();
         scan_image_sync_master_display_metadata($createdImageId, $info);
         $nextSortOrder += 10;
@@ -1058,12 +1061,14 @@ function scan_gallery_selected_images_owned(
  * @param int $galleryId Gallery identifier.
  * @param list<string> $relativePaths Gallery-relative originals explicitly selected for upload registration.
  * @param array<string,array<string,mixed>> $metadataByRelativePath Prepared dimensions and source metadata keyed by selected relative path.
+ * @param array<string,int>|null $createdRows Optional output map of relative paths to newly inserted image IDs; null disables receipts.
  * @return int Number of changed image rows.
  */
 function scan_gallery_selected_uploaded_images(
     int $galleryId,
     array $relativePaths,
     array $metadataByRelativePath = [],
+    ?array &$createdRows = null,
 ): int {
     $writerLock = gallery_edit_writer_begin();
     try {
@@ -1071,6 +1076,7 @@ function scan_gallery_selected_uploaded_images(
             $galleryId,
             $relativePaths,
             $metadataByRelativePath,
+            $createdRows,
         );
     } finally {
         gallery_edit_writer_end($writerLock);
@@ -1086,6 +1092,7 @@ function scan_gallery_selected_uploaded_images(
  * @param int $galleryId Gallery identifier.
  * @param list<string> $relativePaths Selected gallery-relative original paths; an empty selection scans nothing.
  * @param array<string,array<string,mixed>> $metadataByRelativePath Prepared dimensions and source metadata keyed by selected relative path.
+ * @param array<string,int>|null $createdRows Optional output map of relative paths to newly inserted image IDs; null disables receipts.
  * @return int Number of changed image rows.
  * @author Rudolf Klusal
  */
@@ -1093,6 +1100,7 @@ function scan_gallery_selected_uploaded_images_owned(
     int $galleryId,
     array $relativePaths,
     array $metadataByRelativePath = [],
+    ?array &$createdRows = null,
 ): int {
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
@@ -1139,6 +1147,7 @@ function scan_gallery_selected_uploaded_images_owned(
         $metadata = is_array($metadataByRelativePath[$relative] ?? null)
             ? $metadataByRelativePath[$relative]
             : null;
+        $createdRowId = null;
         $count += scan_gallery_image_file_entry(
             $gallery,
             $realRoot,
@@ -1150,7 +1159,11 @@ function scan_gallery_selected_uploaded_images_owned(
                 'upload_fast_path' => true,
                 'metadata' => $metadata,
             ],
+            $createdRowId,
         );
+        if ($createdRows !== null && $createdRowId !== null) {
+            $createdRows[$relative] = $createdRowId;
+        }
     }
 
     scan_gallery_refresh_after_changes($gallery, $count, [

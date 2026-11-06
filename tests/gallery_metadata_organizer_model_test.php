@@ -36,6 +36,39 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services {
+    /**
+     * Simulate an image move that can fail after recording an effect.
+     *
+     * @param int $sourceGalleryId Fixture source identifier.
+     * @param int $destinationGalleryId Fixture destination identifier.
+     * @param list<int> $imageIds Fixture image identifiers.
+     * @param array{defer_maintenance?:bool} $options Fixture maintenance choice.
+     * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:list<string>,source_cover_image_id:null,destination_cover_image_id:null} Simulated move result.
+     * @throws \RuntimeException When the simulated post-effect callback fails.
+     */
+    function move_gallery_images(
+        int $sourceGalleryId,
+        int $destinationGalleryId,
+        array $imageIds,
+        array $options = [],
+    ): array {
+        $GLOBALS['organizer_simulated_destination'] = $imageIds;
+        if ($GLOBALS['organizer_move_case'] === 'post_effect_exception') {
+            throw new \RuntimeException('Fixture maintenance failure.');
+        }
+        return [
+            'requested' => count($imageIds), 'moved' => count($imageIds),
+            'originals_moved' => count($imageIds), 'derivatives_moved' => 0,
+            'failures' => $GLOBALS['organizer_move_case'] === 'partial'
+                ? ['Fixture partial result.'] : [],
+            'source_cover_image_id' => null, 'destination_cover_image_id' => null,
+        ];
+    }
+}
+
+namespace {
+
 use function Gallery\Services\gallery_metadata_organizer_apply_notice;
 use function Gallery\Services\gallery_metadata_organizer_date_title;
 use function Gallery\Services\gallery_metadata_organizer_default_max_date;
@@ -220,4 +253,44 @@ assert_metadata_organizer_contains(
 );
 
 schema_inspection_set_query_executor_for_tests(null);
+
+// The compound operations retain one shared writer lease. No failure branch
+// may delete a destination after a simulated post-effect or partial result.
+$organizerSource = (string) file_get_contents(
+    __DIR__ . '/../app/services/gallery_metadata_organizer.php',
+);
+assert_metadata_organizer_same(
+    2,
+    substr_count($organizerSource, 'gallery_linked_reservation_assert_admin_write();'),
+    'Both organizer entrypoints check linked-create reservations',
+);
+assert_metadata_organizer_same(
+    2,
+    substr_count($organizerSource, '$moveResult = gallery_metadata_organizer_move_checked('),
+    'Both organizer modes use the checked move owner',
+);
+assert_metadata_organizer_same(
+    0,
+    substr_count($organizerSource, 'delete_gallery_subtrees([$destinationGalleryId]);'),
+    'An uncertain destination must never be deleted by the organizer',
+);
+foreach (['post_effect_exception', 'partial'] as $case) {
+    $GLOBALS['organizer_move_case'] = $case;
+    $GLOBALS['organizer_simulated_destination'] = [];
+    $refused = false;
+    try {
+        \Gallery\Services\gallery_metadata_organizer_move_checked(1, 2, [17], true);
+    } catch (RuntimeException $exception) {
+        $refused = str_contains($exception->getMessage(), 'uncertain');
+    }
+    assert_metadata_organizer_same(true, $refused,
+        'A post-effect exception or partial move must remain uncertain');
+    assert_metadata_organizer_same([17], $GLOBALS['organizer_simulated_destination'],
+        'The simulated moved original remains in the retained destination');
+}
+$GLOBALS['organizer_move_case'] = 'success';
+assert_metadata_organizer_same(1,
+    \Gallery\Services\gallery_metadata_organizer_move_checked(1, 2, [17], false)['moved'],
+    'A verified move still reports its completed count');
 echo "Gallery metadata organizer model tests passed.\n";
+}

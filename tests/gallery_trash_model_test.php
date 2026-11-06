@@ -549,6 +549,42 @@ namespace {
         'Same-size content corruption changes the trash copy verification signature.',
     );
 
+    // Same-filesystem rename historically preserves a descendant link without
+    // following it; the separate cross-filesystem copy refuses such a link.
+    $linkSource = $fixtureRoot . DIRECTORY_SEPARATOR . 'link-source';
+    $linkDestination = $fixtureRoot . DIRECTORY_SEPARATOR . 'link-moved';
+    $linkTarget = $fixtureRoot . DIRECTORY_SEPARATOR . 'link-target.txt';
+    mkdir($linkSource);
+    file_put_contents($linkTarget, 'owned fixture target');
+    $linkPath = $linkSource . DIRECTORY_SEPARATOR . 'linked.txt';
+    if (function_exists('symlink') && @symlink($linkTarget, $linkPath)) {
+        \Gallery\Services\gallery_trash_move_directory(
+            $linkSource,
+            $linkDestination,
+            $fixtureRoot,
+        );
+        $movedLink = $linkDestination . DIRECTORY_SEPARATOR . 'linked.txt';
+        gallery_trash_assert(
+            is_link($movedLink) && readlink($movedLink) === $linkTarget
+                && file_get_contents($linkTarget) === 'owned fixture target',
+            'Same-filesystem moves preserve descendant links without following them.',
+        );
+        $copyLinkRefused = false;
+        try {
+            \Gallery\Services\gallery_trash_copy_directory(
+                $linkDestination,
+                $fixtureRoot . DIRECTORY_SEPARATOR . 'link-copy',
+            );
+        } catch (\RuntimeException) {
+            $copyLinkRefused = true;
+        }
+        gallery_trash_assert(
+            $copyLinkRefused && file_get_contents($linkTarget) === 'owned fixture target',
+            'Cross-filesystem fallback refuses descendant links without changing their targets.',
+        );
+        unlink($movedLink);
+    }
+
     gallery_trash_test_rmtree($fixtureRoot);
 
     // ---------------------------------------------------------------------
@@ -571,9 +607,40 @@ namespace {
     $controller = (string) file_get_contents($root
         . '/app/controllers/admin_trash.php');
 
+    $restoreWrapper = gallery_writer_functions($service)[
+        'restore_gallery_trash_entry'
+    ]['body'] ?? '';
+    $restoreBegin = strpos($restoreWrapper, 'gallery_edit_writer_begin');
+    $restoreGuard = strpos($restoreWrapper, 'gallery_linked_reservation_assert_admin_write');
+    $restoreOwned = strpos($restoreWrapper, 'restore_gallery_trash_entry_owned');
+    $restoreEnd = strpos($restoreWrapper, 'gallery_edit_writer_end');
+    gallery_trash_assert(
+        $restoreBegin !== false && $restoreGuard !== false
+            && $restoreOwned !== false && $restoreEnd !== false
+            && $restoreBegin < $restoreGuard && $restoreGuard < $restoreOwned
+            && $restoreOwned < $restoreEnd
+            && strpos($restoreWrapper, 'finally') !== false,
+        'Trash restore checks reservations inside the writer lease before the owned workflow and releases it in finally.',
+    );
+
     $trashFunction = gallery_writer_functions($service)[
         'move_gallery_subtrees_to_trash_owned'
     ]['body'] ?? '';
+    $trashWrapper = gallery_writer_functions($service)[
+        'move_gallery_subtrees_to_trash'
+    ]['body'] ?? '';
+    $trashBegin = strpos($trashWrapper, 'gallery_edit_writer_begin');
+    $trashGuard = strpos($trashWrapper, 'gallery_linked_reservation_assert_admin_write');
+    $trashOwned = strpos($trashWrapper, 'move_gallery_subtrees_to_trash_owned');
+    $trashEnd = strpos($trashWrapper, 'gallery_edit_writer_end');
+    gallery_trash_assert(
+        $trashBegin !== false && $trashGuard !== false
+            && $trashOwned !== false && $trashEnd !== false
+            && $trashBegin < $trashGuard && $trashGuard < $trashOwned
+            && $trashOwned < $trashEnd
+            && strpos($trashWrapper, 'finally') !== false,
+        'Moving to Trash checks reservations under the writer lease before any owned work.',
+    );
     gallery_trash_assert(
         strpos($trashFunction, 'gallery_trash_assert_available') < strpos(
             $trashFunction,

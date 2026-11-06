@@ -47,9 +47,12 @@ use PDOException;
 use Throwable;
 use function Gallery\Models\schema_inspection_model_column_definition_contains;
 use function Gallery\Models\schema_inspection_model_column_nullable;
+use function Gallery\Models\schema_inspection_model_nonunique_index_state;
 use function Gallery\Models\schema_inspection_model_object_exists;
 use function Gallery\Models\schema_inspection_model_query_definition;
+use function Gallery\Models\schema_inspection_model_table_engine_state;
 use function Gallery\Models\schema_inspection_model_table_snapshot_rows;
+use function Gallery\Models\schema_inspection_model_unique_index_state;
 
 const SCHEMA_INSPECTION_AVAILABLE = 'available';
 
@@ -63,9 +66,26 @@ const SCHEMA_INSPECTION_OBJECT_COLUMN = 'column';
 
 const SCHEMA_INSPECTION_OBJECT_INDEX = 'index';
 
+/**
+ * Identify foreign keys in structured schema inspection results.
+ * Type: string. Units: object kind. Scope: one foreign-key requirement.
+ * Consumers: schema_inspection_foreign_key_exact, schema_inspection_object.
+ * Rationale: foreign_key lets capability checks report the exact missing
+ *     constraint separately from its table, columns and indexes.
+ */
+const SCHEMA_INSPECTION_OBJECT_FOREIGN_KEY = 'foreign_key';
+
 const SCHEMA_INSPECTION_ERROR_FAILED = 'inspection_failed';
 
 const SCHEMA_INSPECTION_DIAGNOSTIC_FAILED = 'Database schema inspection failed.';
+
+/**
+ * Bound the expected columns inspected for one security-critical index.
+ * Type: int. Units: columns. Scope: one exact index definition.
+ * Consumers: schema_inspection_unique_index_exact.
+ * Rationale: 16 columns admits normal composite keys while bounding metadata.
+ */
+const SCHEMA_INSPECTION_INDEX_COLUMN_LIMIT = 16;
 
 /**
  * Return the request-local schema inspection cache by reference.
@@ -771,6 +791,178 @@ function schema_inspection_index(string $table, string $index): array
 }
 
 /**
+ * Inspect a named index's uniqueness and exact ordered full-column definition.
+ *
+ * @param string $table Owning table identifier.
+ * @param string $index Required index identifier.
+ * @param list<string> $columns Exact ordered full-column identifiers.
+ * @return array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string} Structured index-definition result.
+ * @throws InvalidArgumentException For an invalid or oversized requirement.
+ */
+function schema_inspection_unique_index_exact(
+    string $table,
+    string $index,
+    array $columns,
+): array {
+    return schema_inspection_index_exact($table, $index, $columns, true);
+}
+
+/**
+ * Inspect a named nonunique index's exact ordered full-column definition.
+ *
+ * @param string $table Owning table identifier.
+ * @param string $index Required index identifier.
+ * @param list<string> $columns Exact ordered full-column identifiers.
+ * @return array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string} Structured index-definition result.
+ * @throws InvalidArgumentException For an invalid or oversized requirement.
+ */
+function schema_inspection_nonunique_index_exact(
+    string $table,
+    string $index,
+    array $columns,
+): array {
+    return schema_inspection_index_exact($table, $index, $columns, false);
+}
+
+/**
+ * Inspect one expected index definition with explicit uniqueness policy.
+ *
+ * @param string $table Owning table identifier.
+ * @param string $index Required index identifier.
+ * @param list<string> $columns Exact ordered full-column identifiers.
+ * @param bool $unique Whether this index must be unique.
+ * @return array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string} Structured index-definition result.
+ * @throws InvalidArgumentException For an invalid or oversized requirement.
+ */
+function schema_inspection_index_exact(
+    string $table,
+    string $index,
+    array $columns,
+    bool $unique,
+): array {
+    $table = schema_inspection_validate_identifier($table, 'table');
+    $index = schema_inspection_validate_identifier($index, 'index');
+    if (
+        !array_is_list($columns)
+        || $columns === []
+        || count($columns) > SCHEMA_INSPECTION_INDEX_COLUMN_LIMIT
+    ) {
+        throw new InvalidArgumentException('Invalid index column requirement.');
+    }
+    foreach ($columns as $column) {
+        if (!is_string($column)) {
+            throw new InvalidArgumentException(
+                'Invalid index column requirement.',
+            );
+        }
+        schema_inspection_validate_identifier($column, 'column');
+    }
+    $indexStatus = schema_inspection_index($table, $index);
+    if (!schema_inspection_is_available($indexStatus)) {
+        return $indexStatus;
+    }
+    $kind = $unique ? 'index_unique_exact' : 'index_nonunique_exact';
+    $cacheKey = $kind . ':' . $table . ':' . $index . ':'
+        . implode(',', $columns);
+    $cache = &schema_inspection_request_cache();
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+    try {
+        $override = &schema_inspection_query_executor_override();
+        $state = is_callable($override)
+            ? ($override(
+                $kind,
+                $table,
+                $index,
+                implode(',', $columns),
+            )
+                ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING)
+            : ($unique
+                ? schema_inspection_model_unique_index_state(
+                    $table,
+                    $index,
+                    $columns,
+                )
+                : schema_inspection_model_nonunique_index_state(
+                    $table,
+                    $index,
+                    $columns,
+                ));
+        $cache[$cacheKey] = schema_inspection_result(
+            $state,
+            SCHEMA_INSPECTION_OBJECT_INDEX,
+            $table,
+            $index,
+            $state === SCHEMA_INSPECTION_UNKNOWN
+                ? SCHEMA_INSPECTION_ERROR_FAILED : '',
+            $state === SCHEMA_INSPECTION_UNKNOWN
+                ? SCHEMA_INSPECTION_DIAGNOSTIC_FAILED : '',
+        );
+    } catch (Throwable $exception) {
+        $cache[$cacheKey] = schema_inspection_result(
+            SCHEMA_INSPECTION_UNKNOWN,
+            SCHEMA_INSPECTION_OBJECT_INDEX,
+            $table,
+            $index,
+            schema_inspection_error_code($exception),
+            SCHEMA_INSPECTION_DIAGNOSTIC_FAILED,
+        );
+    }
+    return $cache[$cacheKey];
+}
+
+/**
+ * Inspect whether a table uses the requested transactional storage engine.
+ *
+ * @param string $table Owning table identifier.
+ * @param string $engine Expected storage engine identifier.
+ * @return array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string} Structured table-engine result.
+ * @throws InvalidArgumentException For an invalid table or engine identifier.
+ */
+function schema_inspection_table_engine(string $table, string $engine): array
+{
+    $table = schema_inspection_validate_identifier($table, 'table');
+    $engine = schema_inspection_validate_identifier($engine, 'engine');
+    $tableStatus = schema_inspection_table($table);
+    if (!schema_inspection_is_available($tableStatus)) {
+        return $tableStatus;
+    }
+    $cacheKey = 'table_engine:' . $table . ':' . $engine;
+    $cache = &schema_inspection_request_cache();
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+    try {
+        $override = &schema_inspection_query_executor_override();
+        $state = is_callable($override)
+            ? ($override('table_engine', $table, $table, $engine)
+                ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING)
+            : schema_inspection_model_table_engine_state($table, $engine);
+        $cache[$cacheKey] = schema_inspection_result(
+            $state,
+            SCHEMA_INSPECTION_OBJECT_TABLE,
+            $table,
+            $table,
+            $state === SCHEMA_INSPECTION_UNKNOWN
+                ? SCHEMA_INSPECTION_ERROR_FAILED : '',
+            $state === SCHEMA_INSPECTION_UNKNOWN
+                ? SCHEMA_INSPECTION_DIAGNOSTIC_FAILED : '',
+        );
+    } catch (Throwable $exception) {
+        $cache[$cacheKey] = schema_inspection_result(
+            SCHEMA_INSPECTION_UNKNOWN,
+            SCHEMA_INSPECTION_OBJECT_TABLE,
+            $table,
+            $table,
+            schema_inspection_error_code($exception),
+            SCHEMA_INSPECTION_DIAGNOSTIC_FAILED,
+        );
+    }
+    return $cache[$cacheKey];
+}
+
+/**
  * Return true when an inspection result confirms object availability.
  *
  * @param array $result Schema inspection result.
@@ -851,6 +1043,7 @@ function schema_inspection_feature(string $feature, array $requirements): array
                     SCHEMA_INSPECTION_OBJECT_TABLE,
                     SCHEMA_INSPECTION_OBJECT_COLUMN,
                     SCHEMA_INSPECTION_OBJECT_INDEX,
+                    SCHEMA_INSPECTION_OBJECT_FOREIGN_KEY,
                 ],
                 true,
             )
@@ -880,4 +1073,136 @@ function schema_inspection_feature(string $feature, array $requirements): array
         'feature' => $feature,
         'requirements' => array_values($requirements),
     ];
+}
+
+/**
+ * Compare optional EXTRA attributes without changing legacy exact checks.
+ *
+ * @param string $extra Observed information_schema EXTRA value.
+ * @param bool $autoIncrement Whether auto_increment must be present.
+ * @param bool $requirePlain Require no EXTRA attributes at all.
+ * @return bool True only when the requested attribute policy matches.
+ */
+function schema_inspection_extra_matches(
+    string $extra,
+    bool $autoIncrement,
+    bool $requirePlain,
+): bool {
+    return str_contains(strtolower($extra), 'auto_increment') === $autoIncrement
+        && (!$requirePlain || $extra === '');
+}
+
+/**
+ * Check a column's exact type, nullability, collation and auto-increment flag.
+ *
+ * Integer display widths do not affect storage and differ across supported
+ * MySQL/MariaDB versions; all other type modifiers remain significant.
+ *
+ * @param string $table Table name.
+ * @param string $column Column name.
+ * @param string $type Expected lowercase SQL COLUMN_TYPE.
+ * @param bool $nullable Whether NULL is permitted.
+ * @param string|null $collation Exact collation, or null for binary/numeric types.
+ * @param bool $autoIncrement Whether auto_increment must be present.
+ * @param bool $requirePlain Require empty EXTRA, refusing generated or modified columns.
+ * @return array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string} Three-state result.
+ */
+function schema_inspection_column_exact(
+    string $table,
+    string $column,
+    string $type,
+    bool $nullable,
+    ?string $collation,
+    bool $autoIncrement = false,
+    bool $requirePlain = false,
+): array {
+    $table = schema_inspection_validate_identifier($table, 'table');
+    $column = schema_inspection_validate_identifier($column, 'column');
+    $definition = [$type, $nullable, $collation, $autoIncrement];
+    if ($requirePlain) {
+        $definition[] = true;
+    }
+    $cacheKey = 'column_exact:' . $table . ':' . $column . ':'
+        . hash('sha256', serialize($definition));
+    $cache = &schema_inspection_request_cache();
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+    try {
+        $override = &schema_inspection_query_executor_override();
+        if (is_callable($override)) {
+            $matches = (bool) $override('column_exact', $table, $column, $definition);
+        } else {
+            $metadata = \Gallery\Models\schema_inspection_model_column_exact_metadata($table, $column);
+            $observed = is_array($metadata) ? strtolower($metadata['type']) : '';
+            // Only integer display width is discarded, never length or precision.
+            $observed = preg_replace('/\b(tinyint|smallint|mediumint|int|bigint)\([0-9]+\)/', '$1', $observed);
+            $matches = is_array($metadata) && $observed === $type
+                && $metadata['nullable'] === ($nullable ? 'YES' : 'NO')
+                && $metadata['collation'] === $collation
+                && schema_inspection_extra_matches(
+                    $metadata['extra'], $autoIncrement, $requirePlain,
+                );
+        }
+        return $cache[$cacheKey] = schema_inspection_result(
+            $matches ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
+            SCHEMA_INSPECTION_OBJECT_COLUMN, $table, $column,
+        );
+    } catch (Throwable $exception) {
+        return $cache[$cacheKey] = schema_inspection_result(
+            SCHEMA_INSPECTION_UNKNOWN, SCHEMA_INSPECTION_OBJECT_COLUMN, $table, $column,
+            schema_inspection_error_code($exception), SCHEMA_INSPECTION_DIAGNOSTIC_FAILED,
+        );
+    }
+}
+
+/**
+ * Check one named single-column foreign key and its delete rule exactly.
+ *
+ * @param string $table Local table name.
+ * @param string $constraint Foreign-key constraint name.
+ * @param string $column Local column name.
+ * @param string $referencedTable Referenced table name.
+ * @param string $referencedColumn Referenced column name.
+ * @param string $deleteRule Required delete rule, such as CASCADE.
+ * @return array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string} Three-state result.
+ */
+function schema_inspection_foreign_key_exact(
+    string $table,
+    string $constraint,
+    string $column,
+    string $referencedTable,
+    string $referencedColumn,
+    string $deleteRule,
+): array {
+    $table = schema_inspection_validate_identifier($table, 'table');
+    $constraint = schema_inspection_validate_identifier($constraint, 'constraint');
+    $column = schema_inspection_validate_identifier($column, 'column');
+    $referencedTable = schema_inspection_validate_identifier($referencedTable, 'table');
+    $referencedColumn = schema_inspection_validate_identifier($referencedColumn, 'column');
+    $cacheKey = 'foreign_key_exact:' . $table . ':' . $constraint . ':'
+        . hash('sha256', serialize([$column, $referencedTable, $referencedColumn, $deleteRule]));
+    $cache = &schema_inspection_request_cache();
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+    try {
+        $expected = [[
+            'column' => $column, 'referenced_table' => $referencedTable,
+            'referenced_column' => $referencedColumn, 'delete_rule' => $deleteRule,
+        ]];
+        $override = &schema_inspection_query_executor_override();
+        $matches = is_callable($override)
+            ? (bool) $override('foreign_key_exact', $table, $constraint, $expected)
+            : \Gallery\Models\schema_inspection_model_foreign_key_metadata($table, $constraint) === $expected;
+        return $cache[$cacheKey] = schema_inspection_result(
+            $matches ? SCHEMA_INSPECTION_AVAILABLE : SCHEMA_INSPECTION_MISSING,
+            SCHEMA_INSPECTION_OBJECT_FOREIGN_KEY, $table, $constraint,
+        );
+    } catch (Throwable $exception) {
+        return $cache[$cacheKey] = schema_inspection_result(
+            SCHEMA_INSPECTION_UNKNOWN, SCHEMA_INSPECTION_OBJECT_FOREIGN_KEY, $table, $constraint,
+            schema_inspection_error_code($exception), SCHEMA_INSPECTION_DIAGNOSTIC_FAILED,
+        );
+    }
 }

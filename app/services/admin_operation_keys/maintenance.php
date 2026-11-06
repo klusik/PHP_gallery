@@ -21,6 +21,7 @@ use const Gallery\Core\ADMIN_OPERATION_PENDING_PAGE_SIZE;
 use const Gallery\Core\ADMIN_OPERATION_INPUT_MAX_BYTES;
 use function Gallery\Models\admin_operation_model_find;
 use function Gallery\Models\admin_operation_model_lock;
+use function Gallery\Models\admin_operation_model_linked_tombstone_valid;
 use function Gallery\Models\admin_operation_model_pending_counts;
 use function Gallery\Models\admin_operation_model_pending_page;
 
@@ -47,7 +48,7 @@ function admin_operation_maintenance_identity(
  * Project only bounded non-credential metadata useful to an authorized operator.
  *
  * @param array<string,mixed> $row Retained ledger row; worker ownership/response data stay private.
- * @return array{actor_id:int,key_hash:string,payload_hash:string,operation:'gallery.create'|'gallery.create_upload'|'image.classic_upload'|'unknown',state:'pending'|'needs_reconciliation'|'completed'|'unknown',created_at:string,updated_at:string} Correlation hashes and bounded SQL timestamps, empty when invalid; never worker ownership or response contents.
+ * @return array{actor_id:int,key_hash:string,payload_hash:string,operation:'gallery.create'|'gallery.create_upload'|'image.classic_upload'|'unknown',state:'pending'|'needs_reconciliation'|'completed'|'abandoned'|'unknown',created_at:string,updated_at:string} Correlation hashes and bounded SQL timestamps, empty when invalid; never worker ownership or response contents.
  */
 function admin_operation_maintenance_metadata(array $row): array
 {
@@ -76,13 +77,16 @@ function admin_operation_maintenance_metadata(array $row): array
     )
         ? $row['operation_name']
         : 'unknown';
-    $result['state'] = in_array(
-        $row['state'] ?? '',
-        ['pending', 'needs_reconciliation', 'completed'],
-        true,
+    $result['state'] = admin_operation_model_linked_tombstone_valid(
+        $row, $result['actor_id'], (string) $result['key_hash'],
+        (string) $result['payload_hash'],
     )
-        ? $row['state']
-        : 'unknown';
+            ? 'abandoned'
+            : (in_array(
+                $row['state'] ?? '',
+                ['pending', 'needs_reconciliation', 'completed'],
+                true,
+            ) ? $row['state'] : 'unknown');
     foreach (['created_at', 'updated_at'] as $field) {
         $value = (string) ($row[$field] ?? '');
         $result[$field] = preg_match(
@@ -163,7 +167,7 @@ function admin_operation_pending_report(string $cursor = ''): array
  *
  * @param int $actorId Original administrator identity.
  * @param string $keyHash Exact operation-key digest from the pending report.
- * @return array{actor_id:int,key_hash:string,payload_hash:string,operation:'gallery.create'|'gallery.create_upload'|'image.classic_upload'|'unknown',state:'pending'|'needs_reconciliation'|'completed'|'unknown',created_at:string,updated_at:string} Bounded original-operation identity/state; invalid timestamps are empty, not native errors.
+ * @return array{actor_id:int,key_hash:string,payload_hash:string,operation:'gallery.create'|'gallery.create_upload'|'image.classic_upload'|'unknown',state:'pending'|'needs_reconciliation'|'completed'|'abandoned'|'unknown',created_at:string,updated_at:string} Bounded original-operation identity/state; invalid timestamps are empty, not native errors.
  */
 function admin_operation_inspect(int $actorId, string $keyHash): array
 {

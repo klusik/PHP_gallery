@@ -483,5 +483,8 @@ if (str_starts_with($path, '/assets/')) {
 }
 // The router script is the PHP server's entry point, but application routing expects SCRIPT_NAME to
 // identify the included public front controller. Keep clean asset paths out of the inferred mount path.
-$_SERVER['SCRIPT_NAME'] = '/index.php';
+// Exercise the same front controller under one controlled installation mount.
+$_SERVER['SCRIPT_NAME'] = $path === '/discovery-mount/index.php'
+    ? '/discovery-mount/index.php'
+    : '/index.php';
 require __DIR__ . '/public/index.php';

@@ -593,10 +593,14 @@ function render_gallery_card(
         'cover_selection_revision' =>
             gallery_cover_selection_revision($gallery),
         'description_layout' => $descriptionLayout,
-        'description' => (string) ($gallery['description'] ?? ''),
-        'description_links' => public_gallery_description_link_models(
-            (string) ($gallery['description'] ?? ''),
-        ),
+        // A listed password-gated card may expose its title and link, but its
+        // description and embedded links remain protected until access is granted.
+        'description' => $isProtectedPublicCard
+            ? '' : (string) ($gallery['description'] ?? ''),
+        'description_links' => $isProtectedPublicCard
+            ? [] : public_gallery_description_link_models(
+                (string) ($gallery['description'] ?? ''),
+            ),
         'is_protected' => $isProtectedPublicCard,
         'show_reorder_handle' => $showPublicReorderHandle,
         'picture_manager_enabled' => $pictureManagerEnabled,

@@ -53,6 +53,25 @@ namespace Gallery\Core {
 
 namespace Gallery\Models {
     /**
+     * Resolve one fixture row only within its owning gallery and path hash.
+     * @param int $galleryId Synthetic owning gallery ID.
+     * @param string $hash SHA-256 of the normalized relative filename.
+     * @return array{id:int}|null Matching fixture row or null.
+     */
+    function image_model_find_by_path_hash(int $galleryId, string $hash): ?array
+    {
+        $paths = $GLOBALS['upload_automation_checksum_paths'] ?? [];
+        if ($galleryId !== 7) {
+            return null;
+        }
+        foreach ($paths as $id => $path) {
+            if (hash('sha256', $path) === $hash) {
+                return ['id' => (int) $id];
+            }
+        }
+        return null;
+    }
+    /**
      * Return the synthetic image-path map prepared by the test fixture.
      *
      * @param int $galleryId Gallery identifier.
@@ -89,6 +108,11 @@ namespace Gallery\Models {
 }
 
 namespace Gallery\Services {
+    /** Resolve the parent of the owned gallery fixture. @return string Fixture root parent. */
+    function galleries_root(): string
+    {
+        return dirname((string) $GLOBALS['upload_automation_checksum_root']);
+    }
     /**
      * Resolve the gallery root prepared by the checksum-indexing fixture.
      *
@@ -100,6 +124,7 @@ namespace Gallery\Services {
         return (string) ($GLOBALS['upload_automation_checksum_root'] ?? '');
     }
 
+    require_once __DIR__ . '/../app/services/uploads.php';
     require_once __DIR__ . '/../app/services/upload_automation.php';
 
     /**
@@ -165,8 +190,67 @@ namespace Gallery\Services {
             ($persisted['checksums'][42] ?? '') === $expected,
             'persisted checksum matches the authoritative stored file bytes',
         );
+
+        $galleryPath = basename($tempRoot);
+        $proof = gallery_upload_delegated_file_identity($galleryPath, $filename);
+        $stored = [
+            'uploaded' => 1,
+            'filenames' => [$filename],
+            'image_ids' => [42],
+            'scan_failed_filenames' => [],
+            'delegated_receipts' => [42 => $proof],
+        ];
+        upload_automation_assert_delegated_registration(
+            7, ['folder_path' => $galleryPath], $stored, 1,
+        );
+        // A successful rename keeps the same original identity and DB ID.
+        $renamed = 'renamed.png';
+        upload_automation_checksum_assert(
+            rename($tempRoot . DIRECTORY_SEPARATOR . $filename,
+                $tempRoot . DIRECTORY_SEPARATOR . $renamed),
+            'fixture source rename succeeds',
+        );
+        $GLOBALS['upload_automation_checksum_paths'] = [42 => $renamed];
+        $stored['filenames'] = [$renamed];
+        upload_automation_assert_delegated_registration(
+            7, ['folder_path' => $galleryPath], $stored, 1,
+        );
+        foreach ([
+            ['image_ids' => []],
+            ['scan_failed_filenames' => [$filename]],
+            ['delegated_receipts' => []],
+            ['image_ids' => [43]],
+        ] as $change) {
+            $refused = false;
+            try {
+                upload_automation_assert_delegated_registration(
+                    7, ['folder_path' => $galleryPath], array_replace($stored, $change), 1,
+                );
+            } catch (\RuntimeException) {
+                $refused = true;
+            }
+            upload_automation_checksum_assert(
+                $refused,
+                'incomplete or unrelated delegated registration is refused',
+            );
+        }
+        unlink($tempRoot . DIRECTORY_SEPARATOR . $renamed);
+        file_put_contents($tempRoot . DIRECTORY_SEPARATOR . $renamed, 'replacement');
+        $refused = false;
+        try {
+            upload_automation_assert_delegated_registration(
+                7, ['folder_path' => $galleryPath], $stored, 1,
+            );
+        } catch (\RuntimeException) {
+            $refused = true;
+        }
+        upload_automation_checksum_assert(
+            $refused,
+            'replaced source is not accepted as the stored upload',
+        );
     } finally {
         @unlink($tempRoot . DIRECTORY_SEPARATOR . 'watcher-screenshot.png');
+        @unlink($tempRoot . DIRECTORY_SEPARATOR . 'renamed.png');
         @rmdir($tempRoot);
     }
 

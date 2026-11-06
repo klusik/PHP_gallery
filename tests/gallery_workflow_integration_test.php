@@ -43,6 +43,14 @@ const GALLERY_WORKFLOW_STORAGE_MAX_STEPS = 32;
 const GALLERY_WORKFLOW_CONSISTENCY_MAX_STEPS = 128;
 
 /**
+ * Differentiate the API upload bytes from seeded images in this fixture.
+ * Type: int. Units: random bytes. Scope: one disposable upload probe.
+ * Consumers: the legacy multipart and inventory journey below.
+ * Rationale: 16 bytes make repeated fixture content collisions negligible.
+ */
+const GALLERY_WORKFLOW_UPLOAD_PROBE_RANDOM_BYTES = 16;
+
+/**
  * Exercise actual source ZIP, scoped publication and confirmation HTTP endpoints.
  * @param Http $client Fixture administrator with its retained session.
  * @param array{token:string,sequence:int,processed:int,status:string,
@@ -307,8 +315,226 @@ try {
     )['url'];
     $admin = new Http($origin);
     $anonymous = new Http($origin);
+    $stage = 'app linking discovery and legacy upload';
+    $discoveryPath = '/index.php?page=app_linking_discovery';
+    $expectedDiscovery = [
+        'contract_version' => 1,
+        'app_linking' => ['available' => false],
+    ];
+    $discovery = $anonymous->request($discoveryPath);
+    check($discovery['status'] === 200
+        && $discovery['json'] === $expectedDiscovery,
+        'Anonymous discovery must expose only the unavailable v1 contract.');
+    foreach ([
+        'content-type' => 'application/json; charset=utf-8',
+        'cache-control' => 'no-store',
+        'x-content-type-options' => 'nosniff',
+    ] as $name => $value) {
+        check(strtolower($discovery['headers'][$name] ?? '') === $value,
+            'Discovery response header mismatch: ' . $name);
+    }
+    $head = $anonymous->request($discoveryPath, null, false, 'HEAD');
+    check($head['status'] === 200 && $head['body'] === '',
+        'Discovery HEAD must have the GET status and an empty body.');
+    foreach (['content-type', 'cache-control', 'x-content-type-options'] as $name) {
+        check(($head['headers'][$name] ?? null) === $discovery['headers'][$name],
+            'Discovery HEAD must retain GET response headers: ' . $name);
+    }
+    $post = $anonymous->request($discoveryPath, ['unused' => 'value']);
+    check($post['status'] === 405
+        && ($post['headers']['allow'] ?? '') === 'GET, HEAD',
+        'Discovery must refuse POST with its allowed methods.');
+    $mounted = $anonymous->request(
+        '/discovery-mount/index.php?page=app_linking_discovery',
+    );
+    check($mounted['status'] === 200 && $mounted['json'] === $expectedDiscovery,
+        'Discovery query route must work under an installation mount.');
+
+    $legacyKey = 'pgu_' . bin2hex(random_bytes(32));
+    $insert = $pdo->prepare('INSERT INTO gallery_upload_tokens '
+        . '(gallery_id, token_hash, label, active, created_at) '
+        . 'VALUES (?, ?, ?, 1, NOW())');
+    $insert->execute([(int) $seed['root_id'], hash('sha256', $legacyKey),
+        'discovery regression']);
+    // A fixture-owned unresolved create must not affect the independent pgu API.
+    $reservationKeyHash = hash('sha256', random_bytes(GALLERY_WORKFLOW_UPLOAD_PROBE_RANDOM_BYTES));
+    $reservationFolder = 'fixture-pgu-reservation-' . $reservationKeyHash;
+    $reservationPathHash = hash('sha256', $reservationFolder);
+    $reservationInserted = false;
+    try {
+        $reservationInsert = $pdo->prepare(
+            'INSERT INTO linked_gallery_create_reservations '
+            . '(actor_id, key_hash, path_hash, active_path_hash, folder_path, payload_hash, state) '
+            . "VALUES (1, ?, ?, ?, ?, ?, 'pending')",
+        );
+        $reservationInsert->execute([
+            $reservationKeyHash, $reservationPathHash, $reservationPathHash,
+            $reservationFolder, hash('sha256', 'fixture-pgu-payload'),
+        ]);
+        $reservationInserted = true;
+        $invalidUpload = $anonymous->request(
+            '/api/upload',
+            ['api_key' => 'pgu_invalid', 'action' => 'inventory'],
+        );
+        check($invalidUpload['status'] === 401,
+            'Legacy upload must reject an invalid gallery API key.');
+        $validUpload = $anonymous->request(
+            '/api/upload',
+            ['api_key' => $legacyKey, 'action' => 'inventory'],
+        );
+        check($validUpload['status'] === 200
+            && ($validUpload['json']['ok'] ?? false) === true
+            && (int) ($validUpload['json']['gallery_id'] ?? 0)
+                === (int) $seed['root_id'],
+            'Legacy POST upload API must retain gallery-scoped key authorization.');
+
+        // Keep this image distinct from the seeded image even when both use the
+        // same small, decodable fixture. JPEG permits bytes after its end marker.
+        $samplePath = $directory . '/galleries/seed/sample-1.jpg';
+        $sampleBytes = file_get_contents($samplePath);
+        check(is_string($sampleBytes), 'Cannot read the legacy upload fixture.');
+        $probeBytes = $sampleBytes . 'legacy-api-'
+            . bin2hex(random_bytes(GALLERY_WORKFLOW_UPLOAD_PROBE_RANDOM_BYTES));
+        $probePath = $directory . '/legacy-api-upload-probe.jpg';
+        check(file_put_contents($probePath, $probeBytes) === strlen($probeBytes),
+            'Cannot prepare the owned multipart upload source.');
+        $probeHash = hash('sha256', $probeBytes);
+        $probeImageId = 0;
+        $storedProbePath = null;
+        try {
+            $beforeProbe = countRows($pdo, 'images');
+            // Adding one makes this positive target differ from the key's scope.
+            $wrongGallery = $anonymous->request('/api/upload', [
+                'api_key' => $legacyKey,
+                'gallery_id' => (string) ((int) $seed['root_id'] + 1),
+                'image' => new CURLFile($probePath, 'image/jpeg', 'legacy-api-probe.jpg'),
+                'create_thumbnails' => '0',
+            ]);
+            check($wrongGallery['status'] === 403
+                && ($wrongGallery['json']['ok'] ?? null) === false,
+                'A legacy key must refuse a different submitted gallery.');
+            check(countRows($pdo, 'images') === $beforeProbe,
+                'A rejected cross-gallery upload changed persisted images.');
+
+            $uploaded = $anonymous->request('/api/upload', [
+                'api_key' => $legacyKey,
+                'gallery_id' => (string) $seed['root_id'],
+                'image' => new CURLFile($probePath, 'image/jpeg', 'legacy-api-probe.jpg'),
+                'create_thumbnails' => '0',
+            ]);
+            $payload = $uploaded['json'];
+            check($uploaded['status'] === 200 && is_array($payload)
+                && ($payload['ok'] ?? null) === true
+                && (int) ($payload['gallery_id'] ?? 0) === (int) $seed['root_id']
+                && ($payload['uploaded'] ?? null) === 1
+                && is_array($payload['image_ids'] ?? null)
+                && count($payload['image_ids']) === 1,
+                'Legacy multipart upload must return its gallery and stored image.');
+            check(isset($payload['gallery_title'], $payload['gallery_url'],
+                $payload['edit_url'], $payload['filenames'], $payload['renamed'],
+                $payload['rename_warnings'], $payload['rename_failures'],
+                $payload['thumbnail_errors'], $payload['post_upload_errors'])
+                && is_int($payload['scanned'] ?? null)
+                && is_array($payload['filenames'])
+                && count($payload['filenames']) === 1
+                && ($payload['post_upload_errors'] ?? null) === []
+                && ($payload['thumbnails'] ?? null) === 0
+                && ($payload['thumbnail_failed'] ?? null) === 0
+                && ($payload['client_thumbnails'] ?? null) === [
+                    'installed' => 0, 'skipped' => 0, 'failed' => 0, 'errors' => [],
+                ]
+                && ($payload['sim_camera_metadata'] ?? null) === [
+                    'attached' => 0, 'skipped' => 0, 'error' => '',
+                ],
+                'Legacy multipart response must retain its result envelope.');
+            $uploadedId = (int) $payload['image_ids'][0];
+            $stored = row($pdo, 'SELECT * FROM images WHERE id = ? AND gallery_id = ?',
+                [$uploadedId, (int) $seed['root_id']]);
+            $rootGallery = row($pdo, 'SELECT * FROM galleries WHERE id = ?',
+                [(int) $seed['root_id']]);
+            $rootPath = realpath($directory . '/galleries/' . $rootGallery['folder_path']);
+            $actualPath = is_string($rootPath)
+                ? realpath($rootPath . '/' . $stored['relative_path']) : false;
+            check(is_string($rootPath) && is_string($actualPath)
+                && str_starts_with($actualPath, $rootPath . DIRECTORY_SEPARATOR)
+                && hash_equals($probeHash, (string) hash_file('sha256', $actualPath))
+                && hash_equals($probeHash, (string) ($stored['checksum_sha256'] ?? '')),
+                'Stored upload bytes and indexed checksum must match the source.');
+            check(countRows($pdo, 'images') === $beforeProbe + 1,
+                'One legacy multipart upload must create exactly one image row.');
+            $probeImageId = $uploadedId;
+            $storedProbePath = $actualPath;
+
+            $inventory = $anonymous->request(
+                '/api/upload',
+                [
+                    'action' => 'inventory',
+                    'files' => [[
+                        'client_id' => 'legacy-probe',
+                        'filename' => 'legacy-api-probe.jpg',
+                        'size' => strlen($probeBytes),
+                        'sha256' => $probeHash,
+                    ]],
+                ],
+                apiKey: $legacyKey,
+                jsonBody: true,
+            );
+            $inventoryPayload = $inventory['json'];
+            check($inventory['status'] === 200 && is_array($inventoryPayload)
+                && ($inventoryPayload['ok'] ?? null) === true
+                && ($inventoryPayload['action'] ?? null) === 'inventory'
+                && (int) ($inventoryPayload['gallery_id'] ?? 0) === (int) $seed['root_id']
+                && ($inventoryPayload['checked'] ?? null) === 1
+                && ($inventoryPayload['matched'] ?? null) === 1
+                && ($inventoryPayload['deep_check_applied'] ?? null) === false
+                && ($inventoryPayload['gallery_title'] ?? null) === $rootGallery['title']
+                && ($inventoryPayload['gallery_folder'] ?? null) === $rootGallery['folder_path']
+                && is_string($inventoryPayload['fingerprint'] ?? null)
+                && is_string($inventoryPayload['server_time'] ?? null)
+                && ($inventoryPayload['capabilities']['flight_reports_v1'] ?? null) === true,
+                'Legacy JSON inventory must retain its scoped response contract.');
+            $matched = $inventoryPayload['existing'][0] ?? null;
+            check(is_array($matched)
+                && ($matched['client_id'] ?? null) === 'legacy-probe'
+                && ($matched['sha256'] ?? null) === $probeHash
+                && (int) ($matched['remote_image_id'] ?? 0) === $probeImageId
+                && ($matched['remote_relative_path'] ?? null) === $stored['relative_path']
+                && ($matched['matched_by'] ?? null) === 'checksum_sha256',
+                'Legacy inventory must find the actual indexed uploaded image.');
+        } finally {
+            if (is_string($storedProbePath)) {
+                @unlink($storedProbePath);
+            }
+            if ($probeImageId > 0) {
+                $removeProbe = $pdo->prepare(
+                    'DELETE FROM images WHERE id = ? AND gallery_id = ?',
+                );
+                $removeProbe->execute([$probeImageId, (int) $seed['root_id']]);
+            }
+            @unlink($probePath);
+        }
+        clearstatcache(true, (string) $storedProbePath);
+        check(countRows($pdo, 'images') === $beforeProbe
+            && (!is_string($storedProbePath) || !is_file($storedProbePath)),
+            'Legacy upload fixture must remove only its owned image and row.');
+        echo "PASS legacy upload multipart envelope and checksum inventory\n";
+    } finally {
+        if ($reservationInserted) {
+            $removeReservation = $pdo->prepare(
+                'DELETE FROM linked_gallery_create_reservations '
+                . "WHERE actor_id = 1 AND key_hash = ? AND path_hash = ? AND state = 'pending'",
+            );
+            $removeReservation->execute([$reservationKeyHash, $reservationPathHash]);
+        }
+        $delete = $pdo->prepare('DELETE FROM gallery_upload_tokens WHERE token_hash = ?');
+        $delete->execute([hash('sha256', $legacyKey)]);
+    }
     $stage = 'login and negative mutation controls';
     $csrf = $admin->login($seed);
+    $adminDiscovery = $admin->request($discoveryPath);
+    check($adminDiscovery['status'] === 200
+        && $adminDiscovery['json'] === $expectedDiscovery,
+        'Admin authentication must not enable or expand discovery.');
     $baseline = countRows($pdo, 'galleries');
     $fields = [
         'csrf_token' => $csrf,
@@ -2628,6 +2854,60 @@ try {
         )['status'] === 400,
         'Invalid CSRF restore must fail.',
     );
+    // A synthetic unresolved reservation belongs only to this disposable DB.
+    // Its missing ledger also exercises conservative handling of unknown state.
+    $trashToken = (string) $trash['trash_token'];
+    $trashFolder = (string) $trash['original_folder_path'];
+    check(preg_match('/\A[a-f0-9]{32}\z/', $trashToken) === 1
+        && $trashFolder === $gallery['folder_path']
+        && $trash['trash_relative_path'] === 'data/gallery-trash/' . $trashToken,
+        'The owned trash fixture must identify the expected gallery and storage.');
+    $trashOriginal = $directory . '/' . $trash['trash_relative_path']
+        . '/payload/' . $trashFolder . '/' . $image['relative_path'];
+    clearstatcache(true, $trashOriginal);
+    check(is_file($trashOriginal), 'The owned trash payload must exist.');
+    $trashDigest = hash_file('sha256', $trashOriginal);
+    check(is_string($trashDigest), 'The owned trash payload must be readable.');
+    $trashActor = (int) $pdo->query(
+        "SELECT id FROM users WHERE username = 'workflow_admin' AND role = 'admin'",
+    )->fetchColumn();
+    check($trashActor > 0, 'The owned workflow administrator must exist.');
+    $trashKey = hash('sha256', 'trash restore fixture ' . $trashToken);
+    $trashPayloadHash = hash('sha256', 'trash restore fixture');
+    $trashPathHash = hash('sha256', $trashFolder);
+    $trashGalleriesBefore = countRows($pdo, 'galleries');
+    $trashImagesBefore = countRows($pdo, 'images');
+    $insertReservation = $pdo->prepare(
+        'INSERT INTO linked_gallery_create_reservations '
+        . '(path_hash, active_path_hash, folder_path, actor_id, key_hash, payload_hash, state) '
+        . "VALUES (?, ?, ?, ?, ?, ?, 'pending')",
+    );
+    $insertReservation->execute([
+        $trashPathHash, $trashPathHash, $trashFolder, $trashActor,
+        $trashKey, $trashPayloadHash,
+    ]);
+    try {
+        $refusedRestore = $admin->request(
+            '/index.php?page=admin_trash_restore', $restore, true,
+        );
+        clearstatcache(true, $trashOriginal);
+        clearstatcache(true, $folder);
+        check($refusedRestore['status'] === 422
+            && ($refusedRestore['json']['ok'] ?? null) === false
+            && ($refusedRestore['json']['error_code'] ?? null) === 'gallery_trash_restore_failed'
+            && row($pdo, 'SELECT * FROM gallery_trash_entries WHERE trash_token = ?', [$trashToken]) === $trash
+            && countRows($pdo, 'galleries') === $trashGalleriesBefore
+            && countRows($pdo, 'images') === $trashImagesBefore
+            && !is_dir($folder) && is_file($trashOriginal)
+            && hash_file('sha256', $trashOriginal) === $trashDigest,
+            'Unknown reservation state must leave the trash entry, rows and payload unchanged.');
+    } finally {
+        $deleteReservation = $pdo->prepare(
+            'DELETE FROM linked_gallery_create_reservations '
+            . 'WHERE actor_id = ? AND key_hash = ? AND folder_path = ? AND payload_hash = ?',
+        );
+        $deleteReservation->execute([$trashActor, $trashKey, $trashFolder, $trashPayloadHash]);
+    }
     envelope(
         $admin->request('/index.php?page=admin_trash_restore', $restore, true),
         'Restore',

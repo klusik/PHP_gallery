@@ -199,6 +199,158 @@ function schema_inspection_model_object_exists(
 }
 
 /**
+ * Observe an exact full-column unique index rather than its name alone.
+ *
+ * @param string $table Validated table identifier.
+ * @param string $index Validated index identifier.
+ * @param list<string> $columns Ordered validated full-column identifiers.
+ * @return 'available'|'missing'|'unknown' Matching definition, confirmed
+ *     absent/incompatible definition, or incomplete metadata.
+ * @throws \Throwable When metadata access fails.
+ */
+function schema_inspection_model_unique_index_state(
+    string $table,
+    string $index,
+    array $columns,
+): string {
+    return schema_inspection_model_index_definition_state(
+        $table,
+        $index,
+        $columns,
+        true,
+    );
+}
+
+/**
+ * Observe an exact full-column nonunique index used for bounded reads.
+ *
+ * @param string $table Validated table identifier.
+ * @param string $index Validated index identifier.
+ * @param list<string> $columns Ordered validated full-column identifiers.
+ * @return 'available'|'missing'|'unknown' Matching definition, confirmed
+ *     absent/incompatible definition, or incomplete metadata.
+ * @throws \Throwable When metadata access fails.
+ */
+function schema_inspection_model_nonunique_index_state(
+    string $table,
+    string $index,
+    array $columns,
+): string {
+    return schema_inspection_model_index_definition_state(
+        $table,
+        $index,
+        $columns,
+        false,
+    );
+}
+
+/**
+ * Compare a complete index definition with the expected ordered columns.
+ *
+ * @param string $table Validated table identifier.
+ * @param string $index Validated index identifier.
+ * @param list<string> $columns Ordered validated full-column identifiers.
+ * @param bool $unique Whether the required index must be unique.
+ * @return 'available'|'missing'|'unknown' Matching definition, confirmed
+ *     absent/incompatible definition, or incomplete metadata.
+ * @throws \Throwable When metadata access fails.
+ */
+function schema_inspection_model_index_definition_state(
+    string $table,
+    string $index,
+    array $columns,
+    bool $unique,
+): string {
+    $statement = db()->prepare(
+        'SELECT COLUMN_NAME, SEQ_IN_INDEX, NON_UNIQUE, SUB_PART '
+            . 'FROM information_schema.STATISTICS '
+            . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? '
+            . 'AND INDEX_NAME = ? ORDER BY SEQ_IN_INDEX LIMIT ?',
+    );
+    $statement->bindValue(1, $table, PDO::PARAM_STR);
+    $statement->bindValue(2, $index, PDO::PARAM_STR);
+    // One lookahead row proves that the ordered definition has no extra field.
+    $statement->bindValue(3, count($columns) + 1, PDO::PARAM_INT);
+    if (!$statement->execute()) {
+        return 'unknown';
+    }
+    $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+    if (!is_array($rows)) {
+        return 'unknown';
+    }
+    if (count($rows) !== count($columns)) {
+        return 'missing';
+    }
+    foreach ($columns as $offset => $column) {
+        $row = $rows[$offset];
+        if (!is_array($row)) {
+            return 'unknown';
+        }
+        foreach ([
+            'COLUMN_NAME', 'SEQ_IN_INDEX', 'NON_UNIQUE', 'SUB_PART',
+        ] as $field) {
+            if (!array_key_exists($field, $row)) {
+                return 'unknown';
+            }
+        }
+        if (
+            !in_array($row['NON_UNIQUE'], [0, '0', 1, '1'], true)
+            || !(
+                is_int($row['SEQ_IN_INDEX'])
+                || (is_string($row['SEQ_IN_INDEX'])
+                    && preg_match('/\A[0-9]+\z/D', $row['SEQ_IN_INDEX']) === 1)
+            )
+        ) {
+            return 'unknown';
+        }
+        if (
+            $row['COLUMN_NAME'] !== $column
+            || (int) $row['SEQ_IN_INDEX'] !== $offset + 1
+            || !in_array(
+                $row['NON_UNIQUE'],
+                $unique ? [0, '0'] : [1, '1'],
+                true,
+            )
+            || $row['SUB_PART'] !== null
+        ) {
+            return 'missing';
+        }
+    }
+    return 'available';
+}
+
+/**
+ * Observe the storage engine of one table for transaction guarantees.
+ *
+ * @param string $table Validated table identifier.
+ * @param string $engine Validated expected engine identifier.
+ * @return 'available'|'missing'|'unknown' Matching engine, confirmed absent
+ *     or different table engine, or incomplete engine metadata.
+ * @throws \Throwable When metadata access fails.
+ */
+function schema_inspection_model_table_engine_state(
+    string $table,
+    string $engine,
+): string {
+    $statement = db()->prepare(
+        'SELECT ENGINE FROM information_schema.TABLES '
+            . 'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+    );
+    if (!$statement->execute([$table])) {
+        return 'unknown';
+    }
+    $row = $statement->fetch(PDO::FETCH_ASSOC);
+    if ($row === false) {
+        return 'missing';
+    }
+    if (!is_array($row) || !is_string($row['ENGINE'] ?? null)) {
+        return 'unknown';
+    }
+    return strcasecmp($row['ENGINE'], $engine) === 0
+        ? 'available' : 'missing';
+}
+
+/**
  * Return whether one column definition contains the supplied validated token.
  *
  * @param string $table Table name containing the column.
@@ -239,4 +391,64 @@ function schema_inspection_model_column_nullable(
     );
     $statement->execute([$table, $column]);
     return (bool) $statement->fetchColumn();
+}
+
+/**
+ * Read exact column metadata from the current database only.
+ *
+ * @param string $table Validated table name.
+ * @param string $column Validated column name.
+ * @return array{type:string,nullable:string,collation:?string,extra:string}|null Metadata, or null if absent.
+ * @throws \Throwable When metadata access fails.
+ */
+function schema_inspection_model_column_exact_metadata(string $table, string $column): ?array
+{
+    $query = db()->prepare(
+        'SELECT COLUMN_TYPE, IS_NULLABLE, COLLATION_NAME, EXTRA '
+            . 'FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() '
+            . 'AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+    );
+    $query->execute([$table, $column]);
+    $row = $query->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row)) {
+        return null;
+    }
+    return [
+        'type' => (string) $row['COLUMN_TYPE'],
+        'nullable' => (string) $row['IS_NULLABLE'],
+        'collation' => $row['COLLATION_NAME'] === null ? null : (string) $row['COLLATION_NAME'],
+        'extra' => (string) $row['EXTRA'],
+    ];
+}
+
+/**
+ * Read all ordered columns of a named foreign-key constraint.
+ *
+ * @param string $table Validated table name.
+ * @param string $constraint Validated constraint name.
+ * @return list<array{column:string,referenced_table:string,referenced_column:string,delete_rule:string}> Ordered foreign-key fields.
+ * @throws \Throwable When metadata access fails.
+ */
+function schema_inspection_model_foreign_key_metadata(string $table, string $constraint): array
+{
+    $query = db()->prepare(
+        'SELECT k.COLUMN_NAME, k.REFERENCED_TABLE_NAME, k.REFERENCED_COLUMN_NAME, '
+            . 'r.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE k '
+            . 'INNER JOIN information_schema.REFERENTIAL_CONSTRAINTS r '
+            . 'ON r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA '
+            . 'AND r.TABLE_NAME = k.TABLE_NAME AND r.CONSTRAINT_NAME = k.CONSTRAINT_NAME '
+            . 'WHERE k.CONSTRAINT_SCHEMA = DATABASE() AND k.TABLE_NAME = ? '
+            . 'AND k.CONSTRAINT_NAME = ? ORDER BY k.ORDINAL_POSITION LIMIT 17',
+    );
+    $query->execute([$table, $constraint]);
+    $result = [];
+    while (($row = $query->fetch(PDO::FETCH_ASSOC)) !== false) {
+        $result[] = [
+            'column' => (string) $row['COLUMN_NAME'],
+            'referenced_table' => (string) $row['REFERENCED_TABLE_NAME'],
+            'referenced_column' => (string) $row['REFERENCED_COLUMN_NAME'],
+            'delete_rule' => (string) $row['DELETE_RULE'],
+        ];
+    }
+    return $result;
 }

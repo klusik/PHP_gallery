@@ -556,19 +556,27 @@ function dispatchThumbnailMutationResult(form, result) {
 }
 
 /**
- * Handles run import with thumbnail progress behavior for the gallery UI.
+ * Import selected galleries and report thumbnail progress or a safe error.
  *
- * @param {*} form Value supplied by the caller or event context.
+ * @param {HTMLFormElement} form Admin discovery form containing the selection.
+ * @returns {Promise<void>} Resolves after completion or a displayed failure.
  */
 async function runImportWithThumbnailProgress(form) {
     // progress stores state or configuration for the gallery front-end flow.
     const progress = ensureThumbnailProgress(form);
+    const progressFill = progress.querySelector('[data-thumbnail-progress-fill]');
+    const progressText = progress.querySelector('[data-thumbnail-progress-text]');
     // buttons stores state or configuration for the gallery front-end flow.
     const buttons = Array.from(form.querySelectorAll('button, input[type="submit"]'));
     buttons.forEach((button) => {
         button.disabled = true;
     });
-    updateThumbnailProgress(progress, 0, 0, 0, 0, 'Importing selected galleries...');
+    // No completion percentage is known while the import request is pending.
+    progressFill.style.display = 'none';
+    progressText.classList.remove('notice');
+    progressText.classList.add('muted');
+    progressText.setAttribute('role', 'status');
+    progressText.textContent = 'Importing selected galleries...';
     try {
         // importBody stores state or configuration for the gallery front-end flow.
         const importBody = new FormData(form);
@@ -634,6 +642,7 @@ async function runImportWithThumbnailProgress(form) {
             created += result.created || 0;
             skipped += result.skipped || 0;
             failed += result.failed || 0;
+            progressFill.style.display = '';
             updateThumbnailProgress(progress, result.processed || 0, total, created, skipped, discoveryThumbnailRunningMessage(importResult));
             if (result.done) {
                 updateThumbnailProgress(progress, total, total, created, skipped, 'Import and thumbnail job complete.');
@@ -645,7 +654,11 @@ async function runImportWithThumbnailProgress(form) {
         const message = error instanceof Error && error.message
             ? error.message
             : i18n('admin.galleries.discover_import_or_thumbnail_failed', 'Import or thumbnail job failed.');
-        updateThumbnailProgress(progress, 0, 0, 0, 0, message);
+        progressFill.style.display = 'none';
+        progressText.classList.remove('muted');
+        progressText.classList.add('notice');
+        progressText.setAttribute('role', 'alert');
+        progressText.textContent = message;
     } finally {
         buttons.forEach((button) => {
             button.disabled = false;

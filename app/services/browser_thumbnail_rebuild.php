@@ -82,6 +82,7 @@ function browser_thumbnail_rebuild_store_consistency_batch(
     \Gallery\Core\cms_runtime_kernel()->load('domain-admin-dashboard');
     $lock = gallery_edit_writer_begin();
     try {
+        gallery_linked_reservation_assert_admin_write();
         $namespace = hash('sha256', (string) $input['consistency_token']
             . ':' . (string) $input['consistency_sequence'] . ':' . $sessionId);
         return browser_thumbnail_rebuild_store_prepared_zip_batch(

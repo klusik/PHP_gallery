@@ -59,10 +59,13 @@ final class Http
      * @param string $route Root-relative front-controller, public gallery asset,
      *     or clean Home/Gallery/Smart document route. Absolute URLs must remain
      *     on the same loopback origin and a supported application route.
-     * @param ?array<string,string|int|float|bool|null|\CURLFile|list<string|int|float|bool|null>> $fields Form fields keyed by input name; values are scalar values, top-level upload handles, or one-dimensional repeated scalar values.
+     * @param ?array<string,string|int|float|bool|null|\CURLFile|list<string|int|float|bool|null>|list<array{client_id:string,filename:string,size:int,sha256:string}>> $fields
+     *     Form fields or bounded inventory descriptors, keyed by input name.
      * @param bool $json Whether to request the JSON transport envelope.
      * @param string $method GET or HEAD; form submissions always use POST.
      * @param ?string $referer Optional absolute HTTP(S) referrer used by request-context integration tests.
+     * @param ?string $apiKey Fixture-only gallery upload key for the API header.
+     * @param bool $jsonBody Whether to send fields as an inventory JSON body.
      * @return array{status:int,body:string,headers:array<string,string>,json:scalar|array<array-key,mixed>|null} Real HTTP result; json is the associative decoded JSON tree with nested arrays recursively containing JSON scalars, arrays or null; null represents valid JSON null or failed/non-JSON decoding.
      */
     public function request(
@@ -71,6 +74,8 @@ final class Http
         bool $json = false,
         string $method = 'GET',
         ?string $referer = null,
+        ?string $apiKey = null,
+        bool $jsonBody = false,
     ): array {
         $routeParts = parse_url($route);
         $originParts = parse_url($this->origin);
@@ -119,7 +124,7 @@ final class Http
         }
         $frontControllerRoute =
             is_string($path)
-            && $path === '/index.php'
+            && in_array($path, ['/index.php', '/discovery-mount/index.php'], true)
             && is_string($query)
             && $query !== '';
         $cleanGalleryAssetRoute =
@@ -195,8 +200,11 @@ final class Http
                 }
             }
         }
+        // The legacy upload transport is the only machine clean path admitted.
+        $legacyUploadRoute = $path === '/api/upload' && $fields !== null;
         $routePathAllowed =
-            $frontControllerRoute
+            $legacyUploadRoute
+            || $frontControllerRoute
             || $cleanGalleryAssetRoute
             || ($cleanDocumentRoute && $cleanDocumentQueryAllowed);
         check(
@@ -231,6 +239,19 @@ final class Http
         );
         $requestHeaders = [];
         $responseHeaders = [];
+        if ($apiKey !== null || $jsonBody) {
+            check(
+                $path === '/api/upload'
+                    && $fields !== null
+                    && is_string($apiKey)
+                    && preg_match('/^pgu_[a-f0-9]{64}$/D', $apiKey) === 1,
+                'JSON inventory transport requires the owned upload key.',
+            );
+            $requestHeaders[] = 'X-Gallery-API-Key: ' . $apiKey;
+            if ($jsonBody) {
+                $requestHeaders[] = 'Content-Type: application/json';
+            }
+        }
         if ($referer !== null) {
             $requestHeaders[] = 'Referer: ' . $referer;
         }
@@ -270,7 +291,9 @@ final class Http
             curl_setopt(
                 $this->handle,
                 CURLOPT_POSTFIELDS,
-                $multipart ? $fields : http_build_query($fields),
+                $jsonBody
+                    ? json_encode($fields, JSON_THROW_ON_ERROR)
+                    : ($multipart ? $fields : http_build_query($fields)),
             );
         } elseif ($method === 'HEAD') {
             curl_setopt($this->handle, CURLOPT_NOBODY, true);

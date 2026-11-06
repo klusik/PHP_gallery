@@ -525,7 +525,9 @@ def main(ticket_path: str) -> int:
     events: queue.Queue[tuple[str, str | tuple[int, int] | UpdateOutcome | None]] = queue.Queue()
     try:
         ticket = load_ticket(path)
-        if Path(sys.executable).resolve() != path.parent / "helper.exe":
+        # Compare the same canonical representation on both sides; Windows
+        # can expose the owned session via an 8.3 short-path alias.
+        if Path(sys.executable).resolve() != (path.parent / "helper.exe").resolve():
             raise ValueError("Helper is not running from its owned session")
         installed_identity(Path(ticket.installed_executable))
         backend = WindowsBackend()

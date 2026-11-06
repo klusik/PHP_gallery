@@ -935,6 +935,58 @@ function image_model_direct_rows_by_checksums(
 }
 
 /**
+ * Bound one delegated inventory checksum lookup to its existing chunk size.
+ * Type: int. Units: distinct SHA-256 hashes. Scope: one SQL query.
+ * Consumers: image_model_direct_rows_by_checksums_bounded.
+ * Rationale: 250 matches the existing service chunk and bounds result rows.
+ */
+const IMAGE_MODEL_DELEGATED_INVENTORY_HASH_LIMIT = 250;
+
+/**
+ * Return one deterministic direct image row per requested checksum.
+ *
+ * Grouping chooses the lowest image ID for each present checksum before rows
+ * are fetched. Thus duplicate stored images cannot expand the PHP result and
+ * no requested distinct checksum is lost to an arbitrary row limit.
+ *
+ * @param int $galleryId Positive gallery identifier.
+ * @param list<string> $hashes Unique normalized lowercase SHA-256 values.
+ * @return list<array{id:int|string,filename:string,relative_path:string,file_size:int|string|null,checksum_sha256:string}>
+ *     At most one representative per requested checksum, ordered by database.
+ * @throws InvalidArgumentException When the candidate set exceeds its bounds.
+ */
+function image_model_direct_rows_by_checksums_bounded(
+    int $galleryId,
+    array $hashes,
+): array {
+    if ($galleryId <= 0 || count($hashes) > IMAGE_MODEL_DELEGATED_INVENTORY_HASH_LIMIT
+        || !array_is_list($hashes)) {
+        throw new InvalidArgumentException('Invalid inventory checksum set.');
+    }
+    foreach ($hashes as $hash) {
+        if (!is_string($hash) || preg_match('/\A[a-f0-9]{64}\z/D', $hash) !== 1) {
+            throw new InvalidArgumentException('Invalid inventory checksum.');
+        }
+    }
+    if (count(array_unique($hashes)) !== count($hashes)) {
+        throw new InvalidArgumentException('Duplicate inventory checksum.');
+    }
+    if ($hashes === []) {
+        return [];
+    }
+    $placeholders = implode(',', array_fill(0, count($hashes), '?'));
+    $stmt = db()->prepare(
+        'SELECT i.id, i.filename, i.relative_path, i.file_size, i.checksum_sha256 '
+            . 'FROM images i INNER JOIN ('
+            . 'SELECT MIN(id) AS id FROM images WHERE gallery_id = ? '
+            . "AND relative_path NOT LIKE '%/%' AND checksum_sha256 IN ($placeholders) "
+            . 'GROUP BY checksum_sha256) AS chosen ON chosen.id = i.id',
+    );
+    $stmt->execute(array_merge([$galleryId], $hashes));
+    return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+}
+
+/**
  * Persist authoritative SHA-256 checksums for selected images in one gallery.
  *
  * @param int $galleryId Gallery identifier.

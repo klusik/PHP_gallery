@@ -23,6 +23,7 @@ from unittest.mock import Mock, patch
 
 import uploader.flight_workflow as workflow
 from uploader.flight_jobs import SessionPlan, connection_binding, report_revisions
+from uploader.flight_delivery import FLIGHT_DELIVERY_CHUNK_BYTES
 
 
 # Type: float; Units: seconds; Scope: worker synchronization regression tests.
@@ -33,6 +34,19 @@ EVENT_WAIT_SECONDS = 3.0
 # Consumers: _render_report and receipt checksum assertions.
 # Rationale: small fixed payloads isolate orchestration from PDF implementation.
 PDF_FIXTURE_PREFIX = b"%PDF-test-"
+
+
+def _fixture_pdf_digest(path: Path) -> tuple[str, int]:
+    """Hash a small synthetic renderer output without invoking the real decoder.
+
+    Args:
+        path (Path): Fixture-owned short report file.
+
+    Returns:
+        tuple[str, int]: Fixture SHA-256 and byte length.
+    """
+    content = path.read_bytes()
+    return hashlib.sha256(content).hexdigest(), len(content)
 
 
 class FlightWorkflowTests(unittest.TestCase):
@@ -132,11 +146,15 @@ class FlightWorkflowTests(unittest.TestCase):
             reports = plan.directory / "reports" / "manual-test"
             reports.mkdir(parents=True)
             for language in plan.languages:
-                (reports / (language + ".pdf")).write_bytes(b"%PDF-saved-" + language.encode("ascii"))
+                (reports / (language + ".pdf")).write_bytes(
+                    b"%PDF-saved-" + language.encode("ascii") + b"\n%%EOF\n"
+                )
             revision = report_revisions(plan.directory)[0]
             drain = Mock()
             revoke = Mock()
-            receipt = {"id": "a" * 32, "sha256": "b" * 64}
+            first_pdf = next(iter(revision.files.values()))
+            receipt = {"id": "a" * 32,
+                       "sha256": hashlib.sha256(first_pdf.read_bytes()).hexdigest()}
             first = workflow.FinalizationWorker(
                 [plan], "https://gallery.test/api", "replacement-key", drain,
                 revoke, False, saved_revision=revision, target_gallery="Flights/A320",
@@ -157,7 +175,9 @@ class FlightWorkflowTests(unittest.TestCase):
             )
             with (
                 patch.object(delivery, "saved_report_destination"),
-                patch.object(delivery, "deliver_report", return_value=receipt) as upload,
+                patch.object(delivery, "deliver_report", side_effect=lambda *args, **kwargs: {
+                    "id": "a" * 32, "sha256": kwargs["expected_sha256"],
+                }) as upload,
             ):
                 retry.run()
             self.assertEqual("completed", retry.snapshot().phase)
@@ -267,8 +287,12 @@ class FlightWorkflowTests(unittest.TestCase):
             tuple[ModuleType, ModuleType]: Delivery module and report module.
         """
         delivery = ModuleType("uploader.flight_delivery")
+        delivery.FLIGHT_DELIVERY_CHUNK_BYTES = FLIGHT_DELIVERY_CHUNK_BYTES
+        delivery.flight_report_digest = Mock(side_effect=_fixture_pdf_digest)
         delivery.check_report_capability = Mock(return_value=True)
-        delivery.deliver_report = Mock()
+        delivery.deliver_report = Mock(side_effect=lambda *args, **kwargs: {
+            "sha256": kwargs["expected_sha256"],
+        })
         report = ModuleType("uploader.flight_report")
         report.REPORT_TEMPLATE_VERSION = "test"
         report.render_report = Mock(side_effect=self._render_report)
@@ -303,6 +327,65 @@ class FlightWorkflowTests(unittest.TestCase):
         renderer.start()
         self.addCleanup(renderer.stop)
         return delivery, report
+
+    def test_gui_remote_flight_holds_exact_admission_through_delivery(self) -> None:
+        """Pass the captured work checkpoint to each remote report owner.
+
+        Returns:
+            None: The lease remains active through delivery and closes afterward.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = self._plan(Path(temporary) / 'flight-guarded')
+            delivery, report = self._report_modules()
+            owner, port, work = Mock(), Mock(), Mock()
+            owner.acquire.return_value = work
+            worker = workflow.FinalizationWorker(
+                [plan], 'https://gallery.test/api', 'test-key',
+                lambda _cancel, _deadline: None, Mock(), False,
+                gui_admission=(owner, port), require_gui_admission=True,
+            )
+            with patch.object(workflow, 'analyze_session', return_value=self._analysis()), \
+                    patch.dict('sys.modules', {
+                        'uploader.flight_delivery': delivery,
+                        'uploader.flight_report': report,
+                    }):
+                worker.run()
+            owner.acquire.assert_called_once_with('legacy', port)
+            self.assertIs(work.checkpoint, delivery.check_report_capability.call_args.kwargs['before_request'])
+            self.assertTrue(delivery.deliver_report.call_args_list)
+            for call in delivery.deliver_report.call_args_list:
+                self.assertIs(work.checkpoint, call.kwargs['before_request'])
+            work.close.assert_called_once_with()
+            self.assertTrue(plan.completed)
+
+    def test_gui_remote_flight_refuses_missing_or_unavailable_admission(self) -> None:
+        """Refuse remote finalization before draining or touching a transport.
+
+        Returns:
+            None: A missing or failed host owner cannot authorize legacy work.
+        """
+        for scenario in ('missing', 'unavailable'):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                plan = self._plan(Path(temporary) / 'flight-refused')
+                delivery, report = self._report_modules()
+                owner, port = Mock(), Mock()
+                owner.acquire.side_effect = RuntimeError('fixture unavailable')
+                drain = Mock()
+                worker = workflow.FinalizationWorker(
+                    [plan], 'https://gallery.test/api', 'test-key', drain, Mock(), False,
+                    gui_admission=(owner, port) if scenario == 'unavailable' else None,
+                    require_gui_admission=True,
+                )
+                with patch.dict('sys.modules', {
+                    'uploader.flight_delivery': delivery,
+                    'uploader.flight_report': report,
+                }):
+                    worker.run()
+                drain.assert_not_called()
+                delivery.check_report_capability.assert_not_called()
+                delivery.deliver_report.assert_not_called()
+                self.assertFalse(plan.completed)
+                self.assertEqual('error', worker.snapshot().phase)
 
     def test_no_samples_completes_without_creating_blank_report(self) -> None:
         """Turn empty telemetry into photograph-only completion without a PDF.
@@ -367,6 +450,29 @@ class FlightWorkflowTests(unittest.TestCase):
             revoke.assert_called_once_with()
             self.assertEqual("saving_key", worker.snapshot().phase)
 
+    def test_local_only_report_skips_server_digest_policy(self) -> None:
+        """Keep local finalization independent of server PDF upload limits.
+
+        Returns:
+            None: A readable local-only fixture completes without remote work.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = self._plan(Path(temporary) / "flight-local", local_only=True)
+            delivery, report = self._report_modules()
+            worker = workflow.FinalizationWorker(
+                [plan], "https://gallery.test/api", "test-key",
+                lambda cancel, deadline: None, Mock(), False,
+            )
+            with patch.object(workflow, "analyze_session", return_value=self._analysis()), \
+                    patch.dict("sys.modules", {
+                        "uploader.flight_delivery": delivery,
+                        "uploader.flight_report": report,
+                    }):
+                worker.run()
+            self.assertTrue(plan.completed)
+            delivery.flight_report_digest.assert_not_called()
+            delivery.deliver_report.assert_not_called()
+
     def test_second_language_failure_keeps_first_durable_receipt(self) -> None:
         """Retain a confirmed first-language receipt when the next upload fails.
 
@@ -381,7 +487,7 @@ class FlightWorkflowTests(unittest.TestCase):
             )
             delivery, report = self._report_modules()
             delivery.deliver_report.side_effect = [
-                None,
+                {"sha256": hashlib.sha256(PDF_FIXTURE_PREFIX + b"en").hexdigest()},
                 RuntimeError("Swedish/Czech delivery failure"),
             ]
             revoke = Mock()
@@ -406,6 +512,61 @@ class FlightWorkflowTests(unittest.TestCase):
             self.assertEqual(delivery.deliver_report.call_count, 2)
             self.assertEqual(worker.snapshot().phase, "error")
             revoke.assert_not_called()
+
+    def test_changed_report_or_mismatched_receipt_remains_unconfirmed(self) -> None:
+        """Keep the plan open when local bytes or the returned digest change.
+
+        Returns:
+            None: Neither case records a receipt or allows key revocation.
+        """
+        for case in ("source", "receipt"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
+                plan = self._plan(Path(temporary) / "flight")
+                delivery, report = self._report_modules()
+                revoke = Mock()
+
+                def changed(
+                    upload_url: str, api_key: str, pdf: Path, session_id: str,
+                    language: str, report_id: str,
+                    emit: Callable[[int, int], None],
+                    expected_sha256: str | None = None,
+                ) -> dict[str, str]:
+                    """Return a mismatched receipt or change the retained file.
+
+                    Args:
+                        upload_url (str): Unused fixture gallery endpoint.
+                        api_key (str): Unused fake gallery key.
+                        pdf (Path): Exact retained source file under test.
+                        session_id (str): Unused flight session identifier.
+                        language (str): Unused report language.
+                        report_id (str): Unused report identity.
+                        emit (Callable[[int, int], None]): Unused progress callback.
+                        expected_sha256 (str | None): Earlier captured digest.
+
+                    Returns:
+                        dict[str, str]: Simulated acknowledged report checksum.
+                    """
+                    if case == "source":
+                        pdf.write_bytes(b"%PDF-changed")
+                        return {"sha256": str(expected_sha256)}
+                    return {"sha256": "f" * 64}
+
+                delivery.deliver_report.side_effect = changed
+                worker = workflow.FinalizationWorker(
+                    [plan], "https://gallery.test/api", "test-key",
+                    lambda cancel, deadline: None, revoke, True,
+                )
+                with patch.object(workflow, "analyze_session", return_value=self._analysis()), \
+                        patch.dict("sys.modules", {
+                            "uploader.flight_delivery": delivery,
+                            "uploader.flight_report": report,
+                        }):
+                    worker.run()
+                saved = SessionPlan.load(plan.directory)
+                self.assertFalse(saved.completed)
+                self.assertEqual({}, saved.receipts)
+                self.assertEqual("error", worker.snapshot().phase)
+                revoke.assert_not_called()
 
     def test_complete_render_set_precedes_any_delivery(self) -> None:
         """Upload only after every selected PDF is present and journaled.
@@ -444,7 +605,8 @@ class FlightWorkflowTests(unittest.TestCase):
                     upload_url: str, api_key: str, pdf: Path, session_id: str,
                     language: str, report_id: str,
                     emit: Callable[[int, int], None],
-                ) -> None:
+                    expected_sha256: str | None = None,
+                ) -> dict[str, str]:
                     """Check the render barrier at the first gallery operation.
 
                     Args:
@@ -455,11 +617,14 @@ class FlightWorkflowTests(unittest.TestCase):
                         language (str): Uploaded language.
                         report_id (str): Stable reserved report identity.
                         emit (Callable[[int, int], None]): Unused byte callback.
+                        expected_sha256 (str | None): Expected rendered PDF digest.
                     Returns:
-                        None: All selected languages already have completed PDFs.
+                        dict[str, str]: The previously captured SHA-256 receipt.
                     """
                     self.assertEqual(plan.languages, worker.snapshot().rendered_languages)
                     self.assertEqual(len(plan.languages), report.render_report.call_count)
+                    self.assertIsNotNone(expected_sha256)
+                    return {"sha256": str(expected_sha256)}
 
                 report.render_report.side_effect = render
                 delivery.deliver_report.side_effect = delivered

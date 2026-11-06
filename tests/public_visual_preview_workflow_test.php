@@ -1591,7 +1591,7 @@ try {
         string $documentType,
         string $label,
         bool $listedProtectedChildExpected = false,
-    ) use ($seed, $previewDocumentFacts): void {
+    ) use ($seed, $previewDocumentFacts, &$stageDiagnostic): void {
         $documentFacts = $previewDocumentFacts(
             $response['body'],
             (int) $seed['root_id'],
@@ -1628,6 +1628,44 @@ try {
             '',
             $response['body'],
         );
+        // Emit only bounded boolean facts, never private document content.
+        // Keep each existing privacy assertion independently diagnosable.
+        $stageDiagnostic .=
+            ';follow_public_body=' . ($documentFacts['public_body'] ? '1' : '0')
+            . ';follow_home_index=' . ($documentFacts['home_index'] ? '1' : '0')
+            . ';follow_root_hero=' . ($documentFacts['root_hero'] ? '1' : '0')
+            . ';follow_title_class='
+            . ($documentFacts['gallery_title_class'] ? '1' : '0')
+            . ';follow_root_title='
+            . ($documentFacts['root_gallery_title'] ? '1' : '0')
+            . ';follow_root_title_anywhere='
+            . ($documentFacts['root_title_anywhere'] ? '1' : '0')
+            . ';follow_preview_marker='
+            . (str_contains(
+                $response['body'],
+                'data-theme-background-visual-editor-target',
+            ) ? '1' : '0')
+            . ';follow_listed_card='
+            . ($hasListedProtectedChildCard ? '1' : '0')
+            . ';follow_listed_card_expected='
+            . ($listedProtectedChildExpected ? '1' : '0')
+            . ';follow_child_id='
+            . (str_contains(
+                $response['body'],
+                'data-gallery-id="' . (int) $seed['protected_id'] . '"',
+            ) ? '1' : '0')
+            . ';follow_protected_text='
+            . (str_contains($response['body'], 'Protected') ? '1' : '0')
+            . ';follow_protected_title_link='
+            . (preg_match(
+                '~<a\b[^>]*>\s*Protected\s*</a>~i',
+                $response['body'],
+            ) === 1 ? '1' : '0')
+            . ';follow_protected_path='
+            . (str_contains(strtolower($outsideProtectedCard), 'seed/protected')
+                ? '1' : '0')
+            . ';follow_listing_safe='
+            . ($protectedChildListingIsSafe ? '1' : '0');
         check(
             $response['status'] === 200
                 && $documentFacts['public_body']

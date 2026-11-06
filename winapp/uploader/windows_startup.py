@@ -16,6 +16,8 @@ import os
 from pathlib import Path
 import sys
 
+from .windows_file_identity import WindowsDirectoryAnchor
+
 
 IS_WINDOWS = sys.platform == "win32"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -94,9 +96,11 @@ class WindowsInstance:
     """Hold a profile-scoped Windows mutex and a coalescing activation event.
 
     All desktop launches use the shared application profile, including different
-    executable/source copies. Global objects also prevent concurrent use of that
-    profile across Windows sessions. Default Windows object ACLs apply. Handles
-    are non-inheritable; helper/version/runtime modes bypass this desktop owner.
+    executable/source copies. The legacy path mutex remains held for older
+    cooperating builds, while an additional native volume/File ID mutex rejects
+    different aliases of the same open directory. Global objects coordinate
+    Windows sessions. Default Windows object ACLs apply. Helper/version/runtime
+    modes bypass this desktop owner; older binaries are not physically fenced.
     """
 
     def __init__(self, profile: Path) -> None:
@@ -107,6 +111,7 @@ class WindowsInstance:
         Returns:
             None: Creates an unacquired lifecycle owner.
         """
+        self.profile = profile
         identity = os.path.normcase(str(profile.resolve())).casefold()
         digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
         self.name = "Global\\PHPGalleryUploader-" + digest
@@ -114,6 +119,10 @@ class WindowsInstance:
         self.mutex: int | None = None
         self.event: int | None = None
         self.owned = False
+        self.directory: WindowsDirectoryAnchor | None = None
+        self.physical_mutex: int | None = None
+        self.physical_event: int | None = None
+        self.physical_owned = False
 
     def acquire(self) -> bool:
         """Acquire the profile before configuration, logging or workers start.
@@ -167,6 +176,40 @@ class WindowsInstance:
                 if status not in (WAIT_OBJECT_0, WAIT_ABANDONED):
                     raise ctypes.WinError(ctypes.get_last_error())
                 self.owned = True
+            if sys.platform == "win32":
+                # The legacy path owner is retained before creating the
+                # directory or resolving its opened native filesystem identity.
+                self.profile.mkdir(parents=True, exist_ok=True)
+                self.directory = WindowsDirectoryAnchor(self.profile)
+                self.directory.verify()
+                physical_id = self.directory.identity
+                if physical_id is None:
+                    raise OSError("Native profile identity is unavailable.")
+                # Keep all 128 File ID bits, not the truncated ReFS 64-bit index.
+                physical_digest = hashlib.sha256(
+                    b"PHPGallery physical profile\x00" + physical_id
+                ).hexdigest()
+                physical_name = "Global\\PHPGalleryUploader.Physical-" + physical_digest
+                self.physical_event = self.kernel.CreateEventW(
+                    None, False, False, physical_name + "-Activate",
+                )
+                if not self.physical_event:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                ctypes.set_last_error(0)
+                self.physical_mutex = self.kernel.CreateMutexW(
+                    None, True, physical_name,
+                )
+                physical_error = ctypes.get_last_error()
+                if not self.physical_mutex:
+                    raise ctypes.WinError(physical_error)
+                if physical_error == ERROR_ALREADY_EXISTS:
+                    status = self.kernel.WaitForSingleObject(self.physical_mutex, 0)
+                    if status == WAIT_TIMEOUT:
+                        return False
+                    if status not in (WAIT_OBJECT_0, WAIT_ABANDONED):
+                        raise ctypes.WinError(ctypes.get_last_error())
+                self.physical_owned = True
+                self.directory.verify()
             return True
         except OSError:
             self.close()
@@ -182,6 +225,11 @@ class WindowsInstance:
         """
         if self.kernel is None or self.event is None:
             return
+        event = (
+            self.physical_event
+            if self.physical_event is not None and not self.physical_owned
+            else self.event
+        )
         user = ctypes.WinDLL(
             "user32.dll", use_last_error=True,
             winmode=LOAD_LIBRARY_SEARCH_SYSTEM32,
@@ -191,7 +239,7 @@ class WindowsInstance:
         # The explicit launcher can transfer its foreground allowance. Windows
         # revokes ASFW_ANY at the next user input; no credentials/data are sent.
         user.AllowSetForegroundWindow(ASFW_ANY)
-        if not self.kernel.SetEvent(self.event):
+        if not self.kernel.SetEvent(event):
             raise ctypes.WinError(ctypes.get_last_error())
 
     def activation_requested(self) -> bool:
@@ -204,10 +252,15 @@ class WindowsInstance:
         """
         if self.kernel is None or self.event is None:
             return False
-        status = self.kernel.WaitForSingleObject(self.event, 0)
-        if status not in (WAIT_OBJECT_0, WAIT_TIMEOUT):
-            raise ctypes.WinError(ctypes.get_last_error())
-        return status == WAIT_OBJECT_0
+        for event in (self.event, self.physical_event):
+            if event is None:
+                continue
+            status = self.kernel.WaitForSingleObject(event, 0)
+            if status not in (WAIT_OBJECT_0, WAIT_TIMEOUT):
+                raise ctypes.WinError(ctypes.get_last_error())
+            if status == WAIT_OBJECT_0:
+                return True
+        return False
 
     def close(self) -> None:
         """Release owned synchronization resources after the main loop ends.
@@ -217,12 +270,24 @@ class WindowsInstance:
                 also releases the mutex after an unexpected process termination.
         """
         if self.kernel is not None:
+            if self.physical_event:
+                self.kernel.CloseHandle(self.physical_event)
+            if self.physical_mutex:
+                if self.physical_owned:
+                    self.kernel.ReleaseMutex(self.physical_mutex)
+                self.kernel.CloseHandle(self.physical_mutex)
             if self.event:
                 self.kernel.CloseHandle(self.event)
             if self.mutex:
                 if self.owned:
                     self.kernel.ReleaseMutex(self.mutex)
                 self.kernel.CloseHandle(self.mutex)
+        if self.directory is not None:
+            self.directory.close()
+        self.directory = None
+        self.physical_event = None
+        self.physical_mutex = None
+        self.physical_owned = False
         self.event = None
         self.mutex = None
         self.owned = False

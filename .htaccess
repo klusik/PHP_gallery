@@ -44,6 +44,15 @@ Options -Indexes
     RewriteRule ^ public/index.php [L]
 </IfModule>
 
+<IfModule mod_fastcgi.c>
+    <IfModule mod_setenvif.c>
+        # MAMP's FastCGI Action drops the Authorization header. Pass only
+        # WinApp linking bearers as the environment value PHP already reads
+        # after an internal redirect, even with mod_rewrite disabled.
+        SetEnvIf Authorization "^((?i:Bearer) pg(?:la|lr)_[A-Za-z0-9_-]+)$" HTTP_AUTHORIZATION=$1
+    </IfModule>
+</IfModule>
+
 <IfModule mod_headers.c>
     <FilesMatch "\.(?:css|js)$">
         Header set Cache-Control "public, max-age=31536000, immutable"

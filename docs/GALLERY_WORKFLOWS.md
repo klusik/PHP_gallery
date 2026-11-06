@@ -20,7 +20,8 @@ Home SEO canonicalization preserves that exact notice only with the matching
 preview and anonymous-audience markers. The denied gallery document itself is
 never rendered. An otherwise listed,
 password-gated child may still appear in its accessible parent’s ordinary public
-listing as a locked card without cover imagery; a private child is omitted by
+listing as a locked card without its description, description links or cover
+imagery; a private child is omitted by
 the
 existing public-listing policy. Gallery destinations are matched against the
 stored canonical `url_path`, not inferred from the gallery’s filesystem folder

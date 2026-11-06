@@ -564,7 +564,14 @@ class UtcLifecycleTests(unittest.TestCase):
         app.config = MAIN.WatcherConfig(api_key="saved", sync_utc_time=True)
         app.sync_utc_time_var.get.return_value = False
         app.current_config.side_effect = AssertionError("Must not read unsaved form")
+        # The current GUI persists only through the mode-owned ConfigStore
+        # callback; run that real callback rather than mocking the result.
+        app.mode_owner.save.side_effect = lambda save, **kwargs: save()
+        app._save_owned_config = MAIN.WatcherApp._save_owned_config.__get__(
+            app, MAIN.WatcherApp
+        )
         MAIN.WatcherApp.toggle_utc_sync(app)
+        app.mode_owner.save.assert_called_once()
         self.assertFalse(app.config.sync_utc_time)
         self.assertEqual("saved", app.config.api_key)
         self.assertLess(

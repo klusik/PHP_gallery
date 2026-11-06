@@ -45,6 +45,22 @@ use function Gallery\Models\public_search_model_compatibility_image_rows;
 const PUBLIC_HOME_SEARCH_SETTING = 'public_home_search_enabled';
 
 /**
+ * Bound alternatives in a Boolean search expression.
+ * Type: int. Units: OR groups. Scope: public and native gallery search.
+ * Consumers: public_search_parse_groups.
+ * Rationale: four alternatives bound the query work while permitting OR.
+ */
+const PUBLIC_SEARCH_QUERY_GROUP_LIMIT = 4;
+
+/**
+ * Bound required terms across a Boolean search expression.
+ * Type: int. Units: terms or quoted phrases. Scope: one parsed expression.
+ * Consumers: public_search_parse_groups.
+ * Rationale: twelve terms bound the number of database match expressions.
+ */
+const PUBLIC_SEARCH_QUERY_TERM_LIMIT = 12;
+
+/**
  * Return whether public search is enabled, defaulting on without changing saved preferences.
  *
  * @return bool True when the condition matches.
@@ -134,10 +150,15 @@ function public_search_flush_query_token(
  * An over-limit query returns no matches rather than silently dropping terms.
  *
  * @param string $query Normalized browser query.
+ * @param array<int,array<int,true>>|null $quoted Optional caller-initialized map
+ *     filled with the positions of quoted terms in each returned group.
  * @return array<int,array<int,string>> OR groups containing required terms.
  */
-function public_search_parse_groups(string $query): array
+function public_search_parse_groups(string $query, ?array &$quoted = null): array
 {
+    if ($quoted !== null) {
+        $quoted = [];
+    }
     $chars = preg_split('//u', $query, -1, PREG_SPLIT_NO_EMPTY);
     if (!is_array($chars)) {
         return [];
@@ -178,6 +199,9 @@ function public_search_parse_groups(string $query): array
                     $closingIndex - $i - 1,
                 )));
                 if ($phrase !== '') {
+                    if ($quoted !== null) {
+                        $quoted[count($groups)][count($current)] = true;
+                    }
                     $current[] = $phrase;
                 }
                 $i = $closingIndex;
@@ -209,7 +233,14 @@ function public_search_parse_groups(string $query): array
     foreach ($groups as $group) {
         $terms += count($group);
     }
-    return count($groups) > 4 || $terms > 12 ? [] : $groups;
+    if (count($groups) > PUBLIC_SEARCH_QUERY_GROUP_LIMIT
+        || $terms > PUBLIC_SEARCH_QUERY_TERM_LIMIT) {
+        if ($quoted !== null) {
+            $quoted = [];
+        }
+        return [];
+    }
+    return $groups;
 }
 
 /**

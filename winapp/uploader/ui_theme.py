@@ -298,6 +298,10 @@ def configure_theme(root: tk.Tk) -> None:
               background=[("pressed", colors["line"]),
                           ("active", colors["surface_alt"])],
               foreground=[("disabled", colors["muted"])])
+    style.configure("Compact.TButton", padding=(7, 3), width=-1)
+    style.configure("Accent.Compact.TButton", foreground=colors["focus"])
+    style.map("Accent.Compact.TButton",
+              foreground=[("disabled", colors["muted"])])
     style.configure("Primary.TButton", padding=(12, 6), borderwidth=0,
                     background=colors["primary"], foreground="#F2F6FA",
                     font=("Segoe UI Semibold", 10))
@@ -1034,13 +1038,13 @@ class GalleryIdentityLabel(ttk.Label):
         value = self._source.get().removeprefix("Target gallery: ")
         parts = [part for part in value.replace("\\", "/").split("/") if part]
         if not parts or value == "unknown":
-            self._display_name.set("Target gallery: unknown")
-            self._hierarchy.set("Target gallery: unknown")
+            self._display_name.set("Upload gallery: not set")
+            self._hierarchy.set("Upload gallery: not set")
             return
         title = self._title.get().strip() if self._title is not None else ""
         # Older inventory APIs omit the title. Keep their folder leaf usable;
         # this presentation fallback never rewrites the authoritative identity.
-        heading = "Gallery: " + (title or parts[-1])
+        heading = "Upload gallery: " + (title or parts[-1])
         self._display_name.set(heading)
         # Each arrow is one folder edge; line breaks retain the complete path
         # without spending heading width on the potentially long parent names.

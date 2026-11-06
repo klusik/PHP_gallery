@@ -22,6 +22,7 @@ $usage =
     "Usage:\n"
     . "  php scripts/reconcile_admin_operations.php --list [--after=ACTOR:KEY_HASH]\n"
     . "  php scripts/reconcile_admin_operations.php --inspect=ACTOR:KEY_HASH\n"
+    . "  php scripts/reconcile_admin_operations.php --inspect-linked-create < PRIVATE_JSON\n"
     . "  php scripts/reconcile_admin_operations.php --complete=EVIDENCE_JSON [--apply]\n"
     . "Completion defaults to dry-run. Apply requires independently verified original effects.\n"
     . "No command deletes claims, expires keys, retries target work, or repairs files.\n";
@@ -34,7 +35,9 @@ $cursor = '';
 $identity = [];
 $evidencePath = '';
 $apply = false;
-if (($arguments[0] ?? '') === '--list' && count($arguments) <= 2) {
+if ($arguments === ['--inspect-linked-create']) {
+    $mode = 'inspect-linked-create';
+} elseif (($arguments[0] ?? '') === '--list' && count($arguments) <= 2) {
     $mode = 'list';
     if (isset($arguments[1])) {
         if (!str_starts_with($arguments[1], '--after=')) {
@@ -79,6 +82,27 @@ try {
             (int) $identity[1],
             $identity[2],
         );
+    } elseif ($mode === 'inspect-linked-create') {
+        // This CLI-only diagnostic loads its actual linking policy and service
+        // owners explicitly; the legacy full bootstrap does not include them.
+        require_once dirname(__DIR__) . '/app/services/app_linking_policy.php';
+        require_once dirname(__DIR__) . '/app/services/app_linking.php';
+        require_once dirname(__DIR__) . '/app/services/app_linking_create.php';
+        $json = stream_get_contents(
+            STDIN, \Gallery\Core\ADMIN_OPERATION_INPUT_MAX_BYTES + 1,
+        );
+        $evidence = is_string($json)
+            && strlen($json) <= \Gallery\Core\ADMIN_OPERATION_INPUT_MAX_BYTES
+            ? json_decode($json, true) : null;
+        // Accept only PHP's compact canonical encoding: duplicate keys,
+        // escaped field names and alternate representations cannot be silently
+        // interpreted as a different evidence document.
+        if (!is_array($evidence) || json_encode(
+            $evidence, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
+        ) !== trim((string) $json)) {
+            throw new RuntimeException('Private evidence unavailable.');
+        }
+        $result = \Gallery\Services\admin_operation_inspect_linked_create($evidence);
     } else {
         if (!is_file($evidencePath) || !is_readable($evidencePath)) {
             throw new RuntimeException('Evidence file unavailable.');

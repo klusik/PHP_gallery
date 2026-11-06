@@ -1972,8 +1972,270 @@ ersetzen den gespeicherten Schlüssel nicht. Die App-Kopfzeile enthält außerde
 Einstellungen, Updates und Hilfe. Der Watcher-Bildschirm zeigt die Zielgalerie,
 den ausgewählten Ordnerpfad, den Überwachungsstatus und den Warnhinweis zur
 Quelldatei-Löschung.
+Ist die Konfiguration nicht lesbar oder überprüfbar, stoppt der Start vor
+Beginn der Arbeit. Bewahren Sie die Originaldatei auf und stellen Sie eine
+gültige Sicherung wieder her; eine fehlende Datei nutzt weiter die
+Erststartvorgaben. Windows-Reparse-Punkte und Ausfallsicherheit bei Stromverlust
+sind noch nicht qualifiziert.
+Klicken Sie im Hauptfenster auf \ui{Link gallery}. Fügen Sie die Galerieadresse
+aus dem Browser ein und bestätigen Sie mit \ui{Link gallery}. Auf demselben
+Computer kann die Galerie eine HTTP-Adresse auf \texttt{localhost} verwenden.
+Andere Adressen und die gespeicherte Erneuerung verwenden HTTPS.
+Der Dialog zeigt den Fortschritt bis zur Genehmigung.
+Schlägt die Verbindung fehl, zeigt er den Fehler an und ermöglicht einen
+neuen Versuch. Melden Sie sich im Browser als Administrator an und klicken
+Sie auf \ui{Genehmigen}. Kehren Sie bei \ui{Approval received} zu WinApp
+zurück. WinApp zeigt die Adresse der verbundenen Website und lädt die erste
+Galerieseite automatisch. Mit \ui{Abbrechen} lehnen Sie die Anfrage ab.
+
+Die drei Punkte neben \ui{Unlink gallery} öffnen die Verbindungsübersicht.
+Unter \ui{Aktiv verbunden} wechseln Sie mit der bestehenden Genehmigung.
+Das Profil behält bis zu 20~Einträge unter \ui{Letzte Adressen} über einen
+Neustart hinweg. Wählen Sie eine Adresse für eine neue Genehmigung.
+Das Ein/Aus-Symbol trennt die gewählte Website, das Kreuz entfernt eine
+letzte Adresse. Das Upload-Ziel hat eine eigene Auswahl.
+
+Öffnen Sie \ui{Choose gallery…} neben der Adresse und geben Sie einen
+Suchbegriff in \ui{Galerien suchen} ein. Titel haben Vorrang vor
+Beschreibungen und Galerie-Tags. Die Titelsuche toleriert kleine Tippfehler.
+Anführungszeichen und \texttt{AND}/\texttt{OR} funktionieren wie auf der
+Website. Einrückung und übergeordnete Titel der Auswahl zeigen die Hierarchie.
+Der Pfeil lädt weitere Treffer. Mit einfachem Listenzugriff lassen sich die
+Titel der aktuellen Seite filtern. Für die Katalogsuche ist eine neue
+Genehmigung auf einem unterstützten Server nötig.
+
+Wählen Sie mit genehmigtem Upload-Zugriff einen Treffer und klicken Sie auf
+\ui{Für Uploads nutzen}.
+In einem unterstützten lokalen Profil verwendet WinApp die genehmigte
+Upload-Berechtigung automatisch, auch beim Start aus dem Quellcode unter
+macOS. Nach der Prüfung zeigt \ui{Upload gallery} das
+Ziel in Watcher und Import. Die drei Punkte öffnen weitere Galerieaktionen.
+\ui{Unlink gallery} beendet die aktuelle Verbindung. Verbinden Sie nach einem
+Neustart dasselbe Konto und wählen Sie die Galerie erneut. Erweiterte Rechte
+finden Sie in den Einstellungen unter \ui{Manage link…}. Uploads per
+API-Schlüssel verwenden eine eigene \ui{Gallery URL} und einen
+galeriegebundenen Schlüssel.
+
+Wählen Sie \ui{Read gallery details}
+gesondert und stimmen Sie dem Leserecht zu. Dann zeigt \ui{Read selected
+details} für eine ausgewählte Galerie ID, Titel, Revision sowie gespeicherte
+Sichtbarkeit, Zugriffs- und Auflistungsmodus; vererbte effektive Rechte werden
+nicht angezeigt. Ein bereits vom Server geprüftes Lesen kann nach einem
+gleichzeitigen Widerruf abgeschlossen werden. Ältere Server unterstützen das
+Recht oder den Endpunkt möglicherweise nicht; der Client meldet dies als
+nicht unterstützt oder nicht verfügbar, ohne den Scope stillschweigend zu
+verringern. Der gespeicherte \texttt{pgu\_}-Upload bleibt verfügbar. Echtes
+Windows, bereitgestelltes HTTPS und Datenbankverhalten sind noch nicht
+qualifiziert.
+Der verknüpfte Upload wird nur mit neuer Bildzeile und beobachteter Originaldatei
+am endgültigen Galeriepfad bestätigt. Bei unklarer Bestätigung kann die Datei
+bereits vorhanden sein; der Client wiederholt den Vorgang nicht automatisch.
+Ein Widerruf während des Uploads macht bereits gespeicherte Dateien nicht rückgängig.
+Der neue verknüpfte Client verlangt exakt den Upload-Nachweis
+\texttt{fresh\_insert\_v1}; bei einem älteren verknüpften Server bleibt der
+Versuch ungeklärt. Der Uploadweg \texttt{pgu\_} bleibt unverändert.
+Eine Live-Antwort darf die vorab gespeicherte Unsicherheit nur ersetzen, wenn
+derselbe positive Versuch, unveränderte Quelle und Hash sowie ein bestätigter
+neuer Bildeintrag vorliegen. Die Antwort muss ein hochgeladenes Bild und eine
+nichtnegative Zahl geprüfter Einträge melden; eine unbekannte oder verlorene
+Antwort, Hashprüfung oder Inventur entfernt den Marker nie. Daraus folgen weder
+Wiederholung noch Quelldateilöschung oder Exactly-once-Garantie.
+Die serverseitige Dateiidentität beweist bei fremden Änderungen nicht jedes Byte.
+Identitäts- und Hashprüfungen des Clients sind gegenüber lokalen Schreibern nicht
+atomar; Windows-Reparse und Stromausfall sind noch nicht qualifiziert.
+Originale ZIP-Dateien und entpackte Staging-Verzeichnisse bleiben unabhängig
+von Alter und Uploadbestätigung zur manuellen Prüfung erhalten; die automatische
+Altersbereinigung ist deaktiviert, da sichtbare Job-IDs keine vollständige
+Historie beweisen.
+Für genau einen ungewissen verknüpften Upload fragt \ui{Check uncertain upload}
+die Dateigröße in Byte bis 64~MiB ab und prüft den gespeicherten Hash einmal,
+ohne die lokale Datei zu öffnen. Ein Treffer
+meldet beobachtete Bytes, nicht den Abschluss oder die Datenbankregistrierung;
+ein unbekanntes Ergebnis beweist keine Abwesenheit. Keines der Ergebnisse
+löscht den Eintrag oder Dateien oder wiederholt den Upload. Ältere Server
+unterstützen diese Prüfung möglicherweise nicht.
+Prüfen Sie vor der Bearbeitung eines aktuell ungewissen Uploads zuerst Galerie
+und Originalquelle. Die optionale Hashprüfung beobachtet nur Bytes; sie bestätigt
+weder die Registrierung noch beweist sie Abwesenheit. Die ausdrückliche
+Prüfabfrage wählt standardmäßig Nein. Die Prüfung erhält Unsicherheitsmarker,
+Original und ZIP. Derselbe Pfad oder dieselben Bytes bleiben auch nach einem
+Neustart gesperrt, während andere geeignete Quellen fortgesetzt werden können.
+Die unbekannte Quelle wird weder erneut gesendet noch gelöscht.
+Verknüpfte Uploads benötigen ein Profil ohne Ordnerumleitung auf einem festen
+lokalen Windows-Laufwerk oder einem lokalen, vom Benutzer kontrollierten
+macOS-Volume. Schließen Sie ältere Uploader mit diesem Profil.
+Die separate Berechtigung \texttt{gallery:visibility} wird nur angeboten, wenn
+der Server sie ausweist, und erfordert eine ausdrückliche Zustimmung im Browser.
+Vor einer Änderung bestätigt der Client den aktuellen Galeriezustand. Bei einer
+veralteten Revision oder einem Planungskonflikt wird der Zustand schreibgeschützt
+aktualisiert; die Änderung wird nicht erneut gesendet. Ältere Server weisen
+diese Berechtigung nicht aus. Der Betreiberbefehl
+\texttt{inspect\_gallery\_visibility.php} ist standardmäßig schreibgeschützt.
+Nur ein aktuelles \texttt{--reconcile=FINGERPRINT} kann passende Sidecar-Daten
+der Version zwei korrigieren und den Marker nach synchronisiertem Readback
+entfernen; Datenbankzeile und Revision bleiben unverändert. Marker der Version
+eins sind nur lesbar. Kandidat \texttt{8de8e50a} bestand BASIC-Lauf
+\texttt{42107055888} und WinApp-Lauf \texttt{42107055797}. Installiertes GUI,
+MariaDB und produktives Verhalten sind noch nicht qualifiziert.
+Die separate temporäre Zustimmung zu \texttt{media:read} erlaubt nur
+das Durchsuchen gelisteter öffentlicher Galerien und nicht sensibler Fotos;
+die optionale Zustimmung zu \texttt{presentation:read} erlaubt autorisierte
+Diashows und sichtbare Musik. Jeder Vorfahr muss öffentlich, gelistet,
+normal zugänglich und frei von NSFW-Inhalten sein. Private, unveröffentlichte,
+nicht gelistete, passwortgeschützte und NSFW-Inhalte werden abgelehnt. Fotoseiten
+enthalten höchstens acht Bilder mit einer Binärgrenze von 16~MiB; Listen
+enthalten höchstens 32 sichtbare MP3/WAV-Titel. Es gibt keine Migration oder
+neue Abhängigkeit. Wählen Sie bei einer berechtigten Galerie \ui{Fotoansicht
+öffnen}. Eine ausdrücklich gestartete Diashow verwendet das Serverintervall
+und lädt bei Bedarf die nächste Seite. Ältere Server zeigen die Steuerelemente nicht.
+Die Codex-Darstellung wurde bei 1000/360~px mit beiden Berechtigungstexten und
+44~px schmalen Bedienelementen geprüft. Auf Wunsch des Eigentümers wurde kein
+HTTPS-Browserlauf durchgeführt; Windows-Wiedergabe ist nicht geprüft.
+Die Dateisystem-Schreibsperre ist ein inaktiver Prototyp und schützt
+Galerieoperationen erst nach geprüfter Koordination.
+Die experimentelle separate Berechtigung \texttt{galleries:create} erfordert
+ausdrückliche Zustimmung und geprüften Berechtigungsspeicher. Ihr Quelltext
+lehnt belegte Ziele, Abweichungen im kanonischen
+Katalog und mehr als 10.000~Zeilen einschließlich der neuen Galerie ab;
+die Slug-Suche prüft höchstens 128~Kandidaten. Dies sind keine Zeitgrenzen.
+Ein unklarer Vorgang wird nicht automatisch wiederholt.
+Eine ausstehende Reservierung blockiert vorübergehend Admin-Ordnerimporte,
+das Verschieben entdeckter Fotos, das Löschen entdeckter Ordner, das Kopieren
+von Auswahlen, Verschieben in den Papierkorb und Wiederherstellung daraus,
+Metadatenverschiebungen,
+Konsistenzreparaturen und die normale
+Galerieerstellung, auch für andere Pfade. Löschen Sie die
+Reservierung nicht: eine sichere automatische Bereinigung fehlt noch. Uploads
+mit API-Schlüssel bleiben verfügbar. Der Schutz derselben Datenbank ersetzt
+keine Dateisystemsperre.
+Vor Erstellung oder Prüfung einer gespeicherten Absicht verlangt der Client
+eine aktuelle Serveridentität passend zum gewählten oder gespeicherten Admin.
+Vor dem Senden prüft der Client die vollständig vorbereitete Absicht und
+veröffentlicht sie exklusiv ohne einen anderen Schlüssel zu überschreiben.
+Eine Unterbrechung kann eine blockierende alte Sperre hinterlassen; Windows
+und Stromausfall sind nicht qualifiziert.
+Das Wartungs-CLI kann private Originaldaten über die Standardeingabe nur mit
+dem Register abgleichen; es beweist weder das Ende des ursprünglichen Workers
+noch erlaubt es eine neue Erstellung.
+\ui{Resume original creation} zeigt den ursprünglichen Titel und das Elternziel
+zur ausdrücklichen Bestätigung und sendet denselben Schlüssel und dieselben
+Eingaben an denselben HTTPS-Issuer und dasselbe geprüfte Administratorkonto.
+Bestehende ausstehende oder ungeklärte Servereinträge bleiben blockiert und
+können eine Klärung durch den Administrator erfordern. Der Schutz setzt das
+ursprüngliche Serverregister voraus; eine ältere Datenbanksicherung kann diese
+Historie entfernen. Die Meldung bietet die ausdrückliche Fortsetzung oder nach
+Prüfung von Galerie und Speicher \ui{Close unresolved creation}. Die Aktion zeigt den ursprünglichen
+Titel und das Elternziel zur ausdrücklichen Bestätigung. Die lokale Absicht wird
+erst nach bestätigtem dauerhaftem Abschluss desselben Schlüssels auf dem Server
+entfernt; bei unklarem Ergebnis bleibt sie erhalten. Ein ausstehender Claim wird
+vom Server nicht geschlossen. Der Abschluss beweist nicht,
+dass keine Galerie oder Dateien entstanden sind oder die frühere Arbeit endete.
+Prüfen Sie vor einer separaten Erstellung das Ende der ursprünglichen Arbeit,
+Galerie und Speicher; automatisch startet keine. Bestätigt
+der Server stattdessen ein abgeschlossenes Ergebnis, bleibt dessen Beleg zur
+Bestätigung erhalten. Eine ungültige oder nicht lesbare lokale Absicht bleibt
+blockiert und erfordert Hilfe des Administrators, da ihr Schlüssel nicht geprüft
+werden kann. Ein bestätigter Beleg bleibt bis zur ausdrücklichen Bestätigung
+gespeichert. Vor der exklusiven Veröffentlichung schreibt und prüft der Client
+einen vollständigen vorbereiteten Beleg; bei Ungewissheit bleiben Absicht und
+ein eventuell veröffentlichter Beleg erhalten. Eine lokale Bindung an die
+ursprüngliche Absicht verhindert, dass eine veraltete Auswahl oder Bestätigung
+eine andere Operation mit gleichen Galeriedaten betrifft; der Schlüssel wird
+nicht angezeigt. Fremde Dateizugriffe sind nicht ausgeschlossen, die Beständigkeit
+nach Stromausfall ist nicht nachgewiesen. Im unterstützten lokalen
+Profil prüft \ui{Erstellte Galerie verwenden} Beleg und Galerie vor
+der Auswahl für Watcher und Import erneut. Das erfordert eine separate
+Upload-Berechtigung. Der Server prüft
+ursprüngliche ID, Titel und Eltern gegen den aktuellen Stand. Umbenennung ergibt
+einen unbekannten Status; Verschieben, Löschen oder nicht prüfbarer Zustand kann
+als nicht verfügbar abgelehnt werden. Ein fehlendes oder unsicher umgeleitetes
+Verzeichnis oder Sidecar ergibt ebenfalls einen unbekannten Status; geprüft
+werden die aktuellen sicheren Dateien, nicht ihre ursprünglichen Inodes. Keines
+startet automatisch einen Ersatz. Wo unterstützt, hat
+die neue Galerie normalen, gelisteten Zugriff ohne geplante Veröffentlichung.
+Ein Datenbank-Rollback macht Dateisystemschreibvorgänge nicht rückgängig.
+Lokales Flushen belegt keine Wiederherstellung nach Stromausfall; echtes
+Datenbank-, HTTPS- und Windows-Verhalten ist noch nicht qualifiziert.
+Mit separater ausdrücklicher Zustimmung kann
+ein kurzlebiger Grant alle Galerien einschließlich privater und
+unveröffentlichter Galerien auflisten. Ein reiner Identitätsgrant darf dies
+nicht. Die Galerieauswahl allein erlaubt keinen Upload. Ein separates,
+ausdrücklich genehmigtes Upload-Recht umfasst alle Galerien des regulären
+Administrators einschließlich privater und unveröffentlichter Galerien. Der
+temporär verknüpfte Watcher und Import sind im Quelltext angebunden, aber nicht
+qualifiziert; der bisherige galeriegebundene Schlüssel bleibt unabhängig
+verfügbar.
+
+Installation und Aktualisierung legen den Verbindungsschlüssel in der
+Datenbank an. Die gespeicherte HTTPS-Websiteadresse bestimmt Ursprung und
+Installationspfad. Vorhandene explizite Angaben für Adresse und Schlüssel
+haben Vorrang. Die öffentliche Abfrage liest die Bereitschaft. Vor der
+normalen Admin-Anmeldung speichert der Browser eine kurzlebige Anfragekennung
+in der Sitzung. Die CSRF-geschützte Bindung führt zur ausdrücklichen Zustimmung.
+\ui{Genehmigen} liefert einen einmaligen Code an die geprüfte Rücksprungadresse
+für den Austausch mit PKCE. Die Hauptaktion fordert bis zu 15~Minuten
+Konto- und Listenzugriff sowie Bild-Uploads an, wenn das lokale Profil und der
+Server diese unterstützen. Sichere Verlängerung unter Windows erfordert
+eine separate Zustimmung.
+Administratoren können Zugriffe unter den verbundenen Anwendungen widerrufen.
+Nicht ausgetauschte Codes verfallen innerhalb von 120~Sekunden. Siehe
+\filepath{docs/APP_LINKING_PHASE_0.md}.
+
+Die Scope-Kapazitätsmigration erweitert vier binäre Scope-Spalten, ohne
+bestehende Grants zu ändern. Eine teilweise Migration erhält die geprüfte
+Unterstützung kurzer Scopes; größere Kapazität ist erst nach Prüfung aller vier
+Spalten bereit. Sie erteilt keine neuen Rechte. DDL ist wiederholbar, aber
+nicht atomar; älterer Runtime-Code kann das erweiterte Schema ablehnen.
+Eine automatische Verkleinerung wird nicht unterstützt.
+Das Warten auf jeden Metadatensperrversuch beträgt höchstens fünf Sekunden;
+eine strengere vorhandene Einstellung bleibt erhalten. Ein abgesenkter Wert
+wird wiederhergestellt; die gesamte DDL-Zeit ist nicht begrenzt. Die
+Callback-Sperre endet vor dem Migrationscheckpoint.
+
+Für fortgesetzten Zugriff wählen Sie ausdrücklich \ui{Remember securely on
+this Windows account} und bestätigen die separate Berechtigung im Browser.
+Windows Credential Manager speichert die Erneuerungsdaten; eine separate
+lokale Bindung enthält nur Issuer, Konto-ID und genehmigten Umfang. Wählen Sie
+nach dem Neustart ausdrücklich \ui{Reconnect saved link}. Der Client erneuert
+die Daten einmal und prüft die Serveridentität. Eine unklare Antwort oder ein
+Speicherfehler sperrt die Wiederverwendung der alten Daten. Prüfen Sie die
+Verbindungen auf dem Server und wählen Sie bei Bedarf \ui{Forget saved link}
+vor einer erneuten Verknüpfung. Lokales Vergessen widerruft den Server-Grant
+nicht; die aktuelle Sitzung kann aktiv bleiben. Der gespeicherte
+\texttt{pgu\_}-Schlüssel bleibt unabhängig. Echte Windows- und
+Stromausfallwiederherstellung sind noch nicht qualifiziert. Fortgesetzter
+Zugriff ist auf 30~Tage und sieben Tage Inaktivität begrenzt. Es wird jeweils
+nur eine Offline-Bindung gespeichert: Öffnen Sie zum Wechsel von Issuer oder
+Konto den alten Issuer, klären Sie offene Arbeit und vergessen Sie die lokale
+Verknüpfung vor dem Speichern der neuen. Widerrufen Sie den alten Grant bei
+Bedarf separat in der Galerie. Der verknüpfte Upload trennt Verlauf und
+exklusive Sperre nach Issuer, Konto und Galerie und speichert vor dem Senden
+eine ausstehende Markierung. Prüfen Sie nach unklarem Ergebnis Galerie und
+Quelle manuell; Quelle nicht automatisch erneut senden oder löschen. Eine
+experimentelle begrenzte Serverprüfung liefert \texttt{present} nur bei während
+des Lesens beobachteten übereinstimmenden Bytes; sie belegt keine
+Bildregistrierung. \texttt{unknown} beweist weder Abwesenheit noch erlaubt es
+einen erneuten Upload; der Client nutzt diese Prüfung noch nicht. Das Zeitbudget
+wird zwischen Dateisystemaufrufen geprüft und unterbricht keinen blockierenden
+Aufruf. Externe lokale Dateisystemänderungen sind nicht atomar ausgeschlossen.
+Beim Prozessende gibt das Betriebssystem die native Sperre der aktuellen
+WinApp für einen weiteren Versuch frei. Bei älteren Sperren alle Uploader
+beenden, Galerie und Quellen prüfen, das Wiederherstellungs-JSON behalten und
+nur die nachweislich inaktive Sperre archivieren. Lokales Dateisystemverhalten und Schutz bei
+Stromausfall sind nicht nachgewiesen. Verknüpfte Flugdaten bleiben lokal und
+senden keine KI-Aufträge oder PDFs automatisch mit einem alten Schlüssel.
+Begrenzen Sie Anfragen in Proxy, Webserver und PHP: Multipart-Verarbeitung
+kann vor der Anwendungskontrolle Ressourcen verbrauchen.
+
 \ui{Start Watcher} startet erst nach ausdrücklichem Klick; während des Betriebs
 heißt dieselbe kontextabhängige Schaltfläche \ui{Stop Watcher}.
+Beim Abschluss öffnet \ui{Show progress} den Fortschritt. Nach einer
+Unterbrechung öffnet \ui{Review pending uploads} die ursprüngliche
+Warteschlange. Verbinden Sie dieselbe Galerie erneut, wählen Sie sie aus
+und klicken Sie auf \ui{Retry}. In einer verknüpften Sitzung schließt
+\ui{Keep files locally} die Warteschlange nach dem Stopp der Worker. Fotos,
+Berichte und Verlauf bleiben erhalten. Danach ist \ui{Start Watcher} wieder
+verfügbar.
 \ui{Check folder only} prüft den Ordner ohne Uploads und startet keine
 dauerhafte
 Überwachung. Das Watcher-Zahnrad öffnet ein Einstellungsblatt für Ordnerauswahl,
@@ -1981,8 +2243,10 @@ Unterordner, Scanintervall, Dateistabilität, Simulatormetadaten und die
 optionale
 Quelldatei-Löschung.
 Bei laufender Überwachung fordert eine Meldung zuerst zum Stoppen auf und lässt
-keine Änderungen zu. \ui{Save watcher settings} speichert für den nächsten
-Start; \ui{Cancel}, Escape und Schließen stellen den zuvor geöffneten Ordner,
+keine Änderungen zu. \ui{Choose folder…} speichert den Ordner direkt in
+Watcher. \ui{Start Watcher} fordert zur Auswahl auf, wenn der Ordner fehlt.
+\ui{Save watcher settings} speichert die Watcher-Einstellungen für den
+nächsten Start. \ui{Cancel}, Escape und Schließen stellen den zuvor geöffneten Ordner,
 Ignorierzahl, letzten Scan und die Einstellungen wieder her. \ui{Sync UTC time}
 bleibt eine freiwillige Option neben den Hauptaktionen.
 Lange Seiten und Dialoge lassen sich mit Mausrad oder Bildlaufleiste bewegen;
@@ -2007,6 +2271,19 @@ gesetzt und es kommen keine Laufzeitabhängigkeiten hinzu. Ohne Pillow bleiben
 lesbare,
 flache ttk-Flächen sowie native Steuerelemente und der Quellmodus einschließlich
 \texttt{--once} unterstützt.
+Vor dem Scan prüft \texttt{--once} den gespeicherten Upload-Modus mit Windows
+Credential Manager. Ein bestätigtes älteres oder nicht migriertes Profil kann
+den API-Schlüssel verwenden; verknüpfte, erstmalige, unbekannte oder nicht
+verfügbare Zustände enden ohne Scan mit einem Fehlercode. Vor jedem Inventar-
+und Uploadversuch sowie jeder Weiterleitung wird erneut geprüft; laufende
+Anfragen können enden. Die Prüfung schützt weder andere Prozesse noch die GUI.
+Anfragen mit API-Schlüssel verweigern Weiterleitungen zu anderen Hosts,
+nicht erlaubten Ports oder von HTTPS zu HTTP; verwenden Sie die endgültige URL.
+Das tatsächliche Windows-Verhalten ist noch nicht qualifiziert.
+In diesem Entwicklungsstand ist das automatische Löschen überwachter Fotos
+und ursprünglicher ZIP-Dateien nicht verfügbar; die Quellen bleiben erhalten.
+Der API-Schlüsselwiderruf im Flugablauf ist vorübergehend nicht verfügbar.
+GUI-Modusschutz und Wiederherstellung nach Absturz sind noch nicht qualifiziert.
 
 \subsection{Windows-Start und eine laufende Instanz}
 
@@ -2149,7 +2426,7 @@ weiter. Das Schließen der Einstellungen startet keinen Vorgang. Opake
 RGB-Grafiken sichern die Darstellung unter Windows Tk; ohne Pillow bleiben
 im Quellmodus native Bedienelemente zur Reparatur verfügbar.
 
-Ordnerpfad und Auswahl befinden sich gemeinsam unter Watch folder.
+Watcher zeigt den Ordnerpfad und \ui{Choose folder…}.
 Gespeicherte Pfade, Galerie-URL und Funktionsoptionen werden beim Neustart
 wiederhergestellt. Vier sichtbare Schaltflächen wählen die Oberflächensprache.
 Scrollleisten erscheinen nur bei überlaufendem Inhalt; Hilfsfenster und
@@ -2188,8 +2465,8 @@ Checkpoints, lokale PDFs, Status und erhaltene Fehler. Aktualisieren liest nur
 Checkpoints; App-Protokoll öffnen verwendet das bestehende Protokoll.
 \ui{Flug beenden und PDFs erstellen} erzeugt ohne Bestätigung vier
 Sprachfassungen,
-erledigt angenommene Arbeit und erforderliche Übertragung, dann widerruft es
-den gespeicherten Schlüssel. Dies gilt auch bei ausgeschalteter PDF-Automatik.
+erledigt angenommene Arbeit und erforderliche Übertragung und behält die
+Verbindung. Dies gilt auch bei ausgeschalteter PDF-Automatik.
 
 Gewählte Sprachen werden gleichzeitig in getrennten Prozessen erzeugt, ein
 Prozess je~Sprache (derzeit höchstens vier). Fluganalyse und Kartenhintergründe
@@ -2253,14 +2530,13 @@ einzelnen eingerückten Zeilen, von der Wurzel bis zur Galerie. Änderungen der
 Verbindung aktualisieren beide Darstellungen; Flugaufzeichnungen und
 Importverlauf behalten die vollständige Identität.
 
-Die Abschlussaktion steht direkt unter der Zielgalerie; ein Klick startet
-Abschluss und Schlüsselwiderruf. Nach Fehlern behalten \ui{Lokal behalten und
-Schlüssel widerrufen} und Wiederholen die bereits bestätigte Absicht für
-dieselbe Verbindung in dieser App-Sitzung. Widerrufsabbruch, Schlüsselwechsel
-oder Neustart übernehmen keine Zustimmung. Normales Stoppen behält den
-Schlüssel. Wiederherstellungsaktionen stehen in zwei Zeilen.
+Die Abschlussaktion steht während der Überwachung unter der Zielgalerie.
+Abschluss und Stopp behalten die Verbindung für eine weitere Sitzung.
+Serverschlüssel verwalten Sie in der PHP-Gallery-Verwaltung. Verknüpfte
+Sitzungen verwenden die Zustimmung im Browser. Nach einem Neustart steht
+die geprüfte gespeicherte Adresse bereits im Dialog zur Wiederverbindung.
 
-\ui{Flug aufgeben} neben dem Abschluss in Watcher/Import und im Flugfortschritt
+Im API-Schlüsselmodus steht \ui{Flug aufgeben} in Watcher, Import und Fortschritt
 ermöglicht lokale Wiederherstellung bei gelöschter Galerie oder widerrufenem
 Schlüssel. Nach Bestätigung stoppen die Worker und laufende Anfragen enden;
 ausstehende Übertragungen werden aufgegeben und der gespeicherte Schlüssel
@@ -2281,6 +2557,12 @@ bestätigte Prüfsummen; Wiederholen gleicht den Serverstatus ab. Alte Pläne,
 Schlüsselbindungen und Rohdaten bleiben erhalten. Abbruch behält fertige
 Fassungen. Protokollfehler nennen bereinigte Aktion, HTTP-Status, Inhaltstyp
 und einen begrenzten Antwortauszug.
+Vor dem Upload wird der Status geprüft; die Bestätigung muss Prüfsumme und
+Dateigröße entsprechen. Bei unklarem Ergebnis oder einer Änderung der lokalen
+PDF-Datei bleibt sie erhalten und die Ausgabe unbestätigt. Eine gespeicherte
+Planbestätigung ist historisch und beweist keine aktuelle Existenz auf dem Server.
+Der Dialog wählt eine Datei, keinen bei der Bestätigung erfassten Hash;
+spätere Prüfungen schließen fremde Schreibzugriffe nicht atomar aus.
 
 Ohne gespeicherten Schlüssel öffnet die Beginn-Aktion die API-Einstellungen.
 Flug und gegebenenfalls Version aufklappen, um einzelne PDFs zu sehen;
@@ -3989,6 +4271,17 @@ und konfigurierte Galeriebranding-Ressourcen bei verfügbaren Schemata. Das
 Schreiben der Begleitdatei folgt denselben Schemaprüfungen wie die
 entsprechenden Galeriefunktionen.
 
+Wenn die Admin-Reparatur von Schlagwörtern in Begleitdateien läuft, lehnt sie
+nicht prüfbare Ziele und Ziele außerhalb der konfigurierten Galeriewurzel ab;
+Verweise auf Ziele innerhalb bleiben nutzbar. Eine Ablehnung oder ein
+fehlgeschlagener Schreibvorgang speichert keine Abschlussmarkierung. Der
+Schreibvorgang lehnt mehrere harte Links und unbrauchbare Inode-Identität ab.
+Vor dem Kürzen prüft er das geöffnete Ziel und den bisherigen Inhalt;
+ein späterer Fehler oder Abbruch kann unvollständigen Inhalt hinterlassen. Das
+gesamte JSON wird neu kodiert, wodurch Formatierung und Zahlendarstellung
+verändert werden können. Die Prüfungen schließen fremde Änderungen zwischen
+Beobachtungen nicht aus.
+
 Bei Erkennung und Reparatur fehlender übergeordneter Galerien kann PHP Gallery
 unterstützte Werte aus der Begleitdatei lesen, statt alles aus dem Ordnernamen
 abzuleiten. Importierte Zeilen werden vorsichtshalber nicht veröffentlicht, wenn
@@ -4164,6 +4457,15 @@ bietet einen zentralen Widerrufsablauf, ohne die ursprünglichen Geheimnisse
 offenzulegen. Steuerungen auf Galerieebene bleiben für dieselben
 bereichsgebundenen Zugangsdaten verfügbar.
 
+Die öffentliche Abfrage unter der installationsrelativen Adresse
+\texttt{index.php?page=app\_linking\_discovery} meldet Version~1 und prüft
+den kanonischen HTTPS-Issuer, das unabhängige Secret, das Kernschema und die
+Bereitschaft optionaler Capabilities. Ist die Kernverknüpfung nicht bereit,
+meldet sie Nichtverfügbarkeit; unbekannter optionaler Speicher blendet nur
+dessen Operation aus. Die Abfrage benötigt keine Admin-Sitzung und gibt weder
+Zugangsdaten noch Galerielisten preis. Der galeriegebundene API-Schlüssel bleibt
+unabhängig; Discovery berechtigt nicht zum Hochladen.
+
 Die Windows-Begleitanwendung verwendet denselben galeriegebundenen
 Uploadvertrag. Sie besitzt zwei normale Uploadmodi. \ui{Ordner überwachen}
 ignoriert bereits beim Überwachungsbeginn vorhandene Dateien, wartet auf die
@@ -4186,6 +4488,8 @@ Analyseauftrag, lädt nur die übernommene Ressource herunter, erzeugt interne
 durchsuchbare Metadaten mit der ausgewählten lokalen Backend-/Modellgeneration
 und liefert das Ergebnis an den bestehenden Uploadautomatisierungsendpunkt
 zurück. Dieser Arbeitsprozess ist von menschlichen Bildunterschriften getrennt.
+Beim Stoppen wird das tatsächliche Ende einer laufenden Heartbeat-Anfrage
+abgewartet; blockiertes HTTP oder DNS kann länger als das Socket-Timeout dauern.
 Die galeriebezogene Aktion \ui{Neuerzeugung von KI-Metadaten erzwingen} löscht
 gespeicherte erzeugte Zeilen und den alten Warteschlangenzustand für diesen
 Galeriezweig und stellt neue Arbeit ein; die aufwendige Analyse läuft weiterhin
@@ -5258,6 +5562,9 @@ ausgewählten E-Mail-Transport. Verwenden Sie HTTPS, starke
 Administratorzugangsdaten, eingeschränkte Datenbankkonten und geschützte
 E-Mail-/API-Geheimnisse.
 
+Eine gelistete passwortgeschützte Galerie kann als gesperrte Karte mit Titel
+und Link erscheinen; Beschreibung und Vorschaubild zeigt diese Karte nicht.
+
 Der Schutz von Administrator-Cookies, das Schema erzeugter URLs und die
 HTTPS-Prüfung für Besucherkonten verwenden dieselbe Transportrichtlinie.
 Direktes TLS wird ohne Proxy-Einstellungen erkannt. Beendet ein Reverse-Proxy
@@ -5736,6 +6043,13 @@ auf ihre eigenen Cache-Verzeichnisse begrenzt. Öffentliche Bildantworten
 erlauben unterstützte Rasterformate, nicht jedoch aktive SVG-Dateien. Das
 ursprüngliche Designhintergrundbild ist nur für angemeldete Administratoren
 abrufbar; die normale öffentliche Ableitung bleibt verfügbar.
+
+Für ein neues Galerieziel vergleicht die Prüfung den aufgelösten vorhandenen
+Elternordner mit dem aufgelösten Galeriewurzelordner. Dateisystemaliasse wie
+\filepath{/var} auf macOS zu \filepath{/private/var} bleiben nutzbar;
+nicht auflösbare vorhandene Einträge und Eltern außerhalb der Wurzel werden
+abgewiesen. Die Prüfung verhindert keine späteren gleichzeitigen Änderungen
+am Dateisystem.
 
 Bei der Galerie-Migration prüfen sowohl die Erstellung des Asset-Manifests als
 auch die authentifizierte Dateiausgabe über den API-Schlüssel die endgültige
@@ -8425,6 +8739,11 @@ Lokale Audits, Generatoren und Testschleifen sind Ausnahmediagnosen. CI behält
 die unveränderliche Merge-Base mit \codeword{origin/main}; Releases verwenden
 den vorherigen stabilen Tag. Rotes oder langsames CI rechtfertigt keine rein
 lokale Qualifikation.
+
+Für Diagnosen mit einer temporären MySQL-Datenbank bietet
+\filepath{scripts/gallery_workflow_mysql.php} den Modus
+\codeword{--audit-php-regression} über die zentrale PHP-Regressionstestsuite.
+Auch der Checkout benötigt eine isolierte Kopie, um seinen Cache zu isolieren.
 
 Die~gehostete Qualifikation umfasst PHP/Node/WinApp-Tests, Quellverträge,
 erforderliches Chromium, echte MySQL/MariaDB-Abläufe, PHP-Kompatibilität

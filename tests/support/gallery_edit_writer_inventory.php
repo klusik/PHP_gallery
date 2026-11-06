@@ -105,6 +105,7 @@ function gallery_edit_writer_fixture_arguments(ReflectionFunction $function): ar
             'string', '?string' => 'fixture-input',
             'array', '?array' => [],
             'bool', '?bool' => true,
+            '?callable' => null,
             'mixed' => null,
             default => throw new RuntimeException(
                 'Uncovered gallery writer fixture parameter.',

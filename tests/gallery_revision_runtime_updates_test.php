@@ -75,6 +75,7 @@ $contracts = [
     ],
     'app/models/galleries.php' => [
         'gallery_publication_model_consume' => 1,
+        'gallery_model_linked_visibility_update' => 1,
         'gallery_model_update_scalar_for_ids' => 1,
         'gallery_model_update_fields' => 1,
         'gallery_model_clear_background_sources' => 1,
@@ -102,6 +103,7 @@ $contracts = [
         'exif_model_reset_gallery_gps_overrides' => 1,
     ],
     'app/models/public_paths.php' => [
+        'public_path_model_assign_linked_creation' => 1,
         'public_path_model_apply_parent_assignments' => 1,
         'public_path_model_apply_gallery_regeneration' => 2,
     ],

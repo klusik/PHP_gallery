@@ -190,6 +190,14 @@ function gallery_consistency_repair_step(array &$job): void
     $group = $job['groups'][$task['key']];
     $failure = null;
     $lock = gallery_edit_writer_begin();
+    // Refuse before the repair catch can consume a task or record a failure.
+    // The controller may then offer an explicit retry using the new sequence.
+    try {
+        gallery_linked_reservation_assert_admin_write();
+    } catch (Throwable $exception) {
+        gallery_edit_writer_end($lock);
+        throw $exception;
+    }
     try {
         // Check again inside the shared writer lease, before the first write.
         gallery_consistency_assert_catalog($job);
@@ -461,6 +469,7 @@ function gallery_consistency_browser_verify(array &$job): void
     gallery_consistency_load_maintenance_owner();
     $lock = gallery_edit_writer_begin();
     try {
+        gallery_linked_reservation_assert_admin_write();
         gallery_consistency_assert_catalog($job);
         $target = gallery_consistency_browser_target($job['token'], $job['sequence']);
         $image = find_image($target['image_id'], true);

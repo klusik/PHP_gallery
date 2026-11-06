@@ -10,6 +10,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Portable dispatch tests without a SimBrief account or live tile service."""
 
+from contextlib import closing
 import io
 import json
 import sqlite3
@@ -229,7 +230,7 @@ class FlightDispatchTests(unittest.TestCase):
             remember_plan(root, plan)
             remember_plan(root, replace(plan, airac="2611"))
             remember_plan(root, replace(plan, points=[DispatchPoint("TEST", 51, 13)]))
-            with sqlite3.connect(root / "navdata.sqlite") as database:
+            with closing(sqlite3.connect(root / "navdata.sqlite")) as database:
                 self.assertEqual(database.execute("SELECT COUNT(*) FROM fixes").fetchone()[0], 3)
 
     def test_offline_dateline_map_remains_printable(self) -> None:

@@ -107,6 +107,7 @@ try {
             [
                 '--development',
                 '--audit-quick',
+                '--audit-php-regression',
                 '--audit',
                 '--release',
                 '--route-probes',
@@ -238,6 +239,7 @@ try {
         '--development' => 'new workflow development checks',
         '--route-probes' => 'route lifecycle probes with disposable database',
         '--loader-benchmark' => 'loader phase benchmark with disposable database',
+        '--audit-php-regression' => 'central PHP regression with disposable database',
         default => 'central audit with disposable database',
     };
     $childCommand = $mode === '--loader-benchmark'

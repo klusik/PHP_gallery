@@ -135,7 +135,8 @@ Home canonical query guard preserves that token only when both markers match.
 The HUD replaces it with a localized generic notice and removes the token from
 subsequent navigation. The denied gallery document is not rendered. An otherwise
 listed password-gated child may remain in its accessible parent's normal listing
-as a locked card without cover imagery; private children are omitted by the
+as a locked card without its description, description links or cover imagery;
+private children are omitted by the
 existing listing policy. A cyclic or incomplete parent chain fails closed to
 Home. Ordinary visitor requests keep their existing password gate or not-found
 behavior.

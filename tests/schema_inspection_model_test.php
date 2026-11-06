@@ -633,6 +633,25 @@ schema_assert_invalid(
     'incomplete feature requirement',
 );
 
+// Legacy callers retain their prior auto-increment check; explicit plain
+// storage refuses generated and every other unexpected EXTRA attribute.
+schema_assert_true(
+    \Gallery\Services\schema_inspection_extra_matches('', false, true),
+    'plain storage accepts empty metadata',
+);
+foreach (['VIRTUAL GENERATED', 'STORED GENERATED', 'DEFAULT_GENERATED'] as $extra) {
+    schema_assert_true(
+        !\Gallery\Services\schema_inspection_extra_matches($extra, false, true)
+            && \Gallery\Services\schema_inspection_extra_matches($extra, false, false),
+        'plain storage rejects generated metadata without changing legacy checks',
+    );
+}
+schema_assert_true(
+    \Gallery\Services\schema_inspection_extra_matches('auto_increment', true, false)
+        && !\Gallery\Services\schema_inspection_extra_matches('auto_increment', true, true),
+    'plain storage never permits auto increment',
+);
+
 schema_inspection_set_query_executor_for_tests(null);
 
 echo "Schema inspection model tests passed.\n";

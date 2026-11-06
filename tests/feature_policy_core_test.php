@@ -378,6 +378,38 @@ namespace {
         'Legacy unknown feature lookup must remain fail-open for extension compatibility.',
     );
 
+    // The upload switch owns both established and delegated routes while
+    // identity, consent and listing remain independently accessible.
+    $uploadRoutes = [
+        'admin_api_manager',
+        'admin_upload_automation_token',
+        'upload_automation_upload',
+        'app_linking_inventory',
+        'app_linking_upload',
+    ];
+    set_feature_capability_enabled('upload_api', false);
+    foreach ($uploadRoutes as $route) {
+        feature_policy_core_assert(
+            feature_flag_for_route($route) === 'upload_api'
+                && !feature_flag_route_enabled($route),
+            'Upload API OFF must block its owned route: ' . $route,
+        );
+    }
+    foreach (['app_linking_identity', 'app_linking_galleries',
+        'app_linking_consent', 'app_linking_revoke'] as $route) {
+        feature_policy_core_assert(
+            feature_flag_for_route($route) === null,
+            'Upload API must not own independent linking route: ' . $route,
+        );
+    }
+    set_feature_capability_enabled('upload_api', true);
+    foreach ($uploadRoutes as $route) {
+        feature_policy_core_assert(
+            feature_flag_route_enabled($route),
+            'Upload API ON must restore its owned route: ' . $route,
+        );
+    }
+
     $routeMap = feature_flag_route_map();
     feature_policy_core_assert(
         ($routeMap['picture_game'] ?? null) === 'picture_game',

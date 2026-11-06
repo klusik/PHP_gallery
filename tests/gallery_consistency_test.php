@@ -12,6 +12,27 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
+    /** Supply only the deferred loader boundary for isolated browser admission. */
+    final class ConsistencyFixtureKernel
+    {
+        /**
+         * Accept the named fixture module without loading host resources.
+         * @param string $module Existing runtime module name.
+         * @return void Performs no filesystem or database writes.
+         */
+        public function load(string $module): void {}
+    }
+
+    /**
+     * Return the isolated deferred loader.
+     * @return ConsistencyFixtureKernel Inert fixture runtime loader.
+     */
+    function cms_runtime_kernel(): ConsistencyFixtureKernel
+    {
+        static $kernel = null;
+        return $kernel ??= new ConsistencyFixtureKernel();
+    }
+
     /** Escape the actual result view without the full HTTP bootstrap.
      * @param string|null $value Safe or hostile fixture text.
      * @return string HTML-safe text, including escaped attribute quotes.
@@ -142,6 +163,20 @@ namespace Gallery\Models {
 }
 
 namespace Gallery\Services {
+    /** Fixture equivalent of the bounded linked-create reservation refusal. */
+    final class LinkedGalleryReservationUnavailable extends \RuntimeException {}
+
+    /**
+     * Model a reservation admission result before any consistency effect.
+     * @return void Refuses when the fixture requests an unavailable reservation.
+     */
+    function gallery_linked_reservation_assert_admin_write(): void
+    {
+        if ($GLOBALS['consistency_reservation_blocked'] ?? false) {
+            throw new LinkedGalleryReservationUnavailable('fixture reservation');
+        }
+    }
+
     /** Read checked-in labels for the real view rather than duplicating prose.
      * @param string $key Requested UI catalog identity.
      * @param string|null $fallback Explicit missing-label fallback.
@@ -178,7 +213,11 @@ namespace Gallery\Services {
      * @param array{fixture:bool} $lock Previously acquired fixture lease.
      * @return void Performs no host filesystem operation.
      */
-    function gallery_edit_writer_end(array $lock): void {}
+    function gallery_edit_writer_end(array $lock): void
+    {
+        $GLOBALS['consistency_writer_releases'] =
+            ($GLOBALS['consistency_writer_releases'] ?? 0) + 1;
+    }
 
     /** Admit only the fixture's explicitly available thumbnail schema.
      * @param string $operation Safe operation label.
@@ -438,6 +477,21 @@ namespace {
         }
     }
 
+    // A pre-effect reservation refusal must preserve the checkpoint for an
+    // explicitly requested status refresh, while other failures remain blocked.
+    $controller = (string) file_get_contents(
+        dirname(__DIR__) . '/app/controllers/admin_gallery_consistency.php',
+    );
+    $specificCatch = strpos($controller,
+        'catch (\\Gallery\\Services\\LinkedGalleryReservationUnavailable $exception)');
+    $genericCatch = $specificCatch === false ? false : strpos(
+        $controller, 'catch (Throwable $exception)', $specificCatch,
+    );
+    consistency_check($specificCatch !== false && $genericCatch !== false
+        && !str_contains(substr($controller, $specificCatch, $genericCatch - $specificCatch),
+            "\$job['status'] = 'blocked'"),
+        'Only the proven pre-effect reservation refusal may retain the resumable job.');
+
     $root = sys_get_temp_dir() . '/gallery-consistency-' . uniqid();
     $GLOBALS['consistency_root'] = $root;
     $GLOBALS['consistency_fingerprint'] = 'catalog-before';
@@ -634,6 +688,21 @@ namespace {
             'Planning repairs must not perform a write.');
         consistency_check(count($job['queue']) === 3,
             'Gallery, image and metadata findings deduplicate to exact tasks.');
+        $refusedJob = $job;
+        $unchangedJob = $refusedJob;
+        $releasesBefore = $GLOBALS['consistency_writer_releases'] ?? 0;
+        $GLOBALS['consistency_reservation_blocked'] = true;
+        $refused = false;
+        try {
+            \Gallery\Services\gallery_consistency_repair_step($refusedJob);
+        } catch (\Gallery\Services\LinkedGalleryReservationUnavailable) {
+            $refused = true;
+        } finally {
+            $GLOBALS['consistency_reservation_blocked'] = false;
+        }
+        consistency_check($refused && $refusedJob === $unchangedJob
+            && ($GLOBALS['consistency_writer_releases'] ?? 0) === $releasesBefore + 1,
+            'Reservation refusal must release the writer without consuming a repair task.');
         consistency_check($before === [hash_file('sha256', $thumbnail), filemtime($thumbnail)],
             'Preparing the selected queue must preserve thumbnail bytes.');
         $browserJob = $fileJob;
@@ -657,6 +726,36 @@ namespace {
             && $browserJob['repaired'] === 0
             && !in_array('300:jpg', $browserJob['browser_pending']['variants'], true),
             'Image repair must prepare only missing variants without generating on PHP.');
+        $unchangedBrowserJob = $browserJob;
+        $releasesBefore = $GLOBALS['consistency_writer_releases'] ?? 0;
+        $GLOBALS['consistency_reservation_blocked'] = true;
+        $refused = false;
+        try {
+            \Gallery\Services\gallery_consistency_browser_verify($browserJob);
+        } catch (\Gallery\Services\LinkedGalleryReservationUnavailable) {
+            $refused = true;
+        } finally {
+            $GLOBALS['consistency_reservation_blocked'] = false;
+        }
+        consistency_check($refused && $browserJob === $unchangedBrowserJob
+            && ($GLOBALS['consistency_writer_releases'] ?? 0) === $releasesBefore + 1,
+            'A reservation must refuse browser verification without consuming its task.');
+        $GLOBALS['consistency_reservation_blocked'] = true;
+        $releasesBefore = $GLOBALS['consistency_writer_releases'] ?? 0;
+        $refused = false;
+        try {
+            \Gallery\Services\browser_thumbnail_rebuild_store_consistency_batch(
+                [], 'fixture', 0,
+                ['consistency_token' => 'fixture', 'consistency_sequence' => 1],
+            );
+        } catch (\Gallery\Services\LinkedGalleryReservationUnavailable) {
+            $refused = true;
+        } finally {
+            $GLOBALS['consistency_reservation_blocked'] = false;
+        }
+        consistency_check($refused && $browserJob === $unchangedBrowserJob
+            && ($GLOBALS['consistency_writer_releases'] ?? 0) === $releasesBefore + 1,
+            'A reservation must refuse browser publication before ZIP processing.');
         $forcedVariant = $browserJob['browser_pending']['variants'][0];
         $browserJob['browser_pending']['force'] = [$forcedVariant];
         $GLOBALS['consistency_session_job'] = $browserJob;

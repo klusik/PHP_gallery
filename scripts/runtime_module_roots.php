@@ -15,6 +15,11 @@ declare(strict_types=1);
 
 return [
     'modules' => [
+        // Discovery loads this existing owner only when preparing capabilities.
+        // Its historical linking handlers already own the complete closure.
+        'domain-admin-auth' => [
+            'Gallery\\Controllers\\app_linking_discovery_model',
+        ],
         'request-policy' => [
             'Gallery\\Core\\current_user',
             'Gallery\\Services\\auth_admin_session_lifetime_seconds',
@@ -181,6 +186,26 @@ return [
         'Gallery\\Controllers\\cms_home' => 'public-home',
         'Gallery\\Controllers\\cms_gallery' => 'public-gallery',
         'Gallery\\Controllers\\cms_robots_txt' => 'public-robots',
+        // Discovery uses the existing lightweight public HTTP controller closure.
+        'Gallery\\Controllers\\cms_app_linking_discovery' => 'public-robots',
+        // Linking is an account/authentication concern. This proposed shared
+        // owner changes the Admin auth closure and needs generated-plan review.
+        'Gallery\\Controllers\\cms_app_linking_push' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_start' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_consent' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_token' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_identity' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_galleries' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_gallery_detail' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_media' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_gallery_create' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_gallery_create_status' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_gallery_create_abandon' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_gallery_visibility' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_inventory' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_upload' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_revoke' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_devices' => 'domain-admin-auth',
         'Gallery\\Controllers\\cms_sitemap_xml' => 'public-sitemap',
         'Gallery\\Controllers\\cms_media' => 'public-media',
         'Gallery\\Controllers\\cms_gallery_ofp_pdf' => 'gallery-pdf-documents',
@@ -234,7 +259,10 @@ return [
         // Reuse the existing maintenance owner only where its complete historical
         // closure is already present, including Admin authentication. The edge
         // replaces four duplicated files without broadening any route's closure.
-        'domain-admin-auth' => ['request-maintenance'],
+        // Authentication already contains the entire public-access policy
+        // closure. Give its gallery access file the shared owner and keep
+        // the native picker's reused search grammar within the duplicate cap.
+        'domain-admin-auth' => ['request-maintenance', 'public-policy'],
         'domain-admin-test-runs' => ['request-maintenance'],
         'domain-site-maintenance' => ['request-maintenance'],
         'domain-updates' => ['request-maintenance'],
@@ -282,6 +310,26 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        'Gallery\\Controllers\\cms_app_linking_discovery' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+            'Gallery\\Controllers\\app_linking_discovery_model',
+        ],
+        // Only authorized native presentation and track requests explicitly
+        // load the complete existing attachment owner. Native photo reads and
+        // linking auth add no music catalog dependency to the runtime plan.
+        'Gallery\\Controllers\\cms_app_linking_media' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+            'Gallery\\Controllers\\gallery_music_stream_document',
+        ],
+        'Gallery\\Services\\app_linking_media_presentation' => [
+            'Gallery\\Services\\gallery_music_playlist',
+        ],
+        'Gallery\\Services\\app_linking_media_track_playable' => [
+            'Gallery\\Services\\gallery_music_track_visible',
+        ],
+        'Gallery\\Services\\app_linking_media_track' => [
+            'Gallery\\Services\\gallery_music_track',
+        ],
         // Scoped browser requests explicitly load the inventory/dashboard
         // owners before validating tickets or acquiring their writer lease.
         'Gallery\\Services\\browser_thumbnail_rebuild_consistency_target' => [
@@ -292,6 +340,7 @@ return [
             'Gallery\\Core\\cms_runtime_kernel',
             'Gallery\\Services\\gallery_edit_writer_begin',
             'Gallery\\Services\\gallery_edit_writer_end',
+            'Gallery\\Services\\gallery_linked_reservation_assert_admin_write',
         ],
         'Gallery\\Controllers\\cms_admin_gallery_consistency_browser_config' => [
             'Gallery\\Core\\cms_runtime_kernel',

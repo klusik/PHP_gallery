@@ -236,6 +236,7 @@ namespace {
     use function Gallery\Services\image_public_display_file;
     use function Gallery\Services\thumbnail_ensure_image_thumbnail_variant_file;
 
+    require_once __DIR__ . '/support/gallery_edit_writer_source.php';
     require_once __DIR__ . '/../app/services/thumbnail_generation.php';
     require_once __DIR__ . '/../app/services/dng_derivatives.php';
 
@@ -565,29 +566,112 @@ namespace {
         );
 
         // These are source call-chain checks, not HTTP/browser/database acceptance.
+        $uploadFunctions = [];
         foreach ([
-            'admin_uploads.php',
-            'upload_automation.php',
-        ] as $controller) {
-            $controllerSource = file_get_contents(
-                __DIR__ . '/../app/controllers/' . $controller,
-            );
+            'app/controllers/admin_uploads.php',
+            'app/controllers/upload_automation.php',
+            'app/controllers/app_linking/upload.php',
+            'app/services/upload_automation.php',
+        ] as $relativePath) {
+            $source = file_get_contents(__DIR__ . '/../' . $relativePath);
             image_decode_pipeline_assert(
-                php_source_contains(
-                    $controllerSource,
-                    'create_image_thumbnails_result($image, $gallery)',
-                ),
-                'Upload fallback must retain the shared thumbnail boundary: '
-                    . $controller,
+                is_string($source),
+                'Missing upload source: ' . $relativePath,
             );
+            $uploadFunctions[$relativePath] = gallery_writer_functions($source);
             image_decode_pipeline_assert(
                 !preg_match(
                     '/imagecreatefrom(?:jpeg|png|gif|webp)\s*\(/',
-                    $controllerSource,
+                    $source,
                 ),
-                'An upload controller bypasses the shared decoder.',
+                'An upload owner bypasses the shared decoder: ' . $relativePath,
             );
         }
+        $uploadContracts = [
+            [
+                'app/controllers/admin_uploads.php',
+                'cms_admin_upload',
+                'create_image_thumbnails_result($image, $gallery)',
+            ],
+            [
+                'app/controllers/upload_automation.php',
+                'cms_upload_automation_upload',
+                'upload_automation_store_images('
+                    . '$galleryId, $gallery, $entries, '
+                    . '$clientThumbnailEntries, $imageClientIds, '
+                    . '$simCameraMetadata)',
+            ],
+            [
+                'app/controllers/upload_automation.php',
+                'cms_upload_automation_upload',
+                'upload_automation_generate_derivatives('
+                    . '$stored, $gallery, $createThumbnails)',
+            ],
+            [
+                'app/controllers/app_linking/upload.php',
+                'cms_app_linking_upload',
+                '$storedResult = upload_automation_store_images('
+                    . '$galleryId, $gallery, $entries, $thumbnails, '
+                    . '$clientIds, $camera,',
+            ],
+            [
+                'app/controllers/app_linking/upload.php',
+                'cms_app_linking_upload',
+                "upload_automation_bool(\$_POST['create_thumbnails'] ?? '1', true)",
+            ],
+            [
+                'app/services/upload_automation.php',
+                'upload_automation_store_images',
+                'if ($delegatedCreateThumbnails !== null) {'
+                    . '$postResult[] = upload_automation_generate_derivatives('
+                    . '$stored, $gallery, $delegatedCreateThumbnails);'
+                    . '$current = $resolveDelegatedGallery === null ? null : '
+                    . '$resolveDelegatedGallery();'
+                    . 'if (!is_array($current) || '
+                    . '($current[\'folder_path\'] ?? null) !== '
+                    . '($gallery[\'folder_path\'] ?? null)) {'
+                    . 'throw new RuntimeException(\'Upload authority is unavailable.\'); }'
+                    . 'upload_automation_assert_delegated_registration('
+                    . '$galleryId, $current, $stored, count($entries)); }',
+            ],
+            [
+                'app/services/upload_automation.php',
+                'upload_automation_store_images',
+                'store_uploaded_gallery_images('
+                    . '$galleryId, $entries, null, $authorizeBeforeStore, '
+                    . '$delegatedCreateThumbnails === null ? null : $finish, '
+                    . '$delegatedCreateThumbnails !== null, '
+                    . '$delegatedCreateThumbnails === null ? null : '
+                    . 'static fn(string $writerLock): bool => '
+                    . 'upload_automation_model_inventory_locks_owned('
+                    . '$galleryId, $writerLock),)',
+            ],
+            [
+                'app/services/upload_automation.php',
+                'upload_automation_generate_derivatives',
+                'create_image_thumbnails_result($image, $gallery)',
+            ],
+        ];
+        foreach ($uploadContracts as [$relativePath, $functionName, $fragment]) {
+            $body = $uploadFunctions[$relativePath][$functionName]['body'] ?? '';
+            image_decode_pipeline_assert(
+                php_source_contains($body, $fragment),
+                'Upload fallback must retain the shared thumbnail boundary: '
+                    . $relativePath . '::' . $functionName,
+            );
+        }
+        $delegatedBody = $uploadFunctions['app/controllers/app_linking/upload.php']
+            ['cms_app_linking_upload']['body'] ?? '';
+        $legacyBody = $uploadFunctions['app/controllers/upload_automation.php']
+            ['cms_upload_automation_upload']['body'] ?? '';
+        $delegatedStore = strpos($delegatedBody, 'upload_automation_store_images(');
+        $versionedAck = strpos($delegatedBody, "'upload_evidence' => 'fresh_insert_v1'");
+        image_decode_pipeline_assert(
+            $delegatedStore !== false && $versionedAck !== false
+                && $versionedAck > $delegatedStore
+                && !str_contains($legacyBody, 'fresh_insert_v1'),
+            'Only delegated success after the upload owner may advertise fresh insertion evidence.',
+        );
         echo
             "Image decode pipeline tests passed (small native GD fixtures, injected metadata, public repair, upload call-chain checks).\n";
     } finally {

@@ -25,9 +25,9 @@ row.
 
 Every supported application gallery UPDATE explicitly increments the revision,
 including bulk setters, access changes, public-path rebuilds and cover writers.
-Multi-step and filesystem writers acquire the shared application lock before
-reading mutable state and retain it through their last database/file side
-effect.
+The shared application lock is required before mutable reads through the last
+database/file side effect. The inventory below identifies implemented wrappers
+and known direct paths that do not yet satisfy this lifetime.
 `Gallery\Core\GALLERY_EDIT_LOCK_SUFFIX` in `app/policy_constants.php` owns the
 protocol suffix used by those application writer boundaries.
 
@@ -90,8 +90,11 @@ supplies `edit_revision`.
 Acquire `gallery_edit_writer_begin()` before reading mutable state and before
 the outer use case's first target file change. Retain ownership through metadata
 and sidecars, and release through `gallery_edit_writer_end()` in `finally`.
-Acquire before more specific pair/job/entity locks. Same-connection nested
-callers may reacquire. Do not open an outer PDO transaction around the use case.
+Acquire before more specific pair/job/entity locks where the outer owner has
+that contract. Existing upload and linked-create ordering exceptions are
+documented below; they must be reconciled before filesystem-fence activation.
+Same-connection nested callers may reacquire. Do not open an outer PDO
+transaction around the use case.
 
 The wrappers below are implemented. The shared test inventory verifies ordinary
 wrapper lifetimes and actual busy refusal; this is not evidence that every
@@ -175,6 +178,157 @@ current.
 Acquire before reading mutable state and retain through writing, or reload and
 compare under ownership. Sidecar-only `normalize_gallery_sidecar_tags_recursive`
 also retains the outer boundary while traversing and rewriting metadata.
+
+## Visibility marker and filesystem fence inventory
+
+The experimental linked visibility scope remains disabled. The filesystem
+fence is preparation for future coordination, not a currently enforced lock.
+The database named lock is released on connection loss even if a PHP process
+has not finished its filesystem work. A check before a filesystem call cannot
+prevent a disconnect between that check and the call. No existing marker, path
+check or database lease provides crash-atomic coordination with unrelated
+filesystem processes.
+
+Current entry points and existing database-lock lifetimes are:
+
+| Area | Current owner and boundary |
+| --- | --- |
+| Editor and quick access | `gallery_edit_begin()` calls `gallery_edit_model_reserve()` directly; `gallery_edit_end()` releases after editor effects. Adding a fence only to `gallery_edit_writer_begin()` would miss this path. |
+| Ordinary writers | `gallery_edit_writer_begin()` surrounds the wrappers above, including import, scan, create, move, copy, Trash move/restore/reconciliation, editor sidecars, dates, thumbnails, grid reset, media renaming and migration jobs. Owned helpers are not independent write authority. |
+| Other guarded jobs | `gallery_consistency/repairs.php`, `gallery_image_move_journal.php`, `browser_thumbnail_rebuild.php`, `gallery_pdf_conversion.php` and `simbrief_ofp_conversion.php` also have explicit writer boundaries. Image moves acquire the global database lock before their sorted pair locks. The ordinary wrapper test inventory alone does not cover every entry. |
+| Linked creation and visibility | `app_linking_create.php` acquires the writer lock around each creation or disabled visibility mutation. Creation also has a durable operation claim. Visibility retains a marker, but marker recovery and competing writers are not yet integrated. |
+| Legacy and linked upload | Both controllers use `upload_automation_store_images()`: it takes a gallery-specific database lock before `store_uploaded_gallery_images()` and its global writer lock. Linked post-store work remains under both; legacy post-store work runs after the global lock is released. The legacy controller additionally generates derivatives after the upload service returns. |
+| Layout compatibility | `gallery_description_layout_migrate_legacy()` directly acquires `gallery_edit_model_lock($pdo)` on the migration connection before planning and applying live/Trash sidecars. `gallery_description_layout_upgrade_sidecars()` has no such wrapper itself. |
+
+Known paths requiring an outer boundary before their first authoritative change
+include the following. A filesystem lock added only to the ordinary wrapper
+would not cover them.
+
+- `cms_admin_reorder_galleries()` calls individually guarded folder moves,
+  then updates order and refreshes sidecars outside those nested leases.
+- `admin_gallery_discovery_move_requested_photos()` and
+  `admin_gallery_discovery_delete_requested_paths()` move or delete before a
+  possible later guarded scan. Cached discovery results are observations, not
+  permission to import or delete without a fresh target check.
+- `gallery_bulk_set_gps_map_enabled()` and
+  `gallery_bulk_set_show_filenames()` update rows and sidecars without their own
+  writer lease. `gallery_bulk_set_visibility()` has one.
+- `gallery_metadata_organizer_apply_date_plan()` and its batch variant combine
+  individually guarded create/move operations with later unguarded sidecar
+  maintenance. Their complete use cases need one consistent boundary.
+- `purge_gallery_trash_entry()` claims and removes a Trash payload without the
+  gallery writer lease; batch and scheduled purges call it. Reconciliation and
+  restore use separate guarded entry points.
+- `normalize_gallery_sidecar_tags_recursively()` in `tag_metadata.php` is the
+  Admin tag-page repair and differs from the guarded similarly named function
+  in `gallery_sidecars.php`. Its legacy configuration key and checkpoint
+  compatibility are recorded in [the lifecycle register](COMPATIBILITY_LIFECYCLE.md).
+
+This inventory does not prove that every writer has been found. Scheduled
+publication and other SQL-first writers must also check a marker before the
+database effect; refusing only the later sidecar write would be too late. Grid
+reset similarly updates rows before walking sidecars. Reconciliation,
+compensation and error handling must remain inside the ownership boundary.
+
+### Proposed lock-order graph and transition
+
+This is a target to review, not an implemented acquisition order. The fixed
+filesystem-fence gate remains false. The outermost filesystem lease must be
+obtained before any advisory lock participating in the use case and held
+until all protected filesystem and database work, including compensation and
+reconciliation, has stopped. The currently identified required edges are:
+
+```text
+filesystem lease -> operation-key lock -> global gallery writer
+filesystem lease -> upload gallery lock -> global gallery writer
+filesystem lease ---------------------> global gallery writer
+global gallery writer -> sorted gallery-pair locks, where used
+global gallery writer -> transaction and its established row-lock order
+```
+
+An arrow means the left owner must already be held before the right owner is
+acquired, and released only after the dependent owner and its work finish.
+Optional nodes occur only in use cases that need them. This graph does not
+establish an order between operation-key, upload-gallery, pair, session,
+updater, PDF or other specialized locks in combinations not yet audited. Such
+combinations and all nested acquisitions need an explicit cycle-free extension
+before activation; missing edges are not authorization to acquire in either
+order. Existing grant and user row-lock ordering must also remain intact.
+
+The implementation transition must begin at complete outer use cases, not by
+silently inserting a filesystem lock into `gallery_edit_writer_begin()` or
+`gallery_edit_begin()`. In particular:
+
+- Linked create and abandon currently take an operation-key lock before the
+  global writer. Their outer entry must obtain the filesystem lease before the
+  operation-key lock and retain both through the existing completion or
+  reconciliation path.
+- Legacy and linked uploads, plus the linked recovery probe, currently acquire
+  the upload-gallery lock before the global writer. The future upload boundary
+  must obtain the same filesystem lease before the gallery lock. For legacy
+  upload it must continue through post-store work and controller-side
+  `upload_automation_generate_derivatives()`, which currently runs after both
+  database leases are released. Linked upload runs its derivatives inside the
+  guarded callback. Preserve the existing `pgu_` API response, partial-result
+  semantics, authority checks and compatibility throughout this change.
+- The layout migration directly uses `gallery_edit_model_lock($pdo)` with the
+  migration connection, including installation before normal configuration is
+  present. Its outer migration owner needs the same filesystem admission and
+  explicit trusted root; ordinary writer wrappers cannot cover that entry.
+- An execution must reuse one filesystem-handle owner for nested editor and
+  specialized-writer leases. Pair every acquisition with exactly one release;
+  the outer handle must remain held while any nested owner or cleanup is active.
+  A database disconnect stops subsequent mutations and makes the outcome
+  uncertain, but must not prematurely release that filesystem handle while
+  already-started protected work can still run. Release and error paths need
+  independent verification, including when database unlock fails.
+
+Activation additionally requires a complete inventory of every direct model,
+route, worker, scheduled job, updater, CLI and migration entry; consistent
+cross-process and cross-host lock-file identity on the actual filesystem; and
+a deployment transition that drains all older PHP, CLI and background workers
+before any new marker-based write. Unrelated shell, FTP and older-runtime
+writers do not participate in `flock`; explicitly exclude or coordinate them.
+Restored database and filesystem backups also need independent coherence
+assessment. Lock-order tests must cover nested owners, competing upload and
+create paths, lost database connections while filesystem work is in progress,
+exceptional release, and both upload variants' complete side effects. No
+runtime integration or marker-removal authority follows from this plan.
+
+Before considering activation, complete these separate steps:
+
+1. Extend the source and behavioral inventory to route, worker, cron, migration,
+   CLI, compensation and recovery callers, including direct model locks. Keep
+   the filesystem fence inert during this work.
+2. Establish one lock-order graph for operation claims, the retained filesystem
+   lease, the global database lease and per-gallery/pair locks. Account for the
+   existing upload order and pair reentrant nested calls. Acquire the filesystem
+   lease before relevant database gallery leases and retain it from before the
+   first effect through the last sidecar, cleanup or reconciliation. Recheck
+   authority after acquisition. A failed acquisition or lost database connection
+   must not authorize further mutation.
+3. Integrate marker checks for logical paths and resolved sidecar targets, plus
+   move/copy/Trash subtrees, without silently excluding previously supported
+   unmarked symbolic links or truncating work. Refuse uncertain observations;
+   check again at authoritative import or mutation, not only a cached preview.
+4. Prove that all cooperating processes and hosts use the same persistent lock
+   inode on a filesystem with supported interprocess and, where applicable,
+   interhost lock semantics. Never unlink or replace it while it may be in use.
+   A shared database does not prove a shared filesystem; independently writable
+   databases sharing storage need the same fence. NFS/SMB, failover, power
+   loss and external writers need separate evidence. Drain old PHP workers,
+   cron and CLI jobs and prevent old code from writing that storage before
+   enabling a marker-based protocol.
+5. Exercise busy, reentrant, crash, connection-loss, partial-write, recovery,
+   live/Trash, symlink and multi-host cases through central test owners. Report
+   exact hosted results and platform gaps. Keep visibility disabled until the
+   complete protocol has independent security review and qualification.
+
+The fence is a server implementation detail. Preserve legacy `pgu_`
+authorization and the upload response contract for old and new clients. An old
+gallery server cannot enforce a fence or marker protocol it does not implement;
+source compatibility does not establish safe mixed-version server writes to
+shared storage.
 
 ## SQL coverage and foreign keys
 

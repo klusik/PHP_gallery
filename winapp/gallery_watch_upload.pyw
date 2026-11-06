@@ -32,8 +32,11 @@ second, divergent implementation of upload behavior.
 import argparse
 import base64
 import concurrent.futures
+import copy
 import ctypes
+import email.message
 import hashlib
+import http.client
 import importlib
 import json
 import math
@@ -42,6 +45,8 @@ import multiprocessing
 import os
 import shutil
 import queue
+import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -49,14 +54,17 @@ import threading
 import time
 import uuid
 import webbrowser
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import TracebackType
 from typing import (
     Any,
     Callable,
     Dict,
     Iterable,
+    IO,
     List,
+    Literal,
     Optional,
     Set,
     Tuple,
@@ -105,7 +113,23 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS as REDESIGN_CONFIG_DEFAULTS, migrate_config_payload
+from uploader.config_snapshot import ConfigSnapshot, ConfigSnapshotError, ConfigSnapshotStore
+from uploader.credential_store import WindowsUploadModeStore
+from uploader.macos_mode import MacUploadModeStore, assert_local_macos_profile
+from uploader.mode_coordinator import (
+    CoordinatedWork, GuiModeOwner, ModeConfigPort, ModeCoordinator, ModeCoordinatorError,
+)
 from uploader.diagnostics import redact_text
+from uploader.linked_upload import (
+    LINKED_UPLOAD_CHUNK_BYTES,
+    LINKED_UPLOAD_FILE_MAX_BYTES,
+    LinkedTargetLease,
+    LinkedThumbnail,
+    LinkedUploadTarget,
+    capture_linked_source,
+    linked_target_binding,
+    verify_linked_source,
+)
 from uploader.windows_startup import (
     ACTIVATION_POLL_MS,
     STARTUP_TRAY_TIMEOUT_SECONDS,
@@ -115,7 +139,6 @@ from uploader.windows_startup import (
 )
 from uploader.discovery import (
     ArchiveLimits,
-    cleanup_stale_staging,
     discover_folder,
     discover_selected_files,
     stage_zip_archive,
@@ -127,20 +150,29 @@ from uploader.models import (
     ImportJob,
     ImportPlan,
     ITEM_ACTIVE_STATES,
+    LINKED_UPLOAD_UNCERTAIN_REASON,
     JsonValue,
     RECOVERABLE_ITEM_STATES,
 )
 from uploader.simconnect_location import SimCameraLocation, SimConnectCameraClient, SimulatorInfo
 from uploader.simconnect_time import UtcSyncManager
 from uploader.game_presence import GamePresence
-from uploader.flight_jobs import read_document
+from uploader.flight_jobs import connection_binding, read_document
+from uploader.flight_report_translations import tr
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
+from uploader.windows_file_identity import assert_local_windows_profile
 from uploader.state_store import (
     JobStateStore,
+    accepted_work_owner,
     atomic_write_json,
+    linked_upload_state_path,
     load_upload_state,
+    load_upload_state_for_mutation,
     merge_upload_sections,
     quarantine_malformed,
+    _strict_mode_history_object,
+    _reject_mode_history_constant,
+    _strict_mode_history_float,
 )
 
 try:
@@ -277,6 +309,11 @@ CONNECTION_DIALOG_MINIMUM = (560, 280)
 # Consumers: WatcherApp.open_connection_dialog.
 # Rationale: Keep the resizable credential editor inside the usable display area.
 CONNECTION_DIALOG_SCREEN_MARGIN = (80, 100)
+# Purpose: Keep long site addresses, folder paths and feedback readable.
+# Type: int. Units: Tk pixels. Scope: main window summary labels.
+# Consumers: WatcherApp.build_gallery_link_bar and WatcherApp.build_watch_tab.
+# Rationale: 500 leaves room for neighboring actions at the minimum width.
+WINDOW_SUMMARY_WRAP = 500
 # Purpose: Keep watcher preferences readable while allowing shorter screens to scroll.
 # Type: tuple[int, int]; Units: pixels; Scope: watcher settings sheet.
 # Consumers: WatcherApp.open_watcher_settings.
@@ -392,7 +429,37 @@ SUPPORTED_SUFFIXES = {
 DEFAULT_INTERVAL_SECONDS = 1.0
 DEFAULT_STABLE_SECONDS = 2.0
 DEFAULT_TIMEOUT_SECONDS = 180
+# Purpose: Limit how often the watcher checks the directory.
+# Type: float. Units: seconds. Scope: the Watcher form.
+# Consumers: WatcherApp.current_watcher_config.
+# Rationale: Preserve the existing 0.2-second minimum for scan scheduling.
+MIN_INTERVAL_SECONDS = 0.2
+# Purpose: Give a file time to stop changing before a watcher upload.
+# Type: float. Units: seconds. Scope: the Watcher form.
+# Consumers: WatcherApp.current_watcher_config.
+# Rationale: Preserve the existing half-second minimum for file stability.
+MIN_STABLE_SECONDS = 0.5
+# Purpose: Bound delegated inventory batches before JSON encoding.
+# Type: int. Units: file descriptors. Scope: one linked preflight request.
+# Consumers: ManualUploadThread.preload_remote_inventory,
+# ImportPreflightThread.run. Rationale: 500 leaves room within the two-MiB
+# request cap for long escaped filenames and their SHA-256 descriptors.
+LINKED_INVENTORY_BATCH_SIZE = 500
 DEFAULT_INVENTORY_REFRESH_SECONDS = 30.0
+
+# Purpose: Preserve transient-failure backoff without unbound historical state.
+# Type: int. Units: seconds. Scope: one live legacy watcher and source hash.
+# Consumers: WatcherThread.scan_once. Rationale: start at the existing five
+# seconds and retain the old one-hour ceiling while avoiding another gallery's
+# persisted retry metadata. The exponent remains bounded at the existing seven.
+LEGACY_WATCH_RETRY_BASE_SECONDS = 5
+LEGACY_WATCH_RETRY_CAP_SECONDS = 3600
+LEGACY_WATCH_RETRY_EXPONENT_MAX = 7
+
+# An unconfirmed legacy mutation is not evidence of absence or a retry grant.
+LEGACY_UPLOAD_UNCERTAIN_REASON = (
+    'Upload outcome is unconfirmed; review the gallery before retrying.'
+)
 DEFAULT_AI_WORKER_POLL_SECONDS = 60.0
 DEFAULT_AI_WORKER_LEASE_SECONDS = 600
 AI_WORKER_MIN_POLL_SECONDS = 5.0
@@ -439,8 +506,8 @@ class WatcherConfig:
 
     Args:
         schema_version (int): Existing configuration migration marker.
-        delete_uploaded_files (bool): Delete sources only after confirmed
-            upload.
+        delete_uploaded_files (bool): Saved deletion preference; source
+            deletion is temporarily unavailable and files are retained.
         watch_recursive (bool): Include descendants in watch-folder discovery.
         manual_thumbnail_mode (str): Server or local thumbnail generation.
         archive_max_entries (int): Maximum accepted ZIP entry count.
@@ -504,6 +571,8 @@ class WatcherConfig:
         ai_ollama_model (str): Ollama vision model name, for example
             llava:latest or llama3.2-vision:latest.
         ai_semantic_prompt (str): Prompt sent only to a local vision backend.
+        _snapshot_token (object | None): Private config-owner generation; never
+            serialized or used as a credential.
     """
 
     schema_version: int = CONFIG_SCHEMA_VERSION
@@ -544,6 +613,7 @@ class WatcherConfig:
     ai_ollama_url: str = AI_OLLAMA_URL_DEFAULT
     ai_ollama_model: str = AI_OLLAMA_MODEL_DEFAULT
     ai_semantic_prompt: str = AI_SEMANTIC_PROMPT_DEFAULT
+    _snapshot_token: object | None = field(default=None, repr=False, compare=False)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "WatcherConfig":
@@ -696,6 +766,80 @@ def trim_path(value: str) -> Optional[Path]:
     return Path(text)
 
 
+class CapturedWatcherConfig(WatcherConfig):
+    """Hold sealed primitive settings for cooperating worker code.
+
+    This is not a security boundary against arbitrary code in this process.
+    """
+
+    def __setattr__(self, name: str,
+                    value: str | bool | int | float | object | None) -> None:
+        """Refuse later changes to the worker's captured settings.
+
+        Args:
+            name (str): Config field selected by the assignment.
+            value (str | bool | int | float | object | None): Configuration
+                primitive or private snapshot token, accepted during construction.
+
+        Returns:
+            None: Stores initial fields before the capture is sealed.
+
+        Raises:
+            AttributeError: A sealed capture cannot be changed by a worker.
+        """
+        if getattr(self, '_capture_sealed', False):
+            raise AttributeError('Captured worker configuration is immutable.')
+        super().__setattr__(name, value)
+
+    def __delattr__(self, name: str) -> None:
+        """Refuse accidental removal of any sealed captured field.
+
+        Args:
+            name (str): Field selected for deletion.
+
+        Returns:
+            None: Deletes only an unsealed construction-time field.
+
+        Raises:
+            AttributeError: A sealed capture cannot be changed by a worker.
+        """
+        if getattr(self, '_capture_sealed', False):
+            raise AttributeError('Captured worker configuration is immutable.')
+        super().__delattr__(name)
+
+    def __repr__(self) -> str:
+        """Avoid exposing the captured API key in diagnostics.
+
+        Returns:
+            str: A fixed non-secret description.
+        """
+        return 'CapturedWatcherConfig(<private>)'
+
+
+def capture_worker_config(config: WatcherConfig) -> CapturedWatcherConfig:
+    """Create a sealed worker copy preserving the original snapshot token.
+
+    Args:
+        config (WatcherConfig): Current host configuration selected for work.
+
+    Returns:
+        CapturedWatcherConfig: Independent immutable primitive settings.
+
+    Raises:
+        ValueError: Fields or the owner generation cannot be safely captured.
+    """
+    values = config.to_dict()
+    if (config._snapshot_token is None or any(
+            type(value) not in (str, int, float, bool) for value in values.values())):
+        raise ValueError('Worker configuration is unavailable.')
+    captured = CapturedWatcherConfig.from_dict(values)
+    captured._snapshot_token = config._snapshot_token
+    if captured.to_dict() != values:
+        raise ValueError('Worker configuration changed during capture.')
+    captured._capture_sealed = True
+    return captured
+
+
 class ConfigStore:
     """
     Small persistence wrapper for the local configuration file.
@@ -705,56 +849,82 @@ class ConfigStore:
     write behavior.
     """
 
-    def __init__(self, path: Path = CONFIG_PATH) -> None:
+    def __init__(self, path: Path | str = CONFIG_PATH) -> None:
         """
         Create a config store for one JSON file.
 
         Args:
-            path (Path): Path to the JSON configuration file.
+            path (Path | str): Selected JSON config path. A string preserves
+                its original spelling for mode evidence; Path callers retain
+                the spelling already represented by their Path object.
 
         Returns:
             None: Create a config store for one JSON file.
         """
-        self.path = path
+        self._mode_raw_path = str(path)
+        self.path = Path(path)
+        self._snapshot_store = ConfigSnapshotStore(
+            self.path, frozenset(WatcherConfig().to_dict()),
+        )
+        self._snapshot = None
+        self._lock = threading.RLock()
+        self._revision = object()
+        self._mode_transaction_active = False
 
     def load(self) -> WatcherConfig:
         """
         Load the configuration file.
 
-        Invalid, missing, or non-object JSON content falls back to defaults. The
-        watcher should remain startable even after a user accidentally damages
-        the local config file.
+        A confirmed missing file returns first-run defaults. An unreadable,
+        malformed or ambiguous file is not treated as an empty configuration.
 
         Returns:
-            WatcherConfig: Loaded configuration, or defaults when the file is
-                unusable.
+            WatcherConfig: Loaded configuration or first-run defaults.
+
+        Raises:
+            OSError: Configuration or its parent cannot be safely observed.
         """
-        if not self.path.is_file():
-            return WatcherConfig()
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                quarantine_malformed(self.path)
-                return WatcherConfig()
-            normalized, migrated = migrate_config_payload(data)
-            config = WatcherConfig.from_dict(normalized)
-            canonical_url = normalize_upload_url(config.gallery_url) if config.gallery_url.strip() else ""
-            if canonical_url and canonical_url != config.gallery_url:
-                config.gallery_url = canonical_url
-                migrated = True
-            if migrated:
-                atomic_write_json(self.path, config.to_dict())
-            return config
-        except (OSError, json.JSONDecodeError, ValueError, UnicodeError):
-            quarantine_malformed(self.path)
-            return WatcherConfig()
+        # First launches and explicit --config paths may need a new parent.
+        # A created directory does not prove prior mode evidence never existed.
+        with self._lock:
+            if self._mode_transaction_active:
+                raise ConfigSnapshotError('Configuration mode transaction is active.')
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            snapshot = self._snapshot_store.inspect()
+            self._snapshot = snapshot
+            self._revision = object()
+            if snapshot.state == 'missing':
+                return WatcherConfig(_snapshot_token=self._revision)
+            if snapshot.state != 'valid':
+                raise ConfigSnapshotError(
+                    'Configuration is unavailable. Preserve the file and restore '
+                    'a valid backup before starting uploads.'
+                )
+            try:
+                data = self._snapshot_store.read(snapshot)
+                normalized, migrated = migrate_config_payload(data)
+                config = WatcherConfig.from_dict(normalized)
+                config._snapshot_token = self._revision
+                canonical_url = normalize_upload_url(config.gallery_url) if config.gallery_url.strip() else ""
+                if canonical_url and canonical_url != config.gallery_url:
+                    config.gallery_url = canonical_url
+                    migrated = True
+                if migrated:
+                    self.save(config)
+                return config
+            except (ValueError, TypeError, OverflowError):
+                raise ConfigSnapshotError(
+                    'Configuration is invalid. Preserve the file and restore '
+                    'a valid backup before starting uploads.'
+                ) from None
 
     def save(self, config: WatcherConfig) -> None:
         """
         Persist configuration atomically.
 
-        The temporary file plus replace pattern avoids leaving a half-written
-        config if Windows, antivirus, or the process interrupts the write.
+        Preserve fields outside WatcherConfig and compare the complete prior
+        snapshot before publishing. This does not exclude unrelated writers or
+        establish directory durability after a power failure.
 
         Args:
             config (WatcherConfig): Configuration object to persist.
@@ -765,7 +935,265 @@ class ConfigStore:
         Returns:
             None: Persist configuration atomically.
         """
-        atomic_write_json(self.path, config.to_dict())
+        with self._lock:
+            if self._mode_transaction_active:
+                raise ConfigSnapshotError('Configuration mode transaction is active.')
+            fresh_owner = self._snapshot is None
+            if self._snapshot is None:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self._snapshot = self._snapshot_store.inspect()
+            if (config._snapshot_token is not self._revision
+                    and not (fresh_owner and self._snapshot.state == 'missing'
+                             and config._snapshot_token is None)):
+                raise ConfigSnapshotError('Configuration selection is stale.')
+            if fresh_owner and self._snapshot.state == 'missing':
+                # Retain this attempt's generation if staging fails. A retry
+                # still has to match the original missing snapshot on disk.
+                config._snapshot_token = self._revision
+            self._snapshot = self._snapshot_store.save(
+                self._snapshot, config.to_dict(),
+            )
+            self._revision = object()
+            config._snapshot_token = self._revision
+
+    def mode_port(self, config: WatcherConfig) -> "_ConfigModePort":
+        """Bind mode transactions to the current host-owned config object.
+
+        Args:
+            config (WatcherConfig): Exact live configuration selected by the host.
+
+        Returns:
+            _ConfigModePort: Port retaining the config object and its owner.
+        """
+        with self._lock:
+            if (str(self.path) != str(self._snapshot_store.path)
+                    or str(self.path) != str(Path(self._mode_raw_path))):
+                raise ConfigSnapshotError('Configuration path changed.')
+            return _ConfigModePort(self, config, str(self.path), self._mode_raw_path)
+
+
+class _ConfigModePort:
+    """Bind a mode transaction factory to one host-owned config generation."""
+
+    def __init__(self, store: ConfigStore, config: WatcherConfig, path: str,
+                 raw_path: str) -> None:
+        """Retain the exact config object whose token may be refreshed.
+
+        Args:
+            store (ConfigStore): Existing owner for the complete config file.
+            config (WatcherConfig): Host-owned active config object.
+            path (str): Exact selected Path spelling captured by the store.
+            raw_path (str): Original string supplied before Path conversion.
+
+        Returns:
+            None: Prepares a port without filesystem work.
+        """
+        self._store = store
+        self._config = config
+        self._path = path
+        self._raw_path = raw_path
+
+    def mode_transaction(self) -> "_ConfigModeTransaction":
+        """Prepare one transaction sharing the original ConfigStore lock.
+
+        Returns:
+            _ConfigModeTransaction: Unentered transaction bound to this config.
+        """
+        return _ConfigModeTransaction(self._store, self._config, self._path, self._raw_path)
+
+
+class _ConfigModeTransaction:
+    """Hold one ConfigStore lock while its mode anchor is observed or updated."""
+
+    def __init__(self, store: ConfigStore, config: WatcherConfig, path: str,
+                 raw_path: str) -> None:
+        """Bind an unentered mode transaction to the existing config owner.
+
+        Args:
+            store (ConfigStore): ConfigStore which owns the full document.
+            config (WatcherConfig): Exact host-owned config selected for update.
+            path (str): Exact Path spelling captured by the mode port.
+            raw_path (str): Original spelling captured before Path conversion.
+
+        Returns:
+            None: Creates an unentered transaction without filesystem work.
+        """
+        self._store = store
+        self._config = config
+        self._path = path
+        self._raw_path = raw_path
+        self._thread_id: int | None = None
+
+    def __enter__(self) -> "_ConfigModeTransaction":
+        """Acquire the config lock for this transaction's calling thread.
+
+        Returns:
+            _ConfigModeTransaction: Entered transaction for the current thread.
+
+        Raises:
+            ConfigSnapshotError: The transaction is already entered.
+        """
+        if self._thread_id is not None:
+            raise ConfigSnapshotError('Configuration transaction is unavailable.')
+        self._store._lock.acquire()
+        try:
+            if (self._store._mode_transaction_active
+                    or self._config._snapshot_token is not self._store._revision
+                    or str(self._store.path) != self._path
+                    or str(self._store._snapshot_store.path) != self._path
+                    or self._store._mode_raw_path != self._raw_path
+                    or str(Path(self._raw_path)) != self._path):
+                raise ConfigSnapshotError('Configuration selection is stale.')
+            self._assert_config_matches_snapshot()
+            self._thread_id = threading.get_ident()
+            self._store._mode_transaction_active = True
+        except BaseException:
+            self._store._lock.release()
+            raise
+        return self
+
+    def _check_owner(self) -> None:
+        """Require the same thread that acquired the config-owner lock.
+
+        Returns:
+            None: The transaction belongs to the current thread.
+
+        Raises:
+            ConfigSnapshotError: The transaction is inactive or belongs elsewhere.
+        """
+        if (self._thread_id is None or self._thread_id != threading.get_ident()
+                or self._config._snapshot_token is not self._store._revision
+                or str(self._store.path) != self._path
+                or str(self._store._snapshot_store.path) != self._path
+                or self._store._mode_raw_path != self._raw_path
+                or str(Path(self._raw_path)) != self._path):
+            raise ConfigSnapshotError('Configuration transaction is unavailable.')
+        self._assert_config_matches_snapshot()
+
+    def _assert_config_matches_snapshot(self) -> None:
+        """Require current in-memory settings to match the owned config evidence.
+
+        This comparison performs no migration write and never reports values.
+
+        Returns:
+            None: Known fields match the stored document or first-run defaults.
+
+        Raises:
+            ConfigSnapshotError: Known settings or snapshot cannot be verified.
+        """
+        snapshot = self._store._snapshot
+        try:
+            if snapshot is None:
+                raise ValueError
+            if snapshot.state == 'missing':
+                expected = WatcherConfig()
+            elif snapshot.state == 'valid':
+                expected = WatcherConfig.from_dict(
+                    self._store._snapshot_store.read(snapshot),
+                )
+            else:
+                raise ValueError
+            if self._config.to_dict() != expected.to_dict():
+                raise ValueError
+        except (ValueError, TypeError, OverflowError, OSError):
+            raise ConfigSnapshotError('Configuration selection is stale.') from None
+
+    @property
+    def config_path(self) -> str:
+        """Return the original selected path spelling for mode validation.
+
+        Returns:
+            str: Original string spelling, or the already-converted Path
+                spelling for a Path caller; not filesystem identity proof.
+
+        Raises:
+            ConfigSnapshotError: This transaction is inactive or belongs elsewhere.
+        """
+        self._check_owner()
+        return self._raw_path
+
+    def snapshot(self) -> ConfigSnapshot:
+        """Return the exact loaded and still-current complete config snapshot.
+
+        Returns:
+            ConfigSnapshot: Existing validated or positively missing config.
+
+        Raises:
+            ConfigSnapshotError: The config is changed or unavailable.
+        """
+        self._check_owner()
+        snapshot = self._store._snapshot
+        if (snapshot is None or snapshot.state not in ('valid', 'missing')
+                or self._store._snapshot_store.inspect() != snapshot):
+            raise ConfigSnapshotError('Configuration evidence changed.')
+        self._check_owner()
+        return snapshot
+
+    def read_mode_anchor(self, snapshot: ConfigSnapshot) -> bytes | None:
+        """Read the exact current anchor without treating invalid data as absent.
+
+        Args:
+            snapshot (ConfigSnapshot): Exact current snapshot from this owner.
+
+        Returns:
+            bytes | None: Canonical mode record, or proven field absence.
+
+        Raises:
+            ConfigSnapshotError: Evidence is stale, invalid or unavailable.
+        """
+        self._check_owner()
+        if snapshot is not self._store._snapshot:
+            raise ConfigSnapshotError('Configuration evidence changed.')
+        payload = self._store._snapshot_store.read_mode_anchor(snapshot)
+        self._check_owner()
+        return payload
+
+    def write_mode_anchor(self, snapshot: ConfigSnapshot, payload: bytes) -> ConfigSnapshot:
+        """Publish a mode anchor and invalidate every older config generation.
+
+        Args:
+            snapshot (ConfigSnapshot): Exact current snapshot from this owner.
+            payload (bytes): Canonical, validated upload-mode record.
+
+        Returns:
+            ConfigSnapshot: Verified new complete configuration observation.
+
+        Raises:
+            ConfigSnapshotError: Evidence or publication is unsafe or uncertain.
+        """
+        self._check_owner()
+        if snapshot is not self._store._snapshot:
+            raise ConfigSnapshotError('Configuration evidence changed.')
+        updated = self._store._snapshot_store.save_mode_anchor(snapshot, payload)
+        self._check_owner()
+        self._store._snapshot = updated
+        self._store._revision = object()
+        self._config._snapshot_token = self._store._revision
+        return updated
+
+    def __exit__(
+        self, exc_type: type[BaseException] | None,
+        exc_value: BaseException | None, traceback: TracebackType | None,
+    ) -> bool:
+        """Release the owner-thread lock without suppressing caller failures.
+
+        Args:
+            exc_type (type[BaseException] | None): Raised exception class.
+            exc_value (BaseException | None): Raised exception instance.
+            traceback (TracebackType | None): Raised exception traceback.
+
+        Returns:
+            bool: False so caller failures remain visible.
+
+        Raises:
+            ConfigSnapshotError: The transaction belongs to another thread.
+        """
+        if self._thread_id is None or self._thread_id != threading.get_ident():
+            raise ConfigSnapshotError('Configuration transaction is unavailable.')
+        self._thread_id = None
+        self._store._mode_transaction_active = False
+        self._store._lock.release()
+        return False
 
 
 class UploadState:
@@ -802,21 +1230,26 @@ class UploadState:
     def load(self) -> None:
         """
         Load upload state from disk into memory.
-        
-        Malformed sections are ignored individually so one damaged section does
-        not invalidate all upload history. This matters because state is only an
-        optimization and retry aid, not canonical gallery data.
+
+        Malformed sections are not discarded during writer admission: a legacy
+        state cache may be tolerant for display, but accepted upload history
+        cannot be silently replaced after a damaged or concurrent write.
+        The baseline is captured independently under the accepted-work owner.
+
+        Returns:
+            None: The verified persisted sections are loaded into memory.
         """
-        data = load_upload_state(self.path, quarantine_bad=True)
-        uploaded_paths = data.get("uploaded_paths", {})
-        uploaded_hashes = data.get("uploaded_hashes", {})
-        failures = data.get("failures", {})
+        with accepted_work_owner(self.path.parent):
+            data = load_upload_state_for_mutation(self.path)
+            sections = ("uploaded_paths", "uploaded_hashes", "failures")
+            self._disk_baseline = {
+                key: copy.deepcopy(data[key]) for key in sections
+            }
         self.data["schema_version"] = 2
-        self.data["uploaded_paths"] = uploaded_paths if isinstance(uploaded_paths, dict) else {}
-        self.data["uploaded_hashes"] = uploaded_hashes if isinstance(uploaded_hashes, dict) else {}
-        self.data["failures"] = failures if isinstance(failures, dict) else {}
-        self.data["jobs"] = data.get("jobs", {}) if isinstance(data.get("jobs", {}), dict) else {}
-        self.data["recent_events"] = data.get("recent_events", []) if isinstance(data.get("recent_events", []), list) else []
+        for key in sections:
+            self.data[key] = data[key]
+        self.data["jobs"] = data["jobs"]
+        self.data["recent_events"] = data["recent_events"]
 
     def save(self) -> None:
         """
@@ -824,11 +1257,19 @@ class UploadState:
 
         Raises:
             OSError: Propagated when the state file cannot be written.
+            ValueError: Current watcher history differs from our baseline.
+            RuntimeError: The resulting document could not be verified.
 
         Returns:
             None: Persist upload state atomically.
         """
-        merge_upload_sections(self.path, self.data)
+        confirmed = merge_upload_sections(
+            self.path, self.data, self._disk_baseline,
+        )
+        self._disk_baseline = {
+            key: copy.deepcopy(confirmed[key])
+            for key in ("uploaded_paths", "uploaded_hashes", "failures")
+        }
 
     def already_uploaded_path(self, path: Path, file_hash: str) -> bool:
         """
@@ -962,6 +1403,359 @@ class UploadState:
             "next_retry_at": now + retry_delay,
         }
         self.save()
+
+
+# Bound a target recovery file before parsing. Oversize is unknown history, not
+# permission to reset the target or retry an upload.
+LINKED_RECOVERY_STATE_MAX_BYTES = 16 * 1024 * 1024
+
+
+def write_linked_upload_state(path: Path, payload: Dict[str, JsonValue]) -> None:
+    """Atomically write a linked target's recovery state and require file fsync.
+
+    Args:
+        path (Path): Verified destination-owned JSON state file.
+        payload (Dict[str, JsonValue]): Existing upload-state object containing only
+            path/hash, failure, job and event collections without credentials.
+
+    Returns:
+        None: Publishes the complete file only after a successful file flush.
+
+    Raises:
+        OSError: Creation, writing, file synchronization or replacement fails.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + '.' + uuid.uuid4().hex + '.tmp')
+    descriptor: Optional[int] = None
+    try:
+        flags = (os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                 | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0))
+        descriptor = os.open(temporary, flags, 0o600)
+        with os.fdopen(descriptor, 'w', encoding='utf-8', newline='\n') as handle:
+            descriptor = None
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+
+
+class LinkedUploadState(UploadState):
+    """Keep linked-gallery retry state separate from all legacy galleries."""
+
+    def __init__(self, target: LinkedUploadTarget) -> None:
+        """Bind local retry state to one exact installation, account and gallery.
+
+        Args:
+            target (LinkedUploadTarget): Captured in-memory delegated destination.
+
+        Returns:
+            None: Loads only the independently scoped, non-secret state file.
+        """
+        self._binding = target.binding()
+        state_path = linked_upload_state_path(CONFIG_DIR, self._binding)
+        # Determine existence during the owner-protected load, not from a
+        # separate pre-lock path observation that could already be stale.
+        self.preexisting = False
+        self._history_created = False
+        self._disk_baseline: Optional[Dict[str, JsonValue]] = None
+        super().__init__(state_path)
+
+    def _safe_existing_document(self) -> Optional[Dict[str, JsonValue]]:
+        """Read a linked state document without repairing ambiguous history.
+
+        Returns:
+            Optional[Dict[str, JsonValue]]: Schema version, uploaded path and
+                hash maps, failure rows, jobs and recent events, or None before
+                any scoped history exists. Reviewed failure rows retain the
+                uncertain flag and SHA-256.
+
+        Raises:
+            ValueError: Stored history is unreadable or lacks required sections.
+        """
+        self.path = linked_upload_state_path(CONFIG_DIR, self._binding)
+        try:
+            before = self.path.lstat()
+        except FileNotFoundError:
+            if self._history_created:
+                raise ValueError('Linked upload history disappeared; review before recovery.')
+            return None
+        except OSError as exc:
+            raise ValueError('Linked upload state requires recovery.') from exc
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_dev <= 0 or before.st_ino <= 0
+                or before.st_size > LINKED_RECOVERY_STATE_MAX_BYTES):
+            raise ValueError('Linked upload state requires recovery.')
+        flags = (os.O_RDONLY | getattr(os, 'O_BINARY', 0)
+                 | getattr(os, 'O_NOFOLLOW', 0)
+                 | getattr(os, 'O_NONBLOCK', 0))
+        try:
+            with os.fdopen(os.open(self.path, flags), 'rb') as source:
+                opened = os.fstat(source.fileno())
+                raw = source.read(LINKED_RECOVERY_STATE_MAX_BYTES + 1)
+                finished = os.fstat(source.fileno())
+            after = self.path.lstat()
+            snapshots = (before, opened, finished, after)
+            identities = {
+                (entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns)
+                for entry in snapshots
+            }
+            if (len(raw) > LINKED_RECOVERY_STATE_MAX_BYTES
+                    or len(raw) != opened.st_size or len(identities) != 1
+                    or any(not stat.S_ISREG(entry.st_mode) or entry.st_nlink != 1
+                           for entry in snapshots)):
+                raise ValueError('Linked upload history changed during read.')
+            data = json.loads(
+                raw.decode('utf-8'),
+                object_pairs_hook=_strict_mode_history_object,
+                parse_constant=_reject_mode_history_constant,
+                parse_float=_strict_mode_history_float,
+            )
+        except (OSError, UnicodeError, ValueError, TypeError, OverflowError,
+                RecursionError) as exc:
+            raise ValueError('Linked upload state requires recovery.') from exc
+        if (not isinstance(data, dict) or data.get('schema_version') != 2
+                or any(not isinstance(data.get(key), dict) for key in (
+                    'uploaded_paths', 'uploaded_hashes', 'failures', 'jobs',
+                )) or not isinstance(data.get('recent_events'), list)):
+            raise ValueError('Linked upload state requires recovery.')
+        for value in data['failures'].values():
+            if (not isinstance(value, dict)
+                    or ('uncertain' in value and type(value['uncertain']) is not bool)
+                    or ('reviewed' in value and (
+                        value['reviewed'] is not True
+                        or value.get('uncertain') is not True
+                    ))
+                    or (value.get('uncertain') is True and (
+                        not isinstance(value.get('sha256'), str)
+                        or re.fullmatch(r'[a-f0-9]{64}', value['sha256']) is None))):
+                raise ValueError('Linked upload recovery marker is malformed.')
+        return data
+
+    def load(self) -> None:
+        """Revalidate the scoped state path before reading its local history.
+
+        Returns:
+            None: Loads only state belonging to this linked destination.
+
+        Raises:
+            ValueError: The scoped state path is unsafe or redirected.
+        """
+        with accepted_work_owner(CONFIG_DIR):
+            data = self._safe_existing_document()
+            self.preexisting = data is not None
+            if data is not None:
+                self._history_created = True
+                self.data.update(data)
+            # Keep an independent snapshot so in-memory transitions cannot
+            # change the state we subsequently compare against fresh disk.
+            self._disk_baseline = copy.deepcopy(data)
+
+    def save(self) -> None:
+        """Publish a linked target state only from its last owned disk snapshot.
+
+        The shared accepted-work owner includes this fresh read, full-file
+        publication and readback. A stale instance must not erase an uncertain
+        HTTP outcome or another process's confirmed result. This cannot attest
+        to history lost before construction or collectively rolled back files.
+
+        Returns:
+            None: Persists unchanged target provenance and new retry metadata.
+
+        Raises:
+            ValueError: Scoped history disappeared or changed since our load.
+            RuntimeError: Published linked history could not be read back.
+            OSError: The state file cannot be written.
+        """
+        with accepted_work_owner(CONFIG_DIR):
+            current = self._safe_existing_document()
+            if current != self._disk_baseline:
+                raise ValueError(
+                    'Linked upload recovery history changed; review before retry.'
+                )
+            write_linked_upload_state(self.path, self.data)
+            self._history_created = True
+            confirmed = self._safe_existing_document()
+            if confirmed != self.data:
+                raise RuntimeError('Published linked recovery state is unconfirmed.')
+            self._disk_baseline = copy.deepcopy(confirmed)
+
+    def has_uncertain_hash(self, file_hash: str) -> bool:
+        """Check for any unresolved transfer of this content to this gallery.
+
+        Args:
+            file_hash (str): Lowercase SHA-256 of a proposed local source.
+
+        Returns:
+            bool: True when any recorded path has an ambiguous matching upload.
+        """
+        return any(
+            isinstance(value, dict) and value.get('uncertain') is True
+            and value.get('sha256') == file_hash
+            for value in self.data['failures'].values()
+        )
+
+    def has_unresolved_upload(self) -> bool:
+        """Block other transfers until the operator reviews the unknown result.
+
+        Returns:
+            bool: True when an uncertain marker lacks explicit review. A
+                reviewed original remains uncertain and excluded separately.
+        """
+        return any(
+            isinstance(value, dict) and value.get('uncertain') is True
+            and value.get('reviewed') is not True
+            for value in self.data['failures'].values()
+        )
+
+    def recovery_marker(self) -> tuple[str, str]:
+        """Identify the unreviewed marker without opening its recorded path.
+
+        Returns:
+            tuple[str, str]: Its validated SHA-256 and local identity digest.
+
+        Raises:
+            ValueError: The journal is missing, malformed or ambiguous.
+        """
+        with accepted_work_owner(CONFIG_DIR):
+            data = self._safe_existing_document()
+            if data is None:
+                raise ValueError('Linked upload recovery marker is unavailable.')
+            uncertain = [(path, entry) for path, entry in data['failures'].items()
+                         if entry.get('uncertain') is True
+                         and entry.get('reviewed') is not True]
+            if len(uncertain) != 1:
+                raise ValueError('Linked upload recovery marker is unavailable.')
+            path, entry = uncertain[0]
+            encoded = json.dumps([path, entry], ensure_ascii=True, sort_keys=True,
+                                 separators=(',', ':')).encode('ascii')
+            return entry['sha256'], hashlib.sha256(encoded).hexdigest()
+
+    def review_uncertainty(self, marker: str) -> None:
+        """Record review of one exact marker while retaining its unknown result.
+
+        The caller holds the same gallery lease as Watcher and Import. Review
+        permits other originals only; the path and matching content stay
+        excluded even across restart. No receipt or retry permission is made.
+
+        Args:
+            marker (str): Digest of the unreviewed marker the operator inspected.
+
+        Returns:
+            None: Publishes review while preserving the original failure row.
+
+        Raises:
+            ValueError: The marker changed or the current history is unsafe.
+            OSError: The scoped journal could not be written.
+            RuntimeError: Publication could not be confirmed by readback.
+        """
+        if self.recovery_marker()[1] != marker:
+            raise ValueError('The uncertain upload changed during review.')
+        pending = [entry for entry in self.data['failures'].values()
+                   if entry.get('uncertain') is True
+                   and entry.get('reviewed') is not True]
+        if len(pending) != 1:
+            raise ValueError('The uncertain upload needs manual review.')
+        pending[0]['reviewed'] = True
+        # save() rereads and compares the complete owned baseline under the
+        # publication lock; a newer journal is not replaced by this review.
+        self.save()
+
+    def has_uncertain_source(self, path: Path, file_hash: str) -> bool:
+        """Exclude retained unknown paths and the same bytes at other paths.
+
+        Args:
+            path (Path): Local source being considered for dispatch.
+            file_hash (str): Lowercase SHA-256 of its current bytes.
+
+        Returns:
+            bool: True for any matching uncertain history, reviewed or not.
+        """
+        failure = self.data['failures'].get(str(path))
+        return ((isinstance(failure, dict) and failure.get('uncertain') is True)
+                or self.has_uncertain_hash(file_hash))
+
+    def retry_allowed(self, path: Path, file_hash: str) -> bool:
+        """Refuse automatic retry of a transfer with an uncertain result.
+
+        Args:
+            path (Path): Local source path being considered.
+            file_hash (str): Current lowercase SHA-256 of the source file.
+
+        Returns:
+            bool: False for the same ambiguous transfer; otherwise the existing
+                bounded retry policy applies.
+        """
+        if self.has_uncertain_source(path, file_hash):
+            return False
+        return super().retry_allowed(path, file_hash)
+
+    def mark_uncertain(self, path: Path, file_hash: str) -> None:
+        """Persist an ambiguous transfer without scheduling an automatic retry.
+
+        Args:
+            path (Path): Source retained for explicit human review.
+            file_hash (str): Lowercase SHA-256 of the attempted source.
+
+        Returns:
+            None: Preserves an unresolved marker scoped to this exact gallery.
+
+        Raises:
+            OSError: The marker cannot be persisted.
+            ValueError: The journal is unsafe, or this source or another
+                unreviewed marker already owns the transfer boundary.
+            RuntimeError: Publication could not be confirmed by readback.
+        """
+        existing = self.data['failures'].get(str(path))
+        if (self.has_unresolved_upload()
+                or self.has_uncertain_source(path, file_hash)) and not (
+            isinstance(existing, dict) and existing.get('uncertain') is True
+            and existing.get('sha256') == file_hash
+            and existing.get('reviewed') is not True
+        ):
+            raise ValueError('Linked gallery has an unresolved upload; review it before continuing.')
+        self.data['failures'][str(path)] = {
+            'sha256': file_hash,
+            'uncertain': True,
+            'last_error': 'Upload result uncertain; review the gallery manually.',
+            'last_failed_at': time.time(),
+        }
+        self.save()
+
+    def mark_uploaded(
+        self, path: Path, file_hash: str, size: int, response: Dict[str, Any],
+    ) -> None:
+        """Clear only the marker for the exact acknowledged transfer.
+
+        Args:
+            path (Path): Local path used for the acknowledged upload.
+            file_hash (str): SHA-256 of the exact acknowledged bytes.
+            size (int): Source size in bytes.
+            response (Dict[str, Any]): Validated acknowledgement with success,
+                gallery ID, uploaded and scanned counts, fresh insertion
+                evidence, image IDs and filenames, and optional warnings or
+                thumbnail results.
+
+        Returns:
+            None: Saves the acknowledgement and clears its own marker.
+
+        Raises:
+            ValueError: The marker is absent, reviewed or belongs to other bytes.
+            OSError: The scoped state could not be persisted.
+            RuntimeError: Publication could not be confirmed by readback.
+        """
+        pending = self.data['failures'].get(str(path))
+        if (not isinstance(pending, dict) or pending.get('uncertain') is not True
+                or pending.get('sha256') != file_hash
+                or pending.get('reviewed') is True):
+            raise ValueError('Linked upload acknowledgement does not match its marker.')
+        super().mark_uploaded(path, file_hash, size, response)
 
 
 class FileStabilityTracker:
@@ -1168,11 +1962,121 @@ def revoke_upload_key(upload_url: str, api_key: str) -> Dict[str, Any]:
             ) from retry_exc
 
 
+class GalleryKeyRedirectError(RuntimeError):
+    """Refuse a redirect that could disclose the legacy gallery API key."""
+
+
+class _GalleryKeyRedirectHandler(request.HTTPRedirectHandler):
+    """Keep gallery credentials on the same host and a safe transport."""
+
+    def __init__(self, checkpoint: Optional[Callable[[], None]] = None,
+                 allow_redirects: bool = True) -> None:
+        """Retain the optional request checkpoint for redirect attempts.
+
+        Args:
+            checkpoint (Optional[Callable[[], None]]): Revalidates admitted
+                once-mode work or a manual batch, or None for other callers.
+            allow_redirects (bool): Whether safe redirects may be followed.
+
+        Returns:
+            None: Initializes the redirect handler.
+        """
+        super().__init__()
+        self._checkpoint = checkpoint
+        self._allow_redirects = allow_redirects
+
+    def redirect_request(
+        self, req: request.Request, fp: IO[bytes], code: int, msg: str,
+        headers: email.message.Message, newurl: str,
+    ) -> Optional[request.Request]:
+        """Restrict the destination and recheck any admitted once-mode work.
+
+        Args:
+            req (request.Request): Original urllib request.
+            fp (IO[bytes]): Original HTTP response stream.
+            code (int): HTTP redirect status.
+            msg (str): HTTP redirect reason.
+            headers (email.message.Message): Response headers.
+            newurl (str): Destination selected by urllib.
+
+        Returns:
+            Optional[request.Request]: Redirect request, or None when urllib
+                declines to follow it.
+
+        Raises:
+            ModeCoordinatorError: The admitted evidence is no longer valid.
+            GalleryKeyRedirectError: The redirect changes host, weakens TLS,
+                changes an unapproved port, or has ambiguous URL authority.
+        """
+        if not self._allow_redirects:
+            raise GalleryKeyRedirectError("Gallery upload redirect was refused.")
+        try:
+            source = parse.urlsplit(req.full_url)
+            target = parse.urlsplit(newurl)
+            source_scheme, target_scheme = source.scheme.lower(), target.scheme.lower()
+            source_port = source.port if source.port is not None else (
+                80 if source_scheme == 'http' else 443
+            )
+            target_port = target.port if target.port is not None else (
+                80 if target_scheme == 'http' else 443
+            )
+            safe = (
+                source_scheme in ('http', 'https')
+                and target_scheme in ('http', 'https')
+                and source.hostname is not None and source.hostname == target.hostname
+                and source.username is None and source.password is None
+                and target.username is None and target.password is None
+                and not (source_scheme == 'https' and target_scheme != 'https')
+                and (source_port == target_port or (
+                    source_scheme == 'http' and target_scheme == 'https'
+                    and source_port == 80 and target_port == 443
+                ))
+            )
+        except ValueError:
+            safe = False
+        if not safe:
+            raise GalleryKeyRedirectError('Gallery API redirect was refused.')
+        if self._checkpoint is not None:
+            self._checkpoint()
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _gallery_key_open(
+    http_request: request.Request, timeout: float,
+    before_request: Optional[Callable[[], None]] = None,
+    allow_redirects: bool = True,
+) -> http.client.HTTPResponse:
+    """Open one legacy gallery request with guarded credential redirects.
+
+    Args:
+        http_request (request.Request): Existing request carrying a gallery key.
+        timeout (float): Network socket timeout in seconds.
+        before_request (Optional[Callable[[], None]]): Once-mode or manual
+            batch checkpoint, or None for other callers.
+        allow_redirects (bool): Whether safe redirects may be followed.
+
+    Returns:
+        http.client.HTTPResponse: Successful response owned by the caller.
+
+    Raises:
+        GalleryKeyRedirectError: An unsafe redirect is refused.
+        ModeCoordinatorError: Once-mode evidence cannot authorize an attempt.
+        OSError: The HTTP transport could not complete.
+    """
+    opener = request.build_opener(
+        _GalleryKeyRedirectHandler(before_request, allow_redirects),
+    )
+    if before_request is not None:
+        before_request()
+    return opener.open(http_request, timeout=timeout)
+
+
 def post_json_resolved(
     upload_url: str,
     api_key: str,
     payload: Dict[str, Any],
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    before_request: Optional[Callable[[], None]] = None,
 ) -> Tuple[Dict[str, Any], str]:
     """
     Submit one JSON API request and report the endpoint that actually succeeded.
@@ -1185,15 +2089,20 @@ def post_json_resolved(
     Args:
         upload_url (str): PHP Gallery root or upload endpoint.
         api_key (str): Gallery-scoped API key sent as X-Gallery-API-Key.
-        payload (Dict[str, Any]): JSON-serializable request object.
+        payload (Dict[str, Any]): Request object with action and its JSON
+            scalar, object or array fields for the selected automation action.
         timeout_seconds (float): Network timeout for this metadata request.
+        before_request (Optional[Callable[[], None]]): Once-mode or manual
+            batch checkpoint before each endpoint and redirect, or None.
 
     Returns:
-        Tuple[Dict[str, Any], str]: Parsed response and successful endpoint
-            URL.
+        Tuple[Dict[str, Any], str]: Response object containing ok and
+            action-specific JSON fields, and the successful endpoint URL.
 
     Raises:
         RuntimeError: Raised for network, HTTP, non-JSON, or gallery errors.
+        ModeCoordinatorError: The once-mode evidence changed before an attempt.
+        GalleryKeyRedirectError: A credential-bearing redirect is unsafe.
     """
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     candidates = upload_endpoint_candidates(upload_url)
@@ -1215,7 +2124,12 @@ def post_json_resolved(
         )
 
         try:
-            with request.urlopen(http_request, timeout=max(5.0, float(timeout_seconds))) as response:
+            request_options = (
+                {'before_request': before_request} if before_request is not None else {}
+            )
+            with _gallery_key_open(
+                http_request, max(5.0, float(timeout_seconds)), **request_options,
+            ) as response:
                 response_body = response.read().decode("utf-8", errors="replace")
         except error.HTTPError as exc:
             response_body = exc.read().decode("utf-8", errors="replace")
@@ -1248,7 +2162,11 @@ def post_json_resolved(
     raise RuntimeError("No usable PHP Gallery upload endpoint was found.")
 
 
-def post_json(upload_url: str, api_key: str, payload: Dict[str, Any], timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS) -> Dict[str, Any]:
+def post_json(
+    upload_url: str, api_key: str, payload: Dict[str, Any],
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    before_request: Optional[Callable[[], None]] = None,
+) -> Dict[str, Any]:
     """
     Submit one JSON API request and parse the JSON response.
 
@@ -1260,16 +2178,26 @@ def post_json(upload_url: str, api_key: str, payload: Dict[str, Any], timeout_se
     Args:
         upload_url (str): PHP Gallery root or upload endpoint.
         api_key (str): Gallery-scoped API key sent as X-Gallery-API-Key.
-        payload (Dict[str, Any]): JSON-serializable request object.
+        payload (Dict[str, Any]): Action and its JSON scalar, object or array
+            fields for the selected automation request.
         timeout_seconds (float): Network timeout for this metadata request.
+        before_request (Optional[Callable[[], None]]): Once-mode or manual
+            batch checkpoint before each endpoint and redirect, or None.
 
     Returns:
-        Dict[str, Any]: Parsed JSON response from the server.
+        Dict[str, Any]: Response object with ok and action-specific JSON fields.
 
     Raises:
         RuntimeError: Raised for network, HTTP, non-JSON, or gallery errors.
+        ModeCoordinatorError: The once-mode evidence changed before an attempt.
+        GalleryKeyRedirectError: A credential-bearing redirect is unsafe.
     """
-    response_payload, _resolved_url = post_json_resolved(upload_url, api_key, payload, timeout_seconds)
+    if before_request is None:
+        response_payload, _resolved_url = post_json_resolved(upload_url, api_key, payload, timeout_seconds)
+    else:
+        response_payload, _resolved_url = post_json_resolved(
+            upload_url, api_key, payload, timeout_seconds, before_request,
+        )
     return response_payload
 
 def post_binary_to_file(
@@ -1278,6 +2206,7 @@ def post_binary_to_file(
     fields: Dict[str, str],
     target_path: Path,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    before_request: Optional[Callable[[], None]] = None,
 ) -> Tuple[str, int]:
     """
     Submit one form-encoded request and stream the binary response to a file.
@@ -1295,6 +2224,8 @@ def post_binary_to_file(
         target_path (Path): Local path where the downloaded asset should be
             stored.
         timeout_seconds (float): Network timeout for the download request.
+        before_request (Optional[Callable[[], None]]): Optional work checkpoint
+            before each endpoint and redirect attempt.
 
     Returns:
         Tuple[str, int]: Tuple of response content type and downloaded byte
@@ -1302,6 +2233,7 @@ def post_binary_to_file(
 
     Raises:
         RuntimeError: Raised for network or HTTP failures.
+        GalleryKeyRedirectError: A credential-bearing redirect is unsafe.
     """
     body = parse.urlencode(fields).encode("utf-8")
     candidates = upload_endpoint_candidates(upload_url)
@@ -1323,7 +2255,10 @@ def post_binary_to_file(
         )
 
         try:
-            with request.urlopen(http_request, timeout=max(5.0, float(timeout_seconds))) as response:
+            with _gallery_key_open(
+                http_request, max(5.0, float(timeout_seconds)),
+                **({'before_request': before_request} if before_request is not None else {}),
+            ) as response:
                 content_type = str(response.headers.get("Content-Type") or "application/octet-stream")
                 downloaded = 0
                 with target_path.open("wb") as handle:
@@ -1519,6 +2454,8 @@ class RemoteInventorySession:
         self,
         refresh_seconds: float,
         emit: Callable[[str, str], None],
+        linked_target: Optional[LinkedUploadTarget] = None,
+        before_request: Optional[Callable[[], None]] = None,
     ) -> None:
         """
         Create a remote inventory session.
@@ -1528,15 +2465,22 @@ class RemoteInventorySession:
                 probes.
             emit (Callable[[str, str], None]): Callback receiving status level
                 and message; it queues/logs the event and returns None.
+            linked_target (Optional[LinkedUploadTarget]): Captured scoped
+                destination, or None for the original API-key connection.
+            before_request (Optional[Callable[[], None]]): Once-mode or manual
+                batch request checkpoint, or None for other inventory.
 
         Returns:
             None: Create a remote inventory session.
         """
         self.refresh_seconds = max(1.0, float(refresh_seconds or DEFAULT_INVENTORY_REFRESH_SECONDS))
         self.emit = emit
+        self.linked_target = linked_target
+        self.before_request = before_request
         self.last_refresh_at = 0.0
         self.last_fingerprint = ""
         self.existing_hashes: Set[str] = set()
+        self.resolved_endpoint = ""
         self.lock = threading.Lock()
 
     def due(self) -> bool:
@@ -1602,6 +2546,10 @@ class RemoteInventorySession:
 
         Returns:
             bool: True when the API call completed successfully.
+
+        Raises:
+            ModeCoordinatorError: Once-mode evidence changed before a request.
+            GalleryKeyRedirectError: A credential-bearing redirect is unsafe.
         """
         if not candidates:
             return False
@@ -1610,18 +2558,43 @@ class RemoteInventorySession:
         with self.lock:
             if not force and not self.due():
                 return False
+            # A fresh failed or negative check must never reuse an old match.
+            queried = {str(item.get('sha256', '')).lower() for item in candidates}
+            self.existing_hashes.difference_update(queried)
+            self.resolved_endpoint = ""
             try:
-                payload = post_json(
-                    upload_url,
-                    api_key,
-                    {"action": "inventory", "files": candidates, "deep_check": bool(deep_check)},
-                    timeout_seconds=min(DEFAULT_TIMEOUT_SECONDS, max(10.0, self.refresh_seconds)),
-                )
+                if self.linked_target is not None:
+                    if deep_check:
+                        self.emit(
+                            "warning", "Linked upload recovery requires manual "
+                            "review; database absence does not prove failure.",
+                        )
+                        return False
+                    if self.before_request is not None:
+                        self.before_request()
+                    payload = self.linked_target.inventory(candidates)
+                else:
+                    request_options = (
+                        {'before_request': self.before_request}
+                        if self.before_request is not None else {}
+                    )
+                    payload, endpoint = post_json_resolved(
+                        upload_url,
+                        api_key,
+                        {"action": "inventory", "files": candidates, "deep_check": bool(deep_check)},
+                        timeout_seconds=min(DEFAULT_TIMEOUT_SECONDS, max(10.0, self.refresh_seconds)),
+                        **request_options,
+                    )
+                    if (payload.get("action") == "inventory"
+                            and endpoint in upload_endpoint_candidates(upload_url)):
+                        self.resolved_endpoint = endpoint
                 matched = self.remember_existing(payload)
                 self.last_refresh_at = time.time()
                 checked = int(payload.get("checked", len(candidates)) or 0)
                 self.emit("info", f"Remote inventory refreshed: checked={checked}, already_present={matched}.")
                 return True
+            except (ModeCoordinatorError, GalleryKeyRedirectError):
+                raise
             except Exception as exc:  # noqa: BLE001
                 self.last_refresh_at = time.time()
                 self.emit("warning", f"Remote inventory refresh failed: {exc}")
@@ -1653,6 +2626,8 @@ class RemoteInventorySession:
             bool: True when the gallery now reports the file as already
                 present.
         """
+        if self.linked_target is not None:
+            return False
         self.refresh(upload_url, api_key, [candidate], force=True, deep_check=True)
         return self.has_hash(str(candidate.get("sha256", "")))
 
@@ -1735,7 +2710,10 @@ def multipart_field_part(boundary: str, name: str, value: str) -> bytes:
     ])
 
 
-def multipart_file_part(boundary: str, field_name: str, path: Path, filename: Optional[str] = None) -> bytes:
+def multipart_file_part(
+    boundary: str, field_name: str, path: Path, filename: Optional[str] = None,
+    file_bytes: Optional[bytes] = None,
+) -> bytes:
     """
     Build one file field for a multipart/form-data request body.
 
@@ -1745,6 +2723,8 @@ def multipart_file_part(boundary: str, field_name: str, path: Path, filename: Op
         path (Path): Local file path whose bytes should be sent.
         filename (Optional[str]): Optional remote file name. When omitted,
             path.name is used.
+        file_bytes (Optional[bytes]): Exact captured file bytes, or None to
+            read the selected file once.
 
     Returns:
         bytes: Encoded multipart file bytes including the file content.
@@ -1758,7 +2738,7 @@ def multipart_file_part(boundary: str, field_name: str, path: Path, filename: Op
         f"--{boundary}\r\n".encode("ascii"),
         f'Content-Disposition: form-data; name="{field_name}"; filename="{safe_name}"\r\n'.encode("utf-8"),
         f"Content-Type: {content_type}\r\n\r\n".encode("ascii"),
-        path.read_bytes(),
+        path.read_bytes() if file_bytes is None else file_bytes,
         b"\r\n",
     ])
 
@@ -1771,6 +2751,11 @@ def multipart_upload(
     thumbnails: Optional[List[LocalThumbnail]] = None,
     client_upload_id: Optional[str] = None,
     metadata_fields: Optional[Dict[str, str]] = None,
+    before_request: Optional[Callable[[], None]] = None,
+    expected_sha256: str = "",
+    expected_size: Optional[int] = None,
+    single_dispatch: bool = False,
+    selected_endpoint: str = "",
 ) -> Dict[str, Any]:
     """
     Upload one image file using standard-library HTTP multipart/form-data.
@@ -1793,15 +2778,28 @@ def multipart_upload(
             to map supplied.
         metadata_fields (Optional[Dict[str, str]]): Optional text fields to
             submit beside the image.
+        before_request (Optional[Callable[[], None]]): Once-mode or manual
+            batch checkpoint before each endpoint and redirect, or None.
+        expected_sha256 (str): Expected image digest, or empty for an older
+            direct caller without a captured candidate.
+        expected_size (Optional[int]): Expected image length, or None when no
+            candidate was captured.
+        single_dispatch (bool): Refuse redirects and alternate multipart POSTs.
+        selected_endpoint (str): Successful inventory route, or empty for the
+            canonical route; used only with single_dispatch.
 
     Returns:
-        Dict[str, Any]: Parsed JSON response from the server.
+        Dict[str, Any]: Response with ok and upload result fields, including
+            uploaded, scanned, filenames and optional metadata or rename status.
 
     Raises:
         RuntimeError: Raised for HTTP errors, network errors, non-JSON
             responses, malformed JSON payloads, or server-declared upload
             failure.
         OSError: Propagated when the image or a thumbnail cannot be read.
+        ValueError: The bytes to send do not match the captured candidate.
+        ModeCoordinatorError: The once-mode evidence changed before an attempt.
+        GalleryKeyRedirectError: A credential-bearing redirect is unsafe.
     """
     boundary = "PHPGalleryUpload" + uuid.uuid4().hex
     field_entries: List[Tuple[str, str]] = [
@@ -1816,7 +2814,15 @@ def multipart_upload(
     for name, value in field_entries:
         body_parts.append(multipart_field_part(boundary, name, value))
 
-    body_parts.append(multipart_file_part(boundary, "images[]", path, path.name))
+    # Hash the immutable bytes that enter the request, not a prior path read.
+    image_bytes = path.read_bytes()
+    if ((expected_size is not None and len(image_bytes) != expected_size)
+            or (expected_sha256
+                and hashlib.sha256(image_bytes).hexdigest() != expected_sha256)):
+        raise ValueError('Source changed before upload; no request was sent.')
+    body_parts.append(multipart_file_part(
+        boundary, "images[]", path, path.name, image_bytes,
+    ))
 
     for thumbnail in thumbnails or []:
         body_parts.append(multipart_field_part(boundary, "thumbnail_client_ids[]", client_upload_id or ""))
@@ -1830,6 +2836,10 @@ def multipart_upload(
     candidates = upload_endpoint_candidates(upload_url)
     if not candidates:
         raise RuntimeError("Gallery URL or upload endpoint is invalid.")
+    if single_dispatch:
+        if selected_endpoint and selected_endpoint not in candidates:
+            raise ValueError("The selected upload endpoint is invalid.")
+        candidates = [selected_endpoint or candidates[0]]
 
     for index, endpoint in enumerate(candidates):
         http_request = request.Request(
@@ -1846,7 +2856,14 @@ def multipart_upload(
         )
 
         try:
-            with request.urlopen(http_request, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
+            request_options = (
+                {'before_request': before_request} if before_request is not None else {}
+            )
+            if single_dispatch:
+                request_options["allow_redirects"] = False
+            with _gallery_key_open(
+                http_request, DEFAULT_TIMEOUT_SECONDS, **request_options,
+            ) as response:
                 response_body = response.read().decode("utf-8", errors="replace")
         except error.HTTPError as exc:
             # PHP Gallery returns JSON for application errors. Only an HTML/plain
@@ -1875,6 +2892,10 @@ def multipart_upload(
             raise RuntimeError("Server returned an invalid JSON response.")
         if not payload.get("ok"):
             raise RuntimeError(str(payload.get("error") or "Upload failed."))
+        if expected_sha256 and (payload.get("ok") is not True
+                                or type(payload.get("uploaded")) is not int
+                                or payload.get("uploaded") != 1):
+            raise RuntimeError("Upload outcome is unconfirmed; review the gallery.")
         return payload
 
     raise RuntimeError("No usable PHP Gallery upload endpoint was found.")
@@ -2286,6 +3307,47 @@ def generate_local_thumbnails(source_path: Path, output_root: Path, client_uploa
     return thumbnails
 
 
+def generate_linked_thumbnails(
+    source_path: Path, output_root: Path, client_upload_id: str, expected_sha256: str,
+) -> List[LocalThumbnail]:
+    """Generate variants from a size-bounded, hash-verified private snapshot.
+
+    Args:
+        source_path (Path): Original source retained by its owner.
+        output_root (Path): Owned temporary root for this generation pipeline.
+        client_upload_id (str): Unique request-local thumbnail directory.
+        expected_sha256 (str): SHA-256 captured before generation begins.
+
+    Returns:
+        List[LocalThumbnail]: Variants generated only from verified bytes.
+
+    Raises:
+        OSError: The source or private snapshot cannot be safely processed.
+        ValueError: The source is too large or changed since hashing.
+    """
+    snapshot_dir = output_root / client_upload_id / 'source-snapshot'
+    snapshot_dir.mkdir(parents=True, exist_ok=False)
+    snapshot = snapshot_dir / source_path.name
+    digest = hashlib.sha256()
+    copied = 0
+    try:
+        with source_path.open('rb') as source, snapshot.open('xb') as destination:
+            while True:
+                chunk = source.read(LINKED_UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                copied += len(chunk)
+                if copied > LINKED_UPLOAD_FILE_MAX_BYTES:
+                    raise ValueError('Linked thumbnail source exceeds the upload size limit.')
+                digest.update(chunk)
+                destination.write(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise ValueError('Source changed before linked thumbnail generation.')
+        return generate_local_thumbnails(snapshot, output_root, client_upload_id)
+    finally:
+        shutil.rmtree(snapshot_dir, ignore_errors=True)
+
+
 class PeriodicAIHeartbeat(threading.Thread):
     """
     Sends periodic lease heartbeats while one AI job is being processed.
@@ -2304,6 +3366,8 @@ class PeriodicAIHeartbeat(threading.Thread):
         lease_seconds: int,
         progress_callback: Callable[[], Tuple[int, str]],
         emit: Callable[[str, str], None],
+        before_request: Optional[Callable[[], None]] = None,
+        terminal_event: Optional[threading.Event] = None,
     ) -> None:
         """
         Create a heartbeat thread for one claimed job.
@@ -2318,6 +3382,10 @@ class PeriodicAIHeartbeat(threading.Thread):
                 returning integer progress percent and status text.
             emit (Callable[[str, str], None]): Status callback receiving level
                 and message, with no return value.
+            before_request (Optional[Callable[[], None]]): GUI work checkpoint,
+                or None for non-GUI fixture and compatibility callers.
+            terminal_event (Optional[threading.Event]): Shared AI parent signal,
+                or None for an independent heartbeat.
 
         Returns:
             None: Create a heartbeat thread for one claimed job.
@@ -2330,26 +3398,25 @@ class PeriodicAIHeartbeat(threading.Thread):
         self.lease_seconds = lease_seconds
         self.progress_callback = progress_callback
         self.emit = emit
+        self.before_request = before_request
+        self.terminal_event = terminal_event
         self.stop_event = threading.Event()
         self.interval = max(AI_HEARTBEAT_MIN_SECONDS, min(120.0, lease_seconds / 3.0))
 
     def stop(self) -> None:
+        """Stop scheduling heartbeats without claiming an active request ended.
+
+        Returns:
+            None: Signals the worker; an in-flight request may still be active.
         """
-        Request the watcher worker to stop without deleting any source data.
-        """
-        if self.worker and self.worker.is_alive():
-            self.worker.stop()
-            self.status_var.set("Stopping")
-            self.watcher_activity_var.set("Watch: stopping")
-        else:
-            self.status_var.set("Stopped")
-            self.watcher_activity_var.set("Watch: stopped")
-        self.refresh_activity_monitor_state()
-        self.refresh_revoke_button_state()
+        self.stop_event.set()
 
     def run(self) -> None:
         """
         Send heartbeats until stopped.
+
+        Returns:
+            None: Ends after a stop signal or terminal authorization refusal.
         """
         while not self.stop_event.wait(self.interval):
             try:
@@ -2366,7 +3433,14 @@ class PeriodicAIHeartbeat(threading.Thread):
                         "message": str(message),
                     },
                     timeout_seconds=30,
+                    **({'before_request': self.before_request}
+                       if self.before_request is not None else {}),
                 )
+            except (ModeCoordinatorError, GalleryKeyRedirectError):
+                if self.terminal_event is not None:
+                    self.terminal_event.set()
+                self.stop_event.set()
+                self.emit('warning', 'Gallery authorization could not be verified; AI heartbeat stopped.')
             except Exception as exc:  # noqa: BLE001
                 self.emit("warning", f"AI worker heartbeat failed for job {self.job_id}: {exc}")
 
@@ -3157,7 +4231,8 @@ class AIAnalysisWorkerThread(threading.Thread):
     safe to run several companion app instances against the same gallery key.
     """
 
-    def __init__(self, config: WatcherConfig, events: "queue.Queue[Tuple[str, str]]") -> None:
+    def __init__(self, config: WatcherConfig, events: "queue.Queue[Tuple[str, str]]",
+                 gui_admission: Optional[Tuple[GuiModeOwner, ModeConfigPort]] = None) -> None:
         """
         Create a background AI-analysis worker.
 
@@ -3166,6 +4241,8 @@ class AIAnalysisWorkerThread(threading.Thread):
                 worker starts.
             events (queue.Queue[Tuple[str, str]]): Queue used to send status
                 lines back to the UI.
+            gui_admission (Optional[Tuple[GuiModeOwner, ModeConfigPort]]): GUI
+                owner and port for the exact captured AI configuration.
 
         Returns:
             None: Create a background AI-analysis worker.
@@ -3173,6 +4250,9 @@ class AIAnalysisWorkerThread(threading.Thread):
         super().__init__(name="PHPGalleryAIAnalysisWorker", daemon=True)
         self.config = config
         self.events = events
+        self._gui_admission = gui_admission
+        self._gui_work: Optional[CoordinatedWork] = None
+        self._terminal_refused = threading.Event()
         self.stop_event = threading.Event()
         self.worker_id = ai_worker_id()
         self.progress_lock = threading.Lock()
@@ -3184,6 +4264,21 @@ class AIAnalysisWorkerThread(threading.Thread):
         Request the worker loop to stop.
         """
         self.stop_event.set()
+
+    def _request_checkpoint(self) -> None:
+        """Stop every new AI request after a shared terminal refusal.
+
+        Returns:
+            None: The AI job and any GUI work remain admitted.
+
+        Raises:
+            GalleryKeyRedirectError: A heartbeat already refused a redirect.
+            ModeCoordinatorError: Current mode evidence cannot admit a request.
+        """
+        if self._terminal_refused.is_set():
+            raise GalleryKeyRedirectError('Gallery authorization is unavailable.')
+        if self._gui_work is not None:
+            self._gui_work.checkpoint()
 
     def emit(self, level: str, message: str) -> None:
         """
@@ -3225,8 +4320,28 @@ class AIAnalysisWorkerThread(threading.Thread):
             return self.progress_percent, self.progress_message
 
     def run(self) -> None:
+        """Hold the GUI work lease across AI jobs and their heartbeats.
+
+        Returns:
+            None: Stops on unavailable mode and releases its own work lease.
         """
-        Poll the server and process claimed jobs until stopped.
+        try:
+            if self._gui_admission is not None:
+                owner, port = self._gui_admission
+                self._gui_work = owner.acquire('legacy', port)
+            self._run_owned()
+        except (ModeCoordinatorError, GalleryKeyRedirectError):
+            self._terminal_refused.set()
+            self.emit('error', 'Gallery authorization could not be verified; AI worker stopped.')
+        finally:
+            if self._gui_work is not None:
+                self._gui_work.close()
+
+    def _run_owned(self) -> None:
+        """Poll the server until stopped while retaining admitted work.
+
+        Returns:
+            None: Processes claimed jobs without admitting another mode.
         """
         enter_background_thread_mode()
         upload_url = normalize_upload_url(self.config.gallery_url)
@@ -3257,6 +4372,7 @@ class AIAnalysisWorkerThread(threading.Thread):
                         "lease_seconds": lease_seconds,
                     },
                     timeout_seconds=60,
+                    before_request=self._request_checkpoint,
                 )
                 job = claimed.get("job")
                 if not isinstance(job, dict):
@@ -3265,6 +4381,9 @@ class AIAnalysisWorkerThread(threading.Thread):
                     self.stop_event.wait(max(AI_WORKER_MIN_POLL_SECONDS, wait_seconds))
                     continue
                 self.process_job(upload_url, api_key, job, lease_seconds)
+            except (ModeCoordinatorError, GalleryKeyRedirectError):
+                self._terminal_refused.set()
+                raise
             except Exception as exc:  # noqa: BLE001
                 self.emit("warning", f"AI metadata worker poll failed: {exc}")
                 self.stop_event.wait(poll_seconds)
@@ -3292,11 +4411,18 @@ class AIAnalysisWorkerThread(threading.Thread):
             self.emit("warning", "AI metadata worker received an invalid job payload.")
             return
 
-        heartbeat = PeriodicAIHeartbeat(upload_url, api_key, job_id, claim_token, lease_seconds, self.current_progress, self.emit)
-        heartbeat.start()
+        heartbeat = PeriodicAIHeartbeat(
+            upload_url, api_key, job_id, claim_token, lease_seconds,
+            self.current_progress, self.emit,
+            before_request=self._request_checkpoint,
+            terminal_event=self._terminal_refused,
+        )
         temp_dir = Path(tempfile.mkdtemp(prefix="php_gallery_ai_"))
-        downloaded_path = temp_dir / ("source" + extension_for_content_type(str(image.get("mime_type") or ""), filename))
+        heartbeat_started = False
         try:
+            downloaded_path = temp_dir / ("source" + extension_for_content_type(str(image.get("mime_type") or ""), filename))
+            heartbeat.start()
+            heartbeat_started = True
             self.update_progress(5, "Downloading assigned image.")
             self.emit("info", f"AI metadata worker claimed job {job_id} for {filename}.")
             content_type, downloaded = post_binary_to_file(
@@ -3309,6 +4435,7 @@ class AIAnalysisWorkerThread(threading.Thread):
                 },
                 downloaded_path,
                 timeout_seconds=DEFAULT_TIMEOUT_SECONDS,
+                before_request=self._request_checkpoint,
             )
             if downloaded <= 0:
                 raise RuntimeError("Server returned an empty image asset.")
@@ -3334,15 +4461,22 @@ class AIAnalysisWorkerThread(threading.Thread):
                     "searchable_text": searchable_text,
                 },
                 timeout_seconds=60,
+                before_request=self._request_checkpoint,
             )
             self.update_progress(100, "Completed.")
             self.emit("info", f"AI metadata stored for {filename}.")
+        except (ModeCoordinatorError, GalleryKeyRedirectError):
+            self._terminal_refused.set()
+            raise
         except Exception as exc:  # noqa: BLE001
             self.update_progress(0, "Reporting failure.")
             self.report_failure(upload_url, api_key, job_id, claim_token, filename, exc)
         finally:
             heartbeat.stop()
-            heartbeat.join(timeout=2.0)
+            if heartbeat_started:
+                # The parent stays active until the last heartbeat request exits.
+                # Network and DNS delays can extend this wait beyond socket timeouts.
+                heartbeat.join()
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     def report_failure(self, upload_url: str, api_key: str, job_id: int, claim_token: str, filename: str, exc: Exception) -> None:
@@ -3374,7 +4508,11 @@ class AIAnalysisWorkerThread(threading.Thread):
                     "error": message,
                 },
                 timeout_seconds=60,
+                before_request=self._request_checkpoint,
             )
+        except (ModeCoordinatorError, GalleryKeyRedirectError):
+            self._terminal_refused.set()
+            raise
         except Exception as report_exc:  # noqa: BLE001
             self.emit("warning", f"AI metadata worker could not report failure for {filename}: {report_exc}")
         self.emit("warning", f"AI metadata worker failed for {filename}: {message}")
@@ -3390,7 +4528,14 @@ class WatcherThread(threading.Thread):
     can behave inconsistently.
     """
 
-    def __init__(self, config: WatcherConfig, events: "queue.Queue[Tuple[str, str]]") -> None:
+    def __init__(
+        self, config: WatcherConfig, events: "queue.Queue[Tuple[str, str]]",
+        linked_target: Optional[LinkedUploadTarget] = None,
+        once_work: Optional[CoordinatedWork] = None,
+        gui_admission: Optional[Tuple[GuiModeOwner, ModeConfigPort]] = None,
+        watch_folder_override: Optional[Path] = None,
+        watch_recursive_override: Optional[bool] = None,
+    ) -> None:
         """
         Create a watcher worker.
 
@@ -3399,18 +4544,40 @@ class WatcherThread(threading.Thread):
                 worker starts.
             events (queue.Queue[Tuple[str, str]]): Thread-safe queue used to
                 send status messages to the GUI.
+            linked_target (Optional[LinkedUploadTarget]): Captured delegated
+                destination, or None for the existing API-key workflow.
+            once_work (Optional[CoordinatedWork]): Admitted once-mode work to
+                recheck before each request; None for ordinary GUI workers.
+            gui_admission (Optional[Tuple[GuiModeOwner, ModeConfigPort]]): GUI
+                owner and port for this exact captured worker configuration.
+            watch_folder_override (Optional[Path]): Previously admitted drain
+                folder, or None for the captured configuration folder.
+            watch_recursive_override (Optional[bool]): Previously admitted drain
+                recursion choice, or None for the captured setting.
 
         Returns:
             None: Create a watcher worker.
         """
         super().__init__(daemon=True)
         self.config = config
+        self.linked_target = linked_target
+        self._once_work = once_work
+        self._gui_admission = gui_admission
+        self._watch_folder_override = watch_folder_override
+        self._watch_recursive_override = watch_recursive_override
         self.events = events
         self.stop_event = threading.Event()
-        self.state = UploadState()
+        self._linked_lease = (LinkedTargetLease(CONFIG_DIR, linked_target.binding())
+                              if linked_target is not None else None)
+        # New legacy work never reads or rewrites the old unbound history.
+        self.state: Optional[LinkedUploadState] = None
         self.stability = FileStabilityTracker(config.stable_seconds)
-        self.remote_inventory = RemoteInventorySession(config.inventory_refresh_seconds, self.emit)
+        self.remote_inventory = RemoteInventorySession(
+            config.inventory_refresh_seconds, self.emit, linked_target,
+            once_work.checkpoint if once_work is not None else None,
+        )
         self.remote_skipped_paths: Set[Tuple[Path, str]] = set()
+        self._legacy_failed_paths: Dict[Tuple[Path, str], Tuple[int, float]] = {}
         self.initial_paths: Set[Path] = set()
         self._admission_lock = threading.RLock()
         self.initial_captured = False
@@ -3449,6 +4616,21 @@ class WatcherThread(threading.Thread):
         Raises:
             ValueError: A resumed path escapes the original watched folder.
         """
+        if self.linked_target is not None:
+            if self._linked_lease is None:
+                raise ValueError('Linked upload lease is unavailable.')
+            self._linked_lease.acquire()
+            try:
+                state = LinkedUploadState(self.linked_target)
+                if resume and not state.preexisting:
+                    raise ValueError('Linked upload history is missing; review before recovery.')
+                if not resume:
+                    # Record destination-owned history before accepting a file.
+                    state.save()
+                self.state = state
+            except Exception:
+                self._linked_lease.release()
+                raise
         self.drain_manifest = directory / "watch-drain.json"
         self.initial_paths = set(initial)
         self.initial_captured = True
@@ -3457,7 +4639,8 @@ class WatcherThread(threading.Thread):
             paths = row.get("pending")
             if not isinstance(paths, list):
                 raise ValueError("Pending photograph queue is malformed.")
-            folder = Path(self.config.watched_folder).resolve()
+            folder = (getattr(self, '_watch_folder_override', None)
+                      or Path(self.config.watched_folder)).resolve()
             for value in paths:
                 if not isinstance(value, str):
                     raise ValueError("Pending photograph path is malformed.")
@@ -3489,8 +4672,11 @@ class WatcherThread(threading.Thread):
             if self.drain_manifest is not None:
                 atomic_write_json(self.drain_manifest, {
                     "schema_version": 1,  # First explicit queue wire format.
-                    "folder": self.config.watched_folder,
-                    "recursive": self.config.watch_recursive,
+                    "folder": str(getattr(self, '_watch_folder_override', None)
+                                  or self.config.watched_folder),
+                    "recursive": (self.config.watch_recursive
+                                  if getattr(self, '_watch_recursive_override', None) is None
+                                  else self._watch_recursive_override),
                     "initial": sorted(str(path) for path in self.initial_paths),
                     "pending": sorted(str(path) for path in self.accepted_paths),
                     "frozen": self.drain_only,
@@ -3543,21 +4729,63 @@ class WatcherThread(threading.Thread):
         log_method(message)
 
     def run(self) -> None:
+        """Run the watcher while retaining its target lease through shutdown.
+
+        Returns:
+            None: Reports unsafe redirects, retains pending work and releases
+                an acquired lease after the worker has stopped.
+        """
+        gui_work: Optional[CoordinatedWork] = None
+        try:
+            gui_admission = getattr(self, '_gui_admission', None)
+            if gui_admission is not None:
+                owner, port = gui_admission
+                kind = 'linked' if self.linked_target is not None else 'legacy'
+                gui_work = owner.acquire(kind, port)
+                self._once_work = gui_work
+                self.remote_inventory.before_request = gui_work.checkpoint
+            self._run_owned()
+        except (GalleryKeyRedirectError, ModeCoordinatorError) as exc:
+            self.drain_error = ('Gallery API redirect was refused; pending photographs are retained.'
+                                if isinstance(exc, GalleryKeyRedirectError) else
+                                'Upload mode could not be verified; pending photographs are retained.')
+            self.stop_event.set()
+            try:
+                self.persist_drain()
+            finally:
+                self.emit('error', self.drain_error)
+        finally:
+            if gui_work is not None:
+                gui_work.close()
+            if self._linked_lease is not None:
+                self._linked_lease.release()
+
+    def _run_owned(self) -> None:
         """Observe new photographs, then drain a frozen recoverable queue.
 
         Returns:
             None: Pending/error state survives cancellation, timeout and restart.
         """
-        folder = Path(self.config.watched_folder)
-        upload_url = normalize_upload_url(self.config.gallery_url)
-        if not folder.is_dir() or not upload_url or not self.config.api_key.strip():
+        folder = (getattr(self, '_watch_folder_override', None)
+                  or Path(self.config.watched_folder))
+        recursive_override = getattr(self, '_watch_recursive_override', None)
+        recursive = (self.config.watch_recursive if recursive_override is None
+                     else recursive_override)
+        if self.linked_target is not None and self.state is None:
+            self.drain_error = 'Linked upload recovery state is unavailable.'
+            self.emit('error', self.drain_error)
+            return
+        upload_url = (self.linked_target.issuer if self.linked_target is not None
+                      else normalize_upload_url(self.config.gallery_url))
+        if (not folder.is_dir() or not upload_url
+                or (self.linked_target is None and not self.config.api_key.strip())):
             self.drain_error = "Readable watch folder and saved connection required."
             self.persist_drain()
             self.emit("error", self.drain_error)
             return
         if not self.initial_captured:
             self.initial_paths = set(
-                iter_candidate_files(folder, self.config.watch_recursive)
+                iter_candidate_files(folder, recursive)
             )
         self.emit("info", f"Watching {folder}")
         self.emit("info", f"Upload endpoint: {upload_url}")
@@ -3581,13 +4809,16 @@ class WatcherThread(threading.Thread):
             f"Ignoring {len(self.initial_paths)} existing image file(s).",
         )
         while not self.stop_event.is_set():
+            if (self.linked_target is not None
+                    and not self.linked_target.session.can_upload()):
+                self.drain_error = "Gallery access expired. Reconnect to resume uploads."
+                self.emit("warning", self.drain_error)
+                break
             if self.drain_event.is_set() and not self.drain_only:
                 # On Windows ctime is creation time: include files already
                 # being copied at Stop, but never admit later creations.
                 # Previously observed files remain accepted even if modified.
-                for path in iter_candidate_files(
-                    folder, self.config.watch_recursive
-                ):
+                for path in iter_candidate_files(folder, recursive):
                     try:
                         before_stop = path.stat().st_ctime <= self.drain_requested_at
                     except OSError:
@@ -3629,12 +4860,21 @@ class WatcherThread(threading.Thread):
         Returns:
             None: Scan the watched folder once and process files that are
                 ready.
+
+        Raises:
+            ModeCoordinatorError: Once-mode evidence changed before a request.
+            GalleryKeyRedirectError: A credential-bearing redirect is unsafe.
         """
         candidates = (
             sorted(self.accepted_paths) if self.drain_only
-            else iter_candidate_files(folder, self.config.watch_recursive)
+            else iter_candidate_files(folder, (
+                self.config.watch_recursive if getattr(self, '_watch_recursive_override', None) is None
+                else self._watch_recursive_override
+            ))
         )
         admitted: List[Path] = []
+        if not hasattr(self, '_legacy_failed_paths'):
+            self._legacy_failed_paths = {}
         with self._admission_lock:
             for path in candidates:
                 if path in self.initial_paths:
@@ -3658,47 +4898,123 @@ class WatcherThread(threading.Thread):
             if path in self.initial_paths:
                 continue
 
+            if self.drain_only and not path.is_file():
+                self.drain_error = (
+                    "A pending photo is unavailable. Restore it or keep files locally."
+                )
+                self.stop_event.set()
+                self.persist_drain()
+                self.emit("warning", self.drain_error)
+                return
+
             if not self.stability.stable(path):
                 continue
 
             try:
                 file_hash = sha256_file(path)
                 size = path.stat().st_size
-            except OSError as exc:
+                linked_source = capture_linked_source(path, file_hash, size)
+            except (OSError, ValueError, RuntimeError) as exc:
                 self.emit("warning", f"Cannot read {path.name}: {exc}")
                 continue
 
+            if (self.linked_target is not None
+                    and self.state.has_unresolved_upload()):
+                self.drain_error = 'Linked upload outcome needs manual review.'
+                self.stop_event.set()
+                self.emit('error', self.drain_error)
+                return
+
+            if (self.linked_target is not None
+                    and self.state.has_uncertain_source(path, file_hash)):
+                # Explicit review excludes this source from further work.
+                # Keep its unknown journal and bytes without an acknowledgement.
+                with self._admission_lock:
+                    self.initial_paths.add(path)
+                    self.accepted_paths.discard(path)
+                    self.persist_drain()
+                self.emit('warning', f'Kept {path.name}; its prior upload remains uncertain.')
+                continue
+
+            # Acknowledgements apply only to this worker's fixed destination
+            # and exact bytes. New or changed files still need fresh inventory.
             if (path, file_hash) in self.remote_skipped_paths:
                 self.acknowledge_photo(path)
                 continue
-            if self.state.already_uploaded_path(path, file_hash):
-                self.acknowledge_photo(path)
-                continue
-            if self.state.already_uploaded_hash(file_hash):
-                self.acknowledge_photo(path)
-                self.state.mark_duplicate(path, file_hash, size)
-                self.emit("info", f"Skipped duplicate content: {path.name}")
-                continue
-
-            # The remote gallery remains authoritative after restarts or lost
-            # responses. Refreshing here creates a new short API connection before
-            # the next upload when the planned reconnect interval has elapsed.
+            # The old global local history has no gallery binding; never use it
+            # to skip a source on a newly selected gallery.
             candidate = inventory_candidate(path, file_hash, size)
-            self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), [candidate])
-            if self.remote_inventory.has_hash(file_hash):
+            inventory_ready = self.remote_inventory.refresh(
+                upload_url, self.config.api_key.strip(), [candidate],
+                force=True,
+            )
+            if self.linked_target is not None and not inventory_ready:
+                self.drain_error = (
+                    "Could not check the upload gallery. Retry when it is reachable."
+                    if self.linked_target.session.can_upload() else
+                    "Gallery access expired. Reconnect to resume uploads."
+                )
+                self.stop_event.set()
+                self.persist_drain()
+                self.emit("warning", self.drain_error)
+                return
+            if inventory_ready and self.remote_inventory.has_hash(file_hash):
+                if linked_source is not None:
+                    try:
+                        verify_linked_source(linked_source)
+                    except (OSError, ValueError, RuntimeError):
+                        self.drain_error = 'Linked source changed during inventory.'
+                        self.stop_event.set()
+                        self.emit('error', self.drain_error)
+                        return
                 self.acknowledge_photo(path)
                 self.remote_skipped_paths.add((path, file_hash))
                 self.emit("info", f"Skipped already present on gallery: {path.name}")
                 continue
 
-            if not self.state.retry_allowed(path, file_hash):
+            if (self.linked_target is not None and not self.state.retry_allowed(path, file_hash)):
+                continue
+            if (self.linked_target is None
+                    and time.monotonic() < self._legacy_failed_paths.get(
+                        (path, file_hash), (0, 0.0),
+                    )[1]):
                 continue
 
+            legacy_send_started = False
             try:
                 self.emit("info", f"Uploading {path.name}")
                 metadata_fields = self.sim_camera_metadata_fields(path)
-                payload = self.upload_watched_file(upload_url, path, metadata_fields)
-                self.state.mark_uploaded(path, file_hash, size, payload)
+                if self.linked_target is not None:
+                    if not self.linked_target.session.can_upload():
+                        self.drain_error = "Gallery access expired. Reconnect to resume uploads."
+                        self.stop_event.set()
+                        self.persist_drain()
+                        self.emit("warning", self.drain_error)
+                        return
+                    # Persist uncertainty before any bytes can reach the server.
+                    self.state.mark_uncertain(path, file_hash)
+                legacy_send_started = self.linked_target is None
+                payload = self.upload_watched_file(
+                    upload_url, path, metadata_fields, file_hash, size,
+                )
+                current_work = getattr(self, '_once_work', None)
+                if current_work is not None:
+                    current_work.checkpoint()
+                # A path can be replaced while the immutable request is in flight.
+                # Keep the drain pending if the current file cannot be verified.
+                try:
+                    verify_linked_source(linked_source)
+                except (OSError, ValueError, RuntimeError):
+                    self.drain_error = 'Source changed during upload; photo retained for review.'
+                    self.stop_event.set()
+                    self.persist_drain()
+                    self.emit('error', self.drain_error)
+                    return
+                if self.linked_target is not None:
+                    self.state.mark_uploaded(path, file_hash, size, payload)
+                else:
+                    self._legacy_failed_paths.pop((path, file_hash), None)
+                    self.remote_skipped_paths.add((path, file_hash))
                 self.acknowledge_photo(path)
                 uploaded = payload.get("uploaded", 0)
                 scanned = payload.get("scanned", 0)
@@ -3715,22 +5031,50 @@ class WatcherThread(threading.Thread):
                         self.emit("info", f"[simconnect] Stored Flight Simulator location for {path.name}.")
                     elif sim_error:
                         self.emit("warning", f"Uploaded {path.name}, but simulator location metadata was not stored: {sim_error}")
-                if self.config.delete_uploaded_files:
+                if self.config.delete_uploaded_files and self.linked_target is None:
                     self.delete_uploaded_file(path, payload)
+                elif self.config.delete_uploaded_files:
+                    self.emit('info', 'Linked upload keeps the local source file.')
+            except (ModeCoordinatorError, GalleryKeyRedirectError):
+                raise
             except Exception as exc:  # noqa: BLE001
+                current_work = getattr(self, '_once_work', None)
+                if current_work is not None:
+                    current_work.checkpoint()
                 message = str(exc)
-                if upload_failure_needs_inventory_reconciliation(exc):
-                    if self.remote_inventory.confirm_after_failure(upload_url, self.config.api_key.strip(), candidate):
-                        self.remote_skipped_paths.add((path, file_hash))
-                        self.acknowledge_photo(path)
-                        self.emit("warning", f"Upload response failed after transfer, but gallery inventory confirms {path.name} is already present; skipping retry. Original response error: {message}")
-                        if self.config.delete_uploaded_files:
-                            self.delete_uploaded_file(path, {"uploaded": 1, "filenames": [path.name]})
-                        continue
-                self.state.mark_failure(path, file_hash, message)
+                if self.linked_target is not None:
+                    # A dropped reply can follow a committed upload. Retain the
+                    # durable pre-send marker and stop; absence from indexed
+                    # inventory cannot prove that the original was not stored.
+                    try:
+                        self.state.mark_uncertain(path, file_hash)
+                    except (OSError, ValueError) as marker_error:
+                        self.emit('error', f'Could not persist linked recovery state: {marker_error}')
+                    self.drain_error = 'Linked upload outcome needs manual review.'
+                    self.stop_event.set()
+                    self.emit('error', self.drain_error)
+                    return
+                if legacy_send_started:
+                    self.drain_error = 'Upload outcome is unconfirmed; review the gallery before retrying.'
+                    self.stop_event.set()
+                    self.persist_drain()
+                    self.emit('error', self.drain_error)
+                    return
+                if self.linked_target is None:
+                    attempts = self._legacy_failed_paths.get((path, file_hash), (0, 0.0))[0] + 1
+                    delay = min(LEGACY_WATCH_RETRY_CAP_SECONDS,
+                                LEGACY_WATCH_RETRY_BASE_SECONDS * (
+                                    2 ** min(attempts - 1, LEGACY_WATCH_RETRY_EXPONENT_MAX)))
+                    self._legacy_failed_paths[(path, file_hash)] = (
+                        attempts, time.monotonic() + delay,
+                    )
                 self.emit("error", f"Upload failed for {path.name}: {message}")
 
-    def upload_watched_file(self, upload_url: str, path: Path, metadata_fields: Dict[str, str]) -> Dict[str, Any]:
+    def upload_watched_file(
+        self, upload_url: str, path: Path, metadata_fields: Dict[str, str],
+        file_hash: str = '',
+        expected_size: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
         Upload one stable watched file with local thumbnails when available.
 
@@ -3746,12 +5090,49 @@ class WatcherThread(threading.Thread):
             path (Path): Stable watched source file.
             metadata_fields (Dict[str, str]): Optional multipart metadata
                 fields.
+            file_hash (str): Captured source SHA-256, or empty for an older
+                direct caller without a candidate.
+            expected_size (Optional[int]): Captured byte length, or None for
+                an older direct caller without a candidate.
 
         Returns:
-            Dict[str, Any]: Parsed server response.
+            Dict[str, Any]: Upload response with ok, uploaded/scanned counts
+                and optional filename, rename and metadata result fields.
+
+        Raises:
+            ModeCoordinatorError: Once-mode evidence changed before a request.
+            GalleryKeyRedirectError: A credential-bearing redirect is unsafe.
         """
         create_server_thumbnails = bool(self.config.create_thumbnails)
         local_suffixes = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+        request_options = (
+            {'before_request': self._once_work.checkpoint}
+            if self._once_work is not None else {}
+        )
+        if self.linked_target is not None:
+            if self._once_work is not None:
+                self._once_work.checkpoint()
+            if (not create_server_thumbnails or not local_thumbnail_supported()
+                    or path.suffix.lower() not in local_suffixes):
+                return self.linked_target.upload(
+                    path, create_server_thumbnails, file_hash, metadata=metadata_fields,
+                )
+            client_upload_id = uuid.uuid4().hex
+            with tempfile.TemporaryDirectory(prefix="php-gallery-watch-thumbs-") as directory:
+                thumbnails = generate_linked_thumbnails(
+                    path, Path(directory), client_upload_id, file_hash,
+                )
+                if sha256_file(path) != file_hash:
+                    raise ValueError('Source changed during linked thumbnail generation.')
+                converted = tuple(
+                    LinkedThumbnail(item.path, item.size, item.format)
+                    for item in thumbnails
+                )
+                if self._once_work is not None:
+                    self._once_work.checkpoint()
+                return self.linked_target.upload(
+                    path, False, file_hash, converted, client_upload_id, metadata_fields,
+                )
         if not create_server_thumbnails or not local_thumbnail_supported() or path.suffix.lower() not in local_suffixes:
             return multipart_upload(
                 upload_url,
@@ -3759,14 +5140,21 @@ class WatcherThread(threading.Thread):
                 path,
                 create_server_thumbnails,
                 metadata_fields=metadata_fields,
+                **({"expected_sha256": file_hash, "expected_size": expected_size,
+                    "single_dispatch": True,
+                    "selected_endpoint": self.remote_inventory.resolved_endpoint}
+                       if file_hash else {}),
+                **request_options,
             )
 
         client_upload_id = uuid.uuid4().hex
         with tempfile.TemporaryDirectory(prefix="php-gallery-watch-thumbs-") as temp_dir_name:
             temp_root = Path(temp_dir_name)
+            upload_attempted = False
             try:
                 thumbnails = generate_local_thumbnails(path, temp_root, client_upload_id)
                 self.emit("info", f"Generated {len(thumbnails)} local thumbnail file(s) for {path.name}; server-side batch generation skipped.")
+                upload_attempted = True
                 return multipart_upload(
                     upload_url,
                     self.config.api_key.strip(),
@@ -3775,8 +5163,17 @@ class WatcherThread(threading.Thread):
                     thumbnails=thumbnails,
                     client_upload_id=client_upload_id,
                     metadata_fields=metadata_fields,
+                    **({"expected_sha256": file_hash, "expected_size": expected_size,
+                    "single_dispatch": True,
+                    "selected_endpoint": self.remote_inventory.resolved_endpoint}
+                       if file_hash else {}),
+                    **request_options,
                 )
+            except (ModeCoordinatorError, GalleryKeyRedirectError):
+                raise
             except Exception as exc:  # noqa: BLE001
+                if upload_attempted:
+                    raise
                 self.emit("warning", f"Local thumbnails failed for {path.name}; falling back to server generation: {exc}")
                 return multipart_upload(
                     upload_url,
@@ -3784,6 +5181,11 @@ class WatcherThread(threading.Thread):
                     path,
                     True,
                     metadata_fields=metadata_fields,
+                    **({"expected_sha256": file_hash, "expected_size": expected_size,
+                    "single_dispatch": True,
+                    "selected_endpoint": self.remote_inventory.resolved_endpoint}
+                       if file_hash else {}),
+                    **request_options,
                 )
 
     def sim_camera_metadata_fields(self, path: Path) -> Dict[str, str]:
@@ -3830,35 +5232,21 @@ class WatcherThread(threading.Thread):
             return {}
 
     def delete_uploaded_file(self, path: Path, payload: Dict[str, Any]) -> None:
-        """
-        Delete a watched-folder file after a confirmed successful upload.
-
-        The watcher deletes only originals that the gallery reports as uploaded.
-        Skipped, duplicate, or failed files remain in place.
+        """Retain the source while safe deletion ownership is unavailable.
 
         Args:
-            path (Path): Local image file that was just submitted.
-            payload (Dict[str, Any]): Successful JSON response returned by the
-                gallery.
+            path (Path): Local image path that was submitted.
+            payload (Dict[str, Any]): Gallery response with ok/uploaded and
+                optional metadata; it cannot prove the current path identity.
 
         Returns:
-            None: Delete a watched-folder file after a confirmed successful
-                upload.
+            None: The saved deletion preference remains intact and the
+                current source is kept for manual review.
         """
-        uploaded_count = int(payload.get("uploaded", 0) or 0)
-        if uploaded_count <= 0:
-            self.emit("warning", f"Kept {path.name}: gallery did not confirm a stored upload.")
-            return
-
-        try:
-            path.unlink()
-            self.initial_paths.discard(path)
-            self.emit("info", f"Deleted uploaded source file: {path.name}")
-        except FileNotFoundError:
-            self.initial_paths.discard(path)
-            self.emit("warning", f"Uploaded source file was already gone: {path.name}")
-        except OSError as exc:
-            self.emit("warning", f"Uploaded {path.name}, but could not delete the source file: {exc}")
+        self.emit(
+            "warning",
+            f"Kept {path.name}: automatic source deletion is temporarily unavailable.",
+        )
 
 
 class ManualUploadThread(threading.Thread):
@@ -3881,6 +5269,8 @@ class ManualUploadThread(threading.Thread):
         events: "queue.Queue[Any]",
         job: Optional[ImportJob] = None,
         job_store: Optional[JobStateStore] = None,
+        linked_target: Optional[LinkedUploadTarget] = None,
+        gui_admission: Optional[Tuple[GuiModeOwner, ModeConfigPort]] = None,
     ) -> None:
         """
         Create a manual upload worker.
@@ -3902,25 +5292,42 @@ class ManualUploadThread(threading.Thread):
                 progress and restart recovery.
             job_store (Optional[JobStateStore]): Shared state store for job and
                 activity persistence.
+            linked_target (Optional[LinkedUploadTarget]): Captured delegated
+                gallery, or None for the saved gallery API-key connection.
+            gui_admission (Optional[Tuple[GuiModeOwner, ModeConfigPort]]): GUI
+                owner and exact immutable worker configuration port.
 
         Returns:
             None: Create a manual upload worker.
         """
         super().__init__(daemon=True)
         self.config = config
+        self.linked_target = linked_target
+        self._gui_admission = gui_admission
+        self._gui_work: Optional[CoordinatedWork] = None
+        self._linked_lease = (LinkedTargetLease(CONFIG_DIR, linked_target.binding())
+                              if linked_target is not None else None)
+        self.linked_state: Optional[LinkedUploadState] = None
         self.paths = paths
         self.client_thumbnails = client_thumbnails
         self.thumbnail_workers = resolve_thumbnail_worker_count(thumbnail_workers)
-        self.upload_workers = resolve_upload_worker_count(upload_workers)
+        # One delegated mutation at a time protects its durable write-ahead
+        # marker and prevents same-target workers from racing recovery.
+        self.upload_workers = (1 if linked_target is not None
+                               else resolve_upload_worker_count(upload_workers))
         self.events = events
         self.stop_event = threading.Event()
+        self._redirect_refused = threading.Event()
         self.pause_event = threading.Event()
         self.uploaded = 0
         self.failed = 0
         self.skipped_existing = 0
         self.completed_uploads = 0
         self.progress_lock = threading.Lock()
-        self.remote_inventory = RemoteInventorySession(config.inventory_refresh_seconds, self.emit)
+        self.remote_inventory = RemoteInventorySession(
+            config.inventory_refresh_seconds, self.emit, linked_target,
+            self._redirect_checkpoint if linked_target is None else None,
+        )
         self.job = job
         self.job_store = job_store
         self.job_lock = threading.RLock()
@@ -3929,6 +5336,45 @@ class ManualUploadThread(threading.Thread):
             for item in self.job.items:
                 self.item_by_path[os.path.normcase(os.path.abspath(item.path))] = item
 
+
+    def _redirect_checkpoint(self) -> None:
+        """Reject another manual request after an unsafe redirect was refused.
+
+        Returns:
+            None: This batch has not observed an unsafe redirect.
+
+        Raises:
+            GalleryKeyRedirectError: This batch must retain unfinished sources.
+        """
+        if self._redirect_refused.is_set():
+            raise GalleryKeyRedirectError('Gallery API redirect was refused.')
+        work = getattr(self, '_gui_work', None)
+        if work is not None:
+            work.checkpoint()
+
+    def _stop_for_unsafe_redirect(self, path: Path, *, mode_error: bool = False) -> None:
+        """Retain one ambiguous item and stop new requests after a refusal.
+
+        Args:
+            path (Path): Local source whose outcome must be reviewed.
+            mode_error (bool): True when mode evidence rather than a redirect failed.
+
+        Returns:
+            None: Marks the item unresolved and signals the batch to stop.
+        """
+        self._redirect_refused.set()
+        self.stop_event.set()
+        with self.progress_lock:
+            self.failed += 1
+            self.completed_uploads += 1
+        reason = ('Upload mode could not be verified' if mode_error
+                  else 'Gallery API redirect was refused')
+        uncertain = (LINKED_UPLOAD_UNCERTAIN_REASON if self.linked_target is not None
+                     else LEGACY_UPLOAD_UNCERTAIN_REASON)
+        self.update_item(
+            path, 'failed_permanent', uncertain,
+        )
+        self.emit('error', reason + '; import sources are retained.')
 
     def stop(self) -> None:
         """
@@ -4026,24 +5472,32 @@ class ManualUploadThread(threading.Thread):
             self.persist_job()
 
     def finalize_job(self) -> None:
-        """Persist the terminal batch snapshot and clean staging after complete success."""
+        """Persist the terminal batch while retaining all original ZIP sources.
+
+        Returns:
+            None: Finishes the job without deleting source or staged media.
+        """
         if self.job is None:
             return
         with self.job_lock:
             self.job.finished_at = time.time()
         self.persist_job()
-        successful_states = {"confirmed", "skipped_duplicate"}
-        if self.job.items and all(item.state in successful_states for item in self.job.items):
-            if self.job.staging_dir:
-                shutil.rmtree(self.job.staging_dir, ignore_errors=True)
-            if self.job.delete_source_zip_after_success and self.job.source_zip:
-                try:
-                    Path(self.job.source_zip).unlink()
-                    self.emit("info", f"Deleted source ZIP after confirmed import: {Path(self.job.source_zip).name}")
-                except FileNotFoundError:
-                    pass
-                except OSError as exc:
-                    self.emit("warning", f"Import completed, but the source ZIP could not be deleted: {exc}")
+        # A local confirmed/duplicate state does not attest a durable
+        # server image-operation receipt or prove absent historical work.
+        # Keep extracted originals even when every item looks successful.
+        if self.job.staging_dir:
+            self.emit(
+                "warning",
+                "Import staging sources retained; safe automatic deletion "
+                "requires server-bound operation receipts.",
+            )
+        if (self.linked_target is None and self.job.delete_source_zip_after_success
+                and self.job.source_zip):
+            self.emit(
+                "warning",
+                "Legacy upload cannot verify the destination for ZIP cleanup; "
+                "the source ZIP is retained.",
+            )
 
 
     def emit(self, level: str, message: str) -> None:
@@ -4062,16 +5516,62 @@ class ManualUploadThread(threading.Thread):
         log_method(message)
 
     def run(self) -> None:
+        """Retain the target lease throughout one manual import worker.
+
+        Returns:
+            None: Refuses linked work when exclusive recovery state is unavailable.
         """
-        Run the selected manual upload mode.
+        try:
+            if self._gui_admission is not None:
+                owner, port = self._gui_admission
+                kind = 'linked' if self.linked_target is not None else 'legacy'
+                self._gui_work = owner.acquire(kind, port)
+                self.remote_inventory.before_request = self._redirect_checkpoint
+            if self.linked_target is not None:
+                if self._linked_lease is None:
+                    raise ValueError('Linked gallery lease is unavailable.')
+                self._linked_lease.acquire()
+                self.linked_state = LinkedUploadState(self.linked_target)
+            self._run_owned()
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.emit('error', f'Import cannot acquire safe recovery state: {exc}')
+        finally:
+            if self._gui_work is not None:
+                self._gui_work.close()
+            if self._linked_lease is not None:
+                self._linked_lease.release()
+
+    def _run_owned(self) -> None:
+        """Run the selected manual upload mode under its captured owner.
+
+        Returns:
+            None: Records item outcomes without retrying ambiguous transfers.
         """
-        upload_url = normalize_upload_url(self.config.gallery_url)
-        if not upload_url or not self.config.api_key.strip():
-            self.emit("error", "Gallery URL and API key are required.")
+        upload_url = (self.linked_target.issuer if self.linked_target is not None
+                      else normalize_upload_url(self.config.gallery_url))
+        if (not upload_url
+                or (self.linked_target is None and not self.config.api_key.strip())
+                or (self.linked_target is not None
+                    and not self.linked_target.session.can_upload())):
+            reason = ('Linked gallery session expired; reconnect before continuing.'
+                      if self.linked_target is not None
+                      else 'Gallery URL and API key are required.')
+            self.emit('error', reason)
             if self.job is not None:
                 for path in self.paths:
-                    self.update_item(path, "failed_permanent", "Gallery URL or API key is missing.")
+                    self.update_item(
+                        path, 'failed_retryable' if self.linked_target is not None
+                        else 'failed_permanent', reason,
+                    )
                 self.finalize_job()
+            return
+        if (self.linked_target is not None and (
+                self.job is None or self.job_store is None
+                or any(self.item_for_path(path) is None for path in self.paths))):
+            self.emit('error', 'Linked import requires a durable item recovery record.')
+            return
+        if self.linked_state is not None and self.linked_state.has_unresolved_upload():
+            self.emit('error', LINKED_UPLOAD_UNCERTAIN_REASON)
             return
         if not self.paths:
             self.emit("warning", "No manual upload files were selected.")
@@ -4101,6 +5601,12 @@ class ManualUploadThread(threading.Thread):
                 self.run_with_client_thumbnails(upload_url)
             else:
                 self.run_with_server_thumbnails(upload_url)
+        except (GalleryKeyRedirectError, ModeCoordinatorError) as exc:
+            self._redirect_refused.set()
+            self.stop_event.set()
+            reason = ('Upload mode could not be verified' if isinstance(exc, ModeCoordinatorError)
+                      else 'Gallery API redirect was refused')
+            self.emit('error', reason + '; import sources are retained.')
         finally:
             if self.stop_event.is_set():
                 self.mark_remaining_cancelled()
@@ -4132,7 +5638,16 @@ class ManualUploadThread(threading.Thread):
             except OSError as exc:
                 self.emit("warning", f"Cannot include {path.name} in remote inventory preload: {exc}")
         if candidates:
-            self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), candidates, force=True)
+            if self.linked_target is not None:
+                for start in range(0, len(candidates), LINKED_INVENTORY_BATCH_SIZE):
+                    chunk = candidates[start:start + LINKED_INVENTORY_BATCH_SIZE]
+                    if not self.remote_inventory.refresh(
+                        upload_url, self.config.api_key.strip(), chunk, force=True,
+                    ):
+                        self.emit('warning', 'Linked inventory preload incomplete; individual files will be rechecked.')
+                        break
+            else:
+                self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), candidates, force=True)
 
     def remote_skip_before_work(self, upload_url: str, path: Path, file_hash: str, size: int) -> bool:
         """
@@ -4149,8 +5664,13 @@ class ManualUploadThread(threading.Thread):
                 exists.
         """
         candidate = inventory_candidate(path, file_hash, size)
-        self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), [candidate])
-        if not self.remote_inventory.has_hash(file_hash):
+        refreshed = self.remote_inventory.refresh(
+            upload_url, self.config.api_key.strip(), [candidate],
+            force=True,
+        )
+        if self.linked_target is not None and not refreshed:
+            raise RuntimeError('Linked gallery inventory is unavailable.')
+        if not refreshed or not self.remote_inventory.has_hash(file_hash):
             return False
         with self.progress_lock:
             self.skipped_existing += 1
@@ -4246,9 +5766,20 @@ class ManualUploadThread(threading.Thread):
             return
 
         temp_root = Path(tempfile.mkdtemp(prefix="php_gallery_thumbs_"))
-        thumbnail_executor = concurrent.futures.ProcessPoolExecutor(max_workers=self.thumbnail_workers)
-        upload_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.upload_workers)
-        pending_thumbnails: Dict[concurrent.futures.Future[List[LocalThumbnail]], Tuple[int, Path, str]] = {}
+        try:
+            thumbnail_executor = concurrent.futures.ProcessPoolExecutor(max_workers=self.thumbnail_workers)
+        except BaseException:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            raise
+        try:
+            upload_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.upload_workers)
+        except BaseException:
+            try:
+                thumbnail_executor.shutdown(wait=True, cancel_futures=True)
+            finally:
+                shutil.rmtree(temp_root, ignore_errors=True)
+            raise
+        pending_thumbnails: Dict[concurrent.futures.Future[List[LocalThumbnail]], Tuple[int, Path, str, str]] = {}
         pending_uploads: Dict[concurrent.futures.Future[None], Tuple[Path, Path]] = {}
         path_iterator = iter(enumerate(self.paths, start=1))
         thumbnail_queue_limit = max(1, self.thumbnail_workers * 2)
@@ -4283,12 +5814,27 @@ class ManualUploadThread(threading.Thread):
                     self.update_item(path, "failed_permanent", f"Cannot read source file: {exc}")
                     self.emit("error", f"Cannot read {path.name}: {exc}")
                     continue
-                if self.remote_skip_before_work(upload_url, path, file_hash, size):
-                    continue
+                try:
+                    if (self.linked_target is None
+                            and self.remote_skip_before_work(upload_url, path, file_hash, size)):
+                        continue
+                except RuntimeError as exc:
+                    with self.progress_lock:
+                        self.failed += 1
+                        self.completed_uploads += 1
+                    self.update_item(path, 'failed_retryable', str(exc))
+                    self.emit('error', f'Linked inventory unavailable for {path.name}.')
+                    self.stop_event.set()
+                    return False
                 client_upload_id = uuid.uuid4().hex
                 self.update_item(path, "staged", file_hash=file_hash)
-                future = thumbnail_executor.submit(generate_local_thumbnails, path, temp_root, client_upload_id)
-                pending_thumbnails[future] = (index, path, client_upload_id)
+                if self.linked_target is not None:
+                    future = thumbnail_executor.submit(
+                        generate_linked_thumbnails, path, temp_root, client_upload_id, file_hash,
+                    )
+                else:
+                    future = thumbnail_executor.submit(generate_local_thumbnails, path, temp_root, client_upload_id)
+                pending_thumbnails[future] = (index, path, client_upload_id, file_hash)
                 return True
             return False
 
@@ -4299,6 +5845,7 @@ class ManualUploadThread(threading.Thread):
             client_upload_id: Optional[str],
             create_server_thumbnails: bool,
             cleanup_dir: Path,
+            expected_sha256: str,
         ) -> None:
             """
             Submit one upload job to the upload thread pool.
@@ -4313,6 +5860,7 @@ class ManualUploadThread(threading.Thread):
                 create_server_thumbnails (bool): Whether the server should
                     generate.
                 cleanup_dir (Path): Temporary directory to delete after upload.
+                expected_sha256 (str): Hash captured before thumbnail generation.
 
             Returns:
                 None: Submit one upload job to the upload thread pool.
@@ -4328,6 +5876,7 @@ class ManualUploadThread(threading.Thread):
                 thumbnails,
                 client_upload_id,
                 create_server_thumbnails,
+                expected_sha256 if self.linked_target is not None else '',
             )
             pending_uploads[future] = (path, cleanup_dir)
 
@@ -4396,27 +5945,36 @@ class ManualUploadThread(threading.Thread):
                     continue
 
                 for future in done:
-                    index, path, client_upload_id = pending_thumbnails.pop(future)
+                    index, path, client_upload_id, expected_sha256 = pending_thumbnails.pop(future)
                     thumbnail_dir = temp_root / client_upload_id
                     try:
                         thumbnails = future.result()
                         self.emit("info", f"Generated {len(thumbnails)} thumbnail file(s) for {path.name}.")
-                        submit_upload(path, index, thumbnails, client_upload_id, False, thumbnail_dir)
+                        submit_upload(path, index, thumbnails, client_upload_id, False, thumbnail_dir, expected_sha256)
                     except Exception as exc:  # noqa: BLE001
+                        if self.linked_target is not None:
+                            self.update_item(path, 'failed_retryable', str(exc))
+                            self.emit('error', f'Linked thumbnail generation failed for {path.name}.')
+                            self.stop_event.set()
+                            continue
                         self.emit("warning", f"Local thumbnails failed for {path.name}; asking server to create them: {exc}")
                         self.emit_structured("thumbnail_fallback", {"filename": path.name, "reason": str(exc)})
-                        submit_upload(path, index, [], None, True, thumbnail_dir)
+                        submit_upload(path, index, [], None, True, thumbnail_dir, expected_sha256)
 
                     if not self.stop_event.is_set() and len(pending_thumbnails) < thumbnail_queue_limit:
                         submit_next_thumbnail()
 
             drain_completed_uploads(wait_for_one=False)
         finally:
-            thumbnail_executor.shutdown(wait=True, cancel_futures=True)
-            upload_executor.shutdown(wait=True, cancel_futures=True)
-            for _path, cleanup_dir in list(pending_uploads.values()):
-                shutil.rmtree(cleanup_dir, ignore_errors=True)
-            shutil.rmtree(temp_root, ignore_errors=True)
+            try:
+                thumbnail_executor.shutdown(wait=True, cancel_futures=True)
+            finally:
+                try:
+                    upload_executor.shutdown(wait=True, cancel_futures=True)
+                finally:
+                    for _path, cleanup_dir in list(pending_uploads.values()):
+                        shutil.rmtree(cleanup_dir, ignore_errors=True)
+                    shutil.rmtree(temp_root, ignore_errors=True)
 
 
     def upload_one(
@@ -4427,6 +5985,7 @@ class ManualUploadThread(threading.Thread):
         thumbnails: List[LocalThumbnail],
         client_upload_id: Optional[str],
         create_server_thumbnails: bool,
+        expected_sha256: str = '',
     ) -> None:
         """
         Upload one original, optionally with locally generated thumbnails.
@@ -4437,25 +5996,54 @@ class ManualUploadThread(threading.Thread):
             index (int): One-based item index for status messages.
             thumbnails (List[LocalThumbnail]): Local thumbnail files to submit
                 with the original.
-            client_upload_id (Optional[str]): Request-local ID used to map
-                thumbnails to the.
+            client_upload_id (Optional[str]): Request-local ID mapping
+                derivatives to this original.
             create_server_thumbnails (bool): Whether PHP Gallery should
-                generate.
+                generate thumbnails.
+            expected_sha256 (str): Source hash before linked thumbnail work,
+                or empty when no linked snapshot was generated.
 
         Returns:
-            None: Upload one original, optionally with locally generated
-                thumbnails.
+            None: Records a confirmed, skipped or failed disposition; retains
+                an unknown original excluded from dispatch after review.
         """
         if not self.wait_if_paused():
             return
         candidate: Optional[Dict[str, Any]] = None
+        linked_send_started = False
+        legacy_send_started = False
         try:
             self.update_item(path, "hashing")
             file_hash = sha256_file(path)
+            if self.linked_target is not None and expected_sha256 and file_hash != expected_sha256:
+                raise ValueError('Source changed during linked thumbnail generation.')
             size = path.stat().st_size
+            linked_source = (capture_linked_source(path, file_hash, size)
+                             if self.linked_target is not None else None)
             candidate = inventory_candidate(path, file_hash, size)
-            self.remote_inventory.refresh(upload_url, self.config.api_key.strip(), [candidate])
-            if self.remote_inventory.has_hash(file_hash):
+            if (self.linked_state is not None
+                    and self.linked_state.has_unresolved_upload()):
+                self.update_item(path, 'failed_permanent', LINKED_UPLOAD_UNCERTAIN_REASON)
+                self.emit('error', LINKED_UPLOAD_UNCERTAIN_REASON)
+                self.stop_event.set()
+                return
+            if (self.linked_state is not None
+                    and self.linked_state.has_uncertain_source(path, file_hash)):
+                with self.progress_lock:
+                    self.failed += 1
+                    self.completed_uploads += 1
+                self.update_item(path, 'failed_permanent', LINKED_UPLOAD_UNCERTAIN_REASON)
+                self.emit('warning', f'Kept {path.name}; its prior upload remains uncertain.')
+                return
+            inventory_ready = self.remote_inventory.refresh(
+                upload_url, self.config.api_key.strip(), [candidate],
+                force=True,
+            )
+            if self.linked_target is not None and not inventory_ready:
+                raise RuntimeError('Linked gallery inventory is unavailable.')
+            if inventory_ready and self.remote_inventory.has_hash(file_hash):
+                if linked_source is not None:
+                    verify_linked_source(linked_source)
                 with self.progress_lock:
                     self.skipped_existing += 1
                     self.completed_uploads += 1
@@ -4465,16 +6053,39 @@ class ManualUploadThread(threading.Thread):
 
             if not self.wait_if_paused():
                 return
-            self.update_item(path, "uploading", file_hash=file_hash, increment_attempt=True)
-            self.emit("info", f"Uploading {index}/{len(self.paths)}: {path.name}")
-            payload = multipart_upload(
-                upload_url,
-                self.config.api_key.strip(),
-                path,
-                create_server_thumbnails,
-                thumbnails=thumbnails,
-                client_upload_id=client_upload_id,
+            if self.linked_state is not None:
+                # Share the write-ahead marker with watcher and future imports.
+                self.linked_state.mark_uncertain(path, file_hash)
+            self.update_item(
+                path, 'failed_permanent' if self.linked_target is not None else 'uploading',
+                LINKED_UPLOAD_UNCERTAIN_REASON if self.linked_target is not None else '',
+                file_hash=file_hash, increment_attempt=True,
             )
+            self.emit("info", f"Uploading {index}/{len(self.paths)}: {path.name}")
+            if self.linked_target is not None:
+                # The durable item marker precedes all network side effects.
+                linked_send_started = True
+                self._redirect_checkpoint()
+                payload = self.linked_target.upload(
+                    path, create_server_thumbnails, file_hash,
+                    tuple(LinkedThumbnail(item.path, item.size, item.format)
+                          for item in thumbnails), client_upload_id or '',
+                )
+                self.linked_state.mark_uploaded(path, file_hash, size, payload)
+            else:
+                legacy_send_started = True
+                payload = multipart_upload(
+                    upload_url,
+                    self.config.api_key.strip(),
+                    path,
+                    create_server_thumbnails,
+                    thumbnails=thumbnails,
+                    client_upload_id=client_upload_id,
+                    before_request=self._redirect_checkpoint,
+                    expected_sha256=file_hash, expected_size=size,
+                    single_dispatch=True,
+                    selected_endpoint=self.remote_inventory.resolved_endpoint,
+                )
             with self.progress_lock:
                 self.uploaded += int(payload.get("uploaded", 0) or 0)
                 self.completed_uploads += 1
@@ -4497,7 +6108,38 @@ class ManualUploadThread(threading.Thread):
             if failed_thumbnails or thumbnail_errors:
                 details = "; ".join(thumbnail_errors) if thumbnail_errors else "no detailed server message"
                 self.emit("warning", f"Client thumbnails were partially rejected for {path.name}: failed={failed_thumbnails}; {details}. Server-side generation remains authoritative.")
+        except (GalleryKeyRedirectError, ModeCoordinatorError) as exc:
+            # A redirect can arrive after an original was accepted; never turn
+            # that ambiguous result into an automatic retry or confirmation.
+            self._stop_for_unsafe_redirect(path, mode_error=isinstance(exc, ModeCoordinatorError))
         except Exception as exc:  # noqa: BLE001
+            if self.linked_target is not None:
+                with self.progress_lock:
+                    self.failed += 1
+                    self.completed_uploads += 1
+                if linked_send_started:
+                    if candidate is not None and self.linked_state is not None:
+                        try:
+                            self.linked_state.mark_uncertain(
+                                path, str(candidate.get('sha256', '')),
+                            )
+                        except (OSError, ValueError):
+                            self.emit('error', 'Linked recovery marker could not be refreshed.')
+                    self.update_item(path, 'failed_permanent', LINKED_UPLOAD_UNCERTAIN_REASON)
+                    self.emit('error', LINKED_UPLOAD_UNCERTAIN_REASON)
+                else:
+                    self.update_item(path, 'failed_retryable', str(exc))
+                    self.emit('error', f'Linked upload could not start: {exc}')
+                self.stop_event.set()
+                return
+            if legacy_send_started:
+                with self.progress_lock:
+                    self.failed += 1
+                    self.completed_uploads += 1
+                self.update_item(path, 'failed_permanent', LEGACY_UPLOAD_UNCERTAIN_REASON)
+                self.emit('error', LEGACY_UPLOAD_UNCERTAIN_REASON)
+                self.stop_event.set()
+                return
             try:
                 if (
                     candidate is not None
@@ -4508,15 +6150,20 @@ class ManualUploadThread(threading.Thread):
                         self.skipped_existing += 1
                         self.completed_uploads += 1
                     file_hash = str(candidate.get("sha256", ""))
+                    # This path is reached only before legacy HTTP dispatch.
+                    # Matching gallery inventory is a duplicate-skip hint, not
+                    # an immutable receipt for any particular upload attempt.
                     self.update_item(
                         path,
-                        "confirmed",
-                        "Upload response was ambiguous, but remote inventory confirms the file is present.",
+                        "skipped_duplicate",
+                        "Matching content is already indexed; no upload was dispatched by this attempt.",
                         file_hash=file_hash,
-                        count_bytes=True,
                     )
-                    self.emit("warning", f"Upload response failed after transfer, but gallery inventory confirms {path.name} is already present; skipping retry. Original response error: {exc}")
+                    self.emit("warning", f"Pre-dispatch operation failed for {path.name}; existing gallery inventory matches the content, so this attempt was skipped without an upload receipt. Original error: {exc}")
                     return
+            except (GalleryKeyRedirectError, ModeCoordinatorError) as exc:
+                self._stop_for_unsafe_redirect(path, mode_error=isinstance(exc, ModeCoordinatorError))
+                return
             except Exception as confirm_exc:  # noqa: BLE001
                 self.emit("warning", f"Could not confirm remote inventory after failure for {path.name}: {confirm_exc}")
             with self.progress_lock:
@@ -4551,6 +6198,8 @@ class ImportPreflightThread(threading.Thread):
         delete_source_zip_after_success: bool,
         events: "queue.Queue[Any]",
         job_store: JobStateStore,
+        linked_target: Optional[LinkedUploadTarget] = None,
+        gui_admission: Optional[Tuple[GuiModeOwner, ModeConfigPort]] = None,
     ) -> None:
         """
         Create one preflight worker for the selected source.
@@ -4566,6 +6215,10 @@ class ImportPreflightThread(threading.Thread):
                 import may delete its original archive.
             events (queue.Queue[Any]): Thread-safe UI event queue.
             job_store (JobStateStore): Durable job history store.
+            linked_target (Optional[LinkedUploadTarget]): Explicitly selected
+                delegated gallery, or None for the legacy API-key connection.
+            gui_admission (Optional[Tuple[GuiModeOwner, ModeConfigPort]]): GUI
+                owner and exact immutable preflight configuration port.
 
         Returns:
             None: Create one preflight worker for the selected source.
@@ -4580,6 +6233,12 @@ class ImportPreflightThread(threading.Thread):
         self.delete_source_zip_after_success = delete_source_zip_after_success
         self.events = events
         self.job_store = job_store
+        self.linked_target = linked_target
+        self._gui_admission = gui_admission
+        self._gui_work: Optional[CoordinatedWork] = None
+        self._preflight_owner = object()
+        self._linked_lease = (LinkedTargetLease(CONFIG_DIR, linked_target.binding())
+                              if linked_target is not None else None)
         self.stop_event = threading.Event()
 
     def stop(self) -> None:
@@ -4587,8 +6246,28 @@ class ImportPreflightThread(threading.Thread):
         self.stop_event.set()
 
     def emit(self, kind: str, payload: Dict[str, Any]) -> None:
-        """Send one structured preflight event to the Tkinter thread."""
-        self.events.put({"kind": kind, "payload": dict(payload)})
+        """Send one structured preflight event to the Tkinter thread.
+
+        Args:
+            kind (str): Preflight event name identifying the payload variant.
+            payload (Dict[str, Any]): Event fields such as job_id, message,
+                current and total counts, filename, or the completed ImportPlan.
+
+        Returns:
+            None: Enqueues the event with its captured linked destination.
+        """
+        event_payload = dict(payload)
+        # Opaque generations and owner tickets never contain credentials.
+        event_payload['config_generation'] = self.config._snapshot_token
+        event_payload['preflight_owner'] = self._preflight_owner
+        event_payload['linked_binding'] = (
+            self.linked_target.binding() if self.linked_target is not None else None
+        )
+        event_payload['preflight_binding'] = (
+            self.linked_target.binding() if self.linked_target is not None else
+            connection_binding(normalize_upload_url(self.config.gallery_url), self.config.api_key)
+        )
+        self.events.put({"kind": kind, "payload": event_payload})
 
     def run(self) -> None:
         """Build a preflight plan and publish current gallery metadata.
@@ -4597,11 +6276,37 @@ class ImportPreflightThread(threading.Thread):
             None: Saves the plan and emits connection metadata or a warning;
                 no source media is uploaded.
         """
-        upload_url = normalize_upload_url(self.config.gallery_url)
+        try:
+            if self._gui_admission is not None:
+                owner, port = self._gui_admission
+                kind = 'linked' if self.linked_target is not None else 'legacy'
+                self._gui_work = owner.acquire(kind, port)
+            if self._linked_lease is not None:
+                self._linked_lease.acquire()
+            self._run_owned()
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.emit('preflight_failed', {'message': str(exc)})
+        finally:
+            if self._gui_work is not None:
+                self._gui_work.close()
+            if self._linked_lease is not None:
+                self._linked_lease.release()
+
+    def _run_owned(self) -> None:
+        """Inspect sources while holding the target lease.
+
+        Returns:
+            None: Emits a plan excluding retained unknown sources, or a
+                diagnostic when the gallery still needs review.
+        """
+        upload_url = (self.linked_target.issuer if self.linked_target is not None
+                      else normalize_upload_url(self.config.gallery_url))
         parsed = parse.urlparse(upload_url) if upload_url else None
         target_label = parsed.netloc if parsed and parsed.netloc else "Gallery connection not configured"
         if parsed and parsed.path and parsed.path not in {"", "/"}:
             target_label += parsed.path
+        if self.linked_target is not None:
+            target_label = f'{self.linked_target.title} (#{self.linked_target.gallery_id})'
 
         if self.source_kind == "files":
             source_label = f"{len(self.source_paths)} selected file(s)"
@@ -4611,6 +6316,21 @@ class ImportPreflightThread(threading.Thread):
             source_label = str(self.source_zip or "")
         job = ImportJob.create(self.source_kind, source_label, target_label)
         self.emit("preflight_started", {"job_id": job.id, "source_label": source_label})
+
+        try:
+            linked_state = (LinkedUploadState(self.linked_target)
+                            if self.linked_target is not None else None)
+        except (OSError, ValueError):
+            self.emit('preflight_failed', {
+                'message': 'Linked gallery recovery state is unavailable.',
+                'job_id': job.id,
+            })
+            return
+        if linked_state is not None and linked_state.has_unresolved_upload():
+            self.emit('preflight_failed', {
+                'message': LINKED_UPLOAD_UNCERTAIN_REASON, 'job_id': job.id,
+            })
+            return
 
         limits = ArchiveLimits(
             max_entries=self.config.archive_max_entries,
@@ -4631,7 +6351,9 @@ class ImportPreflightThread(threading.Thread):
                 discovery = stage_zip_archive(self.source_zip, STAGING_ROOT, job.id, SUPPORTED_SUFFIXES, limits)
                 job.staging_dir = discovery.staging_dir
                 job.source_zip = str(self.source_zip)
-                job.delete_source_zip_after_success = self.delete_source_zip_after_success
+                job.delete_source_zip_after_success = (
+                    self.delete_source_zip_after_success and self.linked_target is None
+                )
             else:
                 raise ValueError("Unknown import source kind: " + self.source_kind)
         except Exception as exc:  # noqa: BLE001
@@ -4639,28 +6361,30 @@ class ImportPreflightThread(threading.Thread):
             return
 
         if self.stop_event.is_set():
-            if discovery.staging_dir:
-                shutil.rmtree(discovery.staging_dir, ignore_errors=True)
-            self.emit("preflight_cancelled", {"job_id": job.id})
+            # A cancelled preflight cannot prove staged sources were never
+            # accepted by an older or concurrent uploader. Keep the bytes.
+            self.emit("preflight_cancelled", {
+                "job_id": job.id,
+                "staging_dir": discovery.staging_dir,
+            })
             return
 
         generic_capabilities = detect_suffix_capabilities(SUPPORTED_SUFFIXES, Image)
         notes = capability_notes(generic_capabilities)
-        local_state = load_upload_state(STATE_PATH, quarantine_bad=True)
-        uploaded_hashes = local_state.get("uploaded_hashes", {})
-        if not isinstance(uploaded_hashes, dict):
-            uploaded_hashes = {}
-
         valid_items: List[ImportItem] = []
         local_duplicates = 0
+        retained_unknown = 0
         candidates: List[Dict[str, Any]] = []
         item_by_hash: Dict[str, List[ImportItem]] = {}
         total = max(1, len(discovery.items))
         for index, item in enumerate(discovery.items, start=1):
             if self.stop_event.is_set():
-                if discovery.staging_dir:
-                    shutil.rmtree(discovery.staging_dir, ignore_errors=True)
-                self.emit("preflight_cancelled", {"job_id": job.id})
+                # A cancelled preflight cannot prove staged sources were never
+                # accepted by an older or concurrent uploader. Keep the bytes.
+                self.emit("preflight_cancelled", {
+                    "job_id": job.id,
+                    "staging_dir": discovery.staging_dir,
+                })
                 return
             path = Path(item.path)
             self.emit("preflight_progress", {"current": index, "total": total, "filename": path.name})
@@ -4673,6 +6397,15 @@ class ImportPreflightThread(threading.Thread):
                 discovery.unsupported[bucket] = discovery.unsupported.get(bucket, 0) + 1
                 discovery.warnings.append(f"{item.source_label}: cannot be read: {exc}")
                 continue
+            if (linked_state is not None
+                    and linked_state.has_uncertain_source(path, item.sha256)):
+                # Keep this outside the newly accepted job. Marking an
+                # unbound item terminal would fail its first binding admission.
+                retained_unknown += 1
+                discovery.warnings.append(
+                    f'Kept {item.source_label}; its prior upload remains uncertain.',
+                )
+                continue
 
             suffix = path.suffix.lower()
             if suffix in {".heic", ".heif", ".dng"}:
@@ -4684,34 +6417,39 @@ class ImportPreflightThread(threading.Thread):
             else:
                 item.local_decode = "local"
 
-            if item.sha256 in uploaded_hashes:
-                item.transition("skipped_duplicate", "Local upload history already contains this content.")
-                local_duplicates += 1
-            else:
-                item.transition("queued")
-                candidate = inventory_candidate(path, item.sha256, item.size)
-                candidates.append(candidate)
-                item_by_hash.setdefault(item.sha256, []).append(item)
+            item.transition("queued")
+            candidate = inventory_candidate(path, item.sha256, item.size)
+            candidates.append(candidate)
+            item_by_hash.setdefault(item.sha256, []).append(item)
             valid_items.append(item)
 
         job.items = valid_items
         job.bytes_total = sum(max(0, item.size) for item in valid_items)
-        job.skipped = sum(discovery.unsupported.values()) + len(discovery.unsafe_entries)
+        job.skipped = (sum(discovery.unsupported.values())
+                       + len(discovery.unsafe_entries) + retained_unknown)
 
         remote_duplicates = 0
         gallery_label = target_label
         gallery_title = ""
-        if candidates and upload_url and self.config.api_key.strip() and not self.stop_event.is_set():
+        if (candidates and upload_url and not self.stop_event.is_set()
+                and (self.linked_target is not None or self.config.api_key.strip())):
             existing_hashes: Set[str] = set()
             try:
-                for start in range(0, len(candidates), 500):
-                    chunk = candidates[start : start + 500]
-                    payload = post_json(
-                        upload_url,
-                        self.config.api_key.strip(),
-                        {"action": "inventory", "files": chunk, "deep_check": False},
-                        timeout_seconds=min(DEFAULT_TIMEOUT_SECONDS, max(15.0, self.config.inventory_refresh_seconds)),
-                    )
+                for start in range(0, len(candidates), LINKED_INVENTORY_BATCH_SIZE):
+                    chunk = candidates[start : start + LINKED_INVENTORY_BATCH_SIZE]
+                    if self.linked_target is not None:
+                        if self._gui_work is not None:
+                            self._gui_work.checkpoint()
+                        payload = self.linked_target.inventory(chunk)
+                    else:
+                        payload = post_json(
+                            upload_url,
+                            self.config.api_key.strip(),
+                            {"action": "inventory", "files": chunk, "deep_check": False},
+                            timeout_seconds=min(DEFAULT_TIMEOUT_SECONDS, max(15.0, self.config.inventory_refresh_seconds)),
+                            **({'before_request': self._gui_work.checkpoint}
+                               if self._gui_work is not None else {}),
+                        )
                     folder_label = str(payload.get("gallery_folder", "") or "").strip()
                     if folder_label:
                         gallery_label = folder_label
@@ -4726,18 +6464,24 @@ class ImportPreflightThread(threading.Thread):
                 for file_hash in existing_hashes:
                     for item in item_by_hash.get(file_hash, []):
                         if item.state != "skipped_duplicate":
-                            item.transition("skipped_duplicate", "Remote gallery inventory already contains this content.")
                             remote_duplicates += 1
+                if remote_duplicates:
+                    discovery.warnings.append(
+                        'Duplicate candidates are only a preview; each '
+                        'file is checked again during import.',
+                    )
                 job.target_gallery_label = gallery_label
                 self.emit("connection_ready", {
                     "gallery_label": gallery_label,
                     "gallery_title": gallery_title,
                     "normalized_url": upload_url,
                 })
+            except (ModeCoordinatorError, GalleryKeyRedirectError):
+                raise
             except Exception as exc:  # noqa: BLE001
                 discovery.warnings.append("Remote duplicate preflight was unavailable: " + str(exc))
                 self.emit("connection_warning", {"message": str(exc), "normalized_url": upload_url})
-        elif not upload_url or not self.config.api_key.strip():
+        elif not upload_url or (self.linked_target is None and not self.config.api_key.strip()):
             discovery.warnings.append("Connection is not configured. Preflight is local only until Gallery URL and API key are provided.")
 
         plan = ImportPlan(
@@ -4889,6 +6633,24 @@ class ScrollableFrame(ttk.Frame if ttk is not None else object):
         self.canvas.itemconfigure(self.window_id, width=max(1, int(event.width)))
 
 
+def protected_staging_job_ids(jobs: List[ImportJob]) -> List[str]:
+    """Keep recoverable and uncertain linked ZIP jobs out of stale cleanup.
+
+    Args:
+        jobs (List[ImportJob]): Persisted jobs with their individual item states.
+
+    Returns:
+        List[str]: Job IDs whose staged sources must remain available.
+    """
+    return [
+        job.id for job in jobs
+        if job.recoverable() or any(
+            item.reason in (LINKED_UPLOAD_UNCERTAIN_REASON, LEGACY_UPLOAD_UNCERTAIN_REASON)
+            for item in job.items
+        )
+    ]
+
+
 class WatcherApp:
     """
     Tkinter user interface for the watched-folder uploader.
@@ -4921,7 +6683,19 @@ class WatcherApp:
         if tk is None or ttk is None or filedialog is None or messagebox is None:
             raise RuntimeError("Tkinter is not available in this Python installation.")
 
+        from uploader.app_linking_ui import LinkingManager
+
         self.root = tk.Tk()
+        self.linking_manager = LinkingManager(
+            self.root, self.linked_target_change_refusal, self.linked_target_changed,
+            self.probe_linked_uncertain_upload, self.publish_linked_recovery,
+            self.saved_linked_mode_selected, self.commit_linked_upload_target,
+            self.commit_saved_api_key,
+            language=lambda: self.flights.ui_language.get(),
+            recovery_review=self.review_linked_uncertainty,
+            upload_workspace_ready=self.linked_workspace_ready,
+            saved_upload_identity=self.saved_linked_upload_identity,
+        )
         if start_minimized:
             self.root.withdraw()
         self.root.title(f"{APP_DISPLAY_NAME} {APP_VERSION}")
@@ -4935,6 +6709,14 @@ class WatcherApp:
             startup_error = str(exc)
         self.job_store = JobStateStore(STATE_PATH, self.config.activity_history_limit)
         self.events: "queue.Queue[Any]" = queue.Queue()
+        self.mode_owner = GuiModeOwner(
+            self.config_store.mode_port(self.config),
+            (lambda: MacUploadModeStore(CONFIG_DIR))
+            if sys.platform == "darwin" else WindowsUploadModeStore,
+        )
+        threading.Thread(
+            target=self._initialize_gui_mode, name='PHPGalleryModeStartup', daemon=True,
+        ).start()
         self.utc_sync = UtcSyncManager(self.emit_utc_activity)
         self.simulator_presence = GamePresence(
             lambda: self.config.simconnect_dll_path, CONFIG_DIR
@@ -4953,6 +6735,7 @@ class WatcherApp:
         self.manual_folder: Optional[Path] = None
         self.manual_zip: Optional[Path] = None
         self.manual_plan: Optional[ImportPlan] = None
+        self._preflight_approved: Optional[Tuple[str, object, str]] = None
         self.current_job: Optional[ImportJob] = None
         self.tray_icon: Optional[Any] = None
         self.tray_thread: Optional[threading.Thread] = None
@@ -4971,8 +6754,7 @@ class WatcherApp:
 
         self.watched_folder_var = tk.StringVar(value=self.config.watched_folder)
         self.watch_folder_display_var = tk.StringVar(
-            value=self.config.watched_folder
-            or "Choose a folder in Watcher settings"
+            value=self.config.watched_folder or "No folder selected",
         )
         self.watched_folder_var.trace_add("write", self.update_watch_folder_display)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
@@ -4990,6 +6772,7 @@ class WatcherApp:
         self.sync_utc_time_var = tk.BooleanVar(value=self.config.sync_utc_time)
         self.utc_sync_status_var = tk.StringVar(value="UTC sync stopped")
         self.delete_uploaded_files_var = tk.BooleanVar(value=self.config.delete_uploaded_files)
+        self.delete_unavailable_var = tk.BooleanVar(value=False)
         self.watch_recursive_var = tk.BooleanVar(value=self.config.watch_recursive)
         self.manual_folder_recursive_var = tk.BooleanVar(value=False)
         self.delete_source_zip_var = tk.BooleanVar(value=False)
@@ -5036,7 +6819,9 @@ class WatcherApp:
         self.ai_status_var = tk.StringVar(value="AI metadata worker idle")
         self.monitor_state_var = tk.StringVar(value="Idle")
         self.monitor_detail_var = tk.StringVar(value="No background worker is active.")
-        self.connection_status_var = tk.StringVar(value="Not tested")
+        self.connection_status_var = tk.StringVar(
+            value="Not tested" if self.config.api_key.strip() else "",
+        )
         self.connection_detail_var = tk.StringVar(value="Save or test the gallery connection in Settings.")
         self.gallery_label_var = tk.StringVar(value="Target gallery: unknown")
         self.gallery_title_var = tk.StringVar(value="")
@@ -5053,8 +6838,13 @@ class WatcherApp:
         self.watcher_action_button: Optional["ttk.Button"] = None
         self.latest_activity_label: Optional["ttk.Label"] = None
 
-        recoverable_ids = [job.id for job in self.job_store.recoverable_jobs()]
-        removed_staging = cleanup_stale_staging(STAGING_ROOT, self.config.staging_cleanup_age_hours, recoverable_ids)
+        # Uncertain linked uploads remain blocked rather than recoverable, but
+        # their staged ZIP entries must not be treated as disposable on restart.
+        # No rollback-resistant witness currently proves that a staging job
+        # missing from a valid local snapshot was never accepted. Age and a
+        # legacy tolerant job listing are therefore insufficient to delete it.
+        # Keep staged originals intact until durable admission/recovery exists.
+        removed_staging: List[str] = []
 
         from uploader.update_ui import UpdateController
         self.updates = UpdateController(self, APP_VERSION)
@@ -5188,6 +6978,7 @@ class WatcherApp:
         )
         self.monitor_light.pack(side="left", padx=(0, 6))
         ttk.Label(status, textvariable=self.watcher_activity_var, style="App.Status.TLabel").pack(side="left", padx=(0, 12))
+        self.build_gallery_link_bar(header)
         self.check_updates_button = icon_button(
             header,
             "refresh",
@@ -5293,6 +7084,74 @@ class WatcherApp:
         self.update_monitor_state("disabled", "No background worker is active.")
         self.set_update_available(self.update_available_version)
 
+    def build_gallery_link_bar(self, header: "ttk.Frame") -> None:
+        """Group the selected site, gallery picker and connection actions.
+
+        Args:
+            header (ttk.Frame): Main window header receiving the linking row.
+
+        Returns:
+            None: Shows the live site and opens the separate links chooser.
+        """
+        bar = ttk.Frame(header, style="App.TFrame")
+        bar.grid(row=2, column=0, columnspan=6, sticky="w", pady=(5, 0))
+        address = ttk.Label(
+            bar, style="App.Status.TLabel", wraplength=WINDOW_SUMMARY_WRAP,
+        )
+        choose = ttk.Button(
+            bar, text="Choose gallery…", command=self.choose_linked_gallery,
+            style="Accent.Compact.TButton",
+        )
+        link = ttk.Button(
+            bar, command=self.link_gallery, style="Compact.TButton",
+        )
+        link.grid(row=0, column=2, sticky="w")
+        links = icon_button(
+            bar, "⋯", self.open_gallery_links,
+            tr(self.flights.ui_language.get(), "linking_address_manager"),
+        )
+        linked_address = self.linking_manager.linked_address
+        status = self.linking_manager.status
+        feedback = ttk.Label(
+            bar, textvariable=status, style="App.Status.TLabel",
+            wraplength=WINDOW_SUMMARY_WRAP,
+        )
+
+        def refresh(*_trace_info: str) -> None:
+            """Show only the controls and feedback for the live link state.
+
+            Args:
+                *_trace_info (str): Tk variable name, index and write operation.
+
+            Returns:
+                None: Shows gallery choice, unlinking and link management.
+            """
+            issuer = linked_address.get()
+            link.configure(text="Unlink gallery" if issuer else "Link gallery")
+            if issuer:
+                address.configure(text="Linked: " + issuer)
+                address.grid(row=0, column=0, sticky="w", padx=(0, 8))
+                choose.grid(row=0, column=1, sticky="w", padx=(0, 6))
+                links.grid(row=0, column=3, sticky="w", padx=(2, 0))
+            else:
+                address.grid_remove()
+                choose.grid_remove()
+                links.grid_remove()
+            if status.get():
+                feedback.grid(
+                    row=1, column=0, columnspan=4, sticky="w", pady=(4, 0),
+                )
+            else:
+                feedback.grid_remove()
+
+        address_trace = linked_address.trace_add("write", refresh)
+        status_trace = status.trace_add("write", refresh)
+        bar.bind("<Destroy>", lambda event: (
+            linked_address.trace_remove("write", address_trace),
+            status.trace_remove("write", status_trace),
+        ) if event.widget is bar else None, add="+")
+        refresh()
+
     def set_update_available(self, version: Optional[str]) -> None:
         """Show or clear the verified uploader update across app surfaces.
 
@@ -5386,28 +7245,38 @@ class WatcherApp:
             ))
 
     def toggle_watcher(self) -> None:
-        """Start or stop the watched-folder worker from the primary action.
+        """Dispatch the primary Watcher action for the current session state.
 
         Returns:
-            None: Dispatches to the existing start or stop lifecycle method.
+            None: Starts, finishes or opens the pending queue for recovery.
         """
-        if self.worker is not None and self.worker.is_alive():
+        state = self.flights.session_state()
+        if state == "working":
+            self.flights.show_progress()
+        elif state in ("pending", "blocked"):
+            self.flights.show_recovery()
+        elif state == "active":
             self.stop()
         else:
             self.start()
 
     def refresh_watcher_action(self) -> None:
-        """Match the primary watcher caption to the worker's current state.
+        """Match the primary Watcher caption to capture, drain or recovery.
 
         Returns:
-            None: Updates the visible Start or Stop action caption.
+            None: Updates the primary action even after a stopped worker.
         """
         if self.watcher_action_button is None:
             return
-        running = bool(self.worker and self.worker.is_alive())
-        self.watcher_action_button.configure(
-            text="■  Stop Watcher" if running else "▶  Start Watcher",
-        )
+        state = self.flights.session_state()
+        labels = {
+            "active": "■  Stop Watcher",
+            "working": self.flights.text("show_upload_progress"),
+            "pending": self.flights.text("review_pending_uploads"),
+            "blocked": self.flights.text("review_pending_uploads"),
+            "idle": "▶  Start Watcher",
+        }
+        self.watcher_action_button.configure(text=labels[state])
 
 
     def configure_window_icon(self) -> None:
@@ -5849,7 +7718,7 @@ class WatcherApp:
         )
         icon_button(
             target, "settings", self.open_connection_dialog,
-            "Gallery connection and API key",
+            "Upload via API key",
         ).grid(row=0, column=1, padx=(8, 0))
         ttk.Label(
             hero, textvariable=self.connection_status_var, style="Muted.TLabel",
@@ -5893,17 +7762,25 @@ class WatcherApp:
         ttk.Label(heading, text="WATCH FOLDER", style="Eyebrow.TLabel").grid(
             row=0, column=0, sticky="w"
         )
+        ttk.Button(
+            heading, text="Choose folder…", command=self.browse_folder,
+            style="Compact.TButton",
+        ).grid(row=0, column=1, padx=(8, 0))
         icon_button(
             heading,
             "settings",
             self.open_watcher_settings,
             "Watcher settings",
-        ).grid(row=0, column=1, padx=(4, 0))
+        ).grid(row=0, column=2, padx=(4, 0))
         help_button(
             heading,
             "Watcher behavior",
             "Files already present at startup are ignored. New files wait until their size and modified time remain unchanged. Subfolders are excluded unless enabled in Watcher settings.",
-        ).grid(row=0, column=2, padx=(4, 0))
+        ).grid(row=0, column=3, padx=(4, 0))
+        ttk.Label(
+            card, textvariable=self.watch_folder_display_var,
+            style="Muted.TLabel", wraplength=WINDOW_SUMMARY_WRAP,
+        ).grid(row=1, column=0, sticky="w", pady=(1, 4))
         ttk.Label(card, textvariable=self.status_var, style="Status.TLabel").grid(
             row=2, column=0, sticky="w", pady=(1, 3)
         )
@@ -6006,9 +7883,10 @@ class WatcherApp:
             style="Large.TEntry",
         )
         folder_entry.grid(row=0, column=0, sticky="ew")
-        icon_button(folder_row, "add", self.browse_folder, "Choose watched folder").grid(
-            row=0, column=1, padx=(7, 0)
-        )
+        icon_button(
+            folder_row, "add", lambda: self.browse_folder(parent=dialog),
+            "Choose watched folder",
+        ).grid(row=0, column=1, padx=(7, 0))
         icon_button(
             folder_row, "↗", self.open_watched_folder, "Open watched folder",
         ).grid(row=0, column=2, padx=(4, 0))
@@ -6026,23 +7904,24 @@ class WatcherApp:
         ttk.Label(interval_row, text="seconds").pack(side="left")
         stable_row = ttk.Frame(panel, style="Card.TFrame")
         stable_row.grid(row=5, column=0, sticky="w", pady=(5, 0))
-        ttk.Label(stable_row, text="Wait for files to stay stable for").pack(side="left")
+        ttk.Label(stable_row, text="File stable for").pack(side="left")
         ttk.Entry(stable_row, textvariable=self.stable_var, width=8).pack(side="left", padx=7)
         ttk.Label(stable_row, text="seconds").pack(side="left")
         ttk.Checkbutton(
             panel,
-            text="Attach Flight Simulator location when available",
+            text="Attach simulator location",
             variable=self.attach_sim_camera_metadata_var,
         ).grid(row=6, column=0, sticky="w", pady=(8, 0))
         ttk.Checkbutton(
             panel,
-            text="Delete sources only after confirmed successful upload",
-            variable=self.delete_uploaded_files_var,
+            text="Automatic deletion unavailable",
+            variable=self.delete_unavailable_var,
+            state="disabled",
             command=self.refresh_watch_delete_warning,
         ).grid(row=7, column=0, sticky="w", pady=(6, 0))
         ttk.Label(
             panel,
-            text="Duplicates, skipped files, and failures are always kept.",
+            text="Photos are kept for manual review.",
             style="Muted.TLabel",
         ).grid(row=8, column=0, sticky="w", padx=(24, 0), pady=(1, 0))
         footer = GlassCard(dialog, padding=(14, 10))
@@ -6071,7 +7950,13 @@ class WatcherApp:
             Returns:
                 None: Closes the sheet only when the configuration is saved.
             """
-            if self.save_config():
+            try:
+                self.config = self._save_owned_config(
+                    self.current_watcher_config(), first_setup=True,
+                )
+            except (OSError, ValueError, ModeCoordinatorError) as exc:
+                messagebox.showerror("Watcher settings", str(exc), parent=dialog)
+            else:
                 dialog.destroy()
 
         ttk.Button(footer, text="Cancel", command=cancel_changes).pack(side="right")
@@ -6126,9 +8011,8 @@ class WatcherApp:
         """
         Build controls dedicated to manual bulk uploading.
 
-        Connection setup is deliberately visible here because confirming the
-        target gallery and inserting the gallery-scoped API key is part of the
-        primary import path, not an advanced setting.
+        Keep the chosen upload target and its optional API-key editor together.
+        The site link and its gallery picker live in the main header.
 
         Args:
             parent (tk.Misc): Tk container receiving the import controls.
@@ -6154,9 +8038,9 @@ class WatcherApp:
         )
         icon_button(
             identity, "settings", self.open_connection_dialog,
-            "Gallery connection and API key",
+            "Upload via API key",
         ).grid(row=0, column=1, padx=(8, 0))
-        ttk.Label(target, textvariable=self.api_key_status_var, style="Muted.TLabel").grid(
+        ttk.Label(target, textvariable=self.connection_status_var, style="Muted.TLabel").grid(
             row=2, column=0, sticky="w", pady=(2, 0)
         )
         self.import_revoke_button = ttk.Button(
@@ -6264,11 +8148,10 @@ class WatcherApp:
             variable=self.manual_folder_recursive_var,
             command=self.rebuild_manual_preflight,
         ).grid(row=0, column=0, sticky="w", pady=3)
-        ttk.Checkbutton(
+        ttk.Label(
             self.import_details_frame,
-            text="Delete the source ZIP after every accepted entry succeeds",
-            variable=self.delete_source_zip_var,
-            command=self.rebuild_manual_preflight,
+            text="Original ZIP is kept for manual verification.",
+            style="Muted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=3)
         ttk.Radiobutton(
             self.import_details_frame,
@@ -6477,6 +8360,9 @@ class WatcherApp:
         icon_button(actions, "add", self.open_connection_dialog, "Open protected credential editor").pack(side="left", padx=(7, 0))
         self.revoke_button = ttk.Button(actions, text="Revoke key…", command=self.revoke_api_key)
         self.revoke_button.pack(side="left", padx=(7, 0))
+        ttk.Button(
+            actions, text="Manage link…", command=self.manage_gallery_link,
+        ).pack(side="left", padx=(7, 0))
         ttk.Label(connection, textvariable=self.revoke_blocker_var, style="Muted.TLabel", wraplength=760).grid(
             row=6, column=1, columnspan=3, sticky="w", pady=(6, 0)
         )
@@ -6750,6 +8636,36 @@ class WatcherApp:
             messagebox.showerror("Dependency repair failed", output[-1200:] if output else "pip failed without output")
         self.refresh_thumbnail_controls()
 
+    def current_watcher_config(self) -> WatcherConfig:
+        """Read the watcher settings without selecting a connection.
+
+        Returns:
+            WatcherConfig: Saved settings with the current Watcher fields.
+
+        Raises:
+            ValueError: The scan interval or file stability value is invalid.
+        """
+        try:
+            interval = max(
+                MIN_INTERVAL_SECONDS,
+                float(self.interval_var.get().strip() or DEFAULT_INTERVAL_SECONDS),
+            )
+            stable = max(
+                MIN_STABLE_SECONDS,
+                float(self.stable_var.get().strip() or DEFAULT_STABLE_SECONDS),
+            )
+        except ValueError as exc:
+            raise ValueError("Enter a valid scan interval and file stability time.") from exc
+        return replace(
+            self.config,
+            watched_folder=self.watched_folder_var.get().strip(),
+            scan_interval_seconds=interval,
+            stable_seconds=stable,
+            attach_sim_camera_metadata=bool(self.attach_sim_camera_metadata_var.get()),
+            delete_uploaded_files=bool(self.delete_uploaded_files_var.get()),
+            watch_recursive=bool(self.watch_recursive_var.get()),
+        )
+
     def current_config(self) -> WatcherConfig:
         """
         Read and validate the current UI values.
@@ -6760,9 +8676,8 @@ class WatcherApp:
         Raises:
             ValueError: Raised when numeric settings cannot be parsed.
         """
+        watcher = self.current_watcher_config()
         try:
-            interval = max(0.2, float(self.interval_var.get().strip() or DEFAULT_INTERVAL_SECONDS))
-            stable = max(0.5, float(self.stable_var.get().strip() or DEFAULT_STABLE_SECONDS))
             thumbnail_workers = parse_worker_choice(self.manual_thumbnail_workers_var.get())
             upload_workers = parse_worker_choice(self.manual_upload_workers_var.get())
             inventory_refresh = max(1.0, float(self.inventory_refresh_var.get().strip() or DEFAULT_INVENTORY_REFRESH_SECONDS))
@@ -6783,19 +8698,14 @@ class WatcherApp:
             if not gallery_url:
                 raise ValueError("Gallery URL must use HTTP or HTTPS and contain a valid host.")
 
-        return WatcherConfig(
+        return replace(
+            watcher,
             schema_version=CONFIG_SCHEMA_VERSION,
-            watched_folder=self.watched_folder_var.get().strip(),
             gallery_url=gallery_url,
             api_key=self.api_key_var.get().strip(),
-            scan_interval_seconds=interval,
-            stable_seconds=stable,
             create_thumbnails=bool(self.create_thumbnails_var.get()),
-            attach_sim_camera_metadata=bool(self.attach_sim_camera_metadata_var.get()),
             simconnect_dll_path=self.simconnect_dll_path_var.get().strip(),
             sync_utc_time=self.sync_utc_time_var.get(),
-            delete_uploaded_files=bool(self.delete_uploaded_files_var.get()),
-            watch_recursive=bool(self.watch_recursive_var.get()),
             manual_thumbnail_mode="local" if self.manual_local_thumbnails_var.get() else "server",
             manual_thumbnail_workers=thumbnail_workers,
             manual_upload_workers=upload_workers,
@@ -6835,22 +8745,45 @@ class WatcherApp:
             None: Shows the selected path or a concise empty-state label.
         """
         folder = self.watched_folder_var.get().strip()
-        self.watch_folder_display_var.set(
-            folder or "Choose a folder in Watcher settings"
-        )
+        self.watch_folder_display_var.set(folder or "No folder selected")
 
-    def browse_folder(self) -> None:
+    def browse_folder(self, *, parent: Optional["tk.Misc"] = None) -> None:
         """
-        Open a folder picker and store the selected path in the UI.
+        Open a native directory picker for the stopped Watcher.
+
+        Args:
+            parent (Optional[tk.Misc]): Settings dialog for an unsaved edit,
+                or None to save the folder directly from the main window.
 
         Returns:
-            None: Updates the selected folder and resets its scan summary.
+            None: Updates the folder after a successful pick and any required
+                save. Cancel or a failed save leaves the existing folder.
         """
-        selected = filedialog.askdirectory(initialdir=self.watched_folder_var.get() or str(Path.home()))
-        if selected:
-            self.watched_folder_var.set(selected)
-            self.watch_ignored_var.set("Ignored at startup: not scanned yet")
-            self.watch_last_scan_var.set("Last scan: -")
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
+        if self.worker is not None and self.worker.is_alive():
+            messagebox.showinfo(
+                "Watch folder", "Stop Watcher before changing its folder.",
+                parent=parent or self.root,
+            )
+            return
+        selected = filedialog.askdirectory(
+            initialdir=self.watched_folder_var.get() or str(Path.home()),
+            parent=parent or self.root, mustexist=True,
+        )
+        if not selected:
+            return
+        if parent is None:
+            try:
+                self.config = self._save_owned_config(
+                    replace(self.config, watched_folder=selected), first_setup=True,
+                )
+            except (OSError, ModeCoordinatorError) as exc:
+                messagebox.showerror("Watch folder", str(exc), parent=self.root)
+                return
+        self.watched_folder_var.set(selected)
+        self.watch_ignored_var.set("Ignored at startup: not scanned yet")
+        self.watch_last_scan_var.set("Last scan: -")
 
 
     def browse_simconnect_dll(self) -> None:
@@ -6918,19 +8851,31 @@ class WatcherApp:
     def clear_manual_files(self) -> None:
         """
         Clear the manual upload selection.
+
+        Returns:
+            None: Clears the selection unless an update blocks changes.
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.preflight_worker and self.preflight_worker.is_alive():
             self.preflight_worker.stop()
+            messagebox.showwarning(
+                "Import", "The previous preflight is stopping. Clear the selection again after it finishes.",
+            )
+            return
         if self.manual_plan is not None and self.manual_plan.job.started_at <= 0:
-            if self.manual_plan.job.staging_dir:
-                shutil.rmtree(self.manual_plan.job.staging_dir, ignore_errors=True)
-            self.job_store.delete_job(self.manual_plan.job.id)
+            try:
+                self.flights.import_bindings.discard_unbound_preflight(
+                    self.job_store, self.manual_plan.job.id,
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                messagebox.showwarning("Import recovery", str(exc))
+                return
         self.manual_paths = []
         self.manual_folder = None
         self.manual_zip = None
         self.manual_plan = None
+        self._preflight_approved = None
         self.current_job = None
         self.manual_selection_var.set("Choose files, a folder, or a ZIP archive")
         self.manual_preflight_var.set("Select a source to build an import summary. Nothing uploads until you press Start import.")
@@ -6941,7 +8886,12 @@ class WatcherApp:
         self.start_import_button.configure(state="disabled")
 
     def rebuild_manual_preflight(self) -> None:
-        """Start a new non-uploading discovery/preflight pass for the selected source."""
+        """Start a non-uploading preflight pass for the selected source.
+
+        Returns:
+            None: Starts a worker when the selected connection is ready, or
+                displays the reason the preflight could not start.
+        """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.api_key_revoke_running:
@@ -6951,18 +8901,34 @@ class WatcherApp:
             return
         if self.preflight_worker and self.preflight_worker.is_alive():
             self.preflight_worker.stop()
+            messagebox.showwarning(
+                'Import', 'The previous preflight is stopping. Start preflight again when it has finished.',
+            )
+            return
         if not self.manual_paths and self.manual_folder is None and self.manual_zip is None:
             return
         try:
             config = self.current_config()
+            linked_target = self.capture_linked_target()
+            if linked_target is None and config.to_dict() != self.config.to_dict():
+                raise ValueError('Save the current settings before starting import preflight.')
+            config = capture_worker_config(config)
+            config_port = self.config_store.mode_port(config)
+            if linked_target is not None and self.worker and self.worker.is_alive():
+                raise ValueError('Stop the linked watcher before starting import preflight.')
         except ValueError as exc:
             messagebox.showerror("Invalid settings", str(exc))
             return
         if self.manual_plan is not None and self.manual_plan.job.started_at <= 0:
-            if self.manual_plan.job.staging_dir:
-                shutil.rmtree(self.manual_plan.job.staging_dir, ignore_errors=True)
-            self.job_store.delete_job(self.manual_plan.job.id)
+            try:
+                self.flights.import_bindings.discard_unbound_preflight(
+                    self.job_store, self.manual_plan.job.id,
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                messagebox.showwarning("Import recovery", str(exc))
+                return
         self.manual_plan = None
+        self._preflight_approved = None
         self.current_job = None
         self.start_import_button.configure(state="disabled")
         self.retry_failed_button.configure(state="disabled")
@@ -6980,6 +8946,8 @@ class WatcherApp:
             bool(self.delete_source_zip_var.get()),
             self.events,
             self.job_store,
+            linked_target,
+            (self.mode_owner, config_port),
         )
         self.preflight_worker.start()
         self.manual_status_var.set("Preflight running")
@@ -6997,7 +8965,14 @@ class WatcherApp:
         return f"{int(value)} B"
 
     def render_preflight_plan(self, plan: ImportPlan) -> None:
-        """Render a compact explicit import summary and enable Start import when useful."""
+        """Render a compact import summary and enable Start import when useful.
+
+        Args:
+            plan (ImportPlan): Preflight job, duplicate counts and warnings.
+
+        Returns:
+            None: Updates the summary, item tree and import controls.
+        """
         job = plan.job
         duplicates = plan.duplicate_local + plan.duplicate_remote
         ready = sum(1 for item in job.items if item.state in RECOVERABLE_ITEM_STATES)
@@ -7007,7 +8982,7 @@ class WatcherApp:
             f"Supported files found: {len(job.items)}  |  Ready to upload: {ready}  |  Duplicate candidates: {duplicates}",
             f"Estimated accepted bytes: {self.format_bytes(job.bytes_total)}  |  Unsupported skipped: {unsupported}  |  Unsafe ZIP entries rejected: {len(plan.unsafe_entries)}",
             "Thumbnail mode: " + ("This PC creates derivatives with server fallback." if self.manual_local_thumbnails_var.get() else "Server creates thumbnails."),
-            "Source deletion: " + ("Original ZIP will be deleted only after all accepted entries succeed." if job.delete_source_zip_after_success else "Source files/archive are kept."),
+            "Source deletion: Original files and ZIP archives are kept for manual verification.",
         ]
         special = []
         for suffix in (".heic", ".heif", ".dng"):
@@ -7091,6 +9066,379 @@ class WatcherApp:
             self.manual_selection_var.set("Choose files, a folder, or a ZIP archive")
 
 
+    def saved_linked_mode_selected(self) -> bool:
+        """Reflect durable linked selection without silently selecting a key.
+
+        Returns:
+            bool: True for linked mode or unavailable startup evidence, and
+                False only for verified legacy or first-setup evidence.
+        """
+        try:
+            return self.mode_owner.view().state not in (
+                'legacy_unmigrated', 'legacy', 'first_setup',
+            )
+        except (AttributeError, ModeCoordinatorError):
+            return True
+
+    def saved_linked_upload_identity(self) -> tuple[str, str] | None:
+        """Recover the exact saved destination even without a live grant.
+
+        Returns:
+            tuple[str, str] | None: Verified issuer and target fingerprint,
+                or None when mode evidence is unavailable or legacy is selected.
+        """
+        try:
+            record = self.mode_owner.view().record
+        except ModeCoordinatorError:
+            return None
+        if record is None or record.mode != "linked":
+            return None
+        return (
+            record.issuer,
+            linked_target_binding(record.issuer, record.account_id, record.gallery_id),
+        )
+
+    def commit_linked_upload_target(self, target: LinkedUploadTarget) -> bool:
+        """Publish and activate one explicitly chosen server-verified target.
+
+        The linking worker must have freshly verified this exact gallery, Admin
+        and scope before asking the Tk owner to commit. No request is sent here.
+
+        Args:
+            target (LinkedUploadTarget): Exact independently verified gallery.
+
+        Returns:
+            bool: True only after local workspace admission and confirmed mode
+                publication and activation.
+        """
+        if (not self.linked_workspace_ready()
+                or self.linked_target_change_refusal(target.binding()) is not None):
+            return False
+        try:
+            if self.mode_owner.view().state == 'first_setup':
+                # The explicit target choice also authorizes initializing the
+                # missing config. Write only the loaded defaults, never
+                # copy the linked URL or read unsaved API-key form fields.
+                self.config = self._save_owned_config(self.config, first_setup=True)
+            view = self.mode_owner.select_linked(target)
+            record = view.record
+            return (
+                view.state == 'linked_active' and record is not None
+                and record.mode == 'linked' and record.issuer == target.issuer
+                and record.account_id == target.user_id
+                and record.gallery_id == target.gallery_id
+                and record.scope == target.session.approved_scope()
+            )
+        except Exception:
+            logging.warning('Linked target could not be activated safely.')
+            return False
+
+    def linked_workspace_ready(self) -> bool:
+        """Check local profile ownership before requesting or starting uploads.
+
+        Returns:
+            bool: True for an admitted local Windows or macOS profile.
+        """
+        try:
+            if sys.platform == "darwin":
+                assert_local_macos_profile(CONFIG_DIR)
+                if self.config_store.path.parent != CONFIG_DIR:
+                    assert_local_macos_profile(self.config_store.path.parent)
+            else:
+                assert_local_windows_profile(CONFIG_DIR)
+        except OSError:
+            return False
+        return True
+
+    def commit_saved_api_key(self) -> bool:
+        """Honor an explicit return to the unchanged saved gallery API key.
+
+        Returns:
+            bool: True only after the persistent owner confirms legacy mode.
+        """
+        if self.linked_target_change_refusal(None) is not None:
+            return False
+        try:
+            view = self.mode_owner.select_legacy()
+            return view.state in ('legacy', 'legacy_unmigrated')
+        except Exception:
+            logging.warning('Saved API-key mode could not be restored safely.')
+            return False
+
+    def linked_target_change_refusal(self, proposed_binding: str | None) -> str | None:
+        """Explain the first blocker to an explicit upload-target change.
+
+        Args:
+            proposed_binding (str | None): Proposed linked target fingerprint,
+                or None for the saved API-key connection.
+
+        Returns:
+            str | None: Short reason for refusal, or None when the mode
+                and existing work permit the change.
+        """
+        if self.background_work_active() or self.flights.is_alive() or self.flights.busy():
+            return 'Wait for the current Watcher, import or flight work to stop.'
+        try:
+            view = self.mode_owner.view()
+        except ModeCoordinatorError:
+            return 'Upload settings could not be verified. Restart WinApp and try again.'
+
+        legacy_binding = connection_binding(
+            normalize_upload_url(self.config.gallery_url), self.config.api_key,
+        )
+        record = view.record
+        current_binding = (
+            linked_target_binding(record.issuer, record.account_id, record.gallery_id)
+            if record is not None and record.mode == 'linked'
+            else legacy_binding
+        )
+        desired_binding = proposed_binding if proposed_binding is not None else legacy_binding
+        try:
+            # The saved mode identifies pending flights even when the linked
+            # token has expired or WinApp has just restarted.
+            if (self.flights.pending(binding=current_binding)
+                    and desired_binding != current_binding):
+                return 'Finish the pending flight before changing the upload target.'
+            # An accepted import retains its binding across restarts. Do not
+            # replace its destination, but allow reconnecting to that same
+            # exact target to review and explicitly recover incomplete work.
+            # Check even a same-target reactivation: an orphaned or damaged job
+            # cannot become safe solely because the in-memory target matches.
+            # Never erase a completed binding as a side effect of this check.
+            with accepted_work_owner(CONFIG_DIR):
+                bindings = self.flights.import_bindings.entries()
+                # Both ledgers are re-read under one cooperative owner. This
+                # cannot attest to previously deleted or rolled-back work.
+                result = self.job_store.admitted_imports_match_target(
+                    bindings, desired_binding,
+                )
+                if result is not True:
+                    return 'Review unfinished imports in Activity before changing the upload target.'
+        except (OSError, ValueError, RuntimeError):
+            return 'Local upload history could not be verified. Review Activity.'
+        return None
+
+    def linked_target_changed(self) -> None:
+        """Refresh the chosen connection and invalidate stale preflight results.
+
+        Returns:
+            None: Keeps the saved API-key fields untouched and requires a fresh
+                import preflight for the newly selected destination.
+        """
+        if (self.manual_plan is not None
+                and not (self.manual_worker and self.manual_worker.is_alive())):
+            self.manual_plan = None
+            self._preflight_approved = None
+            self.current_job = None
+            self.start_import_button.configure(state='disabled')
+            self.manual_preflight_var.set(
+                'Gallery connection changed. Run import preflight again.',
+            )
+        target = self.linking_manager.selected_upload_target()
+        if target is not None:
+            self.connection_status_var.set('Ready for uploads')
+            self.connection_detail_var.set(
+                'Choose a folder in Watcher or add files in Import.',
+            )
+            self.gallery_label_var.set('Target gallery: ' + target.title)
+            self.gallery_title_var.set(target.title)
+        elif self.linking_manager.linked_upload_mode_selected():
+            self.connection_status_var.set('Reconnect to upload')
+            self.connection_detail_var.set('The selected upload gallery needs a new link.')
+            self.gallery_label_var.set('Target gallery: unknown')
+            self.gallery_title_var.set('')
+        else:
+            self.connection_status_var.set('Not tested')
+            self.connection_detail_var.set('Saved API-key connection selected.')
+            self.gallery_label_var.set('Target gallery: unknown')
+            self.gallery_title_var.set('')
+        self.refresh_connection_controls()
+
+    def probe_linked_uncertain_upload(
+        self, target: LinkedUploadTarget, size: int,
+    ) -> tuple[str, str]:
+        """Observe one journaled hash under its target's exclusive lease.
+
+        Args:
+            target (LinkedUploadTarget): Exact live linked gallery and Admin.
+            size (int): Size in bytes explicitly supplied by the user.
+
+        Returns:
+            tuple[str, str]: Server observation and the local marker digest.
+
+        Raises:
+            ValueError: The journal, session or identity cannot be verified.
+        """
+        lease = LinkedTargetLease(CONFIG_DIR, target.binding())
+        lease.acquire()
+        try:
+            state = LinkedUploadState(target)
+            file_hash, marker = state.recovery_marker()
+            if (not target.session.matches_issuer(target.issuer)
+                    or target.session.identity().user_id != target.user_id):
+                raise ValueError('Linked identity is unavailable.')
+            result = target.session.probe_uncertain_upload(target.gallery_id, file_hash, size)
+            if (not target.session.matches_issuer(target.issuer)
+                    or target.session.identity().user_id != target.user_id
+                    or LinkedUploadState(target).recovery_marker() != (file_hash, marker)):
+                raise ValueError('Linked recovery state changed.')
+            return result, marker
+        finally:
+            lease.release()
+
+    def publish_linked_recovery(
+        self, target: LinkedUploadTarget, marker: str, publish: Callable[[], None],
+    ) -> bool:
+        """Publish an observation only while its original journal is current.
+
+        Args:
+            target (LinkedUploadTarget): Exact linked gallery and Admin observed.
+            marker (str): Digest of the exact locally observed uncertain marker.
+            publish (Callable[[], None]): Tk-thread update without journal writes.
+
+        Returns:
+            bool: True only if the same marker was revalidated under the lease.
+        """
+        lease = LinkedTargetLease(CONFIG_DIR, target.binding())
+        try:
+            lease.acquire()
+            if (self.linking_manager.selected_upload_target() is not target
+                    or LinkedUploadState(target).recovery_marker()[1] != marker):
+                return False
+            publish()
+            return True
+        except (OSError, ValueError, RuntimeError):
+            return False
+        finally:
+            lease.release()
+
+    def review_linked_uncertainty(
+        self, target: LinkedUploadTarget, marker: Optional[str],
+    ) -> Optional[str]:
+        """Read or acknowledge one exact retained unknown under its gallery lease.
+
+        Args:
+            target (LinkedUploadTarget): Current selected gallery and session.
+            marker (Optional[str]): None for inspection; exact inspected marker
+                only after explicit user confirmation to continue other files.
+
+        Returns:
+            Optional[str]: Current marker after inspection or verified review;
+                None when work, the selected target or the journal changed.
+        """
+        if (self.background_work_active() or not self.linked_workspace_ready()
+                or self.linking_manager.selected_upload_target() is not target):
+            return None
+        lease = LinkedTargetLease(CONFIG_DIR, target.binding())
+        try:
+            lease.acquire()
+            state = LinkedUploadState(target)
+            current = state.recovery_marker()[1]
+            if marker is not None:
+                state.review_uncertainty(marker)
+            return current
+        except (OSError, ValueError, RuntimeError):
+            return None
+        finally:
+            lease.release()
+
+    def capture_linked_target(self) -> Optional[LinkedUploadTarget]:
+        """Capture the explicitly selected target without legacy fallback.
+
+        Returns:
+            Optional[LinkedUploadTarget]: Live linked target, or None only when
+                the user explicitly selected the saved API-key connection.
+
+        Raises:
+            ValueError: Linked mode lacks a live session, safe local profile or
+                matching saved mode evidence.
+        """
+        if not self.linking_manager.linked_upload_mode_selected():
+            return None
+        target = self.linking_manager.selected_upload_target()
+        if target is None:
+            raise ValueError(
+                'Linked gallery access expired. Reconnect or explicitly select '
+                'the saved API-key connection.',
+            )
+        if not self.linked_workspace_ready():
+            raise ValueError(tr(
+                self.flights.ui_language.get(), 'linking_upload_workspace',
+            ))
+        try:
+            view = self.mode_owner.view()
+        except ModeCoordinatorError:
+            raise ValueError('Linked mode evidence is unavailable.') from None
+        record = view.record
+        if (view.state != 'linked_active' or record is None
+                or record.mode != 'linked' or record.issuer != target.issuer
+                or record.account_id != target.user_id
+                or record.gallery_id != target.gallery_id
+                or record.scope != target.session.approved_scope()):
+            raise ValueError('Linked gallery mode needs verification before uploading.')
+        return target
+
+    def _initialize_gui_mode(self) -> None:
+        """Observe startup mode off Tk before any GUI key work can be admitted.
+
+        Returns:
+            None: Reports unavailable evidence without opening a fallback mode.
+        """
+        try:
+            self.mode_owner.initialize()
+        except ModeCoordinatorError:
+            self.events.put(('warning', 'Upload mode needs verification before API-key work.'))
+        else:
+            if self.saved_linked_upload_identity() is not None:
+                self.events.put({"kind": "saved_linked_mode_ready"})
+
+    def _save_owned_config(self, config: WatcherConfig, *,
+                           first_setup: bool = False) -> WatcherConfig:
+        """Save one host configuration under exclusive mode admission.
+
+        Args:
+            config (WatcherConfig): Proposed complete settings with owner token.
+            first_setup (bool): True only for an explicit first settings save.
+
+        Returns:
+            WatcherConfig: The accepted host object, retaining no-op identity.
+
+        Raises:
+            ModeCoordinatorError: Active work or uncertain mode blocks saving.
+            OSError: The original config owner cannot persist the settings.
+        """
+        if not first_setup and config.to_dict() == self.config.to_dict():
+            return self.config
+
+        def save() -> _ConfigModePort:
+            """Write only through the current ConfigStore and return its port.
+
+            Returns:
+                _ConfigModePort: Mode port bound to the saved config object.
+            """
+            self.config_store.save(config)
+            return self.config_store.mode_port(config)
+
+        self.mode_owner.save(save, first_setup=first_setup)
+        return config
+
+    def capture_flight_admission(self) -> Tuple[GuiModeOwner, ModeConfigPort, str, str]:
+        """Capture the exact saved legacy connection for a flight worker.
+
+        Returns:
+            Tuple[GuiModeOwner, ModeConfigPort, str, str]: GUI owner, port
+                bound to sealed settings, canonical endpoint and private API
+                key. The caller passes these directly to the worker only.
+
+        Raises:
+            ValueError: The saved settings cannot be captured safely.
+            OSError: The ConfigStore path cannot be verified.
+        """
+        captured = capture_worker_config(self.config)
+        port = self.config_store.mode_port(captured)
+        return (self.mode_owner, port, normalize_upload_url(captured.gallery_url),
+                captured.api_key)
+
     def connection_change_allowed(self, config: WatcherConfig) -> bool:
         """Preserve captured connection ownership while accepted work is pending.
 
@@ -7108,19 +9456,19 @@ class WatcherApp:
             return True
         try:
             unresolved = bool(self.flights.pending())
-            for job_id, binding in self.flights.import_bindings.entries().items():
-                if binding != self.flights.binding():
-                    continue
-                job = self.job_store.get_job(job_id)
-                if job is None:
+            proposed_binding = connection_binding(
+                normalize_upload_url(config.gallery_url), config.api_key,
+            )
+            with accepted_work_owner(CONFIG_DIR):
+                # Every accepted job and binding must be reloaded strictly
+                # after ownership. An orphan or damaged row blocks edits even
+                # when its old binding is not the currently displayed key.
+                bindings = self.flights.import_bindings.entries()
+                if not self.job_store.admitted_imports_match_target(
+                    bindings, proposed_binding,
+                ):
                     unresolved = True
-                    continue
-                counts = job.counts()
-                if counts["active"] or counts["failed"] or counts["cancelled"]:
-                    unresolved = True
-                else:
-                    self.flights.import_bindings.resolve(job_id)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RuntimeError):
             unresolved = True
         if self.background_work_active() or unresolved or self.flights.is_alive():
             messagebox.showwarning(
@@ -7148,8 +9496,8 @@ class WatcherApp:
             self.config, start_with_windows=self.start_with_windows_var.get(),
         )
         try:
-            self.config_store.save(config)
-        except OSError as exc:
+            config = self._save_owned_config(config)
+        except (OSError, ModeCoordinatorError) as exc:
             self.start_with_windows_var.set(self.config.start_with_windows)
             messagebox.showerror("Configuration error", str(exc), parent=self.root)
             return
@@ -7192,7 +9540,7 @@ class WatcherApp:
             config = self.current_config()
             if not self.connection_change_allowed(config):
                 return False
-            self.config_store.save(config)
+            config = self._save_owned_config(config, first_setup=True)
             self.config = config
             self.write_log("Configuration saved.", "success")
             self.apply_startup_registration()
@@ -7222,30 +9570,47 @@ class WatcherApp:
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
-        if not self.flights.can_start():
-            return
         if self.api_key_revoke_running:
-            messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting watcher.")
+            self.flights.show_progress()
             return
         if self.worker and self.worker.is_alive():
             self.write_log("Watcher is already running.")
             return
 
+        selected = self.watched_folder_var.get().strip()
+        folder = Path(selected)
         try:
-            config = self.current_config()
+            has_folder = bool(selected) and folder.is_dir()
+        except OSError:
+            has_folder = False
+        if not has_folder:
+            messagebox.showinfo(
+                "Watch folder", "Choose a folder to watch before starting.",
+                parent=self.root,
+            )
+            return
+        if not self.flights.can_start():
+            return
+
+        try:
+            linked_target = self.capture_linked_target()
+            config = (self.current_watcher_config() if linked_target is not None
+                      else self.current_config())
+            if linked_target is not None and (
+                (self.manual_worker and self.manual_worker.is_alive())
+                or (self.preflight_worker and self.preflight_worker.is_alive())
+            ):
+                raise ValueError('Wait for the linked import or preflight to finish first.')
             if not self.connection_change_allowed(config):
                 return
-            self.config_store.save(config)
+            config = self._save_owned_config(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
             return
 
-        folder = Path(config.watched_folder)
-        if not folder.is_dir():
-            messagebox.showerror("Watch folder", "Choose an existing readable watch folder before starting.")
-            return
-        if not normalize_upload_url(config.gallery_url) or not config.api_key.strip():
+        if (linked_target is None
+                and (not normalize_upload_url(config.gallery_url) or not config.api_key.strip())):
             messagebox.showerror("Connection", "Gallery URL and API key are required before starting the watcher.")
             return
 
@@ -7253,16 +9618,23 @@ class WatcherApp:
         self.watch_ignored_var.set(f"Ignored at startup: {len(existing)}")
         self.watch_last_scan_var.set("Last scan: starting now")
         self.utc_sync.stop()
-        self.worker = WatcherThread(config, self.events)
         try:
+            captured = capture_worker_config(config)
+            config_port = self.config_store.mode_port(captured)
+            self.worker = WatcherThread(
+                captured, self.events, linked_target,
+                gui_admission=(self.mode_owner, config_port),
+            )
             directory = self.flights.start_session()
             self.worker.configure_drain(directory, existing)
+            self.worker.start()
         except (OSError, ValueError, RuntimeError) as exc:
+            if self.worker is not None and self.worker._linked_lease is not None:
+                self.worker._linked_lease.release()
             self.flights.stop()
             messagebox.showerror("Watcher state", str(exc))
             self.worker = None
             return
-        self.worker.start()
         self.refresh_utc_sync()
         self.status_var.set("Running")
         self.watcher_activity_var.set("Watch: running")
@@ -7295,16 +9667,39 @@ class WatcherApp:
         if not path.exists():
             return None
         row = read_document(path)
-        if not row.get("pending") and row.get("frozen") is True:
+        pending, frozen = row.get("pending"), row.get("frozen")
+        if not isinstance(pending, list) or not isinstance(frozen, bool):
+            raise ValueError("Pending photograph queue is malformed.")
+        if not pending and frozen:
             return None
         # A persisted Stop can precede the final scan while a new screenshot
         # is still being copied. Reconcile that cutoff even with no queued path.
-        config = WatcherConfig.from_dict(self.config.to_dict())
-        config.watched_folder = str(row.get("folder", ""))
-        config.watch_recursive = row.get("recursive") is True
-        worker = WatcherThread(config, self.events)
-        worker.configure_drain(directory, (), resume=True)
-        worker.start()
+        config = capture_worker_config(self.config)
+        config_port = self.config_store.mode_port(config)
+        folder, recursive = row.get("folder"), row.get("recursive")
+        if not isinstance(folder, str) or not isinstance(recursive, bool):
+            raise ValueError("The original Watcher folder could not be verified.")
+        drain_folder = Path(folder)
+        if not drain_folder.is_absolute():
+            raise ValueError("The original Watcher folder could not be verified.")
+        linked_target = self.capture_linked_target()
+        # Resume only a queue admitted under the current exact connection.
+        if not any(plan.directory.resolve() == directory.resolve()
+                   for plan in self.flights.pending()):
+            raise ValueError('Pending photographs belong to another gallery connection.')
+        worker = WatcherThread(
+            config, self.events, linked_target,
+            gui_admission=(self.mode_owner, config_port),
+            watch_folder_override=drain_folder,
+            watch_recursive_override=recursive,
+        )
+        try:
+            worker.configure_drain(directory, (), resume=True)
+            worker.start()
+        except Exception:
+            if worker._linked_lease is not None:
+                worker._linked_lease.release()
+            raise
         return worker
 
     def emit_utc_activity(self, level: str, message: str) -> None:
@@ -7333,12 +9728,10 @@ class WatcherApp:
         # Revoke writes immediately, before even attempting a disk save.
         if not enabled:
             self.utc_sync.stop()
-        payload = self.config.to_dict()
-        payload["sync_utc_time"] = enabled
-        config = WatcherConfig.from_dict(payload)
+        config = replace(self.config, sync_utc_time=enabled)
         try:
-            self.config_store.save(config)
-        except OSError as exc:
+            config = self._save_owned_config(config)
+        except (OSError, ModeCoordinatorError) as exc:
             self.sync_utc_time_var.set(self.config.sync_utc_time)
             self.refresh_utc_sync()
             messagebox.showerror("UTC synchronization", str(exc))
@@ -7391,14 +9784,16 @@ class WatcherApp:
 
         try:
             config = self.current_config()
+            linked_target = self.capture_linked_target()
             if not self.connection_change_allowed(config):
                 return
-            self.config_store.save(config)
+            config = self._save_owned_config(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
             return
-        if not normalize_upload_url(config.gallery_url) or not config.api_key.strip():
+        if (linked_target is None
+                and (not normalize_upload_url(config.gallery_url) or not config.api_key.strip())):
             messagebox.showerror("Connection", "Gallery URL and API key are required before starting an import.")
             return
 
@@ -7411,7 +9806,7 @@ class WatcherApp:
             messagebox.showinfo("Import", "This job has no queued or recoverable files to upload.")
             self.render_preflight_plan(self.manual_plan) if self.manual_plan is not None else None
             return
-        self.launch_manual_job(self.current_job, paths, config)
+        self.launch_manual_job(self.current_job, paths, config, linked_target)
 
     def stop_manual_upload(self) -> None:
         """
@@ -7475,6 +9870,13 @@ class WatcherApp:
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
+        if self.linking_manager.linked_upload_mode_selected():
+            messagebox.showwarning(
+                "AI metadata worker",
+                "Linked gallery upload does not grant AI access. Switch "
+                "explicitly to the saved API-key connection to use this worker.",
+            )
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before starting the AI metadata worker.")
             return
@@ -7486,7 +9888,7 @@ class WatcherApp:
             config = self.current_config()
             if not self.connection_change_allowed(config):
                 return
-            self.config_store.save(config)
+            config = self._save_owned_config(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
@@ -7500,7 +9902,11 @@ class WatcherApp:
             return
 
         self.ai_worker_stop_requested = False
-        self.ai_worker = AIAnalysisWorkerThread(config, self.events)
+        captured = capture_worker_config(config)
+        config_port = self.config_store.mode_port(captured)
+        self.ai_worker = AIAnalysisWorkerThread(
+            captured, self.events, (self.mode_owner, config_port),
+        )
         self.ai_worker.start()
         self.ai_status_var.set("AI metadata worker running")
         self.ai_activity_var.set("AI: running")
@@ -7528,12 +9934,11 @@ class WatcherApp:
         self.refresh_revoke_button_state()
 
     def refresh_connection_controls(self) -> None:
-        """Refresh connection controls and cached game-specific wording.
+        """Refresh key settings and the shared Watcher/Import session actions.
 
         Returns:
-            None: Displays active work, keeps Finish available and enables
-                offline abandonment whenever a saved key is present. Begin
-                and Finish use the cached SimConnect or process-based context.
+            None: Selects actions from the accepted work and current upload
+                mode. Begin and Finish use cached game-specific wording.
                 SimBrief controls are visible only for a detected flight.
         """
         current_url = self.gallery_url_var.get().strip()
@@ -7564,10 +9969,18 @@ class WatcherApp:
             blocker_text = "Paste a gallery-scoped API key generated in PHP Gallery Admin before testing or uploading."
         self.revoke_blocker_var.set(blocker_text)
         enabled = key_present and credentials_saved
-        action = "finish" if saved_key else "begin"
-        action_label = self.simulator_presence.action_label(
-            action, self.flights.ui_language.get()
-        )
+        action = self.flight_action_state()
+        if action in ("begin", "finish"):
+            action_label = self.simulator_presence.action_label(
+                action, self.flights.ui_language.get()
+            )
+        else:
+            action_label = self.flights.text({
+                "progress": "show_upload_progress",
+                "recover": "review_pending_uploads",
+                "reconnect": "reconnect_upload_gallery",
+                "choose": "linking_select_gallery",
+            }.get(action, "show_upload_progress"))
         for attr in ("revoke_button",):
             button = getattr(self, attr, None)
             if button is not None:
@@ -7575,13 +9988,25 @@ class WatcherApp:
         for attr in ("finish_flight_button", "import_revoke_button"):
             button = getattr(self, attr, None)
             if button is not None:
-                button.configure(text=action_label)
-                button.state(["!disabled"])
+                if action == "idle":
+                    button.grid_remove()
+                else:
+                    button.configure(text=action_label)
+                    button.grid()
+                    button.state(["!disabled"])
+        legacy_cleanup = (
+            saved_key and not self.linking_manager.linked_upload_mode_selected()
+            and action != "progress"
+        )
         for attr in ("abandon_flight_button", "import_abandon_button"):
             button = getattr(self, attr, None)
             if button is not None:
-                button.configure(text=self.flights.text("abandon"))
-                button.state(["!disabled"] if saved_key else ["disabled"])
+                if legacy_cleanup:
+                    button.configure(text=self.flights.text("abandon"))
+                    button.grid()
+                    button.state(["!disabled"])
+                else:
+                    button.grid_remove()
         for attr in (
             "simbrief_button", "simbrief_settings_button", "simbrief_status_label",
         ):
@@ -7599,6 +10024,32 @@ class WatcherApp:
                     entry.configure(state=entry_state)
                 except Exception:  # noqa: BLE001
                     logging.debug("Could not refresh connection entry state.", exc_info=True)
+
+    def flight_action_state(
+        self,
+    ) -> Literal["idle", "begin", "finish", "progress", "recover", "reconnect", "choose"]:
+        """Resolve the session action before considering credential setup.
+
+        Returns:
+            str: One visible action for capture, pending work or connection
+                setup, or idle when the Watcher and Import controls suffice.
+        """
+        state = self.flights.session_state()
+        if state == "working":
+            return "progress"
+        if state in ("pending", "blocked"):
+            return "recover"
+        if state == "active":
+            return "finish"
+        if self.manual_worker is not None and self.manual_worker.is_alive():
+            return "idle"
+        if self.linking_manager.selected_upload_target() is not None:
+            return "idle"
+        if self.linking_manager.linked_upload_mode_selected():
+            return "reconnect"
+        if self.config.api_key.strip():
+            return "idle"
+        return "choose" if self.linking_manager.linked_address.get() else "begin"
 
     def refresh_revoke_button_state(self) -> None:
         """
@@ -7629,15 +10080,69 @@ class WatcherApp:
         self.connection_detail_var.set("API key changed. Save and test the connection before starting work.")
         self.refresh_connection_controls()
 
+    def link_gallery(self) -> None:
+        """Run the action for the current site-link state.
+
+        Returns:
+            None: Opens the linking prompt or requests unlinking of the live site.
+        """
+        if not self.updates.blocked():
+            if self.linking_manager.linked_address.get():
+                self.linking_manager.unlink()
+            else:
+                self.linking_manager.open_address_dialog()
+
+    def open_gallery_links(self) -> None:
+        """Open the gallery address manager while a site is selected.
+
+        Returns:
+            None: Shows live and recent links, or waits for an active update.
+        """
+        if not self.updates.blocked():
+            self.linking_manager.open_address_dialog()
+
+    def choose_linked_gallery(self) -> None:
+        """Show the gallery list beside the linked site's address.
+
+        Returns:
+            None: Opens the linked gallery picker or reports that a link is needed.
+        """
+        if not self.updates.blocked():
+            self.linking_manager.open(self.root, self.linking_manager.address())
+
+    def reconnect_upload_gallery(self) -> None:
+        """Restore browser access or choose a destination from the linked site.
+
+        Returns:
+            None: Opens the existing linking or gallery dialog for this step.
+        """
+        if not self.updates.blocked():
+            linked = self.linking_manager.linked_address.get()
+            saved = self.saved_linked_upload_identity()
+            if linked and (saved is None or linked == saved[0]):
+                self.choose_linked_gallery()
+            else:
+                self.linking_manager.open_address_dialog(prefill=saved[0] if saved else "")
+
+    def manage_gallery_link(self) -> None:
+        """Open the access controls for the active or entered installation.
+
+        Returns:
+            None: Shows access controls or requests a separate linking address.
+        """
+        if not self.updates.blocked():
+            address = self.linking_manager.address()
+            self.linking_manager.open(self.root, address, manage=True)
+
     def open_connection_dialog(self) -> None:
         """
-        Open a compact first-class editor for gallery URL and API-key insertion.
+        Open the legacy gallery URL and API-key editor.
 
         The dialog works with temporary values until Save or Save & Test is
         pressed, so closing it cannot accidentally replace a working key.
 
         Returns:
-            None: Displays the protected URL and API-key editor.
+            None: Displays the URL and API-key controls.
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
@@ -7659,7 +10164,7 @@ class WatcherApp:
         ttk.Label(frame, text="PHP Gallery connection", style="Section.TLabel").grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
         ttk.Label(
             frame,
-            text="Use a gallery-scoped API key from Admin. Your Admin password is never needed.",
+            text="Use a gallery-scoped API key from Admin. Your password is not entered into this app.",
             wraplength=520,
             style="Muted.TLabel",
         ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(0, 8))
@@ -7733,16 +10238,34 @@ class WatcherApp:
             if test_after:
                 self.test_connection()
 
-        buttons = ttk.Frame(frame, style="Card.TFrame")
-        buttons.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(8, 0))
-        buttons.columnconfigure(0, weight=1)
         revoke = ttk.Button(
-            buttons, text="Revoke saved API key...",
+            frame, text="Revoke saved API key...",
             command=lambda: (dialog.destroy(), self.revoke_api_key()),
         )
-        revoke.grid(row=0, column=0, sticky="w", padx=(0, 16))
+        revoke.grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 3))
         if not self.api_key_var.get().strip():
             revoke.state(["disabled"])
+        if (self.config.api_key.strip()
+                and self.linking_manager.linked_upload_mode_selected()):
+            def use_saved_key() -> None:
+                """Select the saved key without changing the browser link.
+
+                Returns:
+                    None: Closes the editor on success or explains a refusal.
+                """
+                refusal = self.linking_manager.use_saved_api_key()
+                if refusal is not None:
+                    messagebox.showwarning("Upload via API key", refusal, parent=dialog)
+                else:
+                    dialog.destroy()
+
+            ttk.Button(
+                frame, text="Use saved API key", command=use_saved_key,
+                style="Compact.TButton",
+            ).grid(row=5, column=2, columnspan=2, sticky="e", pady=(0, 3))
+        buttons = ttk.Frame(frame, style="Card.TFrame")
+        buttons.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(3, 0))
+        buttons.columnconfigure(0, weight=1)
         ttk.Button(
             buttons, text="Cancel", command=dialog.destroy,
         ).grid(row=0, column=1, padx=(0, 8))
@@ -7789,19 +10312,25 @@ class WatcherApp:
         dialog.grab_set()
 
     def flight_action(self) -> None:
-        """Open connection setup without a saved key, otherwise finish the flight.
+        """Run the same lifecycle action shown by Watcher and Import.
 
         Returns:
-            None: Begin flight opens API settings. Finish uses the saved
-                connection, loaded OFP and report editions, then revokes without
-                modal confirmation after accepted work and PDFs complete.
+            None: Finishes capture, opens progress or recovery, or offers the
+                appropriate connection setup before any work is accepted.
         """
         if self.updates.blocked():
             return
-        if not self.config.api_key.strip():
+        action = self.flight_action_state()
+        if action == "begin":
             self.open_connection_dialog()
-            return
-        self.flights.finish_report()
+        elif action == "finish":
+            self.flights.finish_report()
+        elif action == "progress":
+            self.flights.show_progress()
+        elif action == "recover":
+            self.flights.show_recovery()
+        elif action in ("choose", "reconnect"):
+            self.reconnect_upload_gallery()
 
     def abandon_flight(self) -> None:
         """Offer explicit local recovery for a deleted or unreachable gallery.
@@ -7810,7 +10339,8 @@ class WatcherApp:
             None: Uses the shared offline stop/abandon/key-cleanup workflow
                 after confirmation; update ownership keeps its existing gate.
         """
-        if self.updates.blocked() or not self.config.api_key.strip():
+        if (self.updates.blocked() or not self.config.api_key.strip()
+                or self.linking_manager.linked_upload_mode_selected()):
             return
         self.flights.abandon()
 
@@ -7829,9 +10359,8 @@ class WatcherApp:
         """
         if binding != self.flights.binding():
             raise ValueError("Saved connection changed before local key cleanup.")
-        cleared_config = WatcherConfig.from_dict(self.config.to_dict())
-        cleared_config.api_key = ""
-        self.config_store.save(cleared_config)
+        cleared_config = replace(self.config, api_key="")
+        cleared_config = self._save_owned_config(cleared_config)
         self.config = cleared_config
         self.api_key_var.set("")
         self.connection_status_var.set("Not configured")
@@ -7874,7 +10403,8 @@ class WatcherApp:
         Returns:
             None: Retains the update indicator when shutdown is deferred or
                 canceled, and clears it only before confirmed app teardown.
-                Confirmed teardown also stops the simulator-presence observer.
+                Confirmed teardown also stops the simulator-presence observer
+                and forgets any in-memory linked identity.
                 Update shutdown exits the process without waiting for threads;
                 only already persisted job state is available after restart.
         """
@@ -7960,6 +10490,7 @@ class WatcherApp:
         self.set_update_available(None)
         self.stop_tray_icon()
         self.simulator_presence.stop()
+        self.linking_manager.close()
         self.root.destroy()
 
     def open_config_folder(self) -> None:
@@ -8067,6 +10598,13 @@ class WatcherApp:
         """
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
+        if self.linking_manager.linked_upload_mode_selected():
+            messagebox.showinfo(
+                'Connection',
+                'This tests the saved API key. Select the API-key connection '
+                'explicitly before running this test.',
+            )
+            return
         if self.api_key_revoke_running:
             messagebox.showwarning("Connection", "Wait for API-key revocation to finish before testing the connection.")
             return
@@ -8080,6 +10618,15 @@ class WatcherApp:
         if not api_key:
             messagebox.showerror("Connection", "Enter an API key before testing the connection.")
             return
+        try:
+            current = self.current_config()
+            if current.to_dict() != self.config.to_dict():
+                raise ValueError('Save the current settings before testing the connection.')
+            captured = capture_worker_config(current)
+            config_port = self.config_store.mode_port(captured)
+        except (ValueError, OSError) as exc:
+            messagebox.showerror('Connection', str(exc))
+            return
         self.connection_test_running = True
         self.connection_status_var.set("Testing")
         self.connection_detail_var.set("Checking endpoint and API-key authorization without uploading media...")
@@ -8092,16 +10639,26 @@ class WatcherApp:
                 None: Enqueues connection metadata or a connection error.
             """
             try:
-                payload, resolved_url = post_json_resolved(upload_url, api_key, {"action": "inventory", "files": [], "deep_check": False}, timeout_seconds=20.0)
+                with self.mode_owner.acquire('legacy', config_port) as work:
+                    payload, resolved_url = post_json_resolved(
+                        upload_url, api_key,
+                        {"action": "inventory", "files": [], "deep_check": False},
+                        timeout_seconds=20.0, before_request=work.checkpoint,
+                    )
                 label = str(payload.get("gallery_folder", "") or payload.get("gallery", "") or "gallery").strip()
                 self.events.put({"kind": "connection_ready", "payload": {
                     "gallery_label": label,
                     "gallery_title": str(payload.get("gallery_title", "") or "").strip(),
                     "normalized_url": resolved_url,
                     "explicit_test": True,
+                    "config_generation": captured._snapshot_token,
                 }})
             except Exception as exc:  # noqa: BLE001
-                self.events.put({"kind": "connection_error", "payload": {"message": str(exc), "normalized_url": upload_url, "explicit_test": True}})
+                self.events.put({"kind": "connection_error", "payload": {
+                    "message": str(exc), "normalized_url": upload_url,
+                    "explicit_test": True,
+                    "config_generation": captured._snapshot_token,
+                }})
 
         threading.Thread(target=tester, name="PHPGalleryConnectionTest", daemon=True).start()
 
@@ -8117,16 +10674,21 @@ class WatcherApp:
         if self.delete_uploaded_files_var.get():
             self.watch_delete_warning.grid()
             self.watch_delete_warning.configure(
-                text="Deletion is enabled: only server-confirmed uploads are removed. Duplicates and failures stay on this PC.",
+                text="Source deletion is temporarily unavailable. Photos stay on this PC.",
                 style="Warning.TLabel",
             )
         else:
             self.watch_delete_warning.grid_remove()
 
     def dry_run_watch_folder(self) -> None:
-        """Inspect watcher candidates without hashing, uploading, or changing durable state."""
-        folder = Path(self.watched_folder_var.get().strip())
-        if not folder.is_dir():
+        """Inspect an explicitly chosen watch folder without uploading.
+
+        Returns:
+            None: Reports existing files or asks for a readable folder.
+        """
+        selected = self.watched_folder_var.get().strip()
+        folder = Path(selected)
+        if not selected or not folder.is_dir():
             messagebox.showwarning("Watch folder", "Choose an existing folder first.")
             return
         result = discover_folder(folder, SUPPORTED_SUFFIXES, bool(self.watch_recursive_var.get()))
@@ -8138,13 +10700,18 @@ class WatcherApp:
         self.write_log(detail, "system")
         self.record_activity("info", detail, "watcher")
 
-    def launch_manual_job(self, job: ImportJob, paths: List[Path], config: WatcherConfig) -> None:
+    def launch_manual_job(
+        self, job: ImportJob, paths: List[Path], config: WatcherConfig,
+        linked_target: Optional[LinkedUploadTarget] = None,
+    ) -> None:
         """Bind and launch accepted manual-import work for the saved connection.
 
         Args:
             job (ImportJob): Durable job containing accepted source items.
             paths (List[Path]): Recoverable originals selected for this attempt.
             config (WatcherConfig): Saved connection and upload settings snapshot.
+            linked_target (Optional[LinkedUploadTarget]): Captured delegated
+                destination, or None for explicitly selected API-key mode.
 
         Returns:
             None: Starts the worker after binding, or reports a recovery error.
@@ -8159,19 +10726,46 @@ class WatcherApp:
             return
         if not paths:
             return
+        if (self.linking_manager.linked_upload_mode_selected()
+                != (linked_target is not None)):
+            messagebox.showerror('Import recovery', 'The selected gallery connection changed.')
+            return
+        if (linked_target is not None and (
+                self.linking_manager.linked_upload_binding() != linked_target.binding()
+                or self.linking_manager.selected_upload_target() is not linked_target)):
+            messagebox.showerror('Import recovery', 'Reconnect the selected linked gallery.')
+            return
+        if linked_target is not None and self.flights.session_state() != "idle":
+            messagebox.showinfo(
+                "Import", "Finish the current Watcher session before starting an import.",
+                parent=self.root,
+            )
+            return
         use_local_thumbnails = bool(self.manual_local_thumbnails_var.get()) and local_thumbnail_supported()
         if self.manual_local_thumbnails_var.get() and not local_thumbnail_supported():
             self.write_log("Local thumbnail generation is unavailable. Server thumbnail generation will be used.", "warning")
             use_local_thumbnails = False
         try:
-            self.flights.import_bindings.bind(job.id, self.flights.binding())
-        except (OSError, ValueError) as exc:
+            binding = (linked_target.binding() if linked_target is not None
+                       else self.flights.binding())
+            entries = self.flights.import_bindings.entries()
+            if job.started_at <= 0:
+                if getattr(self, '_preflight_approved', None) != (
+                    job.id, config._snapshot_token, binding,
+                ):
+                    raise ValueError('Configuration changed or preflight is unverified; run it again.')
+            elif (entries.get(job.id) != binding
+                  or any(item.state == 'skipped_duplicate' for item in job.items)):
+                raise ValueError('This import needs a new preflight before recovery.')
+            self.flights.import_bindings.admit_job(self.job_store, job, binding)
+        except (OSError, ValueError, RuntimeError) as exc:
             messagebox.showerror("Import recovery", str(exc))
             return
         self.current_job = job
-        self.job_store.save_job(job)
+        captured = capture_worker_config(config)
+        config_port = self.config_store.mode_port(captured)
         self.manual_worker = ManualUploadThread(
-            config,
+            captured,
             list(paths),
             use_local_thumbnails,
             config.manual_thumbnail_workers,
@@ -8179,6 +10773,8 @@ class WatcherApp:
             self.events,
             job=job,
             job_store=self.job_store,
+            linked_target=linked_target,
+            gui_admission=(self.mode_owner, config_port),
         )
         self.manual_worker.start()
         self.manual_status_var.set("Import running")
@@ -8230,11 +10826,51 @@ class WatcherApp:
         if self.current_job is None:
             messagebox.showwarning("Retry import", "Select a job in Activity first.")
             return
-        refreshed = self.job_store.get_job(self.current_job.id) or self.current_job
+        try:
+            with accepted_work_owner(CONFIG_DIR):
+                # Never fall back to an in-memory row when durable history is
+                # missing, malformed or newer than the selected GUI snapshot.
+                jobs = self.job_store.inspect_jobs_for_target_change()
+                refreshed = next(
+                    (job for job in jobs if job.id == self.current_job.id),
+                    None,
+                )
+                if refreshed is None:
+                    raise ValueError("Accepted import history is missing; review it.")
+                entries = self.flights.import_bindings.entries()
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showwarning('Import review', str(exc))
+            return
+        if any(item.state == 'skipped_duplicate' for item in refreshed.items):
+            messagebox.showwarning(
+                'Retry import',
+                'Earlier duplicate results need a new preflight. Original sources were retained.',
+            )
+            return
+        try:
+            proposed = self.current_config()
+            if proposed.to_dict() != self.config.to_dict():
+                raise ValueError('Save the current settings and run preflight again.')
+            target = self.capture_linked_target()
+            binding = target.binding() if target is not None else self.flights.binding()
+            if refreshed.started_at <= 0:
+                if getattr(self, '_preflight_approved', None) != (
+                    refreshed.id, self.config._snapshot_token, binding,
+                ):
+                    raise ValueError('This import needs a new preflight before recovery.')
+            elif entries.get(refreshed.id) != binding:
+                raise ValueError('This import has no verified current gallery binding.')
+        except (OSError, ValueError) as exc:
+            messagebox.showwarning('Retry import', str(exc))
+            return
         paths = []
         missing = 0
+        uncertain = 0
         for item in refreshed.items:
             if item.state not in RECOVERABLE_ITEM_STATES and item.state != "failed_permanent":
+                continue
+            if item.reason in (LINKED_UPLOAD_UNCERTAIN_REASON, LEGACY_UPLOAD_UNCERTAIN_REASON):
+                uncertain += 1
                 continue
             path = Path(item.path)
             if not path.is_file():
@@ -8246,6 +10882,12 @@ class WatcherApp:
             paths.append(path)
         if missing:
             self.job_store.save_job(refreshed)
+        if uncertain:
+            messagebox.showwarning(
+                'Import review',
+                f'{uncertain} upload(s) have an uncertain result. '
+                'Review the gallery manually; they were not retried.',
+            )
         if not paths:
             messagebox.showinfo("Retry import", "No failed or recoverable local files are available for retry.")
             self.current_job = refreshed
@@ -8255,18 +10897,20 @@ class WatcherApp:
         refreshed.finished_at = 0.0
         try:
             config = self.current_config()
+            linked_target = self.capture_linked_target()
             if not self.connection_change_allowed(config):
                 return
-            self.config_store.save(config)
+            config = self._save_owned_config(config)
             self.config = config
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
             return
-        if not normalize_upload_url(config.gallery_url) or not config.api_key.strip():
+        if (linked_target is None
+                and (not normalize_upload_url(config.gallery_url) or not config.api_key.strip())):
             messagebox.showerror("Connection", "Gallery URL and API key are required before retrying.")
             return
         self.current_job = refreshed
-        self.launch_manual_job(refreshed, paths, config)
+        self.launch_manual_job(refreshed, paths, config, linked_target)
 
     def offer_recoverable_jobs(self) -> None:
         """Offer the newest unfinished import for explicit recovery after restart.
@@ -8462,9 +11106,14 @@ class WatcherApp:
         ai_running = bool(self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested)
         preflight_running = bool(self.preflight_worker and self.preflight_worker.is_alive())
 
-        if watcher_running and not self.watcher_activity_var.get().endswith("stopping"):
+        state = self.flights.session_state()
+        if state == "working" and not self.flights.independent_operation():
+            self.watcher_activity_var.set("Watch: finishing")
+        elif watcher_running:
             self.watcher_activity_var.set("Watch: running")
-        elif not watcher_running:
+        elif state == "pending":
+            self.watcher_activity_var.set("Watch: uploads pending")
+        else:
             self.watcher_activity_var.set("Watch: stopped")
         if preflight_running:
             self.import_activity_var.set("Import: preflight")
@@ -8506,6 +11155,30 @@ class WatcherApp:
             if isinstance(event, dict):
                 kind = str(event.get("kind", "") or "")
                 payload = event.get("payload", {}) if isinstance(event.get("payload", {}), dict) else {}
+                if 'preflight_owner' in payload:
+                    worker = self.preflight_worker
+                    if worker is None or payload['preflight_owner'] is not worker._preflight_owner:
+                        continue
+                    if (payload.get('config_generation') is None
+                            or payload['config_generation'] is not self.config._snapshot_token
+                            or (not payload.get('linked_binding') and (
+                                normalize_upload_url(self.gallery_url_var.get())
+                                != normalize_upload_url(self.config.gallery_url)
+                                or self.api_key_var.get().strip() != self.config.api_key.strip()
+                            ))):
+                        if kind in ('preflight_complete', 'preflight_failed', 'preflight_cancelled'):
+                            self.preflight_progress.stop()
+                            self.preflight_progress.grid_remove()
+                            self.preflight_worker = None
+                            self._preflight_approved = None
+                            self.manual_status_var.set('Preflight needs to be run again')
+                            self.manual_preflight_var.set(
+                                'Configuration changed; run preflight again. Sources were retained.',
+                            )
+                        continue
+                if ('linked_binding' in payload and payload['linked_binding']
+                        != self.linking_manager.linked_upload_binding()):
+                    continue
                 job_id = str(event.get("job_id", payload.get("job_id", "")) or "")
                 if kind == "preflight_started":
                     self.manual_status_var.set("Preflight running")
@@ -8521,6 +11194,14 @@ class WatcherApp:
                     self.preflight_progress.grid_remove()
                     self.preflight_worker = None
                     if isinstance(plan, ImportPlan):
+                        binding = payload.get('preflight_binding')
+                        if not isinstance(binding, str) or re.fullmatch(r'[0-9a-f]{64}', binding) is None:
+                            self._preflight_approved = None
+                            self.manual_status_var.set('Preflight needs to be run again')
+                            continue
+                        self._preflight_approved = (
+                            plan.job.id, payload['config_generation'], binding,
+                        )
                         self.manual_plan = plan
                         self.current_job = plan.job
                         self.render_preflight_plan(plan)
@@ -8551,6 +11232,17 @@ class WatcherApp:
                     explicit = bool(payload.get("explicit_test", False))
                     if explicit:
                         self.connection_test_running = False
+                    generation = payload.get('config_generation')
+                    if (generation is None
+                            or generation is not self.config._snapshot_token
+                            or (not payload.get('linked_binding') and (
+                                normalize_upload_url(self.gallery_url_var.get())
+                                != normalize_upload_url(self.config.gallery_url)
+                                or self.api_key_var.get().strip() != self.config.api_key.strip()
+                            ))):
+                        if explicit:
+                            self.refresh_connection_controls()
+                        continue
                     if kind == "connection_ready":
                         label = str(payload.get("gallery_label", "gallery") or "gallery")
                         resolved_url = str(payload.get("normalized_url", "") or "")
@@ -8572,10 +11264,9 @@ class WatcherApp:
                                 and current_key == saved_key
                                 and not getattr(self, "api_key_revoke_running", False)
                             ):
-                                resolved_config = WatcherConfig.from_dict(self.config.to_dict())
-                                resolved_config.gallery_url = resolved_url
+                                resolved_config = replace(self.config, gallery_url=resolved_url)
                                 try:
-                                    self.config_store.save(resolved_config)
+                                    resolved_config = self._save_owned_config(resolved_config)
                                     self.config = resolved_config
                                     self.gallery_url_var.set(resolved_url)
                                     self.write_log("Working Gallery API route detected and saved: " + resolved_url, "system")
@@ -8595,15 +11286,16 @@ class WatcherApp:
                         self.record_activity("error", "Connection test failed: " + message, "system")
                 elif kind == "flight_abandoned":
                     self.flights.forgotten(str(payload.get("binding", "")))
+                elif kind == "saved_linked_mode_ready":
+                    self.linked_target_changed()
                 elif kind == "api_key_revoked":
                     self.api_key_revoke_running = False
                     self.api_key_revoke_thread = None
                     self.api_key_var.set("")
-                    cleared_config = WatcherConfig.from_dict(self.config.to_dict())
-                    cleared_config.api_key = ""
+                    cleared_config = replace(self.config, api_key="")
                     cleanup_error = ""
                     try:
-                        self.config_store.save(cleared_config)
+                        cleared_config = self._save_owned_config(cleared_config)
                         self.config = cleared_config
                     except Exception as exc:  # noqa: BLE001
                         self.config.api_key = ""
@@ -8850,7 +11542,7 @@ class WatcherApp:
         self.root.mainloop()
 
 
-def run_once(config: WatcherConfig) -> int:
+def run_once(config: WatcherConfig, config_store: ConfigStore) -> int:
     """
     Run one scan without showing the GUI.
 
@@ -8860,22 +11552,36 @@ def run_once(config: WatcherConfig) -> int:
 
     Args:
         config (WatcherConfig): Configuration to use for the scan.
+        config_store (ConfigStore): Owner of the exact loaded configuration;
+            mode evidence is checked before constructing the worker.
 
     Returns:
-        int: Process exit code. Zero means the scan command completed.
+        int: Zero after a completed scan; one if evidence or work fails.
     """
-    setup_logging()
-    events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
-    worker = WatcherThread(config, events)
-    folder = Path(config.watched_folder)
-    upload_url = normalize_upload_url(config.gallery_url)
-    worker.scan_once(folder, upload_url)
+    try:
+        if type(config_store) is not ConfigStore:
+            raise ValueError('Configuration owner is unavailable.')
+        coordinator = ModeCoordinator(
+            config_store.mode_port(config), WindowsUploadModeStore(),
+        )
+        view = coordinator.refresh()
+        with coordinator.acquire_work(view, 'legacy') as work:
+            setup_logging()
+            events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
+            worker = WatcherThread(config, events, once_work=work)
+            folder = Path(config.watched_folder)
+            upload_url = normalize_upload_url(config.gallery_url)
+            worker.scan_once(folder, upload_url)
 
-    while not events.empty():
-        level, message = events.get()
-        print(f"{level.upper()}: {message}")
-
-    return 0
+            while not events.empty():
+                level, message = events.get()
+                print(f"{level.upper()}: {message}")
+        return 0
+    except Exception:  # noqa: BLE001
+        # Never expose config contents or interpret failed evidence as key mode.
+        if sys.stderr is not None:
+            print('Upload mode or one-scan work could not be verified.', file=sys.stderr)
+        return 1
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -8915,7 +11621,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     Returns:
         int: Zero after a normal exit, activation or startup reconciliation;
-            one if native coordination fails or --once overlaps a running app.
+            one if coordination or configuration fails, or --once overlaps a
+            running app.
     """
     args = parse_args(list(argv) if argv is not None else sys.argv[1:])
     instance = WindowsInstance(CONFIG_DIR)
@@ -8928,13 +11635,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 0
         # A second launcher never opens/rotates logs or reads/writes app state.
         setup_logging()
-        store = ConfigStore(Path(args.config))
+        store = ConfigStore(args.config)
+        config = store.load()
         if args.once:
-            return run_once(store.load())
+            return run_once(config, store)
         if args.configure_startup:
-            synchronize_startup(store.load().start_with_windows)
+            synchronize_startup(config.start_with_windows)
             return 0
-        if args.startup and not store.load().start_with_windows:
+        if args.startup and not config.start_with_windows:
             synchronize_startup(False)
             return 0
         app = WatcherApp(config_store=store, start_minimized=args.startup)
@@ -8945,7 +11653,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     except OSError as exc:
         # Windowed builds may have no stderr. Native coordination failure must
         # never admit a second writer, and needs a visible manual-launch error.
-        if not args.configure_startup and messagebox is not None:
+        if not args.configure_startup and not args.once and messagebox is not None:
             messagebox.showerror("Application startup", str(exc))
         elif sys.stderr is not None:
             print("Application startup failed: " + str(exc), file=sys.stderr)

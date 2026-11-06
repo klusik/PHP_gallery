@@ -42,25 +42,41 @@ try {
 /**
  * Exercise the exact public wrapper with local seams instead of production persistence.
  *
- * Only the three delegated calls are replaced. The real signature, try/finally,
- * return statement and exception propagation execute unchanged.
+ * Replace the lease, reservation check and owned writer with local seams. The
+ * real signature, try/finally, return and exception propagation run unchanged.
+ * Upload's authority and post-store callbacks remain explicit fixture seams.
  *
  * @param string $name Public use-case name.
  * @param array{declaration:string,body:string,doc:string} $function Source under test.
  * @param string $returnType Declared result type.
+ * @param bool $checksReservation Whether a linked create can block this writer.
  * @return void
  */
 function gallery_writer_exercise(
     string $name,
     array $function,
     string $returnType,
+    bool $checksReservation,
 ): void {
-    foreach ([
+    $modes = [
         'return',
         'operation_failure',
         'acquire_failure',
         'release_failure',
-    ] as $mode) {
+    ];
+    $isUpload = $name === 'store_uploaded_gallery_images';
+    if ($isUpload) {
+        $modes = array_merge($modes, [
+            'return_no_callbacks',
+            'authorization_refusal',
+            'authorization_failure',
+            'after_failure',
+        ]);
+    }
+    if ($checksReservation) {
+        $modes[] = 'reservation_failure';
+    }
+    foreach ($modes as $mode) {
         $events = [];
         $failure = new RuntimeException('fixture-' . $mode);
         $value = match ($returnType) {
@@ -121,6 +137,16 @@ function gallery_writer_exercise(
                 throw $failure;
             }
         };
+        $reservationCheck = static function () use (
+            &$events,
+            $mode,
+            $failure,
+        ): void {
+            $events[] = 'reservation';
+            if ($mode === 'reservation_failure') {
+                throw $failure;
+            }
+        };
         $declaration = str_replace(
             'function ' . $name,
             'static function',
@@ -128,17 +154,18 @@ function gallery_writer_exercise(
         );
         $declaration = preg_replace(
             '/\)\s*:/',
-            ') use ($acquire, $operation, $release):',
+            ') use ($acquire, $operation, $release, $reservationCheck):',
             $declaration,
             1,
         );
         $body = str_replace(
             [
                 'gallery_edit_writer_begin()',
+                'gallery_linked_reservation_assert_admin_write()',
                 $name . '_owned(',
                 'gallery_edit_writer_end(',
             ],
-            ['$acquire()', '$operation(', '$release('],
+            ['$acquire()', '$reservationCheck()', '$operation(', '$release('],
             $function['body'],
         );
         $callable = eval('return ' . $declaration . ' ' . $body . ';');
@@ -149,21 +176,76 @@ function gallery_writer_exercise(
         $arguments = gallery_edit_writer_fixture_arguments(
             new ReflectionFunction($callable),
         );
+        if ($isUpload && $mode !== 'return_no_callbacks') {
+            $arguments[3] = static function () use (
+                &$events,
+                $mode,
+                $failure,
+            ): bool {
+                $events[] = 'authorize';
+                if ($mode === 'authorization_failure') {
+                    throw $failure;
+                }
+                return $mode !== 'authorization_refusal';
+            };
+            $arguments[4] = static function (array $stored) use (
+                &$events,
+                $mode,
+                $failure,
+                $value,
+            ): void {
+                gallery_writer_check(
+                    $stored === $value,
+                    'Post-store callback received a different result.',
+                );
+                $events[] = 'after';
+                if ($mode === 'after_failure') {
+                    throw $failure;
+                }
+            };
+        }
+        if ($isUpload) {
+            $arguments[5] = false;
+        }
         try {
             $actual = $callable(...$arguments);
             gallery_writer_check(
-                $mode === 'return' && $actual === $value,
+                in_array($mode, ['return', 'return_no_callbacks'], true)
+                    && $actual === $value,
                 'Changed wrapper result: ' . $name,
             );
         } catch (RuntimeException $exception) {
             gallery_writer_check(
-                $mode !== 'return' && $exception === $failure,
+                ($mode === 'authorization_refusal'
+                    && $exception->getMessage() === 'Upload authority is unavailable.')
+                    || (!in_array(
+                        $mode,
+                        ['return', 'return_no_callbacks', 'authorization_refusal'],
+                        true,
+                    ) && $exception === $failure),
                 'Changed wrapper failure: ' . $name,
             );
         }
-        $expectedEvents = $mode === 'acquire_failure'
-            ? ['begin']
-            : ['begin', 'operation', 'end'];
+        if ($checksReservation) {
+            $expectedEvents = match ($mode) {
+                'acquire_failure' => ['begin'],
+                'reservation_failure' => ['begin', 'reservation', 'end'],
+                default => ['begin', 'reservation', 'operation', 'end'],
+            };
+        } elseif (!$isUpload || $mode === 'return_no_callbacks') {
+            $expectedEvents = $mode === 'acquire_failure'
+                ? ['begin']
+                : ['begin', 'operation', 'end'];
+        } else {
+            $expectedEvents = match ($mode) {
+                'acquire_failure' => ['begin'],
+                'authorization_refusal', 'authorization_failure' =>
+                    ['begin', 'authorize', 'end'],
+                'operation_failure' =>
+                    ['begin', 'authorize', 'operation', 'end'],
+                default => ['begin', 'authorize', 'operation', 'after', 'end'],
+            };
+        }
         gallery_writer_check(
             $events === $expectedEvents,
             'Ownership lifetime failure: ' . $name . '/' . $mode,
@@ -174,6 +256,14 @@ function gallery_writer_exercise(
 // Every ordinary outer writer in the documented inventory, including the other
 // implementation owners. Entry-point readers include their ordered part files.
 $inventory = gallery_edit_writer_fixture_inventory();
+// These wrappers can race a linked create. The reservation must be checked
+// under the acquired writer lease, before any of their delegated effects.
+$reservationGuardedWriters = [
+    'move_gallery_subtrees_to_trash',
+    'restore_gallery_trash_entry',
+    'copy_gallery_images',
+    'picture_manager_copy_gallery_subtrees',
+];
 $root = dirname(__DIR__) . '/app/services/';
 $allFunctions = [];
 $checked = 0;
@@ -200,29 +290,91 @@ foreach ($inventory as $module => $names) {
                 $arguments[] = $token[1];
             }
         }
+        $checksReservation = in_array($name, $reservationGuardedWriters, true);
         $expected =
             '{ $writerLock = gallery_edit_writer_begin(); try { '
+            . ($checksReservation
+                ? 'gallery_linked_reservation_assert_admin_write(); '
+                : '')
             . ($returnType === 'void' ? '' : 'return ')
             . $name
             . '_owned('
             . implode(', ', $arguments)
             . '); } finally { gallery_edit_writer_end($writerLock); } }';
+        if ($name === 'store_uploaded_gallery_images') {
+            $expected = <<<'PHP'
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        if ($authorizeBeforeStore !== null && !$authorizeBeforeStore()) {
+            throw new RuntimeException('Upload authority is unavailable.');
+        }
+        if ($requireFreshRegistration && ($verifyWriterOwnership === null
+            || !$verifyWriterOwnership($writerLock))) {
+            throw new RuntimeException('Upload ownership is unavailable.');
+        }
+        $stored = store_uploaded_gallery_images_owned(
+            $galleryId, $entries, $renameOnUpload, $requireFreshRegistration,
+        );
+        if ($afterStore !== null) {
+            $afterStore($stored);
+        }
+        if ($requireFreshRegistration && ($verifyWriterOwnership === null
+            || !$verifyWriterOwnership($writerLock))) {
+            throw new RuntimeException('Upload ownership is unavailable.');
+        }
+        return $stored;
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+PHP;
+        }
         gallery_writer_check(
             php_source_contract_tokens('<?php ' . $function['body'])
                 === php_source_contract_tokens('<?php ' . $expected),
-            'Writer must begin before reads, delegate once and release in finally: '
+            'Writer must acquire, check any reservation, delegate once and release: '
                 . $name,
         );
         $owned = $functions[$name . '_owned'];
-        gallery_writer_check(
-            php_source_contract_tokens('<?php ' . str_replace(
-                $name . '_owned',
-                $name,
-                $owned['declaration'],
-            ))
-            === php_source_contract_tokens('<?php ' . $function['declaration']),
-            'Owned implementation changed the public signature: ' . $name,
-        );
+        if ($name === 'store_uploaded_gallery_images') {
+            $publicSignature = <<<'PHP'
+function store_uploaded_gallery_images(
+    int $galleryId,
+    array $entries,
+    ?bool $renameOnUpload = null,
+    ?callable $authorizeBeforeStore = null,
+    ?callable $afterStore = null,
+    bool $requireFreshRegistration = false,
+    ?callable $verifyWriterOwnership = null,
+): array
+PHP;
+            $ownedSignature = <<<'PHP'
+function store_uploaded_gallery_images_owned(
+    int $galleryId,
+    array $entries,
+    ?bool $renameOnUpload = null,
+    bool $requireFreshRegistration = false,
+): array
+PHP;
+            gallery_writer_check(
+                php_source_contract_tokens('<?php ' . $function['declaration'])
+                    === php_source_contract_tokens('<?php ' . $publicSignature)
+                    && php_source_contract_tokens('<?php ' . $owned['declaration'])
+                    === php_source_contract_tokens('<?php ' . $ownedSignature),
+                'Upload writer or owned signature changed.',
+            );
+        } else {
+            gallery_writer_check(
+                php_source_contract_tokens('<?php ' . str_replace(
+                    $name . '_owned',
+                    $name,
+                    $owned['declaration'],
+                ))
+                === php_source_contract_tokens('<?php ' . $function['declaration']),
+                'Owned implementation changed the public signature: ' . $name,
+            );
+        }
         gallery_writer_check(
             str_contains($function['doc'], '@return')
                 && str_contains($owned['doc'], '@return'),
@@ -230,11 +382,18 @@ foreach ($inventory as $module => $names) {
         );
         foreach ($arguments as $argument) {
             gallery_writer_check(
-                str_contains($owned['doc'], $argument),
+                ($name !== 'store_uploaded_gallery_images'
+                    || str_contains($function['doc'], $argument))
+                    && (($name === 'store_uploaded_gallery_images'
+                        && in_array($argument, [
+                            '$authorizeBeforeStore',
+                            '$afterStore',
+                            '$verifyWriterOwnership',
+                        ], true)) || str_contains($owned['doc'], $argument)),
                 'Owned parameter documentation missing: ' . $name,
             );
         }
-        gallery_writer_exercise($name, $function, $returnType);
+        gallery_writer_exercise($name, $function, $returnType, $checksReservation);
         $checked++;
     }
 }
@@ -351,4 +510,5 @@ gallery_writer_check(
 echo
     'PASS gallery writer guards: '
         . $checked
-        . " wrappers, four lifetime paths each, journal lock ordering and fresh-row reads\n";
+        . ' wrappers, lease and linked reservation refusal, journal lock ordering'
+        . " and fresh-row reads\n";

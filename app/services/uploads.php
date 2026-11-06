@@ -1121,23 +1121,141 @@ function gallery_upload_progress_event(
  * @param int $galleryId Destination gallery reloaded after writer acquisition.
  * @param list<array{name:string,tmp_name:string,size?:int,type?:string,error?:int}> $entries Validated temporary upload entries in original request order.
  * @param bool|null $renameOnUpload Explicit rename preference, or null for the stored domain policy.
- * @return array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>} Stored/scanned identities and processing diagnostics; partial failures remain visible.
+ * @param callable():bool|null $authorizeBeforeStore Optional delegated authority
+ *     and target check run after acquiring the writer lease; null preserves the
+ *     established caller's existing authorization behavior.
+ * @param callable(array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>,delegated_receipts?:array<int,array{root:string,root_dev:int,root_ino:int,directory:string,directory_dev:int,directory_ino:int,dev:int,ino:int,size:int,mtime:int}>}):void|null $afterStore
+ *     Optional post-store work held under the same writer lease; null retains
+ *     established caller behavior. A failure occurs after a possible write.
+ * @param bool $requireFreshRegistration Require internal delegated registration evidence; false preserves the legacy upload path.
+ * @param callable(string):bool|null $verifyWriterOwnership Verify both delegated leases using the actual global lock name; null is valid only for legacy.
+ * @return array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>,delegated_receipts?:array<int,array{root:string,root_dev:int,root_ino:int,directory:string,directory_dev:int,directory_ino:int,dev:int,ino:int,size:int,mtime:int}>} Stored/scanned identities and internal delegated evidence.
+ * @throws RuntimeException When the delegated check refuses the write.
  */
 function store_uploaded_gallery_images(
     int $galleryId,
     array $entries,
     ?bool $renameOnUpload = null,
+    ?callable $authorizeBeforeStore = null,
+    ?callable $afterStore = null,
+    bool $requireFreshRegistration = false,
+    ?callable $verifyWriterOwnership = null,
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return store_uploaded_gallery_images_owned(
+        // The target may have changed while waiting for the writer lease.
+        if ($authorizeBeforeStore !== null && !$authorizeBeforeStore()) {
+            throw new RuntimeException('Upload authority is unavailable.');
+        }
+        if ($requireFreshRegistration && ($verifyWriterOwnership === null
+            || !$verifyWriterOwnership($writerLock))) {
+            throw new RuntimeException('Upload ownership is unavailable.');
+        }
+        $stored = store_uploaded_gallery_images_owned(
             $galleryId,
             $entries,
             $renameOnUpload,
+            $requireFreshRegistration,
         );
+        if ($afterStore !== null) {
+            $afterStore($stored);
+        }
+        if ($requireFreshRegistration && ($verifyWriterOwnership === null
+            || !$verifyWriterOwnership($writerLock))) {
+            throw new RuntimeException('Upload ownership is unavailable.');
+        }
+        return $stored;
     } finally {
         gallery_edit_writer_end($writerLock);
     }
+}
+
+/**
+ * Observe the canonical root and target directory without redirected components.
+ *
+ * @param string $galleryPath Normalized gallery-root-relative directory.
+ * @return array{root:string,root_dev:int,root_ino:int,directory:string,directory_dev:int,directory_ino:int} Observed root and target directory identity.
+ * @throws RuntimeException When the directory identity is uncertain.
+ */
+function gallery_upload_delegated_directory_identity(string $galleryPath): array
+{
+    $root = realpath(galleries_root());
+    if (!is_string($root) || !is_dir($root)
+        || $galleryPath === ''
+        || normalize_relative_path($galleryPath) !== $galleryPath) {
+        throw new RuntimeException('Uploaded image identity is unavailable.');
+    }
+    $rootStat = @lstat($root);
+    if (!is_array($rootStat) || ($rootStat['ino'] ?? 0) <= 0
+        || !isset($rootStat['dev'])) {
+        throw new RuntimeException('Uploaded image root is unavailable.');
+    }
+    $directory = $root;
+    foreach (explode('/', $galleryPath) as $segment) {
+        $directory .= DIRECTORY_SEPARATOR . $segment;
+        clearstatcache(true, $directory);
+        if (is_link($directory) || !is_dir($directory)
+            || realpath($directory) !== $directory) {
+            throw new RuntimeException('Uploaded image directory is unavailable.');
+        }
+    }
+    $directoryStat = @lstat($directory);
+    if (!is_array($directoryStat) || ($directoryStat['ino'] ?? 0) <= 0
+        || !isset($directoryStat['dev'])) {
+        throw new RuntimeException('Uploaded image directory is unavailable.');
+    }
+    clearstatcache(true, $root);
+    clearstatcache(true, $directory);
+    $rootAfter = @lstat($root);
+    $directoryAfter = @lstat($directory);
+    if (!is_array($rootAfter) || !is_array($directoryAfter)
+        || realpath(galleries_root()) !== $root || is_link($directory)
+        || realpath($directory) !== $directory
+        || $rootAfter['dev'] !== $rootStat['dev'] || $rootAfter['ino'] !== $rootStat['ino']
+        || $directoryAfter['dev'] !== $directoryStat['dev']
+        || $directoryAfter['ino'] !== $directoryStat['ino']) {
+        throw new RuntimeException('Uploaded image directory changed.');
+    }
+    return [
+        'root' => $root, 'root_dev' => $rootStat['dev'], 'root_ino' => $rootStat['ino'],
+        'directory' => $directory, 'directory_dev' => $directoryStat['dev'],
+        'directory_ino' => $directoryStat['ino'],
+    ];
+}
+
+/**
+ * Observe one direct uploaded file without following a redirected leaf.
+ *
+ * @param string $galleryPath Normalized gallery-root-relative directory.
+ * @param string $relativePath Exact direct normalized original filename.
+ * @return array{root:string,root_dev:int,root_ino:int,directory:string,directory_dev:int,directory_ino:int,dev:int,ino:int,size:int,mtime:int} Observed root, directory and regular single-link file identity.
+ * @throws RuntimeException When the path or its file identity is uncertain.
+ */
+function gallery_upload_delegated_file_identity(
+    string $galleryPath,
+    string $relativePath,
+): array {
+    if ($relativePath === ''
+        || normalize_relative_path($relativePath) !== $relativePath
+        || str_contains($relativePath, '/')) {
+        throw new RuntimeException('Uploaded image identity is unavailable.');
+    }
+    $directory = gallery_upload_delegated_directory_identity($galleryPath);
+    $path = $directory['directory'] . DIRECTORY_SEPARATOR . $relativePath;
+    clearstatcache(true, $path);
+    $stat = @lstat($path);
+    // POSIX mode type bits identify a regular file, independently of permissions.
+    if (!is_array($stat) || is_link($path) || realpath($path) !== $path
+        || ($stat['mode'] & 0170000) !== 0100000
+        || ($stat['ino'] ?? 0) <= 0 || ($stat['nlink'] ?? 0) !== 1
+        || !isset($stat['dev'], $stat['size'], $stat['mtime'])
+        || gallery_upload_delegated_directory_identity($galleryPath) !== $directory) {
+        throw new RuntimeException('Uploaded image identity is unavailable.');
+    }
+    return $directory + [
+        'dev' => $stat['dev'], 'ino' => $stat['ino'],
+        'size' => $stat['size'], 'mtime' => $stat['mtime'],
+    ];
 }
 
 /**
@@ -1146,13 +1264,15 @@ function store_uploaded_gallery_images(
  * @param int $galleryId Existing target gallery identity.
  * @param list<array<string,mixed>> $entries Validated temporary upload entries.
  * @param bool|null $renameOnUpload Explicit rename preference, or the domain default.
- * @return array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>} Stable image identities, final relative filenames and scan/rename outcomes.
+ * @param bool $requireFreshRegistration Capture delegated-only per-file registration evidence.
+ * @return array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array<string,mixed>}>,delegated_receipts?:array<int,array{root:string,root_dev:int,root_ino:int,directory:string,directory_dev:int,directory_ino:int,dev:int,ino:int,size:int,mtime:int}>} Stable image identities and optional internal delegated evidence.
  * @internal Call only through store_uploaded_gallery_images(), including nested editor/upload use.
  */
 function store_uploaded_gallery_images_owned(
     int $galleryId,
     array $entries,
     ?bool $renameOnUpload = null,
+    bool $requireFreshRegistration = false,
 ): array {
     $startedAt = microtime(true);
     $events = [gallery_upload_progress_event(
@@ -1191,12 +1311,29 @@ function store_uploaded_gallery_images_owned(
 
     // $stored stores the temporary safe filenames first used to accept the uploaded originals.
     $stored = [];
+    $uploadProofs = [];
     $storedBytes = 0;
     foreach ($entries as $entry) {
         [$filename, $target] = unique_gallery_upload_target(
             $gallery,
             (string) $entry['name'],
         );
+        if ($requireFreshRegistration) {
+            $directoryProof = gallery_upload_delegated_directory_identity(
+                (string) $gallery['folder_path'],
+            );
+            if (realpath(dirname($target)) !== $directoryProof['directory']) {
+                throw new RuntimeException('Uploaded image directory changed.');
+            }
+            if (uploaded_gallery_image_row_by_path($galleryId, $filename) !== null) {
+                throw new RuntimeException('Uploaded image target is unavailable.');
+            }
+            clearstatcache(true, (string) $entry['tmp_name']);
+            $sourceSize = @filesize((string) $entry['tmp_name']);
+            if (!is_int($sourceSize) || $sourceSize < 0) {
+                throw new RuntimeException('Uploaded image source is unavailable.');
+            }
+        }
         if (!move_uploaded_file((string) $entry['tmp_name'], $target)) {
             throw new RuntimeException(t(
                 'upload.error.store_image_failed',
@@ -1204,6 +1341,16 @@ function store_uploaded_gallery_images_owned(
             ));
         }
         $stored[] = $filename;
+        if ($requireFreshRegistration) {
+            $proof = gallery_upload_delegated_file_identity(
+                (string) $gallery['folder_path'], $filename,
+            );
+            if ($proof['size'] !== $sourceSize
+                || array_intersect_key($proof, $directoryProof) !== $directoryProof) {
+                throw new RuntimeException('Uploaded image source is unavailable.');
+            }
+            $uploadProofs[$filename] = $proof;
+        }
         $storedBytes += is_file($target)
             ? (int) (@filesize($target) ?: 0)
             : (int) ($entry['size'] ?? 0);
@@ -1220,10 +1367,18 @@ function store_uploaded_gallery_images_owned(
     );
 
     // $changed stores source rows reconciled for the files accepted in this request only.
+    $createdRows = $requireFreshRegistration ? [] : null;
+    if ($requireFreshRegistration && !function_exists(
+        'Gallery\\Services\\scan_gallery_selected_uploaded_images',
+    )) {
+        throw new RuntimeException('Uploaded image registration is unavailable.');
+    }
     $changed = function_exists(
         'Gallery\Services\scan_gallery_selected_uploaded_images',
     )
-        ? scan_gallery_selected_uploaded_images($galleryId, $stored)
+        ? ($requireFreshRegistration
+            ? scan_gallery_selected_uploaded_images($galleryId, $stored, [], $createdRows)
+            : scan_gallery_selected_uploaded_images($galleryId, $stored))
         : scan_gallery_images($galleryId);
     $events[] = gallery_upload_progress_event(
         $startedAt,
@@ -1238,6 +1393,17 @@ function store_uploaded_gallery_images_owned(
         $galleryId,
         $stored,
     );
+    $receipts = [];
+    if ($requireFreshRegistration) {
+        foreach ($stored as $filename) {
+            $createdId = $createdRows[$filename] ?? null;
+            if (!is_int($createdId) || $createdId <= 0
+                || !isset($uploadProofs[$filename]) || isset($receipts[$createdId])) {
+                throw new RuntimeException('Uploaded image registration is unavailable.');
+            }
+            $receipts[$createdId] = $uploadProofs[$filename];
+        }
+    }
     // $renameResult stores the optional media-renamer execution summary for this upload batch.
     $renameResult = null;
 
@@ -1263,7 +1429,7 @@ function store_uploaded_gallery_images_owned(
         );
     }
 
-    return [
+    $result = [
         'uploaded' => $uploadedCount,
         'filenames' => $stored,
         'image_ids' => $imageIds,
@@ -1280,6 +1446,10 @@ function store_uploaded_gallery_images_owned(
             : array_values((array) ($renameResult['failures'] ?? [])),
         'upload_events' => array_values($events),
     ];
+    if ($requireFreshRegistration) {
+        $result['delegated_receipts'] = $receipts;
+    }
+    return $result;
 }
 
 /**

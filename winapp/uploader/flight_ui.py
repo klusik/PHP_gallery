@@ -11,6 +11,7 @@
 """Compact live readings, saved-flight browsing and independent report actions."""
 
 import queue
+import re
 import sqlite3
 import sys
 import threading
@@ -18,7 +19,7 @@ import time
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable, Literal, Protocol
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -44,6 +45,7 @@ from uploader.flight_recorder import FlightRecorder
 from uploader.game_presence import GamePresence
 from uploader.flight_workflow import FinalizationWorker
 from uploader.models import ImportJob, JsonValue
+from uploader.mode_coordinator import GuiModeOwner, ModeConfigPort
 from uploader.state_store import JobStateStore
 from uploader.state_store import atomic_write_json
 from uploader.flight_simbrief import (
@@ -78,9 +80,9 @@ REPORT_COLUMN_WIDTHS = (145, 60, 45, 145, 45, 110)
 REPORT_VISIBLE_ROWS = 7
 # Purpose: Keep recovery actions inside a compact progress window.
 # Type: int; Units: button columns; Scope: finalization progress actions.
-# Consumers: FlightUI.show_progress. Rationale: three columns wrap the six
-# ordinary actions into two rows instead of forcing a very wide dialog.
-PROGRESS_ACTION_COLUMNS = 3
+# Consumers: FlightUI.refresh_progress_actions.
+# Rationale: two compact columns leave room for translated recovery actions.
+PROGRESS_ACTION_COLUMNS = 2
 # Keep identity help and validation readable without a desktop-sized dialog.
 # Type: int; Units: pixels; Scope: SimBrief identity sheet.
 # Consumers: prompt_simbrief_identity. Rationale: 360 px fits its single input.
@@ -89,6 +91,8 @@ SIMBRIEF_PROMPT_WRAP_PX = 360
 # Type: int; Units: character columns; Scope: SimBrief identity entry.
 # Consumers: prompt_simbrief_identity. Rationale: 40 columns leaves editing room.
 SIMBRIEF_IDENTITY_COLUMNS = 40
+
+SessionState = Literal["idle", "active", "working", "pending", "blocked"]
 
 
 class ConnectionConfig(Protocol):
@@ -119,6 +123,49 @@ class ControlledWorker(Protocol):
         ...
 
 
+class LinkedFlightTarget(Protocol):
+    """Expose only the approved gallery identity needed by flight recording."""
+
+    issuer: str
+    gallery_id: int
+
+    def binding(self) -> str:
+        """Return this issuer, account and gallery's non-secret fingerprint.
+
+        Returns:
+            str: Stable SHA-256 target binding without bearer material.
+        """
+        ...
+
+
+class LinkedFlightManager(Protocol):
+    """Describe linked-target admission independently from legacy settings."""
+
+    def linked_upload_mode_selected(self) -> bool:
+        """Report the user's selected mode even after its session expires.
+
+        Returns:
+            bool: True while linked upload remains the selected mode.
+        """
+        ...
+
+    def linked_upload_binding(self) -> str | None:
+        """Identify the selected target without requiring a live session.
+
+        Returns:
+            str | None: Non-secret target binding, or None if not selected.
+        """
+        ...
+
+    def selected_upload_target(self) -> LinkedFlightTarget | None:
+        """Return a live approved target only while its session is usable.
+
+        Returns:
+            LinkedFlightTarget | None: Current approved target, or None.
+        """
+        ...
+
+
 class FlightHost(Protocol):
     """Describe the existing app properties consumed by this controller."""
 
@@ -141,6 +188,18 @@ class FlightHost(Protocol):
     watcher_activity_var: tk.StringVar
     gallery_label_var: tk.StringVar
     simulator_presence: GamePresence
+    linking_manager: LinkedFlightManager
+
+    def capture_flight_admission(
+        self,
+    ) -> tuple[GuiModeOwner, ModeConfigPort, str, str]:
+        """Capture the exact saved legacy connection for a flight worker.
+
+        Returns:
+            tuple[GuiModeOwner, ModeConfigPort, str, str]: Shared owner, sealed
+                config port, canonical endpoint and associated API key.
+        """
+        ...
 
     def api_key_request_blockers(self) -> list[str]:
         """List existing authenticated workers without adding this coordinator.
@@ -155,6 +214,14 @@ class FlightHost(Protocol):
 
         Returns:
             None: Refreshes the visible saved-connection state.
+        """
+        ...
+
+    def reconnect_upload_gallery(self) -> None:
+        """Open browser linking or the existing gallery picker for recovery.
+
+        Returns:
+            None: Offers the next explicit step to restore linked uploads.
         """
         ...
 
@@ -249,7 +316,9 @@ class FlightUI:
         self.report_group_files: dict[str, list[str]] = {}
         self.report_file_sort_keys: dict[str, ReportFileDetails] = {}
         self.report_button: ttk.Button | None = None
-        self.keep_local_button: ttk.Button | None = None
+        self.progress_actions: ttk.Frame | None = None
+        self.progress_buttons: dict[str, ttk.Button] = {}
+        self.progress_detail_label: ttk.Label | None = None
         self.bar: ttk.Progressbar | None = None
         self.activity_bar: ttk.Progressbar | None = None
         self.task_tree: ttk.Treeview | None = None
@@ -262,6 +331,7 @@ class FlightUI:
         self.telemetry_var = tk.StringVar(value="IAS — kt · ALT — ft · V/S — fpm")
         self.lease: WorkspaceLease | None = None
         self.load_error = ""
+        self._recovery_state: tuple[str, SessionState] | None = None
         self.manual_job_id: str | None = None
         self.resume_workers: list[threading.Thread] = []
         try:
@@ -755,16 +825,15 @@ class FlightUI:
         )
 
     def finish_report(self) -> None:
-        """Finish the flight, its PDFs and revocation without modal confirmation.
+        """Finish the active Watcher session and its available flight reports.
 
         Returns:
-            None: Uses loaded OFP for the current or sole pending flight,
-                enables all four report editions for this operation,
-                then drains accepted work and revokes after report delivery.
-                Successful progress closes after durable credential cleanup.
+            None: Uses a loaded OFP and all editions for explicit flight
+                completion. Finishes accepted work with the current connection
+                and closes progress after success. Credentials stay in place.
         """
         if self.busy():
-            self.begin(True, automatic=True)
+            self.show_progress()
             return
         languages = REPORT_LANGUAGES
         try:
@@ -780,7 +849,7 @@ class FlightUI:
                 plan.languages = languages
                 plan.reports_enabled = True
                 plan.save()
-            self.begin(True, automatic=True)
+            self.begin(False, automatic=True)
         except (OSError, ValueError) as exc:
             messagebox.showerror(self.text("finish_pdf"), str(exc), parent=self.dialog_owner())
 
@@ -1287,6 +1356,13 @@ class FlightUI:
         if self.busy():
             self.show_progress()
             return
+        if self.host.linking_manager.linked_upload_mode_selected():
+            messagebox.showinfo(
+                self.text("saved_reports"),
+                self.text("linked_legacy_action_unavailable"),
+                parent=self.dialog_owner(),
+            )
+            return
         if self.load_error or self.lease is None:
             messagebox.showerror(
                 self.text("saved_reports"),
@@ -1325,13 +1401,14 @@ class FlightUI:
         try:
             languages = tuple(dict.fromkeys(code for item in (revision,) + additional for code in item.files))
             plan = replace(SessionPlan.load(row.directory), languages=languages)
+            owner, port, upload_url, api_key = self.host.capture_flight_admission()
             self.operation = FinalizationWorker(
-                [plan], self.normalize(self.host.config.gallery_url),
-                self.host.config.api_key, lambda _cancel, _deadline: None,
+                [plan], upload_url, api_key, lambda _cancel, _deadline: None,
                 lambda: None, False, saved_revision=revision,
                 saved_revisions=(revision,) + additional,
                 target_gallery=gallery,
                 emit=lambda level, message: self.host.events.put((level, message)),
+                gui_admission=(owner, port), require_gui_admission=True,
             )
             self._last_terminal = ""
             self.operation.start()
@@ -1479,18 +1556,30 @@ class FlightUI:
             variable.set(code in self.preferences.languages)
 
     def binding(self) -> str:
-        """Fingerprint the current saved connection.
+        """Fingerprint the selected target without falling back on expiry.
 
         Returns:
-            str: Non-secret endpoint/key binding.
+            str: Non-secret linked target or legacy endpoint/key binding.
+
+        Raises:
+            ValueError: Linked mode is selected without an owned binding.
         """
+        if self.host.linking_manager.linked_upload_mode_selected():
+            binding = self.host.linking_manager.linked_upload_binding()
+            if not isinstance(binding, str) or re.fullmatch(r"[0-9a-f]{64}", binding) is None:
+                raise ValueError("The linked gallery target is unavailable.")
+            return binding
         return connection_binding(
             self.normalize(self.host.config.gallery_url),
             self.host.config.api_key,
         )
 
-    def pending(self) -> list[SessionPlan]:
-        """Read recoverable work using the current saved key only.
+    def pending(self, *, binding: str | None = None) -> list[SessionPlan]:
+        """Read recoverable work for a live or verified saved target.
+
+        Args:
+            binding (str | None): Exact saved target fingerprint supplied by
+                the mode owner, or None to use the current connection.
 
         Returns:
             list[SessionPlan]: Pending connection-bound sessions.
@@ -1500,7 +1589,50 @@ class FlightUI:
         """
         if self.load_error:
             raise ValueError(self.load_error)
-        return pending_sessions(self.directory, self.binding())
+        return pending_sessions(
+            self.directory, self.binding() if binding is None else binding,
+        )
+
+    def session_state(self) -> SessionState:
+        """Project the Watcher lifecycle from workers and the owned queue.
+
+        Returns:
+            SessionState: Active capture, finishing work, interrupted work,
+                blocked recovery evidence, or an idle workspace. Durable
+                admissions read the queue again before changing it.
+        """
+        if self.busy() or self.host.api_key_revoke_running:
+            return "working"
+        watcher = self.host.worker
+        if watcher is not None and watcher.is_alive():
+            return "active"
+        try:
+            binding = self.binding()
+        except ValueError:
+            return "blocked"
+        if self._recovery_state is None or self._recovery_state[0] != binding:
+            try:
+                state: SessionState = "pending" if self.pending(binding=binding) else "idle"
+            except (OSError, ValueError):
+                # A malformed queue must not become an idle workspace.
+                state = "blocked"
+            self._recovery_state = (binding, state)
+        return self._recovery_state[1]
+
+    def show_recovery(self) -> None:
+        """Open recovery for the saved Watcher session, including after restart.
+
+        Returns:
+            None: Shows unfinished work or the error that prevents reading it.
+        """
+        if not self.busy() and (
+            self.independent_operation()
+            or (self.operation is not None
+                and self.operation.snapshot().phase == "completed")
+        ):
+            self.operation = None
+        self._recovery_state = None
+        self.show_progress()
 
     def can_start(self) -> bool:
         """Refuse a new flight while existing accepted work needs completion.
@@ -1508,20 +1640,17 @@ class FlightUI:
         Returns:
             bool: True when current connection work can be admitted.
         """
-        if self.busy():
+        if self.busy() or self.host.api_key_revoke_running:
             self.show_progress()
             return False
         try:
             pending = self.pending()
-        except ValueError as exc:
+        except (OSError, ValueError) as exc:
             self.host.events.put(("warning", str(exc)))
+            self.show_recovery()
             return False
         if pending:
-            self.show_progress()
-            messagebox.showinfo(
-                self.text("flight_progress"), self.text("finish_pending"),
-                parent=self.dialog_owner(),
-            )
+            self.show_recovery()
             return False
         return True
 
@@ -1538,10 +1667,26 @@ class FlightUI:
         """
         if self.load_error or self.lease is None:
             raise ValueError(self.load_error or "Flight workspace unavailable.")
+        linked = self.host.linking_manager.linked_upload_mode_selected()
+        target = self.host.linking_manager.selected_upload_target() if linked else None
+        if linked and target is None:
+            raise ValueError(self.text("linked_target_unavailable"))
+        if target is not None:
+            target_binding = target.binding()
+            if (not isinstance(target_binding, str)
+                    or re.fullmatch(r"[0-9a-f]{64}", target_binding) is None
+                    or target_binding != self.host.linking_manager.linked_upload_binding()):
+                raise ValueError(self.text("linked_target_unavailable"))
+        else:
+            target_binding = None
         if not self.save_preferences():
             raise ValueError("Flight preferences must be saved before starting.")
+        gallery_identity = (
+            target.issuer + " #" + str(target.gallery_id)
+            if target is not None else self.normalize(self.host.config.gallery_url)
+        )
         self.recorder = FlightRecorder(
-            self.directory, self.normalize(self.host.config.gallery_url),
+            self.directory, gallery_identity,
             self.host.config.simconnect_dll_path,
             lambda level, message: self.host.events.put((level, message)),
         )
@@ -1555,11 +1700,19 @@ class FlightUI:
         self.active_dispatch_directory = directory
         self.plan = SessionPlan(
             directory=directory,
-            binding=self.binding(),
+            binding=target_binding if target_binding is not None else self.binding(),
             languages=self.preferences.languages,
             reports_enabled=self.preferences.reports and self.preferences.recording,
+            local_only=linked,
         )
+        if linked and self.plan.reports_enabled:
+            self.host.events.put((
+                "info",
+                "[flight-report] Linked galleries retain flight reports locally; "
+                "PDF delivery is not authorized by this connection.",
+            ))
         self.plan.save()
+        self._recovery_state = None
         self.recorder.start()
         self.dispatch = None
         self.refresh_dispatch_status()
@@ -1595,6 +1748,8 @@ class FlightUI:
             bool: True while consent exists for ordinary finalization; False
                 after cancellation, submission, restart or independent PDF work.
         """
+        if self.host.linking_manager.linked_upload_mode_selected():
+            return False
         operation = self.operation
         return bool(
             operation is not None and not self.independent_operation()
@@ -1612,6 +1767,8 @@ class FlightUI:
             None: Reuses in-memory consent; never restores consent from disk.
                 Failed local abandonment requires its explicit confirmation again.
         """
+        if self.busy() or self.host.api_key_revoke_running:
+            return
         if self.operation is not None and self.operation.abandonment is True:
             self.abandon()
             return
@@ -1671,7 +1828,7 @@ class FlightUI:
             self.dispatch_worker.join(timeout=remaining)
 
     def begin(self, revoke: bool = False, *, automatic: bool = False) -> None:
-        """Start or join Stop/Revoke, honoring the one-click Finish action.
+        """Start or join Stop; refuse Revoke until its cleanup is fenced.
 
         Args:
             revoke (bool): Whether this explicit action should finally revoke.
@@ -1679,9 +1836,17 @@ class FlightUI:
                 skip confirmation and close its views only after verified success.
 
         Returns:
-            None: Shows progress and runs expensive tasks on a worker;
-                active abandonment cannot be upgraded to remote revocation.
+            None: Shows progress for Stop, or explains that remote revocation
+                is unavailable while its local acknowledgement is not fenced.
         """
+        linked = self.host.linking_manager.linked_upload_mode_selected()
+        if revoke:
+            messagebox.showinfo(
+                self.text("flight_progress"),
+                self.text("revoke_temporarily_unavailable"),
+                parent=self.dialog_owner(),
+            )
+            return
         if self.load_error:
             messagebox.showerror(
                 self.text("flight_progress"),
@@ -1724,6 +1889,27 @@ class FlightUI:
             return
         try:
             plans = self.pending()
+            if linked and any(not plan.local_only for plan in plans):
+                raise ValueError("Linked flight work requires local-only reports.")
+            photo_worker = self.host.worker
+            watching = photo_worker is not None and photo_worker.is_alive()
+            if linked and not watching:
+                # A linked destination owns one exclusive photo worker. Older
+                # profiles with multiple plans recover one session per Retry.
+                plans = plans[:1]
+            remote_reports = any(
+                plan.reports_enabled and not plan.local_only and not plan.abandoned
+                for plan in plans
+            )
+            gui_admission = None
+            upload_url = ''
+            api_key = ''
+            if remote_reports:
+                owner, port, upload_url, api_key = self.host.capture_flight_admission()
+                binding = connection_binding(upload_url, api_key)
+                if any(plan.binding != binding for plan in plans):
+                    raise ValueError('Flight work belongs to a different gallery connection.')
+                gui_admission = (owner, port)
             self.host.api_key_revoke_running = True
             worker = self.host.manual_worker
             self.manual_job_id = (
@@ -1735,23 +1921,22 @@ class FlightUI:
             self.stop()
             if revoke:
                 self.stop_other_workers()
-            photo_worker = self.host.worker
-            if photo_worker is not None and photo_worker.is_alive():
+            if watching:
                 drain = getattr(photo_worker, "request_drain", None)
                 if not callable(drain):
                     raise RuntimeError("Watcher cannot safely drain accepted files.")
                 drain()
             self.resume_workers = []
-            if photo_worker is None or not photo_worker.is_alive():
+            if not watching:
                 for plan in plans:
                     resumed = self.resume_photos(plan.directory)
                     if resumed is not None:
                         self.resume_workers.append(resumed)
             self.operation = FinalizationWorker(
-                plans, self.normalize(self.host.config.gallery_url),
-                self.host.config.api_key, self.wait_for_workers,
+                plans, upload_url, api_key, self.wait_for_workers,
                 self.submit_revoke, revoke,
                 emit=lambda level, message: self.host.events.put((level, message)),
+                gui_admission=gui_admission, require_gui_admission=remote_reports,
             )
             if automatic:
                 self.automatic_operation = self.operation
@@ -1840,12 +2025,19 @@ class FlightUI:
         watched = self.host.worker
         if watched is not None and getattr(watched, "drain_manifest", None) is None:
             raise RuntimeError("Watcher has no durable queue; recovery required.")
-        for plan in self.pending():
+        operation = self.operation
+        for plan in operation.plans if operation is not None else self.pending():
             path = plan.directory / "watch-drain.json"
-            if path.exists() and read_document(path).get("pending"):
-                raise RuntimeError(
-                    "Accepted photographs remain pending. Retry before revoking."
-                )
+            if path.exists():
+                row = read_document(path)
+                pending = row.get("pending")
+                if not isinstance(pending, list) or not isinstance(row.get("frozen"), bool):
+                    raise ValueError("Pending photograph queue is malformed.")
+                if pending or not row["frozen"]:
+                    raise RuntimeError(
+                        str(row.get("error") or "")
+                        or "Photographs still need review. Retry or keep files locally."
+                    )
         for job_id, binding in self.import_bindings.entries().items():
             if not wants_revoke or binding != self.binding():
                 continue
@@ -1860,23 +2052,15 @@ class FlightUI:
             self.import_bindings.resolve(job_id)
 
     def submit_revoke(self) -> None:
-        """Queue the existing transport's result without touching Tk.
+        """Refuse remote revocation until its asynchronous cleanup is fenced.
 
         Returns:
-            None: GUI event owns durable local credential clearing.
+            None: This temporary guard never submits a server request.
 
         Raises:
-            Exception: Transport error leaves the key and pending state retained.
+            RuntimeError: Revocation is unavailable; the key remains retained.
         """
-        if self.operation is None:
-            raise RuntimeError("No explicitly confirmed revoke operation.")
-        result = self.revoke_transport(
-            self.operation.upload_url, self.operation.api_key
-        )
-        self.host.events.put({
-            "kind": "api_key_revoked",
-            "payload": {"message": str(result.get("message", "API key revoked."))},
-        })
+        raise RuntimeError('API-key revocation is temporarily unavailable.')
 
     def revoked(self, error: str = "") -> None:
         """Acknowledge GUI-owned local credential persistence.
@@ -1916,31 +2100,39 @@ class FlightUI:
             self.operation is not None and self.operation.abandonment is True
         )
         mode = "abandon" if abandoning else "upload" if saved_upload else local_mode
+        if self.operation is None:
+            self.phase_var.set(self.text("review_pending_uploads"))
+            try:
+                detail = ""
+                for plan in self.pending():
+                    path = plan.directory / "watch-drain.json"
+                    detail = plan.error or (
+                        str(read_document(path).get("error") or "")
+                        if path.exists() else ""
+                    )
+                    if detail:
+                        break
+                self.detail_var.set(detail or self.text("watcher_recovery_hint"))
+            except (OSError, ValueError) as exc:
+                self.detail_var.set(str(exc))
+            self.time_var.set("")
         if self.dialog is not None and self.dialog.winfo_exists():
             if self._progress_local_mode == mode:
+                self.refresh_tasks()
+                self.refresh_progress_actions()
                 self.dialog.deiconify()
                 self.dialog.lift()
                 return
             self.dialog.destroy()
             self._animation_running = False
         self._progress_local_mode = mode
-        self.keep_local_button = None
-        if self.operation is None:
-            self.phase_var.set(self.text("phase_idle"))
-            try:
-                self.detail_var.set("; ".join(
-                    plan.session_id + (": " + plan.error if plan.error else "")
-                    for plan in self.pending()
-                ) or self.text("finish_pending"))
-            except ValueError as exc:
-                self.detail_var.set(str(exc))
         owner = self.dialog_owner()
         self.dialog = tk.Toplevel(owner)
         self.dialog.withdraw()
         self.dialog.title(self.text("flight_progress"))
         self.dialog.transient(self.host.root)
-        frame = ttk.Frame(self.dialog, padding=18)
-        frame.pack(fill="both", expand=True)
+        frame = GlassCard(self.dialog, padding=(16, 12))
+        frame.pack(fill="both", expand=True, padx=8, pady=8)
         ttk.Label(
             frame, textvariable=self.phase_var, style="Section.TLabel"
         ).pack(anchor="w")
@@ -1958,16 +2150,20 @@ class FlightUI:
         self.task_tree.column("#0", width=250)
         self.task_tree.column("state", width=230)
         self.task_tree.pack(fill="both", expand=True, pady=(4, 8))
-        ttk.Label(
+        self.progress_detail_label = ttk.Label(
             frame, textvariable=self.detail_var, wraplength=520
-        ).pack(anchor="w", fill="x")
+        )
+        self.progress_detail_label.pack(anchor="w", fill="x")
         ttk.Label(frame, textvariable=self.time_var).pack(anchor="w", pady=8)
         actions = ttk.Frame(frame)
         actions.pack(fill="x", pady=(8, 0))
+        self.progress_actions = actions
         ordinary_actions = (
             ("retry", self.retry_finalization),
             ("keep_local", self.keep_local),
             ("abandon", self.abandon),
+            ("keep_watched_files", self.abandon),
+            ("reconnect_upload_gallery", self.host.reconnect_upload_gallery),
             ("cancel_revoke", self.cancel_revocation),
             ("open_reports", self.open_reports),
             ("hide", self.dialog.withdraw),
@@ -1987,21 +2183,68 @@ class FlightUI:
             abandon_actions if abandoning else
             local_actions if local_mode else ordinary_actions
         )
-        for index, (label, command) in enumerate(choices):
-            button = ttk.Button(
-                actions, text=self.text(label), command=command
+        self.progress_buttons = {
+            label: ttk.Button(
+                actions, text=self.text(label), command=command,
+                style="Accent.Compact.TButton" if label == "retry" else "Compact.TButton",
             )
+            for label, command in choices
+        }
+        self.refresh_tasks()
+        self.refresh_progress_actions()
+        self.dialog.protocol("WM_DELETE_WINDOW", self.dialog.withdraw)
+        self.dialog.bind("<Escape>", lambda _event: self.dialog.withdraw())
+        place_dialog(self.dialog, owner)
+        self.dialog.deiconify()
+
+    def refresh_progress_actions(self) -> None:
+        """Show only actions usable for the current progress or recovery state.
+
+        Returns:
+            None: Updates the compact action rows without opening a window.
+        """
+        actions = self.progress_actions
+        if actions is None or not actions.winfo_exists():
+            return
+        operation = self.operation
+        phase = operation.snapshot().phase if operation is not None else None
+        running = phase not in {None, "completed", "error", "cancelled"}
+        linked = self.host.linking_manager.linked_upload_mode_selected()
+        choices: list[str] = []
+        if self.independent_operation():
+            if running:
+                choices.append("cancel_upload" if operation.saved_upload else "cancel_pdf")
+            elif phase != "completed":
+                choices.append("retry")
+            choices.append("open_reports")
+        elif operation is not None and operation.abandonment:
+            if not running and phase != "completed":
+                choices.append("retry")
+        elif running or self.session_state() == "pending":
+            if not running:
+                if linked and self.host.linking_manager.selected_upload_target() is None:
+                    choices.append("reconnect_upload_gallery")
+                choices.append("retry")
+                if not linked:
+                    choices.append("keep_local")
+            if self.pending_revoke_intent():
+                choices.append("cancel_revoke")
+            choices.append("keep_watched_files" if linked else "abandon")
+        elif self.session_state() == "blocked":
+            choices.append("retry")
+        choices.append("hide")
+        for label, button in self.progress_buttons.items():
+            if label not in choices:
+                button.grid_remove()
+        for index, label in enumerate(choices):
+            button = self.progress_buttons[label]
+            button.configure(text=self.text(label))
             column = index % PROGRESS_ACTION_COLUMNS
             actions.columnconfigure(column, weight=1)
             button.grid(
                 row=index // PROGRESS_ACTION_COLUMNS, column=column,
                 sticky="ew", padx=(0, 4), pady=(0, 4),
             )
-            if label == "keep_local":
-                self.keep_local_button = button
-        self.dialog.protocol("WM_DELETE_WINDOW", self.dialog.withdraw)
-        place_dialog(self.dialog, owner)
-        self.dialog.deiconify()
 
     def cancel_local_pdf(self) -> None:
         """Cancel queued PDF work and drain running renders, retaining results.
@@ -2037,8 +2280,19 @@ class FlightUI:
         """
         tree = self.task_tree
         operation = self.operation
-        if tree is None or not tree.winfo_exists() or operation is None:
+        if tree is None or not tree.winfo_exists():
             return
+        if operation is None or (
+            not self.independent_operation()
+            and operation.snapshot().phase == "draining"
+        ):
+            tree.pack_forget()
+            return
+        if not tree.winfo_manager():
+            tree.pack(
+                fill="both", expand=True, pady=(4, 8),
+                before=self.progress_detail_label,
+            )
         progress = operation.snapshot()
         rows: list[tuple[str, str, str]] = []
         if operation.saved_upload is True:
@@ -2095,10 +2349,17 @@ class FlightUI:
         """Explicitly resolve pending remote delivery while retaining artifacts.
 
         Returns:
-            None: Persists local retention and resumes finalization, including
-                the same connection's already-confirmed unsubmitted revocation.
+            None: Persists local retention and resumes local finalization, or
+                refuses a still-pending revocation without changing the plan.
         """
         revoke = self.pending_revoke_intent()
+        if revoke:
+            messagebox.showinfo(
+                self.text('flight_progress'),
+                self.text('revoke_temporarily_unavailable'),
+                parent=self.dialog_owner(),
+            )
+            return
         automatic = self.automatic_completion()
         if self.busy() or not messagebox.askyesno(
             self.text("keep_local_revoke" if revoke else "keep_local"),
@@ -2124,13 +2385,14 @@ class FlightUI:
             )
 
     def abandon(self) -> None:
-        """Stop the captured flight and forget its local key without a server.
+        """Close the captured session after stopping its admitted producers.
 
         Returns:
-            None: Confirmation starts bounded asynchronous worker shutdown,
-                retains files and abandons pending delivery before local cleanup.
+            None: Confirmation starts bounded asynchronous shutdown and keeps
+                original files. Only the legacy action clears a saved API key.
                 Submitted revocation and independent PDF work must settle first.
         """
+        linked = self.host.linking_manager.linked_upload_mode_selected()
         if self.busy() and (
             self.independent_operation()
             or (self.operation is not None and self.operation.abandonment is True)
@@ -2138,12 +2400,15 @@ class FlightUI:
             self.show_progress()
             return
         if not messagebox.askyesno(
-            self.text("abandon"), self.text("confirm_abandon"),
+            self.text("keep_watched_files" if linked else "abandon"),
+            self.text("confirm_keep_watched_files" if linked else "confirm_abandon"),
             parent=self.dialog_owner(),
         ):
             return
         try:
             plans = self.pending()
+            if linked and not plans:
+                return
             previous = self.operation
             if previous is not None:
                 if not previous.cancel_revoke() and (
@@ -2156,19 +2421,22 @@ class FlightUI:
             self.host.api_key_revoke_running = True
             self.host.utc_sync.stop()
             self.stop()
-            for worker in (
-                self.host.worker, self.host.manual_worker,
-                self.host.preflight_worker, self.host.ai_worker,
-                *self.resume_workers,
-            ):
+            workers = [self.host.worker, *self.resume_workers]
+            if not linked:
+                workers.extend((
+                    self.host.manual_worker, self.host.preflight_worker,
+                    self.host.ai_worker,
+                ))
+                self.host.ai_worker_stop_requested = True
+            for worker in workers:
                 if worker is not None and worker.is_alive():
                     worker.stop()
-            self.host.ai_worker_stop_requested = True
             self.operation = FinalizationWorker(
-                plans, self.normalize(self.host.config.gallery_url),
-                self.host.config.api_key, self.wait_for_abandonment,
-                self.submit_revoke, False, forget=self.submit_forget,
+                plans, "" if linked else self.normalize(self.host.config.gallery_url),
+                "" if linked else self.host.config.api_key, self.wait_for_abandonment,
+                self.submit_revoke, False, forget=None if linked else self.submit_forget,
                 emit=lambda level, message: self.host.events.put((level, message)),
+                abandon_local=linked,
             )
             self.automatic_operation = self.operation
             self.host.api_key_revoke_thread = self.operation
@@ -2198,16 +2466,20 @@ class FlightUI:
             InterruptedError: Cancellation retains the key and unresolved work.
             TimeoutError: A worker did not stop before the existing deadline.
         """
+        local_only = self.operation is not None and self.operation.forget is None
         while True:
             if cancel.is_set():
                 raise InterruptedError("Abandonment cancelled; local key retained.")
             workers = (
-                self.abandon_previous, self.recorder, self.dispatch_worker,
+                self.abandon_previous, self.host.worker, self.recorder, self.dispatch_worker,
                 self.host.utc_sync, *self.resume_workers,
             )
-            if not self.host.api_key_request_blockers() and not any(
+            other_work = not local_only and (
+                self.host.api_key_request_blockers() or self.host.semantic_ai_install_running
+            )
+            if not other_work and not any(
                 worker is not None and worker.is_alive() for worker in workers
-            ) and not self.host.semantic_ai_install_running:
+            ):
                 return
             if time.monotonic() >= deadline:
                 raise TimeoutError("Workers are still stopping; local key retained.")
@@ -2263,13 +2535,14 @@ class FlightUI:
             None: Schedules the next bounded Tk update while the app is open.
         """
         operation = self.operation
+        watcher = self.host.worker
+        if (watcher is not None and not watcher.is_alive()
+                and self.recorder is not None and self.recorder.is_alive()):
+            self.recorder.stop()
+            self.host.utc_sync.stop()
         self.refresh_telemetry()
         self.accept_simbrief()
         self.refresh_dispatch_status()
-        if self.keep_local_button is not None and self.keep_local_button.winfo_exists():
-            self.keep_local_button.configure(text=self.text(
-                "keep_local_revoke" if self.pending_revoke_intent() else "keep_local"
-            ))
         if operation is not None:
             progress = operation.snapshot()
             terminal = progress.phase in {"completed", "error", "cancelled"}
@@ -2326,11 +2599,17 @@ class FlightUI:
             if terminal and self._last_terminal != progress.phase:
                 self._last_terminal = progress.phase
                 if not self.independent_operation():
+                    self._recovery_state = None
                     self.host.api_key_revoke_running = False
                     self.host.api_key_revoke_thread = None
-                    self.host.status_var.set(self.text("phase_" + progress.phase))
+                    self.host.status_var.set(self.text(
+                        "watched_files_kept"
+                        if (progress.phase == "completed"
+                            and operation.abandonment and operation.forget is None)
+                        else "phase_" + progress.phase
+                    ))
                     self.host.watcher_activity_var.set(
-                        self.text("phase_" + progress.phase)
+                        self.text("phase_" + progress.phase),
                     )
                 self.refresh_reports()
                 self.host.refresh_connection_controls()
@@ -2339,4 +2618,5 @@ class FlightUI:
                     and self.dialog is not None and self.dialog.winfo_exists()
                 ):
                     self.dialog.withdraw()
+        self.refresh_progress_actions()
         self.host.root.after(PROGRESS_TICK_MS, self.tick)
