@@ -8678,6 +8678,10 @@ ephemeral checkout and delegates PHP regression to the existing disposable
 MariaDB owner with browser tests explicitly disabled. On Windows it uses the
 repository installer builder with already installed build dependencies and
 checks the produced hash and size. The build outputs stay on the runner.
+Its Node job delegates the full registered JavaScript fixture set to
+`scripts/audit.php --suite=node-full`, including gallery-editor navigation.
+Browser-dependent fixtures are explicitly disabled there; actual Chromium
+qualification remains with its required FULL owner.
 These jobs prove only their exact-source diagnostics. They do not publish a
 release, qualify a prepared integration SHA, or replace the required FULL
 Chromium and installed GUI coverage.
