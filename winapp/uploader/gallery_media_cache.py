@@ -890,11 +890,12 @@ class GalleryMediaCache:
                         item.name.startswith('.media-')
                         or item.name.startswith('.pin-')
                     ) and item.name.endswith('.tmp')
+                    item_path = Path(item.path)
                     if temporary:
-                        info = item.stat(follow_symlinks=False)
+                        info = item_path.lstat()
                         if not stat.S_ISREG(info.st_mode):
                             return None
-                        if not self._unlink(Path(item.path)):
+                        if not self._unlink_if_matches(item_path, info):
                             return None
                         continue
                     match = item.name.endswith('.bin') and (
@@ -902,10 +903,12 @@ class GalleryMediaCache:
                     )
                     if not match:
                         continue
-                    info = item.stat(follow_symlinks=False)
+                    # Windows DirEntry.stat can omit the inode. A direct
+                    # no-follow stat supplies the identity checked against fstat.
+                    info = item_path.lstat()
                     if not stat.S_ISREG(info.st_mode):
                         return None
-                    entries.append((Path(item.path), info))
+                    entries.append((item_path, info))
             return entries
         except OSError:
             return None

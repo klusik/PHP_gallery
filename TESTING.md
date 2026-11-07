@@ -8560,6 +8560,9 @@ download attempt does not imply full coverage after ordinary LRU eviction.
 Cache fixtures pin one exact issuer/gallery across restart, pressure the
 ordinary item/byte quota, reject unsafe paths and preserve retained originals
 when an unpin copy fails. Retained files do not consume ordinary inventory work.
+The Windows identity regression models a directory-entry stat with inode zero;
+retained cleanup captures direct no-follow path identities and preserves the
+same-file comparison against opened handles.
 Native UI coverage must observe icons without opening Information, preload
 progress/cancel, persisted Keep preloaded, and returning an album to normal
 cache policy. Use an existing test gallery and avoid unrelated cache deletion.

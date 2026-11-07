@@ -366,6 +366,8 @@ class PhotosWorkspace(ttk.Frame):
             self._heading_controls, '◌', self._open_cache_context,
             self._cache_tooltip,
         )
+        # Fit the retention pin and coverage glyph together using Tk's width.
+        self._cache_button.configure(width=-1)
         self._cache_button.pack(side='right', padx=(0, 8))
         self._gallery_title = tk.StringVar(self._gallery_heading)
         self._show_subgalleries = tk.BooleanVar(self._gallery_heading, value=True)

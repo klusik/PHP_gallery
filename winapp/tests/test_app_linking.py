@@ -14,6 +14,7 @@ import base64
 import hashlib
 import http.client
 import json
+import os
 import queue
 import socket
 import sys
@@ -2424,6 +2425,40 @@ class NativeMediaSessionTests(unittest.TestCase):
             retained_root.write_text('not a directory', encoding='utf-8')
             self.assertFalse(cache.set_gallery_pinned(issuer, 4, True))
             self.assertFalse(cache.is_gallery_pinned(issuer, 4))
+
+    def test_retained_scan_uses_direct_path_identity(self) -> None:
+        """Avoid zero-inode DirEntry metadata in retained cleanup snapshots.
+
+        Returns:
+            None: A synthetic Windows-style DirEntry inode of zero is ignored;
+                the direct no-follow path stat matches the actual cache object.
+        """
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            gallery_key = cache.gallery_key('https://gallery.example', 4)
+            retained_directory = Path(directory) / '.retained' / gallery_key
+            retained_directory.mkdir(parents=True)
+            key = cache.key('https://gallery.example', 4, 7, True)
+            entry_path = retained_directory / (key + '.bin')
+            entry_path.write_bytes(b'fixture')
+            listed_entry = mock.Mock()
+            listed_entry.name = entry_path.name
+            listed_entry.path = str(entry_path)
+            listed_entry.stat.return_value = mock.Mock(st_ino=0)
+            listing = mock.MagicMock()
+            listing.__enter__.return_value = iter((listed_entry,))
+
+            with mock.patch.object(
+                gallery_media_cache.os, 'scandir', return_value=listing,
+            ):
+                retained = cache._retained_entries(retained_directory)
+
+            self.assertIsNotNone(retained)
+            self.assertEqual(1, len(retained))
+            self.assertTrue(os.path.samestat(
+                entry_path.lstat(), retained[0][1],
+            ))
+            listed_entry.stat.assert_not_called()
 
 
 class NativeMediaTransportTests(unittest.TestCase):
