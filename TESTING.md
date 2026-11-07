@@ -8368,7 +8368,8 @@ track changes. Compare contextual panels at desktop and narrow widths,
 including an outside click, Escape, and macOS Control-click.
 Deliver both a legacy wheel notch and a packed Tk TouchpadScroll event over
 a thumbnail and in the photo overlay. Verify grid movement and zoom in both
-lightbox modes. Check that unknown cache coverage has no tree icon.
+lightbox modes. Check that unchecked cache coverage has a dotted-circle icon
+and changes automatically as authorized photos are loaded or preloaded.
 The native Tk fixture reclaims destroyed widget cycles on the Tk owner thread
 between tests so finalizers cannot consume the cover worker's readiness deadline.
 
