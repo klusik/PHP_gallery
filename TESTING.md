@@ -8262,6 +8262,16 @@ repaint after Close and Escape at normal and minimum widths. Include a loaded
 photo and a failed photo read so the underlying tree and tiles both redraw.
 Hover and focus a tile and an icon near a window edge. Verify that the themed
 tooltip stays readable inside the main window and disappears when navigating.
+Compare installed Segoe UI Variable Text and font fallback at normal and narrow
+window widths. Check accented gallery titles, settings inputs, menus and logs.
+Known icons must have smooth edges, preserve disabled/focus states and update
+when Play changes to Pause or the recording pulse changes color. In the tree,
+cache coverage, Keep preloaded and the recording marker must coexist without
+changing selection or expanded branches. Repeat source startup without Pillow.
+The display-bootstrap fixture preserves an already-aware manifest/host context,
+requests native startup resolution for an unaware Windows process and keeps
+native refusal/non-Windows launches usable. Real display scaling, different-DPI
+monitor moves and ClearType appearance remain manual coverage.
 Verify a stale or revoked link cannot publish gallery results, and confirm
 that the logon `--startup` path still starts in the system tray.
 On macOS and Windows, approve a continuing listing link, quit WinApp and

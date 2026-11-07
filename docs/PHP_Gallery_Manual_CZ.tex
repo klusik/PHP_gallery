@@ -2290,6 +2290,17 @@ nepřipojuje. Fotografie se nahrávají nezávisle. Zavření nastavení nezahaj
 spolehlivosti Windows Tk; zdrojový režim bez Pillow ponechává funkční
 nativní ovládání pro opravu závislostí.
 
+Windows přednostně používá nainstalované písmo Segoe UI Variable Text,
+případně Segoe UI nebo nativní písmo Tk. Společné textové styly respektují
+systémové vyhlazování; neproporcionální diagnostika zachovává své písmo.
+Běžné ovládací ikony, stav cache, připnutí a~záznam používají vyhlazené
+obrázky vytvořené ve vyšším rozlišení. Bez Pillow zůstávají čitelné nativní
+symboly. Aplikace nestahuje písma ani nemění systémové předvolby.
+Proces ve Windows si před vytvořením oken vyžádá systémovou podporu DPI;
+existující kontext z~manifestu zachová. Nepřidává tím automatické
+přeskupování mezi monitory. Při přesunu mezi monitory s~odlišným měřítkem
+spusťte aplikaci znovu na cílovém monitoru.
+
 Uložené cesty, URL galerie a~volby funkcí se při příštím spuštění obnoví.
 Jazyk rozhraní se vybírá čtyřmi přímo zobrazenými volbami. Posuvníky jsou
 viditelné pouze při přetečení obsahu; pomocná okna a~tooltipy používají

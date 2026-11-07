@@ -565,6 +565,24 @@ truncation can leave partial bytes; decoding and re-encoding the entire JSON
 document can change formatting and numeric representation. It does not provide
 visibility-marker recovery.
 
+## WinApp native text and display scaling
+
+The shared theme selects an installed UI family rather than installing fonts.
+Windows prefers Segoe UI Variable Text, then Segoe UI; a native Tk family remains
+available on other platforms. Windows text retains its native GDI smoothing
+policy. Supersampled control/cache/recording artwork avoids emoji substitution;
+Pillow-free source launches retain usable glyph controls. The theme owns these
+permanent fallbacks because dependencies and installed fonts vary across source
+and packaged runtimes. Installed prevalence is unknown.
+
+The Windows display bootstrap requests system awareness only for an unaware
+process before creating Tk windows. An existing manifest/host context is never
+replaced. Native API refusal keeps the original toolkit path usable. System
+awareness deliberately matches Tk 8.6 startup scaling; automatic layout reflow
+between differently scaled monitors is not claimed. Native display/ClearType
+appearance, fractional scaling and monitor moves need manual qualification.
+No OS display or smoothing preferences are changed.
+
 ## WinApp update process exit
 
 The updater permanently retains verified downloads, installed-path validation,

@@ -2372,6 +2372,17 @@ Att stänga inställningarna startar ingen åtgärd. Ogenomskinliga RGB-bilder
 ger säker Windows Tk-visning; utan Pillow finns fungerande inbyggda
 kontroller kvar i källäget för att reparera beroenden.
 
+Windows föredrar det installerade typsnittet Segoe UI Variable Text,
+med Segoe UI och Tk:s inbyggda typsnitt som reserv. Gemensamma textstilar
+respekterar Windows kantutjämning; diagnostik med fast teckenbredd behåller
+sitt typsnitt. Vanliga kontroll-, cache-, nål- och inspelningssymboler
+använder bilder som ritas i högre upplösning och skalas ned med utjämning.
+Utan Pillow finns läsbara inbyggda tecken kvar. Appen hämtar inga typsnitt
+och ändrar inga systeminställningar. Före det första fönstret begär en
+Windows-process utan DPI-medvetenhet systemets läge och bevarar ett befintligt
+manifestläge. Automatisk layoutanpassning mellan skärmar ingår inte.
+Starta om appen på målskärmen vid flytt mellan olika skalningar.
+
 Watcher visar mappsökvägen och \ui{Choose folder…}. Sparade
 sökvägar, galleri-URL och funktionsval återställs efter omstart. Fyra synliga
 val väljer gränssnittsspråk. Rullningslister visas bara när innehållet är

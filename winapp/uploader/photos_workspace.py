@@ -31,7 +31,10 @@ from .linked_create import BoundCreateReceipt
 from .linked_upload import LinkedUploadTarget
 from .native_gallery_viewer import GalleryThumbnailMemory, mount_native_gallery_view
 from .tk_scroll_input import vertical_scroll_delta
-from .ui_theme import GlassCard, _PALETTE, attach_inline_tooltip, icon_button
+from .ui_theme import (
+    GlassCard, ThemeImage, _PALETTE, attach_inline_tooltip,
+    create_smooth_icon, icon_button,
+)
 
 
 # Purpose: Keep Tk result delivery responsive during sequential page loading.
@@ -87,6 +90,12 @@ PHOTOS_HEADING_STACK_WIDTH = 440
 # Consumers: PhotosWorkspace._recording_image.
 # Rationale: Nine pixels remain legible without changing the tree row height.
 PHOTOS_RECORDING_DOT_SIZE = 9
+
+# Purpose: Keep composite cache and Watcher marks legible beside gallery titles.
+# Type: int. Units: logical pixels. Scope: one Photos tree marker image.
+# Consumers: PhotosWorkspace._tree_marker.
+# Rationale: 18 px fits the 30 px tree row without changing title spacing.
+PHOTOS_TREE_MARKER_SIZE = 18
 
 # Purpose: Coalesce successful media reads before checking local cache headers.
 # Type: int; Units: milliseconds; Scope: the current Photos workspace.
@@ -238,7 +247,10 @@ class PhotosWorkspace(ttk.Frame):
         self._watcher_target: LinkedUploadTarget | None = None
         self._watcher_pulse = False
         self._recording_rows: set[str] = set()
-        self._recording_images: dict[tuple[bool, bool], tk.PhotoImage] = {}
+        self._recording_images: dict[tuple[bool, bool], ThemeImage] = {}
+        self._tree_marker_images: dict[
+            tuple[str, bool, bool, bool, bool], ThemeImage
+        ] = {}
 
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
@@ -890,14 +902,19 @@ class PhotosWorkspace(ttk.Frame):
             gallery = self._galleries[gallery_id]
             item_id = str(gallery_id)
             title = gallery.title or self._text("untitled")
-            glyph = self._cache_glyph(gallery_id)
-            label = ("  " if item_id in self._recording_rows else "") + (
-                (glyph + "  " if glyph else "") + title
-            )
+            marked = item_id in self._recording_rows
+            target = self._watcher_target
+            hollow = marked and target is not None and target.gallery_id != gallery_id
+            marker = self._tree_marker(gallery_id, marked, hollow)
+            label = title if marker is not None else self._cache_glyph(gallery_id) + "  " + title
+            image = marker
+            if image is None and marked:
+                image = self._recording_image(hollow)
             if self.tree.exists(item_id):
                 self.tree.item(
                     item_id,
                     text=label,
+                    image=image or "",
                 )
             else:
                 self.tree.insert(
@@ -905,6 +922,7 @@ class PhotosWorkspace(ttk.Frame):
                     self._ordered_index("", gallery_id),
                     iid=str(gallery_id),
                     text=label,
+                    image=image or "",
                     open=self._tree_state.get(gallery_id, self._expand_new_nodes),
                 )
             candidates.update(self._children_by_parent.get(gallery_id, ()))
@@ -1038,31 +1056,68 @@ class PhotosWorkspace(ttk.Frame):
         self._watcher_pulse = pulse
         self._update_recording_rows()
 
-    def _recording_image(self, hollow: bool) -> tk.PhotoImage:
+    def _recording_image(self, hollow: bool) -> ThemeImage:
         """Return a small red indicator for the current pulse phase.
 
         Args:
             hollow (bool): Draw an outline for an obscured descendant.
 
         Returns:
-            tk.PhotoImage: Retained Tk image for this phase and marker shape.
+            ThemeImage: Retained Pillow/Tk image for this phase and marker shape.
         """
         key = (hollow, self._watcher_pulse)
         image = self._recording_images.get(key)
         if image is None:
-            image = tk.PhotoImage(
-                master=self, width=PHOTOS_RECORDING_DOT_SIZE,
-                height=PHOTOS_RECORDING_DOT_SIZE,
+            image = create_smooth_icon(
+                self, "recording",
+                (PHOTOS_RECORDING_DOT_SIZE, PHOTOS_RECORDING_DOT_SIZE),
+                hollow=hollow, pulse=self._watcher_pulse,
             )
-            color = _PALETTE['recording' if self._watcher_pulse else 'recording_dim']
-            center = PHOTOS_RECORDING_DOT_SIZE // 2
-            for y in range(PHOTOS_RECORDING_DOT_SIZE):
-                for x in range(PHOTOS_RECORDING_DOT_SIZE):
-                    distance = (x - center) ** 2 + (y - center) ** 2
-                    # Inner and outer radii describe this circle's geometry.
-                    if distance <= center ** 2 and (not hollow or distance >= 7):
-                        image.put(color, (x, y))
+            if image is None:
+                image = tk.PhotoImage(
+                    master=self, width=PHOTOS_RECORDING_DOT_SIZE,
+                    height=PHOTOS_RECORDING_DOT_SIZE,
+                )
+                color = _PALETTE[
+                    'recording' if self._watcher_pulse else 'recording_dim'
+                ]
+                center = PHOTOS_RECORDING_DOT_SIZE // 2
+                for y in range(PHOTOS_RECORDING_DOT_SIZE):
+                    for x in range(PHOTOS_RECORDING_DOT_SIZE):
+                        distance = (x - center) ** 2 + (y - center) ** 2
+                        if distance <= center ** 2 and (
+                            not hollow or distance >= 7
+                        ):
+                            image.put(color, (x, y))
             self._recording_images[key] = image
+        return image
+
+    def _tree_marker(
+        self, gallery_id: int, recording: bool, hollow: bool,
+    ) -> ThemeImage | None:
+        """Return the composed cache, pin and Watcher marker for one row.
+
+        Args:
+            gallery_id (int): Gallery represented by the tree row.
+            recording (bool): Whether this exact row is recording.
+            hollow (bool): Whether the row hides a recording descendant.
+
+        Returns:
+            ThemeImage | None: Retained combined image, or None without Pillow.
+        """
+        status = self._cache_state.get(gallery_id, "unknown")
+        pinned = self._gallery_pins.get(gallery_id) is True
+        key = (status, pinned, recording, hollow, self._watcher_pulse)
+        image = self._tree_marker_images.get(key)
+        if image is None:
+            image = create_smooth_icon(
+                self, status,
+                (PHOTOS_TREE_MARKER_SIZE, PHOTOS_TREE_MARKER_SIZE),
+                pinned=pinned,
+                recording=recording, hollow=hollow, pulse=self._watcher_pulse,
+            )
+            if image is not None:
+                self._tree_marker_images[key] = image
         return image
 
     def _on_tree_expansion(self, _event: tk.Event) -> None:
@@ -1118,15 +1173,21 @@ class PhotosWorkspace(ttk.Frame):
                     parent = self.tree.parent(parent)
         for item in self._recording_rows | set(markers):
             if self.tree.exists(item):
-                image = self._recording_image(markers[item]) if item in markers else ''
-                was_marked = item in self._recording_rows
+                gallery_id = int(item)
                 is_marked = item in markers
-                if was_marked != is_marked:
-                    text = str(self.tree.item(item, 'text'))
-                    text = '  ' + text if is_marked else text.removeprefix('  ')
-                    self.tree.item(item, image=image, text=text)
-                else:
-                    self.tree.item(item, image=image)
+                image = self._tree_marker(
+                    gallery_id, is_marked, markers.get(item, False),
+                )
+                title = self._galleries.get(gallery_id)
+                text = (
+                    (title.title or self._text("untitled"))
+                    if title is not None else str(self.tree.item(item, "text"))
+                )
+                if image is None:
+                    text = self._cache_glyph(gallery_id) + "  " + text
+                    if is_marked:
+                        image = self._recording_image(markers[item])
+                self.tree.item(item, image=image or "", text=text)
         self._recording_rows = set(markers)
         selected_target = matching and target is not None and (
             self._selected_gallery_id == target.gallery_id
@@ -2447,7 +2508,7 @@ class PhotosWorkspace(ttk.Frame):
         glyph = {"cloud": "☁", "local": "●", "partial": "◐"}.get(
             self._cache_state.get(gallery_id, "unknown"), "◌",
         )
-        return ('📌 ' if self._gallery_pins.get(gallery_id) is True else '') + glyph
+        return ('PIN ' if self._gallery_pins.get(gallery_id) is True else '') + glyph
 
     def _gallery_info(
         self, card: GlassCard, session: LinkingSession, gallery_id: int,

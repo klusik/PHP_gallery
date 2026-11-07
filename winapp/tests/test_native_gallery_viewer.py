@@ -253,6 +253,104 @@ class NativeGalleryViewerTests(unittest.TestCase):
             time.sleep(TEST_GUI_POLL_SECONDS)
         self.fail(message)
 
+    def test_smooth_icon_button_updates_text_state_and_arrow_direction(self) -> None:
+        """Keep accessible text while redrawing dynamic and disabled icons.
+
+        Returns:
+            None: Play-to-pause updates the image and directional artwork differs.
+        """
+        from uploader import ui_theme
+
+        ui_theme.configure_theme(self.root)
+        with mock.patch.object(self.root, "winfo_fpixels", return_value=144.0):
+            ui_theme.configure_theme(self.root)
+            dpi_icon = ui_theme.create_smooth_icon(
+                self.root, "close", ui_theme._ICON_IMAGE_SIZE,
+            )
+            self.assertEqual((30, 30), ImageTk.getimage(dpi_icon).size)
+            self.assertEqual(
+                45,
+                int(ttk.Style(self.root).lookup("Treeview", "rowheight")),
+            )
+        host = ttk.Frame(self.root)
+        host.pack()
+        button = ui_theme.icon_button(
+            host, "play", lambda: None, "Toggle playback",
+            style_override="Icon.TButton",
+        )
+        button.pack()
+        self.root.update()
+        self.assertEqual("▶", button.cget("text"))
+        play_image = str(button.cget("image"))
+        self.assertTrue(play_image)
+
+        button.configure(text="Ⅱ")
+        self.root.update()
+        pause_image = str(button.cget("image"))
+        self.assertEqual("Ⅱ", button.cget("text"))
+        self.assertNotEqual(play_image, pause_image)
+
+        with mock.patch.object(
+            ui_theme, "create_smooth_icon", wraps=ui_theme.create_smooth_icon,
+        ) as render:
+            button.configure(state="disabled")
+            self.root.update()
+        self.assertIn("disabled", button.state())
+        self.assertTrue(button.cget("image"))
+        self.assertEqual(
+            ui_theme._PALETTE["muted"],
+            render.call_args.kwargs["tone"],
+        )
+
+        button.configure(state="normal")
+        external_badge = ImageTk.PhotoImage(
+            Image.new("RGBA", (8, 8), (255, 255, 255, 255)),
+            master=self.root,
+        )
+        button.configure(image=external_badge)
+        badge_name = str(button.cget("image"))
+        button.event_generate("<Enter>")
+        self.root.update()
+        self.assertEqual(badge_name, button.cget("image"))
+        button.configure(text="?", image=external_badge)
+        self.assertEqual("?", button.cget("text"))
+        self.assertEqual(badge_name, button.cget("image"))
+        button.configure(image="")
+        self.root.update()
+        self.assertEqual("?", button.cget("text"))
+        self.assertNotEqual(badge_name, button.cget("image"))
+        button.configure(text="×")
+        self.root.update()
+        self.assertNotEqual(badge_name, button.cget("image"))
+
+        with mock.patch.object(ui_theme, "create_smooth_icon", return_value=None):
+            button.configure(text="?")
+            self.root.update()
+        self.assertEqual("?", button.cget("text"))
+        self.assertFalse(button.cget("image"))
+
+        icon_size = ui_theme._ICON_IMAGE_SIZE
+        left = ui_theme.create_smooth_icon(self.root, "back", icon_size)
+        right = ui_theme.create_smooth_icon(self.root, "next", icon_size)
+        fit = ui_theme.create_smooth_icon(self.root, "fit", icon_size)
+        self.assertIsNotNone(ImageTk.getimage(fit).getbbox())
+        left_pixels = ImageTk.getimage(left)
+        right_pixels = ImageTk.getimage(right)
+        left_points = [
+            x for y in range(left_pixels.height)
+            for x in range(left_pixels.width)
+            if left_pixels.getpixel((x, y))[3] > 0
+        ]
+        right_points = [
+            x for y in range(right_pixels.height)
+            for x in range(right_pixels.width)
+            if right_pixels.getpixel((x, y))[3] > 0
+        ]
+        self.assertTrue(left_points)
+        self.assertTrue(right_points)
+        self.assertLess(sum(left_points) / len(left_points),
+                        sum(right_points) / len(right_points))
+
     def _png(self, color: tuple[int, int, int]) -> bytes:
         """Encode one tiny synthetic RGB image without filesystem access.
 
@@ -643,7 +741,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
 
         Returns:
             None: The gallery is selected automatically and has real thumbnails;
-                collapse keeps the album selected, and folder cards navigate.
+                scaled folder art fits its viewport and cards navigate.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -680,6 +778,22 @@ class NativeGalleryViewerTests(unittest.TestCase):
             lambda: shelf.winfo_viewable() and TEST_GALLERY_ID in shelf._covers,
             'The empty parent did not show its child folder with a photo cover.',
         )
+        with mock.patch.object(shelf, 'winfo_fpixels', return_value=144.0):
+            large_folder = shelf._folder_icon(
+                image_bytes[page.photos[0].image_id],
+            )
+        self.assertEqual((168, 102), ImageTk.getimage(large_folder).size)
+        shelf._covers[TEST_GALLERY_ID] = large_folder
+        shelf._tiles[TEST_GALLERY_ID].configure(image=large_folder)
+        self.root.update_idletasks()
+        shelf._viewport_changed(mock.Mock())
+        self.root.update_idletasks()
+        cards_height = shelf._cards.winfo_reqheight()
+        self.assertGreaterEqual(int(shelf._canvas.cget('height')), cards_height)
+        scroll_region = tuple(
+            float(value) for value in shelf._canvas.cget('scrollregion').split()
+        )
+        self.assertGreaterEqual(scroll_region[3], cards_height)
         self.assertTrue(workspace._show_subgalleries.get())
         workspace._subgallery_switch.invoke()
         self.root.update_idletasks()
@@ -754,17 +868,31 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session = self._session(page, presentation, image_bytes)
         session.gallery_pinned.return_value = False
         session.has_cached_photo.return_value = False
-        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Cache album')
-        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        gallery = LinkedGallery(
+            TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Cache album',
+        )
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        session.gallery_page.return_value = LinkedGalleryPage(
+            (parent, gallery), None,
+        )
+        manager = mock.Mock()
+        manager.photos_site_identity.return_value = (
+            'https://gallery.example.test/photos', 7,
+        )
         workspace = photos_workspace.PhotosWorkspace(
             self.root, lambda: session, mock.Mock(), lambda: 'en',
+            manager=manager,
         )
         workspace.pack(fill='both', expand=True)
         self._wait_until(
             lambda: workspace._cache_state.get(TEST_GALLERY_ID) == 'cloud',
             'A loaded viewer did not publish its automatic cloud cache icon.',
         )
-        self.assertIn('☁', workspace.tree.item(str(TEST_GALLERY_ID), 'text'))
+        row_id = str(TEST_GALLERY_ID)
+        parent_id = str(TEST_PARENT_GALLERY_ID)
+        self.assertEqual('Cache album', workspace.tree.item(row_id, 'text'))
+        cloud_image = workspace.tree.item(row_id, 'image')
+        self.assertTrue(cloud_image)
         self._wait_until(
             lambda: workspace._viewer._gallery_viewer_controller._worker is None,
             'The initial viewer requests did not settle before the local probe.',
@@ -777,7 +905,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             lambda: workspace._cache_state.get(TEST_GALLERY_ID) == 'local',
             'Local cache completion did not update the tree icon.',
         )
-        self.assertIn('●', workspace.tree.item(str(TEST_GALLERY_ID), 'text'))
+        local_image = workspace.tree.item(row_id, 'image')
+        self.assertEqual('Cache album', workspace.tree.item(row_id, 'text'))
+        self.assertNotEqual(cloud_image, local_image)
         controller.on_cache_changed(controller._photos, False)
         self._wait_until(
             lambda: workspace._cache_state.get(TEST_GALLERY_ID) == 'partial',
@@ -786,6 +916,46 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertEqual(metadata_reads, session.media_page.call_count)
         session.media_gallery_info.assert_not_called()
         session.media_gallery_details.assert_not_called()
+
+        workspace.tree.item(parent_id, open=False)
+        workspace._gallery_pins[TEST_GALLERY_ID] = True
+        selection = (row_id,)
+        workspace.tree.selection_set(selection)
+        target = mock.Mock(
+            issuer='https://gallery.example.test/photos', user_id=7,
+            gallery_id=TEST_GALLERY_ID,
+        )
+        workspace.set_watcher_recording(target, True)
+        self.root.update()
+        recording_image = workspace.tree.item(row_id, 'image')
+        ancestor_image = workspace.tree.item(parent_id, 'image')
+        self.assertTrue(recording_image)
+        self.assertTrue(ancestor_image)
+        self.assertNotEqual(local_image, recording_image)
+        self.assertNotEqual(recording_image, ancestor_image)
+        self.assertEqual('Cache album', workspace.tree.item(row_id, 'text'))
+        self.assertFalse(workspace.tree.item(parent_id, 'open'))
+        self.assertEqual(selection, workspace.tree.selection())
+        workspace.set_watcher_recording(target, False)
+        self.root.update()
+        self.assertNotEqual(
+            recording_image, workspace.tree.item(row_id, 'image'),
+        )
+        self.assertEqual(selection, workspace.tree.selection())
+        with mock.patch.object(
+            photos_workspace, 'create_smooth_icon', return_value=None,
+        ):
+            workspace.set_watcher_recording(target, True)
+            self.root.update()
+            fallback_image = workspace.tree.item(row_id, 'image')
+            fallback_label = workspace.tree.item(row_id, 'text')
+            self.assertTrue(fallback_image)
+            self.assertIn('PIN ', fallback_label)
+            self.assertIn('Cache album', fallback_label)
+            workspace.set_watcher_recording(None, False)
+            self.root.update()
+            self.assertFalse(workspace.tree.item(row_id, 'image'))
+            self.assertIn('PIN ', workspace.tree.item(row_id, 'text'))
         workspace.destroy()
 
     def test_cache_context_starts_and_cancels_only_selected_gallery(self) -> None:

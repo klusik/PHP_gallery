@@ -11,8 +11,9 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from math import cos, radians, sin
 import tkinter as tk
-from tkinter import ttk
+from tkinter import font as tkfont, ttk
 from typing import TYPE_CHECKING, TypeAlias
 
 if TYPE_CHECKING:
@@ -58,6 +59,34 @@ _PHOTOS_ICON_PADDING = (4, 4)
 # Consumers: Photos.Icon.TButton.
 # Rationale: 12 pt stays legible within the compact toolbar.
 _PHOTOS_ICON_FONT_SIZE = 12
+
+# Purpose: Keep the drawn Photos toolbar symbol compact inside its button.
+# Type: int; Units: logical pixels; Scope: Photos icon button artwork.
+# Consumers: SmoothIconButton._refresh_icon.
+# Rationale: 16 px leaves the toolbar text-free while preserving the 32 px row.
+_PHOTOS_ICON_IMAGE_SIZE = 16
+
+# Purpose: Normalize Tk's reported display density to logical UI pixels.
+# Type: float; Units: dots per inch; Scope: Windows uploader image and row sizing.
+# Consumers: _tk_dpi_scale.
+# Rationale: 96 DPI is the conventional baseline for logical desktop pixels.
+_BASE_UI_DPI = 96.0
+
+# Purpose: Keep gallery tree rows tall enough for labels and status artwork.
+# Type: int; Units: logical pixels; Scope: shared ttk Treeview rows.
+# Consumers: configure_theme Treeview style.
+# Rationale: 30 px fits the native font and an 18 px status mark compactly.
+_TREEVIEW_ROW_HEIGHT = 30
+
+# Type: tuple[str, str, str, object, object]; Units: ttk option metadata.
+# Scope: one Tkinter widget configuration response. Fields: option name,
+# database name, database class, default value and current Tcl value. The last
+# two values are the native option's scalar, tuple or Tk handle, passed through
+# unchanged rather than interpreted by the presentation helper.
+TtkOptionSpec: TypeAlias = tuple[str, str, str, object, object]
+TtkConfigureResult: TypeAlias = (
+    dict[str, TtkOptionSpec] | TtkOptionSpec | str | None
+)
 
 # Purpose: Keep help instructions comfortably readable in a compact overlay.
 # Type: int; Units: pixels; Scope: help window minimum content width.
@@ -213,6 +242,36 @@ _ICON_GLYPHS = {
     "upload": "↑",
 }
 
+# Purpose: Prefer the native variable UI face while retaining usable fallbacks.
+# Type: tuple[str, ...]; Units: installed Tk family names; Scope: uploader UI.
+# Consumers: configure_theme font-family selection.
+# Rationale: Use the installed text family instead of a symbol font for UI text.
+_UI_FONT_PREFERENCES = ("Segoe UI Variable Text", "Segoe UI")
+
+# Purpose: Keep compact semantic artwork crisp after reduction.
+# Type: int; Units: supersampling factor; Scope: smooth icon generation.
+# Consumers: create_smooth_icon.
+# Rationale: Existing theme artwork uses 3x rendering for clean edges.
+_ICON_SUPERSAMPLE = _ARTWORK_SCALE
+
+# Purpose: Map known UI glyph spellings to deterministic geometric drawings.
+# Type: dict[str, str]; Units: icon key; Scope: common uploader controls.
+# Consumers: SmoothIconButton and icon composition.
+# Rationale: Drawing known shapes avoids font fallback while keeping text intact.
+_ICON_ALIASES = {
+    "+": "add", "−": "remove", "×": "close", "✓": "check",
+    "‹": "back", "›": "next", "▶": "play", "Ⅱ": "pause",
+    "↻": "refresh", "⚙": "settings", "■": "stop", "↑": "upload",
+    "☁": "cloud", "●": "local", "◐": "partial", "◌": "unknown",
+    "⏻": "power", "⋯": "more", "≡": "list", "↗": "external",
+    "⌖": "location", "⛶": "fullscreen", "□": "fit",
+    "♫": "music", "⊕": "zoom_in",
+    "◉": "recording", "◯": "recording", "◍": "recording",
+    "?": "help", "i": "info", "help": "help", "info": "info",
+    "PIN ☁": "cloud", "PIN ●": "local", "PIN ◐": "partial",
+    "PIN ◌": "unknown",
+}
+
 # Purpose: Retain generated Tk images while ttk styles may use them.
 # Type: dict[str, ThemeImage]; Units: retained image objects; Scope: process.
 # Consumers: ttk layouts using generated glossy elements.
@@ -225,6 +284,486 @@ _THEME_IMAGES: dict[str, ThemeImage] = {}
 # Rationale: 38 by 22 px leaves a visible thumb and comfortable label spacing.
 _SWITCH_IMAGE_SIZE = (38, 22)
 
+
+def _select_ui_font_family(root: tk.Misc) -> str:
+    """Select an installed static UI family and update Tk named fonts.
+
+    Args:
+        root (tk.Misc): Tk interpreter owning the fonts and option database.
+
+    Returns:
+        str: Installed family selected for ordinary uploader text.
+    """
+    try:
+        families = {name.casefold(): name for name in tkfont.families(root)}
+    except tk.TclError:
+        families = {}
+    default_family = str(tkfont.nametofont("TkDefaultFont", root=root).actual(
+        "family",
+    ))
+    family = next(
+        (families[name.casefold()] for name in _UI_FONT_PREFERENCES
+         if name.casefold() in families),
+        families.get(default_family.casefold(), default_family),
+    )
+    for name in (
+        "TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont",
+        "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont", "TkTooltipFont",
+    ):
+        try:
+            named = tkfont.nametofont(name, root=root)
+            if name == "TkHeadingFont":
+                named.configure(family=family, weight="bold")
+            else:
+                named.configure(family=family)
+        except tk.TclError:
+            continue
+    return family
+
+
+def _tk_dpi_scale(master: tk.Misc) -> float:
+    """Read Tk's display scale relative to the conventional 96 DPI baseline.
+
+    Args:
+        master (tk.Misc): Tk widget whose display density should be measured.
+
+    Returns:
+        float: Scale factor of at least 1.0, or 1.0 if Tk cannot report DPI.
+    """
+    try:
+        return max(1.0, float(master.winfo_fpixels("1i")) / _BASE_UI_DPI)
+    except (tk.TclError, ValueError):
+        return 1.0
+
+
+def _scale_ui_pixels(master: tk.Misc, logical_pixels: int) -> int:
+    """Convert a logical Tk pixel measurement to the active display density.
+
+    Args:
+        master (tk.Misc): Widget on the display that owns the measurement.
+        logical_pixels (int): Baseline UI size at 96 DPI.
+
+    Returns:
+        int: At least one pixel at the current Tk-reported display scale.
+    """
+    return max(1, round(logical_pixels * _tk_dpi_scale(master)))
+
+
+def create_smooth_icon(
+    master: tk.Misc,
+    icon: str,
+    size: tuple[int, int],
+    *,
+    pinned: bool = False,
+    recording: bool = False,
+    hollow: bool = False,
+    pulse: bool = True,
+    cover: bytes | None = None,
+    tone: str = "ink",
+) -> ThemeImage | None:
+    """Render a semantic icon with supersampled vector-like Pillow artwork.
+
+    Args:
+        master (tk.Misc): Tk widget that owns the returned image handle.
+        icon (str): Semantic icon key such as ``"close"`` or ``"folder"``.
+        size (tuple[int, int]): Final logical image width and height in pixels.
+        pinned (bool): Whether to overlay a retention pin on a tree marker.
+        recording (bool): Whether to overlay the Watcher recording marker.
+        hollow (bool): Whether recording marks a collapsed ancestor.
+        pulse (bool): Whether the recording marker uses its bright phase.
+        cover (bytes | None): Optional normalized PNG for folder artwork.
+        tone (str): Palette key or current ttk foreground color for its strokes.
+
+    Returns:
+        ThemeImage | None: Tk-owned artwork, or None when Pillow is unavailable.
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageOps, ImageTk
+    except ImportError:
+        return None
+    dpi_scale = _tk_dpi_scale(master)
+    width, height = size
+    scale = max(1, round(_ICON_SUPERSAMPLE * dpi_scale))
+    canvas = Image.new("RGBA", (width * scale, height * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    ink = _PALETTE.get(tone, tone if tone.startswith("#") else _PALETTE["ink"])
+    stroke = max(1, scale)
+    cx, cy = width * scale // 2, height * scale // 2
+    radius = max(2 * scale, min(width, height) * scale // 3)
+    key = _ICON_ALIASES.get(icon, icon)
+
+    def line(points: tuple[tuple[int, int], ...], color: str = ink,
+             width_px: int = stroke) -> None:
+        """Draw a rounded polyline in logical final-image coordinates.
+
+        Args:
+            points (tuple[tuple[int, int], ...]): Logical image coordinates.
+            color (str): Palette color used for the stroke.
+            width_px (int): Stroke width in supersampled pixels.
+
+        Returns:
+            None: Artwork is painted into the current supersampled canvas.
+        """
+        draw.line([(x * scale, y * scale) for x, y in points],
+                  fill=color, width=width_px, joint="curve")
+
+    # These simple logical coordinates define icon silhouettes, not sizing limits.
+    if key == "folder":
+        color = _PALETTE["card_surface_alt"]
+        draw.rounded_rectangle((scale, scale, 42 * scale, 15 * scale),
+                               radius=5 * scale, fill=color)
+        draw.rounded_rectangle((scale, 8 * scale, (width - 2) * scale,
+                                (height - 2) * scale), radius=7 * scale,
+                               fill=color, outline=_PALETTE["line"],
+                               width=stroke)
+        if cover is not None:
+            try:
+                import io
+                with Image.open(io.BytesIO(cover)) as source:
+                    preview = ImageOps.fit(source.convert("RGB"),
+                                           (102 * scale, 48 * scale))
+                    canvas.paste(preview, (5 * scale, 12 * scale))
+            except (OSError, ValueError):
+                pass
+    elif key in ("cloud", "local", "partial", "unknown"):
+        semantic_color = {
+            "cloud": _PALETTE["muted"], "local": _PALETTE["success"],
+            "partial": _PALETTE["primary"], "unknown": _PALETTE["muted"],
+        }[key]
+        color = semantic_color if tone == "ink" else ink
+        if key == "cloud":
+            draw.ellipse((cx - 7 * scale, cy - 2 * scale,
+                          cx + 5 * scale, cy + 6 * scale), fill=color)
+            draw.ellipse((cx - 3 * scale, cy - 6 * scale,
+                          cx + 5 * scale, cy + 4 * scale), fill=color)
+            draw.rounded_rectangle((cx - 8 * scale, cy, cx + 8 * scale,
+                                    cy + 6 * scale), radius=3 * scale,
+                                   fill=color)
+        elif key == "local":
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius),
+                         fill=color)
+        elif key == "partial":
+            draw.pieslice((cx - radius, cy - radius, cx + radius, cy + radius),
+                          90, 270, fill=color)
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius),
+                         outline=color, width=stroke)
+        else:
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius),
+                         outline=color, width=stroke)
+    elif key == "recording":
+        color = (
+            _PALETTE["recording" if pulse else "recording_dim"]
+            if tone == "ink" else ink
+        )
+        box = (cx - radius, cy - radius, cx + radius, cy + radius)
+        if hollow:
+            draw.ellipse(box, outline=color, width=stroke)
+        else:
+            draw.ellipse(box, fill=color)
+    else:
+        color = ink
+        bounds = (cx - radius, cy - radius, cx + radius, cy + radius)
+        if key in ("add", "zoom_in"):
+            line(((width // 2, height // 2 - 5), (width // 2, height // 2 + 5)))
+            line(((width // 2 - 5, height // 2), (width // 2 + 5, height // 2)))
+        elif key in ("remove", "zoom_out"):
+            line(((width // 2 - 5, height // 2), (width // 2 + 5, height // 2)))
+        elif key == "close":
+            line(((width // 2 - 5, height // 2 - 5),
+                  (width // 2 + 5, height // 2 + 5)))
+            line(((width // 2 + 5, height // 2 - 5),
+                  (width // 2 - 5, height // 2 + 5)))
+        elif key in ("back", "next"):
+            x = width // 2
+            direction = 1 if key == "back" else -1
+            line(((x + 3 * direction, height // 2 - 6),
+                  (x - 3 * direction, height // 2),
+                  (x + 3 * direction, height // 2 + 6)))
+        elif key == "play":
+            draw.polygon(((cx - 4 * scale, cy - 6 * scale),
+                          (cx + 6 * scale, cy),
+                          (cx - 4 * scale, cy + 6 * scale)), fill=color)
+        elif key == "pause":
+            draw.rectangle((cx - 5 * scale, cy - 6 * scale,
+                            cx - scale, cy + 6 * scale), fill=color)
+            draw.rectangle((cx + scale, cy - 6 * scale,
+                            cx + 5 * scale, cy + 6 * scale), fill=color)
+        elif key == "check":
+            line(((width // 2 - 6, height // 2),
+                  (width // 2 - 2, height // 2 + 4),
+                  (width // 2 + 6, height // 2 - 5)), color)
+        elif key in ("help", "info"):
+            draw.ellipse(bounds, outline=color, width=stroke)
+            if key == "info":
+                draw.ellipse((cx - scale, cy - 5 * scale,
+                              cx + scale, cy - 3 * scale), fill=color)
+                draw.line((cx, cy - scale, cx, cy + 5 * scale), fill=color,
+                          width=stroke)
+            else:
+                draw.arc((cx - 3 * scale, cy - 5 * scale,
+                          cx + 4 * scale, cy + 2 * scale), 205, 510,
+                         fill=color, width=stroke)
+                draw.ellipse((cx - scale, cy + 4 * scale,
+                              cx + scale, cy + 6 * scale), fill=color)
+        elif key == "settings":
+            draw.ellipse(bounds, outline=color, width=stroke)
+            draw.ellipse((cx - 2 * scale, cy - 2 * scale,
+                          cx + 2 * scale, cy + 2 * scale), fill=color)
+            for angle in range(0, 360, 45):
+                a = radians(angle)
+                line(((round(width / 2 + 4 * cos(a)),
+                       round(height / 2 + 4 * sin(a))),
+                      (round(width / 2 + 7 * cos(a)),
+                       round(height / 2 + 7 * sin(a)))), color)
+        elif key == "refresh":
+            draw.arc(bounds, 35, 315, fill=color, width=stroke)
+            draw.polygon(((cx + 6 * scale, cy - 6 * scale),
+                          (cx + 7 * scale, cy),
+                          (cx + scale, cy - 2 * scale)), fill=color)
+        elif key == "stop":
+            draw.rectangle((cx - 4 * scale, cy - 4 * scale,
+                            cx + 4 * scale, cy + 4 * scale), fill=color)
+        elif key == "upload":
+            line(((width // 2, height // 2 + 6), (width // 2, height // 2 - 5)))
+            line(((width // 2 - 4, height // 2 - 1),
+                  (width // 2, height // 2 - 5),
+                  (width // 2 + 4, height // 2 - 1)))
+            line(((width // 2 - 6, height // 2 + 5),
+                  (width // 2 + 6, height // 2 + 5)))
+        elif key == "power":
+            draw.arc(bounds, 35, 325, fill=color, width=stroke)
+            line(((width // 2, height // 2 - 8),
+                  (width // 2, height // 2 + 1)))
+        elif key == "more":
+            for offset in (-5, 0, 5):
+                draw.ellipse((cx + offset * scale - scale,
+                              cy - scale, cx + offset * scale + scale,
+                              cy + scale), fill=color)
+        elif key == "list":
+            for offset in (-5, 0, 5):
+                draw.ellipse((cx - 7 * scale, cy + offset * scale - scale,
+                              cx - 5 * scale, cy + offset * scale + scale),
+                             fill=color)
+                draw.line((cx - 2 * scale, cy + offset * scale,
+                           cx + 7 * scale, cy + offset * scale), fill=color,
+                          width=stroke)
+        elif key == "external":
+            draw.rectangle((cx - 7 * scale, cy - 4 * scale,
+                            cx + 4 * scale, cy + 7 * scale),
+                           outline=color, width=stroke)
+            line(((width // 2 - 1, height // 2 + 3),
+                  (width // 2 + 7, height // 2 - 5),
+                  (width // 2 + 2, height // 2 - 5)))
+        elif key == "location":
+            draw.ellipse((cx - 6 * scale, cy - 7 * scale,
+                          cx + 6 * scale, cy + 5 * scale),
+                         outline=color, width=stroke)
+            draw.ellipse((cx - 2 * scale, cy - 3 * scale,
+                          cx + 2 * scale, cy + scale), fill=color)
+            draw.polygon(((cx - 4 * scale, cy + 2 * scale),
+                          (cx + 4 * scale, cy + 2 * scale),
+                          (cx, cy + 8 * scale)), fill=color)
+        elif key in ("fit", "fullscreen"):
+            line(((width // 2 - 6, height // 2 - 2),
+                  (width // 2 - 6, height // 2 - 6),
+                  (width // 2 - 2, height // 2 - 6)))
+            line(((width // 2 + 2, height // 2 - 6),
+                  (width // 2 + 6, height // 2 - 6),
+                  (width // 2 + 6, height // 2 - 2)))
+            line(((width // 2 - 6, height // 2 + 2),
+                  (width // 2 - 6, height // 2 + 6),
+                  (width // 2 - 2, height // 2 + 6)))
+            line(((width // 2 + 2, height // 2 + 6),
+                  (width // 2 + 6, height // 2 + 6),
+                  (width // 2 + 6, height // 2 + 2)))
+        elif key == "music":
+            draw.ellipse((cx - 7 * scale, cy + 2 * scale,
+                          cx - 2 * scale, cy + 6 * scale), fill=color)
+            line(((width // 2 - 2, height // 2 + 4),
+                  (width // 2 - 2, height // 2 - 6),
+                  (width // 2 + 6, height // 2 - 8),
+                  (width // 2 + 6, height // 2 + 2)))
+            draw.ellipse((cx + scale, cy, cx + 6 * scale, cy + 4 * scale),
+                         fill=color)
+        elif key == "pin" or pinned:
+            draw.ellipse((cx - 4 * scale, cy - 6 * scale,
+                          cx + 4 * scale, cy + 2 * scale), fill=color)
+            line(((width // 2, height // 2), (width // 2 - 3, height - 2)))
+        elif key == "recording" or recording:
+            dot_color = _PALETTE["recording" if pulse else "recording_dim"]
+            dotbox = (width - 9, 1, width - 2, 8)
+            draw.ellipse(tuple(v * scale for v in dotbox),
+                         outline=dot_color if hollow else None,
+                         fill=None if hollow else dot_color,
+                         width=stroke)
+        elif key == "cloud":
+            draw.ellipse(bounds, outline=color, width=stroke)
+        else:
+            # Unknown labels stay textual and are not replaced with fallback art.
+            return None
+    if pinned and key not in ("pin", "folder"):
+        px, py = width - 4, 4
+        pin_color = _PALETTE["primary"]
+        draw.ellipse(((px - 2) * scale, (py - 2) * scale,
+                      (px + 2) * scale, (py + 2) * scale), fill=pin_color)
+    if recording and key != "recording":
+        px, py = width - 4, height - 4
+        rec = _PALETTE["recording" if pulse else "recording_dim"]
+        draw.ellipse(((px - 3) * scale, (py - 3) * scale,
+                      (px + 3) * scale, (py + 3) * scale),
+                     outline=rec if hollow else None,
+                     fill=None if hollow else rec, width=stroke)
+    output_size = (
+        max(1, round(width * dpi_scale)), max(1, round(height * dpi_scale)),
+    )
+    canvas = canvas.resize(output_size, Image.Resampling.LANCZOS)
+    if ImageTk is not None:
+        return ImageTk.PhotoImage(canvas, master=master)
+    return None
+
+
+class SmoothIconButton(ttk.Button):
+    """A ttk button whose known glyph text is backed by smooth icon artwork.
+
+    Args:
+        master (tk.Misc): Parent Tk widget.
+        icon (str): Initial semantic icon or display text.
+        **kwargs (object): Standard ttk button configuration options.
+    """
+
+    def __init__(self, master: tk.Misc, icon: str, **kwargs: object) -> None:
+        """Create the button and bind state-aware icon refreshes.
+
+        Args:
+            master (tk.Misc): Parent Tk widget.
+            icon (str): Semantic icon or initial display text.
+            **kwargs (object): Native button options, including text/style/state
+                strings, an image handle or state/image tuple, a zero-argument
+                command callback, integer width and boolean takefocus.
+
+        Returns:
+            None: The button owns its generated image and event bindings.
+        """
+        self._smooth_icon = icon
+        self._icon_photo: ThemeImage | None = None
+        self._external_image = bool(kwargs.get("image"))
+        super().__init__(master, **kwargs)
+        for sequence in ("<Enter>", "<Leave>", "<FocusIn>", "<FocusOut>",
+                         "<ButtonPress-1>", "<ButtonRelease-1>"):
+            self.bind(sequence, self._refresh_icon_event, add="+")
+        self._refresh_icon()
+
+    def configure(
+        self,
+        cnf: dict[str, object] | str | None = None,
+        **kwargs: object,
+    ) -> TtkConfigureResult:
+        """Apply ttk options and refresh artwork after text changes.
+
+        Args:
+            cnf (dict[str, object] | str | None): Option-name/value mapping or
+                ttk option-name query passed through to Tkinter.
+            **kwargs (object): Native options passed unchanged to Tcl. Text,
+                style and state are strings; image is a Tk handle or a
+                state/image tuple; command is a zero-argument callback; width
+                is an integer and takefocus is boolean.
+
+        Returns:
+            TtkConfigureResult: Option metadata for a query, queried Tcl value,
+                or None after a normal option update.
+        """
+        text = kwargs.get("text")
+        image = kwargs.get("image")
+        if isinstance(cnf, dict) and "text" in cnf:
+            text = cnf["text"]
+        if isinstance(cnf, dict) and "image" in cnf:
+            image = cnf["image"]
+        style_changed = isinstance(cnf, dict) and (
+            "style" in cnf or "state" in cnf
+        )
+        result = super().configure(cnf, **kwargs)
+        if isinstance(text, str):
+            self._smooth_icon = text
+        if image is not None and bool(image):
+            self._external_image = True
+        elif isinstance(text, str):
+            self._external_image = False
+            self._refresh_icon()
+        elif image is not None:
+            self._external_image = bool(image)
+            if not self._external_image:
+                self._refresh_icon()
+        elif style_changed or "state" in kwargs or "style" in kwargs:
+            self._refresh_icon()
+        return result
+
+    config = configure
+
+    def state(
+        self, statespec: tuple[str, ...] | list[str] | None = None,
+    ) -> tuple[str, ...]:
+        """Read or update ttk state and repaint when state changes.
+
+        Args:
+            statespec (tuple[str, ...] | list[str] | None): Optional state changes.
+
+        Returns:
+            tuple[str, ...]: Current ttk state flags.
+        """
+        result = super().state(statespec)
+        if statespec is not None:
+            self._refresh_icon()
+        return result
+
+    def _refresh_icon_event(self, _event: tk.Event) -> None:
+        """Refresh artwork after ttk applies a hover, focus or press state.
+
+        Args:
+            _event (tk.Event): Widget event before the ttk class binding runs.
+
+        Returns:
+            None: An idle callback reads the settled ttk state.
+        """
+        try:
+            self.after_idle(self._refresh_icon)
+        except tk.TclError:
+            return
+
+    def _refresh_icon(self) -> None:
+        """Render current semantic text and preserve the per-widget photo ref.
+
+        Returns:
+            None: The Tcl image option follows current style and widget state.
+        """
+        if self._external_image:
+            return
+        label = self._smooth_icon.strip()
+        pinned = label.startswith("PIN ")
+        semantic_label = label[4:] if pinned else label
+        key = _ICON_ALIASES.get(label, _ICON_ALIASES.get(
+            semantic_label, semantic_label,
+        ))
+        try:
+            current_state = set(self.state())
+            style = ttk.Style(self)
+            state = tuple(current_state)
+            color = style.lookup(str(self.cget("style")), "foreground", state)
+            if not color:
+                color = _PALETTE["muted" if "disabled" in current_state else "ink"]
+            logical_size = (
+                _PHOTOS_ICON_IMAGE_SIZE
+                if "Photos.Icon" in str(self.cget("style"))
+                else _ICON_IMAGE_SIZE[0]
+            )
+            size = (logical_size, logical_size)
+            image = create_smooth_icon(
+                self, key, size, pinned=pinned, tone=color,
+            )
+            self._icon_photo = image
+            super().configure(image=image or "", compound="none")
+        except tk.TclError:
+            return
+
 def configure_theme(root: tk.Tk) -> None:
     """Apply the uploader palette and shared ttk widget styles.
 
@@ -236,6 +775,7 @@ def configure_theme(root: tk.Tk) -> None:
         None: The root and its shared ttk style are configured in place.
     """
     style = ttk.Style(root)
+    _ui_font = _select_ui_font_family(root)
     if "clam" in style.theme_names():
         style.theme_use("clam")
 
@@ -252,7 +792,7 @@ def configure_theme(root: tk.Tk) -> None:
     root.option_add("*TCombobox*Listbox.background", colors["surface"])
     root.option_add("*TCombobox*Listbox.foreground", colors["ink"])
     style.configure(".", background=colors["background"],
-                    foreground=colors["ink"], font=("Segoe UI", 10))
+                    foreground=colors["ink"], font=(_ui_font, 10))
     # Unqualified inner frames live inside cards. App/page containers select
     # App.TFrame or Backdrop.TFrame explicitly so toolbars never cut dark strips
     # through an otherwise continuous panel surface.
@@ -273,49 +813,48 @@ def configure_theme(root: tk.Tk) -> None:
                     background=colors["card_surface"],
                     foreground=colors["ink"],
                     padding=_PHOTOS_STATUS_PADDING)
-    style.configure("Title.TLabel", font=("Segoe UI Semibold", 20),
+    style.configure("Title.TLabel", font=(_ui_font, 20, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
     style.configure("Glass.Title.TLabel",
-                    font=("Segoe UI Semibold", 20),
+                    font=(_ui_font, 20, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
-    style.configure("Brand.TLabel", font=("Segoe UI Semibold", 18),
+    style.configure("Brand.TLabel", font=(_ui_font, 18, "bold"),
                     background=colors["background"],
                     foreground=colors["ink"])
-    style.configure("Eyebrow.TLabel", font=("Segoe UI Semibold", 8),
+    style.configure("Eyebrow.TLabel", font=(_ui_font, 8, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["muted"])
-    style.configure("Status.TLabel", font=("Segoe UI Semibold", 10),
+    style.configure("Status.TLabel", font=(_ui_font, 10, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
-    style.configure("App.Status.TLabel",
-                    font=("Segoe UI Semibold", 10),
+    style.configure("App.Status.TLabel", font=(_ui_font, 10, "bold"),
                     background=colors["background"],
                     foreground=colors["ink"])
     style.configure("App.Muted.TLabel", background=colors["background"],
                     foreground=colors["muted"])
     style.configure("App.Eyebrow.TLabel",
-                    font=("Segoe UI Semibold", 8),
+                    font=(_ui_font, 8, "bold"),
                     background=colors["background"],
                     foreground=colors["muted"])
     style.configure("Warning.TLabel",
                     background=colors["card_surface_alt"],
                     foreground=colors["warning"], padding=(10, 8))
-    style.configure("Watcher.Active.TLabel", font=("Segoe UI Semibold", 10),
+    style.configure("Watcher.Active.TLabel", font=(_ui_font, 10, "bold"),
                     background=colors["card_surface"], foreground=colors["danger"])
     style.configure("Body.TLabel", background=colors["card_surface"],
                     foreground=colors["ink"])
     style.configure("Footer.TLabel", background=colors["card_surface"],
                     foreground=colors["muted"])
-    style.configure("Hero.TLabel", font=("Segoe UI Semibold", 22),
+    style.configure("Hero.TLabel", font=(_ui_font, 22, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
     style.configure("HeroTarget.TLabel",
-                    font=("Segoe UI Semibold", 11),
+                    font=(_ui_font, 11, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["primary"])
-    style.configure("Large.TEntry", font=("Segoe UI", 11),
+    style.configure("Large.TEntry", font=(_ui_font, 11),
                     padding=(10, 9))
     style.configure("App.TFrame", background=colors["background"])
     style.configure("Backdrop.TFrame", background=colors["background"],
@@ -323,7 +862,7 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("Footer.TFrame",
                     background=colors["card_surface"],
                     relief="flat", borderwidth=0, padding=(12, 8))
-    style.configure("Section.TLabel", font=("Segoe UI Semibold", 12),
+    style.configure("Section.TLabel", font=(_ui_font, 12, "bold"),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
     style.configure("Glass.TFrame", background=colors["card_surface"],
@@ -346,20 +885,20 @@ def configure_theme(root: tk.Tk) -> None:
               foreground=[("disabled", colors["muted"])])
     style.configure("Primary.TButton", padding=(12, 6), borderwidth=0,
                     background=colors["primary"], foreground="#F2F6FA",
-                    font=("Segoe UI Semibold", 10))
+                    font=(_ui_font, 10, "bold"))
     style.map("Primary.TButton",
               background=[("pressed", colors["primary_pressed"]),
                           ("active", colors["primary_hover"])],
               foreground=[("disabled", "#D8D7FA")])
     style.configure("Icon.TButton", padding=(2, 2),
-                    font=("Segoe UI Symbol", 12),
+                    font=(_ui_font, 12),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
     style.configure("Photos.Icon.TButton", padding=_PHOTOS_ICON_PADDING,
                     borderwidth=0,
                     background=colors["card_surface"],
                     foreground=colors["ink"],
-                    font=("Segoe UI Symbol", _PHOTOS_ICON_FONT_SIZE))
+                    font=(_ui_font, _PHOTOS_ICON_FONT_SIZE))
     style.map("Photos.Icon.TButton",
               background=[("pressed", colors["line"]),
                           ("active", colors["surface_alt"])],
@@ -374,7 +913,7 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("Action.Photos.Icon.TButton",
                     padding=(6, 3), font="TkDefaultFont", anchor="w")
     style.configure("IconPrimary.TButton", padding=(3, 3),
-                    font=("Segoe UI Symbol", 12),
+                    font=(_ui_font, 12),
                     background=colors["primary"], foreground="#F2F6FA")
     style.map("IconPrimary.TButton",
               foreground=[("disabled", "#F0EFFC")],
@@ -383,7 +922,7 @@ def configure_theme(root: tk.Tk) -> None:
     for phase, tone in (("Bright", "recording"), ("Dim", "recording_dim")):
         name = f"Watcher.Recording{phase}.Icon.TButton"
         style.configure(
-            name, padding=(3, 3), font=("Segoe UI Symbol", 12),
+            name, padding=(3, 3), font=(_ui_font, 12),
             background=colors["background"], foreground=colors[tone],
         )
         style.map(name, foreground=[
@@ -437,7 +976,7 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure(
         "Language.TRadiobutton", padding=(10, 5),
         background=colors["card_surface"], foreground=colors["muted"],
-        font=("Segoe UI Semibold", 9),
+        font=(_ui_font, 9, "bold"),
     )
     style.map("Language.TRadiobutton", foreground=[
         ("disabled", colors["muted"]),
@@ -459,7 +998,7 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("TLabelframe.Label",
                     background=colors["card_surface"],
                     foreground=colors["muted"],
-                    font=("Segoe UI Semibold", 10))
+                    font=(_ui_font, 10, "bold"))
     style.configure("TNotebook", background=colors["background"],
                     borderwidth=0, bordercolor=colors["background"],
                     lightcolor=colors["background"],
@@ -476,7 +1015,9 @@ def configure_theme(root: tk.Tk) -> None:
     style.map("TNotebook.Tab",
               background=[("selected", colors["surface"])],
               foreground=[("selected", colors["primary"])])
-    style.configure("Treeview", rowheight=30, borderwidth=0,
+    style.configure("Treeview",
+                    rowheight=_scale_ui_pixels(root, _TREEVIEW_ROW_HEIGHT),
+                    borderwidth=0,
                     background=colors["surface"],
                     fieldbackground=colors["surface"],
                     foreground=colors["ink"],
@@ -490,7 +1031,7 @@ def configure_theme(root: tk.Tk) -> None:
                     lightcolor=colors["surface_alt"],
                     darkcolor=colors["surface_alt"], borderwidth=0,
                     relief="flat",
-                    font=("Segoe UI Semibold", 9))
+                    font=(_ui_font, 9, "bold"))
     style.map("Treeview.Heading",
               background=[("active", colors["line"])],
               foreground=[("active", colors["ink"])],
@@ -1006,7 +1547,7 @@ def icon_button(parent: tk.Misc, icon: str,
             )
             if background == _PALETTE["background"]:
                 style = "App.Icon.TButton"
-    button = ttk.Button(parent, text=glyph, command=command, style=style,
+    button = SmoothIconButton(parent, icon, text=glyph, command=command, style=style,
                         takefocus=True,
                         width=_ICON_BUTTON_COLUMNS if icon_only else -1)
     button.configure(cursor="hand2")
@@ -1402,7 +1943,7 @@ def _show_help(owner: tk.Misc, title: str, body: str) -> None:
         pady=2,
         background=_PALETTE["surface"],
         foreground=_PALETTE["ink"],
-        font=("Segoe UI", 10),
+        font=(tkfont.nametofont("TkDefaultFont", root=parent).actual("family"), 10),
         takefocus=True,
     )
     text_box.insert("1.0", body)

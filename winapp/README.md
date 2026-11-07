@@ -21,6 +21,18 @@ opacity. Source mode without Pillow retains usable native controls for repair.
 Import, Activity, AI and Settings share the same card spacing, continuous
 toolbar surfaces and flat table headings as the Watcher view.
 
+Windows uses the installed Segoe UI Variable Text family when available,
+with Segoe UI and the native Tk font as fallbacks. Shared fonts cover labels,
+tables, inputs, menus and secondary windows; fixed-width diagnostics keep their
+monospaced font. Native text respects Windows font smoothing/ClearType.
+Known control, cache, pin and recording icons use supersampled artwork rather
+than small emoji or font-substitution glyphs. Pillow-free source mode keeps
+readable native glyphs. No font download or system preference change is needed.
+Before creating Tk windows, an unaware Windows process requests system
+DPI awareness; an existing manifest/host context is preserved. This avoids
+startup bitmap scaling, but does not add per-monitor layout reflow. Restart on
+the destination display when moving between displays with different scaling.
+
 The app header groups PHP Gallery and the linked site. The Watcher screen
 shows the upload gallery, chosen folder and primary Start/Stop control.
 **Choose folder…** is on the Watcher screen; its settings sheet also offers

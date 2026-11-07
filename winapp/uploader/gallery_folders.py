@@ -18,12 +18,12 @@ from tkinter import ttk
 from typing import Callable
 
 from .app_linking import LinkedGallery, LinkingSession
-from .ui_theme import _PALETTE, _attach_tooltip
+from .ui_theme import _PALETTE, _attach_tooltip, create_smooth_icon
 
 try:
-    from PIL import Image, ImageDraw, ImageOps, ImageTk
+    from PIL import Image, ImageOps, ImageTk
 except ImportError:
-    Image = ImageDraw = ImageOps = ImageTk = None
+    Image = ImageOps = ImageTk = None
 
 
 # Purpose: Fit a complete folder preview and title above the photo grid.
@@ -176,22 +176,11 @@ class GalleryFolderShelf(ttk.Frame):
         Returns:
             ImageTk.PhotoImage | None: The themed image, or None without Pillow.
         """
-        if Image is None or ImageDraw is None or ImageTk is None:
+        if Image is None or ImageTk is None:
             return None
-        artwork = Image.new('RGBA', FOLDER_IMAGE_SIZE)
-        draw = ImageDraw.Draw(artwork)
-        width, height = FOLDER_IMAGE_SIZE
-        # Structural coordinates form the tab, body and four-pixel preview inset.
-        fill = _PALETTE['card_surface_alt']
-        draw.rounded_rectangle((1, 1, 42, 15), radius=5, fill=fill)
-        draw.rounded_rectangle(
-            (1, 8, width - 2, height - 2), radius=7,
-            fill=fill, outline=_PALETTE['line'],
+        return create_smooth_icon(
+            self, "folder", FOLDER_IMAGE_SIZE, cover=cover,
         )
-        if cover is not None:
-            with Image.open(io.BytesIO(cover)) as preview:
-                artwork.paste(preview.convert('RGB'), (5, 12))
-        return ImageTk.PhotoImage(artwork, master=self)
 
     def _viewport_changed(self, _event: tk.Event) -> None:
         """Update the strip geometry and queue newly visible covers.
@@ -203,7 +192,8 @@ class GalleryFolderShelf(ttk.Frame):
             None: Overflow is scrollable when the cards exceed the viewport.
         """
         width = self._cards.winfo_reqwidth()
-        self._canvas.configure(scrollregion=(0, 0, width, FOLDER_STRIP_HEIGHT))
+        height = max(FOLDER_STRIP_HEIGHT, self._cards.winfo_reqheight())
+        self._canvas.configure(height=height, scrollregion=(0, 0, width, height))
         if width > self._canvas.winfo_width():
             self._scrollbar.grid()
         else:

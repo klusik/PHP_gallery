@@ -165,6 +165,7 @@ from uploader.photos_workspace import PhotosWorkspace
 from uploader.app_linking import LinkedGallery, LinkingSession
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
 from uploader.windows_file_identity import assert_local_windows_profile
+from uploader.windows_display import prepare_windows_display
 from uploader.state_store import (
     ActivityWriter,
     JobStateStore,
@@ -6755,6 +6756,8 @@ class WatcherApp:
 
         from uploader.app_linking_ui import LinkingManager
 
+        # Establish the display context before Tk creates its first window.
+        prepare_windows_display()
         self.root = tk.Tk()
         self.linking_manager = LinkingManager(
             self.root, self.linked_target_change_refusal, self.linked_target_changed,
@@ -8740,6 +8743,7 @@ class WatcherApp:
         ttk.Button(diagnostic_actions, text="Copy redacted diagnostics", command=self.copy_diagnostics).pack(side="left")
         self.log_text = tk.Text(
             diagnostics, height=9, wrap="word", relief="flat", padx=8, pady=6,
+            font="TkFixedFont",
             background="#182330", foreground="#F2F6FA",
             insertbackground="#F2F6FA", selectbackground="#365768",
         )
@@ -12167,11 +12171,26 @@ class WatcherApp:
         self.log_text.tag_configure("warning", foreground="#F2C581")
         self.log_text.tag_configure("error", foreground="#FF91A2")
         self.log_text.tag_configure("debug", foreground="#95A9BA")
-        self.log_text.tag_configure("prefix_system", foreground="#D2DFE9", font=("Segoe UI", 9, "bold"))
-        self.log_text.tag_configure("prefix_success", foreground="#46D68C", font=("Segoe UI", 9, "bold"))
-        self.log_text.tag_configure("prefix_warning", foreground="#F2C581", font=("Segoe UI", 9, "bold"))
-        self.log_text.tag_configure("prefix_error", foreground="#FF91A2", font=("Segoe UI", 9, "bold"))
-        self.log_text.tag_configure("prefix_debug", foreground="#95A9BA", font=("Segoe UI", 9, "bold"))
+        # Keep compact bold prefixes in the same installed family as the UI.
+        family = str(self.root.tk.call(
+            "font", "actual", "TkDefaultFont", "-family",
+        ))
+        prefix_font = (family, 9, "bold")
+        self.log_text.tag_configure(
+            "prefix_system", foreground="#D2DFE9", font=prefix_font,
+        )
+        self.log_text.tag_configure(
+            "prefix_success", foreground="#46D68C", font=prefix_font,
+        )
+        self.log_text.tag_configure(
+            "prefix_warning", foreground="#F2C581", font=prefix_font,
+        )
+        self.log_text.tag_configure(
+            "prefix_error", foreground="#FF91A2", font=prefix_font,
+        )
+        self.log_text.tag_configure(
+            "prefix_debug", foreground="#95A9BA", font=prefix_font,
+        )
         self.log_tags_ready = True
 
     def update_monitor_state(self, state: str, detail: str) -> None:

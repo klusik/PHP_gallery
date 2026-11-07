@@ -2557,6 +2557,18 @@ weiter. Das Schließen der Einstellungen startet keinen Vorgang. Opake
 RGB-Grafiken sichern die Darstellung unter Windows Tk; ohne Pillow bleiben
 im Quellmodus native Bedienelemente zur Reparatur verfügbar.
 
+Windows bevorzugt die installierte Schrift Segoe UI Variable Text,
+ersatzweise Segoe UI oder die native Tk-Schrift. Gemeinsame Textstile
+beachten die Windows-Schriftglättung; Diagnoseanzeigen mit fester
+Zeichenbreite behalten ihre Schrift. Übliche Steuer-, Cache-, Pin- und
+Aufzeichnungssymbole verwenden in höherer Auflösung erzeugte, geglättete
+Grafiken. Ohne Pillow bleiben lesbare native Zeichen verfügbar. Die App
+lädt keine Schriften und ändert keine Systemeinstellungen. Vor dem ersten
+Fenster fordert ein nicht DPI-bewusster Windows-Prozess System-DPI-Bewusstsein
+an und bewahrt einen vorhandenen Manifestkontext. Eine automatische
+Layoutanpassung zwischen Monitoren wird nicht ergänzt. Starten Sie die App
+bei unterschiedlichen Skalierungen auf dem Zielmonitor neu.
+
 Watcher zeigt den Ordnerpfad und \ui{Choose folder…}.
 Gespeicherte Pfade, Galerie-URL und Funktionsoptionen werden beim Neustart
 wiederhergestellt. Vier sichtbare Schaltflächen wählen die Oberflächensprache.

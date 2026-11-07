@@ -324,7 +324,9 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         surface = mock.Mock()
         button = mock.Mock()
         with (
-            mock.patch.object(ui_theme.ttk, "Button", return_value=button) as build,
+            mock.patch.object(
+                ui_theme, "SmoothIconButton", return_value=button,
+            ) as build,
             mock.patch.object(ui_theme, "attach_inline_tooltip") as inline,
             mock.patch.object(ui_theme, "_attach_tooltip") as popup,
         ):
@@ -344,6 +346,54 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         )
         inline.assert_called_once_with(button, "Fit photo", surface)
         popup.assert_not_called()
+
+    def test_theme_font_family_prefers_an_installed_static_variable_face(self) -> None:
+        """Use the installed UI family while preserving the fixed-width face.
+
+        Returns:
+            None: Common Tk fonts share the selected family; fixed-width stays.
+        """
+        from uploader import ui_theme
+
+        root = mock.Mock()
+        fonts = {name: mock.Mock() for name in (
+            "TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont",
+            "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont",
+            "TkTooltipFont", "TkFixedFont",
+        )}
+        fonts["TkDefaultFont"].actual.return_value = "TkDefault"
+        with (
+            mock.patch.object(
+                ui_theme.tkfont, "families",
+                return_value=("TkDefault", "Segoe UI", "Segoe UI Variable Text"),
+            ),
+            mock.patch.object(
+                ui_theme.tkfont, "nametofont",
+                side_effect=lambda name, root=None: fonts[name],
+            ),
+        ):
+            family = ui_theme._select_ui_font_family(root)
+
+        self.assertEqual("Segoe UI Variable Text", family)
+        fonts["TkDefaultFont"].configure.assert_called_once_with(
+            family="Segoe UI Variable Text",
+        )
+        fonts["TkHeadingFont"].configure.assert_called_once_with(
+            family="Segoe UI Variable Text", weight="bold",
+        )
+        fonts["TkFixedFont"].configure.assert_not_called()
+        root.option_add.assert_not_called()
+        with (
+            mock.patch.object(
+                ui_theme.tkfont, "families", return_value=("TkDefault",),
+            ),
+            mock.patch.object(
+                ui_theme.tkfont, "nametofont",
+                side_effect=lambda name, root=None: fonts[name],
+            ),
+        ):
+            fallback = ui_theme._select_ui_font_family(root)
+        self.assertEqual("TkDefault", fallback)
 
     def test_shared_tooltip_uses_the_existing_toplevel_surface(self) -> None:
         """Keep legacy tooltip callers inside their owning window.

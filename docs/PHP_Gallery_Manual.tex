@@ -2144,6 +2144,15 @@ no~whole-window
 opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
 surfaces remain, and~native controls and~source-mode operation, including
 \texttt{--once}, stay supported.
+Windows prefers the~installed Segoe UI Variable Text font, with Segoe UI
+and~the~native Tk font as~fallbacks. Shared text styles preserve Windows
+font smoothing; fixed-width diagnostics stay monospaced. Common control,
+cache, pin and~recording icons use supersampled artwork; without Pillow,
+readable native glyphs remain. The~app downloads no~fonts and~changes
+no~system preferences. Before creating windows, an~unaware Windows process
+requests system DPI awareness and~preserves an~existing manifest context.
+This does not~add per-monitor layout reflow. Restart on~the~destination
+display when moving between displays with different scaling.
 Before its~scan, \texttt{--once} verifies the~saved upload mode with Windows
 Credential Manager. A~verified legacy or~unmigrated legacy profile remains
 eligible; linked, first-setup, unknown or~unavailable evidence returns a~nonzero
