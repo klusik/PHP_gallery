@@ -123,6 +123,10 @@ function cms_admin_gallery_consistency(): void
                     session_write_close();
                     try {
                         gallery_consistency_step($job);
+                    } catch (\Gallery\Services\LinkedGalleryReservationUnavailable $exception) {
+                        // This exact refusal occurs before the repair's first effect.
+                        // Keep the incremented sequence and require an explicit resume.
+                        throw $exception;
                     } catch (Throwable $exception) {
                         $job['status'] = 'blocked';
                         throw $exception;

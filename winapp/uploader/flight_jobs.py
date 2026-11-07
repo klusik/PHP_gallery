@@ -14,14 +14,32 @@ import hashlib
 import json
 import os
 import re
+import stat
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO
 
-from uploader.models import JsonValue
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
+from uploader.models import ImportJob, JsonValue
 from uploader.flight_simbrief import load_dispatch
-from uploader.state_store import atomic_write_json
+from uploader.windows_file_identity import WindowsDirectoryAnchor
+from uploader.state_store import (
+    _check_accepted_owner_path,
+    _reject_mode_history_constant,
+    _strict_mode_history_float,
+    _strict_mode_history_object,
+    atomic_write_json,
+    accepted_work_owner,
+    JobStateStore,
+    load_upload_state_for_mutation,
+    read_import_binding_entries,
+    validate_import_job_update,
+)
 
 # Preserve the four supported report editions in a stable task order.
 # Type: tuple[str, ...]; Units: language codes; Scope: flight preferences.
@@ -43,6 +61,10 @@ REPORT_AIRCRAFT_NAME_CHARS = 64
 # Type: int; Units: ASCII characters; Scope: one new PDF flight-number token.
 # Consumers: readable_pdf_name. Rationale: 16 retains airline/number/suffix text.
 REPORT_FLIGHT_NUMBER_CHARS = 16
+
+# Refuse oversized accepted-import evidence instead of inferring an empty queue.
+# Type: int; Units: bytes; Scope: strict read-only import binding admission.
+IMPORT_BINDINGS_MAX_BYTES = 16 * 1024 * 1024
 
 
 def connection_binding(url: str, key: str) -> str:
@@ -714,52 +736,114 @@ def saved_flights(root: Path) -> list[SavedFlight]:
 
 
 class WorkspaceLease:
-    """Prevent two uploader instances from finalizing the same flight workspace."""
+    """Prevent two uploader instances from owning the same local workspace."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, lock_name: str = "owner.lock") -> None:
         """Acquire a nonblocking operating-system file lock.
 
+        The Windows directory handle stays open for the full lease, so the
+        direct workspace cannot normally be renamed or removed while owned.
+        Both workspace and lock-file identity are checked before accessing
+        sentinel bytes and after native acquisition. This is cooperative and
+        cannot stop older clients or qualify arbitrary ancestor swaps.
+
         Args:
-            root (Path): Shared per-user flight workspace.
+            root (Path): Per-user workspace whose lock is shared by its writers.
+            lock_name (str): Single lock filename within that workspace.
 
         Returns:
             None: Owns the lock until release or process termination.
 
         Raises:
-            RuntimeError: Another uploader instance owns the flight workspace.
+            RuntimeError: Another uploader owns the workspace, or its
+                native identity/lock file cannot be established safely.
         """
         root.mkdir(parents=True, exist_ok=True)
-        self.handle: IO[bytes] | None = (root / "owner.lock").open("a+b")
-        self.handle.seek(0)
-        if not self.handle.read(1):
-            self.handle.write(b"0")
-            self.handle.flush()
-        self.handle.seek(0)
+        self.root = root
+        self.handle: IO[bytes] | None = None
+        self.directory: WindowsDirectoryAnchor | None = None
         try:
+            if Path(lock_name).name != lock_name or lock_name in ("", ".", ".."):
+                raise ValueError("Workspace lock filename is invalid.")
+            self.lock_path = root / lock_name
+            named_root = root.lstat()
+            if (not stat.S_ISDIR(named_root.st_mode) or
+                    (os.name == "nt"
+                     and (getattr(named_root, "st_file_attributes", 0)
+                          & stat.FILE_ATTRIBUTE_REPARSE_POINT))):
+                raise ValueError("Flight workspace is redirected.")
+            root_info = root.stat()
+            self._root_identity = (root_info.st_dev, root_info.st_ino)
             if os.name == "nt":
-                import msvcrt
+                self.directory = WindowsDirectoryAnchor(root)
+                self.directory.verify()
+            flags = (
+                os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+            )
+            descriptor = os.open(self.lock_path, flags, stat.S_IRUSR | stat.S_IWUSR)
+            try:
+                self.handle = os.fdopen(descriptor, "r+b")
+            except BaseException:
+                os.close(descriptor)
+                raise
+            self.verify()
+            # A second Windows process cannot read the first owner's locked
+            # byte. Treat the read refusal as a busy workspace, not an
+            # unhandled PermissionError before the ownership error boundary.
+            self.handle.seek(0)
+            if not self.handle.read(1):
+                self.handle.write(b"0")
+                self.handle.flush()
+            self.handle.seek(0)
+            if os.name == "nt":
                 msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
             else:
-                import fcntl
                 fcntl.flock(
-                    self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB
+                    self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB,
                 )
-        except OSError as exc:
-            self.handle.close()
-            self.handle = None
+            self.verify()
+        except (OSError, ValueError) as exc:
+            self.release()
             raise RuntimeError(
-                "Another uploader owns flight work; finish it there first."
+                "Another uploader owns flight work or its native identity "
+                "is unavailable; finish it there first."
             ) from exc
+
+    def verify(self) -> None:
+        """Check that the workspace and named lock still match the open lease.
+
+        Returns:
+            None: The named directory and lock retain their original identity.
+
+        Raises:
+            ValueError: The workspace, handle or lock identity changed.
+            OSError: The native identity cannot be checked.
+        """
+        if self.handle is None:
+            raise ValueError("The workspace lease is closed.")
+        _check_accepted_owner_path(
+            self.root, self._root_identity, self.lock_path, self.handle,
+        )
+        if self.directory is not None:
+            self.directory.verify()
 
     def release(self) -> None:
         """Release workspace ownership after every related worker is stopped.
 
         Returns:
-            None: Closes the OS-owned handle; repeated release is harmless.
+            None: Closes the OS-owned lock and pinned directory handles.
+                Repeated release is harmless.
         """
-        if self.handle is not None:
-            self.handle.close()
+        try:
+            if self.handle is not None:
+                self.handle.close()
+        finally:
             self.handle = None
+            if self.directory is not None:
+                directory = self.directory
+                self.directory = None
+                directory.close()
 
 
 class ImportBindings:
@@ -785,17 +869,181 @@ class ImportBindings:
         Raises:
             ValueError: Existing admission state is malformed.
         """
-        if not self.path.exists():
-            return {}
-        row = read_document(self.path)
-        entries = row.get("jobs")
-        if not isinstance(entries, dict) or any(
-            not isinstance(key, str) or not isinstance(value, str)
-            or re.fullmatch(r"[0-9a-f]{64}", value) is None
-            for key, value in entries.items()
-        ):
-            raise ValueError("Invalid accepted-import connection ledger.")
-        return dict(entries)
+        return read_import_binding_entries(self.path, IMPORT_BINDINGS_MAX_BYTES)
+
+    def admit_job(
+        self, store: JobStateStore, job: ImportJob, binding: str,
+    ) -> None:
+        """Publish a job and its immutable target binding before first dispatch.
+
+        One cooperative owner spans fresh reads, both independent file
+        publications and readback. A crash between the two file replacements
+        leaves an orphaned binding that must fail closed at target admission.
+        This is not an atomic two-file commit or a server upload receipt.
+
+        Args:
+            store (JobStateStore): Job ledger sharing this flight workspace.
+            job (ImportJob): Already accepted import with its original job ID.
+            binding (str): Exact approved gallery/credential fingerprint.
+
+        Returns:
+            None: Both ledgers are independently published and read back.
+
+        Raises:
+            ValueError: Topology, binding or existing evidence is invalid.
+            RuntimeError: Either publication cannot be confirmed.
+        """
+        if (not isinstance(store, JobStateStore)
+                or not isinstance(job, ImportJob)
+                or not isinstance(job.id, str) or not job.id
+                or not isinstance(binding, str)
+                or re.fullmatch(r"[0-9a-f]{64}", binding) is None):
+            raise ValueError("Accepted import identity is invalid.")
+        with accepted_work_owner(store.path.parent):
+            if not store.path.parent.samefile(self.path.parent.parent):
+                raise ValueError("Accepted job and binding use different profiles.")
+            # Both fresh snapshots are captured after ownership, never before.
+            entries = self.entries()
+            state = load_upload_state_for_mutation(store.path)
+            if job.id in entries and entries[job.id] != binding:
+                raise ValueError("This import belongs to another gallery/key.")
+            if job.id in entries and job.id not in state["jobs"]:
+                # A prior admission may have written its binding before its
+                # job document, or job history may have been lost afterwards.
+                raise ValueError("Accepted import job history needs manual review.")
+            row = job.to_dict()
+            previous = state["jobs"].get(job.id)
+            if previous is None:
+                # A fresh in-memory job is not an accepted preflight receipt.
+                # A lost job ledger or crash-split binding must never be
+                # reconstructed by the first-dispatch admission path.
+                raise ValueError(
+                    "Persisted import preflight is missing; review before admission."
+                )
+            if job.id not in entries:
+                if (not isinstance(previous, dict)
+                        or previous.get("started_at", 0)
+                        or previous.get("finished_at", 0)
+                        or not isinstance(previous.get("items"), list)
+                        or any(
+                            not isinstance(item, dict)
+                            or item.get("attempt_count", 0)
+                            or (item.get("server_result")
+                                and item.get("state") != "skipped_duplicate")
+                            or item.get("state") in (
+                                "uploading", "confirmed", "failed_retryable",
+                                "failed_permanent", "cancelled",
+                            )
+                            for item in previous["items"]
+                        )):
+                    # Preflight-only jobs may obtain their first binding.
+                    # A previously dispatched or recovered job may not.
+                    raise ValueError("Accepted import binding history is missing.")
+            if previous is not None:
+                # Use the same monotone evidence guard as subsequent job saves.
+                validate_import_job_update(previous, row)
+                # Reusing an accepted ID must not retarget its source or roll
+                # back completed media and receipts from a fresher process.
+                if not isinstance(previous, dict):
+                    raise ValueError("Existing accepted import job is malformed.")
+                immutable = (
+                    "id", "source_kind", "source_label",
+                    "target_gallery_label", "created_at", "staging_dir",
+                    "source_zip", "delete_source_zip_after_success",
+                    "skipped", "bytes_total",
+                )
+                if any(previous.get(key) != row.get(key) for key in immutable):
+                    raise ValueError("Existing import identity changed.")
+                old_items = previous.get("items")
+                if not isinstance(old_items, list) or len(old_items) != len(row["items"]):
+                    raise ValueError("Existing import source list changed.")
+                item_identity = (
+                    "id", "path", "source_label", "size",
+                    "sha256", "from_archive",
+                )
+                for before, after in zip(old_items, row["items"]):
+                    if (not isinstance(before, dict)
+                            or any(before.get(key) != after.get(key)
+                                   for key in item_identity)
+                            or not isinstance(before.get("attempt_count"), int)
+                            or before["attempt_count"] > after["attempt_count"]
+                            or (before.get("server_result")
+                                and before.get("server_result") != after.get("server_result"))
+                            or (before.get("state") in ("confirmed", "skipped_duplicate")
+                                and before.get("state") != after.get("state"))):
+                        raise ValueError("Existing accepted import progress changed.")
+                if (not isinstance(previous.get("bytes_sent"), int)
+                        or previous["bytes_sent"] > row["bytes_sent"]):
+                    raise ValueError("Existing accepted upload progress changed.")
+            entries[job.id] = binding
+            state["jobs"][job.id] = row
+            # A binding without a job is an explicit recovery blocker; writing
+            # the binding first avoids an unbound job being dispatched.
+            atomic_write_json(self.path, {"schema_version": 1, "jobs": entries})
+            if self.entries() != entries:
+                raise RuntimeError("Accepted import binding is unconfirmed.")
+            atomic_write_json(store.path, state)
+            confirmed = load_upload_state_for_mutation(store.path)
+            if confirmed["jobs"].get(job.id) != row or self.entries() != entries:
+                raise RuntimeError("Accepted import publication is unconfirmed.")
+
+    def discard_unbound_preflight(
+        self, store: JobStateStore, job_id: str,
+    ) -> None:
+        """Forget only an undispatched preflight under both ledger owners.
+
+        This removes no staged source bytes. The accepted-import binding file
+        is read after acquiring the owner; an existing binding, attempted
+        upload, receipt or invalid job blocks removal. A cooperating-lock
+        check cannot reconstruct jointly lost or rolled-back historical data.
+
+        Args:
+            store (JobStateStore): Uploader job ledger for this profile.
+            job_id (str): Preflight-only identifier to retire.
+
+        Returns:
+            None: The verified unbound preflight row is removed or absent.
+
+        Raises:
+            ValueError: The job may contain accepted or uncertain work.
+            RuntimeError: Publication or readback cannot be confirmed.
+        """
+        if (not isinstance(store, JobStateStore)
+                or not isinstance(job_id, str) or not job_id):
+            raise ValueError("Preflight identity is invalid.")
+        with accepted_work_owner(store.path.parent):
+            if not store.path.parent.samefile(self.path.parent.parent):
+                raise ValueError("Preflight and binding use different profiles.")
+            entries = self.entries()
+            state = load_upload_state_for_mutation(store.path)
+            if job_id in entries:
+                raise ValueError("Preflight has an accepted target binding; retain it.")
+            row = state["jobs"].get(job_id)
+            if row is None:
+                return
+            items = row.get("items") if isinstance(row, dict) else None
+            if (not isinstance(row, dict) or row.get("id") != job_id
+                    or row.get("started_at", 0)
+                    or row.get("finished_at", 0)
+                    or row.get("bytes_sent", 0)
+                    or not isinstance(items, list)
+                    or any(
+                        not isinstance(item, dict)
+                        or type(item.get("attempt_count", 0)) is not int
+                        or item.get("attempt_count", 0) != 0
+                        or bool(item.get("server_result"))
+                        or item.get("state") not in (
+                            "discovered", "validating", "staged",
+                            "hashing", "queued", "skipped_duplicate",
+                        )
+                        for item in items
+                    )):
+                raise ValueError("Preflight may contain accepted upload work.")
+            del state["jobs"][job_id]
+            atomic_write_json(store.path, state)
+            confirmed = load_upload_state_for_mutation(store.path)
+            if job_id in confirmed["jobs"] or self.entries() != entries:
+                raise RuntimeError("Preflight retirement is unconfirmed.")
 
     def bind(self, job_id: str, binding: str) -> None:
         """Record credential ownership before a manual upload worker starts.
@@ -805,26 +1053,102 @@ class ImportBindings:
             binding (str): Current canonical endpoint/key fingerprint.
 
         Returns:
-            None: Admission is atomically durable before any API call.
+            None: The existing job-to-target binding is published and read back.
 
         Raises:
-            ValueError: The job belongs to another saved connection.
+            ValueError: The job is absent, dispatched or belongs to another key.
         """
-        entries = self.entries()
-        if job_id in entries and entries[job_id] != binding:
-            raise ValueError("This import belongs to another gallery/key.")
-        entries[job_id] = binding
-        atomic_write_json(self.path, {"schema_version": 1, "jobs": entries})
+        if (not isinstance(job_id, str) or not job_id
+                or not isinstance(binding, str)
+                or re.fullmatch(r"[0-9a-f]{64}", binding) is None):
+            raise ValueError("Accepted import identity is invalid.")
+        with accepted_work_owner(self.path.parent.parent):
+            entries = self.entries()
+            state = load_upload_state_for_mutation(
+                self.path.parent.parent / "upload_state.json"
+            )
+            row = state["jobs"].get(job_id)
+            if not isinstance(row, dict) or row.get("id") != job_id:
+                raise ValueError("Accepted import job history is missing.")
+            if job_id in entries and entries[job_id] != binding:
+                raise ValueError("This import belongs to another gallery/key.")
+            items = row.get("items")
+            if job_id not in entries and (
+                row.get("started_at", 0)
+                or not isinstance(items, list)
+                or any(
+                    not isinstance(item, dict)
+                    or item.get("attempt_count", 0)
+                    or (item.get("server_result")
+                        and item.get("state") != "skipped_duplicate")
+                    or item.get("state") in (
+                        "uploading", "confirmed", "failed_retryable",
+                        "failed_permanent", "cancelled",
+                    )
+                    for item in items
+                )
+            ):
+                raise ValueError("Accepted import binding history may be missing.")
+            entries[job_id] = binding
+            atomic_write_json(self.path, {"schema_version": 1, "jobs": entries})
+            if (self.entries() != entries
+                    or load_upload_state_for_mutation(
+                        self.path.parent.parent / "upload_state.json"
+                    )["jobs"].get(job_id) != row):
+                raise RuntimeError("Accepted-import binding write could not be verified.")
 
     def resolve(self, job_id: str) -> None:
-        """Remove a confirmed-complete or explicitly abandoned import binding.
+        """Retain the immutable binding of a confirmed-complete import.
+
+        Completed imports must not lose their original target provenance.
+        Callers may finish local credential cleanup after checking this job,
+        but this method must never erase a historical binding that could be
+        needed to detect a later missing or rolled-back job-state ledger.
 
         Args:
             job_id (str): Existing durable accepted job identifier.
 
         Returns:
-            None: Other gallery/key admissions remain unchanged.
+            None: Other gallery/key admissions and the completed job remain unchanged.
+
+        Raises:
+            ValueError: Completion or the job ledger cannot be verified.
+            RuntimeError: The retained binding cannot be read back.
         """
-        entries = self.entries()
-        entries.pop(job_id, None)
-        atomic_write_json(self.path, {"schema_version": 1, "jobs": entries})
+        if not isinstance(job_id, str) or not job_id:
+            raise ValueError("Accepted import identity is invalid.")
+        with accepted_work_owner(self.path.parent.parent):
+            entries = self.entries()
+            if job_id not in entries:
+                return
+            state = load_upload_state_for_mutation(
+                self.path.parent.parent / "upload_state.json"
+            )
+            row = state["jobs"].get(job_id)
+            items = row.get("items") if isinstance(row, dict) else None
+            if (not isinstance(row, dict) or row.get("id") != job_id
+                    or not row.get("finished_at", 0)
+                    or not isinstance(items, list)
+                    or any(
+                        not isinstance(item, dict)
+                        or item.get("state") not in (
+                            "confirmed", "skipped_duplicate",
+                        )
+                        or (item.get("state") == "confirmed"
+                            and not item.get("server_result"))
+                        or (isinstance(item.get("reason"), str)
+                            and ("uncertain" in item["reason"].lower()
+                                 or "unconfirmed" in item["reason"].lower()))
+                        for item in items
+                    )):
+                raise ValueError(
+                    "Accepted import is unresolved; retain its target binding."
+                )
+            # A locally complete job is not a server idempotency receipt.
+            # Keep its original target fingerprint so even later inspection
+            # cannot silently reinterpret that accepted job for another key.
+            if (self.entries() != entries
+                    or load_upload_state_for_mutation(
+                        self.path.parent.parent / "upload_state.json"
+                    )["jobs"].get(job_id) != row):
+                raise RuntimeError("Accepted-import binding retention is unverified.")

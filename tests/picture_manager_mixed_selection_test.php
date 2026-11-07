@@ -180,6 +180,39 @@ picture_manager_mixed_assert(
     'Create-from-selection must invoke physical subtree copying for selected galleries.',
 );
 
+// The mixed action must retain one shared lease over every nested owner and
+// rollback, so cooperating writers cannot reserve between creation and copy
+// while the database lease remains owned.
+$createStart = strpos($controller, 'function cms_picture_manager_create_gallery()');
+picture_manager_mixed_assert($createStart !== false, 'The create controller boundary must exist.');
+$deleteStart = strpos($controller, 'function cms_picture_manager_delete()', $createStart);
+picture_manager_mixed_assert(
+    $deleteStart !== false,
+    'The delete controller boundary must exist.',
+);
+$createAction = substr($controller, $createStart, $deleteStart - $createStart);
+$lease = strpos($createAction, 'gallery_edit_writer_begin()');
+$guard = strpos($createAction, 'gallery_linked_reservation_assert_admin_write()');
+$create = strpos($createAction, 'create_empty_gallery(');
+$copy = strpos($createAction, 'picture_manager_copy_gallery_subtrees(');
+$release = strpos($createAction, 'gallery_edit_writer_end($releasedLock)');
+$failure = strpos($createAction, '} catch (Throwable $exception) {');
+picture_manager_mixed_assert($failure !== false, 'The create failure boundary must exist.');
+$ownership = strpos($createAction, 'picture_manager_cleanup_lease_owned($writerLock)', $failure);
+$cleanup = strpos($createAction, 'delete_gallery_subtrees([$createdGalleryId])', $failure);
+$failureRelease = strpos($createAction, 'gallery_edit_writer_end($releasedLock)', $failure);
+picture_manager_mixed_assert(
+    $lease !== false && $guard !== false && $create !== false && $copy !== false
+        && $release !== false && $failure !== false && $ownership !== false && $cleanup !== false
+        && $failureRelease !== false && $lease < $guard && $guard < $create
+        && $create < $copy && $copy < $release && $failure < $ownership
+        && $ownership < $cleanup
+        && str_contains($createAction,
+            '$writerLock !== null && picture_manager_cleanup_lease_owned($writerLock)')
+        && $cleanup < $failureRelease,
+    'Mixed create must check the reservation and retain its lease through copy and cleanup.',
+);
+
 picture_manager_mixed_assert(
     str_contains($service, 'function picture_manager_normalize_gallery_ids('),
     'Picture manager service must normalize physical gallery IDs.',

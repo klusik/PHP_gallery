@@ -24,9 +24,7 @@ from pathlib import Path, PurePosixPath
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 import os
 import re
-import shutil
 import stat
-import time
 import zipfile
 
 from .models import ImportItem
@@ -164,6 +162,17 @@ def stage_zip_archive(
 
     Unsafe paths and unsupported entries are never extracted.  All extracted
     files are confined to a per-job directory owned by the caller.
+
+    Args:
+        zip_path (Path): ZIP archive selected as the import source.
+        staging_root (Path): Owned directory under which job staging is made.
+        job_id (str): Stable identifier used to name this job's staging folder.
+        supported_suffixes (Set[str]): Lowercase file suffixes admitted for
+            media extraction.
+        limits (ArchiveLimits): Entry, expanded-size, file-size and ratio caps.
+
+    Returns:
+        DiscoveryResult: Accepted staged items and any warnings or rejections.
     """
     result = DiscoveryResult()
     zip_path = Path(zip_path)
@@ -175,10 +184,26 @@ def stage_zip_archive(
         return result
 
     staging_root.mkdir(parents=True, exist_ok=True)
+    if (staging_root.is_symlink()
+            or (os.name == "nt"
+                and (getattr(staging_root.lstat(), "st_file_attributes", 0)
+                     & stat.FILE_ATTRIBUTE_REPARSE_POINT))):
+        # Junctions and other direct reparse points can redirect extraction
+        # into a different physical workspace.
+        result.warnings.append(
+            "ZIP staging root is redirected; existing files were preserved."
+        )
+        return result
     staging_dir = staging_root / ("job-" + job_id)
-    if staging_dir.exists():
-        shutil.rmtree(staging_dir, ignore_errors=True)
-    staging_dir.mkdir(parents=True, exist_ok=True)
+    # A reused job ID can be historical accepted work. Never recursively
+    # replace an existing extracted source directory based on an ID alone.
+    try:
+        staging_dir.mkdir(parents=False, exist_ok=False)
+    except FileExistsError:
+        result.warnings.append(
+            "ZIP staging directory already exists; review the previous import."
+        )
+        return result
     result.staging_dir = str(staging_dir)
     used_names: Set[str] = set()
 
@@ -189,8 +214,10 @@ def stage_zip_archive(
                 result.warnings.append(
                     f"Archive has {len(infos)} entries, above the configured limit of {limits.max_entries}. Nothing was extracted."
                 )
-                shutil.rmtree(staging_dir, ignore_errors=True)
-                result.staging_dir = ""
+                result.warnings.append(
+                    "ZIP staging directory retained for manual review: "
+                    + str(staging_dir)
+                )
                 return result
 
             total_uncompressed = 0
@@ -202,8 +229,10 @@ def stage_zip_archive(
                 total_compressed += max(0, int(info.compress_size))
                 if total_uncompressed > limits.max_uncompressed_bytes:
                     result.warnings.append("Archive exceeds the configured total uncompressed-size limit. Nothing was extracted.")
-                    shutil.rmtree(staging_dir, ignore_errors=True)
-                    result.staging_dir = ""
+                    result.warnings.append(
+                        "ZIP staging directory retained for manual review: "
+                        + str(staging_dir)
+                    )
                     return result
             if total_uncompressed and total_compressed:
                 total_ratio = total_uncompressed / max(1, total_compressed)
@@ -211,8 +240,10 @@ def stage_zip_archive(
                     result.warnings.append(
                         f"Archive compression ratio {total_ratio:.1f}:1 exceeds the configured {limits.max_compression_ratio:.1f}:1 limit. Nothing was extracted."
                     )
-                    shutil.rmtree(staging_dir, ignore_errors=True)
-                    result.staging_dir = ""
+                    result.warnings.append(
+                        "ZIP staging directory retained for manual review: "
+                        + str(staging_dir)
+                    )
                     return result
 
             for info in infos:
@@ -246,7 +277,9 @@ def stage_zip_archive(
                     continue
 
                 try:
-                    with archive.open(info, "r") as source, destination.open("wb") as target:
+                    # Exclusive creation must never truncate an existing
+                    # staged source, including during a competing extraction.
+                    with archive.open(info, "r") as source, destination.open("xb") as target:
                         copied = 0
                         while True:
                             chunk = source.read(1024 * 1024)
@@ -258,37 +291,36 @@ def stage_zip_archive(
                             target.write(chunk)
                     result.items.append(ImportItem.create(destination, source_label=info.filename, from_archive=True))
                 except Exception as exc:  # noqa: BLE001
-                    try:
-                        destination.unlink()
-                    except OSError:
-                        pass
+                    # Preserve partial staged bytes; unlinking by a mutable
+                    # filename could remove another process's source instead.
                     result.unsafe_entries.append(f"{info.filename}: extraction failed: {exc}")
     except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as exc:
         result.warnings.append("Archive could not be read: " + str(exc))
 
     if not result.items and result.staging_dir:
-        shutil.rmtree(result.staging_dir, ignore_errors=True)
-        result.staging_dir = ""
+        # Empty or rejected preflight is not authority to unlink a potentially
+        # redirected source directory after another process has seen its path.
+        result.warnings.append(
+            "No accepted ZIP items; staging directory retained: "
+            + result.staging_dir
+        )
     return result
 
 
 def cleanup_stale_staging(staging_root: Path, age_hours: float, active_job_ids: Sequence[str] = ()) -> List[str]:
-    """Remove old job staging directories while leaving known active jobs intact."""
-    removed: List[str] = []
-    if not staging_root.is_dir():
-        return removed
-    cutoff = time.time() - max(1.0, float(age_hours)) * 3600.0
-    active_names = {"job-" + job_id for job_id in active_job_ids}
-    for path in staging_root.iterdir():
-        if not path.is_dir() or path.name in active_names:
-            continue
-        try:
-            modified = path.stat().st_mtime
-        except OSError:
-            continue
-        if modified > cutoff:
-            continue
-        shutil.rmtree(path, ignore_errors=True)
-        if not path.exists():
-            removed.append(path.name)
-    return removed
+    """Remove old job staging directories while leaving known active jobs intact.
+
+    This legacy entry point is disabled: age and a list of visible job IDs
+    do not prove that earlier accepted history was never lost or rolled back.
+    Staged media is retained until independently verified server receipts
+    and an explicit source-ownership cleanup protocol are available.
+
+    Args:
+        staging_root (Path): Root containing per-job staged source directories.
+        age_hours (float): Age threshold that the disabled cleanup would use.
+        active_job_ids (Sequence[str]): Job identifiers that must be retained.
+
+    Returns:
+        List[str]: Empty list because this entry point performs no removals.
+    """
+    return []

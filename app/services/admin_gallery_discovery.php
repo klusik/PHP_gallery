@@ -55,6 +55,24 @@ use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE;
 use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_JOB_TTL_SECONDS;
 use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_RETAINED_JOB_LIMIT;
 use const Gallery\Core\ADMIN_GALLERY_DISCOVERY_TOKEN_BYTES;
+use const Gallery\Core\FILESYSTEM_OBSERVATION_MISSING;
+
+/**
+ * Keep marker-aware preview validation inactive until import recovery is qualified.
+ * Type: bool. Units: enabled state. Scope: Admin discovery jobs.
+ * Consumers: discovery job admission. Rationale: the final import fence is not
+ * active and an isolated preview cannot establish mutation safety.
+ */
+const ADMIN_GALLERY_DISCOVERY_MARKER_VALIDATION_ENABLED = false;
+
+/**
+ * Bound marker directory enumeration for one discovery validation step.
+ * Type: int. Units: directory entries. Scope: one discovery step request.
+ * Consumers: admin_gallery_discovery_validate_marker_batch.
+ * Rationale: 4096 entries bounds added work even in a very wide directory;
+ * exhaustion is unknown and refuses the preview rather than asserting absence.
+ */
+const ADMIN_GALLERY_DISCOVERY_MARKER_ENTRY_BUDGET = 4096;
 
 /**
  * Start a browser-driven Admin gallery discovery job.
@@ -116,7 +134,24 @@ function admin_gallery_discovery_process_job(
     }
 
     if ((string) ($job['status'] ?? '') === 'complete') {
+        if (ADMIN_GALLERY_DISCOVERY_MARKER_VALIDATION_ENABLED
+            && ($job['marker_validation_complete'] ?? false) !== true) {
+            $job = admin_gallery_discovery_begin_marker_validation($job);
+            admin_gallery_discovery_write_job($jobs, $job);
+            return admin_gallery_discovery_public_state($job);
+        }
         return admin_gallery_discovery_public_state($job, true);
+    }
+    if ((string) ($job['status'] ?? '') === 'error') {
+        return admin_gallery_discovery_public_state($job, true);
+    }
+
+    if (($job['phase'] ?? '') === 'marker_validation') {
+        $job = admin_gallery_discovery_validate_marker_batch($job, $batchSize);
+        admin_gallery_discovery_write_job($jobs, $job);
+        return admin_gallery_discovery_public_state(
+            $job, (string) ($job['status'] ?? '') === 'complete',
+        );
     }
 
     $root = galleries_root();
@@ -150,6 +185,9 @@ function admin_gallery_discovery_process_job(
 
     if (!admin_gallery_discovery_has_pending_directory($job)) {
         $job = admin_gallery_discovery_finish_job($job);
+        if (ADMIN_GALLERY_DISCOVERY_MARKER_VALIDATION_ENABLED) {
+            $job = admin_gallery_discovery_begin_marker_validation($job);
+        }
     }
 
     admin_gallery_discovery_write_job($jobs, $job);
@@ -171,6 +209,12 @@ function admin_gallery_discovery_job_status(string $token, array &$jobs): array
     $job = admin_gallery_discovery_read_job($jobs, $token);
     if ($job === null) {
         return admin_gallery_discovery_missing_state();
+    }
+    if (ADMIN_GALLERY_DISCOVERY_MARKER_VALIDATION_ENABLED
+        && ($job['status'] ?? '') === 'complete'
+        && ($job['marker_validation_complete'] ?? false) !== true) {
+        $job = admin_gallery_discovery_begin_marker_validation($job);
+        admin_gallery_discovery_write_job($jobs, $job);
     }
 
     return admin_gallery_discovery_public_state(
@@ -271,9 +315,32 @@ function admin_gallery_discovery_expand_requested_import_paths(array $folderPath
  *
  * @param array<int, mixed> $folderPaths Folder paths posted by the admin form.
  * @param int $targetGalleryId Destination gallery identifier.
- * @return array<string, mixed> Move result for the controller or Ajax caller.
+ * @return array{ok:bool,action:string,error:string,moved:int,scanned:int,gallery_ids:list<int>,thumbnails:int,imported?:int,skipped?:int,source_folders_cleaned?:int,errors?:list<string>} Move outcome for the controller or Ajax caller.
  */
 function admin_gallery_discovery_move_requested_photos(
+    array $folderPaths,
+    int $targetGalleryId,
+): array {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        gallery_linked_reservation_assert_admin_write();
+        return admin_gallery_discovery_move_requested_photos_owned(
+            $folderPaths,
+            $targetGalleryId,
+        );
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Move discovery photos while holding the gallery writer lease.
+ *
+ * @param array<int, mixed> $folderPaths Posted unmanaged folder selections.
+ * @param int $targetGalleryId Existing destination gallery identifier.
+ * @return array{ok:bool,action:string,error:string,moved:int,scanned:int,gallery_ids:list<int>,thumbnails:int,imported?:int,skipped?:int,source_folders_cleaned?:int,errors?:list<string>} Move outcome with counts and errors.
+ */
+function admin_gallery_discovery_move_requested_photos_owned(
     array $folderPaths,
     int $targetGalleryId,
 ): array {
@@ -404,9 +471,26 @@ function admin_gallery_discovery_move_requested_photos(
  * imported galleries from the CMS.
  *
  * @param array<int, mixed> $folderPaths Folder paths posted by the admin form.
- * @return array<string, mixed> Delete result for the controller or Ajax caller.
+ * @return array{ok:bool,action:string,deleted_folders:int,deleted_files:int,skipped:int,imported:int,scanned:int,thumbnails:int,gallery_ids:list<int>,errors:list<string>,error:string} Delete result for the controller or Ajax caller.
  */
 function admin_gallery_discovery_delete_requested_paths(array $folderPaths): array
+{
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        gallery_linked_reservation_assert_admin_write();
+        return admin_gallery_discovery_delete_requested_paths_owned($folderPaths);
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Delete unmanaged discovery folders while holding the gallery writer lease.
+ *
+ * @param array<int, mixed> $folderPaths Posted unmanaged folder selections.
+ * @return array{ok:bool,action:string,deleted_folders:int,deleted_files:int,skipped:int,imported:int,scanned:int,thumbnails:int,gallery_ids:list<int>,errors:list<string>,error:string} Delete outcome with counts and errors.
+ */
+function admin_gallery_discovery_delete_requested_paths_owned(array $folderPaths): array
 {
     $knownJob = admin_gallery_discovery_known_path_job_state(
         admin_gallery_discovery_known_gallery_paths(),
@@ -1200,6 +1284,132 @@ function admin_gallery_discovery_finish_job(array $job): array
 }
 
 /**
+ * Start a resumable marker check without exposing cached candidate rows.
+ *
+ * @param array<string,mixed> $job Completed caller-owned discovery checkpoint.
+ * @return array<string,mixed> Running validation checkpoint, or an error state.
+ */
+function admin_gallery_discovery_begin_marker_validation(array $job): array
+{
+    if (($job['status'] ?? '') === 'complete'
+        && ($job['marker_validation_complete'] ?? false) === true) {
+        return $job;
+    }
+    if (!is_array($job['candidates'] ?? null)
+        || !array_is_list($job['candidates'])) {
+        $job['status'] = 'error';
+        $job['candidates'] = [];
+        $job['errors'][] = 'Discovery candidates cannot be verified.';
+        return $job;
+    }
+    $job['marker_validation_source'] = $job['candidates'];
+    $job['marker_validation_cursor'] = 0;
+    $job['marker_validation_complete'] = false;
+    $job['candidates'] = [];
+    $job['phase'] = 'marker_validation';
+    $job['status'] = 'running';
+    $job['updated_at'] = time();
+    return $job;
+}
+
+/**
+ * Verify candidate and ancestor markers with a shared bounded entry budget.
+ *
+ * @param string $relativePath Candidate directory relative to the trusted root.
+ * @param int $remainingEntries Directory-entry budget, updated by reference.
+ * @return bool True only for canonical paths with every marker confirmed absent.
+ */
+function admin_gallery_discovery_marker_absent(
+    string $relativePath,
+    int &$remainingEntries,
+): bool {
+    if (!function_exists(__NAMESPACE__ . '\\gallery_creation_target_observation')
+        || !defined(__NAMESPACE__ . '\\LINKED_VISIBILITY_PENDING_MARKER')) {
+        return false;
+    }
+    $normalized = normalize_relative_path($relativePath);
+    if ($normalized === '' || $normalized !== str_replace('\\', '/', $relativePath)) {
+        return false;
+    }
+    $cursor = '';
+    foreach (explode('/', $normalized) as $part) {
+        $cursor = $cursor === '' ? $part : $cursor . '/' . $part;
+        if (gallery_creation_target_observation(
+            $cursor . '/' . LINKED_VISIBILITY_PENDING_MARKER,
+            $remainingEntries,
+        ) !== FILESYSTEM_OBSERVATION_MISSING) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Advance one bounded marker check without presenting partial results.
+ *
+ * @param array<string,mixed> $job Running marker-validation checkpoint.
+ * @param int $batchSize Maximum candidate rows to validate in this request.
+ * @return array<string,mixed> Updated checkpoint, complete only after all rows pass.
+ */
+function admin_gallery_discovery_validate_marker_batch(
+    array $job,
+    int $batchSize,
+): array {
+    $source = $job['marker_validation_source'] ?? null;
+    $cursor = $job['marker_validation_cursor'] ?? null;
+    if (($job['status'] ?? '') !== 'running'
+        || ($job['phase'] ?? '') !== 'marker_validation'
+        || !is_array($source) || !array_is_list($source)
+        || !is_int($cursor) || $cursor < 0 || $cursor > count($source)
+        || !is_array($job['candidates'] ?? null)
+        || !array_is_list($job['candidates'])
+        || count($job['candidates']) !== $cursor) {
+        $job['status'] = 'error';
+        $job['candidates'] = [];
+        $job['errors'][] = 'Discovery candidates cannot be verified.';
+        return $job;
+    }
+    $batchSize = max(1, min(ADMIN_GALLERY_DISCOVERY_MAX_BATCH_SIZE, $batchSize));
+    $remainingEntries = ADMIN_GALLERY_DISCOVERY_MARKER_ENTRY_BUDGET;
+    $processed = 0;
+    while ($cursor < count($source) && $processed < $batchSize) {
+        $candidate = $source[$cursor];
+        $verified = is_array($candidate)
+            && is_string($candidate['folder_path'] ?? null)
+            && admin_gallery_discovery_marker_absent(
+                $candidate['folder_path'], $remainingEntries,
+            );
+        if (!$verified && $remainingEntries <= 0 && $processed > 0) {
+            // Retry this candidate with a fresh budget in the next step.
+            break;
+        }
+        if (!$verified) {
+            // A present marker, unreadable directory or exhausted budget is
+            // unknown; do not silently publish or truncate candidate rows.
+            $job['status'] = 'error';
+            $job['candidates'] = [];
+            $job['errors'][] = 'Discovery marker state cannot be verified.';
+            $job['updated_at'] = time();
+            return $job;
+        }
+        $job['candidates'][] = $candidate;
+        $cursor++;
+        $processed++;
+        if ($remainingEntries <= 0) {
+            break;
+        }
+    }
+    $job['marker_validation_cursor'] = $cursor;
+    $job['updated_at'] = time();
+    if ($cursor === count($source)) {
+        $job['marker_validation_complete'] = true;
+        $job['status'] = 'complete';
+        unset($job['phase'], $job['marker_validation_source']);
+    }
+    return $job;
+}
+
+/**
  * Build import-ready candidate metadata for one folder.
  *
  * @param string $relativePath Directory path relative to the gallery root.
@@ -1649,12 +1859,21 @@ function admin_gallery_discovery_public_state(
             )
         ),
     );
+    if (($job['phase'] ?? '') === 'marker_validation'
+        && is_array($job['marker_validation_source'] ?? null)) {
+        $total = count($job['marker_validation_source']);
+        $processed = min($total, max(0, (int) ($job['marker_validation_cursor'] ?? 0)));
+    }
     $candidatePaths = is_array($job['candidate_paths'] ?? null)
         ? $job['candidate_paths']
         : [];
     $candidates = is_array($job['candidates'] ?? null)
         ? $job['candidates']
         : [];
+    if (($job['phase'] ?? '') === 'marker_validation') {
+        // Partial validation is never an importable candidate set.
+        $candidates = [];
+    }
     $status = (string) ($job['status'] ?? 'running');
     $done = $status === 'complete' || $status === 'error';
     $candidateCount = $status === 'complete'

@@ -378,6 +378,8 @@ function feature_capability_definitions(): array
                 'admin_api_manager',
                 'admin_upload_automation_token',
                 'upload_automation_upload',
+                'app_linking_inventory',
+                'app_linking_upload',
             ],
         ],
         'mobile_webdav' => [

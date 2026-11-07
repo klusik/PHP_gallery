@@ -237,6 +237,11 @@ function gallery_target_abs_path(string $relativePath): string
  */
 function gallery_filesystem_path_inside_root(string $path): bool
 {
+    // Refresh the paths being checked. This is not a filesystem lock and does
+    // not prevent another process from changing an ancestor after observation.
+    clearstatcache(true, galleries_root());
+    clearstatcache(true, dirname($path));
+    clearstatcache(true, $path);
     // $rootReal stores the trusted gallery storage root after symlink resolution.
     $rootReal = realpath(galleries_root());
     if ($rootReal === false || !is_dir($rootReal)) {
@@ -249,6 +254,12 @@ function gallery_filesystem_path_inside_root(string $path): bool
         return gallery_normalized_path_inside_root($rootReal, $pathReal);
     }
 
+    // An existing but unresolved entry, including a dangling symlink, is not a
+    // future target. Its eventual destination cannot be proven inside the root.
+    if (@lstat($path) !== false) {
+        return false;
+    }
+
     // Future targets cannot be resolved by realpath(), so validate the existing parent first.
     $parentReal = realpath(dirname($path));
     if ($parentReal === false || !is_dir($parentReal)) {
@@ -258,8 +269,13 @@ function gallery_filesystem_path_inside_root(string $path): bool
         return false;
     }
 
-    // The candidate itself is normalized textually because it does not exist yet.
-    return gallery_normalized_path_inside_root($rootReal, $path);
+    // Anchor the missing leaf to its resolved parent. The configured spelling
+    // can contain aliases such as macOS /var, while realpath() returns
+    // /private/var; comparing the unresolved spelling would reject safe paths.
+    return gallery_normalized_path_inside_root(
+        $rootReal,
+        $parentReal . DIRECTORY_SEPARATOR . basename($path),
+    );
 }
 
 /**

@@ -41,6 +41,7 @@ use InvalidArgumentException;
 use function Gallery\Core\current_user;
 use function Gallery\Core\admin_anonymous_preview_active;
 use function Gallery\Core\public_base_url;
+use function Gallery\Core\request_method;
 use function Gallery\Services\current_user_is_known_under_18;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\find_image;
@@ -1096,6 +1097,54 @@ function cms_media(): void
         'readfile_bytes' => is_int($readBytes) ? $readBytes : null,
         'http_status' => http_response_code() ?: 200,
     ]);
+}
+
+/**
+ * Identify the first public app-linking discovery representation.
+ * Type: int. Units: protocol version. Scope: server discovery response.
+ * Consumers: native clients parsing app_linking discovery.
+ * Rationale: Version 1 identifies the initial, deliberately unavailable contract.
+ */
+const APP_LINKING_DISCOVERY_CONTRACT_VERSION = 1;
+
+/**
+ * Advertise verified linking readiness without exposing account or secret data.
+ *
+ * @return void Send JSON for GET, matching headers for HEAD, or a 405 refusal.
+ */
+function cms_app_linking_discovery(): void
+{
+    header('Content-Type: application/json; charset=utf-8');
+    header('Cache-Control: no-store');
+    header('X-Content-Type-Options: nosniff');
+    $method = request_method();
+    if (!in_array($method, ['GET', 'HEAD'], true)) {
+        http_response_code(405);
+        header('Allow: GET, HEAD');
+        return;
+    }
+    http_response_code(200);
+    if ($method === 'GET') {
+        // Keep robots/media lightweight. Only discovery loads the established
+        // auth owner before checking the configured issuer and additive schema.
+        $linking = ['available' => false];
+        try {
+            if (function_exists('Gallery\\Core\\cms_runtime_kernel')) {
+                \Gallery\Core\cms_runtime_kernel()->load('domain-admin-auth');
+            }
+            if (function_exists('Gallery\\Controllers\\app_linking_discovery_model')) {
+                $linking = app_linking_discovery_model();
+            }
+        } catch (\Throwable) {
+            // Discovery must keep old/manual installations usable when the
+            // optional linking runtime or additive schema is unavailable.
+            // The linking owner retains this permanent compatibility path.
+        }
+        echo json_encode([
+            'contract_version' => APP_LINKING_DISCOVERY_CONTRACT_VERSION,
+            'app_linking' => $linking,
+        ], JSON_THROW_ON_ERROR);
+    }
 }
 
 /**

@@ -1237,6 +1237,7 @@ function move_gallery_subtrees_to_trash(
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
+        gallery_linked_reservation_assert_admin_write();
         return move_gallery_subtrees_to_trash_owned($galleryIds, $options);
     } finally {
         gallery_edit_writer_end($writerLock);
@@ -1887,6 +1888,9 @@ function restore_gallery_trash_entry(
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
+        // Restore can recreate paths reserved by an interrupted linked create.
+        // Check while holding the writer lease and before claiming the entry.
+        gallery_linked_reservation_assert_admin_write();
         return restore_gallery_trash_entry_owned($trashToken, $options);
     } finally {
         gallery_edit_writer_end($writerLock);

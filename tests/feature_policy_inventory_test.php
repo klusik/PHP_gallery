@@ -354,6 +354,16 @@ namespace Gallery\Core {
         );
     }
     feature_policy_inventory_assert(
+        ($definitions['upload_api']['routes'] ?? []) === [
+            'admin_api_manager',
+            'admin_upload_automation_token',
+            'upload_automation_upload',
+            'app_linking_inventory',
+            'app_linking_upload',
+        ],
+        'Upload API must own both legacy and delegated upload routes.',
+    );
+    feature_policy_inventory_assert(
         ($definitions['gallery_music']['routes'] ?? []) === [
             'gallery_music',
             'admin_music',

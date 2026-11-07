@@ -896,20 +896,79 @@ function image_model_metadata_organizer_candidate_count(
  * Return a compact summary for direct images in one gallery.
  *
  * @param int $galleryId Gallery identifier.
- * @return array{image_count:int,newest_update:string,total_size:string} Direct-image inventory summary.
+ * @return array{image_count:int,newest_id:int,newest_update:string,total_size:string} Direct-image inventory summary.
  */
 function image_model_direct_inventory_summary(int $galleryId): array
 {
     $stmt = db()->prepare(
-        "SELECT COUNT(*) AS image_count, COALESCE(MAX(updated_at), '') AS newest_update, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS total_size FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'",
+        "SELECT COUNT(*) AS image_count, COALESCE(MAX(id), 0) AS newest_id, "
+            . "COALESCE(MAX(updated_at), '') AS newest_update, "
+            . 'COALESCE(SUM(COALESCE(file_size, 0)), 0) AS total_size '
+            . "FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'",
     );
     $stmt->execute([$galleryId]);
     $row = $stmt->fetch() ?: [];
     return [
         'image_count' => (int) ($row['image_count'] ?? 0),
+        'newest_id' => (int) ($row['newest_id'] ?? 0),
         'newest_update' => (string) ($row['newest_update'] ?? ''),
         'total_size' => (string) ($row['total_size'] ?? '0'),
     ];
+}
+
+/**
+ * Read direct indexed photos for an already authorized Admin gallery.
+ *
+ * @param int $galleryId Exact authorized physical gallery ID.
+ * @param int $afterId Exclusive image ID cursor or zero for the first page.
+ * @param int $limit Positive row limit including a possible lookahead.
+ * @param bool $includeGps Whether verified GPS coordinates are selected.
+ * @return list<array{id:int|string,gallery_id:int|string,filename:string,relative_path:string,visibility:string,nsfw_enabled:int|string,file_size:int|string|null,gps_lat?:float|string|null,gps_lng?:float|string|null}>
+ *     Indexed direct photos in increasing ID order.
+ */
+function image_model_linked_admin_photo_page(
+    int $galleryId,
+    int $afterId,
+    int $limit,
+    bool $includeGps,
+): array {
+    $coordinates = $includeGps ? ', gps_lat, gps_lng' : '';
+    $stmt = db()->prepare(
+        'SELECT id, gallery_id, filename, relative_path, visibility, nsfw_enabled, file_size'
+            . $coordinates . ' FROM images '
+            . "WHERE gallery_id = ? AND id > ? AND relative_path NOT LIKE '%/%' "
+            . 'ORDER BY id LIMIT ?',
+    );
+    $stmt->bindValue(1, $galleryId, \PDO::PARAM_INT);
+    $stmt->bindValue(2, $afterId, \PDO::PARAM_INT);
+    $stmt->bindValue(3, $limit, \PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+}
+
+/**
+ * Lock a direct photo for its caller's live Admin authority transaction.
+ *
+ * @param int $galleryId Exact gallery to which the photo must belong.
+ * @param int $imageId Positive selected photo ID.
+ * @return array{id:int|string,filename:string,visibility:string,nsfw_enabled:int|string,file_size:int|string|null}|null
+ *     Current editable photo fields, or null if the photo is no longer direct.
+ * @throws \RuntimeException When the caller has no active transaction.
+ */
+function image_model_linked_admin_photo_lock(int $galleryId, int $imageId): ?array
+{
+    $pdo = db();
+    if (!$pdo->inTransaction()) {
+        throw new \RuntimeException('Missing photo visibility transaction.');
+    }
+    $stmt = $pdo->prepare(
+        'SELECT id, filename, visibility, nsfw_enabled, file_size FROM images '
+            . "WHERE gallery_id = ? AND id = ? AND relative_path NOT LIKE '%/%' "
+            . 'FOR UPDATE',
+    );
+    $stmt->execute([$galleryId, $imageId]);
+    $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+    return is_array($row) ? $row : null;
 }
 
 /**
@@ -932,6 +991,58 @@ function image_model_direct_rows_by_checksums(
     );
     $stmt->execute(array_merge([$galleryId], $hashes));
     return $stmt->fetchAll() ?: [];
+}
+
+/**
+ * Bound one delegated inventory checksum lookup to its existing chunk size.
+ * Type: int. Units: distinct SHA-256 hashes. Scope: one SQL query.
+ * Consumers: image_model_direct_rows_by_checksums_bounded.
+ * Rationale: 250 matches the existing service chunk and bounds result rows.
+ */
+const IMAGE_MODEL_DELEGATED_INVENTORY_HASH_LIMIT = 250;
+
+/**
+ * Return one deterministic direct image row per requested checksum.
+ *
+ * Grouping chooses the lowest image ID for each present checksum before rows
+ * are fetched. Thus duplicate stored images cannot expand the PHP result and
+ * no requested distinct checksum is lost to an arbitrary row limit.
+ *
+ * @param int $galleryId Positive gallery identifier.
+ * @param list<string> $hashes Unique normalized lowercase SHA-256 values.
+ * @return list<array{id:int|string,filename:string,relative_path:string,file_size:int|string|null,checksum_sha256:string}>
+ *     At most one representative per requested checksum, ordered by database.
+ * @throws InvalidArgumentException When the candidate set exceeds its bounds.
+ */
+function image_model_direct_rows_by_checksums_bounded(
+    int $galleryId,
+    array $hashes,
+): array {
+    if ($galleryId <= 0 || count($hashes) > IMAGE_MODEL_DELEGATED_INVENTORY_HASH_LIMIT
+        || !array_is_list($hashes)) {
+        throw new InvalidArgumentException('Invalid inventory checksum set.');
+    }
+    foreach ($hashes as $hash) {
+        if (!is_string($hash) || preg_match('/\A[a-f0-9]{64}\z/D', $hash) !== 1) {
+            throw new InvalidArgumentException('Invalid inventory checksum.');
+        }
+    }
+    if (count(array_unique($hashes)) !== count($hashes)) {
+        throw new InvalidArgumentException('Duplicate inventory checksum.');
+    }
+    if ($hashes === []) {
+        return [];
+    }
+    $placeholders = implode(',', array_fill(0, count($hashes), '?'));
+    $stmt = db()->prepare(
+        'SELECT i.id, i.filename, i.relative_path, i.file_size, i.checksum_sha256 '
+            . 'FROM images i INNER JOIN ('
+            . 'SELECT MIN(id) AS id FROM images WHERE gallery_id = ? '
+            . "AND relative_path NOT LIKE '%/%' AND checksum_sha256 IN ($placeholders) "
+            . 'GROUP BY checksum_sha256) AS chosen ON chosen.id = i.id',
+    );
+    $stmt->execute(array_merge([$galleryId], $hashes));
+    return $stmt->fetchAll(\PDO::FETCH_ASSOC);
 }
 
 /**

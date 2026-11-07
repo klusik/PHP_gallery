@@ -35,6 +35,14 @@ use GalleryWorkflow\Fixture;
 use function GalleryWorkflow\check;
 use function PhpGallery\Audit\missing_required_php_test_passes;
 
+/**
+ * Bound a central audit child using the existing disposable workflow budget.
+ * Type: int. Units: seconds. Scope: one central audit subprocess.
+ * Consumers: Fixture::run for profile and PHP-regression diagnostics.
+ * Rationale: 1200 seconds retains the existing full-audit child deadline.
+ */
+const GALLERY_WORKFLOW_CENTRAL_AUDIT_TIMEOUT_SECONDS = 1200;
+
 $fixture = null;
 $exit = 0;
 $stage = 'prerequisites';
@@ -46,6 +54,7 @@ try {
             [
                 '--development',
                 '--audit-quick',
+                '--audit-php-regression',
                 '--audit',
                 '--release',
                 '--route-probes',
@@ -120,6 +129,18 @@ try {
             'PASS gallery workflow route lifecycle probes captured ('
                 . $routeProbeLabel
                 . ")\n";
+    } elseif ($mode === '--audit-php-regression') {
+        // A missing owned DB fixture must fail rather than silently skip its
+        // required workflow children. The central audit remains the only
+        // selector and reporter; this mode never selects the WinApp suite.
+        putenv('GALLERY_WORKFLOW_REQUIRED=1');
+        $stage = 'central PHP regression suite';
+        $fixture->run(
+            [PHP_BINARY, __DIR__ . '/audit.php', '--suite=php-regression'],
+            GALLERY_WORKFLOW_CENTRAL_AUDIT_TIMEOUT_SECONDS,
+            $stage,
+        );
+        echo "PASS gallery workflow central PHP regression completed\n";
     } else {
         // The existing PHP regression suite discovers the PHP workflow tests and the real DB races.
         // No parallel test orchestrator and no direct invocation of the existing concurrency suite.
@@ -141,7 +162,7 @@ try {
         $stage = 'central ' . $profile . ' audit';
         $fixture->run(
             [PHP_BINARY, __DIR__ . '/audit.php', '--profile=' . $profile],
-            1200,
+            GALLERY_WORKFLOW_CENTRAL_AUDIT_TIMEOUT_SECONDS,
             $stage,
         );
         $report = json_decode(

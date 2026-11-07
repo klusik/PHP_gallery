@@ -50,6 +50,12 @@ return [
     // overrides remain supported for backward compatibility.
     'admin_session_name' => 'gallery_admin_session',
     'visitor_vote_secret' => 'replace-with-a-long-random-secret',
+
+    // Browser linking uses base_url and a database key provisioned by the
+    // installer/updater. Use HTTPS for remote galleries. Verified direct
+    // localhost HTTP also supports seven-day continuing WinApp links. Keep
+    // existing explicit app_linking.issuer and app_linking_secret overrides to
+    // preserve their established bindings.
     'setup_key' => 'replace-with-a-temporary-setup-key',
 
     // Admin authentication is intentionally durable because shared hosting can

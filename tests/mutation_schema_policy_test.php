@@ -39,6 +39,7 @@ require_once __DIR__ . '/support/module_source.php';
 require_once __DIR__ . '/support/php_source.php';
 require_once __DIR__ . '/../app/services/schema_inspection.php';
 require_once __DIR__ . '/../app/services/mutation_schema_policy.php';
+require_once __DIR__ . '/../app/services/gallery_creation_safety.php';
 
 use Gallery\Services\MutationSchemaUnavailableException;
 use function Gallery\Services\gallery_deletion_schema_status;
@@ -93,6 +94,47 @@ function mutation_policy_assert_true(bool $condition, string $label): void
 }
 
 $allAvailableExecutor = static fn(): bool => true;
+schema_inspection_set_query_executor_for_tests($allAvailableExecutor);
+mutation_policy_assert_same('available',
+    \Gallery\Services\gallery_linked_reservation_schema_state(),
+    'linked reservation exact schema available');
+schema_inspection_set_query_executor_for_tests(
+    static fn(string $type, string $table): bool => !(
+        $type === 'table' && $table === 'linked_gallery_create_reservations'
+    ),
+);
+mutation_policy_assert_same('legacy',
+    \Gallery\Services\gallery_linked_reservation_schema_state(),
+    'confirmed absent reservation table keeps legacy Admin path');
+\Gallery\Services\gallery_linked_reservation_assert_admin_write();
+schema_inspection_set_query_executor_for_tests(
+    static fn(string $type, string $table, string $column): bool => !(
+        $type === 'column_exact' && $table === 'linked_gallery_create_reservations'
+            && $column === 'active_path_hash'
+    ),
+);
+mutation_policy_assert_same('unavailable',
+    \Gallery\Services\gallery_linked_reservation_schema_state(),
+    'partial reservation schema must not be treated as legacy');
+schema_inspection_set_query_executor_for_tests(
+    static function (string $type, string $table): bool {
+        if ($type === 'table' && $table === 'linked_gallery_create_reservations') {
+            throw new RuntimeException('fixture metadata failure');
+        }
+        return true;
+    },
+);
+mutation_policy_assert_same('unavailable',
+    \Gallery\Services\gallery_linked_reservation_schema_state(),
+    'unknown reservation schema must remain unavailable');
+$reservationUnknownRefused = false;
+try {
+    \Gallery\Services\gallery_linked_reservation_assert_admin_write();
+} catch (RuntimeException) {
+    $reservationUnknownRefused = true;
+}
+mutation_policy_assert_true($reservationUnknownRefused,
+    'unknown reservation schema must refuse covered Admin writes');
 schema_inspection_set_query_executor_for_tests($allAvailableExecutor);
 $deletionAvailable = gallery_deletion_schema_status();
 mutation_policy_assert_true(

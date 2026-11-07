@@ -254,7 +254,8 @@ async function applyMetadataOrganizerDraft(form, submitter) {
         renderApplySummary(root, aggregate);
         refreshAfterApply(root, aggregate, panelOwner);
     } catch (error) {
-        setProgress(root, 100, error instanceof Error ? error.message : String(error));
+        // A failed or uncertain batch cannot claim any completion percentage.
+        setProgress(root, 0, error instanceof Error ? error.message : String(error));
         appendLog(root, error instanceof Error ? error.message : String(error));
         setFormDisabled(form, false);
     } finally {

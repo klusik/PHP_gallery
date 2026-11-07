@@ -92,6 +92,139 @@ function galleryEditFixtureFields(array $response): array
     return $fields;
 }
 
+/**
+ * Remove only the exact scheduled-publication fixture owned by this test.
+ *
+ * Any unexpected row, filesystem identity or directory entry is left untouched
+ * and fails the test instead of deleting data belonging to another writer.
+ *
+ * @param PDO $pdo Validated disposable workflow connection.
+ * @param array{folder:string,parent_real:string,relative:string,parent_id:int,title:string,id:int,dev:int,ino:int,child_id:int,child_dev:?int,child_ino:?int} $owned
+ *     Exact identities captured while the fixture created the directory and rows.
+ * @return void Removes matching owned rows and metadata while retaining live lock inodes.
+ */
+function galleryEditRemovePublicationFixture(PDO $pdo, array $owned): void
+{
+    $folder = $owned['folder'];
+    clearstatcache(true);
+    $stat = @lstat($folder);
+    $real = realpath($folder);
+    $root = realpath(dirname($folder));
+    check(is_array($stat) && !is_link($folder) && is_dir($folder)
+        && $stat['dev'] === $owned['dev'] && $stat['ino'] === $owned['ino']
+        && is_string($root) && $root === $owned['parent_real']
+        && $real === $root . DIRECTORY_SEPARATOR . basename($folder)
+        && preg_match('/\Ascheduled-visitor-publication-[a-f0-9]{8}\z/D', basename($folder)) === 1,
+        'Publication cleanup refused a changed folder identity.');
+    $childName = 'pdf-pages-' . str_repeat('a', 64);
+    $musicName = '.gallery-music';
+    $pdfLockName = '.simbrief-ofp-upload.lock';
+    $entries = scandir($folder);
+    check(is_array($entries)
+        && array_diff($entries, [
+            '.', '..', 'gallery.json', $childName, $musicName, $pdfLockName,
+        ]) === [],
+        'Publication cleanup refused unexpected directory entries.');
+    $musicPath = $folder . DIRECTORY_SEPARATOR . $musicName;
+    $musicStat = @lstat($musicPath);
+    if ($musicStat !== false) {
+        $musicEntries = !is_link($musicPath) && is_dir($musicPath)
+            ? scandir($musicPath) : false;
+        check(is_array($musicEntries)
+            && array_diff($musicEntries, ['.', '..', '.lock']) === [],
+            'Publication cleanup refused unexpected music storage.');
+        if (in_array('.lock', $musicEntries, true)) {
+            $musicLock = $musicPath . DIRECTORY_SEPARATOR . '.lock';
+            $musicLockStat = @lstat($musicLock);
+            check(is_array($musicLockStat) && !is_link($musicLock) && is_file($musicLock)
+                && ($musicLockStat['nlink'] ?? 0) === 1 && $musicLockStat['size'] === 0,
+                'Publication cleanup refused an unsafe music lock.');
+        }
+    }
+    $pdfLock = $folder . DIRECTORY_SEPARATOR . $pdfLockName;
+    $pdfLockStat = @lstat($pdfLock);
+    if ($pdfLockStat !== false) {
+        check(!is_link($pdfLock) && is_file($pdfLock)
+            && ($pdfLockStat['nlink'] ?? 0) === 1 && $pdfLockStat['size'] === 0,
+            'Publication cleanup refused an unsafe PDF lock.');
+    }
+    $childPath = $folder . DIRECTORY_SEPARATOR . $childName;
+    $childStat = @lstat($childPath);
+    if ($childStat !== false) {
+        check($owned['child_dev'] !== null && $owned['child_ino'] !== null
+            && is_dir($childPath) && !is_link($childPath)
+            && $childStat['dev'] === $owned['child_dev']
+            && $childStat['ino'] === $owned['child_ino']
+            && scandir($childPath) === ['.', '..'],
+            'Publication cleanup refused a changed child folder.');
+    }
+    $sidecar = $folder . DIRECTORY_SEPARATOR . 'gallery.json';
+    if (file_exists($sidecar) || is_link($sidecar)) {
+        $metadata = !is_link($sidecar) && is_file($sidecar)
+            ? json_decode((string) file_get_contents($sidecar), true) : null;
+        check(is_array($metadata) && ($metadata['title'] ?? null) === $owned['title'],
+            'Publication cleanup refused an unverified sidecar.');
+    }
+    $writer = gallery_edit_writer_begin();
+    try {
+        $find = $pdo->prepare('SELECT id, parent_id, folder_path, title FROM galleries WHERE folder_path = ?');
+        $find->execute([$owned['relative']]);
+        $parent = $find->fetch(PDO::FETCH_ASSOC);
+        if (is_array($parent)) {
+            check($owned['id'] > 0 && (int) $parent['id'] === $owned['id']
+                && (int) $parent['parent_id'] === $owned['parent_id']
+                && $parent['title'] === $owned['title'],
+                'Publication cleanup refused an unverified gallery row.');
+            $children = $pdo->prepare('SELECT id, folder_path FROM galleries WHERE parent_id = ?');
+            $children->execute([$owned['id']]);
+            foreach ($children->fetchAll(PDO::FETCH_ASSOC) as $child) {
+                check($owned['child_id'] > 0 && (int) $child['id'] === $owned['child_id']
+                    && $child['folder_path'] === $owned['relative'] . '/' . $childName,
+                    'Publication cleanup refused an unrelated gallery child.');
+            }
+            $images = $pdo->prepare('SELECT COUNT(*) FROM images WHERE gallery_id = ?');
+            $images->execute([$owned['id']]);
+            check((int) $images->fetchColumn() === 0,
+                'Publication cleanup refused unexpected gallery images.');
+            if ($owned['child_id'] > 0) {
+                $images->execute([$owned['child_id']]);
+                check((int) $images->fetchColumn() === 0,
+                    'Publication cleanup refused unexpected child images.');
+                $delete = $pdo->prepare('DELETE FROM galleries WHERE id = ? AND parent_id = ? AND folder_path = ?');
+                $delete->execute([$owned['child_id'], $owned['id'], $owned['relative'] . '/' . $childName]);
+            }
+            $delete = $pdo->prepare('DELETE FROM galleries WHERE id = ? AND parent_id = ? AND folder_path = ? AND title = ?');
+            $delete->execute([$owned['id'], $owned['parent_id'], $owned['relative'], $owned['title']]);
+            check($delete->rowCount() === 1, 'Publication fixture row was not removed.');
+        } else {
+            check($owned['id'] === 0
+                || row($pdo, 'SELECT id FROM galleries WHERE id = ?', [$owned['id']]) === [],
+                'Publication cleanup refused a relocated gallery row.');
+            check($owned['child_id'] === 0
+                || row($pdo, 'SELECT id FROM galleries WHERE id = ?', [$owned['child_id']]) === [],
+                'Publication cleanup refused an orphan child row.');
+            $find->execute([$owned['relative'] . '/' . $childName]);
+            check($find->fetch(PDO::FETCH_ASSOC) === false,
+                'Publication cleanup refused an unverified child path.');
+        }
+        if (is_file($sidecar)) {
+            check(unlink($sidecar), 'Publication fixture sidecar was not removed.');
+        }
+        if ($childStat !== false) {
+            check(rmdir($childPath), 'Publication fixture child folder was not removed.');
+        }
+        // Persistent flock inodes must not be unlinked while the shared HTTP
+        // fixture can still have active or waiting workers. The residual folder
+        // contains no gallery.json or images and is removed by fixture teardown
+        // after the isolated server stops.
+        if ($musicStat === false && $pdfLockStat === false) {
+            check(rmdir($folder), 'Publication fixture folder was not removed.');
+        }
+    } finally {
+        gallery_edit_writer_end($writer);
+    }
+}
+
 $stage = 'fixture validation';
 try {
     $token = (string) getenv('GALLERY_WORKFLOW_TOKEN');
@@ -777,222 +910,265 @@ try {
     $publicationPath = 'seed/scheduled-visitor-publication-' . $publicationNonce;
     $publicationFolder = $directory . '/galleries/' . $publicationPath;
     check(mkdir($publicationFolder), 'Could not create owned publication folder.');
-    $publicationInsert = $pdo->prepare(
-        'INSERT INTO galleries (parent_id, folder_path, folder_path_hash, slug,'
-        . ' title, description, sort_order, visibility, access_listing,'
-        . ' created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, NOW(), NOW())',
-    );
-    $publicationInsert->execute([
-        $seed['root_id'], $publicationPath, hash('sha256', $publicationPath),
-        basename($publicationPath), $publicationTitle, '',
-        'unpublished', 'listed',
-    ]);
-    $publicationId = (int) $pdo->lastInsertId();
-    $publicationRoute = '/index.php?page=admin_edit_gallery&id=' . $publicationId;
-    $publicationUrl = '/index.php?page=gallery&gallery_path='
-        . rawurlencode($publicationPath);
-    $publicationParentUrl = '/index.php?page=gallery&gallery_path=seed';
-    $publicationVisitor = new Http($origin);
-    $publicationCrawler = new Http($origin, 'Googlebot/2.1 (+http://www.google.com/bot.html)');
-    $publicationFuture = (new DateTimeImmutable('tomorrow', new DateTimeZone('UTC')))
-        ->format('Y-m-d\TH:i');
-    $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
-    check(array_key_exists('scheduled_publish_at', $publicationFields), 'Schedule control is missing.');
-    $publicationFields['scheduled_publish_at'] = $publicationFuture;
-    envelope($adminA->request($publicationRoute, $publicationFields, true), 'Schedule unpublished gallery');
-    $publicationBefore = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
-    check(
-        $publicationBefore['visibility'] === 'unpublished'
-            && $publicationBefore['scheduled_publish_at'] !== null,
-        'Scheduling changed unpublished state or lost its future deadline.',
-    );
-    $publicationDirect = $publicationVisitor->request($publicationUrl);
-    check(
-        $publicationDirect['status'] === 200,
-        'Unpublished direct URL status before deadline: '
-            . $publicationDirect['status'],
-    );
-    $publicationHome = $publicationVisitor->request($publicationParentUrl);
-    check(!str_contains($publicationHome['body'], 'Scheduled visitor publication'), 'Unpublished gallery entered public discovery early.');
-    $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
-    $publicationFields['scheduled_publish_at'] = '2030-02-30T12:00';
-    $publicationFields['folder_name'] = 'publication-must-not-move';
-    $publicationFields['title'] = 'Rejected publication title';
-    $publicationInvalid = $adminA->request($publicationRoute, $publicationFields, true);
-    $publicationAfterInvalid = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
-    unset($publicationBefore['edit_revision'], $publicationAfterInvalid['edit_revision']);
-    check(
-        ($publicationInvalid['json']['ok'] ?? true) === false
-            && $publicationAfterInvalid === $publicationBefore
-            && is_dir($publicationFolder),
-        'Invalid schedule partly saved editor content or moved its folder.',
-    );
-    $publicationFields['scheduled_publish_at'] = ['malformed'];
-    $publicationInvalidType = $adminA->request(
-        $publicationRoute,
-        $publicationFields,
-        true,
-    );
-    check(
-        ($publicationInvalidType['json']['ok'] ?? true) === false,
-        'A structured HTTP value bypassed scalar schedule validation.',
-    );
-
-    $publicationArm = $pdo->prepare(
-        "UPDATE galleries SET scheduled_publish_at = '2000-01-01 00:00:00',"
-        . ' edit_revision = edit_revision + 1 WHERE id = ?',
-    );
-    $publicationArm->execute([$publicationId]);
-    $publicationDue = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
-    $publicationLease = gallery_edit_writer_begin();
+    $publicationStat = lstat($publicationFolder);
+    $publicationParentReal = realpath(dirname($publicationFolder));
+    check(is_array($publicationStat) && is_string($publicationParentReal),
+        'Could not verify owned publication folder identity.');
+    $publicationOwned = [
+        'folder' => $publicationFolder,
+        'parent_real' => $publicationParentReal,
+        'relative' => $publicationPath,
+        'parent_id' => (int) $seed['root_id'],
+        'title' => $publicationTitle,
+        'id' => 0,
+        'dev' => $publicationStat['dev'],
+        'ino' => $publicationStat['ino'],
+        'child_id' => 0,
+        'child_dev' => null,
+        'child_ino' => null,
+    ];
     try {
+        $publicationInsert = $pdo->prepare(
+            'INSERT INTO galleries (parent_id, folder_path, folder_path_hash, slug,'
+            . ' title, description, sort_order, visibility, access_listing,'
+            . ' created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, NOW(), NOW())',
+        );
+        $publicationInsert->execute([
+            $seed['root_id'], $publicationPath, hash('sha256', $publicationPath),
+            basename($publicationPath), $publicationTitle, '',
+            'unpublished', 'listed',
+        ]);
+        $publicationId = (int) $pdo->lastInsertId();
+        $publicationOwned['id'] = $publicationId;
+        $publicationRoute = '/index.php?page=admin_edit_gallery&id=' . $publicationId;
+        $publicationUrl = '/index.php?page=gallery&gallery_path='
+            . rawurlencode($publicationPath);
+        $publicationParentUrl = '/index.php?page=gallery&gallery_path=seed';
+        $publicationVisitor = new Http($origin);
+        $publicationCrawler = new Http($origin, 'Googlebot/2.1 (+http://www.google.com/bot.html)');
+        $publicationFuture = (new DateTimeImmutable('tomorrow', new DateTimeZone('UTC')))
+            ->format('Y-m-d\TH:i');
+        $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
+        check(array_key_exists('scheduled_publish_at', $publicationFields), 'Schedule control is missing.');
+        $publicationFields['scheduled_publish_at'] = $publicationFuture;
+        envelope($adminA->request($publicationRoute, $publicationFields, true), 'Schedule unpublished gallery');
+        $publicationBefore = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
+        check(
+            $publicationBefore['visibility'] === 'unpublished'
+                && $publicationBefore['scheduled_publish_at'] !== null,
+            'Scheduling changed unpublished state or lost its future deadline.',
+        );
+        $publicationDirect = $publicationVisitor->request($publicationUrl);
+        check(
+            $publicationDirect['status'] === 200,
+            'Unpublished direct URL status before deadline: '
+                . $publicationDirect['status'],
+        );
+        $publicationHome = $publicationVisitor->request($publicationParentUrl);
+        check(!str_contains($publicationHome['body'], 'Scheduled visitor publication'), 'Unpublished gallery entered public discovery early.');
+        $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
+        $publicationFields['scheduled_publish_at'] = '2030-02-30T12:00';
+        $publicationFields['folder_name'] = 'publication-must-not-move';
+        $publicationFields['title'] = 'Rejected publication title';
+        $publicationInvalid = $adminA->request($publicationRoute, $publicationFields, true);
+        $publicationAfterInvalid = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
+        unset($publicationBefore['edit_revision'], $publicationAfterInvalid['edit_revision']);
+        check(
+            ($publicationInvalid['json']['ok'] ?? true) === false
+                && $publicationAfterInvalid === $publicationBefore
+                && is_dir($publicationFolder),
+            'Invalid schedule partly saved editor content or moved its folder.',
+        );
+        $publicationFields['scheduled_publish_at'] = ['malformed'];
+        $publicationInvalidType = $adminA->request(
+            $publicationRoute,
+            $publicationFields,
+            true,
+        );
+        check(
+            ($publicationInvalidType['json']['ok'] ?? true) === false,
+            'A structured HTTP value bypassed scalar schedule validation.',
+        );
+
+        $publicationArm = $pdo->prepare(
+            "UPDATE galleries SET scheduled_publish_at = '2000-01-01 00:00:00',"
+            . ' edit_revision = edit_revision + 1 WHERE id = ?',
+        );
+        $publicationArm->execute([$publicationId]);
+        $publicationDue = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
+        $publicationLease = gallery_edit_writer_begin();
+        try {
+            $publicationCrawler->request($publicationParentUrl);
+            check(
+                row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]) === $publicationDue,
+                'A competing crawler bypassed the editor writer lease.',
+            );
+        } finally {
+            gallery_edit_writer_end($publicationLease);
+        }
+        $publicationTrigger = $publicationCrawler->request($publicationParentUrl);
+        $publicationPublished = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
+        check(
+            $publicationTrigger['status'] === 200
+                && str_contains($publicationTrigger['body'], 'Scheduled visitor publication')
+                && $publicationPublished['visibility'] === 'public'
+                && $publicationPublished['scheduled_publish_at'] === null
+                && (int) $publicationPublished['edit_revision'] === (int) $publicationDue['edit_revision'] + 1,
+            'The anonymous crawler triggering page did not observe committed publication.',
+        );
         $publicationCrawler->request($publicationParentUrl);
         check(
-            row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]) === $publicationDue,
-            'A competing crawler bypassed the editor writer lease.',
+            row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]) === $publicationPublished,
+            'Repeated crawler GET republished a consumed schedule.',
         );
-    } finally {
-        gallery_edit_writer_end($publicationLease);
-    }
-    $publicationTrigger = $publicationCrawler->request($publicationParentUrl);
-    $publicationPublished = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
-    check(
-        $publicationTrigger['status'] === 200
-            && str_contains($publicationTrigger['body'], 'Scheduled visitor publication')
-            && $publicationPublished['visibility'] === 'public'
-            && $publicationPublished['scheduled_publish_at'] === null
-            && (int) $publicationPublished['edit_revision'] === (int) $publicationDue['edit_revision'] + 1,
-        'The anonymous crawler triggering page did not observe committed publication.',
-    );
-    $publicationCrawler->request($publicationParentUrl);
-    check(
-        row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]) === $publicationPublished,
-        'Repeated crawler GET republished a consumed schedule.',
-    );
-    check(
-        json_decode((string) file_get_contents($publicationFolder . '/gallery.json'), true)['visibility'] === 'public',
-        'Scheduled publication did not update the canonical sidecar.',
-    );
-
-    $stage = 'scheduled private protections, cancellation and stale publication';
-    $publicationProtect = $pdo->prepare(
-        "UPDATE galleries SET visibility = 'private', access_listing = 'unlisted',"
-        . " access_mode = 'password', access_password_hash = ?, access_token_hash = ?,"
-        . " access_share_token = NULL, access_token_expires_at = '2099-01-01 00:00:00',"
-        . " description = 'Protected scheduled publication content',"
-        . ' nsfw_enabled = 1, scheduled_publish_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
-    );
-    $publicationProtect->execute([
-        password_hash('fixture-publication-password', PASSWORD_DEFAULT),
-        hash('sha256', 'fixture-publication-share'),
-        str_replace('T', ' ', $publicationFuture) . ':00', $publicationId,
-    ]);
-    $publicationPrivate = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
-    check($publicationVisitor->request($publicationUrl)['status'] === 404, 'Private scheduled gallery opened early.');
-    $publicationArm->execute([$publicationId]);
-    $publicationProtectedDue = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
-    $publicationHead = $publicationVisitor->request(
-        $publicationParentUrl, null, false, 'HEAD',
-    );
-    $publicationProtectedAfter = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
-    foreach (['parent_id', 'description', 'nsfw_enabled', 'access_mode', 'access_password_hash', 'access_share_token', 'access_token_hash', 'access_token_expires_at'] as $publicationProtectedKey) {
         check(
-            $publicationProtectedAfter[$publicationProtectedKey] === $publicationProtectedDue[$publicationProtectedKey],
-            'Scheduled publication changed a protected gallery field.',
+            json_decode((string) file_get_contents($publicationFolder . '/gallery.json'), true)['visibility'] === 'public',
+            'Scheduled publication did not update the canonical sidecar.',
         );
+
+        $stage = 'scheduled private protections, cancellation and stale publication';
+        $publicationProtect = $pdo->prepare(
+            "UPDATE galleries SET visibility = 'private', access_listing = 'unlisted',"
+            . " access_mode = 'password', access_password_hash = ?, access_token_hash = ?,"
+            . " access_share_token = NULL, access_token_expires_at = '2099-01-01 00:00:00',"
+            . " description = 'Protected scheduled publication content',"
+            . ' nsfw_enabled = 1, scheduled_publish_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
+        );
+        $publicationProtect->execute([
+            password_hash('fixture-publication-password', PASSWORD_DEFAULT),
+            hash('sha256', 'fixture-publication-share'),
+            str_replace('T', ' ', $publicationFuture) . ':00', $publicationId,
+        ]);
+        $publicationPrivate = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
+        check($publicationVisitor->request($publicationUrl)['status'] === 404, 'Private scheduled gallery opened early.');
+        $publicationArm->execute([$publicationId]);
+        $publicationProtectedDue = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
+        $publicationHead = $publicationVisitor->request(
+            $publicationParentUrl, null, false, 'HEAD',
+        );
+        $publicationProtectedAfter = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
+        foreach (['parent_id', 'description', 'nsfw_enabled', 'access_mode', 'access_password_hash', 'access_share_token', 'access_token_hash', 'access_token_expires_at'] as $publicationProtectedKey) {
+            check(
+                $publicationProtectedAfter[$publicationProtectedKey] === $publicationProtectedDue[$publicationProtectedKey],
+                'Scheduled publication changed a protected gallery field.',
+            );
+        }
+        check(
+            $publicationHead['status'] === 200
+                && $publicationProtectedAfter['visibility'] === 'public'
+                && $publicationProtectedAfter['access_listing'] === 'listed'
+                && $publicationProtectedAfter['scheduled_publish_at'] === null,
+            'HEAD publication failed to restore listing and consume the deadline.',
+        );
+        $publicationListing = $publicationVisitor->request($publicationParentUrl);
+        $publicationCard = [];
+        check($publicationListing['status'] === 200
+            && preg_match(
+                '~<article class="[^"]*\bis-protected-gallery\b[^"]*" data-gallery-id="'
+                    . $publicationId . '"[^>]*>(.*?)</article>~s',
+                $publicationListing['body'],
+                $publicationCard,
+            ) === 1
+            && str_contains($publicationCard[0], 'gallery-locked-preview')
+            && preg_match('/<img\b/i', $publicationCard[1]) !== 1
+            && !str_contains($publicationListing['body'], 'Protected scheduled publication content'),
+            'The listed locked card must not expose protected description or media.',
+        );
+        // Access gates intentionally render HTTP 200. Assert their actual form and
+        // absence of protected content rather than mistaking that status for access.
+        $publicationGate = $publicationVisitor->request($publicationUrl);
+        check(
+            $publicationGate['status'] === 200
+                && str_contains($publicationGate['body'], 'name="adult_confirmed"')
+                && !str_contains($publicationGate['body'], 'Protected scheduled publication content'),
+            'Published restricted gallery bypassed its NSFW gate or exposed content.',
+        );
+        $publicationAgeConfirmation = $publicationVisitor->request(
+            '/index.php?page=gallery_access',
+            [
+                'csrf_token' => $publicationVisitor->token($publicationUrl),
+                'gallery_id' => $publicationId,
+                'access_action' => 'confirm_nsfw_age',
+                'adult_confirmed' => '1',
+            ],
+        );
+        check(
+            $publicationAgeConfirmation['status'] === 302,
+            'Fixture age confirmation did not use the existing access owner.',
+        );
+        $publicationPasswordGate = $publicationVisitor->request($publicationUrl);
+        check(
+            $publicationPasswordGate['status'] === 200
+                && str_contains($publicationPasswordGate['body'], 'name="gallery_password"')
+                && !str_contains($publicationPasswordGate['body'], 'Protected scheduled publication content'),
+            'Age confirmation bypassed the unchanged gallery password protection.',
+        );
+        // Unrelated editor saves still preserve independent link-only state.
+        $pdo->prepare("UPDATE galleries SET access_listing = 'unlisted' WHERE id = ?")
+            ->execute([$publicationId]);
+        $publicationEditor = $adminA->request($publicationRoute);
+        check(str_contains($publicationEditor['body'], 'still accessible only by link'), 'Editor hides the published-but-unlisted state.');
+        $publicationFields = galleryEditFixtureFields($publicationEditor);
+        envelope($adminA->request($publicationRoute, $publicationFields, true), 'Save unchanged link-only publication');
+        check(row($pdo, 'SELECT access_listing FROM galleries WHERE id = ?', [$publicationId])['access_listing'] === 'unlisted', 'An unchanged full form relisted the gallery.');
+
+        $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
+        $publicationFields['visibility'] = 'private';
+        $publicationFields['scheduled_publish_at'] = $publicationFuture;
+        envelope($adminA->request($publicationRoute, $publicationFields, true), 'Schedule private gallery');
+        $publicationScheduled = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
+        $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
+        $publicationFields['scheduled_publish_at'] = (new DateTimeImmutable('next week', new DateTimeZone('UTC')))->format('Y-m-d\TH:i');
+        envelope($adminA->request($publicationRoute, $publicationFields, true), 'Reschedule private gallery');
+        check(
+            !\Gallery\Models\gallery_publication_model_consume(
+                $publicationId, $publicationScheduled['scheduled_publish_at'],
+                (string) $publicationScheduled['edit_revision'], '2099-01-01 00:00:00', '2099-01-01 00:00:00',
+            ),
+            'A stale due snapshot overrode a reschedule.',
+        );
+        $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
+        $publicationFields['scheduled_publish_at'] = '';
+        envelope($adminA->request($publicationRoute, $publicationFields, true), 'Cancel publication');
+        check(row($pdo, 'SELECT scheduled_publish_at FROM galleries WHERE id = ?', [$publicationId])['scheduled_publish_at'] === null, 'Cancellation retained its pending timestamp.');
+        $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
+        $publicationFields['scheduled_publish_at'] = $publicationFuture;
+        envelope($adminA->request($publicationRoute, $publicationFields, true), 'Rearm private publication');
+        $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
+        $publicationFields['visibility'] = 'public';
+        envelope($adminA->request($publicationRoute, $publicationFields, true), 'Manually publish scheduled gallery');
+        check(row($pdo, 'SELECT scheduled_publish_at FROM galleries WHERE id = ?', [$publicationId])['scheduled_publish_at'] === null, 'Manual publication retained its schedule.');
+
+        $stage = 'restricted PDF child and deleted schedule safety';
+        $publicationChildPath = $publicationPath . '/pdf-pages-' . str_repeat('a', 64);
+        check(mkdir($directory . '/galleries/' . $publicationChildPath), 'Could not create owned PDF child folder.');
+        $publicationChildStat = lstat($directory . '/galleries/' . $publicationChildPath);
+        check(is_array($publicationChildStat), 'Could not verify owned PDF child identity.');
+        $publicationOwned['child_dev'] = $publicationChildStat['dev'];
+        $publicationOwned['child_ino'] = $publicationChildStat['ino'];
+        $publicationInsert->execute([
+            $publicationId, $publicationChildPath, hash('sha256', $publicationChildPath),
+            basename($publicationChildPath), 'Restricted scheduled PDF child', '', 'private', 'unlisted',
+        ]);
+        $publicationChildId = (int) $pdo->lastInsertId();
+        $publicationOwned['child_id'] = $publicationChildId;
+        $publicationArm->execute([$publicationChildId]);
+        $publicationChildBefore = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationChildId]);
+        $publicationCrawler->request('/index.php?page=home');
+        check(
+            row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationChildId]) === $publicationChildBefore,
+            'Scheduled publication bypassed the incomplete PDF child guard.',
+        );
+        $publicationDelete = $pdo->prepare('DELETE FROM galleries WHERE id = ?');
+        $publicationDelete->execute([$publicationChildId]);
+        $publicationCrawler->request('/index.php?page=home');
+        check(row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationChildId]) === [], 'A deleted due gallery was recreated.');
+        echo "PASS scheduled gallery actual editor, anonymous crawler GET, HEAD, concurrency, protection, sidecar, cancellation and PDF/deletion safety\n";
+    } finally {
+        // The shared fixture outlives this test; do not leave a protected card
+        // that changes later public-preview assertions, even on failure.
+        galleryEditRemovePublicationFixture($pdo, $publicationOwned);
     }
-    check(
-        $publicationHead['status'] === 200
-            && $publicationProtectedAfter['visibility'] === 'public'
-            && $publicationProtectedAfter['access_listing'] === 'listed'
-            && $publicationProtectedAfter['scheduled_publish_at'] === null,
-        'HEAD publication failed to restore listing and consume the deadline.',
-    );
-    // Access gates intentionally render HTTP 200. Assert their actual form and
-    // absence of protected content rather than mistaking that status for access.
-    $publicationGate = $publicationVisitor->request($publicationUrl);
-    check(
-        $publicationGate['status'] === 200
-            && str_contains($publicationGate['body'], 'name="adult_confirmed"')
-            && !str_contains($publicationGate['body'], 'Protected scheduled publication content'),
-        'Published restricted gallery bypassed its NSFW gate or exposed content.',
-    );
-    $publicationAgeConfirmation = $publicationVisitor->request(
-        '/index.php?page=gallery_access',
-        [
-            'csrf_token' => $publicationVisitor->token($publicationUrl),
-            'gallery_id' => $publicationId,
-            'access_action' => 'confirm_nsfw_age',
-            'adult_confirmed' => '1',
-        ],
-    );
-    check(
-        $publicationAgeConfirmation['status'] === 302,
-        'Fixture age confirmation did not use the existing access owner.',
-    );
-    $publicationPasswordGate = $publicationVisitor->request($publicationUrl);
-    check(
-        $publicationPasswordGate['status'] === 200
-            && str_contains($publicationPasswordGate['body'], 'name="gallery_password"')
-            && !str_contains($publicationPasswordGate['body'], 'Protected scheduled publication content'),
-        'Age confirmation bypassed the unchanged gallery password protection.',
-    );
-    // Unrelated editor saves still preserve independent link-only state.
-    $pdo->prepare("UPDATE galleries SET access_listing = 'unlisted' WHERE id = ?")
-        ->execute([$publicationId]);
-    $publicationEditor = $adminA->request($publicationRoute);
-    check(str_contains($publicationEditor['body'], 'still accessible only by link'), 'Editor hides the published-but-unlisted state.');
-    $publicationFields = galleryEditFixtureFields($publicationEditor);
-    envelope($adminA->request($publicationRoute, $publicationFields, true), 'Save unchanged link-only publication');
-    check(row($pdo, 'SELECT access_listing FROM galleries WHERE id = ?', [$publicationId])['access_listing'] === 'unlisted', 'An unchanged full form relisted the gallery.');
-
-    $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
-    $publicationFields['visibility'] = 'private';
-    $publicationFields['scheduled_publish_at'] = $publicationFuture;
-    envelope($adminA->request($publicationRoute, $publicationFields, true), 'Schedule private gallery');
-    $publicationScheduled = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationId]);
-    $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
-    $publicationFields['scheduled_publish_at'] = (new DateTimeImmutable('next week', new DateTimeZone('UTC')))->format('Y-m-d\TH:i');
-    envelope($adminA->request($publicationRoute, $publicationFields, true), 'Reschedule private gallery');
-    check(
-        !\Gallery\Models\gallery_publication_model_consume(
-            $publicationId, $publicationScheduled['scheduled_publish_at'],
-            (string) $publicationScheduled['edit_revision'], '2099-01-01 00:00:00', '2099-01-01 00:00:00',
-        ),
-        'A stale due snapshot overrode a reschedule.',
-    );
-    $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
-    $publicationFields['scheduled_publish_at'] = '';
-    envelope($adminA->request($publicationRoute, $publicationFields, true), 'Cancel publication');
-    check(row($pdo, 'SELECT scheduled_publish_at FROM galleries WHERE id = ?', [$publicationId])['scheduled_publish_at'] === null, 'Cancellation retained its pending timestamp.');
-    $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
-    $publicationFields['scheduled_publish_at'] = $publicationFuture;
-    envelope($adminA->request($publicationRoute, $publicationFields, true), 'Rearm private publication');
-    $publicationFields = galleryEditFixtureFields($adminA->request($publicationRoute));
-    $publicationFields['visibility'] = 'public';
-    envelope($adminA->request($publicationRoute, $publicationFields, true), 'Manually publish scheduled gallery');
-    check(row($pdo, 'SELECT scheduled_publish_at FROM galleries WHERE id = ?', [$publicationId])['scheduled_publish_at'] === null, 'Manual publication retained its schedule.');
-
-    $stage = 'restricted PDF child and deleted schedule safety';
-    $publicationChildPath = $publicationPath . '/pdf-pages-' . str_repeat('a', 64);
-    check(mkdir($directory . '/galleries/' . $publicationChildPath), 'Could not create owned PDF child folder.');
-    $publicationInsert->execute([
-        $publicationId, $publicationChildPath, hash('sha256', $publicationChildPath),
-        basename($publicationChildPath), 'Restricted scheduled PDF child', '', 'private', 'unlisted',
-    ]);
-    $publicationChildId = (int) $pdo->lastInsertId();
-    $publicationArm->execute([$publicationChildId]);
-    $publicationChildBefore = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationChildId]);
-    $publicationCrawler->request('/index.php?page=home');
-    check(
-        row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationChildId]) === $publicationChildBefore,
-        'Scheduled publication bypassed the incomplete PDF child guard.',
-    );
-    $publicationDelete = $pdo->prepare('DELETE FROM galleries WHERE id = ?');
-    $publicationDelete->execute([$publicationChildId]);
-    $publicationCrawler->request('/index.php?page=home');
-    check(row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$publicationChildId]) === [], 'A deleted due gallery was recreated.');
-    echo "PASS scheduled gallery actual editor, anonymous crawler GET, HEAD, concurrency, protection, sidecar, cancellation and PDF/deletion safety\n";
 } catch (Throwable $exception) {
     // Assertion messages and their call sites are test-authored; arbitrary
     // application/transport exceptions may contain private fixture details.

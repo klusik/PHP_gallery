@@ -583,12 +583,14 @@ function http_media_range_header(): string
  * @param array{path:string,track:array{filename:string,mime:string,size:int}}|null $document Verified original, or null for an opaque missing response.
  * @param array{start:int,end:int,partial:bool}|null $range Prepared complete or partial range, or null for an unsatisfiable request.
  * @param bool $download Whether delivery is an attachment instead of inline.
+ * @param bool $nativeCache Whether the authorized native caller opted in.
  * @return void Emits private GET/HEAD audio, 404, 405 or 416 without exposing paths.
  */
 function stream_verified_audio_document(
     ?array $document,
     ?array $range,
     bool $download = false,
+    bool $nativeCache = false,
 ): void {
     $method = \Gallery\Core\request_method();
     clear_response_cache_headers();
@@ -617,6 +619,12 @@ function stream_verified_audio_document(
             header('Content-Range: bytes */' . $size);
             header('Content-Length: 0');
             return;
+        }
+        if ($nativeCache && !$range['partial']) {
+            header_remove('Pragma');
+            header('Vary: Authorization, X-PHP-Gallery-Track-Cache', false);
+            header('X-PHP-Gallery-Track-Cache: 1');
+            header('Cache-Control: private, no-cache');
         }
         header('Content-Type: ' . $document['track']['mime']);
         $disposition = $download ? 'attachment' : 'inline';

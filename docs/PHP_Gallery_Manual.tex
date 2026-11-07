@@ -64,8 +64,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{0.150.6}
-\newcommand{\manualdate}{2 November 2026}
+\newcommand{\version}{1.0.0}
+\newcommand{\manualdate}{7 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1768,22 +1768,370 @@ limits and~deployment qualification.
 \section{Windows companion uploader}
 \subsection{Uploader layout}
 
-The~uploader opens on~\ui{Watcher}; its~navigation order is~\ui{Watcher},
-\ui{Import}, \ui{Activity}, \ui{AI}, and~\ui{Settings}. The~Watcher screen
-shows the~gallery target. Its~top connection control opens a~compact API-key
-dialog with a~masked key and~\ui{Save \& Test}; this~connection control remains
-available in~the~header on~every screen. Unsaved edits do~not~replace the~saved
-key. The~app header also has Settings,
+The~normal launch opens on~\ui{Photos}; the~navigation order is~\ui{Photos},
+\ui{Watcher}, \ui{Import}, \ui{Activity}, \ui{AI}, and~\ui{Settings}.
+With an~active gallery link, Photos loads the~gallery tree on~the~left
+and~opens an~initial gallery on~the~right. Expand or~collapse a~branch or
+the~whole tree. Selecting a~gallery shows its~photos in~the~same window.
+The~default-on \ui{Subgalleries} switch shows direct child-folder cards above
+the~photos. Each cover uses the~first authorized direct thumbnail. When none
+is~available, the~card shows a~neutral folder. Photos keeps gallery listings
+in~memory and~uses the~current link grant.
+When disconnected, \ui{Connect} opens the~existing address and~browser
+approval flow. The~active link can then browse public photos directly.
+Choose the~independent upload destination with \ui{Use for uploads}.
+A~logon \texttt{--startup} launch remains in~the~system tray until restored.
+On~macOS, source launches use the~normal Tk window.
+Temporary links end with the~process.
+
+The~Watcher screen shows the~gallery target. Its~top API-key control opens
+a~compact key dialog with a~masked key and~\ui{Save \& Test}; this~control
+remains available in~the~header on~every screen. The~separate ordinary header
+\ui{Link gallery} flow remains the~upload/search path. Unsaved edits do~not~replace
+the~saved key. The~app header also has Settings,
 updates, and~help controls. The~Watcher screen keeps the~selected folder path,
 watcher status, and~source-delete warning visible.
+If~the~configuration cannot be~read or~verified, startup stops before work
+begins. Preserve the~original file and~restore a~valid backup; a~missing file
+still starts with first-run defaults. Windows reparse points and~power-loss
+durability have not~yet been qualified.
+Click \ui{Link gallery} in~the~main window. Paste the~gallery address from
+your browser into the~dialog and~confirm with \ui{Link gallery}.
+An~HTTP address on \texttt{localhost} can link to~a~gallery on~the~same
+computer. Remote installations use verified HTTPS.
+The~dialog shows progress while waiting for~approval. If~the~connection
+fails, it~displays the~error and~lets you try again.
+Sign in~as an~administrator in~the~browser and~click \ui{Approve}.
+Return to~WinApp when the~browser shows \ui{Approval received}. WinApp
+shows the~linked site's address and~loads the~first gallery page
+automatically. \ui{Cancel} declines the~request.
+
+Use the~ellipsis beside \ui{Unlink gallery} to~open the~links chooser.
+Select an~entry under \ui{Linked now} to~switch using its current approval.
+The~profile keeps up~to~20 \ui{Recent addresses} across restarts. Select one
+to~start a~new approval. The~power icon unlinks the~selected site and~the
+cross removes a~recent address. The~upload destination has its own selection.
+
+Open \ui{Choose gallery…} beside the~address and type in~\ui{Search galleries}.
+Suggestions favor names, then descriptions and~gallery tags. Names tolerate
+a~small typo. Quoted phrases and~\texttt{AND}/\texttt{OR} work as on~the website.
+Indentation and~the selected row's parent titles show the~hierarchy.
+The~arrow loads more matches. With basic list access you can filter the~current
+page by name. Approve a~new link on a~supporting server for catalog search.
+
+With approved upload access, choose a~result and click \ui{Use for uploads}.
+On~a~supported local profile,
+including a~source run on~macOS, WinApp uses the~approved upload access
+automatically. After verification,
+\ui{Upload gallery} shows the~destination in~Watcher and~Import. The~ellipsis
+reveals more gallery actions. \ui{Unlink gallery} ends the~current link.
+After restart, reconnect to~the~same account and~select the~gallery again.
+Use \ui{Manage link…} in~Settings for~advanced access. API-key uploads use
+their own \ui{Gallery URL} and~gallery-scoped key.
+
+Separately select \ui{Read gallery details} and~approve the~read permission
+to~use \ui{Read selected details} for~a~selected gallery. It~shows its~ID,
+title, revision and~stored visibility, access and~listing settings, not~inherited
+effective access. A~read already checked by~the~server can~finish
+after concurrent revocation. Older servers may~not~support this permission
+or~endpoint; the~client reports unsupported or~unavailable without silently
+reducing scope. The~saved \texttt{pgu\_} upload path remains available. Real
+Windows, deployed HTTPS and~database behavior remain unqualified.
+Delegated upload success requires a~new image row and~the~observed original
+file at~its~final gallery path. If~confirmation fails, the~file may~already
+exist and~the~client keeps the~attempt unresolved without automatic retry.
+Revocation during an~in-flight upload cannot roll back an~already stored file.
+The~new linked client requires the~exact \texttt{fresh\_insert\_v1} upload
+evidence marker; an~older linked server leaves the~attempt unresolved. The
+\texttt{pgu\_} upload path remains unchanged.
+A~live reply may replace the~write-ahead uncertainty only for~the~same
+positive attempt, unchanged
+source identity and~hash, and~a~validated fresh image insertion. It~must report
+one uploaded image and~a~nonnegative scanned count; an~unknown or~lost reply,
+hash check or~inventory never clears the~marker. No retry, source deletion or
+exactly-once guarantee follows from this correction.
+Server file identity is~not byte-exact proof against outside writers. Client
+source identity and~hash checks are~not atomic against local writers; Windows
+reparse and~power-loss behavior remain unqualified.
+Original ZIPs and~extracted staging directories remain retained regardless
+of~age or~upload confirmation for~manual review; automatic age-based staging
+cleanup is~disabled because visible job IDs do~not prove complete history.
+For~exactly one uncertain linked upload, \ui{Check uncertain upload} asks
+for~the~file size in~bytes, up~to~64~MiB, and~checks its~stored hash once
+without opening the~local file. A~match reports
+observed bytes, not~completion or~database registration; an~unknown result
+does not~prove absence. Neither result clears the~record, deletes files or
+retries the~upload. Older servers may~not~support this check.
+To~review one current unknown upload, first inspect the~gallery and~original
+source. The~optional hash check observes bytes only; it~does~not~confirm
+registration or~prove absence. The~explicit review prompt defaults to~No.
+Review preserves the~uncertainty marker, original and~ZIP. The~same source path
+or~bytes stay blocked after restart, while other eligible sources can~continue.
+Review does~not~resend or~delete the~unknown source.
+Linked uploads require an~unredirected profile on~a~fixed local Windows
+drive or~an owner-controlled local macOS volume. Close older uploaders
+using the~same profile first.
+The~separate \texttt{gallery:visibility} permission is~offered only when the
+server advertises it, and~requires explicit browser approval. Before a~change,
+the~client confirms the~current gallery state. A~stale revision or~schedule
+conflict causes a~read-only refresh; the~change is~not~replayed. Older servers
+omit this permission. The~operator command
+\texttt{inspect\_gallery\_visibility.php} is~read-only by~default. Only an
+explicit current \texttt{--reconcile=FINGERPRINT} can~repair eligible version-two
+sidecar evidence and~retire its~marker after synchronized readback; it~does~not
+write the~database row or~revision. Version-one markers are~inspection-only.
+Candidate \texttt{8de8e50a} passed BASIC run \texttt{42107055888} and~WinApp
+run \texttt{42107055797}. Installed GUI, MariaDB, and~deployed behavior
+remain unqualified.
+An~active gallery listing link permits browsing listed public, non-sensitive
+photos. Supported servers offer explicit \texttt{presentation:read} consent
+in~the normal link flow for presentation settings and~visible music.
+For public-only links, every ancestor must be~public, listed, normal-access,
+and~non-NSFW. Separate administrator media consent lets Photos display hidden,
+restricted and~NSFW media. The~server rechecks the~live administrator grant.
+Internal pages carry up~to 64~photo descriptors, or~eight on~older servers.
+Binary responses have a~16~MiB cap and~playlists carry up~to 32~visible
+MP3/WAV tracks. If~the
+smallest thumbnail is~missing, the~server may use another existing rendition
+or~the~bounded public display file. The~photo pane and~lightbox share the~main
+WinApp window.
+The~responsive grid scrolls continuously and~loads visible thumbnails. Click
+one or~focus it and~press Enter to~open the~lightbox. Left/Right loops through
+the~whole album. Close the
+lightbox or~press Escape to~restore the~tree and~grid, including after an~image
+error. Thumbnails trim detected black bands and~fit the~whole remaining scene.
+Photos and~thumbnails have a~separate
+five-minute limit of~600 requests per IP and~3,600 globally. On~HTTP~429,
+Photos displays the~limit and~pauses speculative requests until \ui{Retry}. Source launches use Pillow
+from the~same Python interpreter.
+Retry reloads failed content. Use the~wheel, a~two-finger scroll or~+ and~\ensuremath{-}
+to~zoom. Press 0 to~reset the~view and~drag to~pan. F or~F11 toggles
+fullscreen. Pointer motion briefly reveals the~controls. When permitted coordinates exist, an~anchored
+location pin offers \ui{Open in OpenStreetMap} in~the~system browser. Browsing
+prepares the~previous and~next details in~bounded memory. \ui{Fit by content} crops
+detected black bands in~both views. \ui{Show original frame} restores the~full
+frame. The~image keeps its aspect ratio in~the~available area. During a~resize,
+the~lightbox updates a~preview and~refines it when the~window settles.
+On~macOS~15 or later, compatible HDR source data can use AppKit on~an~EDR
+display when PyObjC and~the~Tk window bridge are~available. Other configurations
+use the~8-bit Pillow/Tk SDR renderer, including Windows.
+One per-user disk cache stores opted-in photos and~tracks with verified
+content digests. Its ordinary area evicts the~least recently accessed items above
+4,096~entries or~1~GiB. A~matching validator from the~current album catalogue
+reuses a~local thumbnail immediately. Photos without this proof use the~usual
+60-second freshness and~authorized ETag revalidation. The~current authorized
+playlist can reuse a~track by SHA-256, size and~format. Media available
+only to~administrators uses transient storage by~default.
+Cache icons update automatically from loaded metadata: cloud means online,
+half-circle partial, filled circle local and~dotted circle unchecked.
+A~partial catalogue cannot prove full coverage. The~heading's cache icon
+opens the~gallery menu.
+\ui{Preload gallery} prepares direct photos, including thumbnails and~lightbox
+images, in~the~background with progress and~Cancel. Subgalleries are~separate
+targets. \ui{Keep preloaded} retains successfully prepared files outside
+ordinary cleanup, entry limits and~byte limits, including after restart.
+Disabling it~returns the~gallery to~ordinary cache policy, which may evict
+excess files. Cancel keeps prepared files and~the~retention preference without
+claiming full coverage. Existing verified bytes are~reused when retrying after
+a~server limit. No-store media remains transient; retained bytes grant
+no~offline access or~expired-link permission. One explicit preload accepts
+up~to~100,000 direct photos as~a bounded work operation.
+An~explicit Admin Photos preload can also retain private or~draft photos
+on~supporting servers. The~photo, gallery and~complete ancestry must
+be~verified as~non-NSFW. The~saved preference and~private files belong
+to~the~verified account and~installation. Later views revalidate private
+files through the~live server before display, including after restart.
+Older servers and~ordinary restricted browsing remain transient.
+A~server-directed retry delay shows a~cancelable countdown; exhausted
+retries retain completed files. Zero stored photos report a~safe reason
+instead of~partial success.
+The~presentation button opens fullscreen and~loops through the~album at~the
+server's enabled interval or~a five-second default. The~authorized soundtrack
+starts with the~presentation. The~music controls play, pause and~change tracks.
+The~player reads the~local file and~prepares the~next track.
+Right-click a~gallery or~photo for information and~authorized visibility
+changes. Click outside the~panel or press Escape to close it. Admin photo
+information includes format, dimensions, stored EXIF and~GPS when allowed by
+the~gallery. Thumbnail quality shows the~server's current generation settings.
+The~gallery panel shows direct inventory and~local cache coverage.
+A~tree icon appears
+when coverage is~known. Use the~add icon in~the~tree toolbar for a~root
+gallery and~the~add icon beside the~album title for a~subgallery. You can
+also add a~subgallery from a~gallery menu or~blank photo space.
+The~wheel and~trackpad scroll the~grid and~zoom the~lightbox.
+\ui{Edit gallery} opens the~selected gallery's web Admin editor in~the~system
+browser's right-side panel. It uses the~browser's own Admin login and~sends
+no~WinApp credentials. Older servers open their normal full-page editor.
+The~tree restores expanded and~collapsed branches for each linked site and
+account. Use the~circular arrow beside the~album title to~refresh its photos.
+WinApp checks the~visible Admin album's index about every 30~seconds and
+reuses unchanged thumbnails. Older servers support manual refresh.
+Select photos with~Control-click on~Windows, Command-click on~macOS or
+the~photo menu. The~context menu can delete one photo or~the~selection.
+WinApp uses the~current Admin Photos link. Confirm each batch of~up
+to~64~photos in~WinApp. It uses the~same permanent deletion
+operation as~web Admin. Refresh and~review the~album after an~interrupted
+response before confirming another deletion.
+Use \textbf{Use this gallery for Watcher} in~a gallery context or~the~Watcher
+rail menu. WinApp starts capture with a~temporary gallery key and~shows a~red
+REC indicator. The~Watcher rail icon pulses red on~every tab. A~filled red
+light marks the~capture album and~its heading. A~hollow light marks
+a~collapsed branch that hides it.
+SimBrief is available for a~detected flight simulator. Finish
+drains screenshots, saves available flight reports for~a simulator session
+and~revokes the~capture key. The~website stays linked.
+The~Watcher panel reports preparation or~a reason it could not start.
+During startup, a~busy indicator names the~preparation phase. Wait for~REC
+before creating a~new screenshot. Stop and~Finish show preparation immediately
+before the~upload drain and~report phases.
+Recent Activity rows are saved in~bounded background batches. Normal exit
+attempts a~flush within its deadline. Storage failure, timeout or~a crash can
+lose buffered rows; failures are logged and~the~rotating log is written
+immediately.
+Destination selection checks accepted imports in~the~local upload history.
+It uses the~same 256~MiB history limit as~state updates. Unverifiable history
+or~unfinished work for~another destination still blocks the~change.
+The~updated native viewer needs a~current installed
+Windows click-through. Earlier protocol evidence predates this UI revision.
+The~filesystem writer fence is~an~inactive prototype and~does not~protect
+gallery operations until its~coordination has~been qualified.
+The~experimental separate \texttt{galleries:create} permission requires
+explicit consent and~verified scope storage. Its~source refuses occupied targets, canonical catalog drift and
+catalogs over 10,000~rows including the~new gallery; slug search checks at~most
+128~candidates. Neither is~a~time limit.
+A~pending intent is~not automatically repeated after an~uncertain result.
+A~pending linked-create reservation temporarily blocks Admin folder imports,
+moving discovered photos, deleting discovered folders, copying selections,
+moving galleries to~or~restoring them from Trash, metadata-organizer moves,
+consistency repairs and~ordinary gallery creation, even for
+another path. Do~not delete the
+reservation: safe automatic cleanup is~not yet available. Existing API-key
+upload remains available. This same-database guard is~not a~filesystem fence.
+Before creating or~checking a~retained intent, the~client requires a~fresh
+server identity matching the~selected or~saved Admin account.
+The~maintenance CLI can~inspect private original evidence from standard input
+and~report ledger correlation only; it~does~not prove that a~worker stopped
+or~authorize another creation.
+Before sending, the~client verifies a~complete staged intent and~publishes it
+without replacing another key. An~interruption may leave a~stale lease that
+blocks work; Windows filesystem and~power-loss behavior remain unqualified.
+\ui{Resume original creation} shows the~original title and~parent for~explicit
+confirmation, then sends the~same operation key and~inputs to~the~same HTTPS
+issuer and~verified Admin account. Existing pending or~reconciliation claims remain
+blocked and~can~require administrator reconciliation. This protection requires
+the~original server ledger; restoring an~older database backup can~remove it.
+The~unconfirmed status offers explicit resume or~\ui{Close unresolved creation}
+after reviewing the~gallery and~storage. Closure shows the~original title and~parent for~explicit
+confirmation. It~removes the~local intent only after the~server confirms a~durable
+closure of~the~same key. An~unknown result leaves the~intent in~place. Closure
+is~refused while the~server claim is~pending. Closure
+does not~prove that no~gallery or~files exist or~that earlier work has stopped.
+Verify the~original work has stopped and~inspect the~gallery and~storage before
+starting a~separate creation. None starts automatically; a~verified
+completed result instead remains as~a~receipt for~acknowledgement.
+An~invalid or~unreadable local intent remains blocked and~requires administrator
+assistance because its original key cannot be~verified.
+A~confirmed receipt remains until explicit acknowledgement. The~client writes
+and~checks a~complete staged receipt before exclusive publication; uncertainty
+retains the~intent and~any published receipt. A~local binding to~the~original
+intent prevents a~stale selection or~acknowledgement from~applying to~another
+operation with~the~same gallery details; the~operation key is~not~displayed.
+These checks do~not~exclude unrelated filesystem changes or~prove power-loss
+durability. On~a~supported local profile, \ui{Use created gallery}
+rechecks the~receipt and~gallery before selecting it~for~Watcher and~Import.
+This requires separate upload approval. The~server compares the~original ID, title and~parent
+with~current data. A~rename yields unknown; a~move, deletion or~unverifiable
+state can~be~unavailable. A~missing or~unsafely redirected directory or~sidecar
+also remains unknown; validation checks current safe files, not~their original
+inode. Neither automatically starts a~replacement.
+Where supported, new access is~normal and~listed with no~scheduled publication.
+Database
+rollback cannot undo filesystem writes. Local flushes do~not~prove recovery
+after power loss; actual database, HTTPS and~Windows creation remain unqualified.
+With~separate explicit consent, a~short-lived grant can~list all galleries,
+including private and~unpublished ones. An~identity-only grant cannot list
+them. Selecting a~gallery alone grants no~upload permission. A~separate upload
+scope explicitly covers all ordinary Admin galleries, including private
+and~unpublished ones. The~transient linked Watcher and~Import are~implemented
+but~not~qualified; the~gallery-scoped key remains available independently.
+
+The~installer and~updater provision the~linking key in~the~database.
+The~saved website address supplies the~exact origin and~mount.
+Existing explicit issuer and~key settings keep precedence. Public discovery
+reads readiness. The~browser saves a~short-lived request handle in~the~session
+before ordinary Admin sign-in. CSRF-protected binding leads to~explicit consent.
+\ui{Approve} delivers a~one-use code to~the~verified callback for~PKCE exchange.
+The~main action requests account and~gallery access, with image uploads where
+supported. On~compatible servers, approve rolling access explicitly. It~lasts
+seven days after the~last successful authenticated use or~refresh. WinApp
+renews the~15-minute access token using macOS Keychain or~Windows Credential
+Manager. Verified HTTPS and~direct \texttt{http://localhost} are~supported. Older
+servers use a~temporary link lasting up~to 15~minutes.
+The~owner can revoke grants in~Connected
+applications. Unexchanged codes expire within 120~seconds. See
+\filepath{docs/APP_LINKING_PHASE_0.md}.
+
+The~scope-capacity migration widens four binary scope columns without changing
+existing grants. A~partially completed migration retains verified short-scope
+support; new wide capacity is~ready only when all four columns are~verified.
+It~does not~grant new permissions. DDL is~replayable, not~atomic, and~older
+runtime code may~refuse the~widened schema; no~automatic narrowing is~provided.
+Each metadata-lock wait is~limited to~at~most five seconds; a~stricter existing
+setting remains unchanged. A~reduced setting is~restored, but~total DDL time
+is~not~limited. The~callback lock
+ends before the~runner writes its~migration checkpoint.
+
+The~separate Windows HTTPS remembrance option uses the~legacy offline scope
+and~expires after 30~days or~seven days of~inactivity, whichever comes first.
+WinApp can resume an~approved saved link at~startup.
+\ui{Reconnect saved link} also starts this check. The~client rotates once
+and~checks the~server identity. If~the~same verified server explicitly rejects
+an~expired or~revoked rolling credential, WinApp discards that saved credential.
+Choose \ui{Link gallery} to~approve a~new link in~the~browser. Startup leaves
+approval to~you. An~uncertain
+response or~storage failure blocks reuse of~the~old credential. Review server
+links and~use \ui{Forget saved link} before linking again if~needed. Local forget
+does not~revoke the~server grant, and~the~current session may~remain active.
+The~saved \texttt{pgu\_} key remains independent. Real Windows and~power-loss
+recovery have not~been qualified. Rolling links keep one saved binding per exact
+issuer. The~legacy Windows
+HTTPS option keeps one shared binding. Resolve pending work and~forget
+the~local link before replacing a~saved account for~the~same issuer.
+The~server grant can be~revoked separately. The~linked upload
+path uses separate history and~an~exclusive lock by~issuer, account
+and~gallery. Before sending, it~records a~pending result. After an~uncertain
+transfer, inspect the~gallery and~source manually; do~not~automatically retry
+or~delete the~source. An~experimental bounded server probe can~report
+\texttt{present} only when matching bytes were observed during its~read;
+it~does not~prove image registration. \texttt{unknown} is~not~proof of~absence
+or~permission to~retry, and~the~client does not~yet use the~probe. Its~time
+budget is~checked between filesystem calls and~cannot stop a~blocked call.
+External filesystem changes are~not~atomically excluded. When the~current
+WinApp process exits, the~OS releases its~native lock for~the~next Retry.
+For older locks, close all uploaders, review the~gallery and~sources, preserve
+the~recovery JSON and~archive only the~verified inactive lock. Local
+filesystem and~power-loss guarantees remain unverified. Linked flight data stays
+local and~does not~implicitly send AI work or~PDFs with a~saved legacy key.
+Configure proxy, web-server and~PHP request limits because multipart parsing
+can~consume resources before the~application checks the~request.
+
 \ui{Start Watcher} starts only after an~explicit click; while active the~same
-contextual control is~\ui{Stop Watcher}. \ui{Check folder only} performs
+contextual control is~\ui{Stop Watcher}. While accepted work finishes, it
+opens \ui{Show progress}. After an~interruption, \ui{Review pending uploads}
+opens the~original queue. Reconnect and~select the~same upload gallery before
+choosing \ui{Retry}. For a~linked session, \ui{Keep files locally} closes
+the~queue after workers stop and~preserves the~photos, reports and~upload
+history. Once the~session is~closed, \ui{Start Watcher} is~available again.
+\ui{Check folder only} performs
 a~folder
 dry run without uploads or~starting continuous watching. The~Watcher gear opens
 a~settings sheet for~folder choice, recursion, scan interval, file stability,
-simulator metadata, and~the~opt-in deletion setting. The~sheet requires stopping
+simulator metadata, and~the~saved deletion setting. The~sheet requires stopping
 the~watcher before
-edits; \ui{Save watcher settings} stores them for~the~next start. \ui{Cancel},
+edits. \ui{Choose folder…} saves the~folder from the~main Watcher view.
+\ui{Start Watcher} asks for~a~folder when one is~missing.
+\ui{Save watcher settings} stores the~Watcher preferences for~the~next start.
+\ui{Cancel},
 Escape, or~closing the~sheet restores the~opening folder, ignore count, last
 scan, and~preferences.
 \ui{Sync UTC time} remains an~opt-in beside the~main actions.
@@ -1805,6 +2153,42 @@ no~whole-window
 opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
 surfaces remain, and~native controls and~source-mode operation, including
 \texttt{--once}, stay supported.
+Windows prefers the~installed Segoe UI Variable Text font, with Segoe UI
+and~the~native Tk font as~fallbacks. Shared text styles preserve Windows
+font smoothing; fixed-width diagnostics stay monospaced. Common control,
+cache, pin and~recording icons use supersampled artwork; without Pillow,
+readable native glyphs remain. The~app downloads no~fonts and~changes
+no~system preferences. Before creating windows, an~unaware Windows process
+requests system DPI awareness and~preserves an~existing manifest context.
+This does not~add per-monitor layout reflow. Restart on~the~destination
+display when moving between displays with different scaling.
+The~main window remembers its~normal size, position, maximized state and
+Photos tree width automatically. Minimizing, fullscreen and~tray hiding
+preserve the~last normal rectangle. Restoration keeps the~window and
+divider within current display bounds. These view preferences do~not
+change upload configuration or~credentials.
+Switching albums cancels the~old view. A~new request waits within its
+original deadline for~the~existing single transport slot while earlier
+network cleanup finishes; canceling the~new view also cancels that wait.
+Before its~scan, \texttt{--once} verifies the~saved upload mode with Windows
+Credential Manager. A~verified legacy or~unmigrated legacy profile remains
+eligible; linked, first-setup, unknown or~unavailable evidence returns a~nonzero
+status without scanning. Each inventory and~upload attempt and~redirect
+rechecks the~mode; an~already running request may finish. This in-process
+check does not~fence other processes or~protect graphical workers.
+API-key requests refuse redirects to~another host, an~unapproved port, or~from
+HTTPS to~HTTP. Use the~final gallery URL if a~server requires such a~redirect.
+Actual Windows behavior remains unqualified.
+On Windows, watched-source deletion is enabled by~default for~new settings;
+an~explicit saved off choice is retained. The~Watcher settings switch controls
+both linked and~API-key captures. After a~successful upload response and~local
+acknowledgement, a~native handle verifies the~same file identity and~bytes
+before deleting that opened source. Changed, redirected, hardlinked or~busy
+files remain with a~warning. Inventory matches and~uncertain uploads do~not
+authorize deletion. Other platforms, manual imports and~source ZIPs retain
+their sources. Flight
+API-key revocation is temporarily unavailable. GUI mode protection and crash
+recovery are still being implemented and are not qualified.
 
 \subsection{Windows startup and~one running instance}
 
@@ -1935,7 +2319,7 @@ connection. Photo uploads continue independently. Closing settings starts
 no~operation. Glass artwork uses opaque RGB pixels for reliable Windows Tk;
 source mode without Pillow retains usable native controls for repair.
 
-The~folder path and~picker share Watch folder settings. Saved paths,
+Watcher shows the~folder path and~\ui{Choose folder…}. Saved paths,
 gallery URL, and~feature choices are restored after restart. The~interface
 language uses four directly visible choices. Scrollbars appear only when
 content exceeds the~viewport; helper windows and~tooltips use the~same
@@ -1971,8 +2355,8 @@ values become dashes. The~adjacent \ui{PDF} shortcut opens saved flights.
 \ui{Saved flights and PDFs} lists start time, aircraft, checkpoint sample count,
 local PDF count, state, and retained errors. Refresh reads checkpoints only;
 Open app log uses the~existing log. \ui{Finish flight and create PDFs} creates
-all four editions, finishes accepted work and~required delivery, then revokes
-the~saved key without a~confirmation. It~also works with automatic creation off.
+all four editions and~finishes accepted work and~required delivery. It~keeps
+the~upload connection and~works with automatic creation off.
 
 Selected languages render simultaneously in separate processes, one per
 language (currently up~to four). Flight analysis and map backgrounds are
@@ -2005,7 +2389,7 @@ easter eggs for~Cyberpunk 2077, the~Mass Effect trilogy, Skyrim and~Dragon Age.
 Unknown or~ambiguous games keep general wording. The~background observer checks
 every three seconds, even before watching starts or~with recording/UTC sync
 disabled. It~opens/closes SimConnect without telemetry or~simulator writes;
-process names stay local. Actions, reports and~key handling remain unchanged.
+process names stay local.
 SimBrief's Load/Unload control, settings icon and~status appear only
 for~a~detected
 flight; hiding retains the~loaded plan. Outside a~flight context, Watcher,
@@ -2028,14 +2412,13 @@ hierarchy on~separate indented lines, from root to~gallery. Connection changes
 refresh both presentations; flight records and~import history retain
 the~complete identity.
 
-The~Finish button sits below the~target gallery; one click
-authorizes completion and~key revocation. After failure, \ui{Keep locally and
-revoke key} and
-Retry retain the~same connection's confirmed intent in~this app session.
-Cancelling revocation, changing credentials, or~restarting clears that consent.
-Ordinary Stop keeps the~key. Recovery buttons wrap into two rows.
+The~Finish button sits below the~upload gallery during capture. Finish and
+Stop keep the~connection available for another session. Manage server keys
+separately in~PHP Gallery Admin. An~active linked session uses the~browser
+approval for uploads. After restart the~verified saved address prefills
+reconnection.
 
-\ui{Abandon flight} beside Finish in~Watcher/Import and~in~flight progress
+In legacy API-key mode, \ui{Abandon flight} in~Watcher, Import and~progress
 offers explicit local recovery after a~gallery is~deleted or~its~key revoked.
 After confirmation, workers stop and~in-flight requests settle; pending delivery
 is~abandoned and~the~saved key is~removed from this PC without contacting
@@ -2056,6 +2439,12 @@ reconcile
 server status. Old plans, bindings, and~raw data remain intact. Cancellation
 retains finished editions. Protocol errors include redacted HTTP/action/type
 context and~a~bounded response excerpt.
+The~client checks status before upload and~requires matching checksum and~size.
+If~confirmation is~uncertain or~the~local PDF changes, it~retains the~file
+and~does not~mark that edition complete. An~earlier saved plan receipt records
+a~past acknowledgement; it~does not~prove the~PDF still exists on~the~server.
+The~selection dialog identifies a~file, not~a~hash captured at~confirmation;
+the~later file checks do~not~atomically exclude other writers.
 
 Without a~saved key the~main Begin action opens API
 settings. Expand a~flight and, when present, its version to~see PDFs;
@@ -3611,6 +4000,15 @@ and~configured gallery branding assets where those schemas are~available.
 Sidecar writing follows the~same schema checks as~the~corresponding gallery
 features.
 
+When Admin tag sidecar repair runs, it refuses targets outside the~configured
+gallery root or targets it cannot verify; links resolving inside remain usable.
+A~refusal or failed sidecar write does not record its completion checkpoint.
+The~writer refuses multiple hard links or unusable inode identity and checks
+the~opened target and prior content before truncation; a~later write failure
+or~interruption can~leave partial content. The~whole JSON document is~decoded
+and~re-encoded, so~formatting and~number representation may change. These
+checks do~not~exclude unrelated filesystem changes between observations.
+
 During discovery and~missing-parent repair, PHP Gallery can~read supported
 values from~the~sidecar instead of~deriving everything from the~folder name.
 Imported rows conservatively default to~unpublished when no~visibility
@@ -3767,6 +4165,15 @@ automation credentials across galleries and~provides a~central revocation
 workflow without exposing the~original secrets. Gallery-level controls remain
 available for~the~same scoped credentials.
 
+The~public discovery query at~the~installation-relative address
+\texttt{index.php?page=app\_linking\_discovery} reports version~1 and~checks
+the~canonical HTTPS issuer, independent secret, core schema and~optional
+capability readiness. If~core linking is~not~ready it~reports unavailable;
+unknown optional storage hides only that operation. It~does not~require an
+Admin session or~reveal credentials or~gallery lists. The~existing
+gallery-scoped API key remains independent; discovery does not~authorize
+uploads.
+
 The~Windows companion uses the~same gallery-scoped upload contract. It~has~two
 normal upload modes. \ui{Watch folder} ignores files that were already present
 when watching begins, waits for~new files to~become stable, remembers confirmed
@@ -3786,6 +4193,8 @@ worker. It~claims one authenticated analysis job, downloads only the~claimed
 asset, produces internal searchable metadata with the~selected local
 backend/model generation, and~returns the~result to~the~existing
 upload-automation endpoint. This worker is~separate from~human captions.
+Stopping waits until any in-flight heartbeat request actually ends; blocked
+HTTP or~DNS can~extend this wait beyond the~socket timeout.
 A~gallery-level \ui{Force AI metadata regeneration} action clears the~stored
 generated rows/old queue state for~that gallery branch and~queues fresh work;
 the~heavy analysis still runs on~the~Windows worker.
@@ -4768,6 +5177,9 @@ configured lifetime, and~the~selected mail transport. Use HTTPS, strong
 administrator credentials, restricted database accounts, and~protected mail/API
 secrets.
 
+A~listed password-protected gallery can~appear as~a~locked card with its title
+and~link; the~locked card does~not~show its description or~cover image.
+
 Administrator cookie protection, generated URL schemes and~viewer HTTPS checks
 share one transport policy. Direct TLS is~recognized without proxy settings.
 When a~reverse proxy terminates TLS and~forwards HTTP to~PHP, configure its
@@ -5202,6 +5614,12 @@ their owned cache directories, and image responses accept supported raster types
 rather than active SVG content. The retained original Theme background is
 available only to an authenticated administrator; the normal public derivative
 remains viewable.
+
+For~a~new gallery target, containment resolves the~existing parent and~gallery
+root, allowing configured filesystem aliases such as~macOS \filepath{/var} to
+\filepath{/private/var}. Unresolved existing entries and~parents outside
+the~root are~refused. These observations do~not~prevent concurrent filesystem
+changes after the~check.
 
 During gallery-to-gallery migration, asset manifest enumeration and
 authenticated API-key file delivery independently verify the final file's
@@ -7628,6 +8046,10 @@ generators and~test loops are~exceptional diagnostics, not~routine handoff
 gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main};
 releases retain the~previous stable tag. Red or~slow CI does~not~justify
 local-only qualification.
+
+For~disposable MySQL diagnostics, \filepath{scripts/gallery_workflow_mysql.php}
+offers \codeword{--audit-php-regression} through the~central PHP regression
+suite. Isolate the~checkout separately to~isolate its~cache as~well.
 
 Hosted qualification covers PHP/Node/WinApp tests, source contracts, required
 Chromium, real MySQL/MariaDB workflows, PHP compatibility and~required

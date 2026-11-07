@@ -637,17 +637,79 @@ function gallery_metadata_organizer_groups_from_images(
 }
 
 /**
+ * Move one organizer group without erasing an uncertain destination.
+ *
+ * @param int $sourceGalleryId Existing source gallery identifier.
+ * @param int $destinationGalleryId Existing destination gallery identifier.
+ * @param list<int> $imageIds Selected source image identifiers.
+ * @param bool $deferMaintenance Whether final maintenance belongs to the batch.
+ * @return array{requested:int,moved:int,originals_moved:int,derivatives_moved:int,failures:list<string>,source_cover_image_id:int|null,destination_cover_image_id:int|null} Verified move outcome.
+ * @throws RuntimeException When the move result is uncertain or reports failure.
+ */
+function gallery_metadata_organizer_move_checked(
+    int $sourceGalleryId,
+    int $destinationGalleryId,
+    array $imageIds,
+    bool $deferMaintenance,
+): array {
+    try {
+        $result = move_gallery_images(
+            $sourceGalleryId,
+            $destinationGalleryId,
+            $imageIds,
+            $deferMaintenance ? ['defer_maintenance' => true] : [],
+        );
+    } catch (Throwable $exception) {
+        throw new RuntimeException(t(
+            'admin.metadata_organizer.move_uncertain',
+            'The move result is uncertain. The organizer retained both galleries; inspect their contents before retrying.',
+        ), 0, $exception);
+    }
+    if (!empty($result['failures'])) {
+        throw new RuntimeException(t(
+            'admin.metadata_organizer.move_uncertain',
+            'The move result is uncertain. The organizer retained both galleries; inspect their contents before retrying.',
+        ));
+    }
+    return $result;
+}
+
+/**
  * Apply one AJAX-sized date organizer batch.
  *
  * @param int $galleryId Gallery identifier.
  * @param array<string,string|int|float|bool|null> $input Submitted grouping and inclusive date-range values.
  * @param int $limit Maximum candidate photos to move in this request.
- * @return array{created_galleries:int,reused_galleries:int,requested_images:int,moved_images:int,originals_moved:int,derivatives_moved:int,remaining_after:int,done:bool,batch_limit:int,candidate_rows:int,groups_processed:int,selection_ms:float,move_ms:float,maintenance_ms:float,duration_ms:float,maintenance:array{ran:bool,thumbnail_cache_cleared:bool,gallery_public_paths:int,image_public_slugs:int,sidecars_written:int},group_results:list<array{title:string,date:string,destination_gallery_id:int,destination_status:'created'|'existing',requested:int,moved:int,image_ids:list<int>,originals_moved:int,derivatives_moved:int,duration_ms:float}>,failures:list<string>} Batch movement counts, timing, maintenance results, per-date outcomes, and failures.
+ * @return array{created_galleries:int,reused_galleries:int,requested_images:int,moved_images:int,originals_moved:int,derivatives_moved:int,remaining_before:int,remaining_after:int,done:bool,batch_limit:int,candidate_rows:int,groups_processed:int,selection_ms:int,move_ms:int,maintenance_ms:int,duration_ms:int,maintenance:array{ran:bool,thumbnail_cache_cleared:bool,gallery_public_paths:int,image_public_slugs:int,sidecars_written:int},group_results:list<array{title:string,date:string,destination_gallery_id:int,destination_status:'created'|'existing',requested:int,moved:int,image_ids:list<int>,originals_moved:int,derivatives_moved:int,duration_ms:int}>,failures:list<string>} Batch movement counts, timing, maintenance results, per-date outcomes, and failures.
  */
 function gallery_metadata_organizer_apply_date_plan_batch(
     int $galleryId,
     array $input = [],
     int $limit = 1,
+): array {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        gallery_linked_reservation_assert_admin_write();
+        return gallery_metadata_organizer_apply_date_plan_batch_owned(
+            $galleryId, $input, $limit,
+        );
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Apply one organizer batch while retaining its shared writer lease.
+ *
+ * @param int $galleryId Source gallery identifier.
+ * @param array<string,string|int|float|bool|null> $input Selected grouping and date range.
+ * @param int $limit Maximum candidate photographs for the batch.
+ * @return array{created_galleries:int,reused_galleries:int,requested_images:int,moved_images:int,originals_moved:int,derivatives_moved:int,remaining_before:int,remaining_after:int,done:bool,batch_limit:int,candidate_rows:int,groups_processed:int,selection_ms:int,move_ms:int,maintenance_ms:int,duration_ms:int,maintenance:array{ran:bool,thumbnail_cache_cleared:bool,gallery_public_paths:int,image_public_slugs:int,sidecars_written:int},group_results:list<array{title:string,date:string,destination_gallery_id:int,destination_status:'created'|'existing',requested:int,moved:int,image_ids:list<int>,originals_moved:int,derivatives_moved:int,duration_ms:int}>,failures:list<string>} Batch result with move and maintenance outcomes.
+ */
+function gallery_metadata_organizer_apply_date_plan_batch_owned(
+    int $galleryId,
+    array $input,
+    int $limit,
 ): array {
     $requestStartedAt = microtime(true);
     if (!gallery_metadata_organizer_schema_ready()) {
@@ -746,38 +808,9 @@ function gallery_metadata_organizer_apply_date_plan_batch(
         }
         $touchedDestinationIds[$destinationGalleryId] = $destinationGalleryId;
 
-        try {
-            $moveResult = move_gallery_images(
-                $galleryId,
-                $destinationGalleryId,
-                $imageIds,
-                ['defer_maintenance' => true],
-            );
-        } catch (Throwable $exception) {
-            if ($createdThisGallery) {
-                // Rollback of a gallery this failed operation just created. It never held
-                // administrator content, so it is destroyed instead of entering the trash bin.
-                delete_gallery_subtrees([$destinationGalleryId]);
-            }
-            $failures[] =
-                (string) ($group['title'] ?? '')
-                . ': '
-                . $exception->getMessage();
-            continue;
-        }
-
-        if (!empty($moveResult['failures'])) {
-            if ($createdThisGallery) {
-                // Rollback of a gallery this failed operation just created. It never held
-                // administrator content, so it is destroyed instead of entering the trash bin.
-                delete_gallery_subtrees([$destinationGalleryId]);
-            }
-            foreach ((array) ($moveResult['failures'] ?? []) as $failure) {
-                $failures[] =
-                    (string) ($group['title'] ?? '') . ': ' . (string) $failure;
-            }
-            continue;
-        }
+        $moveResult = gallery_metadata_organizer_move_checked(
+            $galleryId, $destinationGalleryId, $imageIds, true,
+        );
 
         $groupMoveMs = gallery_metadata_organizer_elapsed_ms($groupStartedAt);
         $moveMs += $groupMoveMs;
@@ -962,6 +995,28 @@ function gallery_metadata_organizer_apply_date_plan(
     int $galleryId,
     array $input = [],
 ): array {
+    $writerLock = gallery_edit_writer_begin();
+    try {
+        gallery_linked_reservation_assert_admin_write();
+        return gallery_metadata_organizer_apply_date_plan_owned(
+            $galleryId, $input,
+        );
+    } finally {
+        gallery_edit_writer_end($writerLock);
+    }
+}
+
+/**
+ * Apply a complete organizer plan while retaining its shared writer lease.
+ *
+ * @param int $galleryId Source gallery identifier.
+ * @param array<string,string|int|float|bool|null> $input Selected grouping and date range.
+ * @return array{plan:array{schema_ready:true,gallery:array<string,int|float|string|bool|null>,options:array{primary:string,secondary:string,min_date:string,max_date:string},groups:list<array{key:string,date:string,title:string,folder_name:string,destination_gallery_id:int,destination_status:'existing'|'new',destination_folder_path:string,image_count:int,images:list<array{id:int,filename:string,relative_path:string,title:string,visibility:string,exif_taken_at:string,group_date:string}>}>,total_images:int,batch_total_images:int,candidate_images:int,ignored_without_date:int,ignored_before_min:int,ignored_after_max:int,group_count:int,batch:array{offset:int,limit:int,returned:int,next_offset:int,done:bool}},created_galleries:int,reused_galleries:int,requested_images:int,moved_images:int,originals_moved:int,derivatives_moved:int,group_results:list<array{title:string,date:string,destination_gallery_id:int,destination_status:'created'|'existing',requested:int,moved:int}>,failures:list<string>} Applied plan and move outcomes.
+ */
+function gallery_metadata_organizer_apply_date_plan_owned(
+    int $galleryId,
+    array $input,
+): array {
     $plan = gallery_metadata_organizer_build_date_plan($galleryId, $input);
     if (empty($plan['schema_ready'])) {
         throw new RuntimeException(t(
@@ -1024,37 +1079,9 @@ function gallery_metadata_organizer_apply_date_plan(
             continue;
         }
 
-        try {
-            $moveResult = move_gallery_images(
-                $galleryId,
-                $destinationGalleryId,
-                $imageIds,
-            );
-        } catch (Throwable $exception) {
-            if ($createdThisGallery) {
-                // Rollback of a gallery this failed operation just created. It never held
-                // administrator content, so it is destroyed instead of entering the trash bin.
-                delete_gallery_subtrees([$destinationGalleryId]);
-            }
-            $failures[] =
-                (string) ($group['title'] ?? '')
-                . ': '
-                . $exception->getMessage();
-            continue;
-        }
-
-        if (!empty($moveResult['failures'])) {
-            if ($createdThisGallery) {
-                // Rollback of a gallery this failed operation just created. It never held
-                // administrator content, so it is destroyed instead of entering the trash bin.
-                delete_gallery_subtrees([$destinationGalleryId]);
-            }
-            foreach ((array) ($moveResult['failures'] ?? []) as $failure) {
-                $failures[] =
-                    (string) ($group['title'] ?? '') . ': ' . (string) $failure;
-            }
-            continue;
-        }
+        $moveResult = gallery_metadata_organizer_move_checked(
+            $galleryId, $destinationGalleryId, $imageIds, false,
+        );
 
         $movedImages += (int) ($moveResult['moved'] ?? 0);
         $originalsMoved += (int) ($moveResult['originals_moved'] ?? 0);

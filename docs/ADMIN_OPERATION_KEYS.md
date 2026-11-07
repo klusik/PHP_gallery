@@ -211,7 +211,25 @@ php scripts/reconcile_admin_operations.php --help
 php scripts/reconcile_admin_operations.php --list
 php scripts/reconcile_admin_operations.php --list --after=ACTOR:KEY_HASH
 php scripts/reconcile_admin_operations.php --inspect=ACTOR:KEY_HASH
+php scripts/reconcile_admin_operations.php --inspect-linked-create < /private/linked-create-evidence.json
 ~~~
+
+The linked-create inspection reads bounded private JSON from standard input,
+not command arguments. Use a permission-restricted file outside the web root,
+containing exactly `actor_id` (integer), `issuer`, `operation_key`, `title`
+and `parent_id` (integer or null) from the original intent. Do not paste it
+into a command line, logs or a ticket. The command derives the normal
+issuer-bound key and semantic fingerprint and returns only `matched` and the
+observed ledger `state`; absent or mismatched evidence returns unknown. Even a
+matched completed state is not a current gallery receipt. This read-only check
+neither establishes that a worker stopped nor authorizes retry, replacement,
+file deletion or any reconciliation mutation.
+The input must be compact canonical UTF-8 JSON as emitted by PHP
+`json_encode` with `JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES`;
+duplicate or escaped object keys and other encodings are refused. The existing
+application bootstrap may update its updater runtime bookkeeping; the ledger
+inspection itself is read-only.
+Outer whitespace is accepted; whitespace within the encoded object is not.
 
 The list returns exact pending, needs_reconciliation and unknown counts, up to
 50 metadata rows and next_cursor. Pass a returned cursor unchanged to inspect

@@ -13,6 +13,8 @@
 
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -31,6 +33,8 @@ from uploader.flight_jobs import (
     allocate_report_revision,
     report_file_details,
 )
+from uploader.models import ImportItem, ImportJob
+from uploader.state_store import JobStateStore
 
 
 # Type: str; Units: hexadecimal SHA-256 characters; Scope: test receipts.
@@ -410,20 +414,39 @@ class FlightJobsTests(unittest.TestCase):
         """Keep accepted upload jobs attached to their original gallery key.
 
         Returns:
-            None: Assert idempotent binding, mismatch refusal and scoped resolve.
+            None: Assert persisted-job admission, idempotent binding and refusal
+                to change a job's original connection.
         """
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            ledger = ImportBindings(root)
+            ledger = ImportBindings(root / "flights")
+            store = JobStateStore(root / "upload_state.json")
+            first_job = ImportJob.create("files", "first", "Gallery")
+            second_job = ImportJob.create("files", "second", "Gallery")
+            first_job.items = [ImportItem(
+                "first-item", "/unused/first.jpg", "first.jpg",
+            )]
+            second_job.items = [ImportItem(
+                "second-item", "/unused/second.jpg", "second.jpg",
+            )]
+            store.save_job(first_job)
+            store.save_job(second_job)
             first = connection_binding("https://gallery.test/api", "key-one")
             second = connection_binding("https://gallery.test/api", "key-two")
-            ledger.bind("job-1", first)
-            ledger.bind("job-2", second)
-            ledger.bind("job-1", first)
+            ledger.bind(first_job.id, first)
+            ledger.bind(second_job.id, second)
+            ledger.bind(first_job.id, first)
             with self.assertRaises(ValueError):
-                ledger.bind("job-1", second)
-            ledger.resolve("job-1")
-            self.assertEqual(ledger.entries(), {"job-2": second})
+                ledger.bind(first_job.id, second)
+            with self.assertRaises(ValueError):
+                ledger.resolve(first_job.id)
+            first_job.items[0].transition("skipped_duplicate")
+            first_job.finished_at = 1.0
+            store.save_job(first_job)
+            ledger.resolve(first_job.id)
+            self.assertEqual(ledger.entries(), {
+                first_job.id: first, second_job.id: second,
+            })
 
     def test_workspace_lease_is_exclusive_and_releasable(self) -> None:
         """Ensure one live process owns a workspace until release.
@@ -443,6 +466,44 @@ class FlightJobsTests(unittest.TestCase):
             second = WorkspaceLease(root)
             second.release()
 
+    def test_workspace_lease_excludes_an_independent_python_process(self) -> None:
+        """Verify native workspace-byte exclusion across independent PIDs.
+
+        Returns:
+            None: A second Python process is denied until its owner releases.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            probe = (
+                "import sys\n"
+                "from pathlib import Path\n"
+                "from uploader.flight_jobs import WorkspaceLease\n"
+                "try:\n"
+                "    lease = WorkspaceLease(Path(sys.argv[1]))\n"
+                "except RuntimeError:\n"
+                "    print('blocked')\n"
+                "else:\n"
+                "    lease.release()\n"
+                "    print('acquired')\n"
+            )
+            command = [sys.executable, "-c", probe, str(root)]
+            cwd = Path(__file__).resolve().parents[1]
+            owner = WorkspaceLease(root)
+            try:
+                blocked = subprocess.run(
+                    command, cwd=cwd, capture_output=True, text=True,
+                    check=False, timeout=10,
+                )
+                self.assertEqual(0, blocked.returncode, blocked.stderr)
+                self.assertEqual("blocked", blocked.stdout.strip())
+            finally:
+                owner.release()
+            acquired = subprocess.run(
+                command, cwd=cwd, capture_output=True, text=True,
+                check=False, timeout=10,
+            )
+            self.assertEqual(0, acquired.returncode, acquired.stderr)
+            self.assertEqual("acquired", acquired.stdout.strip())
 
     def test_missing_pdf_reader_keeps_existing_report_metadata_usable(self) -> None:
         """Retain saved PDF access when source Python lacks optional inspection.

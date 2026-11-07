@@ -91,7 +91,15 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     // service/fixture provider parameter. No hidden Gallery declaration needs a
     // generated root; request input never selects this callback.
     // Storage observation callbacks are supplied lexically by reviewed call sites.
+    // The visibility row lease invokes only trusted local inspection and
+    // reconciliation closures supplied by the PHP service or fixture.
     // They run once and add no hidden Gallery roots or user-selected targets.
+    // Linking credential factories are lexical closures supplied by the service;
+    // schema-inspection overrides are test seams and are null in production.
+    // Linked inventory authority is a controller-owned lexical closure; upload
+    // lease verification is a service-owned lexical closure around the model
+    // guard. Their concrete targets are already statically referenced in those
+    // callers; request input cannot select either callback.
     $signatures = <<<'SITES'
     Gallery\Controllers\admin_gallery_discovery_capture_html|variable_callable|$renderer()
     Gallery\Controllers\admin_maintenance_center_json_action|variable_callable|$callback()
@@ -109,9 +117,20 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$compensate()
     Gallery\Models\admin_setup_wizard_model_transaction|variable_callable|$operation()
     Gallery\Models\gallery_feature_plan_model_transaction|variable_callable|$operation()
+    Gallery\Models\gallery_model_visibility_inspect|variable_callable|$inspect()
     Gallery\Models\app_settings_model_set_many_with_activation|variable_callable|$activate()
+    Gallery\Models\app_link_model_exchange|variable_callable|$makeTokenHash()
+    Gallery\Models\app_link_model_exchange|variable_callable|$makeRefreshHash()
+    Gallery\Models\app_link_refresh_model_rotate|variable_callable|$makeHashes()
+    Gallery\Models\app_link_model_issue|variable_callable|$makeCodeHash()
     Gallery\Models\music_catalog_model_transaction|variable_callable|$mutation()
     Gallery\Services\music_catalog_commit_mutation|variable_callable|$mutation()
+    Gallery\Services\app_linking_inventory_confirm_indexed|variable_callable|$currentGallery()
+    Gallery\Services\store_uploaded_gallery_images|variable_callable|$authorizeBeforeStore()
+    Gallery\Services\store_uploaded_gallery_images|variable_callable|$afterStore()
+    Gallery\Services\store_uploaded_gallery_images|variable_callable|$verifyWriterOwnership()
+    Gallery\Services\upload_automation_store_images|variable_callable|$finish()
+    Gallery\Services\upload_automation_store_images|variable_callable|$resolveDelegatedGallery()
     Gallery\Models\viewer_account_model_transaction|variable_callable|$operation()
     Gallery\Models\viewer_collection_model_transaction|variable_callable|$operation()
     Gallery\Models\viewer_favourite_model_set|variable_callable|$lockedAccountAllowed()
@@ -137,6 +156,7 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Services\admin_test_run_clear_safe_caches|variable_callable|$callback()
     Gallery\Services\admin_test_run_create|variable_callable|$callback()
     Gallery\Services\admin_test_run_create|variable_callable|$phase()
+    Gallery\Services\app_linking_recovery_probe|variable_callable|$currentGallery()
     Gallery\Services\application_autoupdate_maybe_run|variable_callable|$loadDependencies()
     Gallery\Services\application_update_background_chain_deliver|variable_callable|$deliver()
     Gallery\Services\application_update_cache_blocking_job_diagnostic|variable_callable|$read()
@@ -187,11 +207,19 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Services\public_visual_preview_inherit_referrer_context|variable_callable|$normalizeOrigin()
     Gallery\Services\schema_inspection_column_definition_contains|dynamic_callback_argument|is_callable($override)
     Gallery\Services\schema_inspection_column_definition_contains|variable_callable|$override()
+    Gallery\Services\schema_inspection_column_exact|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\schema_inspection_column_exact|variable_callable|$override()
     Gallery\Services\schema_inspection_column_nullable|dynamic_callback_argument|is_callable($override)
     Gallery\Services\schema_inspection_column_nullable|variable_callable|$override()
     Gallery\Services\schema_inspection_execute_query|dynamic_callback_argument|is_callable($override)
     Gallery\Services\schema_inspection_execute_query|variable_callable|$override()
+    Gallery\Services\schema_inspection_foreign_key_exact|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\schema_inspection_foreign_key_exact|variable_callable|$override()
+    Gallery\Services\schema_inspection_index_exact|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\schema_inspection_index_exact|variable_callable|$override()
     Gallery\Services\schema_inspection_prime_table_snapshots|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\schema_inspection_table_engine|dynamic_callback_argument|is_callable($override)
+    Gallery\Services\schema_inspection_table_engine|variable_callable|$override()
     Gallery\Services\simbrief_description_build_localized_markdown|variable_callable|$replace()
     Gallery\Services\site_maintenance_process_cleanup_step|variable_callable|$run()
     Gallery\Services\site_maintenance_register_request_trigger|variable_callable|$loadDependencies()

@@ -19,11 +19,78 @@ namespace Gallery\Services;
 use RuntimeException;
 use Throwable;
 use function Gallery\Models\gallery_model_catalog_path_owner;
+use function Gallery\Models\gallery_model_linked_reservation_conflicts;
 use const Gallery\Core\FILESYSTEM_OBSERVATION_AVAILABLE;
 use const Gallery\Core\FILESYSTEM_OBSERVATION_MISSING;
 use const Gallery\Core\FILESYSTEM_OBSERVATION_UNKNOWN;
 
 require_once dirname(__DIR__) . '/policy_constants.php';
+
+/**
+ * Inspect exact storage for linked-create reservations.
+ *
+ * @return 'available'|'legacy'|'unavailable' Complete schema, confirmed absent
+ *     table, or partial/unknown metadata respectively.
+ */
+function gallery_linked_reservation_schema_state(): string
+{
+    $table = 'linked_gallery_create_reservations';
+    $status = schema_inspection_table($table);
+    if (schema_inspection_is_missing($status)) {
+        return 'legacy';
+    }
+    if (!schema_inspection_is_available($status)) {
+        return 'unavailable';
+    }
+    $requirements = [
+        $status,
+        schema_inspection_table_engine($table, 'InnoDB'),
+        schema_inspection_unique_index_exact($table, 'PRIMARY', ['actor_id', 'key_hash']),
+        schema_inspection_unique_index_exact($table, 'linked_create_active_path_unique', ['active_path_hash']),
+    ];
+    foreach ([
+        'path_hash' => ['char(64)', false, 'ascii_bin'],
+        'active_path_hash' => ['char(64)', true, 'ascii_bin'],
+        'folder_path' => ['varbinary(1024)', false, null],
+        'actor_id' => ['bigint unsigned', false, null],
+        'key_hash' => ['char(64)', false, 'ascii_bin'],
+        'payload_hash' => ['char(64)', false, 'ascii_bin'],
+        'state' => ['varbinary(16)', false, null],
+    ] as $column => [$type, $nullable, $collation]) {
+        $requirements[] = schema_inspection_column_exact(
+            $table, $column, $type, $nullable, $collation, false, true,
+        );
+    }
+    return schema_inspection_is_available(schema_inspection_feature(
+        'gallery.linked_create_reservations', $requirements,
+    )) ? 'available' : 'unavailable';
+}
+
+/** A bounded refusal when a linked-create reservation blocks an Admin write. */
+final class LinkedGalleryReservationUnavailable extends RuntimeException {}
+
+/**
+ * Refuse covered Admin writes while any new linked create remains uncertain.
+ *
+ * Confirmed pre-migration storage keeps the legacy path; this assumes no newer
+ * reservation history was lost in a database-only restore. The shared DB lease
+ * coordinates cooperating writers but is not a filesystem fence.
+ *
+ * @return void Returns only for proven legacy absence or no unresolved rows.
+ * @throws LinkedGalleryReservationUnavailable When inspection or a reservation is uncertain.
+ */
+function gallery_linked_reservation_assert_admin_write(): void
+{
+    $state = gallery_linked_reservation_schema_state();
+    if ($state === 'legacy') {
+        return;
+    }
+    if ($state !== 'available' || gallery_model_linked_reservation_conflicts()) {
+        throw new LinkedGalleryReservationUnavailable(
+            'A linked gallery creation needs reconciliation before this operation.',
+        );
+    }
+}
 
 /**
  * An existing catalog object requires explicit storage reconciliation.
@@ -61,12 +128,18 @@ final class GalleryCatalogConflict extends RuntimeException
  * health guarantee or a filesystem lock; callers still use exclusive mkdir.
  *
  * @param string $relativePath Normalized requested child path under the gallery root.
+ * @param int|null $remainingEntries Optional shared directory-entry budget,
+ *     decremented for each observed entry; null preserves the original unlimited observation.
  * @return string One of the central FILESYSTEM_OBSERVATION_* states.
  */
-function gallery_creation_target_observation(string $relativePath): string
+function gallery_creation_target_observation(
+    string $relativePath,
+    ?int &$remainingEntries = null,
+): string
 {
     $handle = null;
     $handlingWarnings = false;
+    $boundedObservation = $remainingEntries !== null;
     try {
         $target = gallery_target_abs_path($relativePath);
         $parent = dirname($target);
@@ -100,7 +173,17 @@ function gallery_creation_target_observation(string $relativePath): string
             },
         );
         $handlingWarnings = true;
-        while (($entry = readdir($handle)) !== false) {
+        while (true) {
+            if ($remainingEntries !== null && $remainingEntries <= 0) {
+                return FILESYSTEM_OBSERVATION_UNKNOWN;
+            }
+            $entry = readdir($handle);
+            if ($entry === false) {
+                break;
+            }
+            if ($remainingEntries !== null) {
+                $remainingEntries--;
+            }
             if (
                 $entry === $name
                 || (
@@ -122,6 +205,11 @@ function gallery_creation_target_observation(string $relativePath): string
             || $rootBefore['ino'] !== $rootAfter['ino']
             || $parentBefore['dev'] !== $parentAfter['dev']
             || $parentBefore['ino'] !== $parentAfter['ino']
+            || ($boundedObservation && (
+                $parentBefore['mtime'] !== $parentAfter['mtime']
+                || $parentBefore['ctime'] !== $parentAfter['ctime']
+                || $parentBefore['size'] !== $parentAfter['size']
+            ))
             || !gallery_filesystem_path_inside_root($parent)
         ) {
             return FILESYSTEM_OBSERVATION_UNKNOWN;

@@ -204,6 +204,12 @@ filesystem effects, rescheduling, cancellation, manual publication, restricted
 PDF children and deleted rows. It is discovered by the existing central FULL
 registry; ordinary feature BASIC does not execute these runtime scenarios.
 
+The writer inventory also covers classic image upload's optional authorization
+and post-store callbacks. Its source fixture checks authorization after lease
+acquisition and before the owned write, refusal without a write, callback
+ordering and lease release on callback failures. The MySQL contention fixture
+uses inert null callbacks while checking that all writers refuse a busy lease.
+
 The HTTP fixture uses the supported `gallery_path` request vocabulary and
 reads the actual parent gallery where the new child card belongs. Direct-link
 status, persisted unpublished state and the pending timestamp are checked
@@ -214,7 +220,12 @@ route-include budgets while reusing the gallery model/access owners.
 Password and NSFW gates deliberately return HTTP 200: the fixture asserts the
 actual age-confirmation form, submits its existing CSRF-protected action, then
 asserts the password prompt. Both responses must omit protected descriptions;
-private pre-deadline access separately remains HTTP 404.
+the actual parent listing also verifies that the specific password-gated card
+retains its lock presentation without the protected description or media. The
+test removes its verified, test-owned scheduled row and sidecar after success
+or failure so later serial fixtures do not inherit that card. It retains the
+fixture's permanent lock inodes until the launcher stops the server and removes
+the disposable root. Private pre-deadline access separately remains HTTP 404.
 
 Manual qualification still includes the injected Admin side-panel form on
 desktop/mobile, keyboard/touch datetime input, rescheduling/cancellation with
@@ -547,13 +558,16 @@ takeoff alignment, declared gaps, unavailable anchors and older snapshots with
 defaulted fields. Airborne-start fixtures also require ordered nearby positional
 matches, explicit gap breaks and rejection of distant routes/unknown mass units.
 GUI regressions require loaded OFP before worker admission without a
-confirmation,
-four local editions and one-click Finish revoke intent. Success hides the exact
-operation's progress only after completed cleanup;
+confirmation and four local editions from explicit Finish. Success hides the
+exact operation's progress only after completion;
 saving-key/errors/cancellation
 stay visible. Partial-flight workflow coverage preserves incomplete evidence
 through PDF generation/receipts before revocation, while a failed edition blocks
-revocation and retains earlier receipts. Direct key management still confirms.
+revocation and retains earlier receipts. Direct key management has a separate
+admission check.
+Linked Watcher regressions cover unchanged and changed source bytes, a
+refused inventory check, a retained queue after restart and explicit local
+closure without using or clearing the legacy key.
 Filename fixtures require flight-number leading zeroes and
 ICAO tokens only for new reservations, preserving old paths and PDF bytes.
 Focused layout diagnosis uses isolated, explicitly synthetic telemetry in all
@@ -788,6 +802,98 @@ preview fallback assertions forbid that path elsewhere while retaining exact
 parent hero, access, no-image and private/no-store checks. Creation-collision
 coverage retains the existing claimed-failure 503/reconciliation envelope and
 asserts that it creates no extra gallery or suffixed alias.
+
+`app_linking_gallery_detail_test.php` checks native typeahead with owned
+private galleries. It verifies field priority, a title transposition or
+deletion, exact quoted terms, display ancestry and live search-grant
+revocation. The WinApp transport fixture checks the scoped form POST and
+rejects malformed hierarchy data.
+
+The WinApp linking fixture switches two approvals for distinct mounts on one
+host. It checks exact account selection, the existing upload guard, unlinking
+one parked session, and address-only history round trips and removal in an
+owned profile. Installed Windows dialog acceptance remains separate.
+
+`app_linking_gallery_create_owner_test.php` exercises the disposable linked
+owner's exclusive sidecar create, refusal of an existing file or final symlink,
+and filesystem identity recheck after a substituted directory. Receipt status
+refuses a missing or redirected sidecar and checks currently observed storage;
+it does not establish the original inode's continued identity. These fixtures
+do not establish exclusion of unrelated filesystem writers or power-loss safety.
+Its reservation scenarios cover pending refusal, atomic completion/rollback,
+path reuse after completion and the exact pre-mkdir target binding. Discovery
+move and delete source scenarios reject a real unindexed orphan and partial or
+unknown schema before effects; empty selections retain current and confirmed
+legacy behavior. They do not prove lease survival after a lost DB connection.
+The global
+reservation query has no execution-time or scanned-history bound; a `LIMIT 1`
+only bounds the returned rows. These source scenarios do not qualify real
+cross-host locking, stale runtimes or inconsistent database/filesystem restores.
+The owner fixture also uses a live fixture grant and temporary catalog drift to
+exercise the real create catch before mkdir, followed by status, explicit
+abandonment, and a refused same-key replay without new effects. The separate serialized
+`app_linking_gallery_create_post_mkdir_test.php` verifies an actual permission
+failure after mkdir only when the current POSIX account demonstrably cannot
+write mode-000 directories; otherwise it explicitly skips. Neither scenario
+proves database disconnection, process kill or cross-host behavior.
+It also correlates private linked-create inputs with a retained tombstone,
+rejects changed issuer or title, and verifies the ledger row remains unchanged.
+Fresh CLI children verify actual bootstrap, reject duplicate and escaped keys
+and interior whitespace, and accept outer whitespace without exposing the key.
+The existing bootstrap can update its updater runtime bookkeeping.
+
+`winapp/tests/test_linked_create.py` includes source fixtures for a failed
+partial intent stage, exclusive no-replace publication, uncertain readback and
+failed stage cleanup before dispatch. These fixtures do not qualify Windows
+hardlink/reparse behavior, stale-lease recovery or power-loss durability.
+Its identity fixtures also require fresh matching account identity before a
+new intent is published or an existing creation status is requested.
+
+`app_linking_security_test.php` also exercises bounded delegated inventory
+verification against a regular original, a changed or missing original,
+wrong size and hash, traversal, exhausted file count, and supported symlink
+and hardlink cases. Positive indexed matches are subject to one shared limit of
+8 files, 64 MiB per file, 128 MiB total and two seconds between system calls;
+uncertainty returns HTTP 503. The deadline cannot interrupt a blocked system
+call. Source fixtures do not establish concurrent external-writer exclusion,
+deployed database leases, HTTPS behavior or Windows execution.
+The established checksum lookup admits direct paths only; slash-nested image
+rows are not evidence of absence. Selected anomalous backslash paths, symlinks
+and hardlinks remain unknown instead of being confirmed. A stale representative
+does not prove that every other row with the same checksum is missing.
+
+The same disposable fixture covers linked-create abandonment: active pending
+claims and competing operation locks refuse closure; stopped failed and absent
+claims retain tombstones, repeated closure is idempotent, and delayed create
+cannot reuse the key. Mismatched fingerprints, unavailable schema and malformed
+tombstones fail closed; health retains malformed records as unknown. Source
+fixtures do not establish deployed database or network behavior.
+
+`app_linking_upload_scan_receipt_test.php` runs in the central PHP regression;
+the bounded curated `php-fast` selection does not include it. Its isolated
+scanner fixture distinguishes newly inserted image rows from unchanged existing
+rows and skipped files; it does not qualify a deployed database, concurrent
+writers or an HTTP upload.
+
+`image_path_symlink_containment_test.php` also exercises a missing gallery
+target below an aliased root or in-root parent, an escaping parent, a dangling
+link, relative paths and mixed separators. It also checks tag sidecar repair
+through an in-root link, refusal without modifying an outside target, an
+injected target swap at write-open, a concurrent sidecar content change and a
+hard link to an outside inode.
+Symlink cases run when the fixture can create those links. The assertions check
+observed containment; they do not simulate or exclude a concurrent change to
+filesystem ancestors or the same inode after comparison. They do not establish
+crash-safe writes or byte preservation of unrelated JSON values.
+
+Delegated upload registration fixtures exercise the real upload facade with a
+scanner seam, including missing insertion evidence after a file reached disk.
+The upload call-chain fixture requires the versioned `fresh_insert_v1` marker
+after the delegated owner and prevents it from appearing in the legacy owner.
+The checksum fixture checks current gallery/path/ID and file identity, valid
+same-file rename, missing or foreign evidence and a replaced file. These source
+fixtures do not establish real multipart, database, external-writer or
+power-loss behavior; the central hosted owners remain authoritative.
 
 `upload_auto_rename_selection_test.php` also executes the production planner's
 selection/order loop with explicit row/path/item adapters. It proves that a
@@ -1265,7 +1371,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 0.150.6. Release verification uses the
+This guide applies to PHP Gallery Version 1.0.0. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1908,12 +2014,17 @@ existing disposable workflow wrapper is available. Its result is diagnostic
 evidence, not hosted handoff qualification. Set
 `GALLERY_WORKFLOW_ENABLE=disposable-only` and `GALLERY_WORKFLOW_MYSQL_BIN` to a
 MySQL 8 `mysqld` executable, then run
-`php scripts/gallery_workflow_mysql.php --audit` for full qualification or
-`--audit-quick` for fixture-backed quick feedback. The wrapper initializes a
+`php scripts/gallery_workflow_mysql.php --audit` for the full local profile,
+`--audit-quick` for fixture-backed quick feedback, or
+`--audit-php-regression` for the central `php-regression` suite alone. The last
+mode uses the same disposable fixture, requires its database-dependent workflow
+children, and does not select the WinApp suite, runtime probes or the full
+profile. Review the central report and each relevant child result; unrelated
+optional skips do not establish coverage. The wrapper initializes a
 private data directory, creates a dedicated generated database account, starts
 the migrated application copy and HTTP fixture, and cleans up its owned
-resources afterward. Both modes require all nine route measurements; quick
-retains its curated regression subset, while full additionally requires
+resources afterward. The quick and full modes require all nine route
+measurements; quick retains its curated regression subset, while full requires
 database/HTTP/concurrency and enabled browser workflow PASS records. This local
 MySQL wrapper does not qualify MariaDB; the required CI matrix runs the same
 central real-database workflow against each listed representative. Never point
@@ -2275,6 +2386,21 @@ entry point is introduced. Top-level test counts, nested subtest counts and
 class/module fixture counts remain separate; a parent with a skipped subtest
 does not become individual PASS coverage. Repeated subtest labels retain their
 observed event order instead of losing events through identity deduplication.
+
+`winapp/tests/test_server_discovery.py` defines isolated discovery tests for
+HTTPS roots, mounted installations and upload aliases; it checks no credentials
+are sent, response limits, JSON types and version, duplicate keys, redirects,
+errors and the distinct unavailable, unsupported and reported-available
+states. `winapp/tests/test_redesign.py` defines dialog/controller regressions
+for a single in-flight check, temporary unsaved inputs, changed-URL stale results
+and closed-dialog callbacks. These are test definitions, not a claim that the
+current candidate has passed. With a responsive Tk event loop, the dialog
+reports timeout after 12 seconds, without interrupting socket or DNS work. At
+most one worker remains occupied until it finishes; its late result is ignored.
+The HTTP socket inactivity timeout is eight seconds, not a complete request
+deadline, and response bodies are limited to 8 KiB. Actual Windows UI, HTTPS
+server and network behavior need separate qualification; a server reporting
+linking does not mean the client can link.
 
 `winapp/tests/test_flight_comparison.py` belongs to this same discovery owner.
 It replays original samples with accelerated simulator time, separates initial
@@ -8048,3 +8174,605 @@ selection, restored collapse state, and the grouped action disclosure. The
 dashboard workspace fixture covers retaining search across metadata refresh.
 Manual review includes the production cascade on desktop and a narrow viewport,
 keyboard dismissal, and real gallery data without submitting bulk mutations.
+
+## Public app-linking discovery
+
+The current version-1 flow requires readiness checks for the canonical
+issuer, migration-owned linking secret, core schema and optional capability
+owners. Cover verified HTTPS, direct localhost HTTP, exact authority and
+mount, malformed settings, and precedence of explicit legacy overrides. Check
+that HTTP refuses remote peers, proxy headers, and offline access and that
+WinApp filters non-loopback resolutions of localhost. Fresh install
+and update use the same key migration. Replay must preserve the installed key,
+and discovery GET and HEAD must leave key and request state unchanged. Test
+unavailable core readiness and unknown optional storage separately. Scope
+fixtures distinguish the four basic rolling bundles from the four exact
+presentation bundles, verify preserved upload and search, and reject reordered
+or partial presentation authority. Discovery negotiation covers older servers
+and temporary fallback when the native credential vault is unavailable.
+For the browser handoff, cover the exact issuer/start URL, short-lived
+non-authorizing handle, session storage and query stripping before login,
+CSRF-protected binding, repeated consent in the same session, and refusal of
+duplicate, mismatched, cross-account, expired and replayed handles. Verify that
+only explicit Approve issues a one-use code, Cancel delivers a denial, and the
+legacy `pgu_` path remains independent. The anonymous query guard admits only
+the new handle parameter; raw syntax, session ownership and consent still
+belong to the linking controller.
+
+For manual acceptance, click **Link gallery** in the main window. Verify that
+Cancel closes the address dialog without starting a request. Paste the direct
+localhost address and confirm **Link gallery**. For a remote HTTP address,
+verify the first network request uses HTTPS at the expected mount. Check that
+the dialog shows progress while checking
+the server and waiting for browser approval. A failed HTTPS connection leaves
+an editable address and an error in the same dialog. Try with a fresh app
+profile and with a different address already saved for API-key uploads.
+Linking must use the address from its own dialog and leave the API-key
+upload configuration intact. Exercise both a signed-in and a signed-out
+ordinary Admin. Verify that sign-in returns to consent, Approve returns to
+the app with the exact installation address and loaded gallery list, and
+Cancel leaves the client disconnected. Check the browser return page for
+the matching outcome. Open **Choose gallery…** beside the linked address.
+Verify that **Use for uploads** stays next to the picker at narrow widths,
+that the ellipsis reveals the advanced tools, and that successful
+verification closes the picker and updates **Upload gallery** in Watcher and
+Import, including on fresh Windows and macOS profiles with no API key.
+Before linking, save a folder from **Watcher settings** and check that
+**Start Watcher** explains an empty folder. After linking, start Watcher on a
+disposable folder and verify the exact selected target. Reconnect and
+reselect the same destination after restarting. Verify **Unlink gallery**
+returns to **Link gallery** and disables access through that target while
+leaving saved API-key settings intact. Review consent at desktop and narrow
+widths. Verify Windows upload-target activation and saved credential storage
+separately from the portable linking flow.
+
+Verify Photos in the main window at normal and minimum width. With a live
+listing link, the hierarchy and initial photo grid should load directly after
+approval and when returning to Photos. With no live link, the pane's **Connect**
+action should open the existing address and browser approval flow. Include
+parents and children spanning server pages, individual and bulk expansion,
+rapid selection changes, empty galleries, and a gallery refused by public
+policy. Select a parent with folders and no direct photos. Verify the
+default-on **Subgalleries** switch, folder covers and placeholders, and that
+opening a card selects its child in the tree. Turning the switch off and on
+should preserve the tree and selected album. Confirm selection changes replace
+only the photo pane, including while Watcher has an upload target. Lightbox,
+fullscreen and contextual controls should stay in the main window and restore
+the grid and focus on dismissal. Exercise an album with more photos than a
+legacy or extended server page. Scroll into unvisited rows and check the
+network for viewport-driven thumbnails and bounded cursor reads. Switch
+albums with requests pending. Check Left and Right across both album ends,
+first-to-last before the complete metadata is loaded, and adjacent detail
+prefetch. Start a slideshow with and without scoped server settings and
+verify full-album looping. Use F and F11 to toggle fullscreen. Check that
+the toolbar, edge arrows and location panel are hidden there and that Escape
+restores windowed controls. Check
+that a clean 21:9 frame retains both edges in the thumbnail, lightbox and
+fullscreen. Include a dim scene with paired black side bars and a dark photo
+without bars. Thumbnails should show the resulting scene at its aspect ratio.
+Verify that the content-fit toggle removes and restores vertical and horizontal
+black bars in both lightbox viewing modes. Drag the window through several grid
+column breakpoints. Check for preview repaints during the drag and final image
+quality when it ends.
+Pass a 16-bit source through the native display path and record the rendered
+mode. The current Pillow/Tk surface uses 8-bit RGB.
+On macOS, launch from source with all `requirements.txt` dependencies in the
+same interpreter. Verify the normal window opens and exits. Compare the
+repaint after Close and Escape at normal and minimum widths. Include a loaded
+photo and a failed photo read so the underlying tree and tiles both redraw.
+Hover and focus a tile and an icon near a window edge. Verify that the themed
+tooltip stays readable inside the main window and disappears when navigating.
+Compare installed Segoe UI Variable Text and font fallback at normal and narrow
+window widths. Check accented gallery titles, settings inputs, menus and logs.
+Known icons must have smooth edges, preserve disabled/focus states and update
+when Play changes to Pause or the recording pulse changes color. In the tree,
+cache coverage, Keep preloaded and the recording marker must coexist without
+changing selection or expanded branches. Repeat source startup without Pillow.
+The display-bootstrap fixture preserves an already-aware manifest/host context,
+requests native startup resolution for an unaware Windows process and keeps
+native refusal/non-Windows launches usable. Real display scaling, different-DPI
+monitor moves and ClearType appearance remain manual coverage.
+Window-layout fixtures cover a separate view-state round trip, malformed and
+offscreen rectangles, preserved unrelated preference fields and the Photos
+divider. Resize and move the real window, adjust the tree width, quit the full
+process and relaunch; also check maximized startup and closing to the tray.
+Minimized, withdrawn and fullscreen rectangles must not replace the normal one.
+Delay Photos mapping beyond the window-save debounce: geometry may save, but
+the stored tree width must survive unchanged. Exercise a real sash press at
+index zero, drag/release, tab hide/show and a new workspace backed by the same
+preference. A temporary 210-pixel default must never replace a saved choice.
+Viewer failures log a fixed fetch/apply phase and safe exception class, never
+an exception message, media URL, gallery title, bearer or filesystem path.
+Transport admission regressions hold the only network slot behind an event,
+then verify successful handoff after release, bounded deadline/cancellation and
+no second transport thread or semaphore leak. A late DNS result still cannot
+start a connection or restore authority after cancellation. On actual Windows,
+switch between previously loaded albums and return without using Refresh.
+Verify a stale or revoked link cannot publish gallery results, and confirm
+that the logon `--startup` path still starts in the system tray.
+On macOS and Windows, approve a continuing listing link, quit WinApp and
+launch it again after the short access token expires. Check HTTPS and direct
+localhost HTTP. Verify that Photos resumes after live identity verification
+without a browser prompt. Exercise active requests across access-token rotation,
+watcher and upload target continuity, and fresh approval after seven idle days,
+explicit unlink or server revocation. After a definitive rolling refresh refusal,
+verify passive startup and start fresh approval with the ordinary Link action.
+An ambiguous reply must keep the refresh fenced. The database fixture advances
+stored deadlines to exercise the seven-day extension on authenticated use and
+rotation, expiry, refresh replay, and the legacy HTTPS refresh cap. With the
+server temporarily unreachable before refresh, verify that a retry can reuse the
+original valid grant. Inspect the profile for address-only history and
+non-secret bindings. The rotating credential belongs in Keychain or Windows
+Credential Manager. Check temporary-link fallback on an older server.
+
+Use a current listing grant and an identity-only grant against the native
+photo endpoints. Listing must allow already-public photos, including from an
+existing upload or search session. Identity-only, revoked and wrong-issuer
+grants must fail. Check restricted ancestors, non-public/NSFW photos, and the
+separate `presentation:read` requirement for settings and tracks. With the
+smallest thumbnail missing, check the next existing rendition, then the
+bounded public display file when all configured thumbnails are absent.
+Request a detail whose source exceeds 16 MiB. Verify that an existing bounded
+display rendition is returned, and that an absent or oversized rendition
+produces the opaque unavailable response without generating files.
+Send `X-PHP-Gallery-Photo-Cache: 1` on a photo or thumbnail read and verify the
+private 60-second response and `Vary` on authorization and the opt-in header.
+Verify an authorized 304 refreshes metadata without rewriting the file.
+Check a matching entry older than 24 hours, warm reads, updated content and
+revocation. Exercise legacy eight-photo responses and the exact 64-photo
+opt-in. Send `X-PHP-Gallery-Track-Cache: 1` for a complete scoped track and
+check private opt-in, matching hash reuse, changed hash replacement and
+hidden or removed track refusal. Omit cache opt-ins and check that JSON,
+audio range and refused media keep `no-store`.
+With a two-track playlist, verify manual local playback, preparation of
+exactly the next track, handoff while disconnected, Stop and album-close
+cleanup. Use Windows audio output and the macOS source application. Confirm
+the shared cache keeps earlier photo entries, uses one byte and entry budget,
+and evicts by access when it reaches capacity.
+
+For Admin Photos, compare the ordinary link and newly consented rolling
+`media:admin` link against an unpublished or NSFW gallery and direct photo.
+Check a closed or revoked grant and cross-gallery photo requests. Inspect
+the restricted binary's no-store response and the absence of a persistent
+cache entry. Try a photo visibility change with the previous value, then
+with a stale value. Refresh the source after a conflict or uncertain reply.
+Check root and child creation under the existing creation intent and receipt.
+Approve Admin Photos over an existing saved rolling listing link. Verify the
+same issuer and account, immediate Photos inventory and creation actions, and
+renewal after restart. Exercise vault publication failure and retain the old
+link. Check root and child creation from their toolbar controls, gallery rows
+and blank photo space. Review the inline music action at narrow width.
+
+Use a photo with indexed geometry, capture settings and GPS for Admin
+Information. Check the photo's own gallery, wrong-gallery refusal, no-store,
+and the gallery's map setting. Verify that public-only scopes cannot obtain
+the detail response. Compare short and long details in the anchored card and
+click the tree, a photo, blank space or the navigation rail to dismiss it.
+
+Check that the manual refresh and a changed Admin revision show newly indexed
+photos while retaining the current scroll position and unchanged thumbnails.
+Check first-probe reconciliation, delayed responses after switching albums, and
+retry after a transient failure. Close and reopen the app to verify tree state
+for the same Admin and isolation between sites and accounts. During capture
+inspect the pulsing rail and the filled target and hollow collapsed-branch
+markers at desktop and narrow widths.
+
+The disposable `app_linking_gallery_detail_test.php` fixture checks that a
+saved `media:admin` grant delegates a valid batch once, while public-only,
+revoked, stale and cross-gallery authority fails before delegation. It also verifies
+that an already-issued exact `media:delete` scope remains usable. It records
+delegation. Filesystem mutation belongs to the web Admin deletion owner. In WinApp,
+confirm one photo and a selection, cancel a confirmation, and inspect the album
+after an interrupted response.
+
+Start Watcher from the chosen Photos gallery and from the Watcher rail menu.
+Queue a deferred gallery search during preparation and check that the Watcher
+receives its start result first. Check the Watcher panel's refusal feedback.
+Verify the displayed destination, configured folder, active REC indicator,
+and successful upload with the exact capture key. Try a mismatched gallery,
+grant, expired key, and stale close after replacement. The final write
+admission must recheck the key. Finish a game without making reports and
+finish a captured simulator flight after exiting the simulator. Verify the
+queue drains, available flight reports are saved locally, and the capture
+key is revoked while Photos can still use the site link. Exercise an
+uncertain close and a retry against the same key generation.
+
+Return to an earlier album with an expired disk thumbnail. A matching strong
+validator from the current authorized metadata must let the grid use the
+cached bytes without another binary request. Exercise a changed validator,
+a missing validator on an older server, and a gallery that is no longer
+public. Compare cloud, partial and downloaded cache indicators against
+current catalogue and local-file coverage.
+
+Open the lightbox with a compatible HDR source and an EDR display on macOS.
+Check the same-window AppKit surface and extended image headroom before and
+after fullscreen, zoom, pan and control reveal. Check SDR fallback with an
+SDR source or display. Verify the wheel or trackpad zoom, 0 reset, movement
+reveal and timed hide. Start a configured presentation from the grid and
+verify fullscreen, automatic advance, automatic music and manual pause or
+track changes. Compare contextual panels at desktop and narrow widths,
+including an outside click, Escape, and macOS Control-click.
+Deliver both a legacy wheel notch and a packed Tk TouchpadScroll event over
+a thumbnail and in the photo overlay. Verify grid movement and zoom in both
+lightbox modes. Check that unchecked cache coverage has a dotted-circle icon
+and changes automatically as authorized photos are loaded or preloaded.
+The native Tk fixture reclaims destroyed widget cycles on the Tk owner thread
+between tests so finalizers cannot consume the cover worker's readiness deadline.
+
+Drive at least 125 photo or thumbnail requests within the same rate window
+and verify that the catalogue and media metadata still load. Include conditional
+GETs. Separately exhaust the photo budget and check the 429 response, bounded
+`Retry-After`, the photo viewer's rate-limit message and recovery through Retry.
+Verify that anonymous or invalid photo requests still have bounded admission.
+
+On MAMP with Apache `mod_fastcgi` and no `mod_rewrite`, check that approval
+finishes code exchange and that the subsequent bearer requests verify identity
+and load galleries. The gallery's `.htaccess` must pass the linking
+`Authorization` header through the CGI environment without global Apache
+changes. A similarly named client header cannot replace `Authorization`.
+
+The focused disposable MySQL 8.0.44 HTTPS protocol run covered anonymous start,
+login return, signed-in start, origin/CSRF, refreshed consent, duplicate
+handle and decision, wrong state/PKCE, one-use exchange, identity, gallery
+listing/cursor, denial and revocation. Certificate validation was scoped to
+the test Python process. The actual consent view was also rendered in the
+internal Codex browser at 1000 and 360 px, with no visible code field or
+horizontal overflow and 44 px narrow approval/cancel targets. This was a
+render fixture, which also observed the automatic same-origin POST with the
+expected handle/CSRF fields and no referrer. The owner waived local browser
+HTTPS after a trust refusal.
+Installed Windows browser/GUI and deployed acceptance remain separate.
+
+The existing disposable real-database HTTP workflow covers the discovery
+envelope and assertions for anonymous GET, no-store/nosniff/content-type
+headers, bodyless HEAD with matching representation headers, rejected POST,
+and the same query
+route under a simulated installation mount. It also compares the response
+while an Admin session is active and exercises the existing upload API using
+valid and invalid gallery-scoped API keys. Exact JSON equality excludes
+additional identity, gallery or credential fields. It predates the M1 handoff
+and does not cover request-handle session binding or approval. The mount is
+simulated by the isolated router; it does not establish behavior for every web server or
+rewrite configuration.
+
+Existing linked target selection is enabled for admitted local Windows and
+macOS profiles. The native macOS regression covers a first Watcher settings
+save, activation, restart without a live token and refusal after loss of one
+mode record. Created-receipt application has its own gate. The source fixtures in
+`test_app_linking.py` exercise a refused profile before network verification,
+fresh selection, explicit disabled branches, receipt retention and delayed
+callback guards. Neither local mode checks nor the profile gate control older
+incompatible processes.
+
+Linked upload state validation covers the narrow live-success transition from
+the exact write-ahead uncertain failure for the same positive attempt and
+unchanged item identity/hash, with no prior receipt, one uploaded image, a
+nonnegative scan count and server-validated fresh insertion identity. Other
+state regressions remain refused; unknown/lost replies and hash or inventory
+observations do not clear uncertainty. These source checks do not establish
+installed-client prevalence, mixed-version behavior or exactly-once delivery.
+
+The disposable M2 HTTPS protocol fixture exercised two manual Import items and
+one Watcher item through the actual PHP/MySQL 8.0.44 upload pipeline. One
+server-stored upload reply was lost; matching inventory did not confirm that
+request, cause a resend or remove its source. The original source and ZIP were
+retained. Explicit review defaults to No, preserves the unknown marker and
+blocks the same path or bytes after restart. Import excluded a copy of those
+bytes during a new preflight and confirmed one fresh original in the same
+gallery. This is disposable fixture evidence; deployment and installed Windows
+GUI acceptance are separate.
+
+The Windows-only mode fixture uses the real Credential Manager and a temporary
+config: explicit linked selection, unchanged saved API key, refused switching
+during work, disconnected restart, verified reactivation and explicit legacy
+return. A unique synthetic refresh credential tests native storage and cleanup.
+The local profile test admits a fixed local drive and refuses unsupported path
+syntax and an actual junction ancestor. Process tests separately cover
+contention and stale target leases. At `4fcdd4b5`, BASIC `42103334038` and
+WinApp `42103333699` passed: 740 Windows and 727 Ubuntu tests, with 2 and 15
+platform skips respectively; the native mode, vault and junction tests passed
+on Windows.
+
+The unintegrated `test_upload_mode.py` source uses in-memory vault and native
+API doubles to exercise mode record validation, matching evidence, interrupted
+publication, lexical profile binding and reviewed-generation comparisons.
+The separate `test_mode_admission.py` source covers local parent and child
+leases, stale views and uncertain transitions. Neither source repairs or tests
+the current runtime fallback after restart. The fixed credential namespace is
+not multi-profile safe; compare-and-publish requires cooperating metadata and
+work-admission leases. Loss of both records cannot be distinguished from an
+unmigrated profile, and matching rollback of both records cannot be detected.
+Windows APIs and Windows tests have not been executed for this foundation.
+Discovery refusals use an existing warning surface without displaying a
+completed thumbnail progress bar. An isolated synthetic response was rendered
+with local assets at desktop and 360 px widths; this did not exercise an
+authenticated Admin request. Source fixtures describe the failure display.
+Organizer fixture sources cover reservation refusal and retention of a new
+destination after a failed or uncertain move; they do not prove a filesystem
+fence after connection loss or against external writers.
+An isolated synthetic organizer error was also rendered at desktop and 360 px
+using local assets: its message and log remain visible without a completed
+progress bar. This did not exercise an authenticated Admin request.
+Trash-move fixture sources cover reservation refusal before sidecar, filesystem
+or catalog changes, and the legacy-schema path; mixed deletion remains outside
+this guard.
+The unintegrated `test_linked_target_verification.py` source covers fresh
+identity, exact scope and bounded gallery verification, including cancellation;
+it does not activate an upload target or replace server authorization.
+The `test_mode_coordinator.py` and ConfigStore integration sources
+describe evidence comparisons, failed publication, admission and anchor
+updates through the existing config owner. Their presence does not qualify
+Windows storage behavior. The `--once` source fixture uses the actual ConfigStore
+port and coordinator with a synthetic vault to check legacy admission, UNC
+absence, linked/unknown/first-setup refusal, lease lifetime and cleanup. It
+does not run Windows APIs or prove cross-process fencing; GUI workers still do
+not use this mode guard. Source fixtures cover endpoint attempts and redirects,
+including changed evidence and refused API-key redirect destinations. Actual
+Windows qualification remains open.
+The ConfigStore fixture also covers original `--config` spelling before `Path`,
+path-owner substitution, dot and traversal aliases, and UNC legacy absence
+without accessing a network share. `Path` callers cannot recover spelling lost
+before construction. These checks do not establish Windows filesystem identity.
+
+The AI heartbeat fixtures hold a synthetic request in flight while signaling
+stop, check that the parent worker and background-work guard remain active,
+then release and join it. A failed heartbeat start cleans up the owned temporary
+directory without joining an unstarted thread. Stopping waits for the actual
+heartbeat request; blocked HTTP or DNS can extend that wait beyond a socket
+timeout. These source fixtures do not establish deployed network behavior.
+
+Flight delivery source fixtures cover incomplete or duplicate-key status,
+contradictory receipt size, changed PDF bytes and a 422 after possible server
+publication. They require passive status reconciliation without resending the
+PDF and retain the local file and unfinished plan when confirmation is absent.
+The shared digest owner bounds streamed reads even when the file grows; fixture
+sources also describe digest changes between capture, delivery and receipt.
+An already recorded plan receipt is historical: its use does not recheck that
+the document still exists on the server. A later explicit retry begins with a
+status request. Source fixtures do not qualify Windows or deployed behavior.
+The separate flight transport now accepts a caller-supplied admission check
+before each request; source fixtures cover refusal before capability, status,
+upload and reconciliation attempts. GUI flight workers supply a captured
+configuration and mode lease for remote reports. Revocation is temporarily
+refused while its asynchronous acknowledgement is not safely coordinated.
+Synthetic macOS Tk views covered the refusal and disabled watcher deletion
+control at wide and narrow widths; they did not exercise Windows APIs.
+The experimental pgu journal and its source fixtures are unintegrated.
+Crash-lock recovery, partial-history loss and exact sent-byte binding remain
+unresolved; no restart or Windows qualification is claimed.
+
+The `test_config_snapshot.py` source exercises an
+immutable private configuration snapshot, missing versus unavailable input,
+preservation of legacy and unknown values, stale identity or contents, and
+staged-write failure. Unowned JSON values retain their exact source bytes,
+including nested numeric representations. `test_redesign.py` also describes
+the active ConfigStore migration, ordinary save, stale selection, first-run
+and refusal of damaged configuration before GUI and command startup. Its
+4 MiB bound, single-link policy and positive
+device/inode requirement can reject existing configurations; prevalence is
+unknown. Parent aliases, Windows reparse points, concurrent noncooperating
+writers and power-loss durability require separate qualification. No tests have
+been run merely by adding these source fixtures.
+
+The workflow is functional coverage only when it actually runs against the
+candidate's prepared runtime plan and disposable database. BASIC checks syntax
+and changed declaration documentation; it does not run this workflow. A live
+HTTPS deployment, actual subdirectory installation and end-to-end native client
+remain separate qualification. Discovery always reports full linking
+unavailable while the experimental authorization and consent flow is being
+qualified. The separate `gallery:read` scope and detail response require
+their own real database, HTTPS and Windows coverage; source assertions alone
+do not establish those results.
+
+The WinApp recovery-probe source fixtures cover one uncertain journal marker,
+the user-supplied byte count, exact server envelopes, current identity and
+lease checks, and unchanged upload history. A `present` observation is not
+proof of the original transaction or database registration, and `unknown`
+does not prove absence. These fixtures do not establish actual Windows, deployed
+HTTPS, concurrent external filesystem or power-loss behavior.
+
+The gallery-editor handoff fixtures bind the current Photos session and exact
+installation, validate numeric gallery IDs and keep credentials out of browser
+URLs. The browser drawer fixture covers subdirectory mounts, signed 64-bit
+IDs, malformed/repeated navigation hints and preservation of the dashboard URL.
+For desktop acceptance, invoke Edit gallery from the tree and a gallery card,
+confirm the exact gallery's existing right editor panel, check desktop/narrow
+layout and Escape, and verify an unauthenticated browser reaches normal Admin
+login. An older server may show its ordinary full-page editor.
+
+Gallery preload fixtures exercise ordered pagination, local-body reuse,
+eligibility/no-store handling, cancellation, throttling and a final cache check.
+Admin preload coverage must include a real persisted private-body round trip,
+the separate issuer/verified-account namespace and saved intent, conditional
+revalidation before private display, expired/revoked links, ordinary no-store
+browsing and old-server compatibility. Server cases retain the public validator
+contract and refuse malformed preload headers, NSFW photos, NSFW ancestors,
+missing ancestry, cycles and unverified schema. Retry-After coverage checks
+bounded delay, retry exhaustion and cancellation without raising server limits.
+Progress counts photos rather than their two stored renditions. A successful
+download attempt does not imply full coverage after ordinary LRU eviction.
+Cache fixtures pin one exact issuer/gallery across restart, pressure the
+ordinary item/byte quota, reject unsafe paths and preserve retained originals
+when an unpin copy fails. Retained files do not consume ordinary inventory work.
+The Windows identity regression models a directory-entry stat with inode zero;
+retained cleanup captures direct no-follow path identities and preserves the
+same-file comparison against opened handles.
+Native UI coverage must observe icons without opening Information, preload
+progress/cancel, persisted Keep preloaded, and returning an album to normal
+cache policy. Use an existing test gallery and avoid unrelated cache deletion.
+
+The WinApp destination-admission fixture exercises a complete local upload
+snapshot above the former 16 MiB read-only ceiling. Within the shared 256 MiB
+state envelope, an unfinished import retains its exact binding. The fixture
+admits that binding and refuses another one. This portable regression does not
+exercise the real Photos gesture, key issuance or the Watcher upload. For the
+Windows desktop check, use an approved Admin upload link and a disposable
+watched folder. Create a synthetic image after REC begins, confirm its exact
+gallery and checksum, finish the capture, then confirm queue drain, key closure
+and continued Photos access before selecting the next gallery.
+
+Watcher preparation fixtures cover immediate busy feedback, background initial
+folder capture and exclusion of preexisting screenshots. Exercise Stop and
+interruption during preparation before claiming that recovery cannot admit
+historical files. Finish progress must have a phase and activity indicator on
+its first visible frame, including before pending-plan refresh.
+
+Windows source-deletion coverage must compare the source captured before the
+send with the native opened file after acknowledgement. Verify successful
+same-file deletion, explicit-off retention, replacement/change, hardlink/reparse
+and native-open failure. An inventory skip or uncertain response must retain
+the source. Use synthetic files in an owned folder for a desktop upload and
+confirm both the server image and local disappearance. These checks do not
+qualify manual-import/ZIP deletion or source deletion on other platforms.
+
+The activity-writer fixture verifies ordering, bounded retained history,
+background execution and a final flush while preserving upload and job
+sections. Persistence failures produce a fixed message without source paths.
+Desktop startup and Finish checks should include a substantial existing state
+file, because repeated synchronous recent-event writes can otherwise hide the
+new progress feedback behind the Windows unresponsive-window state.
+
+The disposable HTTPS/MySQL protocol run created an unpublished child through
+the native journal, withheld a completed reply, recovered the original receipt
+with status after restart, and reissued the same key without a duplicate. The
+freshly verified target accepted an actual image. A separate no-dispatch case
+returned unknown status until explicit resume sent the same saved key. The
+Windows fixture joins the real receipt lease to native config and mode storage;
+its network calls are doubles. It refuses a forged receipt and observes a
+disconnected restart with the original key and receipt intact.
+
+The
+`app_linking_gallery_create_owner_test.php` source is intended for the owned,
+serial disposable database and filesystem fixture. It checks preservation of
+existing gallery identities, URLs and revisions, refusal of collisions and
+catalog drift, model guards after a transaction ends, unpublished and access
+defaults with an empty schedule, stale receipt after a title or parent change, and a
+rolled-back filesystem write with an unresolved operation claim. The narrow owner's
+10,000-row catalog admission limit includes the proposed gallery; slug search
+checks at most 128 candidates. These counts are not time bounds. The fixture
+also exercises an occupied slug at a one-candidate boundary. Client regression
+sources cover retained receipt acknowledgement, exclusive staged publication,
+replaced or multiply linked staging, cleanup uncertainty, restart with the
+same key, and fresh server status before created-target selection. The linked
+create and UI fixtures also check that a stale receipt from an earlier intent
+cannot acknowledge or select a later operation with identical gallery fields;
+the local handle does not display the operation key. Target handoff rechecks
+that binding under the local profile lease after the separate server status
+request. The server can change after that response. Slow local filesystem
+operations in this synchronous handoff can delay Tk. When target-change
+notification fails, the internal target and gallery are restored, but an
+already invalidated preflight or stale display may remain. The fixtures do not
+prove exclusion of unrelated filesystem writers or qualify actual Windows,
+hardlink behavior or directory durability after power loss. These source
+assertions have not established a real deadlock,
+concurrent revocation, deployed HTTPS, Windows recovery or power-loss result.
+Exact-candidate hosted execution and platform-specific verification are still
+required before relying on creation in a deployment.
+
+The visibility scope is enabled on exact candidate `8de8e50a` after BASIC
+`42107055888` and WinApp `42107055797` passed. Older servers do not advertise
+the optional permission. Each change requires explicit approval and fresh
+confirmation; stale revision and schedule conflicts refresh read-only and do
+not replay the mutation. The linked-create policy and owned database fixture
+cover exact revision advancement, scheduled-publication refusal, unchanged
+gallery columns and sidecar preservation, plus refusal of ambiguous keys,
+symlinks and truncated staging. The visibility recovery regression uses the
+actual locked gallery row for its v2 marker fingerprint. It checks reviewed
+pre-commit restoration, stale fingerprint and sidecar-drift refusal with bytes
+retained, and post-commit repair from the private sidecar to the committed
+target; both repairs retire the marker without changing the database revision.
+A disposable HTTPS PHP/MySQL 8.0.44 run additionally covered public, private and
+unpublished values, fresh GET verification, stale Admin revision and schedule
+refusal, password/unlisted/NSFW preservation and interruption on both sides of
+commit through exact-fingerprint CLI recovery. Installed GUI, MariaDB and
+deployed behavior remain unqualified. See `docs/APP_LINKING_PHASE_0.md` for the
+recovery boundary and remaining acceptance.
+
+The earlier separate media reader used temporary `media:read` consent and
+optional `presentation:read` consent. A browser render fixture passed at
+desktop 1000 px and narrow 360 px for both permission descriptions and 44 px
+narrow actions. The disposable HTTPS protocol fixture verified thumbnails,
+paging, permission
+denials, ETag and WAV bytes with an authorized range. In the first native Tk
+run, the displayed image was correct but the test expected RGB instead of
+RGBA; the test now checks every channel. The Windows audio fixture attempts
+silent WAV playback and reports a specific skip if there is no output device.
+The native Tk tests passed on Windows at `1844648a`, with the audio-output
+fixture skipped because that runner had no device. The media gates are enabled.
+The feature retains existing authorization and HTTPS policy, pages at
+most eight direct public photos, limits each binary to 16 MiB, and exposes at
+most 32 visible MP3/WAV tracks. See `docs/APP_LINKING_PHASE_0.md` for the
+ancestor and visibility restrictions.
+
+Current viewer source coverage lives in
+`winapp/tests/test_native_gallery_viewer.py` and
+`winapp/tests/test_app_linking.py`. It checks responsive grid columns, selected
+photo detail, tile Return activation, keyboard navigation across a page cursor,
+bounded zoom, Escape ordering, outside-click close and focus return, slideshow
+page continuation, Escape during a pending page read and parent-destroy
+cancellation. Adjacent prefetch coverage checks foreground use of prepared
+pixels without a second download. Transport fixtures cover fresh disk reuse,
+conditional revalidation, expiry, exact installation and rendition keys,
+legacy `no-store` responses, and denied stale reads. The page fixture asserts
+cursor requests `[None, TEST_SECOND_IMAGE_ID, None]` and previous-page selection.
+Location coverage checks absent GPS, valid-to-absent clearing, the anchored
+panel and the exact OpenStreetMap URL after explicit activation. Connection
+coverage keeps closing the upload picker independent of the active Photos
+reader. Installed Windows click-through and audible playback require separate
+verification.
+
+The issue #345 feature diagnostic also prepares runtime artifacts in an
+ephemeral checkout and delegates PHP regression to the existing disposable
+MariaDB owner with browser tests explicitly disabled. On Windows it uses the
+repository installer builder with already installed build dependencies and
+checks the produced hash and size. The build outputs stay on the runner.
+Its Node job delegates the full registered JavaScript fixture set to
+`scripts/audit.php --suite=node-full`, including gallery-editor navigation.
+Browser-dependent fixtures are explicitly disabled there; actual Chromium
+qualification remains with its required FULL owner.
+These jobs prove only their exact-source diagnostics. They do not publish a
+release, qualify a prepared integration SHA, or replace the required FULL
+Chromium and installed GUI coverage.
+
+The gallery writer fixture executes the real copy, Trash and restore wrappers
+against an injected linked-creation reservation refusal. It requires each guard
+to run after lease acquisition and before any delegated write, and checks that
+the same exception propagates and the lease is released on refusal.
+
+The existing gallery edit fixture exercises the private, disabled filesystem
+fence prototype for reentrancy, contention, redirected or multiply linked
+locks, replacement identity and unchanged lock contents. Public admission is
+fixed off. Same-process fixture evidence is not proof of cross-host locking,
+protection against external writers, crash safety, or a complete writer order.
+
+Admin folder-discovery jobs retain candidate rows and image counts in the
+caller-owned checkpoint. Those counts are preview observations, not proof that
+the folder is still importable. A marker can appear after a completed job was
+cached. The import path must recheck the current candidate and its ancestors
+under the existing writer lease immediately before the authoritative insert;
+an observed marker or an unverifiable observation must refuse the import.
+Existing saved job rows must not be treated as a current marker check.
+
+Before relying on marker-aware discovery previews, add a bounded, paginated
+revalidation phase with explicit progress and continuation. It must limit both
+candidate work and directory entries per request, recheck candidate and ancestor
+identity, and omit or refuse any marker or uncertain observation. Directory
+changes during observation must fail closed. A completed batch is still a
+snapshot, so each returned page needs current verification and the final import
+must independently recheck its targets under the writer lease. This requires a
+compatible controller and browser protocol: the current completed-job response
+returns one entire cached candidate list and cannot safely express paginated
+revalidation. Do not add an unbounded scan to every status poll or silently
+truncate large jobs. Measure wide directories, deep trees and repeated polls;
+cover a marker appearing after the checkpoint, catalog failures, interrupted
+continuations and marker insertion before final import. No such paginated
+preview or its hosted qualification is established by the current source.
+
+A separately disabled discovery checkpoint phase reuses step polling and limits
+each step to the existing candidate batch and 4096 directory entries, including
+dot entries. It refuses unknown markers and budget exhaustion, withholds partial
+rows and does not restart completed validation on repeated status. A single
+wider directory cannot yet continue across requests. Counts and completed
+results remain snapshots, not import authorization; the final import fence is
+inactive and visibility stays disabled. Source fixtures are unqualified; hosted
+tests and real interruption, concurrency and filesystem evidence are required.

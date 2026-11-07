@@ -79,6 +79,14 @@ namespace {
     use const Gallery\Core\FILESYSTEM_OBSERVATION_UNKNOWN;
 
     /**
+     * Provide enough directory observations to prove a fixture path absent.
+     * Type: int. Units: observation slots. Scope: the complete fixture scan.
+     * Consumers: the bounded gallery_creation_target_observation assertion.
+     * Rationale: Eight fits the fixture entries and leaves room to observe EOF.
+     */
+    const CREATION_SAFETY_FIXTURE_OBSERVATION_BUDGET = 8;
+
+    /**
      * Fail this isolated regression with a safe assertion message.
      *
      * @param bool $condition Required test postcondition.
@@ -114,6 +122,21 @@ namespace {
             gallery_creation_target_observation('missing')
                 === FILESYSTEM_OBSERVATION_MISSING,
             'Readable absent entry not recognized.',
+        );
+        // Zero is the exhausted boundary; four real entries fit within eight
+        // slots including dot entries, leaving room for the EOF observation.
+        $budget = 0;
+        creationSafetyCheck(
+            gallery_creation_target_observation('missing', $budget)
+                === FILESYSTEM_OBSERVATION_UNKNOWN && $budget === 0,
+            'An exhausted observation must never prove absence.',
+        );
+        $budget = CREATION_SAFETY_FIXTURE_OBSERVATION_BUDGET;
+        creationSafetyCheck(
+            gallery_creation_target_observation('missing', $budget)
+                === FILESYSTEM_OBSERVATION_MISSING
+                && $budget < CREATION_SAFETY_FIXTURE_OBSERVATION_BUDGET,
+            'A complete bounded observation must consume its real entries.',
         );
         creationSafetyCheck(
             gallery_creation_target_observation('present')

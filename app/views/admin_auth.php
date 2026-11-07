@@ -315,7 +315,13 @@ function view_render_admin_account(array $viewModel): void
                 'admin.support.title',
                 'Temporary admin access',
             ))
-            . '</a></div>';
+            . '</a>';
+    $appLinkDevicesUrl = (string) ($viewModel['app_link_devices_url'] ?? '');
+    if ($appLinkDevicesUrl !== '') {
+        echo '<a class="button secondary" href="' . e($appLinkDevicesUrl) . '">'
+            . e(t('app_linking.devices.title', 'Connected applications')) . '</a>';
+    }
+    echo '</div>';
     echo
         '<div class="account-settings-status '
             . ($resetReady ? 'is-ready' : 'is-incomplete')

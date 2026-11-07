@@ -45,11 +45,13 @@ use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Models\image_model_direct_inventory_summary;
 use function Gallery\Models\image_model_direct_rows_by_checksums;
+use function Gallery\Models\image_model_direct_rows_by_checksums_bounded;
 use function Gallery\Models\image_model_find_by_path_hash;
 use function Gallery\Models\image_model_relative_paths_for_gallery_ids;
 use function Gallery\Models\image_model_set_checksums_for_gallery_ids;
 use function Gallery\Models\image_model_set_gps_metadata_for_ids;
 use function Gallery\Models\upload_automation_model_acquire_gallery_lock;
+use function Gallery\Models\upload_automation_model_inventory_locks_owned;
 use function Gallery\Models\upload_automation_model_active_tokens_for_gallery;
 use function Gallery\Models\upload_automation_model_active_tokens_for_manager;
 use function Gallery\Models\upload_automation_model_create_token;
@@ -412,11 +414,14 @@ function upload_automation_gallery_inventory_fingerprint(int $galleryId): string
  *
  * @param int $galleryId Gallery whose direct images are searched.
  * @param array<int,array{client_id:string,filename:string,size:int,sha256:string}> $candidates Normalized client inventory candidates.
+ * @param bool $boundedMatches Select one representative per checksum for
+ *     delegated inventory; false preserves the legacy lookup.
  * @return array<string,array<string,mixed>> Remote rows keyed by checksum.
  */
 function upload_automation_inventory_db_matches(
     int $galleryId,
     array $candidates,
+    bool $boundedMatches = false,
 ): array {
     // $hashes stores the submitted content hashes that are cheap to compare with indexed image rows.
     $hashes = array_values(array_unique(array_map(
@@ -430,10 +435,10 @@ function upload_automation_inventory_db_matches(
     // $matches stores rows keyed by remote checksum_sha256.
     $matches = [];
     foreach (array_chunk($hashes, 250) as $hashChunk) {
-        foreach (image_model_direct_rows_by_checksums(
-            $galleryId,
-            $hashChunk,
-        ) as $row) {
+        $rows = $boundedMatches
+            ? image_model_direct_rows_by_checksums_bounded($galleryId, $hashChunk)
+            : image_model_direct_rows_by_checksums($galleryId, $hashChunk);
+        foreach ($rows as $row) {
             $hash = strtolower((string) ($row['checksum_sha256'] ?? ''));
             if ($hash === '') {
                 continue;
@@ -536,6 +541,8 @@ function upload_automation_inventory_disk_matches(
  *     sha256:string}> $candidates Normalized client inventory candidates.
  * @param bool $deepCheck Whether to perform the bounded filesystem fallback
  *     used only after ambiguous upload failures.
+ * @param bool $boundedMatches Select the complete one-row-per-hash database
+ *     lookup for delegated inventory; false retains the legacy lookup.
  * @return array{ok:bool, action:string, gallery_id:int, gallery_title:string,
  *     gallery_folder:string, checked:int, matched:int,
  *     existing:list<array{client_id:string, filename:string, size:int,
@@ -549,11 +556,13 @@ function upload_automation_gallery_inventory_response(
     array $gallery,
     array $candidates,
     bool $deepCheck = false,
+    bool $boundedMatches = false,
 ): array {
     // $dbMatches stores the normal indexed-image matches. Routine inventory remains database-only.
     $dbMatches = upload_automation_inventory_db_matches(
         $galleryId,
         $candidates,
+        $boundedMatches,
     );
     // $deepCandidates bounds the expensive disk fallback to a tiny recovery request.
     $deepCandidates = $deepCheck ? array_slice($candidates, 0, 8) : [];
@@ -1185,6 +1194,339 @@ function upload_automation_with_gallery_lock(
     } finally {
         upload_automation_model_release_gallery_lock($galleryId);
     }
+}
+
+/**
+ * Limit checksum diagnostic details retained after a partially successful upload.
+ * Type: int. Units: error messages. Scope: one automation upload response.
+ * Consumers: upload_automation_store_images.
+ * Rationale: 3 messages preserve the existing bounded client diagnostic.
+ */
+const UPLOAD_AUTOMATION_POST_UPLOAD_ERROR_LIMIT = 3;
+
+/**
+ * Require every delegated original to have a current matching gallery row.
+ *
+ * @param int $galleryId Current authorized target gallery ID.
+ * @param array{folder_path:string,...} $gallery Fresh authorized gallery row.
+ * @param array{uploaded?:int,filenames?:list<string>,image_ids?:list<int>,scan_failed_filenames?:list<string>,delegated_receipts?:array<int,array{root:string,root_dev:int,root_ino:int,directory:string,directory_dev:int,directory_ino:int,dev:int,ino:int,size:int,mtime:int}>,...} $stored Upload owner's internal result.
+ * @param int $expectedUploads Number of accepted original files in this request.
+ * @return void Returns only when each final filename resolves to its reported ID.
+ * @throws Throwable When registration or storage observation is uncertain.
+ */
+function upload_automation_assert_delegated_registration(
+    int $galleryId,
+    array $gallery,
+    array $stored,
+    int $expectedUploads,
+): void {
+    $filenames = $stored['filenames'] ?? null;
+    $ids = $stored['image_ids'] ?? null;
+    $receipts = $stored['delegated_receipts'] ?? null;
+    if ($galleryId <= 0 || $expectedUploads <= 0
+        || ($stored['uploaded'] ?? null) !== $expectedUploads
+        || ($stored['scan_failed_filenames'] ?? null) !== []
+        || !is_array($filenames) || !array_is_list($filenames)
+        || !is_array($ids) || !array_is_list($ids)
+        || !is_array($receipts) || count($receipts) !== $expectedUploads
+        || count($filenames) !== $expectedUploads
+        || count($ids) !== $expectedUploads) {
+        throw new RuntimeException('Uploaded image registration is unavailable.');
+    }
+    foreach ($filenames as $filename) {
+        if (!is_string($filename) || $filename === '') {
+            throw new RuntimeException('Uploaded image registration is unavailable.');
+        }
+    }
+    foreach ($ids as $id) {
+        if (!is_int($id) || $id <= 0) {
+            throw new RuntimeException('Uploaded image registration is unavailable.');
+        }
+    }
+    $resolvedIds = uploaded_gallery_image_ids($galleryId, $filenames);
+    if (count(array_unique($ids)) !== $expectedUploads
+        || count($resolvedIds) !== $expectedUploads) {
+        throw new RuntimeException('Uploaded image registration is unavailable.');
+    }
+    sort($ids);
+    sort($resolvedIds);
+    if ($ids !== $resolvedIds) {
+        throw new RuntimeException('Uploaded image registration is unavailable.');
+    }
+    $paths = image_model_relative_paths_for_gallery_ids($galleryId, $ids);
+    foreach ($ids as $id) {
+        $path = $paths[$id] ?? null;
+        if (!is_string($path) || !isset($receipts[$id])
+            || gallery_upload_delegated_file_identity(
+                $gallery['folder_path'], $path,
+            ) !== $receipts[$id]) {
+            throw new RuntimeException('Uploaded image registration is unavailable.');
+        }
+    }
+}
+
+/**
+ * Store previously validated uploads using the shared gallery mutation owner.
+ *
+ * The caller must authenticate and authorize the target gallery first. This
+ * service preserves the gallery lock around the store/scan, checksum update,
+ * optional camera metadata and client thumbnail installation. Its returned
+ * post-upload diagnostics do not turn a successfully stored upload into failure.
+ *
+ * @param int $galleryId Authorized destination gallery identifier.
+ * @param array<string,scalar|null> $gallery Existing target row for post-store checks.
+ * @param list<array{tmp_name:string,name:string,size:int}> $entries Validated original uploads.
+ * @param list<array{tmp_name:string,name:string,size_px:int,format:string,client_id:string}> $clientThumbnailEntries Validated thumbnail uploads.
+ * @param array<int,string> $imageClientIds Correlation IDs keyed by original index.
+ * @param array{lat:float,lng:float,altitude:float|null,source:string}|null $simCameraMetadata Optional camera metadata.
+ * @param callable():bool|null $authorizeBeforeStore Delegated live-authority check, or null for legacy.
+ * @param bool|null $delegatedCreateThumbnails Delegated derivative policy, or null for legacy.
+ * @param (callable():(array{id:int|string,folder_path:string,title:string,...}|null))|null $resolveDelegatedGallery Live delegated gallery check, or null for legacy.
+ * @return array{stored:array{uploaded:int,filenames:list<string>,image_ids:list<int>,scanned:int,scan_failed_filenames:list<string>,renamed:int,rename_warnings:list<string>,rename_failures:list<string>,upload_events:list<array{time:string,elapsed_ms:int,message:string,context:array{}}>,delegated_receipts?:array<int,array{root:string,root_dev:int,root_ino:int,directory:string,directory_dev:int,directory_ino:int,dev:int,ino:int,size:int,mtime:int}>},client_thumbnails:array{installed:int,skipped:int,failed:int,errors:list<string>},sim_camera_metadata:array{attached:int,skipped:int,error:string},post_upload_errors:list<string>,derivatives?:array{created:int,failed:int,errors:list<string>,post_upload_errors:list<string>}} Stored originals and bounded diagnostics.
+ * @throws Throwable On refused authority, ambiguous registration or storage failure.
+ */
+function upload_automation_store_images(
+    int $galleryId,
+    array $gallery,
+    array $entries,
+    array $clientThumbnailEntries,
+    array $imageClientIds,
+    ?array $simCameraMetadata,
+    ?callable $authorizeBeforeStore = null,
+    ?bool $delegatedCreateThumbnails = null,
+    ?callable $resolveDelegatedGallery = null,
+): array {
+    if ($delegatedCreateThumbnails !== null
+        && ($authorizeBeforeStore === null || $resolveDelegatedGallery === null)) {
+        throw new RuntimeException('Delegated upload authority is unavailable.');
+    }
+    // $postUploadErrors stores optional post-store failures that must not poison the original upload response.
+    $postUploadErrors = [];
+    // $uploadResult stores the gallery mutation result produced under a
+    // short gallery-scoped advisory lock. The existing scanner reconciles
+    // the whole target folder, so the companion app intentionally serializes
+    // network uploads. The lock remains authoritative for other clients and
+    // prevents two PHP workers from inserting the same discovered image row
+    // concurrently.
+    $uploadResult = upload_automation_with_gallery_lock($galleryId, function () use (
+        $galleryId,
+        $gallery,
+        $entries,
+        $clientThumbnailEntries,
+        $imageClientIds,
+        $simCameraMetadata,
+        $authorizeBeforeStore,
+        $delegatedCreateThumbnails,
+        $resolveDelegatedGallery,
+        &$postUploadErrors,
+    ): array {
+        $postResult = null;
+        $finish = static function (array $stored) use (
+            $galleryId, $gallery, $clientThumbnailEntries, $imageClientIds,
+            $simCameraMetadata, $delegatedCreateThumbnails,
+            $resolveDelegatedGallery, $entries, &$postUploadErrors, &$postResult,
+        ): void {
+            if ($delegatedCreateThumbnails !== null) {
+                $current = $resolveDelegatedGallery === null
+                    ? null : $resolveDelegatedGallery();
+                if (!is_array($current)
+                    || ($current['folder_path'] ?? null) !== ($gallery['folder_path'] ?? null)) {
+                    // Originals may already be committed; the caller must not
+                    // present this failure as proof that the upload rolled back.
+                    throw new RuntimeException('Upload authority is unavailable.');
+                }
+                $gallery = $current;
+                upload_automation_assert_delegated_registration(
+                    $galleryId, $gallery, $stored, count($entries),
+                );
+            }
+            // Populate the checksum index; delegated inventory independently
+            // verifies positive files and legacy keeps its existing behavior.
+            try {
+                $checksumResult = upload_automation_refresh_stored_checksums(
+                    $galleryId,
+                    $gallery,
+                    $stored,
+                );
+                if ((int) ($checksumResult['failed'] ?? 0) > 0) {
+                    $postUploadErrors[] =
+                        'Upload checksum indexing was incomplete: '
+                        . implode('; ', array_slice(
+                            (array) ($checksumResult['errors'] ?? []),
+                            0,
+                            UPLOAD_AUTOMATION_POST_UPLOAD_ERROR_LIMIT,
+                        ));
+                }
+            } catch (Throwable $exception) {
+                $postUploadErrors[] =
+                    'Upload checksum indexing failed: '
+                    . $exception->getMessage();
+            }
+            // $simCameraResult stores the optional GPS metadata update for accepted screenshot uploads.
+            $simCameraResult = ['attached' => 0, 'skipped' => 0, 'error' => ''];
+            try {
+                $simCameraResult = upload_automation_apply_sim_camera_metadata(
+                    $galleryId,
+                    $stored,
+                    $simCameraMetadata,
+                );
+                if ((string) ($simCameraResult['error'] ?? '') !== '') {
+                    $postUploadErrors[] =
+                        'Flight Simulator camera metadata was skipped: '
+                        . (string) $simCameraResult['error'];
+                }
+            } catch (Throwable $exception) {
+                $simCameraResult = [
+                    'attached' => 0,
+                    'skipped' => count((array) ($stored['image_ids'] ?? [])),
+                    'error' => $exception->getMessage(),
+                ];
+                $postUploadErrors[] =
+                    'Flight Simulator camera metadata failed: '
+                    . $exception->getMessage();
+            }
+
+            // $clientThumbnailResult stores the thumbnails installed from the client request.
+            $clientThumbnailResult = [
+                'installed' => 0,
+                'skipped' => 0,
+                'failed' => 0,
+                'errors' => [],
+            ];
+            try {
+                $clientThumbnailResult = upload_automation_install_client_thumbnails(
+                    $galleryId,
+                    $gallery,
+                    $clientThumbnailEntries,
+                    $imageClientIds,
+                    $stored,
+                );
+            } catch (Throwable $exception) {
+                $clientThumbnailResult = [
+                    'installed' => 0,
+                    'skipped' => 0,
+                    'failed' => count($clientThumbnailEntries),
+                    'errors' => [$exception->getMessage()],
+                ];
+                $postUploadErrors[] =
+                    'Client thumbnail installation failed: '
+                    . $exception->getMessage();
+            }
+
+            $postResult = [$clientThumbnailResult, $simCameraResult];
+            if ($delegatedCreateThumbnails !== null) {
+                $postResult[] = upload_automation_generate_derivatives(
+                    $stored, $gallery, $delegatedCreateThumbnails,
+                );
+                $current = $resolveDelegatedGallery === null
+                    ? null : $resolveDelegatedGallery();
+                if (!is_array($current)
+                    || ($current['folder_path'] ?? null) !== ($gallery['folder_path'] ?? null)) {
+                    throw new RuntimeException('Upload authority is unavailable.');
+                }
+                upload_automation_assert_delegated_registration(
+                    $galleryId, $current, $stored, count($entries),
+                );
+            }
+        };
+        // Delegated post-store work stays within both leases; legacy keeps its
+        // established ordering and performs post-store work after writer release.
+        $stored = store_uploaded_gallery_images(
+            $galleryId, $entries, null, $authorizeBeforeStore,
+            $delegatedCreateThumbnails === null ? null : $finish,
+            $delegatedCreateThumbnails !== null,
+            $delegatedCreateThumbnails === null ? null
+                : static fn(string $writerLock): bool =>
+                    upload_automation_model_inventory_locks_owned($galleryId, $writerLock),
+        );
+        if ($delegatedCreateThumbnails === null) {
+            $finish($stored);
+        }
+        if (!is_array($postResult)) {
+            throw new RuntimeException('Upload post-store result is unavailable.');
+        }
+        return [$stored, ...$postResult];
+    });
+    // $stored stores the existing upload pipeline result after filesystem storage and image scan.
+    $stored = $uploadResult[0];
+    // $clientThumbnailResult stores the thumbnails installed from the client request.
+    $clientThumbnailResult = $uploadResult[1];
+    // $simCameraResult stores the optional camera-location metadata outcome.
+    $simCameraResult = $uploadResult[2];
+    $result = [
+        'stored' => $stored,
+        'client_thumbnails' => $clientThumbnailResult,
+        'sim_camera_metadata' => $simCameraResult,
+        'post_upload_errors' => $postUploadErrors,
+    ];
+    if ($delegatedCreateThumbnails !== null) {
+        $result['derivatives'] = $uploadResult[3];
+    }
+    return $result;
+}
+
+/**
+ * Generate requested server derivatives for previously stored images.
+ *
+ * The caller must authorize the gallery and pass the preceding store result.
+ * Individual thumbnail failures remain partial outcomes, as in the legacy API.
+ *
+ * @param array{image_ids:list<int>} $stored Store result with accepted image IDs.
+ * @param array<string,scalar|null> $gallery Authorized gallery row including
+ *     fields consumed by the existing thumbnail generation owner.
+ * @param bool $createThumbnails Whether to generate server derivatives now.
+ * @return array{created:int,failed:int,errors:list<string>,post_upload_errors:list<string>}
+ *     Counts and nonfatal diagnostics.
+ */
+function upload_automation_generate_derivatives(
+    array $stored,
+    array $gallery,
+    bool $createThumbnails,
+): array {
+    $postUploadErrors = [];
+    // $thumbnails stores the count of generated thumbnails and display derivatives.
+    $thumbnails = 0;
+    // $thumbnailFailed stores derivative failures reported by the thumbnail service.
+    $thumbnailFailed = 0;
+    // $thumbnailErrors stores concise thumbnail diagnostics for JSON and logs.
+    $thumbnailErrors = [];
+
+    if ($createThumbnails) {
+        foreach ((array) ($stored['image_ids'] ?? []) as $imageId) {
+            try {
+                // $image stores the image row created or updated by the scan.
+                $image = find_image((int) $imageId);
+                if (!$image) {
+                    continue;
+                }
+                // $thumbnailResult stores per-image derivative generation counts.
+                $thumbnailResult = create_image_thumbnails_result(
+                    $image,
+                    $gallery,
+                );
+                $thumbnails += (int) ($thumbnailResult['created'] ?? 0);
+                $thumbnailFailed += (int) ($thumbnailResult['failed'] ?? 0);
+                foreach ((array) (
+                    $thumbnailResult['errors'] ?? []
+                ) as $thumbnailError) {
+                    $thumbnailErrors[] = (string) $thumbnailError;
+                }
+            } catch (Throwable $exception) {
+                $thumbnailFailed++;
+                $thumbnailErrors[] = $exception->getMessage();
+                $postUploadErrors[] =
+                    'Thumbnail generation failed: '
+                    . $exception->getMessage();
+            }
+        }
+    }
+
+    return [
+        'created' => $thumbnails,
+        'failed' => $thumbnailFailed,
+        'errors' => $thumbnailErrors,
+        'post_upload_errors' => $postUploadErrors,
+    ];
 }
 
 /**

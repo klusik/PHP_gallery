@@ -7,8 +7,9 @@
  * Purpose: Prepare the explicitly named disposable CI workflow database.
  * Responsibilities:
  *   - Apply isolation guards before invoking the central audit workflow.
+ *   - Keep the separate PHP-only diagnostic owner browser-free.
  * Author: Rudolf Klusal
- * Provision only the explicitly named disposable CI database service, then use the central audit.
+ * License: MIT License (see LICENSE file in repository)
  */
 declare(strict_types=1);
 
@@ -26,6 +27,16 @@ use function GalleryWorkflow\check;
 use function GalleryWorkflow\databaseOptions;
 
 try {
+    $arguments = array_slice($argv, 1);
+    check($arguments === [] || $arguments === ['--php-regression'],
+        'Select the existing full owner or the isolated PHP regression suite.');
+    $phpOnly = $arguments === ['--php-regression'];
+    if ($phpOnly) {
+        check(getenv('PHP_GALLERY_BROWSER') === 'disabled'
+            && getenv('GALLERY_WORKFLOW_BROWSER') === 'disabled'
+            && getenv('GALLERY_WORKFLOW_BROWSER_REQUIRED') !== '1',
+            'The PHP diagnostic owner requires browser fixtures to be disabled.');
+    }
     check(
         getenv('GITHUB_ACTIONS') === 'true'
             && getenv('GALLERY_WORKFLOW_ENABLE') === 'disposable-only',
@@ -77,6 +88,9 @@ try {
     // Keep the service root credential out of application/audit child environments.
     putenv('GALLERY_WORKFLOW_CI_ROOT_PASSWORD');
     $argv = [__FILE__, '--audit'];
+    if ($phpOnly) {
+        $argv[1] = '--audit-php-regression';
+    }
     require __DIR__ . '/gallery_workflow_run.php';
 } catch (Throwable) {
     fwrite(STDERR, "BLOCKED gallery workflow disposable CI provisioning\n");

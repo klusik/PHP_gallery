@@ -222,6 +222,13 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
 {
     $global = ['page', 'lang', 'preview'];
     $map = [
+        // The controller accepts only the canonical nonauthorizing handle.
+        // Keep unknown queries subject to this guard before Admin login.
+        'app_linking_start' => ['request_handle'],
+        // These are bearer routes; their controllers validate exact query syntax.
+        'app_linking_galleries' => ['after'],
+        'app_linking_gallery_detail' => ['gallery_id'],
+        'app_linking_media' => ['gallery_id', 'kind', 'after', 'image_id', 'track_id'],
         'home' => ['gallery_page', 'view_as'],
         // Presentation changes client playback only; the gallery controller
         // still enforces the same visibility, password, share and NSFW gates.

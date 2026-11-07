@@ -115,12 +115,12 @@ $mysqlSource = (string) file_get_contents(
 foreach ([
     [
         $runnerSource,
-        "['--development', '--audit-quick', '--audit', '--release',"
+        "['--development', '--audit-quick', '--audit-php-regression', '--audit', '--release',"
             . " '--route-probes']",
     ],
     [
         $mysqlSource,
-        "['--development', '--audit-quick', '--audit', '--release',"
+        "['--development', '--audit-quick', '--audit-php-regression', '--audit', '--release',"
             . " '--route-probes', '--loader-benchmark']",
     ],
 ] as [$source, $expectedModes]) {
@@ -154,6 +154,13 @@ check(
 check(
     php_source_contains($runnerSource, "'--profile=' . \$profile"),
     'Selected profile must flow to the authoritative audit.',
+);
+check(
+    php_source_contains(
+        $runnerSource,
+        "[PHP_BINARY, __DIR__ . '/audit.php', '--suite=php-regression']",
+    ) && php_source_contains($runnerSource, "putenv('GALLERY_WORKFLOW_REQUIRED=1')"),
+    'The disposable PHP-only mode must require the fixture and use the central suite.',
 );
 check(
     php_source_contains($mysqlSource, "\$mode === '--development' ? 540 : 1320"),

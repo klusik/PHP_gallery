@@ -2227,9 +2227,11 @@ function import_galleries_owned(
     array $folderPaths,
     bool $createThumbnails = false,
 ): array {
+    gallery_linked_reservation_assert_admin_write();
     // $folderPaths stores the ordered import queue expanded from the admin selection.
     $folderPaths =
         admin_gallery_discovery_expand_requested_import_paths($folderPaths);
+    gallery_linked_reservation_assert_admin_write();
     gallery_import_assert_canonical_targets($folderPaths);
 
     // Variable $imported stores this steps working value.
@@ -2301,9 +2303,11 @@ function import_galleries_without_thumbnails(array $folderPaths): array
  */
 function import_galleries_without_thumbnails_owned(array $folderPaths): array
 {
+    gallery_linked_reservation_assert_admin_write();
     // $folderPaths stores the ordered import queue expanded from the admin selection.
     $folderPaths =
         admin_gallery_discovery_expand_requested_import_paths($folderPaths);
+    gallery_linked_reservation_assert_admin_write();
     gallery_import_assert_canonical_targets($folderPaths);
 
     // $imported stores an intermediate value used by the surrounding gallery workflow.

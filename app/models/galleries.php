@@ -81,8 +81,146 @@ namespace Gallery\Models;
 use InvalidArgumentException;
 use PDO;
 use PDOException;
+use RuntimeException;
+use Throwable;
 use function Gallery\Core\db;
 use function Gallery\Core\slugify;
+
+/**
+ * Insert one durable linked-create reservation within the caller's transaction.
+ *
+ * @param string $folder Normalized relative target path.
+ * @param int $actorId Owning administrator ID.
+ * @param string $keyHash Issuer-bound retained claim digest.
+ * @param string $payloadHash Normalized input fingerprint.
+ * @return void Returns only after transactional readback of the target.
+ */
+function gallery_model_linked_reservation_insert(
+    string $folder, int $actorId, string $keyHash, string $payloadHash,
+): void {
+    $pdo = db();
+    $pathHash = hash('sha256', $folder);
+    if (!$pdo->inTransaction() || $actorId <= 0
+        || preg_match('/\A[a-f0-9]{64}\z/D', $keyHash) !== 1
+        || preg_match('/\A[a-f0-9]{64}\z/D', $payloadHash) !== 1) {
+        throw new RuntimeException('Linked creation reservation is unavailable.');
+    }
+    $insert = $pdo->prepare('INSERT INTO linked_gallery_create_reservations '
+        . '(path_hash, active_path_hash, folder_path, actor_id, key_hash, payload_hash, state) '
+        . "VALUES (?, ?, ?, ?, ?, ?, 'pending')");
+    if (!$pdo->inTransaction()) {
+        throw new RuntimeException('Linked creation transaction was lost.');
+    }
+    $insert->execute([$pathHash, $pathHash, $folder, $actorId, $keyHash, $payloadHash]);
+    $read = $pdo->prepare('SELECT folder_path, path_hash, active_path_hash, actor_id, key_hash, payload_hash, state '
+        . 'FROM linked_gallery_create_reservations WHERE actor_id = ? AND key_hash = ?');
+    $read->execute([$actorId, $keyHash]);
+    $row = $read->fetch(\PDO::FETCH_ASSOC);
+    if (!$pdo->inTransaction() || !is_array($row)
+        || $row['folder_path'] !== $folder || (int) $row['actor_id'] !== $actorId
+        || $row['key_hash'] !== $keyHash || $row['payload_hash'] !== $payloadHash
+        || $row['path_hash'] !== $pathHash || $row['active_path_hash'] !== $pathHash
+        || $row['state'] !== 'pending') {
+        throw new RuntimeException('Linked creation reservation cannot be verified.');
+    }
+}
+
+/**
+ * Close exactly one reserved target in its caller-owned terminal transaction.
+ *
+ * @param string $folder Exact normalized reserved target.
+ * @param int $actorId Owning administrator ID.
+ * @param string $keyHash Issuer-bound retained claim digest.
+ * @param string $payloadHash Normalized creation fingerprint.
+ * @param string $terminal Completed gallery or proven no-filesystem-effect terminal.
+ * @return void Returns only after the matching terminal state is read back.
+ */
+function gallery_model_linked_reservation_complete(
+    string $folder, int $actorId, string $keyHash, string $payloadHash,
+    string $terminal = 'completed',
+): void {
+    $pdo = db();
+    if (!in_array($terminal, ['completed', 'no_effect'], true)) {
+        throw new RuntimeException('Linked creation terminal is unavailable.');
+    }
+    $hash = hash('sha256', $folder);
+    $update = $pdo->prepare('UPDATE linked_gallery_create_reservations SET state = ?, active_path_hash = NULL '
+        . 'WHERE path_hash = ? AND folder_path = ? AND actor_id = ? '
+        . 'AND key_hash = ? AND payload_hash = ? AND state = ? AND active_path_hash = ?');
+    if (!$pdo->inTransaction()) {
+        throw new RuntimeException('Linked creation transaction was lost.');
+    }
+    $update->execute([$terminal, $hash, $folder, $actorId, $keyHash, $payloadHash, 'pending', $hash]);
+    if ($update->rowCount() !== 1 || !$pdo->inTransaction()) {
+        throw new RuntimeException('Linked creation reservation cannot be completed.');
+    }
+    $read = $pdo->prepare('SELECT state, active_path_hash FROM linked_gallery_create_reservations '
+        . 'WHERE path_hash = ? AND folder_path = ? AND actor_id = ? '
+        . 'AND key_hash = ? AND payload_hash = ?');
+    $read->execute([$hash, $folder, $actorId, $keyHash, $payloadHash]);
+    $row = $read->fetch(\PDO::FETCH_ASSOC);
+    if (!is_array($row) || $row['state'] !== $terminal
+        || $row['active_path_hash'] !== null || !$pdo->inTransaction()) {
+        throw new RuntimeException('Linked creation reservation cannot be verified.');
+    }
+}
+
+/**
+ * Require the exact durable pending reservation inside the active create transaction.
+ *
+ * @param string $folder Normalized reserved target path.
+ * @param int $actorId Original administrator ID.
+ * @param string $keyHash Issuer-bound claim digest.
+ * @param string $payloadHash Normalized creation fingerprint.
+ * @return void Returns only when the original active reservation is present.
+ */
+function gallery_model_linked_reservation_assert_pending(
+    string $folder, int $actorId, string $keyHash, string $payloadHash,
+): void {
+    $pdo = db();
+    if (!$pdo->inTransaction()) {
+        throw new RuntimeException('Linked creation transaction was lost.');
+    }
+    $statement = $pdo->prepare('SELECT folder_path, path_hash, active_path_hash, state '
+        . 'FROM linked_gallery_create_reservations '
+        . 'WHERE actor_id = ? AND key_hash = ? AND payload_hash = ? FOR UPDATE');
+    $statement->execute([$actorId, $keyHash, $payloadHash]);
+    $row = $statement->fetch(\PDO::FETCH_ASSOC);
+    $hash = hash('sha256', $folder);
+    if (!$pdo->inTransaction() || !is_array($row) || $row['folder_path'] !== $folder
+        || $row['path_hash'] !== $hash || $row['active_path_hash'] !== $hash
+        || $row['state'] !== 'pending') {
+        throw new RuntimeException('Linked creation reservation is unavailable.');
+    }
+}
+
+/**
+ * Detect any unresolved or malformed linked-create reservation.
+ *
+ * @return bool True when any unresolved or corrupt reservation exists.
+ */
+function gallery_model_linked_reservation_conflicts(): bool
+{
+    $pdo = db();
+    $statement = $pdo->query('SELECT 1 FROM linked_gallery_create_reservations r '
+        . 'LEFT JOIN admin_operation_keys k ON k.actor_id = r.actor_id AND k.key_hash = r.key_hash '
+        . "WHERE r.state IS NULL OR r.state NOT IN ('completed', 'no_effect') OR r.active_path_hash IS NOT NULL "
+        . "OR r.actor_id = 0 OR r.folder_path = '' "
+        . "OR BINARY r.path_hash <> BINARY SHA2(r.folder_path, 256) "
+        . "OR r.key_hash NOT REGEXP '^[0-9a-f]{64}$' "
+        . "OR r.payload_hash NOT REGEXP '^[0-9a-f]{64}$' "
+        . "OR k.actor_id IS NULL OR k.operation_name IS NULL "
+        . "OR BINARY k.operation_name <> BINARY 'gallery.create' "
+        . "OR k.owner_hash IS NULL OR k.owner_hash NOT REGEXP '^[0-9a-f]{64}$' "
+        . 'OR k.created_at IS NULL OR k.updated_at IS NULL '
+        . "OR k.state IS NULL OR (BINARY r.state = BINARY 'completed' AND BINARY k.state <> BINARY 'completed') "
+        . "OR (BINARY r.state = BINARY 'no_effect' AND (BINARY k.state <> BINARY 'abandoned' OR k.response_json IS NOT NULL)) "
+        . 'OR k.payload_hash IS NULL OR BINARY k.payload_hash <> BINARY r.payload_hash LIMIT 1');
+    if ($statement === false) {
+        throw new RuntimeException('Linked creation reservation is unavailable.');
+    }
+    return $statement->fetchColumn() !== false;
+}
 
 /**
  * Bound the complete visitor hierarchy and authoring snapshot.
@@ -969,6 +1107,214 @@ function gallery_model_picker_rows(bool $secondaryTitleSort = false): array
 }
 
 /**
+ * Read a bounded administrator-authorized native client gallery page.
+ *
+ * The exact active grant and current Admin role are rechecked in the same
+ * query that reads rows. The search projection adds the internal path for
+ * tree order and match classes for ranking. The service serializes only
+ * gallery identities and display ancestry.
+ *
+ * @param int $grantId Previously authenticated grant identifier.
+ * @param int $userId Previously authenticated administrator identifier.
+ * @param string $tokenHash SHA-256 digest of the presented bearer token.
+ * @param string $issuer Exact trusted gallery issuer.
+ * @param string $scope Exact consented gallery-list scope bundle.
+ * @param int $afterId Exclusive gallery ID cursor, or zero for the first page.
+ * @param int $limit Positive page size including one lookahead row.
+ * @param array{terms:list<string>,translated:bool,media_typed:bool}|null $search
+ *     Optional picker projection with bounded terms, verified translation
+ *     storage and the known tag media discriminator.
+ * @return list<array{id:int|string,parent_id:int|string|null,title:string,folder_path?:string,matches?:list<string>}>|null
+ *     Raw gallery identities in ascending ID order, an empty list for a valid
+ *     empty page, or null when the grant no longer authorizes the read.
+ */
+function gallery_model_linked_client_page(
+    int $grantId,
+    int $userId,
+    string $tokenHash,
+    string $issuer,
+    string $scope,
+    int $afterId,
+    int $limit,
+    ?array $search = null,
+): ?array {
+    $fields = 'g.id, g.parent_id, g.title';
+    $values = [];
+    if ($search !== null) {
+        $fields .= ', g.folder_path';
+        foreach ($search['terms'] as $index => $term) {
+            [$expression, $parameters] = gallery_model_linked_picker_match(
+                $term, $search['translated'], $search['media_typed'],
+            );
+            $fields .= ', ' . $expression . ' AS match_' . $index;
+            array_push($values, ...$parameters);
+        }
+    }
+    $statement = db()->prepare(
+        'SELECT ' . $fields . ' FROM app_link_grants ag '
+            . 'INNER JOIN users u ON u.id = ag.user_id '
+            . 'LEFT JOIN galleries g ON g.id > ? '
+            . 'WHERE ag.id = ? AND ag.user_id = ? '
+            . 'AND BINARY ag.access_token_hash = BINARY ? '
+            . 'AND BINARY ag.issuer = BINARY ? AND BINARY ag.scope = BINARY ? '
+            . 'AND ag.revoked_at IS NULL AND ag.access_expires_at > UTC_TIMESTAMP(6) '
+            . "AND BINARY u.role = BINARY 'admin' ORDER BY g.id LIMIT ?",
+    );
+    $position = 0;
+    foreach ($values as $value) {
+        $statement->bindValue(++$position, $value, \PDO::PARAM_STR);
+    }
+    $statement->bindValue(++$position, $afterId, \PDO::PARAM_INT);
+    $statement->bindValue(++$position, $grantId, \PDO::PARAM_INT);
+    $statement->bindValue(++$position, $userId, \PDO::PARAM_INT);
+    $statement->bindValue(++$position, $tokenHash, \PDO::PARAM_STR);
+    $statement->bindValue(++$position, $issuer, \PDO::PARAM_STR);
+    $statement->bindValue(++$position, $scope, \PDO::PARAM_STR);
+    $statement->bindValue(++$position, $limit, \PDO::PARAM_INT);
+    $statement->execute();
+    $rows = $statement->fetchAll(\PDO::FETCH_ASSOC);
+    if ($rows === []) {
+        // No matching live grant: never report a revoked session as empty.
+        return null;
+    }
+    if ($rows[0]['id'] === null) {
+        // LEFT JOIN produces this sentinel only for a live empty page.
+        return [];
+    }
+    if ($search !== null) {
+        foreach ($rows as &$row) {
+            $row['matches'] = [];
+            foreach (array_keys($search['terms']) as $index) {
+                $column = 'match_' . $index;
+                $row['matches'][] = (string) $row[$column];
+                unset($row[$column]);
+            }
+        }
+        unset($row);
+    }
+    return $rows;
+}
+
+/**
+ * Build one literal picker match expression using existing gallery metadata.
+ *
+ * The projection carries the best matching field name without retrieving the
+ * description or tag text. Tag matching uses the image-tag vocabulary.
+ *
+ * @param string $term One parsed word or exact phrase.
+ * @param bool $translated Whether gallery translation storage is available.
+ * @param bool $mediaTyped Whether tags distinguish image and music metadata.
+ * @return array{string,list<string>} SQL match-class expression and bound values.
+ */
+function gallery_model_linked_picker_match(
+    string $term,
+    bool $translated,
+    bool $mediaTyped,
+): array {
+    // LOCATE treats the term literally under the column's collation.
+    $title = 'LOCATE(?, g.title) > 0';
+    $description = 'LOCATE(?, g.description) > 0';
+    $params = [$term, $term, $term];
+    if ($translated) {
+        $title .= ' OR EXISTS (SELECT 1 FROM gallery_translations tr '
+            . 'WHERE tr.gallery_id = g.id AND LOCATE(?, tr.title) > 0)';
+        $params[] = $term;
+    }
+    $params[] = $term;
+    if ($translated) {
+        $description .= ' OR EXISTS (SELECT 1 FROM gallery_translations tr '
+            . 'WHERE tr.gallery_id = g.id AND LOCATE(?, tr.description) > 0)';
+        $params[] = $term;
+    }
+    $media = $mediaTyped ? "AND t.media_type = 'image' " : '';
+    $tags = 'EXISTS (SELECT 1 FROM gallery_tags gt '
+        . 'INNER JOIN tags t ON t.id = gt.tag_id WHERE gt.gallery_id = g.id '
+        . $media . 'AND (LOCATE(?, t.name) > 0 OR LOCATE(?, t.description) > 0))';
+    array_push($params, $term, $term);
+    return [
+        "CASE WHEN g.title = ? THEN 'exact' "
+            . "WHEN LOCATE(?, g.title) = 1 THEN 'prefix' "
+            . "WHEN ($title) THEN 'title' WHEN ($description) THEN 'description' "
+            . "WHEN $tags THEN 'tag' ELSE '' END",
+        $params,
+    ];
+}
+
+/**
+ * Resolve one target while rechecking its scoped grant and live Admin role.
+ *
+ * @param int $grantId Authenticated linking grant identifier.
+ * @param int $userId Authenticated grant-owner identifier.
+ * @param string $tokenHash SHA-256 digest of the presented bearer.
+ * @param string $issuer Exact configured HTTPS issuer.
+ * @param string $scope Exact scope bundle requiring upload authority.
+ * @param int $galleryId Requested positive physical gallery identity.
+ * @return array{id:int|string,folder_path:string,title:string,...}|null Database
+ *     gallery row for the existing upload workflow, or null when authority or
+ *     gallery is absent. The complete row must never be serialized to clients.
+ */
+function gallery_model_linked_upload_target(
+    int $grantId,
+    int $userId,
+    string $tokenHash,
+    string $issuer,
+    string $scope,
+    int $galleryId,
+): ?array {
+    $statement = db()->prepare(
+        'SELECT g.* FROM galleries g '
+            . 'INNER JOIN app_link_grants ag ON ag.id = ? AND ag.user_id = ? '
+            . 'INNER JOIN users u ON u.id = ag.user_id '
+            . 'WHERE g.id = ? AND BINARY ag.access_token_hash = BINARY ? '
+            . 'AND BINARY ag.issuer = BINARY ? AND BINARY ag.scope = BINARY ? '
+            . 'AND ag.revoked_at IS NULL AND ag.access_expires_at > UTC_TIMESTAMP(6) '
+            . "AND BINARY u.role = BINARY 'admin' LIMIT 1",
+    );
+    $statement->execute([$grantId, $userId, $galleryId, $tokenHash, $issuer, $scope]);
+    $row = $statement->fetch(\PDO::FETCH_ASSOC);
+    return is_array($row) ? $row : null;
+}
+
+/**
+ * Read one gallery's stored settings under a live exact native-client grant.
+ *
+ * @param int $grantId Previously authenticated grant identifier.
+ * @param int $userId Previously authenticated ordinary Admin identifier.
+ * @param string $tokenHash SHA-256 digest of the presented access bearer.
+ * @param string $issuer Exact trusted installation issuer.
+ * @param string $scope Exact consented gallery-read scope bundle.
+ * @param int $galleryId Requested positive physical gallery identifier.
+ * @param bool $includeMediaFields Include full internal gallery state for a media caller.
+ * @return array{id:int|string,title:string,edit_revision:int|string,visibility:string,access_mode:string,access_listing:string,folder_path:string}|GalleryDatabaseRow|null
+ *     Stored settings and the internal recovery-marker location, or null if
+ *     the grant or gallery fails.
+ */
+function gallery_model_linked_detail(
+    int $grantId,
+    int $userId,
+    string $tokenHash,
+    string $issuer,
+    string $scope,
+    int $galleryId,
+    bool $includeMediaFields = false,
+): ?array {
+    $fields = $includeMediaFields ? 'g.*' : 'g.id, g.title, g.edit_revision, '
+        . 'g.visibility, g.access_mode, g.access_listing, g.folder_path';
+    $statement = db()->prepare(
+        'SELECT ' . $fields . ' FROM galleries g '
+            . 'INNER JOIN app_link_grants ag ON ag.id = ? AND ag.user_id = ? '
+            . 'INNER JOIN users u ON u.id = ag.user_id '
+            . 'WHERE g.id = ? AND BINARY ag.access_token_hash = BINARY ? '
+            . 'AND BINARY ag.issuer = BINARY ? AND BINARY ag.scope = BINARY ? '
+            . 'AND ag.revoked_at IS NULL AND ag.access_expires_at > UTC_TIMESTAMP(6) '
+            . "AND BINARY u.role = BINARY 'admin' LIMIT 1",
+    );
+    $statement->execute([$grantId, $userId, $galleryId, $tokenHash, $issuer, $scope]);
+    $row = $statement->fetch(\PDO::FETCH_ASSOC);
+    return is_array($row) ? $row : null;
+}
+
+/**
  * Return compact gallery rows used by the new-gallery title completion control.
  *
  * Newer galleries are returned first so a repeated naming scheme naturally
@@ -1306,6 +1652,84 @@ function gallery_model_find_by_id(int $galleryId): ?array
 }
 
 /**
+ * Lock one complete gallery row inside the caller's live-authority transaction.
+ *
+ * @param int $galleryId Positive selected gallery identifier.
+ * @return GalleryDatabaseRow|null Locked raw row, or null when it no longer exists.
+ * @throws RuntimeException When the required transaction is not active.
+ */
+function gallery_model_linked_visibility_lock(int $galleryId): ?array
+{
+    $pdo = db();
+    if (!$pdo->inTransaction()) {
+        throw new RuntimeException('Linked gallery transaction is unavailable.');
+    }
+    $stmt = $pdo->prepare('SELECT * FROM galleries WHERE id = ? FOR UPDATE');
+    $stmt->execute([$galleryId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return is_array($row) ? $row : null;
+}
+
+/**
+ * Hold a gallery row stable in an independent transaction without DB writes.
+ *
+ * @param int $galleryId Positive gallery identifier selected by the operator.
+ * @param callable(GalleryDatabaseRow):array<string,int|string|bool|null> $inspect
+ *     Trusted callback that can inspect or reconcile storage without SQL writes.
+ * @return array<string,int|string|bool|null> Bounded result from the callback.
+ * @throws Throwable When the transaction, locked row or inspection is unavailable.
+ */
+function gallery_model_visibility_inspect(int $galleryId, callable $inspect): array
+{
+    $pdo = db();
+    if ($galleryId <= 0 || $pdo->inTransaction()) {
+        throw new RuntimeException('Gallery inspection transaction is unavailable.');
+    }
+    $pdo->beginTransaction();
+    try {
+        $row = gallery_model_linked_visibility_lock($galleryId);
+        if (!is_array($row)) {
+            throw new RuntimeException('Gallery inspection row is unavailable.');
+        }
+        $result = $inspect($row);
+        gallery_model_assert_linked_creation_transaction();
+        $pdo->rollBack();
+        return $result;
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $error;
+    }
+}
+
+/**
+ * Update only visibility and advance the expected revision in an active transaction.
+ *
+ * @param int $galleryId Positive selected gallery identifier.
+ * @param string $expectedRevision Exact canonical prior revision.
+ * @param string $visibility Validated storage visibility value.
+ * @return bool True when the guarded update changed exactly one row.
+ * @throws RuntimeException When the required transaction is not active.
+ */
+function gallery_model_linked_visibility_update(
+    int $galleryId,
+    string $expectedRevision,
+    string $visibility,
+): bool {
+    $pdo = db();
+    if (!$pdo->inTransaction()) {
+        throw new RuntimeException('Linked gallery transaction is unavailable.');
+    }
+    $stmt = $pdo->prepare(
+        'UPDATE galleries SET visibility = ?, updated_at = UTC_TIMESTAMP(), '
+        . 'edit_revision = edit_revision + 1 WHERE id = ? AND edit_revision = ?',
+    );
+    $stmt->execute([$visibility, $galleryId, $expectedRevision]);
+    return $stmt->rowCount() === 1;
+}
+
+/**
  * Fetch one gallery row by the legacy slug column, not clean url_slug/url_path.
  *
  * @param string $slug Candidate slug compared using the database collation.
@@ -1564,18 +1988,30 @@ function gallery_model_attachment_usage_rows(
  *
  * @param string $title Human-readable gallery title.
  * @param int $excludeGalleryId Existing gallery identifier excluded from collision checks.
+ * @param int|null $maxAttempts Maximum checked candidates, or null for the historical unbounded search.
  * @return string Normalized candidate unused by another row at the time of its last lookup.
+ * @throws RuntimeException When an explicitly bounded search is exhausted.
  */
 function gallery_model_unique_slug(
     string $title,
     int $excludeGalleryId = 0,
+    ?int $maxAttempts = null,
 ): string {
+    if ($maxAttempts !== null && $maxAttempts <= 0) {
+        throw new RuntimeException('Gallery slug search limit is invalid.');
+    }
     $base = slugify($title);
     $slug = $base;
     $counter = 2;
+    // The base candidate is the first permitted lookup.
+    $attempts = 1;
     while (gallery_model_slug_exists($slug, $excludeGalleryId)) {
+        if ($maxAttempts !== null && $attempts >= $maxAttempts) {
+            throw new RuntimeException('Gallery slug search limit was reached.');
+        }
         $slug = $base . '-' . $counter;
         $counter++;
+        $attempts++;
     }
     return $slug;
 }
@@ -1593,7 +2029,7 @@ function gallery_model_unique_slug(
  *
  * @param array{
  *   parent_id?:int|null,folder_path?:string,folder_path_hash?:string,slug?:string,title?:string,
- *   description?:string|null,sort_order?:int,visibility?:string,voting_enabled?:int,show_filenames?:int,newest_uploads_first?:int,
+ *   description?:string|null,sort_order?:int,visibility?:string,scheduled_publish_at?:string|null,voting_enabled?:int,show_filenames?:int,newest_uploads_first?:int,
  *   content_language?:string|null,description_layout?:string|null,count_badge_visibility?:string|null,
  *   lightbox_browsing_mode?:string|null,presentation_json?:string|null,
  *   gallery_date?:string|null,gallery_date_end?:string|null,
@@ -1622,6 +2058,7 @@ function gallery_model_insert(array $fields): int
         'description',
         'sort_order',
         'visibility',
+        'scheduled_publish_at',
         'voting_enabled',
         'show_filenames',
         'newest_uploads_first',
@@ -1670,6 +2107,32 @@ function gallery_model_insert(array $fields): int
     );
     $stmt->execute($values);
     return (int) $pdo->lastInsertId();
+}
+
+/**
+ * Require the still-active transaction owning a linked gallery creation.
+ *
+ * @return void Returns only while the shared database transaction remains active.
+ * @throws RuntimeException When an earlier database error ended the transaction.
+ */
+function gallery_model_assert_linked_creation_transaction(): void
+{
+    if (!db()->inTransaction()) {
+        throw new RuntimeException('Linked gallery transaction is unavailable.');
+    }
+}
+
+/**
+ * Insert a linked gallery only while its caller-owned transaction remains live.
+ *
+ * @param array<string,int|string|null> $fields Normalized gallery column values.
+ * @return int New gallery identifier, still uncommitted.
+ * @throws RuntimeException When the owned transaction has ended.
+ */
+function gallery_model_insert_linked_owned(array $fields): int
+{
+    gallery_model_assert_linked_creation_transaction();
+    return gallery_model_insert($fields);
 }
 
 /**

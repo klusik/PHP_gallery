@@ -145,6 +145,12 @@ namespace Gallery\Models {
 namespace Gallery\Services {
     require_once dirname(__DIR__) . '/app/services/app_settings.php';
 
+    /** Resolve only the isolated physical gallery root. @return string Fixture-owned root. */
+    function galleries_root(): string
+    {
+        return $GLOBALS['decode_upload_root'];
+    }
+
     /** Format safe fixture messages without language/configuration persistence. @param string $key Translation key. @param string|array<string,string>|null $fallback Default text or replacements. @param array<string,string> $parameters Text substitutions. @return string Interpolated fixture message. */
     function t(
         string $key,
@@ -228,13 +234,21 @@ namespace Gallery\Services {
             'Upload move escaped disposable storage.',
         );
         ++$GLOBALS['decode_upload_moves'];
+        if (($GLOBALS['decode_upload_swap_directory'] ?? false) === true) {
+            $gallery = $GLOBALS['decode_upload_root'] . '/gallery';
+            if (!rename($gallery, $gallery . '-original') || !mkdir($gallery)) {
+                throw new \RuntimeException('Could not set up directory swap fixture.');
+            }
+        }
         return rename($source, $target);
     }
 
-    /** Register only the files actually stored by the real upload facade. @param int $galleryId Owning fixture gallery. @param list<string> $filenames Accepted relative filenames. @return int Number of isolated scanner rows inserted. */
+    /** Register only files stored by the real facade. @param int $galleryId Owning fixture gallery. @param list<string> $filenames Accepted filenames. @param array<string,array<string,mixed>> $metadataByRelativePath Optional prepared metadata. @param array<string,int>|null $createdRows Optional insertion receipts. @return int Number of isolated scanner rows inserted. */
     function scan_gallery_selected_uploaded_images(
         int $galleryId,
         array $filenames,
+        array $metadataByRelativePath = [],
+        ?array &$createdRows = null,
     ): int {
         foreach ($filenames as $filename) {
             \decode_upload_expect(
@@ -249,6 +263,9 @@ namespace Gallery\Services {
                 'relative_path' => $filename,
                 'thumbnail_source_identity_version' => 1,
             ];
+            if ($createdRows !== null && empty($GLOBALS['decode_upload_no_receipt'])) {
+                $createdRows[$filename] = $id;
+            }
         }
         return count($filenames);
     }
@@ -623,6 +640,102 @@ namespace {
         $GLOBALS['decode_upload_extreme'] = false;
         $GLOBALS['decode_upload_limits'] = [];
         $GLOBALS['decode_upload_forbid_decoder'] = true;
+        $lostBeforeInput = $root . '/incoming/delegated-lock-before.png';
+        imagepng($pixels, $lostBeforeInput);
+        $refused = false;
+        try {
+            \Gallery\Services\store_uploaded_gallery_images(
+                10, [['name' => 'delegated-lock-before.png',
+                    'tmp_name' => $lostBeforeInput, 'size' => filesize($lostBeforeInput)]],
+                false, null, null, true, static fn(string $lock): bool => false,
+            );
+        } catch (\RuntimeException) {
+            $refused = true;
+        }
+        decode_upload_expect(
+            $refused && is_file($lostBeforeInput)
+                && $GLOBALS['operation_fixture_db']->locks === [],
+            'Lost ownership before storage must leave the incoming source untouched.',
+        );
+        $lostAfterInput = $root . '/incoming/delegated-lock-after.png';
+        imagepng($pixels, $lostAfterInput);
+        $guardChecks = 0;
+        $refused = false;
+        try {
+            \Gallery\Services\store_uploaded_gallery_images(
+                10, [['name' => 'delegated-lock-after.png',
+                    'tmp_name' => $lostAfterInput, 'size' => filesize($lostAfterInput)]],
+                false, null, null, true,
+                static function (string $lock) use (&$guardChecks): bool {
+                    return ++$guardChecks === 1;
+                },
+            );
+        } catch (\RuntimeException) {
+            $refused = true;
+        }
+        decode_upload_expect(
+            $refused && is_file($root . '/gallery/delegated-lock-after.png')
+                && $GLOBALS['operation_fixture_db']->locks === [],
+            'Lost ownership after storage must be uncertain and retain the original.',
+        );
+        $swapInput = $root . '/incoming/delegated-directory-swap.png';
+        imagepng($pixels, $swapInput);
+        $GLOBALS['decode_upload_swap_directory'] = true;
+        $refused = false;
+        try {
+            \Gallery\Services\store_uploaded_gallery_images(
+                10, [['name' => 'delegated-directory-swap.png',
+                    'tmp_name' => $swapInput, 'size' => filesize($swapInput)]],
+                false, null, null, true, static fn(string $lock): bool => true,
+            );
+        } catch (\RuntimeException) {
+            $refused = true;
+        } finally {
+            $GLOBALS['decode_upload_swap_directory'] = false;
+            @unlink($root . '/gallery/delegated-directory-swap.png');
+            @rmdir($root . '/gallery');
+            if (is_dir($root . '/gallery-original')) {
+                rename($root . '/gallery-original', $root . '/gallery');
+            }
+        }
+        decode_upload_expect(
+            $refused && is_dir($root . '/gallery')
+                && $GLOBALS['operation_fixture_db']->locks === [],
+            'Replacing the target directory during upload must not be acknowledged.',
+        );
+        $delegatedInput = $root . '/incoming/delegated-proof.png';
+        imagepng($pixels, $delegatedInput);
+        $delegated = \Gallery\Services\store_uploaded_gallery_images(
+            10, [['name' => 'delegated-proof.png', 'tmp_name' => $delegatedInput,
+                'size' => filesize($delegatedInput)]], false, null, null, true,
+            static fn(string $lock): bool => true,
+        );
+        decode_upload_expect(
+            count($delegated['delegated_receipts'] ?? []) === 1
+                && count($delegated['image_ids']) === 1,
+            'Delegated original did not retain its new-row receipt.',
+        );
+        $missingReceiptInput = $root . '/incoming/delegated-no-receipt.png';
+        imagepng($pixels, $missingReceiptInput);
+        $GLOBALS['decode_upload_no_receipt'] = true;
+        $refused = false;
+        try {
+            \Gallery\Services\store_uploaded_gallery_images(
+                10, [['name' => 'delegated-no-receipt.png',
+                    'tmp_name' => $missingReceiptInput,
+                    'size' => filesize($missingReceiptInput)]],
+                false, null, null, true, static fn(string $lock): bool => true,
+            );
+        } catch (\RuntimeException) {
+            $refused = true;
+        } finally {
+            unset($GLOBALS['decode_upload_no_receipt']);
+        }
+        decode_upload_expect(
+            $refused && is_file($root . '/gallery/delegated-no-receipt.png')
+                && $GLOBALS['operation_fixture_db']->locks === [],
+            'Missing scanner receipt must fail without deleting a stored original.',
+        );
         $prepared = decode_upload_classic('prepared-original', false);
         $imageId = $prepared['response']['image_ids'][0];
         $image = $GLOBALS['decode_upload_images'][$imageId];

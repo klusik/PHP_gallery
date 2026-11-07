@@ -73,6 +73,7 @@ use function Gallery\Views\view_render_admin_new_gallery_side_panel;
 use function Gallery\Views\view_render_gallery_description_formatting_hint;
 use function Gallery\Services\admin_log_event;
 use Gallery\Services\AdminOperationRefusal;
+use Gallery\Services\LinkedGalleryReservationUnavailable;
 use function Gallery\Core\current_user;
 use function Gallery\Services\admin_operation_begin;
 use function Gallery\Services\admin_operation_complete;
@@ -412,27 +413,39 @@ function admin_gallery_discovery_import_action_result(
     // $folders stores selected discovered folder paths from the browser table.
     $folders = is_array($post['folders'] ?? null) ? $post['folders'] : [];
 
-    if ($action === 'delete_from_disk') {
-        return admin_gallery_discovery_delete_requested_paths($folders);
-    }
+    try {
+        if ($action === 'delete_from_disk') {
+            return admin_gallery_discovery_delete_requested_paths($folders);
+        }
 
-    if ($action === 'move_photos') {
-        return admin_gallery_discovery_move_requested_photos(
-            $folders,
-            (int) ($post['target_gallery_id'] ?? 0),
-        );
-    }
+        if ($action === 'move_photos') {
+            return admin_gallery_discovery_move_requested_photos(
+                $folders,
+                (int) ($post['target_gallery_id'] ?? 0),
+            );
+        }
 
-    // $result stores the legacy in-place import result.
-    $result = $createThumbnails
-        ? import_galleries($folders, true)
-        : import_galleries_without_thumbnails($folders);
-    $result['ok'] = true;
-    $result['action'] = 'import_in_place';
-    if (!isset($result['gallery_ids'])) {
-        $result['gallery_ids'] = [];
+        // $result stores the legacy in-place import result.
+        $result = $createThumbnails
+            ? import_galleries($folders, true)
+            : import_galleries_without_thumbnails($folders);
+        $result['ok'] = true;
+        $result['action'] = 'import_in_place';
+        if (!isset($result['gallery_ids'])) {
+            $result['gallery_ids'] = [];
+        }
+        return $result;
+    } catch (LinkedGalleryReservationUnavailable) {
+        return [
+            'ok' => false,
+            'action' => in_array($action, ['delete_from_disk', 'move_photos'], true)
+                ? $action : 'import_in_place',
+            'error' => t(
+                'admin.operation.operation_needs_reconciliation',
+                'An earlier attempt may have changed gallery data. Keep its key and reconcile that attempt before starting replacement work.',
+            ),
+        ];
     }
-    return $result;
 }
 
 /**

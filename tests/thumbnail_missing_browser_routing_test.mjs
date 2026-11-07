@@ -101,4 +101,91 @@ for (const useBrowser of [true, false]) {
             'A browser failure must never silently start server generation.');
     }
 }
+
+// Exercise the real import workflow with an isolated fetch boundary. The
+// literal strings are synthetic responses, never HTML to be interpreted.
+const importStart = source.indexOf('async function runImportWithThumbnailProgress(form)');
+const importEnd = source.indexOf('function discoveryImportFinishedMessage', importStart);
+assert.ok(importStart >= 0 && importEnd > importStart, 'Production import owner must exist.');
+const importDeclaration = source.slice(importStart, importEnd);
+
+/** Keep only the form fields needed by the isolated import workflow. */
+class FixtureImportData {
+    /** Accept synthetic form fields without publishing them.
+     * @param {HTMLFormElement | undefined} form Optional fixture form.
+     * @returns {void} Keeps only isolated fixture state.
+     */
+    constructor(form) { this.form = form; }
+    /** Accept a synthetic replacement field.
+     * @param {string} name Field name.
+     * @param {string} value Field value.
+     * @returns {void} Does not contact a server.
+     */
+    set(name, value) { void name; void value; }
+    /** Accept a synthetic repeated field.
+     * @param {string} name Field name.
+     * @param {string} value Field value.
+     * @returns {void} Does not contact a server.
+     */
+    append(name, value) { void name; void value; }
+}
+
+for (const scenario of ['refused', 'thumbnail_failure']) {
+    const button = {disabled: false};
+    const fill = {style: {display: ''}};
+    const classes = new Set();
+    const label = {
+        textContent: '', role: '',
+        classList: {
+            add: name => classes.add(name),
+            remove: name => classes.delete(name),
+        },
+        setAttribute: (name, value) => { if (name === 'role') label.role = value; },
+    };
+    const progress = {querySelector: selector =>
+        selector === '[data-thumbnail-progress-fill]' ? fill : label};
+    const form = {
+        action: '/fixture-import',
+        querySelectorAll: () => [button],
+        querySelector: () => null,
+    };
+    const message = '<synthetic refusal> Keep the existing attempt.';
+    const requests = [];
+    const updates = [];
+    const context = vm.createContext({
+        Error, FormData: FixtureImportData,
+        window: {location: {href: '/fixture'}},
+        ensureThumbnailProgress: () => progress,
+        i18n: (_key, fallback) => fallback,
+        thumbnailEndpoint: () => '/fixture-thumbnails',
+        discoveryThumbnailRunningMessage: () => 'Working',
+        discoveryImportFinishedMessage: () => 'Finished',
+        adminUrlWithParams: () => '/fixture-complete',
+        updateThumbnailProgress: (...args) => updates.push(args),
+        fetch: async (url, options) => {
+            requests.push({url, method: options.method});
+            if (requests.length === 1 && scenario === 'refused') {
+                return {ok: true, json: async () => ({ok: false, error: message})};
+            }
+            if (requests.length === 1) {
+                return {ok: true, json: async () => ({ok: true, gallery_ids: [1], scanned: 1})};
+            }
+            return {ok: true, json: async () => ({ok: false, error: message})};
+        },
+    });
+    vm.runInContext(importDeclaration, context);
+    const operation = context.runImportWithThumbnailProgress(form);
+    assert.equal(fill.style.display, 'none', 'Pending import has no fabricated percentage.');
+    assert.equal(button.disabled, true);
+    await operation;
+    assert.equal(fill.style.display, 'none', 'Refusal must not show a full progress bar.');
+    assert.equal(label.textContent, message, 'Display the exact error as text.');
+    assert.equal(label.role, 'alert');
+    assert.equal(classes.has('notice'), true);
+    assert.equal(classes.has('muted'), false, 'Refusal must remain readable.');
+    assert.equal(button.disabled, false);
+    assert.equal(requests.length, scenario === 'refused' ? 1 : 2);
+    assert.equal(updates.length, 0, 'A refusal must not fabricate a 0/0 summary.');
+    assert.equal(context.window.location.href, '/fixture');
+}
 console.log('Targeted thumbnails respect browser/server choice: PASS');

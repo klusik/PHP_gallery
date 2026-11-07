@@ -28,6 +28,7 @@ from uploader.flight_jobs import (
     allocate_report_revision,
 )
 from uploader.models import JsonValue
+from uploader.mode_coordinator import CoordinatedWork, GuiModeOwner, ModeConfigPort
 from uploader.state_store import atomic_write_json
 
 # Let graceful requests finish while retaining state on slow/disconnected hosts.
@@ -74,6 +75,9 @@ class FinalizationWorker(threading.Thread):
         target_gallery: str = "",
         saved_revisions: tuple[ReportRevision, ...] = (),
         forget: Callable[[], None] | None = None,
+        gui_admission: tuple[GuiModeOwner, ModeConfigPort] | None = None,
+        require_gui_admission: bool = False,
+        abandon_local: bool = False,
     ) -> None:
         """Capture connection-bound finalization or one independent local source.
 
@@ -102,6 +106,12 @@ class FinalizationWorker(threading.Thread):
             forget (Callable[[], None] | None): Queue local credential cleanup
                 after explicit abandonment; None uses ordinary finalization.
                 Abandonment stops workers without requiring delivery or revoke.
+            gui_admission (tuple[GuiModeOwner, ModeConfigPort] | None): Host
+                owner and port bound to this worker's captured configuration.
+            require_gui_admission (bool): Refuse GUI remote work when no exact
+                host admission was supplied; local-only callers may omit it.
+            abandon_local (bool): Close accepted local work after producers
+                stop, retaining photos, reports and all credentials.
 
         Returns:
             None: Initializes an idle, cancellable finalization thread.
@@ -115,19 +125,25 @@ class FinalizationWorker(threading.Thread):
         self.plans = plans
         self.upload_url = upload_url
         self.api_key = api_key
+        self.gui_admission = gui_admission
+        self.require_gui_admission = require_gui_admission
+        self._gui_work: CoordinatedWork | None = None
         self.wait_for_workers = wait_for_workers
         self.revoke = revoke
         self.wants_revoke = wants_revoke
         self.local_reports = local_reports
         self.forget = forget
-        self.abandonment = forget is not None
+        self.abandonment = abandon_local or forget is not None
         self.emit = emit
         self.saved_revisions = saved_revisions or ((saved_revision,) if saved_revision else ())
         self.saved_revision = self.saved_revisions[0] if self.saved_revisions else None
         self.saved_upload = bool(self.saved_revisions)
         self.target_gallery = target_gallery
         self.local_result: dict[str, JsonValue] | None = None
-        if self.abandonment and (local_reports or self.saved_upload or wants_revoke):
+        if self.abandonment and (
+            local_reports or self.saved_upload or wants_revoke
+            or (abandon_local and forget is not None)
+        ):
             raise ValueError("Abandonment requires local cleanup without delivery or revoke.")
         if local_reports and (len(plans) != 1 or wants_revoke):
             raise ValueError("Local PDF creation requires one session and no revoke.")
@@ -148,8 +164,9 @@ class FinalizationWorker(threading.Thread):
         if self.saved_upload:
             tasks = 1 + sum(len(item.files) for item in self.saved_revisions)
         if self.abandonment:
-            # One stop barrier, one durable decision per plan, one key cleanup.
-            tasks = 2 + len(plans)
+            # Stop barrier and one durable decision per plan, then key cleanup
+            # only for explicit legacy abandonment.
+            tasks = 1 + len(plans) + int(self.forget is not None)
         self._progress = FlightProgress(
             total=tasks, started=now, phase_started=now
         )
@@ -274,10 +291,16 @@ class FinalizationWorker(threading.Thread):
 
         Returns:
             None: Success, failure or cancellation is retained in progress/state.
-                Abandonment retains files and awaits GUI credential persistence.
+                Abandonment retains files and awaits GUI credential persistence
+                only when legacy key cleanup was requested.
         """
         try:
-            if self.forget is not None:
+            if self.gui_admission is not None:
+                owner, port = self.gui_admission
+                self._gui_work = owner.acquire('legacy', port)
+            elif self.require_gui_admission:
+                raise RuntimeError('Flight report connection could not be verified.')
+            if self.abandonment:
                 self.update("draining")
                 self.wait_for_workers(
                     self.cancel, time.monotonic() + FINALIZATION_DRAIN_SECONDS
@@ -294,6 +317,9 @@ class FinalizationWorker(threading.Thread):
                         plan.error = "Explicitly abandoned; local files retained."
                         plan.save()
                     self.update("abandoning", plan.session_id, advance=True)
+                if self.forget is None:
+                    self.update("completed")
+                    return
                 # Publish before queuing the event: a fast Tk acknowledgement
                 # must never be overwritten with an unfinished cleanup phase.
                 self.update("saving_key")
@@ -368,6 +394,25 @@ class FinalizationWorker(threading.Thread):
             with self._lock:
                 self.update("error", detail)
                 self._progress.error = detail
+        finally:
+            if self._gui_work is not None:
+                self._gui_work.close()
+
+    def _request_options(self) -> dict[str, Callable[[], None]]:
+        """Return the live host checkpoint for a report HTTP attempt.
+
+        Returns:
+            dict[str, Callable[[], None]]: The before_request callback, or an
+                empty mapping for established non-GUI callers.
+
+        Raises:
+            RuntimeError: A required GUI work lifetime was not admitted.
+        """
+        if self._gui_work is not None:
+            return {'before_request': self._gui_work.checkpoint}
+        if self.require_gui_admission:
+            raise RuntimeError('Flight report connection could not be verified.')
+        return {}
 
     def save_local_result(self, phase: str, error: str = "") -> None:
         """Persist local render progress separately from remote delivery state.
@@ -537,7 +582,9 @@ class FinalizationWorker(threading.Thread):
             InterruptedError: Cancellation retains acknowledged editions.
             OSError: Local receipts or the network are unavailable.
         """
-        from uploader.flight_delivery import deliver_report, saved_report_destination
+        from uploader.flight_delivery import (
+            deliver_report, flight_report_digest, saved_report_destination,
+        )
 
         plan = self.plans[0]
         if not self.saved_revisions:
@@ -555,7 +602,10 @@ class FinalizationWorker(threading.Thread):
             ):
                 raise ValueError("Saved PDF selection changed; refresh the report list.")
         self.update("uploading", self.target_gallery)
-        saved_report_destination(self.upload_url, self.api_key, self.target_gallery)
+        saved_report_destination(
+            self.upload_url, self.api_key, self.target_gallery,
+            **self._request_options(),
+        )
         self.update("uploading", self.target_gallery, advance=True)
         receipt_path = plan.directory / "upload-receipts.json"
         temporary_receipt = receipt_path.with_name(receipt_path.name + ".tmp")
@@ -573,10 +623,15 @@ class FinalizationWorker(threading.Thread):
         for revision, language, pdf in editions:
             self.check_cancelled()
             self.update("uploading", pdf.name + "; report_id=" + revision.report_id)
+            checksum, size = flight_report_digest(pdf)
             receipt = deliver_report(
                 self.upload_url, self.api_key, pdf, plan.session_id, language,
-                revision.report_id, self.transfer_progress,
+                revision.report_id, self.transfer_progress, expected_sha256=checksum,
+                **self._request_options(),
             )
+            if (receipt.get("sha256") != checksum
+                    or flight_report_digest(pdf) != (checksum, size)):
+                raise RuntimeError("The selected report changed; delivery remains unconfirmed.")
             receipts[binding + ":" + revision.report_id + ":" + language] = {
                 "gallery_folder": self.target_gallery,
                 "report_id": revision.report_id,
@@ -619,6 +674,8 @@ class FinalizationWorker(threading.Thread):
         # still gets a report. Its analysis keeps incomplete/unknown evidence;
         # finalization completion never fabricates takeoff or landing facts.
         from uploader.flight_delivery import (
+            FLIGHT_DELIVERY_CHUNK_BYTES,
+            flight_report_digest,
             check_report_capability,
             deliver_report,
         )
@@ -626,7 +683,7 @@ class FinalizationWorker(threading.Thread):
             REPORT_TEMPLATE_VERSION,
         )
         if not plan.local_only and not check_report_capability(
-            self.upload_url, self.api_key
+            self.upload_url, self.api_key, **self._request_options(),
         ):
             raise RuntimeError(
                 "Gallery does not support flight_reports_v1. Update the gallery "
@@ -648,22 +705,33 @@ class FinalizationWorker(threading.Thread):
         for language in plan.languages:
             self.check_cancelled()
             pdf = outputs[language]
-            checksum = hashlib.sha256(pdf.read_bytes()).hexdigest()
-            self.check_cancelled()
             self.update("uploading", language.upper())
-            if not plan.local_only and plan.receipts.get(language) != checksum:
-                deliver_report(
-                    self.upload_url,
-                    self.api_key,
-                    pdf,
-                    plan.session_id,
-                    language,
-                    revision,
-                    self.transfer_progress,
-                )
-                # Transport returns only after receipt/checksum reconciliation.
-                plan.receipts[language] = checksum
-                plan.save()
+            if plan.local_only:
+                # Local reports retain the existing complete-read check without
+                # imposing the server's upload size or PDF-format restrictions.
+                with pdf.open("rb") as local_report:
+                    while local_report.read(FLIGHT_DELIVERY_CHUNK_BYTES):
+                        self.check_cancelled()
+            else:
+                checksum, size = flight_report_digest(pdf)
+                self.check_cancelled()
+                if plan.receipts.get(language) != checksum:
+                    receipt = deliver_report(
+                        self.upload_url,
+                        self.api_key,
+                        pdf,
+                        plan.session_id,
+                        language,
+                        revision,
+                        self.transfer_progress,
+                        expected_sha256=checksum,
+                        **self._request_options(),
+                    )
+                    if (receipt.get("sha256") != checksum
+                            or flight_report_digest(pdf) != (checksum, size)):
+                        raise RuntimeError("The local report changed; delivery remains unconfirmed.")
+                    plan.receipts[language] = receipt["sha256"]
+                    plan.save()
             self.update("uploading", language.upper(), advance=True)
         plan.completed = True
         plan.error = ""

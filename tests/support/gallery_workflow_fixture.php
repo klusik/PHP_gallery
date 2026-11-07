@@ -259,6 +259,16 @@ final class Fixture
         }
         foreach (['galleries', 'cache', 'data', 'sessions'] as $relative)
             mkdir($this->directory . '/' . $relative, 0700);
+        // Isolated operation-inspection children need these two CLI owners;
+        // never execute the live checkout against the disposable database.
+        check(mkdir($this->directory . '/scripts', 0700),
+            'Could not create isolated CLI source directory.');
+        foreach (['cli_guard.php', 'reconcile_admin_operations.php'] as $name) {
+            $source = $this->source . '/scripts/' . $name;
+            check(is_file($source) && !is_link($source)
+                && copy($source, $this->directory . '/scripts/' . $name),
+                'Could not copy isolated CLI source.');
+        }
         copy($this->source . '/index.php', $this->directory . '/index.php');
     }
 

@@ -83,6 +83,27 @@ function runtime_module_fixture_run(
     } else {
         $kernel->load($module);
     }
+    // Legacy ZIP imports can define playlist helpers independently of the plan.
+    // Check the linking plan and the attachment route's actual stream adapter.
+    if ($module === 'domain-admin-auth'
+        && (in_array('app/services/gallery_music.php', $closure['files'], true)
+            || function_exists('Gallery\\Controllers\\gallery_music_stream_document'))) {
+        throw new RuntimeException('Linking auth preloaded native music delivery.');
+    }
+    if ($module === 'gallery-pdf-documents') {
+        foreach ([
+            'Gallery\\Services\\gallery_music_playlist',
+            'Gallery\\Services\\gallery_music_track',
+            'Gallery\\Services\\gallery_music_track_visible',
+            'Gallery\\Controllers\\gallery_music_stream_document',
+        ] as $musicFunction) {
+            if (!function_exists($musicFunction)) {
+                throw new RuntimeException(
+                    'Missing deferred native music adapter: ' . $musicFunction,
+                );
+            }
+        }
+    }
     // Maintenance analysis and execution defer this owner independently. A
     // prepared handler alone does not prove its dynamic task adapters exist.
     if ($module === 'domain-admin-thumbnails') {

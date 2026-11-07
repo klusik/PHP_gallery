@@ -162,7 +162,11 @@ class UpdateHelperTests(unittest.TestCase):
                 helper.load_ticket(path)
 
     def test_installed_identity_rejects_copied_frozen_executable(self) -> None:
-        """A developer copy sharing the product basename is never an update target."""
+        """A developer copy sharing the product basename is never an update target.
+
+        Returns:
+            None: Accept the actual registered file, never an executable copy.
+        """
         registry = types.ModuleType("winreg")
         registry.HKEY_LOCAL_MACHINE = 1
         registry.KEY_READ = 2
@@ -174,7 +178,7 @@ class UpdateHelperTests(unittest.TestCase):
         with mock.patch.dict(sys.modules, {"winreg": registry}), mock.patch.object(helper.sys, "platform", "win32"), \
                 mock.patch.object(helper.sys, "frozen", True, create=True), \
                 mock.patch.object(helper.sys, "executable", str(self.installed)):
-            self.assertEqual(self.installed, helper.installed_identity())
+            self.assertTrue(self.installed.samefile(helper.installed_identity()))
             copied = self.root / "developer" / "PHPGalleryUploader.exe"
             with self.assertRaisesRegex(RuntimeError, "registered installation"):
                 helper.installed_identity(copied)

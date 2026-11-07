@@ -26,6 +26,8 @@ from uploader.flight_jobs import (
     FlightPreferences, SavedFlight, SessionPlan, connection_binding,
     ImportBindings, ReportFileDetails,
 )
+from uploader.models import ImportItem, ImportJob
+from uploader.state_store import JobStateStore
 
 
 # Type: float; Units: seconds; Scope: flight UI worker race tests.
@@ -63,11 +65,21 @@ class FlightUITests(unittest.TestCase):
             ai_worker_stop_requested=False,
             api_key_revoke_running=False,
             api_key_revoke_thread=None,
+            linking_manager=SimpleNamespace(
+                linked_address=Mock(get=Mock(return_value="")),
+                linked_upload_mode_selected=Mock(return_value=False),
+                linked_upload_binding=Mock(return_value=None),
+                selected_upload_target=Mock(return_value=None),
+            ),
             status_var=Mock(),
             watcher_activity_var=Mock(),
             api_key_request_blockers=Mock(return_value=[]),
             refresh_connection_controls=Mock(),
+            reconnect_upload_gallery=Mock(),
             forget_flight_connection=Mock(),
+            capture_flight_admission=Mock(return_value=(
+                Mock(), Mock(), 'https://gallery.test/api', 'test-key',
+            )),
             open_local_path=Mock(),
             open_log_file=Mock(),
             gallery_label_var=Mock(get=Mock(return_value="Target gallery: Test gallery")),
@@ -120,10 +132,13 @@ class FlightUITests(unittest.TestCase):
         ui.report_group_files = {}
         ui.report_file_sort_keys = {}
         ui.report_button = None
-        ui.keep_local_button = None
+        ui.progress_actions = None
+        ui.progress_buttons = {}
+        ui.progress_detail_label = None
         ui.report_detail_var = Mock()
         ui.telemetry_var = Mock()
         ui._progress_local_mode = False
+        ui._recovery_state = None
         ui.bar = None
         ui.lease = None
         ui.load_error = ""
@@ -146,6 +161,7 @@ class FlightUITests(unittest.TestCase):
         ui.activity_bar = None
         ui.task_tree = None
         ui._animation_running = False
+        ui._preparing_progress = False
         ui.pending = Mock(return_value=[])
         ui.binding = Mock(return_value=connection_binding(
             "https://gallery.test/api", "test-key"
@@ -155,10 +171,42 @@ class FlightUITests(unittest.TestCase):
         ui.wait_for_workers = Mock()
         ui.submit_revoke = Mock()
         ui.show_progress = Mock()
+        ui._prepare_progress_view = Mock()
         ui.refresh_tasks = flight_ui.FlightUI.refresh_tasks.__get__(
             ui, flight_ui.FlightUI
         )
         return ui
+
+    def test_finish_preparation_is_painted_before_pending_history(self) -> None:
+        """Expose a populated busy phase before slow Finish preparation.
+
+        Returns:
+            None: The first history read observes the painted preparation view.
+        """
+        ui = self._ui(self._host())
+        ui.dialog = Mock()
+        ui.activity_bar = Mock()
+        ui.bar = Mock()
+        ui._prepare_progress_view = (
+            flight_ui.FlightUI._prepare_progress_view.__get__(ui)
+        )
+        ui.begin = Mock()
+
+        def inspect_pending() -> list[SessionPlan]:
+            """Require actual preparation feedback before returning no plans.
+
+            Returns:
+                list[SessionPlan]: Empty fixture queue after the UI is painted.
+            """
+            ui.phase_var.set.assert_called_with("phase_preparing")
+            ui.detail_var.set.assert_called_with("finish_preparing_detail")
+            ui.activity_bar.start.assert_called_once_with(flight_ui.PROGRESS_TICK_MS)
+            ui.dialog.update_idletasks.assert_called_once_with()
+            return []
+
+        ui.pending = Mock(side_effect=inspect_pending)
+        ui.finish_report()
+        ui.begin.assert_called_once_with(False, automatic=True)
 
     def test_abandon_dialog_uses_cached_game_or_flight_wording(self) -> None:
         """Pass contextual translated text through the real confirmation adapter.
@@ -277,16 +325,33 @@ class FlightUITests(unittest.TestCase):
         """Resolve only captured imports and retain failed key cleanup for retry.
 
         Returns:
-            None: Stale events cannot clear a key, matching imports alone are
-                released, and local save failure remains an error until retried.
+            None: Stale events cannot clear a key, unrelated import bindings
+                remain untouched, and local save failure remains retryable.
         """
         with tempfile.TemporaryDirectory() as temporary:
             ui = self._ui(self._host())
             binding = ui.binding()
-            ui.import_bindings = ImportBindings(Path(temporary))
-            ui.import_bindings.bind("same", binding)
+            ui.import_bindings = ImportBindings(Path(temporary) / "flights")
+            ui.job_store = JobStateStore(Path(temporary) / "upload_state.json")
+            same_job = ImportJob.create("files", "same", "Gallery")
+            other_job = ImportJob.create("files", "other", "Gallery")
+            same_job.items = [ImportItem(
+                "same-item", "/unused/same.jpg", "same.jpg",
+            )]
+            other_job.items = [ImportItem(
+                "other-item", "/unused/other.jpg", "other.jpg",
+            )]
+            ui.job_store.save_job(same_job)
+            ui.job_store.save_job(other_job)
+            ui.import_bindings.bind(same_job.id, binding)
+            same_job = ui.job_store.get_job(same_job.id)
+            same_job.items[0].transition("confirmed")
+            same_job.items[0].server_result = {"uploaded": 1, "scanned": 0}
+            same_job.started_at = 1.0
+            same_job.finished_at = 2.0
+            ui.job_store.save_job(same_job)
             other = connection_binding("https://other.test/api", "other")
-            ui.import_bindings.bind("other", other)
+            ui.import_bindings.bind(other_job.id, other)
             worker = flight_workflow.FinalizationWorker(
                 [], ui.host.config.gallery_url, ui.host.config.api_key,
                 Mock(), Mock(), False, forget=Mock(),
@@ -298,7 +363,9 @@ class FlightUITests(unittest.TestCase):
             ui.host.forget_flight_connection.side_effect = OSError("disk full")
             ui.forgotten(binding)
             self.assertEqual("error", worker.snapshot().phase)
-            self.assertEqual({"other": other}, ui.import_bindings.entries())
+            self.assertEqual({
+                same_job.id: binding, other_job.id: other,
+            }, ui.import_bindings.entries())
             self.assertEqual("test-key", ui.host.config.api_key)
             worker.update("saving_key")
             ui.host.forget_flight_connection.side_effect = None
@@ -306,12 +373,11 @@ class FlightUITests(unittest.TestCase):
             self.assertEqual("completed", worker.snapshot().phase)
             self.assertEqual(worker.snapshot().total, worker.snapshot().done)
 
-    def test_keep_local_preserves_confirmed_revoke_without_second_confirmation(self) -> None:
-        """Carry the failed workflow's existing consent through local completion.
+    def test_keep_local_does_not_resume_temporarily_unavailable_revoke(self) -> None:
+        """Keep the saved key when a retained revoke cannot yet be admitted.
 
         Returns:
-            None: Local completion resumes Revoke, while its confirmation states
-                that the key will be removed and no second consent prompt appears.
+            None: Local completion cannot silently resume a remote revoke.
         """
         ui = self._ui(self._host())
         worker = flight_workflow.FinalizationWorker(
@@ -321,18 +387,81 @@ class FlightUITests(unittest.TestCase):
         worker.update("error", "delivery failed")
         ui.operation = worker
         ui.begin = Mock()
-        with patch.object(flight_ui.messagebox, "askyesno", return_value=True) as confirm:
+        with patch.object(flight_ui.messagebox, "askyesno", return_value=True) as confirm, \
+                patch.object(flight_ui.messagebox, "showinfo") as unavailable:
             ui.keep_local()
-        ui.begin.assert_called_once_with(True)
-        self.assertEqual("confirm_local_revoke", confirm.call_args.args[1])
+        ui.begin.assert_not_called()
+        confirm.assert_not_called()
+        unavailable.assert_called_once()
         ui.begin = flight_ui.FlightUI.begin.__get__(ui, flight_ui.FlightUI)
         with (
             patch.object(flight_ui.messagebox, "askyesno") as confirm,
+            patch.object(flight_ui.messagebox, "showinfo") as unavailable,
             patch.object(flight_ui, "FinalizationWorker") as factory,
         ):
             ui.begin(True)
         confirm.assert_not_called()
-        self.assertTrue(factory.call_args.args[-1])
+        factory.assert_not_called()
+        unavailable.assert_called_once()
+        self.assertEqual("test-key", ui.host.config.api_key)
+
+    def test_remote_stop_receives_captured_legacy_admission(self) -> None:
+        """Bind remote flight finalization to the host's exact captured config.
+
+        Returns:
+            None: The worker receives the captured endpoint, key and owner port.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        plan = SessionPlan(Path('fixture-flight'), ui.binding(), ('en',), True)
+        ui.pending.return_value = [plan]
+        owner, port, endpoint, key = host.capture_flight_admission.return_value
+        with patch.object(flight_ui, 'FinalizationWorker') as factory:
+            ui.begin(False)
+        self.assertEqual(endpoint, factory.call_args.args[1])
+        self.assertEqual(key, factory.call_args.args[2])
+        self.assertEqual((owner, port), factory.call_args.kwargs['gui_admission'])
+        self.assertTrue(factory.call_args.kwargs['require_gui_admission'])
+        factory.return_value.start.assert_called_once()
+
+    def test_saved_pdf_upload_receives_the_same_captured_owner(self) -> None:
+        """Carry one exact host capture to an explicitly approved PDF upload.
+
+        Returns:
+            None: The worker receives the captured endpoint and lease port.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        ui.lease = Mock()
+        row = SavedFlight(Path('fixture-flight'), recording_ended=True)
+        plan = SessionPlan(row.directory, ui.binding(), ('en',), True)
+        revision = flight_ui.ReportRevision('fixture-report', {'en': Path('fixture.pdf')})
+        owner, port, endpoint, key = host.capture_flight_admission.return_value
+        with patch.object(flight_ui.messagebox, 'askyesno', return_value=True), \
+                patch.object(flight_ui.SessionPlan, 'load', return_value=plan), \
+                patch.object(flight_ui, 'FinalizationWorker') as factory:
+            ui.start_saved_upload(row, revision)
+        self.assertEqual((endpoint, key), factory.call_args.args[1:3])
+        self.assertEqual((owner, port), factory.call_args.kwargs['gui_admission'])
+        self.assertTrue(factory.call_args.kwargs['require_gui_admission'])
+        factory.return_value.start.assert_called_once()
+
+    def test_local_stop_does_not_require_remote_admission(self) -> None:
+        """Leave local-only flight Stop available without a vault or key.
+
+        Returns:
+            None: No remote config is captured for the local operation.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        ui.pending.return_value = [SessionPlan(
+            Path('fixture-flight'), ui.binding(), ('en',), True, local_only=True,
+        )]
+        with patch.object(flight_ui, 'FinalizationWorker') as factory:
+            ui.begin(False)
+        host.capture_flight_admission.assert_not_called()
+        self.assertIsNone(factory.call_args.kwargs['gui_admission'])
+        self.assertFalse(factory.call_args.kwargs['require_gui_admission'])
 
     def test_retry_never_restores_cancelled_or_another_keys_revoke_consent(self) -> None:
         """Bind retained consent to the same process, endpoint and credential.
@@ -359,24 +488,25 @@ class FlightUITests(unittest.TestCase):
         ui.retry_finalization()
         ui.begin.assert_called_with(False)
 
-    def test_automatic_finish_admits_revoke_without_modal_confirmation(self) -> None:
-        """Treat the Finish click as authorization for the final revoke barrier.
+
+    def test_automatic_finish_cannot_bypass_disabled_revoke(self) -> None:
+        """Keep direct revocation unavailable even for automatic Finish.
 
         Returns:
-            None: A fresh worker starts without a confirmation dialog and owns
-                automatic completion; ordinary connection controls remain gated.
+            None: No confirmation, finalization worker or credential change.
         """
         ui = self._ui(self._host())
-        operation = Mock(local_reports=False, saved_upload=False, abandonment=False)
-        with patch.object(flight_ui.messagebox, "askyesno") as confirm, patch.object(
-            flight_ui, "FinalizationWorker", return_value=operation,
-        ) as factory:
+        with (
+            patch.object(flight_ui.messagebox, "askyesno") as confirm,
+            patch.object(flight_ui.messagebox, "showinfo") as notice,
+            patch.object(flight_ui, "FinalizationWorker") as worker_factory,
+        ):
             ui.begin(True, automatic=True)
         confirm.assert_not_called()
-        self.assertTrue(factory.call_args.args[5])
-        operation.start.assert_called_once_with()
-        self.assertIs(operation, ui.automatic_operation)
-        self.assertTrue(ui.host.api_key_revoke_running)
+        notice.assert_called_once()
+        worker_factory.assert_not_called()
+        self.assertIsNone(ui.automatic_operation)
+        self.assertFalse(ui.host.api_key_revoke_running)
 
     def test_automatic_progress_closes_only_after_successful_terminal_state(self) -> None:
         """Keep recovery visible while removing successful transient windows.
@@ -632,6 +762,159 @@ class FlightUITests(unittest.TestCase):
         self.assertIsNone(ui.recorder)
         self.assertIsNone(ui.plan)
 
+    def test_linked_binding_never_falls_back_to_saved_key_after_expiry(self) -> None:
+        """Keep the selected gallery's binding when its session is unavailable.
+
+        Returns:
+            None: Expiry preserves target ownership or fails closed without it.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        host.linking_manager.linked_upload_mode_selected.return_value = True
+        host.linking_manager.linked_upload_binding.return_value = 'a' * 64
+        host.linking_manager.selected_upload_target.return_value = None
+        self.assertEqual('a' * 64, flight_ui.FlightUI.binding(ui))
+        host.linking_manager.linked_upload_binding.return_value = None
+        with self.assertRaises(ValueError):
+            flight_ui.FlightUI.binding(ui)
+
+    def test_linked_flight_report_is_local_and_target_bound(self) -> None:
+        """Bind a linked flight to its target and never schedule PDF delivery.
+
+        Returns:
+            None: The actual persisted plan remains local-only for that target.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            host = self._host()
+            ui = self._ui(host)
+            ui.directory = Path(temporary)
+            ui.lease = object()
+            ui.save_preferences = Mock(return_value=True)
+            ui.refresh_dispatch_status = Mock()
+            host.linking_manager.linked_upload_mode_selected.return_value = True
+            target = SimpleNamespace(
+                issuer='https://gallery.example/Galerie', gallery_id=7,
+                binding=Mock(return_value='b' * 64),
+            )
+            host.linking_manager.selected_upload_target.return_value = target
+            host.linking_manager.linked_upload_binding.return_value = 'b' * 64
+            recorder = Mock()
+            recorder.directory = ui.directory / 'linked-flight'
+            with patch.object(flight_ui, 'FlightRecorder', return_value=recorder):
+                directory = flight_ui.FlightUI.start_session(ui)
+            plan = SessionPlan.load(directory)
+            self.assertEqual('b' * 64, plan.binding)
+            self.assertTrue(plan.local_only)
+            self.assertNotEqual(connection_binding(host.config.gallery_url,
+                                                   host.config.api_key), plan.binding)
+            recorder.start.assert_called_once_with()
+
+    def test_linked_finish_never_passes_saved_key_to_report_worker(self) -> None:
+        """Keep legacy credentials out of linked finalization and revocation.
+
+        Returns:
+            None: A linked finish uses local-only plans and empty credentials.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        host.linking_manager.linked_upload_mode_selected.return_value = True
+        plan = SessionPlan(Path('linked'), 'c' * 64, ('en',), True, local_only=True)
+        ui.pending.return_value = [plan]
+        operation = SimpleNamespace(
+            wants_revoke=False, local_reports=False, saved_upload=False,
+            abandonment=False, start=Mock(), update=Mock(),
+        )
+        with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
+            flight_ui.FlightUI.begin(ui, revoke=False)
+        self.assertEqual('', factory.call_args.args[1])
+        self.assertEqual('', factory.call_args.args[2])
+        self.assertTrue(factory.call_args.args[0][0].local_only)
+        host.forget_flight_connection.assert_not_called()
+
+    def test_linked_mode_blocks_legacy_report_and_key_actions(self) -> None:
+        """Require explicit mode switching before touching legacy authority.
+
+        Returns:
+            None: Saved-PDF upload and legacy key revocation cannot start.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        ui.dialog_owner = Mock(return_value=None)
+        host.linking_manager.linked_upload_mode_selected.return_value = True
+        with patch.object(flight_ui.messagebox, 'showinfo') as info, patch.object(
+            flight_ui, 'FinalizationWorker',
+        ) as factory:
+            flight_ui.FlightUI.start_saved_upload(ui, Mock(), Mock())
+            flight_ui.FlightUI.begin(ui, revoke=True)
+        self.assertEqual(2, info.call_count)
+        factory.assert_not_called()
+        host.forget_flight_connection.assert_not_called()
+
+    def test_contextual_game_finish_disables_saved_report_preferences(self) -> None:
+        """Persist report suppression before the accepted photo queue drains.
+
+        Returns:
+            None: Finalization and any later retry see a photo-only plan.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            host = self._host()
+            ui = self._ui(host)
+            host.linking_manager.linked_upload_mode_selected.return_value = True
+            directory = Path(temporary)
+            plan = SessionPlan(directory, 'c' * 64, ('en',), True, local_only=True)
+            plan.save()
+            ui.pending.return_value = [plan]
+            operation = SimpleNamespace(
+                wants_revoke=False, local_reports=False, saved_upload=False,
+                abandonment=False, start=Mock(), update=Mock(),
+            )
+            with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
+                flight_ui.FlightUI.begin(ui, photos_only=True)
+            self.assertFalse(factory.call_args.args[0][0].reports_enabled)
+            self.assertFalse(SessionPlan.load(directory).reports_enabled)
+
+    def test_interrupted_linked_session_can_close_locally_after_restart(self) -> None:
+        """Resolve a retained Watcher queue without any live upload credential.
+
+        Returns:
+            None: The same bound plan can become idle, preserving the pending
+                file, queue evidence and unrelated saved legacy connection.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            host = self._host()
+            host.linking_manager.linked_upload_mode_selected.return_value = True
+            host.linking_manager.linked_upload_binding.return_value = 'd' * 64
+            ui = self._ui(host)
+            ui.directory = Path(temporary)
+            ui.binding = flight_ui.FlightUI.binding.__get__(ui)
+            ui.pending = flight_ui.FlightUI.pending.__get__(ui)
+            directory = ui.directory / 'interrupted'
+            directory.mkdir()
+            source = ui.directory / 'original.jpg'
+            source.write_bytes(b'original')
+            plan = SessionPlan(directory, ui.binding(), ('en',), False, local_only=True)
+            plan.save()
+            manifest = directory / 'watch-drain.json'
+            flight_ui.atomic_write_json(manifest, {
+                'schema_version': 1, 'frozen': True, 'pending': [str(source)],
+            })
+            self.assertEqual('pending', ui.session_state())
+            with (
+                patch.object(flight_ui.messagebox, 'askyesno', return_value=True),
+                patch.object(flight_workflow.FinalizationWorker, 'start',
+                             flight_workflow.FinalizationWorker.run),
+            ):
+                ui.abandon()
+            self.assertEqual('completed', ui.operation.snapshot().phase)
+            ui.tick()
+            self.assertEqual('idle', ui.session_state())
+            self.assertTrue(SessionPlan.load(directory).abandoned)
+            self.assertEqual([str(source)], flight_ui.read_document(manifest)['pending'])
+            self.assertEqual(b'original', source.read_bytes())
+            self.assertEqual('test-key', host.config.api_key)
+            ui.resume_photos.assert_not_called()
+            host.forget_flight_connection.assert_not_called()
+
     def test_corrupt_recovery_state_refuses_new_session(self) -> None:
         """Fail closed when a durable plan cannot be safely recovered.
 
@@ -664,7 +947,8 @@ class FlightUITests(unittest.TestCase):
         host.preflight_worker = Mock()
         host.preflight_worker.is_alive.return_value = True
         operation = SimpleNamespace(wants_revoke=False, local_reports=False,
-                                    saved_upload=False, abandonment=False, start=Mock())
+                                    saved_upload=False, abandonment=False,
+                                    start=Mock(), update=Mock())
         with patch.object(
             flight_ui, "FinalizationWorker", return_value=operation
         ) as worker_factory:
@@ -681,11 +965,12 @@ class FlightUITests(unittest.TestCase):
         ui.wait_for_workers.assert_not_called()
         ui.submit_revoke.assert_not_called()
 
-    def test_revoke_stops_other_producers_and_dispatches_off_tk(self) -> None:
-        """Stop authenticated producers before starting the background barrier.
+
+    def test_revoke_guard_does_not_interrupt_existing_producers(self) -> None:
+        """Refuse Revoke before changing any authenticated worker ownership.
 
         Returns:
-            None: Assert revoke joins the worker path without synchronous network.
+            None: Existing producers remain uninterrupted by blocked revocation.
         """
         host = self._host()
         ui = self._ui(host)
@@ -699,24 +984,21 @@ class FlightUITests(unittest.TestCase):
         host.ai_worker.is_alive.return_value = True
         host.preflight_worker = Mock()
         host.preflight_worker.is_alive.return_value = True
-        operation = SimpleNamespace(wants_revoke=True, local_reports=False,
-                                    saved_upload=False, abandonment=False, start=Mock())
         with (
-            patch.object(
-                flight_ui.messagebox, "askyesno", return_value=True
-            ),
-            patch.object(
-                flight_ui, "FinalizationWorker", return_value=operation
-            ) as worker_factory,
+            patch.object(flight_ui.messagebox, "askyesno") as confirm,
+            patch.object(flight_ui.messagebox, "showinfo") as notice,
+            patch.object(flight_ui, "FinalizationWorker") as worker_factory,
         ):
             flight_ui.FlightUI.begin(ui, revoke=True)
-        host.ai_worker.stop.assert_called_once()
-        host.preflight_worker.stop.assert_called_once()
-        host.manual_worker.resume.assert_called_once()
-        self.assertTrue(host.ai_worker_stop_requested)
-        self.assertTrue(worker_factory.call_args.args[-1])
-        self.assertIs(worker_factory.call_args.args[3], ui.wait_for_workers)
-        operation.start.assert_called_once()
+        notice.assert_called_once()
+        confirm.assert_not_called()
+        worker_factory.assert_not_called()
+        watcher.request_drain.assert_not_called()
+        host.ai_worker.stop.assert_not_called()
+        host.preflight_worker.stop.assert_not_called()
+        host.manual_worker.resume.assert_not_called()
+        self.assertFalse(host.ai_worker_stop_requested)
+        self.assertFalse(host.api_key_revoke_running)
         ui.wait_for_workers.assert_not_called()
         ui.submit_revoke.assert_not_called()
         ui.revoke_transport.assert_not_called()
@@ -867,6 +1149,7 @@ class FlightUITests(unittest.TestCase):
         ui.operation = SimpleNamespace(
             local_reports=False,
             saved_upload=False,
+            abandonment=False,
             snapshot=lambda: SimpleNamespace(
                 phase="completed",
                 detail="",
@@ -892,12 +1175,12 @@ class FlightUITests(unittest.TestCase):
 
 
     def test_one_click_finish_uses_loaded_ofp_and_enables_reports_without_questions(self) -> None:
-        """Finish with four PDFs and revoke intent after one explicit click.
+        """Finish with four PDF editions after one explicit click.
 
         Returns:
             None: Loaded OFP is saved for the sole pending flight before worker
-                admission, all editions are enabled and revoke is requested
-                without a confirmation; saved automatic preferences stay intact.
+                admission, all editions are enabled and credentials stay
+                configured; saved automatic preferences stay intact.
         """
         from uploader.flight_simbrief import DispatchPlan, load_dispatch
 
@@ -916,7 +1199,7 @@ class FlightUITests(unittest.TestCase):
             saved = SessionPlan.load(directory)
             self.assertTrue(saved.reports_enabled)
             self.assertEqual(("en", "cs", "de", "sv"), saved.languages)
-            ui.begin.assert_called_once_with(True, automatic=True)
+            ui.begin.assert_called_once_with(False, automatic=True)
             confirm.assert_not_called()
             self.assertEqual(ui.dispatch, load_dispatch(directory))
             ui.revoke_transport.assert_not_called()

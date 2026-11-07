@@ -25,6 +25,22 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Models {
+    /**
+     * Observe the isolated lease fixture without contacting a database.
+     *
+     * @param string $lockName Opaque test lease name.
+     * @return bool True only for the fixture's owned state.
+     * @throws \RuntimeException When the fixture simulates unavailable ownership.
+     */
+    function admin_operation_model_lock_owned(string $lockName): bool
+    {
+        if (($GLOBALS['copy_lease_state'] ?? '') === 'unknown') {
+            throw new \RuntimeException('Fixture lease observation unavailable.');
+        }
+        return $lockName === 'fixture-lease'
+            && ($GLOBALS['copy_lease_state'] ?? '') === 'owned';
+    }
+
     /** Supply additive image copy columns without SQL. @return list<string> Fixture column names. */
     function picture_manager_model_image_table_columns(): array
     {
@@ -222,6 +238,17 @@ namespace {
     $staleLegacy = $root . '/target/thumbs/photo_thumb32.webp';
     file_put_contents($staleLegacy, 'stale unrelated legacy derivative');
     try {
+        foreach (['owned', 'lost', 'unknown'] as $leaseState) {
+            $GLOBALS['copy_lease_state'] = $leaseState;
+            copy_check(
+                S\picture_manager_cleanup_lease_owned('fixture-lease')
+                    === ($leaseState === 'owned'),
+                'Copy rollback may proceed only with a positively owned lease.',
+            );
+        }
+        $GLOBALS['copy_lease_state'] = 'owned';
+        copy_check(!S\picture_manager_cleanup_lease_owned('missing-lease'),
+            'An unrelated lease must not authorize copy rollback.');
         // Moving a shared legacy artifact must fail before any original is moved.
         $GLOBALS['copy_ambiguous'] = [11];
         $refused = false;

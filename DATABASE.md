@@ -1,5 +1,28 @@
 # PHP Gallery Database Documentation
 
+## Linked gallery creation reservations
+
+Migration `202611050001_linked_gallery_create_reservations.php` adds an InnoDB
+table binding a linked-create claim and normalized target to a durable
+reservation. The unique nullable active path hash prevents two active claims
+for the same exact target; a successful gallery and receipt transaction changes
+the reservation to completed and clears its active hash atomically. A caught
+failure proven to precede the first filesystem attempt may instead commit an
+owned claim tombstone and `no_effect` reservation together after a verified
+rollback and renewed ownership. Pending or invalid reservations are retained,
+including after ordinary abandonment. No bearer or original operation key is
+stored.
+
+Covered Admin imports, ordinary gallery creation and another linked create
+refuse while any reservation is unresolved. Exact metadata and transactional engine are required; a
+confirmed absent table retains the pre-migration Admin path while new linked
+creation is refused. This legacy path assumes no reservation history was lost
+by an inconsistent database-only restore. The global check uses `LIMIT 1` for
+its result, not a time or rows-scanned bound; completed history may grow.
+Database leases coordinate only cooperating writers on the same database.
+Old runtimes, connection-loss races, unrelated filesystem writers and backups
+with mismatched database/filesystem state are outside this guard.
+
 ## Explicit media consistency reports
 
 Gallery consistency adds no table or migration. Its model reads physical gallery
@@ -91,7 +114,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 0.150.6. Version 0.97 adds the recoverable gallery-trash
+application version 1.0.0. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -119,6 +142,16 @@ server-global setting and requires no `SUPER`-style privilege. A retry after an
 interrupted attempt that already added the column is accepted and records the
 migration normally.
 
+Visibility marker recovery adds no migration or database object. Its v2 marker
+binds the edit revision, unchanged gallery columns and exact original, private
+and target sidecar hashes. The read-only inspection command can return a
+review fingerprint for eligible current evidence; the explicit reconcile
+command uses that exact fingerprint to repair and read back the sidecar, then
+retire the marker. Recovery does not update the gallery row or revision. V1
+markers remain inspection-only. Real disposable HTTPS PHP/MySQL 8.0.44
+interruption recovery was observed. The linked visibility readiness gate
+remains false; MariaDB and deployed behavior remain unqualified.
+
 Version 0.104.1 introduces no schema migration, table, column, index, or
 stored-data conversion. Title completion reads existing gallery metadata through
 bounded keyset queries and performs normalization in the service layer; it adds
@@ -129,6 +162,25 @@ Version 0.120 adds no schema migration, table, column or index. Its database
 changes are support-policy documentation and direct disposable engine regression
 coverage; existing schema inspection and interrupted-DDL replay semantics remain
 unchanged.
+
+The WinApp `media:read` and `presentation:read` scopes reuse existing linking
+authorization and public-media policy. The four exact rolling presentation
+bundles require the existing 255-byte scope columns on requests, codes,
+grants, and refresh families, plus current refresh and presentation storage.
+Renewal retains the exact approved scope, including upload or metadata search
+when consented. Existing bundles retain their original permissions and storage
+requirements.
+
+The separately approved WinApp `media:admin` bundles reuse the same scope
+columns and existing grants. Admin gallery inventory and photo descriptors
+read indexed image and gallery metadata. Photo visibility changes fence the
+live grant and current photo state before updating the existing visibility
+field. No additional gallery, photo or cache table is required.
+Explicit Admin preload also reuses those grants. It requires verified existing
+NSFW schema and non-NSFW flags for the photo, gallery and complete ancestry;
+unknown schema or incomplete ancestry refuses persistence. Its optional
+capability, response fields and account-bound local cache introduce no migration
+or additional server-side authorization scope.
 
 ## Gallery music storage
 
@@ -992,7 +1044,7 @@ Important columns:
 | `operation_name` | Closed workflow kind, separating create, upload, and combined operations. |
 | `payload_hash` | Hash of normalized semantic fields and streamed file identities. |
 | `owner_hash` | Internal claim-owner identity used to prevent a second worker from taking active work. |
-| `state` | Durable `pending`, `completed`, or `needs_reconciliation` lifecycle. |
+| `state` | Durable `pending`, `completed`, or `needs_reconciliation`; linked create also uses `abandoned` as a permanent key tombstone. |
 | `response_json` | Nullable bounded canonical mutation response returned unchanged after current authorization and result-ownership checks. |
 | `created_at`, `updated_at` | Claim and lifecycle timestamps. |
 
@@ -1001,6 +1053,10 @@ accepted. Confirmed missing or unknown storage refuses the operation before
 target work; requests never create or repair the ledger themselves. Uncertain
 rows are retained for explicit `scripts/reconcile_admin_operations.php`
 investigation instead of being expired, stolen, or rerun automatically.
+Explicit linked-create abandonment retains the original fingerprint and never
+deletes the ledger row or claims that filesystem effects are absent. Exact
+storage readiness is required; older runtime versions may classify the new
+state as unknown and refuse replay. No schema migration is introduced.
 
 ### `user_gallery_creation_preferences`
 
@@ -1204,6 +1260,86 @@ migration and validates it again afterward. Data-only migration statements keep
 the cache because they cannot change table, column, or index availability.
 
 ### Phase 9 security/authentication schema capabilities
+
+The experimental browser-approved native client stores consented grants and
+hashed access credentials in `app_link_grants`. An explicitly approved offline
+scope additionally creates one `app_link_refresh_families` row per grant and
+hashed generations in `app_link_refresh_tokens`. Transactional row locks
+serialize rotation and replay revocation; foreign keys cascade grant removal
+to the family and its token hashes. Absolute and idle expiry bound authority,
+and retained generations provide replay evidence. Raw access and refresh
+credentials are not stored in these tables. Rolling consent reuses the
+existing family deadlines. Authenticated use or rotation advances both to
+seven days from the operation. The current refresh hash inherits that expiry.
+Rolling rotation can prune hashes consumed at least seven days ago and keeps
+`issued_count` equal to the retained hash count, with the existing 4,096 cap.
+Legacy offline consent retains its original 30-day absolute deadline,
+seven-day idle window and all consumed hashes until family deletion. Missing
+or unknown refresh schema does not authorize offline issuance or rotation.
+Legacy `gallery_upload_tokens` remain separate. The client refresh path is
+experimental
+and has not been qualified on Windows.
+
+The browser handoff reuses the existing hashed `app_link_requests` claim and
+PKCE state. Its short-lived request handle cannot authorize access. Normal
+installation and update apply `202611050002_app_linking_installation_key`.
+It creates `app_link_installation_key` with a fixed primary key and one
+independent 256-bit binary secret. The explicit-PDO seed preserves the first
+key on replay, including after an interrupted migration. Application requests
+only read the key. Exclude it from diagnostics and protect database backups.
+An existing explicit `app_linking_secret` retains precedence. Linking readiness
+also checks the canonical issuer and core schema. The scheme, authority and
+mount bind each grant. Direct localhost HTTP grants are temporary. Unknown
+optional storage disables only its owned operation. Gallery-scoped `pgu_` credentials
+remain in `gallery_upload_tokens`.
+
+Migration `202611060001_app_linking_watch_keys` adds a separate
+`app_linking_watch_keys` table for contextual WinApp capture. Each row binds a
+SHA-256 key hash and UTC expiry to one exact `(grant_id, gallery_id)` primary
+key. Foreign keys cascade deletion of its linking grant or physical gallery.
+The live grant and temporary key must both authorize keyed inventory and
+upload requests. Keys expire after 24 hours. A confirmed finish deletes the
+matching hash, and a later capture replaces only its own grant/gallery row.
+Missing or unknown schema prevents temporary key operations. Classic
+`gallery_upload_tokens` and browser-link credential storage have separate owners.
+
+The experimental linked `galleries:create` scope is explicitly consented and
+requires verified wide scope storage. Its source prepares a durable
+`admin_operation_keys` claim before creation, locks
+the current user and grant, and commits the new `galleries` row and completed
+receipt in one caller-owned database transaction. The narrow gallery owner
+checks exact storage and uniqueness prerequisites, refuses canonical catalog
+drift, and updates the URL only for the new gallery. It admits at most 10,000
+rows including that gallery and checks at most 128 slug candidates. These
+limits constrain counts, not execution time.
+Where available, new access fields are explicitly normal and listed, and the
+scheduled-publication field is explicitly null; readback checks these values
+and unpublished visibility. Receipt status checks the current ID, title and
+parent before confirming a result. Filesystem creation is outside database
+rollback, so an uncertain attempt retains its operation identity for
+reconciliation. Actual database and
+concurrent-revocation qualification remains outstanding.
+
+The scope-capacity migration widens `scope` in `app_link_requests`,
+`app_link_codes`, `app_link_grants` and `app_link_refresh_families` from exact
+`VARBINARY(64) NOT NULL` to `VARBINARY(255) NOT NULL`. It preflights all four
+definitions, preserves scope bytes, and can replay after a partial DDL result.
+Existing short scopes remain valid when each verified column is either width;
+unknown or incompatible metadata refuses the affected linking operation. A
+separate wide-capacity readiness result requires all four columns at 255 bytes
+but grants no new scope. DDL is not transactional across tables; old runtime
+code that requires exactly 64 bytes may refuse widened tables. No automatic
+downgrade or narrowing is provided. Run migrations through the existing updater
+after deploying compatible code, and qualify database/version behavior before
+relying on it.
+
+During this callback, `lock_wait_timeout` is limited to at most five seconds;
+an existing stricter value, including zero, remains unchanged. If reduced, the
+prior session value is restored and verified after the metadata-lock attempts.
+This does not bound total migration time, DDL execution, or every database
+operation. The callback's advisory lock is released before the runner records
+the migration version; coordination of concurrent checkpoint writers remains
+the runner's responsibility and is not proved by the callback lock.
 
 Security policy must distinguish a database object that is **confirmed absent**
 from an object whose metadata **could not be inspected**. The shared inspection

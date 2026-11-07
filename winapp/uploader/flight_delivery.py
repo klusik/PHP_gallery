@@ -20,17 +20,19 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.parse import urlsplit
 
 from uploader.diagnostics import redact_text
+from uploader.models import JsonValue
+from uploader.server_discovery import _unique_object
 
 
 # Purpose: Bound one report to the existing gallery PDF service policy.
 # Type: int; Units: bytes; Scope: one generated report PDF.
-# Consumers: _pdf_digest and _perform_request.
+# Consumers: flight_report_digest and _perform_request.
 # Rationale: The gallery PDF service accepts originals up to 25 MiB.
 FLIGHT_DELIVERY_MAX_PDF_BYTES = 25 * 1024 * 1024
 
 # Purpose: Bound each streamed report upload read and network write.
-# Type: int; Units: bytes; Scope: one multipart report transfer.
-# Consumers: _perform_request.
+# Type: int; Units: bytes; Scope: one report read or multipart transfer.
+# Consumers: flight_report_digest, _perform_request and local finalization.
 # Rationale: 64 KiB chunks cap transient memory while keeping progress responsive.
 FLIGHT_DELIVERY_CHUNK_BYTES = 64 * 1024
 
@@ -95,6 +97,10 @@ class FlightDeliveryError(RuntimeError):
         self.status_code = status_code
 
 
+class FlightRequestAdmissionError(RuntimeError):
+    """Refuse a report request whose host-owned work is no longer admitted."""
+
+
 def _validate_identity(
     session_id: str,
     report_id: str,
@@ -123,7 +129,7 @@ def _validate_identity(
     return normalized_language, session_id.strip()
 
 
-def _pdf_digest(path: Path) -> Tuple[str, int]:
+def flight_report_digest(path: Path) -> Tuple[str, int]:
     """Validate and hash one local PDF without loading it all into memory.
 
     Args:
@@ -154,6 +160,8 @@ def _pdf_digest(path: Path) -> Tuple[str, int]:
             if not chunk:
                 break
             total += len(chunk)
+            if total > FLIGHT_DELIVERY_MAX_PDF_BYTES:
+                raise ValueError("The flight report is outside the gallery PDF size limit.")
             digest.update(chunk)
             tail = (tail + chunk)[-4096:]
     if total != size or b"%%EOF" not in tail:
@@ -209,30 +217,47 @@ def _perform_request(
     fields: Optional[Dict[str, str]] = None,
     emit: Optional[Callable[[int, int], None]] = None,
     file_size: int = 0,
+    before_request: Optional[Callable[[], None]] = None,
 ) -> Dict[str, Any]:
     """Send one JSON or streamed multipart request to the gallery.
 
     Args:
         url (str): Absolute upload automation endpoint URL.
         api_key (str): Gallery-scoped upload key.
-        payload (Optional[Dict[str, Any]]): JSON request object, or None
-            for a multipart request.
+        payload (Optional[Dict[str, Any]]): Inventory action and candidates,
+            or report status action with identity, language and SHA-256;
+            None for multipart requests.
         pdf_path (Optional[Path]): PDF streamed in the report part.
-        fields (Optional[Dict[str, str]]): ASCII form fields beside the PDF.
+        fields (Optional[Dict[str, str]]): Multipart action, session and report
+            identities, language and SHA-256, or None for JSON requests.
         emit (Optional[Callable[[int, int], None]]): Optional file-byte progress
             callback receiving bytes sent and total bytes.
         file_size (int): Expected PDF byte count for multipart framing.
+        before_request (Optional[Callable[[], None]]): Host-owned work
+            checkpoint, or None when the host has not integrated one.
 
     Returns:
-        Dict[str, Any]: Decoded gallery JSON response object.
+        Dict[str, Any]: Gallery JSON with ok, action-specific capability or
+            status fields and an optional report receipt object.
 
     Raises:
         FlightDeliveryError: When the HTTP response is unsuccessful or invalid.
         OSError: When the local file or network connection fails.
         http.client.HTTPException: When the HTTP exchange is malformed.
+        FlightRequestAdmissionError: The host checkpoint could not authorize
+            this attempt; a prior attempt may still have committed.
     """
     if not api_key.strip():
         raise ValueError("A gallery API key is required.")
+    if before_request is not None:
+        try:
+            before_request()
+        except Exception:
+            # Never misclassify failed admission as a retryable network error.
+            raise FlightRequestAdmissionError(
+                'Flight report request admission is unavailable; an earlier '
+                'upload may need reconciliation.',
+            ) from None
     connection, target = _connection_target(url)
     headers = {
         "X-Gallery-Api-Key": api_key.strip(),
@@ -332,8 +357,8 @@ def _perform_request(
                 response.status,
             )
         try:
-            decoded = json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            decoded = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_object)
+        except (UnicodeDecodeError, ValueError) as exc:
             raise FlightDeliveryError(
                 "The gallery returned invalid JSON for a report request. " + context,
                 response.status,
@@ -365,6 +390,7 @@ def _receipt(
     report_id: str,
     language: str,
     sha256: str,
+    size: int,
     already_present: bool,
 ) -> Dict[str, Any]:
     """Validate a server acknowledgement and return its compact receipt.
@@ -374,6 +400,7 @@ def _receipt(
         report_id (str): Requested stable report identity.
         language (str): Normalized language tag.
         sha256 (str): Expected exact PDF digest.
+        size (int): Expected byte length of the locally validated PDF.
         already_present (bool): Whether the status check found the report.
 
     Returns:
@@ -389,12 +416,15 @@ def _receipt(
         raise FlightDeliveryError("The gallery did not acknowledge the report.")
     identifier = report.get("id")
     digest = report.get("sha256")
+    report_size = report.get("size")
     if (
         not isinstance(identifier, str)
         or re.fullmatch(r"[a-f0-9]{32}", identifier) is None
         or not isinstance(digest, str)
         or _HEX_SHA256.fullmatch(digest) is None
         or digest != sha256
+        or type(report_size) is not int
+        or report_size != size
     ):
         raise FlightDeliveryError(
             "The gallery acknowledgement does not match the report checksum."
@@ -404,18 +434,76 @@ def _receipt(
         "sha256": sha256,
         "report_id": report_id,
         "language": language,
-        "size": int(report.get("size", 0)),
+        "size": report_size,
         "filename": str(report.get("filename", "")),
         "already_present": already_present,
     }
 
 
-def check_report_capability(upload_url: str, api_key: str) -> bool:
+def _status_found(response: Dict[str, JsonValue]) -> bool:
+    """Require an unambiguous report-status response before any upload.
+
+    Args:
+        response (Dict[str, JsonValue]): Decoded status containing action,
+            found, conflict and optional report metadata fields.
+
+    Returns:
+        bool: True for a reported match, false only for confirmed absence.
+
+    Raises:
+        FlightDeliveryError: Status is conflicting, incomplete or inconsistent.
+    """
+    if response.get("conflict") is True:
+        raise FlightDeliveryError(
+            "A different PDF is already stored for this report identity.", 409,
+        )
+    found = response.get("found")
+    if (response.get("ok") is not True
+            or response.get("action") != "flight_report_status"
+            or type(found) is not bool
+            or response.get("conflict") is not False
+            or "report" not in response
+            or (not found and response["report"] is not None)
+            or (found and not isinstance(response["report"], dict))):
+        raise FlightDeliveryError("The gallery report status could not be verified.")
+    return found
+
+
+def _verify_report_unchanged(pdf: Path, sha256: str, size: int) -> None:
+    """Check the retained report again before publishing its acknowledgement.
+
+    Args:
+        pdf (Path): Retained local PDF selected for the current delivery.
+        sha256 (str): SHA-256 captured before the first report request.
+        size (int): Byte length captured before the first report request.
+
+    Returns:
+        None: A fresh read still has the captured digest and byte length.
+
+    Raises:
+        FlightDeliveryError: The retained file changed or cannot be verified.
+    """
+    try:
+        current_digest, current_size = flight_report_digest(pdf)
+        if current_digest != sha256 or current_size != size:
+            raise ValueError
+    except (OSError, ValueError):
+        raise FlightDeliveryError(
+            "The local report changed; its delivery cannot be confirmed."
+        ) from None
+
+
+def check_report_capability(
+    upload_url: str, api_key: str,
+    before_request: Optional[Callable[[], None]] = None,
+) -> bool:
     """Check whether the authorized gallery advertises flight PDF delivery.
 
     Args:
         upload_url (str): Absolute upload automation endpoint URL.
         api_key (str): Gallery-scoped upload key.
+        before_request (Optional[Callable[[], None]]): Host-owned request
+            checkpoint, or None when no host guard is integrated.
 
     Returns:
         bool: True when inventory advertises flight_reports_v1; otherwise
@@ -424,12 +512,17 @@ def check_report_capability(upload_url: str, api_key: str) -> bool:
     Raises:
         OSError: When the capability request cannot reach the gallery.
         FlightDeliveryError: When the gallery response is malformed.
+        FlightRequestAdmissionError: The host denied the capability request.
     """
     try:
+        request_options = (
+            {'before_request': before_request} if before_request is not None else {}
+        )
         response = _perform_request(
             upload_url,
             api_key,
             {"action": "inventory", "candidates": []},
+            **request_options,
         )
     except FlightDeliveryError as exc:
         if exc.status_code in {400, 404, 405}:
@@ -444,6 +537,7 @@ def check_report_capability(upload_url: str, api_key: str) -> bool:
 
 def saved_report_destination(
     upload_url: str, api_key: str, expected_gallery: str,
+    before_request: Optional[Callable[[], None]] = None,
 ) -> None:
     """Verify the current key's gallery against the explicit saved-upload choice.
 
@@ -451,6 +545,8 @@ def saved_report_destination(
         upload_url (str): Saved canonical upload endpoint.
         api_key (str): Current gallery-scoped key, including a replacement key.
         expected_gallery (str): Gallery folder displayed in the confirmation.
+        before_request (Optional[Callable[[], None]]): Host-owned request
+            checkpoint, or None when no host guard is integrated.
 
     Returns:
         None: Inventory confirms the destination and flight_reports_v1 support.
@@ -459,9 +555,14 @@ def saved_report_destination(
         ValueError: The key belongs to a different or unknown gallery.
         FlightDeliveryError: The endpoint cannot confirm report capability.
         OSError: The inventory request cannot reach the server.
+        FlightRequestAdmissionError: The host denied the destination request.
     """
+    request_options = (
+        {'before_request': before_request} if before_request is not None else {}
+    )
     response = _perform_request(
         upload_url, api_key, {"action": "inventory", "candidates": []},
+        **request_options,
     )
     if not expected_gallery or response.get("gallery_folder") != expected_gallery:
         raise ValueError("Gallery changed; test the saved connection and confirm its destination again.")
@@ -478,6 +579,8 @@ def deliver_report(
     language: str,
     report_id: str,
     emit: Optional[Callable[[int, int], None]] = None,
+    expected_sha256: Optional[str] = None,
+    before_request: Optional[Callable[[], None]] = None,
 ) -> Dict[str, Any]:
     """Deliver one report after status reconciliation and return its receipt.
 
@@ -490,6 +593,10 @@ def deliver_report(
         report_id (str): Stable report revision identity.
         emit (Optional[Callable[[int, int], None]]): Optional progress callback
             receiving PDF bytes sent and exact total PDF bytes.
+        expected_sha256 (Optional[str]): Earlier captured PDF SHA-256, or None
+            when the caller has not independently captured it.
+        before_request (Optional[Callable[[], None]]): Host-owned checkpoint
+            before each status, upload and reconciliation request, or None.
 
     Returns:
         Dict[str, Any]: Receipt containing attachment id and sha256, plus
@@ -500,25 +607,33 @@ def deliver_report(
         OSError: When local file access or network delivery fails.
         FlightDeliveryError: When the gallery rejects or cannot confirm the
             report.
+        FlightRequestAdmissionError: The host denied an attempt. An earlier
+            upload may still have committed and requires reconciliation.
     """
     language, session_id = _validate_identity(
         session_id, report_id, language
     )
-    digest, size = _pdf_digest(pdf)
+    digest, size = flight_report_digest(pdf)
+    if expected_sha256 is not None and (
+        not isinstance(expected_sha256, str)
+        or _HEX_SHA256.fullmatch(expected_sha256) is None
+        or digest != expected_sha256
+    ):
+        raise FlightDeliveryError("The local report changed before delivery.")
     status_payload = {
         "action": "flight_report_status",
         "report_id": report_id.strip(),
         "language": language,
         "sha256": digest,
     }
-    status = _perform_request(upload_url, api_key, status_payload)
-    if status.get("conflict") is True:
-        raise FlightDeliveryError(
-            "A different PDF is already stored for this report identity.",
-            409,
-        )
-    if status.get("found") is True:
-        return _receipt(status, report_id.strip(), language, digest, True)
+    request_options = (
+        {'before_request': before_request} if before_request is not None else {}
+    )
+    status = _perform_request(upload_url, api_key, status_payload, **request_options)
+    if _status_found(status):
+        receipt = _receipt(status, report_id.strip(), language, digest, size, True)
+        _verify_report_unchanged(pdf, digest, size)
+        return receipt
 
     fields = {
         "action": "flight_report",
@@ -535,34 +650,51 @@ def deliver_report(
             fields=fields,
             emit=emit,
             file_size=size,
+            **request_options,
         )
         if uploaded.get("conflict") is True:
             raise FlightDeliveryError(
                 "A different PDF is already stored for this report identity.",
                 409,
             )
-        return _receipt(uploaded, report_id.strip(), language, digest, False)
+        if (uploaded.get("ok") is not True
+                or uploaded.get("action") != "flight_report"
+                or uploaded.get("found") is not True
+                or uploaded.get("conflict") is not False):
+            raise FlightDeliveryError("The gallery report receipt could not be verified.")
+        receipt = _receipt(uploaded, report_id.strip(), language, digest, size, False)
     except FlightDeliveryError as exc:
-        if (
-            exc.status_code is not None
-            and 400 <= exc.status_code < 500
-        ):
+        if exc.status_code == 409:
             raise
     except (OSError, http.client.HTTPException):
         pass
+    else:
+        _verify_report_unchanged(pdf, digest, size)
+        return receipt
 
     # A reset or server error may follow a committed file write. Reconcile the
     # stable identity before exposing failure so the caller never duplicates it.
-    reconciled = _perform_request(upload_url, api_key, status_payload)
-    if reconciled.get("conflict") is True:
+    try:
+        reconciled = _perform_request(
+            upload_url, api_key, status_payload, **request_options,
+        )
+        found = _status_found(reconciled)
+    except FlightDeliveryError as exc:
+        if exc.status_code == 409:
+            raise
         raise FlightDeliveryError(
-            "A different PDF is already stored for this report identity.",
-            409,
+            "The report upload outcome is unknown; check its status before retrying."
+        ) from exc
+    except (OSError, http.client.HTTPException) as exc:
+        raise FlightDeliveryError(
+            "The report upload outcome is unknown; check its status before retrying."
+        ) from exc
+    if found:
+        receipt = _receipt(
+            reconciled, report_id.strip(), language, digest, size, True
         )
-    if reconciled.get("found") is True:
-        return _receipt(
-            reconciled, report_id.strip(), language, digest, True
-        )
+        _verify_report_unchanged(pdf, digest, size)
+        return receipt
     raise FlightDeliveryError(
         "The report upload outcome is unknown; check its status before retrying."
     )

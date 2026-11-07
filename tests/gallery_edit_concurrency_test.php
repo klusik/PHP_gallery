@@ -33,6 +33,147 @@ use function Gallery\Views\view_render_admin_gallery_editor_form_open;
 use function Gallery\Views\view_render_admin_gallery_identity_tab;
 use function GalleryWorkflow\check;
 
+/**
+ * Separate disposable filesystem-fence fixture names from unrelated files.
+ * Type: int. Units: random bytes. Scope: one temporary test directory.
+ * Consumers: random_bytes. Rationale: 12 bytes make collisions negligible.
+ */
+const GALLERY_EDIT_FENCE_FIXTURE_RANDOM_BYTES = 12;
+
+$fenceRoot = realpath(sys_get_temp_dir());
+check(is_string($fenceRoot) && is_dir($fenceRoot), 'Temporary fence root is unavailable.');
+$fenceDirectory = $fenceRoot . DIRECTORY_SEPARATOR . 'gallery-fence-'
+    . bin2hex(random_bytes(GALLERY_EDIT_FENCE_FIXTURE_RANDOM_BYTES));
+check(mkdir($fenceDirectory, 0700), 'Could not create the disposable fence fixture.');
+$fenceDirectoryStat = lstat($fenceDirectory);
+$fencePath = $fenceDirectory . DIRECTORY_SEPARATOR
+    . \Gallery\Services\GALLERY_EDIT_FILESYSTEM_FENCE_FILENAME;
+$fenceHandle = fopen($fencePath, 'x+b');
+check(is_resource($fenceHandle), 'Could not create the fixture lock.');
+check(fwrite($fenceHandle, 'fixture-owned') === strlen('fixture-owned'),
+    'Could not write the fixture sentinel.');
+fclose($fenceHandle);
+$fenceFileStat = lstat($fencePath);
+$fence = new \Gallery\Services\GalleryEditFilesystemFence($fenceDirectory);
+$fenceAcquire = new ReflectionMethod($fence, 'acquireOwned');
+$fenceHeld = 0;
+$competitor = null;
+$extraLink = $fenceDirectory . DIRECTORY_SEPARATOR . 'fixture-link';
+try {
+    check(\Gallery\Services\GALLERY_EDIT_FILESYSTEM_FENCE_ENABLED === false,
+        'The unqualified filesystem fence must remain disabled.');
+    $disabledRefused = false;
+    try {
+        $fence->acquire();
+    } catch (RuntimeException) {
+        $disabledRefused = true;
+    }
+    check($disabledRefused && file_get_contents($fencePath) === 'fixture-owned',
+        'Public fence admission must refuse without changing the file.');
+    $fenceAcquire->invoke($fence);
+    $fenceHeld++;
+    $fenceAcquire->invoke($fence);
+    $fenceHeld++;
+    $competitor = fopen($fencePath, 'rb');
+    check(is_resource($competitor) && !flock($competitor, LOCK_EX | LOCK_NB),
+        'A second open handle must not acquire an owned fence.');
+    $fence->release();
+    $fenceHeld--;
+    check(!flock($competitor, LOCK_EX | LOCK_NB),
+        'A reentrant fence must remain held until its last release.');
+    $fence->release();
+    $fenceHeld--;
+    check(flock($competitor, LOCK_EX | LOCK_NB),
+        'A competing handle must acquire after the final release.');
+    flock($competitor, LOCK_UN);
+    fclose($competitor);
+    $competitor = null;
+    if (function_exists('link') && @link($fencePath, $extraLink)) {
+        $hardlinkRefused = false;
+        try {
+            $fenceAcquire->invoke($fence);
+            $fenceHeld++;
+        } catch (RuntimeException) {
+            $hardlinkRefused = true;
+        }
+        check($hardlinkRefused && file_get_contents($fencePath) === 'fixture-owned',
+            'A multiply linked fence must be refused without writing.');
+        check(unlink($extraLink), 'Could not remove the owned hardlink.');
+    }
+    $symlinkTarget = $fenceDirectory . DIRECTORY_SEPARATOR . 'fixture-symlink-target';
+    check(rename($fencePath, $symlinkTarget), 'Could not isolate the owned lock.');
+    $linkCreated = false;
+    try {
+        if (function_exists('symlink') && @symlink($symlinkTarget, $fencePath)) {
+            $linkCreated = true;
+            $symlinkRefused = false;
+            try {
+                $fenceAcquire->invoke($fence);
+                $fenceHeld++;
+            } catch (RuntimeException) {
+                $symlinkRefused = true;
+            }
+            check($symlinkRefused && file_get_contents($symlinkTarget) === 'fixture-owned',
+                'A linked fence must be refused without writing to its target.');
+        }
+    } finally {
+        if ($linkCreated) {
+            check(is_link($fencePath) && readlink($fencePath) === $symlinkTarget
+                && unlink($fencePath), 'The owned fixture symlink changed.');
+        }
+        check(rename($symlinkTarget, $fencePath), 'Could not restore the owned lock.');
+    }
+    $fenceAcquire->invoke($fence);
+    $fenceHeld++;
+    $backup = $fenceDirectory . DIRECTORY_SEPARATOR . 'fixture-original';
+    check(rename($fencePath, $backup), 'Could not move the owned lock for the identity check.');
+    $replacement = fopen($fencePath, 'x+b');
+    check(is_resource($replacement), 'Could not create the owned replacement.');
+    $replacementStat = fstat($replacement);
+    fclose($replacement);
+    try {
+        $replacementRefused = false;
+        try {
+            $fence->release();
+            $fenceHeld--;
+        } catch (RuntimeException) {
+            $replacementRefused = true;
+        }
+        check($replacementRefused, 'A replaced fence inode must not be accepted.');
+    } finally {
+        clearstatcache(true, $fencePath);
+        $currentReplacement = lstat($fencePath);
+        check(is_array($replacementStat) && is_array($currentReplacement)
+            && !is_link($fencePath) && $currentReplacement['dev'] === $replacementStat['dev']
+            && $currentReplacement['ino'] === $replacementStat['ino'] && unlink($fencePath),
+            'The owned replacement changed identity.');
+        check(rename($backup, $fencePath), 'Could not restore the owned lock.');
+    }
+    $fence->release();
+    $fenceHeld--;
+    check(file_get_contents($fencePath) === 'fixture-owned',
+        'The fence must never truncate or replace its lock file.');
+} finally {
+    if (is_resource($competitor)) {
+        fclose($competitor);
+    }
+    while ($fenceHeld > 0) {
+        $fence->release();
+        $fenceHeld--;
+    }
+    clearstatcache(true, $fencePath);
+    $fenceAfter = lstat($fencePath);
+    $directoryAfter = lstat($fenceDirectory);
+    check(is_array($fenceFileStat) && is_array($fenceAfter) && !is_link($fencePath)
+        && $fenceAfter['dev'] === $fenceFileStat['dev']
+        && $fenceAfter['ino'] === $fenceFileStat['ino'] && unlink($fencePath),
+        'The fixture lock changed ownership.');
+    check(is_array($fenceDirectoryStat) && is_array($directoryAfter)
+        && !is_link($fenceDirectory) && $directoryAfter['dev'] === $fenceDirectoryStat['dev']
+        && $directoryAfter['ino'] === $fenceDirectoryStat['ino'] && rmdir($fenceDirectory),
+        'The fixture directory changed ownership.');
+}
+
 $gallery = [
     'id' => 8,
     'edit_revision' => '17',

@@ -152,6 +152,103 @@ function public_path_model_gallery_regeneration_rows(?PDO $pdo = null): array
 }
 
 /**
+ * Read canonical input and stored paths during a linked creation transaction.
+ *
+ * @param int $limit Positive maximum number of rows including lookahead.
+ * @param bool $hasAccess Whether the complete gallery-access schema is verified.
+ * @param bool $hasSchedule Whether scheduled publication storage is verified.
+ * @return list<array{id:int|string,parent_id:int|string|null,title:string,description_is_empty:int|string|null,folder_path:string,folder_path_hash:string,slug:string,visibility:string,sort_order:int|string,voting_enabled:int|string,show_filenames:int|string,edit_revision:int|string,url_slug:?string,url_path:?string,url_path_hash:?string,access_mode?:string,access_listing?:string,scheduled_publish_at?:?string}> Ordered gallery rows with persisted creation fields and public paths.
+ * @throws \RuntimeException When the caller's transaction is unavailable.
+ */
+function public_path_model_linked_creation_rows(
+    int $limit,
+    bool $hasAccess,
+    bool $hasSchedule,
+): array
+{
+    if (!db()->inTransaction() || $limit <= 0) {
+        throw new \RuntimeException('Linked gallery transaction is unavailable.');
+    }
+    $statement = db()->prepare(
+        "SELECT id, parent_id, title, (description = '') AS description_is_empty, "
+            . 'folder_path, folder_path_hash, slug, visibility, '
+            . 'sort_order, voting_enabled, show_filenames, edit_revision, '
+            . 'url_slug, url_path, url_path_hash '
+            . ($hasAccess ? ', access_mode, access_listing ' : '')
+            . ($hasSchedule ? ', scheduled_publish_at ' : '')
+            . 'FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id LIMIT ?',
+    );
+    $statement->bindValue(1, $limit, PDO::PARAM_INT);
+    $statement->execute();
+    return $statement->fetchAll() ?: [];
+}
+
+/**
+ * Assign only the newly inserted gallery's canonical URL inside its transaction.
+ *
+ * @param int $galleryId Identifier of the uncommitted new gallery.
+ * @param string $slug Canonical sibling slug produced by the shared policy.
+ * @param string $path Canonical installation-relative gallery path.
+ * @param string $visibility Verified unpublished or legacy draft value.
+ * @param array{title:string,parent_id:int|null,folder_path:string,legacy_slug:string,sort_order:int} $expected Original validated gallery identity and ordering.
+ * @param bool $hasAccess Whether complete access columns are verified.
+ * @param bool $hasSchedule Whether scheduled publication is verified.
+ * @return void Stores exactly one new gallery path or throws on lost ownership.
+ * @throws \RuntimeException When the transaction or expected row is unavailable.
+ */
+function public_path_model_assign_linked_creation(
+    int $galleryId,
+    string $slug,
+    string $path,
+    string $visibility,
+    array $expected,
+    bool $hasAccess,
+    bool $hasSchedule,
+): void {
+    $pdo = db();
+    if (!$pdo->inTransaction() || $galleryId <= 0 || $slug === '' || $path === '') {
+        throw new \RuntimeException('Linked gallery transaction is unavailable.');
+    }
+    $statement = $pdo->prepare(
+        'UPDATE galleries SET url_slug = ?, url_path = ?, url_path_hash = ?, '
+            . 'edit_revision = edit_revision + 1 '
+            . 'WHERE id = ? AND url_slug IS NULL AND url_path IS NULL AND url_path_hash IS NULL',
+    );
+    $statement->execute([$slug, $path, hash('sha256', $path), $galleryId]);
+    if ($statement->rowCount() !== 1) {
+        throw new \RuntimeException('Linked gallery path ownership is unavailable.');
+    }
+    if (!$pdo->inTransaction()) {
+        throw new \RuntimeException('Linked gallery transaction is unavailable.');
+    }
+    $readback = $pdo->prepare(
+        'SELECT url_slug, url_path, url_path_hash, visibility, title, parent_id, '
+            . 'folder_path, folder_path_hash, slug, sort_order, voting_enabled, show_filenames '
+            . ($hasAccess ? ', access_mode, access_listing ' : '')
+            . ($hasSchedule ? ', scheduled_publish_at ' : '')
+            . 'FROM galleries WHERE id = ?',
+    );
+    $readback->execute([$galleryId]);
+    $row = $readback->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row) || $row['url_slug'] !== $slug || $row['url_path'] !== $path
+        || $row['url_path_hash'] !== hash('sha256', $path)
+        || $row['visibility'] !== $visibility
+        || $row['title'] !== $expected['title']
+        || (int) ($row['parent_id'] ?? 0) !== (int) ($expected['parent_id'] ?? 0)
+        || $row['folder_path'] !== $expected['folder_path']
+        || $row['folder_path_hash'] !== hash('sha256', $expected['folder_path'])
+        || $row['slug'] !== $expected['legacy_slug']
+        || (int) $row['sort_order'] !== $expected['sort_order']
+        || (int) $row['voting_enabled'] !== 0 || (int) $row['show_filenames'] !== 0
+        || ($hasAccess && (($row['access_mode'] ?? null) !== 'normal'
+            || ($row['access_listing'] ?? null) !== 'listed'))
+        || ($hasSchedule && (!array_key_exists('scheduled_publish_at', $row)
+            || $row['scheduled_publish_at'] !== null))) {
+        throw new \RuntimeException('Linked gallery path could not be verified.');
+    }
+}
+
+/**
  * Return compact image rows required to rebuild every public image slug.
  *
  * @param ?PDO $pdo Optional migration-owned connection.

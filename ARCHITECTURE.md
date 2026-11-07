@@ -1,5 +1,279 @@
 # PHP Gallery Architecture
 
+## Public native-client discovery
+
+The public `app_linking_discovery` page uses the standard route table and
+runtime loader at `index.php?page=app_linking_discovery`. Version-1 discovery
+checks the canonical issuer, independent linking secret, core schema and
+ready optional capability owners. The saved website address supplies the
+issuer, including its exact mount. Installation and update provision the
+secret in `app_link_installation_key`. Nonempty legacy issuer and secret
+overrides retain precedence. Discovery reads the key and readiness without
+writing them. It returns `available: false` unless all
+required linking storage is ready; an unknown optional capability hides only
+that operation. GET and HEAD have matching headers, HEAD has no body, and other
+methods return 405. Responses omit identities, credentials, galleries,
+database settings and internal capability details. The route bypasses visitor
+maintenance scheduling; legacy gallery-scoped `pgu_` uploads remain separate.
+
+The route reuses the existing `public-robots` module and its public HTTP
+controller closure. The existing public robots discovery call lazily loads
+the app-linking domain owner through its recorded deferred call; other public,
+media and robots routes do not load linking eagerly. Native presentation and
+track requests load the existing `gallery-pdf-documents` attachment owner only
+after live bearer scope and public gallery policy pass. The linking plan adds
+no music catalog dependency; older ZIP code can load playlist helpers
+independently of the native music stream controller.
+The module allowance remains 98 and the duplicate ceiling remains 3,653.
+Admin authentication composes the existing public-access policy closure
+already present in its plan. Native typeahead reuses the public query parser
+and matches literal gallery metadata inside its existing authorized SQL model.
+Hosted preparation regenerates the plan and manifest; the runtime checks that
+the prepared plan covers every registered route before processing requests.
+
+WinApp's main **Link gallery** action accepts a pasted address in its own
+dialog. The linking workspace keeps that address in memory independently of
+the API-key upload endpoint. Remote addresses use verified HTTPS. The literal
+`http://localhost` issuer permits temporary and rolling access when both endpoints of
+the PHP request are loopback and the configured authority and mount match.
+WinApp connects only to loopback for that issuer and refuses redirects. The
+scheme is part of the binding. Legacy offline consent requires HTTPS. On Apache
+with `mod_fastcgi`, the gallery's `.htaccess` passes linking bearer headers
+through the CGI environment. The linking controller reads the existing
+`REDIRECT_HTTP_AUTHORIZATION` value when Apache redirects to PHP.
+Confirming the address requests gallery listing, plus upload when the local
+Windows or macOS profile and server support it. Compatible servers offer
+explicit rolling consent with the exact `rolling_access offline_access`
+suffix. Older servers use the temporary link. After exchange, WinApp shows the verified installation
+address and loads the first gallery page. The gallery picker opens next to
+that address. Watcher and Import show the selected upload destination. On
+macOS, the source app keeps the second mode record in a private, locked
+profile file. The mode record identifies the destination. The temporary
+token stays in memory.
+Settings owns advanced permission requests and link management.
+
+The native client starts linking by POSTing to the exact discovered issuer and
+receives a version-1 handoff with a random short-lived, non-authorizing request
+handle and the exact issuer start URL. The handle reuses the existing hashed
+claim and PKCE request; no schema migration is required. The browser stores it
+in the session, removes it from the visible URL before ordinary Admin login,
+then binds it after login with CSRF protection. The current session displays
+the exact permissions and expiry policy for explicit consent. Access tokens
+last up to 15 minutes. Only Approve or Cancel starts the existing one-use PKCE
+loopback exchange. Duplicate, mismatched, expired and replayed handles fail.
+The handle alone grants neither authorization nor credentials. The original
+gallery-scoped `pgu_` workflow remains independent.
+
+The experimental native-linking owner also accepts the explicitly consented
+`link:identity galleries:list` bundle. The bounded gallery endpoint returns
+only server-owned ID, parent ID and title; it includes private and unpublished
+galleries because ordinary Admins have catalog access. Grant, exact issuer,
+token, expiry and current Admin role are rechecked in the same query that
+reads each page. An invalidated grant is refused rather than represented as an
+empty page. The original `link:identity` grant cannot list galleries.
+The distinct `gallery:upload` bundle requires explicit consent for upload to
+all ordinary Admin galleries, including private and unpublished galleries.
+Listing or selecting a gallery alone grants no upload rights. Rolling access
+renews both refresh-family deadlines for seven days on authenticated bearer
+use or rotation. The refresh token inherits those deadlines. The transaction
+locks the user, grant, family and token in order. Legacy offline consent
+retains its 30-day absolute limit and seven-day idle limit. The server stores
+hashes and revokes the family on detected replay. Rolling rotation can prune
+consumed hashes after seven days and retains the 4,096-hash family cap.
+All linking and delegated-upload increments remain experimental and unqualified.
+
+The separately consented `gallery:read` scope, combined with identity and
+listing and optionally with upload and offline access, permits a selected
+gallery detail read. It returns only ID, title, revision and stored visibility,
+access mode and listing mode; these are not effective inherited permissions.
+The query rechecks the live grant and Admin role. A read already past that
+check can still complete after a concurrent revocation; revocation does not
+cancel an in-flight response. Old grants do not acquire the new scope, and an
+older server may not support it; the client does not silently downgrade.
+Real Windows, HTTPS deployment and database behavior remain unqualified.
+
+Photos uses the current verified `galleries:list` link for media already
+eligible for anonymous public export. The server rechecks the exact issuer,
+live grant, administrator role, readiness and public policy on each request.
+The policy requires direct non-NSFW photos and a public, listed, normal-access,
+non-NSFW gallery ancestor chain. An explicitly approved `media:admin` link
+adds access to administrator media, including hidden and NSFW galleries and
+photos. The server still checks the live administrator and the photo's direct
+gallery ownership. Media eligible only through the administrator lane is
+transient and served with `no-store`. The legacy `media:read` suffix is
+accepted and presentation settings and tracks require `presentation:read`.
+Browser approval offers the supported rolling permissions for this installation.
+Photo metadata uses bounded eight-item legacy or 64-item opt-in pages.
+Binary responses retain the 16 MiB limit and validator checks. Photos and
+thumbnails have a separate limit of 600 requests
+per IP and 3,600 globally per five minutes. Photos displays a limit on HTTP
+429 and pauses speculative work until Retry. The thumbnail route prefers an
+existing configured rendition and can fall back to the existing public display file within those
+limits. Presentation reads expose up to 32 visible MP3/WAV tracks for local
+WinMM or macOS playback. Both paths reuse the current schema.
+
+The normal WinApp launch selects Photos in the main window. Its workspace
+loads the live link's gallery hierarchy from server pages and opens a gallery
+in the adjacent responsive grid automatically. The left tree selects a photo
+gallery independently of the upload target chosen in Watcher or Import.
+WinApp restores an approved rolling link from macOS Keychain or Windows
+Credential Manager by rotating the refresh credential and verifying the same
+issuer, scope and Admin identity. macOS can also restore a legacy temporary
+listing grant before its original expiry.
+An explicitly approved Admin Photos upgrade for the same installation and
+account replaces the matching saved rolling binding and activates its new
+session. The Photos workspace reloads permissions and gallery data from that
+session.
+When disconnected, the Photos pane offers the existing address and browser
+link flow. The `--startup` path stays in the system tray until restored.
+
+The embedded reader binds work to the exact live session and gallery and
+cancels it when that selection is replaced. The default-on Subgalleries switch
+adds direct child folder cards above the photo grid. Each cover is the first
+authorized direct thumbnail, with a neutral folder fallback. Photos keeps
+listings in memory and uses the current link grant. Internal cursor pages
+append to a continuously scrolling grid. The viewport drives thumbnail
+requests. Manual navigation and the slideshow use the same looping album
+order and prepare adjacent details in bounded memory. A per-user cache
+stores server-opted-in photo and audio bytes with content digests up to
+4,096 entries or 1 GiB. An authorized matching ETag revalidates the stored
+photo bytes after their 60-second fresh interval. Authorized playlist
+descriptors bind reused track bytes by SHA-256, size and MIME type. The
+native player consumes local files and prepares the next track for handoff.
+`gallery_preload.py` prepares direct-photo renditions off the Tk thread.
+Keep preloaded uses hashed retained-gallery directories outside ordinary LRU
+limits. Explicit Admin preload adds an issuer/account-bound private namespace
+and saved intent; private bytes always pass live conditional authorization
+before display from disk. The server retains ordinary no-store browsing and
+verifies the photo and complete gallery ancestry as non-NSFW for this separate
+opt-in.
+Bounded server retry delays publish cancelable progress without raising quotas.
+The workspace retains a bounded decoded thumbnail cache across album
+selections under the current authorized session. Viewport changes share one
+in-flight request per thumbnail. Contextual album and photo
+panels show indexed server metadata and local cache coverage. Detailed Admin
+metadata is fetched on demand for the exact gallery or direct photo. Album
+creation and visibility changes go through the same server-owned mutations as
+the corresponding linked management actions. Native photo deletion uses the
+saved Admin Photos `media:admin` grant, including existing links with the
+historical `media:delete` bundle. It rechecks the live bearer and every direct
+image under the gallery writer lease, then delegates to the web Admin
+deletion owner. The bulk runtime
+loads only for the authorized POST. A visible Admin album can check a small
+indexed revision and reconcile loaded photo descriptors with its thumbnail
+cache. Tree expansion is a local preference scoped to site and Admin account.
+The launcher stores bounded window geometry and the Photos divider width in
+separate atomic view state; hidden or restoring panes cannot replace a saved
+width with their temporary default. The shared theme selects an installed UI
+font and supersamples generated icons. The Windows display bootstrap respects
+existing DPI awareness and runs before Tk. Activity persistence batches history
+events on its own worker rather than blocking the Tk event drain.
+The contextual Watcher action
+verifies the gallery through the existing upload mode owner, then gives the
+capture a temporary key bound to its live link and physical gallery. The
+existing finish workflow drains uploads and flight reports before revoking
+that key. Photos retains the site session independently.
+The grid, lightbox, fullscreen and contextual controls
+share the main WinApp window. The lightbox temporarily unmaps the main content
+frame and restores its geometry and focus on dismissal, including after an
+image load error. F and F11 toggle fullscreen. Pointer motion reveals the
+controls briefly, including music transport for an authorized playlist.
+Explicit slideshow launch enters fullscreen, advances through the album and
+starts the configured soundtrack when permitted. The wheel or trackpad zooms
+in either view. Both windowed and fullscreen geometry contain the current
+frame. The default content fit removes detected black bands for display and
+the toggle restores the original frame. Grid tile
+placement changes at column breakpoints. The lightbox coalesces resize work
+into lightweight previews followed by a full-quality render. A photo's location
+action is available when the server supplies authorized coordinates. Installed
+Windows acceptance and audible playback require separate evidence. Native
+photo display uses 8-bit RGB on the Pillow/Tk path. On macOS, an available
+AppKit bridge can decode compatible detail source bytes through Core Image
+and present a 10-bit PQ raster in the same window. Admission checks the
+current display's EDR capability. Core Animation tone maps the raster in a
+floating-point layer using the available display headroom. The bounded
+Pillow/Tk fallback covers Windows, SDR
+displays, older Tk builds and images without usable HDR data.
+
+Visibility changes use the existing gallery edit revision and writer lease;
+they add no schema. A v2 filesystem marker binds unchanged gallery columns and
+the exact original/private/target sidecar hashes across the separate database
+and file writes. The default operator inspection is read-only. An explicit
+review fingerprint can reconcile only matching eligible sidecar evidence and
+retire its marker after synchronized readback, without writing the database row
+or revision. V1 markers remain inspection-only. This recovery path does not
+enable the separately consented `gallery:visibility` scope: its readiness gate
+remains false pending exact-candidate qualification. Disposable HTTPS PHP/MySQL
+8.0.44 recovery evidence exists; installed WinApp, MariaDB and deployed evidence
+do not.
+
+The experimental source supports separately consented `galleries:create`.
+Its registered bundles require verified wide scope storage; existing grants
+do not gain creation authority. Its narrow gallery owner holds the
+existing writer lease and a caller-owned database transaction, inserts only the
+new gallery and assigns only its canonical URL. It refuses occupied targets,
+catalog drift and a catalog over 10,000 rows including the new row. Slug search
+checks at most 128 candidates. These are count limits, not time limits. A
+durable operation claim precedes work and the
+gallery row and completed receipt share the database commit. Filesystem writes
+cannot be rolled back by that commit, and external filesystem changes are not
+atomically excluded. Uncertain work remains pending for explicit reconciliation.
+The client retains a confirmed receipt until explicit acknowledgement and
+does not treat an unanswered request as permission to create again. Before
+using a saved receipt as an upload target, it requests status from the server
+again and requires the same result; the receipt's title is a historical
+creation value, not a live gallery detail. The server verifies that its ID,
+title and parent still match; a changed or unavailable reference prevents
+selection. Local file flushes do not establish power-loss durability. Real database concurrency,
+HTTPS and Windows behavior of creation have not been qualified.
+
+Scope-capacity migration widens the four request, code, grant and refresh-family
+scope columns from exact 64-byte to 255-byte binary storage without rewriting
+grants. Existing short-scope readiness accepts either verified width per table;
+unknown or incompatible metadata fails closed. The separate wide-capacity
+status requires all four expanded columns and does not grant new permissions.
+Each DDL statement can commit independently, so interruption is handled by
+replay rather than rollback. Older code requiring exactly 64 bytes may refuse
+the widened schema; narrowing it is not an automatic recovery path.
+The migration limits each metadata-lock wait to at most five seconds, preserves
+stricter existing settings and verifies restoration when it reduces the value;
+this is not a total DDL
+deadline. Its advisory lease ends before the runner's version checkpoint and
+does not alone serialize concurrent checkpoint writers.
+
+The legacy upload controller retains `pgu_` authorization and response
+ownership. Its shared upload service owns the existing gallery lock, storage,
+scan, checksum, client thumbnails and optional camera metadata; server
+derivatives still follow after that lock. A separate bearer upload controller
+rechecks the live Admin, grant, scope, issuer and selected target before using
+that workflow; it does not synthesize a `pgu_` key. A separately authorized,
+bounded recovery probe offers only positive byte evidence from direct regular
+files. `present` means a matching SHA-256 was observed during the read, not
+that image registration completed; `unknown` is not proof of absence or
+permission to retry. The probe rechecks authority while holding the existing
+gallery and writer leases. Local filesystem changes outside those owners are
+not atomically excluded. Its time budget is checked between filesystem calls,
+not enforced as a hard deadline on a blocking call. PHP may parse multipart
+before the controller runs: proxy, web-server and PHP request limits must
+enforce resource boundaries upstream.
+
+The browser-link controller owns the active Admin session, CSRF validation
+and pending claim ID. It passes the verified account, session identity and
+claim ID explicitly to the push service, which binds them to the issuer and
+delegates atomic claim and consumption to the model. The session handler must
+hold its normal exclusive request lock throughout these transitions.
+
+The Windows linked Watcher and Import source capture a transient issuer, Admin and
+gallery binding, isolates its upload history from legacy unbound hashes, and
+uses a per-target exclusive lock file. Before sending it records uncertainty;
+an ambiguous result must not be replayed or used to delete a source without
+manual review. A stale lock is not automatically stolen. Linked flight data
+stays local and must not trigger legacy-key AI or PDF delivery. The Windows
+Credential Manager integration and refresh crash fence have not been qualified
+on Windows. Local filesystem semantics and power-loss durability require
+separate verification; see
+`docs/APP_LINKING_PHASE_0.md` for recovery and deployment boundaries.
+
 ## Gallery identity and rename ownership
 
 The source title owns the sanitized physical gallery leaf. Creation derives it
@@ -8,6 +282,12 @@ title saves use the existing gallery writer and subtree move; the root title
 and complete descendant path map commit together in the mutation model. The
 folder field is informational. Public slugs retain their independent URL role.
 Date-organized children derive their folder from the actual source title too.
+For an absent target, gallery path containment anchors the final leaf to its
+resolved existing parent, so a configured root reached through a filesystem
+alias remains usable. Existing unresolved entries are refused, and parents
+outside the resolved root remain prohibited. Creation separately requires a
+successful directory observation; these checks do not lock out unrelated
+filesystem writers.
 
 Explicit consistency reporting is owned by `gallery_consistency.php` and its
 inspection/repair parts. Its model owns source keysets and catalog leases;
@@ -242,7 +522,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '0.150.6';
+const CMS_VERSION = '1.0.0';
 ```
 
 Update-related code uses:
@@ -1909,6 +2189,7 @@ contract and load order are preserved.
 | `app/services/gallery_migration.php` | `app/services/gallery_migration/` | `versions.php`, `temporary_files.php`, `jobs.php`, `metadata.php`, `assets.php`, `manifest.php`, `packages.php`, `target_setup.php`, `install.php`, `recovery.php`, `http.php` |
 | `app/models/public_search_progressive.php` | `app/models/public_search_progressive/` | `deferred.php` |
 | `app/services/public_search_progressive.php` | `app/services/public_search_progressive/` | `deferred.php` |
+| `app/services/app_linking.php` | `app/services/app_linking/` | `search.php` (authorized gallery typeahead and hierarchy) |
 | `app/services/feature_flags.php` | `app/services/feature_flags/` | `registry.php`, `adapters.php`, `policy.php`, `admin.php`, `routes.php` |
 | `app/services/cache_lifecycle.php` | `app/services/cache_lifecycle/` | `policy.php`, `storage.php`, `inventory.php`, `reclamation.php`, `visitor.php`, `chain.php`, `observability.php`, `registry.php` |
 | `app/services/updates_jobs.php` | `app/services/updates_jobs/` | `budget.php`, `errors.php`, `state.php`, `lifecycle.php`, `download.php`, `plan.php`, `activation.php`, `cleanup.php` |
@@ -2764,7 +3045,18 @@ values after the existing Admin and CSRF checks and bumps
 `theme_public_content_revision` when this public rendering policy changes.
 
 `app/services/tag_metadata.php` owns tag policy, normalization, candidate slug
-generation, and hero usage sorting. `app/models/tags.php` owns tag SQL and
+generation, and hero usage sorting. Before its recursive sidecar tag repair
+reads or writes a target, it verifies that the resolved existing file remains
+inside the configured gallery root. In-root symbolic links remain usable;
+unavailable or escaping targets interrupt the repair before its completion
+checkpoint. It reads through an identity-checked handle, opens the write handle
+without truncation, and rechecks identity and original bytes before writing
+through that handle. A multiply linked inode or unusable inode identity is
+refused. These observations do not lock out external filesystem changes; a
+failed write or interruption after truncation can leave partial content. Repair
+decodes and re-encodes the complete JSON document, so formatting and numerical
+representation are not byte-preserved.
+`app/models/tags.php` owns tag SQL and
 transactional assignment persistence; `tag_model_mutate_image_tag_atomically()`
 locks and validates the expected physical owner, applies a targeted add/remove,
 reads back the direct tags, and commits or rolls back. Usage is the sum of
@@ -4815,6 +5107,19 @@ The capability adds no database schema.
 
 ## Upload Automation and Windows Watcher
 
+The experimental browser-approved WinApp link can separately request offline
+access in the browser consent. With explicit selection and an available Windows
+Credential Manager, `offline_linking.py` and `credential_store.py` retain the
+refresh credential for the current Windows account; a separate local binding
+contains only issuer, account ID and approved scope. Explicit reconnect holds a
+cross-process lock and pending fence across one refresh, live identity check and
+verified credential replacement. An uncertain response or failed storage blocks
+reuse of the previous refresh. Local forget removes the binding and credential
+without revoking the server grant or necessarily closing an active session.
+The existing gallery-scoped `pgu_` configuration remains independent. Discovery
+still reports `available: false`; real Windows and power-loss recovery have not
+been qualified.
+
 The optional Watch folder **Sync UTC time** control persists `sync_utc_time`,
 defaulting to false. `winapp/uploader/simconnect_time.py` owns the manager,
 cancellable worker and independent native handle. It reuses the location
@@ -5173,7 +5478,8 @@ model writers advance revisions explicitly for all supported gallery updates;
 filesystem-first writers must acquire the same outer lock before touching
 targets. The migration
 and deployment prerequisite are documented in
-[edit concurrency](docs/GALLERY_EDIT_CONCURRENCY.md). This does not version
+[edit concurrency](docs/GALLERY_EDIT_CONCURRENCY.md), including the current
+writer inventory and still-inactive filesystem-fence rollout. This does not version
 every
 independent tag, translation or Smart Gallery entity.
 

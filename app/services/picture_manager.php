@@ -44,9 +44,28 @@ use Throwable;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Models\gallery_mutation_model_max_image_sort_order;
+use function Gallery\Models\admin_operation_model_lock_owned;
 use function Gallery\Models\picture_manager_model_copy_rows;
 use function Gallery\Models\picture_manager_model_image_table_columns;
 use function Gallery\Models\image_model_rows_for_gallery;
+
+/**
+ * Verify the shared writer lease before destructive copy rollback.
+ *
+ * The observation is not atomic with a later filesystem operation and cannot
+ * exclude a non-cooperating writer or a subsequent connection loss.
+ *
+ * @param string $writerLock Opaque lock name returned by the writer owner.
+ * @return bool True only when this connection positively owns the lease.
+ */
+function picture_manager_cleanup_lease_owned(string $writerLock): bool
+{
+    try {
+        return admin_operation_model_lock_owned($writerLock);
+    } catch (Throwable) {
+        return false;
+    }
+}
 
 /**
  * Normalize submitted image IDs into unique positive integers while preserving order.
@@ -141,6 +160,7 @@ function copy_gallery_images(
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
+        gallery_linked_reservation_assert_admin_write();
         return copy_gallery_images_owned(
             $sourceGalleryId,
             $destinationGalleryId,
@@ -986,6 +1006,7 @@ function picture_manager_copy_gallery_subtrees(
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
+        gallery_linked_reservation_assert_admin_write();
         return picture_manager_copy_gallery_subtrees_owned(
             $sourceGalleryId,
             $destinationGalleryId,

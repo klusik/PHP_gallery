@@ -2,3 +2,5 @@ Pillow>=10.0
 pystray>=0.19.5
 reportlab==5.0.1
 pypdf>=6.0
+pyobjc-framework-Cocoa>=11.0; sys_platform == "darwin"
+pyobjc-framework-Quartz>=11.0; sys_platform == "darwin"

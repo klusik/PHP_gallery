@@ -48,7 +48,9 @@ use function Gallery\Core\current_login_return_target;
 use function Gallery\Core\current_user;
 use function Gallery\Core\flash_message;
 use function Gallery\Core\redirect_to;
+use function Gallery\Core\request_is_https;
 use function Gallery\Core\request_method;
+use function Gallery\Core\request_mount_url;
 use function Gallery\Core\require_admin;
 use function Gallery\Core\sanitize_login_return_target;
 use function Gallery\Core\url_for;
@@ -74,6 +76,7 @@ use function Gallery\Services\auth_user_email_schema_status;
 use function Gallery\Services\schema_inspection_is_available;
 use function Gallery\Services\schema_inspection_is_missing;
 use function Gallery\Services\schema_inspection_is_unknown;
+use function Gallery\Services\schema_inspection_table;
 use function Gallery\Services\google_auth_configuration_ready;
 use function Gallery\Services\google_auth_schema_status;
 use function Gallery\Services\auth_persistence_config;
@@ -1793,6 +1796,17 @@ function cms_admin_account(): void
         'site_name' => site_name(),
         'central_settings_url' => admin_settings_url('advanced'),
         'support_access_url' => url_for('admin_support'),
+        // Revocation remains available independently of new-link admission.
+        'app_link_devices_url' =>
+            (string) ($user['role'] ?? '') === 'admin'
+            && empty($user['support_access'])
+            && !array_key_exists('admin_support', $_SESSION)
+            && request_is_https()
+            && schema_inspection_is_available(
+                schema_inspection_table('app_link_grants'),
+            )
+                ? request_mount_url('index.php?page=app_linking_devices')
+                : '',
         'account_email' => $accountEmail,
         'email_schema_available' => $emailSchemaAvailable,
         'email_schema_unknown' =>

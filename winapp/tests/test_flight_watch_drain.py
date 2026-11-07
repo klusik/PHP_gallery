@@ -17,6 +17,7 @@ import queue
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from types import ModuleType
@@ -27,6 +28,12 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader.flight_workflow import FinalizationWorker
+
+# Purpose: Bound completion of the synthetic initial-folder worker.
+# Type: float. Units: seconds. Scope: startup exclusion regression only.
+# Consumers: test_interrupted_initial_scan_never_admits_historical_photos.
+# Rationale: Three seconds expose a deadlock without hanging hosted discovery.
+PREPARATION_WAIT_SECONDS = 3.0
 
 
 def load_main_module() -> ModuleType:
@@ -86,6 +93,8 @@ class WatchDrainTests(unittest.TestCase):
         )
         watcher = object.__new__(self.main.WatcherThread)
         watcher.config = config
+        watcher.linked_target = None
+        watcher._linked_lease = None
         watcher.events = queue.Queue()
         watcher.stop_event = threading.Event()
         watcher.state = self.main.UploadState(workspace / "upload-state.json")
@@ -115,6 +124,154 @@ class WatchDrainTests(unittest.TestCase):
         )
         return watcher
 
+    def test_interrupted_initial_scan_never_admits_historical_photos(self) -> None:
+        """Keep startup exclusions safe when Stop arrives during folder reading.
+
+        Returns:
+            None: Preparation stays frozen until a background scan accepts nothing.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder, workspace = root / "watch", root / "session"
+            folder.mkdir()
+            workspace.mkdir()
+            old = folder / "existing.jpg"
+            old.write_bytes(b"preexisting screenshot")
+            watcher = self.make_watcher(folder, workspace)
+            owner_thread = threading.get_ident()
+            scan_threads: list[int] = []
+
+            def capture_initial(selected: Path, recursive: bool) -> list[Path]:
+                """Stop during the worker-owned initial directory observation.
+
+                Args:
+                    selected (Path): Exact fixture screenshot folder.
+                    recursive (bool): Captured recursion preference.
+
+                Returns:
+                    list[Path]: The original file, which must remain excluded.
+                """
+                self.assertEqual(folder, selected)
+                self.assertFalse(recursive)
+                scan_threads.append(threading.get_ident())
+                watcher.request_drain()
+                watcher.stop_event.set()
+                return [old]
+
+            with mock.patch.object(MAIN, "iter_candidate_files", side_effect=capture_initial) as scan:
+                watcher.configure_drain(workspace, None)
+                before = self.main.read_document(watcher.drain_manifest)
+                self.assertIs(before["initial_captured"], False)
+                self.assertIs(before["frozen"], True)
+                scan.assert_not_called()
+                worker = threading.Thread(target=watcher._run_owned, daemon=True)
+                worker.start()
+                worker.join(PREPARATION_WAIT_SECONDS)
+                self.assertFalse(worker.is_alive())
+
+            self.assertEqual(1, len(scan_threads))
+            self.assertNotEqual(owner_thread, scan_threads[0])
+            self.assertEqual({old}, watcher.initial_paths)
+            after = self.main.read_document(watcher.drain_manifest)
+            self.assertIs(after["frozen"], True)
+            self.assertEqual([], after["pending"])
+            watcher.upload_watched_file.assert_not_called()
+            self.assertTrue(old.exists())
+
+    def test_cutoff_uses_saved_recursive_choice_after_config_changes(self) -> None:
+        """Do not lose nested photos admitted by the original Stop cutoff.
+
+        Returns:
+            None: The resumed drain uploads its previously eligible nested file.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            watched = root / 'watch'
+            watched.mkdir()
+            nested = watched / 'nested'
+            nested.mkdir()
+            source = nested / 'photo.jpg'
+            source.write_bytes(b'synthetic image')
+            workspace = root / 'flight'
+            workspace.mkdir()
+            worker = self.make_watcher(watched, workspace)
+            worker.config.watch_recursive = False
+            worker._watch_folder_override = watched
+            worker._watch_recursive_override = True
+            worker.configure_drain(workspace, ())
+            worker.drain_event.set()
+            # The future cutoff makes this fixture-created file pre-Stop.
+            worker.drain_requested_at = time.time() + 1.0
+            worker.drain_started_monotonic = time.monotonic()
+            worker._run_owned()
+            worker.upload_watched_file.assert_called_once()
+            self.assertEqual(source, worker.upload_watched_file.call_args.args[1])
+            saved = json.loads((workspace / 'watch-drain.json').read_text())
+            self.assertTrue(saved['frozen'])
+            self.assertEqual([], saved['pending'])
+            self.assertTrue(saved['recursive'])
+
+    def test_prior_worker_skip_is_not_repeated_in_the_same_session(self) -> None:
+        """Do not requery one photograph already handled by this watcher.
+
+        Returns:
+            None: The next scan retains the same per-worker decision.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            watched = root / 'watch'
+            watched.mkdir()
+            source = watched / 'photo.jpg'
+            source.write_bytes(b'synthetic image')
+            worker = self.make_watcher(watched, root)
+            worker.remote_inventory.refresh.return_value = True
+            worker.remote_inventory.has_hash.return_value = True
+            worker.scan_once(watched, 'https://gallery.example')
+            worker.scan_once(watched, 'https://gallery.example')
+            worker.remote_inventory.refresh.assert_called_once()
+            worker.upload_watched_file.assert_not_called()
+
+    def test_source_deletion_follows_confirmed_upload_but_not_inventory_match(self) -> None:
+        """Delete requests belong only to a positively confirmed fresh upload.
+
+        Returns:
+            None: An inventory match remains on disk; fresh ACK uses the exact
+                captured source snapshot for the Windows deletion owner.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'watch'
+            folder.mkdir()
+            workspace = root / 'session'
+            workspace.mkdir()
+            uploaded = folder / 'uploaded.jpg'
+            uploaded.write_bytes(b'confirmed bytes')
+            worker = self.make_watcher(folder, workspace)
+            worker.config.delete_uploaded_files = True
+            worker.upload_watched_file.return_value = {
+                'ok': True, 'uploaded': 1, 'scanned': 0,
+            }
+            with mock.patch.object(
+                self.main, 'delete_verified_linked_source',
+            ) as delete:
+                worker.scan_once(folder, 'https://gallery.example.test/upload')
+                delete.assert_called_once()
+                snapshot = delete.call_args.args[0]
+                self.assertEqual(uploaded, snapshot.path)
+                self.assertEqual(
+                    self.main.hashlib.sha256(b'confirmed bytes').hexdigest(),
+                    snapshot.expected_sha256,
+                )
+
+                duplicate = folder / 'already-present.jpg'
+                duplicate.write_bytes(b'existing bytes')
+                worker.remote_inventory.refresh.return_value = True
+                worker.remote_inventory.has_hash.return_value = True
+                worker.initial_paths.clear()
+                worker.scan_once(folder, 'https://gallery.example.test/upload')
+                delete.assert_called_once()
+                self.assertTrue(duplicate.exists())
+
     def test_existing_startup_files_are_never_admitted(self) -> None:
         """Preserve the rule that pre-existing photos are ignored on start.
 
@@ -141,6 +298,70 @@ class WatchDrainTests(unittest.TestCase):
             self.assertEqual(set(), watcher.accepted_paths)
             saved = self.main.read_document(workspace / "watch-drain.json")
             self.assertEqual([], saved["pending"])
+
+    def test_linked_scan_rechecks_changed_bytes_but_not_acknowledged_photo(self) -> None:
+        """Use fresh linked inventory for a change without polling known bytes.
+
+        Returns:
+            None: Each stable path/digest pair is checked once by the same
+                worker and stays out of its accepted queue once acknowledged.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            workspace = folder / "session"
+            workspace.mkdir()
+            path = folder / "photo.jpg"
+            path.write_bytes(b"original")
+            worker = self.make_watcher(folder, workspace)
+            worker.configure_drain(workspace, ())
+            worker.linked_target = mock.Mock()
+            worker.state = mock.Mock()
+            worker.state.has_unresolved_upload.return_value = False
+            worker.state.has_uncertain_source.return_value = False
+            worker.remote_inventory.has_hash.return_value = True
+
+            worker.scan_once(folder, "https://gallery.example.test")
+            worker.scan_once(folder, "https://gallery.example.test")
+            worker.remote_inventory.refresh.assert_called_once()
+            self.assertEqual(set(), worker.accepted_paths)
+
+            path.write_bytes(b"changed")
+            worker.scan_once(folder, "https://gallery.example.test")
+            self.assertEqual(2, worker.remote_inventory.refresh.call_count)
+            worker.upload_watched_file.assert_not_called()
+            self.assertEqual([], self.main.read_document(
+                workspace / "watch-drain.json"
+            )["pending"])
+
+    def test_failed_linked_inventory_stops_with_a_recoverable_queue(self) -> None:
+        """Exit promptly when a linked gallery will not check the file.
+
+        Returns:
+            None: The worker leaves the accepted path and reason for Retry,
+                with the original file and no attempted transmission.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            workspace = folder / "session"
+            workspace.mkdir()
+            path = folder / "photo.jpg"
+            path.write_bytes(b"original")
+            worker = self.make_watcher(folder, workspace)
+            worker.configure_drain(workspace, ())
+            worker.linked_target = mock.Mock()
+            worker.linked_target.session.can_upload.return_value = True
+            worker.state = mock.Mock()
+            worker.state.has_unresolved_upload.return_value = False
+            worker.state.has_uncertain_source.return_value = False
+            worker.remote_inventory.refresh.return_value = False
+
+            worker.scan_once(folder, "https://gallery.example.test")
+            self.assertTrue(worker.stop_event.is_set())
+            row = self.main.read_document(workspace / "watch-drain.json")
+            self.assertEqual([str(path)], row["pending"])
+            self.assertIn("Retry", row["error"])
+            worker.upload_watched_file.assert_not_called()
+            self.assertEqual(b"original", path.read_bytes())
 
     def test_persisted_cutoff_recovers_last_partial_file_after_restart(self) -> None:
         """Drain a file created before Stop even when stability completes later.
@@ -217,9 +438,15 @@ class WatchDrainTests(unittest.TestCase):
                 watched_folder=str(folder),
                 watch_recursive=False,
                 delete_uploaded_files=False,
-                scan_interval_seconds=0.0,
             )
+            app.config._snapshot_token = object()
+            app.config_store = mock.Mock()
+            app.mode_owner = mock.Mock()
             app.events = queue.Queue()
+            app.linking_manager = mock.Mock()
+            app.linking_manager.linked_upload_mode_selected.return_value = False
+            app.flights = mock.Mock()
+            app.flights.pending.return_value = [mock.Mock(directory=workspace)]
             state_factory = self.main.UploadState
 
             with (
@@ -291,6 +518,8 @@ class WatchDrainTests(unittest.TestCase):
                 upload_url: str,
                 path: Path,
                 metadata_fields: dict[str, str],
+                file_hash: str,
+                expected_size: int | None,
             ) -> dict[str, int]:
                 """Request Stop during one accepted upload, then add a later file.
 
@@ -298,6 +527,8 @@ class WatchDrainTests(unittest.TestCase):
                     upload_url (str): Fixture endpoint unused by the mock.
                     path (Path): Accepted photo currently being uploaded.
                     metadata_fields (dict[str, str]): Empty metadata fixture.
+                    file_hash (str): Captured source digest supplied by the watcher.
+                    expected_size (int | None): Captured source byte count.
 
                 Returns:
                     dict[str, int]: Successful acknowledgement for the first file.
@@ -319,10 +550,10 @@ class WatchDrainTests(unittest.TestCase):
             self.assertFalse(final["pending"])
 
     def test_upload_failure_keeps_the_accepted_photo_durable(self) -> None:
-        """Keep a failed accepted photo queued for later recovery.
+        """Keep a post-dispatch uncertain photo queued without a blind retry.
 
         Returns:
-            None: Failure state and pending identity both remain on disk.
+            None: Pending identity, stop and uncertain result remain observable.
         """
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -345,7 +576,10 @@ class WatchDrainTests(unittest.TestCase):
 
             saved = self.main.read_document(workspace / "watch-drain.json")
             self.assertEqual([str(photo)], saved["pending"])
-            self.assertIn(str(photo), watcher.state.data["failures"])
+            watcher.upload_watched_file.assert_called_once()
+            self.assertTrue(watcher.stop_event.is_set())
+            self.assertIn("unconfirmed", watcher.drain_error)
+            self.assertNotIn(str(photo), watcher.state.data["failures"])
 
     def test_resume_rejects_a_path_outside_the_bound_watch_folder(self) -> None:
         """Refuse a tampered durable queue that names another folder's file.
@@ -383,11 +617,11 @@ class WatchDrainTests(unittest.TestCase):
 
             self.assertNotIn(outside_photo, watcher.accepted_paths)
 
-    def test_upload_history_acknowledges_queue_without_reupload(self) -> None:
-        """Use real persisted upload history as durable remote evidence.
+    def test_unbound_upload_history_does_not_skip_another_gallery(self) -> None:
+        """Do not treat old global history as evidence for this destination.
 
         Returns:
-            None: Matching prior history clears the queue without a network call.
+            None: The existing file still enters the current upload workflow.
         """
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -411,10 +645,48 @@ class WatchDrainTests(unittest.TestCase):
 
             watcher.scan_once(folder, "https://gallery.example.test/upload")
 
-            watcher.upload_watched_file.assert_not_called()
+            watcher.upload_watched_file.assert_called_once()
             self.assertEqual(set(), watcher.accepted_paths)
             saved = self.main.read_document(workspace / "watch-drain.json")
             self.assertEqual([], saved["pending"])
+
+    def test_resume_reuses_the_exact_contextual_watcher_key(self) -> None:
+        """Retain the original keyed target for an in-process drain retry.
+
+        Returns:
+            None: A changed linked session refuses recovery before any worker starts.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            self.main.atomic_write_json(workspace / "watch-drain.json", {
+                "folder": directory,
+                "recursive": False,
+                "pending": ["retained-photo"],
+                "frozen": True,
+            })
+            session = mock.Mock()
+            issuer = "https://gallery.example.test"
+            target = self.main.LinkedUploadTarget(session, issuer, 7, 9, "Screenshots")
+            contextual = self.main.LinkedUploadTarget(
+                session, issuer, 7, 9, "Screenshots", "synthetic watcher key",
+            )
+            app = mock.Mock()
+            app._contextual_watch_target = contextual
+            app.capture_linked_target.return_value = target
+            app.flights.pending.return_value = [mock.Mock(directory=workspace)]
+            with (
+                mock.patch.object(self.main, "capture_worker_config"),
+                mock.patch.object(self.main, "WatcherThread") as worker,
+            ):
+                result = self.main.WatcherApp.resume_flight_photos(app, workspace)
+                self.assertIs(worker.return_value, result)
+                self.assertIs(contextual, worker.call_args.args[2])
+                app.capture_linked_target.return_value = self.main.LinkedUploadTarget(
+                    mock.Mock(), issuer, 7, 9, "Screenshots",
+                )
+                with self.assertRaisesRegex(ValueError, "gallery changed"):
+                    self.main.WatcherApp.resume_flight_photos(app, workspace)
+                worker.assert_called_once()
 
     def test_cancellation_preserves_unfinished_queue(self) -> None:
         """Keep a queued photo when the watcher stops before processing it.

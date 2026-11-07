@@ -65,8 +65,8 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{0.150.6}
-\newcommand{\manualdate}{2.~listopadu~2026}
+\newcommand{\version}{1.0.0}
+\newcommand{\manualdate}{7.~listopadu~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1765,23 +1765,370 @@ i~mutace. Podrobnosti a~omezení nasazení uvádí
 \section{Windows uploader}
 \subsection{Rozvržení}
 
-Uploader se otevírá na kartě \ui{Watcher}; pořadí karet je \ui{Watcher},
-\ui{Import}, \ui{Activity}, \ui{AI} a~\ui{Settings}. Horní ovládací prvek
-připojení otevře kompaktní dialog klíče API se skrytým klíčem a~volbou
-\ui{Save \& Test}; ovládání připojení zůstává v~záhlaví dostupné na každé
+Při běžném spuštění se otevře karta \ui{Fotky}; pořadí je \ui{Fotky},
+\ui{Watcher}, \ui{Import}, \ui{Activity}, \ui{AI} a~\ui{Settings}.
+S~aktivním propojením karta Fotky načte vlevo strom galerií a~vpravo
+automaticky otevře výchozí galerii. Rozbalit či sbalit lze jednotlivé větve
+i~celý strom. Výběr galerie zobrazí její fotky přímo v~tomtéž okně.
+Přepínač \ui{Podgalerie} je ve výchozím stavu zapnutý a~zobrazí nad fotkami
+karty přímých podgalerií. Titulní obrázek tvoří první povolený náhled fotky
+z~podgalerie. Pokud chybí, karta zobrazí ikonu složky. Karta Fotky drží výpis
+galerií v~paměti a~využívá aktuální oprávnění propojení.
+Při odpojení otevře \ui{Připojit} stávající dialog s~adresou a~schválení
+v~prohlížeči. Platné propojení pak zpřístupní veřejné fotky přímo.
+Samostatný cíl nahrávání nastavuje \ui{Use for uploads}.
+Spuštění s~\texttt{--startup} zůstane v~oznamovací oblasti až do obnovení
+okna. Při spuštění ze zdrojů na macOS se používá běžné okno Tk.
+Dočasné propojení skončí s~procesem.
+
+Obrazovka Watcher zobrazuje cílovou galerii. Horní ovládání API klíče otevře
+kompaktní dialog se skrytým klíčem a~volbou
+\ui{Save \& Test}; toto ovládání zůstává v~záhlaví dostupné na každé
 obrazovce. Neuložené změny nenahradí uložený klíč. Hlavička aplikace
 nabízí také Nastavení, aktualizace a~nápovědu. Obrazovka Watcher zobrazuje
 cílovou galerii, vybranou cestu složky, stav sledování a~varování před smazáním
 zdrojů.
+Pokud konfiguraci nelze přečíst nebo ověřit, spuštění se zastaví před zahájením
+práce. Původní soubor zachovejte a~obnovte platnou zálohu; chybějící soubor
+nadále spustí výchozí nastavení. Body reparse ve Windows a~trvanlivost při
+výpadku napájení zatím nejsou ověřeny.
+V~hlavním okně klikněte na \ui{Link gallery}. Do dialogu vložte adresu
+galerie z~prohlížeče a~potvrďte ji tlačítkem \ui{Link gallery}.
+Na stejném počítači funguje i~HTTP adresa na \texttt{localhost}.
+Vzdálené instalace používají ověřené HTTPS. Dialog ukazuje
+průběh až do schválení. Pokud spojení selže, zobrazí chybu a~umožní další
+pokus. V~prohlížeči se přihlaste jako správce a~klikněte na \ui{Schválit}.
+Po zobrazení \ui{Approval received} se vraťte do WinApp. Aplikace zobrazí
+adresu propojeného webu a~sama načte první stránku seznamu galerií.
+\ui{Zrušit} žádost odmítne.
+
+Tři tečky vedle \ui{Unlink gallery} otevřou přehled propojení.
+V~části \ui{Aktivní propojení} lze přepnout na jiný web s~platným
+schválením. Profil uchová až 20~položek v~části \ui{Nedávné adresy}
+i~po restartu. Výběrem adresy předvyplníte nové schválení.
+Ikona vypnutí odpojí vybraný web a~křížek odebere nedávnou adresu.
+Cíl pro nahrávání se vybírá samostatně.
+
+Otevřete \ui{Choose gallery…} vedle adresy a~pište do pole \ui{Hledat galerie}.
+Návrhy upřednostňují názvy, potom popisy a~štítky galerií. Názvy snesou
+drobný překlep. Uvozovky a~\texttt{AND}/\texttt{OR} fungují jako na webu.
+Odsazení a~nadřazené názvy u~vybraného výsledku ukazují vnoření. Šipka načte
+další shody. Se základním přístupem lze filtrovat názvy na aktuální stránce.
+Pro hledání v~celém katalogu schvalte nové propojení na podporovaném serveru.
+
+Se schváleným přístupem k~uploadu vyberte galerii a~klikněte na
+\ui{Použít pro nahrávání}. Na
+podporovaném místním profilu WinApp použije schválený přístup automaticky,
+i~při spuštění ze zdrojů na macOS. Po ověření se cíl zobrazí pod \ui{Upload gallery}
+ve Watcher i~Importu. Tři tečky ukážou další možnosti. \ui{Unlink gallery}
+ukončí aktuální propojení. Po restartu se připojte ke stejnému účtu
+a~galerii znovu vyberte. Rozšířená oprávnění najdete v~Nastavení pod
+\ui{Manage link…}. Upload přes API používá vlastní \ui{Gallery URL}
+a~klíč omezený na galerii.
+
+Samostatně zvolte \ui{Read gallery details} a~schvalte oprávnění ke čtení;
+poté lze u~vybrané galerie použít \ui{Read selected details}. Zobrazí ID,
+název, revizi a~uloženou viditelnost, režim přístupu a~zařazení do výpisu,
+nikoli výsledná zděděná práva. Čtení, které server již ověřil, může doběhnout
+i~po souběžném odvolání. Starší server nemusí oprávnění ani endpoint
+podporovat; klient oznámí nepodporovanou či nedostupnou funkci bez tichého
+omezení scope. Uložené nahrávání pomocí \texttt{pgu\_} zůstává dostupné.
+Skutečné Windows, nasazené HTTPS a~databázové chování zatím nejsou
+kvalifikovány.
+Potvrzení propojeného uploadu vyžaduje nový řádek obrázku a~ověřený uložený
+originál v~cílové galerii. Při nejistém potvrzení již soubor může existovat;
+klient ponechá pokus nevyřešený bez automatického opakování. Odvolání během
+probíhajícího uploadu nemůže vrátit již uložený soubor.
+Nový propojený klient vyžaduje přesný marker potvrzení uploadu
+\texttt{fresh\_insert\_v1}; starší propojený server ponechá pokus nevyřešený.
+Cesta uploadu \texttt{pgu\_} se nemění.
+Živá odpověď může nahradit předem zapsanou nejistotu pouze u~stejného
+kladného pokusu,
+nezměněného zdroje a~hashe a~ověřeného nového vložení obrázku. Odpověď musí
+uvádět jeden nahraný obrázek a~nezáporný počet prohledaných položek; neznámá
+či ztracená odpověď, kontrola hashe ani inventář marker nikdy neodstraní.
+Tato oprava nezavádí opakování, mazání zdroje ani záruku právě jednoho provedení.
+Identita souboru na serveru není přesným důkazem obsahu při cizím zápisu.
+Klientské kontroly identity a~hashe nejsou atomické vůči místním zapisovatelům;
+chování Windows reparse a~při výpadku napájení zatím není kvalifikováno.
+Originální ZIPy i~rozbalené pracovní adresáře zůstávají kvůli ruční kontrole
+uchovány bez ohledu na~stáří či potvrzení uploadu; automatické čištění podle
+stáří je vypnuté, protože viditelná ID úloh nedokazují úplnou historii.
+Pro právě jeden nejistý propojený upload volba \ui{Check uncertain upload}
+vyžádá velikost souboru v~bajtech do 64~MiB a~bez otevření místního souboru
+jednou ověří uložený hash. Shoda znamená
+pozorované bajty, nikoli potvrzení dokončení nebo zápisu do databáze; neznámý
+výsledek neprokazuje nepřítomnost. Žádný výsledek nemaže záznam ani soubory
+a~nespouští opakovaný upload. Starší server tuto kontrolu nemusí podporovat.
+Před kontrolou jednoho aktuálně neznámého uploadu nejprve prověřte galerii
+a~původní zdroj. Volitelná kontrola hashe pouze pozoruje bajty; nepotvrzuje
+registraci ani neprokazuje nepřítomnost. Výslovná kontrola má ve výchozím stavu
+zvoleno Ne. Kontrola zachová marker nejistoty, originál i~ZIP. Stejná cesta
+nebo stejné bajty zůstanou blokované i~po restartu, zatímco ostatní vhodné
+zdroje mohou pokračovat. Neznámý zdroj se znovu neodešle ani nesmaže.
+Propojený upload vyžaduje nepřesměrovaný profil na~pevném disku Windows
+nebo na~místním svazku macOS, který spravuje uživatel. Nejprve zavřete
+starší aplikace se stejným profilem.
+Samostatné oprávnění \texttt{gallery:visibility} se nabízí pouze tehdy, když
+jej server inzeruje, a~vyžaduje výslovné schválení v~prohlížeči. Před změnou
+klient ověří aktuální stav galerie. Při zastaralé revizi nebo konfliktu
+plánovaného zveřejnění pouze načte stav znovu; změnu neopakuje. Starší servery
+oprávnění neinzerují. Operátorský příkaz
+\texttt{inspect\_gallery\_visibility.php} je ve výchozím stavu pouze pro čtení.
+Jedině aktuální \texttt{--reconcile=FINGERPRINT} může opravit způsobilý
+sidecar verze dva a~po synchronizovaném ověření odstranit jeho marker; řádek
+databáze ani revizi nemění. Markery verze jedna lze pouze prohlížet.
+Kandidát \texttt{8de8e50a} prošel kontrolou BASIC \texttt{42107055888}
+a~kontrolou WinApp \texttt{42107055797}. Nainstalované GUI, MariaDB
+a~nasazené chování zatím ověřeny nejsou.
+Aktivní propojení s~oprávněním pro výpis galerií umožňuje prohlížet veřejné
+fotky bez citlivého obsahu. Podporovaný server při běžném propojení nabídne
+výslovný souhlas \texttt{presentation:read} pro nastavení prezentace
+a~viditelnou hudbu. U~běžného propojení musejí být všichni předci veřejní,
+uvedení, s~běžným přístupem a~bez NSFW. Samostatný souhlas správce umožňuje
+zobrazit i~skrytá, chráněná a~NSFW média. Server znovu ověřuje platné
+oprávnění správce. Interní dávka obsahuje nejvýše 64~záznamů o~fotkách
+nebo osm na starším serveru. Soubor má limit 16~MiB. Výpis hudby zahrnuje nejvýše 32~viditelných
+skladeb MP3/WAV. Pokud nejmenší miniatura chybí, server může použít jinou
+existující variantu nebo veřejný zobrazovací obrázek v~daném limitu.
+Panel fotek i~lightbox jsou součástí hlavního okna WinApp.
+Responzivní mřížka plynule posouvá přehled a~načítá viditelné náhledy.
+Kliknutím nebo stiskem Enter na~zaměřené fotografii otevřete lightbox.
+Šipkami vlevo a~vpravo procházíte celé album ve smyčce.
+Zavření lightboxu nebo klávesa Escape obnoví strom a~mřížku
+i~po chybě obrázku. Náhledy oříznou rozpoznané černé pruhy a~zobrazí celou scénu
+v~jejím poměru stran. Fotografie a~náhledy mají
+samostatný limit 600 požadavků na IP a~3\,600 celkem za pět minut.
+Při HTTP~429 aplikace zobrazí upozornění a~pozastaví načítání dopředu do
+volby \ui{Retry}. Při spuštění ze zdrojů musí být Pillow ve stejném
+interpretu Pythonu. Volba \ui{Zkusit znovu}
+načte obsah, který se~nepodařilo načíst. Kolečkem, posunem dvěma prsty nebo
+klávesami + a~\ensuremath{-} měníte přiblížení. Klávesa 0 pohled obnoví a~tažením fotku
+posunete. F nebo F11 přepne celou obrazovku. Pohyb ukazatele na chvíli zobrazí
+ovládání.
+Pokud jsou povoleny souřadnice, připnutá značka polohy nabídne
+\ui{Otevřít v~OpenStreetMap} v~systémovém prohlížeči. Předchozí a~další
+fotka se připraví předem do omezené paměti.
+\ui{Přizpůsobit podle obsahu} ořízne rozpoznané černé pruhy v~okně i~na celé
+obrazovce. \ui{Zobrazit původní snímek} vrátí celý rám snímku. Fotka si zachová
+poměr stran. Při změně velikosti okna se průběžně vykresluje náhled a~po
+ustálení se zobrazí v~plné kvalitě. Od macOS~15 lze kompatibilní HDR snímky
+zobrazit přes AppKit na EDR displeji, pokud je dostupné PyObjC a~propojení
+okna Tk. Ostatní konfigurace včetně Windows zobrazují 8bitové SDR přes
+Pillow/Tk.
+Společná uživatelská disková cache ukládá schválené fotky a~skladby
+s~ověřenými otisky obsahu. Běžná část při překročení 4\,096~položek nebo 1~GiB
+uvolní nejdéle nepoužívaná data. Pokud se shoduje ověřovací údaj z~aktuálního
+výpisu alba, aplikace náhled vezme rovnou z~disku. Bez něj platí čerstvost
+60~sekund a~ověření ETagem. Aktuální schválený playlist znovu použije skladbu
+se stejným SHA-256, velikostí a~formátem. Média dostupná pouze správcům se
+ve výchozím stavu na disk neukládají.
+Ikony cache se aktualizují automaticky z~načtených údajů: oblak znamená
+online, půlkruh částečné pokrytí, plný kruh místní data a~tečkovaný kruh
+neověřený stav. Část katalogu neprokazuje úplné pokrytí. Ikona v~záhlaví
+otevře nabídku galerie.
+\ui{Přednačíst galerii} připraví přímé fotky, náhledy i~snímky pro lightbox,
+na pozadí s~průběhem a~možností zrušení. Podgalerie jsou samostatné cíle.
+\ui{Uchovat přednačtenou} ponechá úspěšně připravená data mimo běžné čištění
+i~limity počtu a~velikosti, také po restartu. Vypnutí vrátí galerii pod běžná
+pravidla cache, která mohou přebytečná data uvolnit. Zrušení ponechá hotové
+soubory i~volbu uchování, ale neoznačí celou galerii za přednačtenou.
+Opakování po limitu serveru znovu využije ověřená místní data. Média
+s~\texttt{no-store} zůstávají dočasná; uložené soubory neobcházejí přihlášení
+ani platnost propojení. Jedna operace přijme nejvýše 100\,000~přímých fotek.
+Výslovné přednačtení s~Admin Photos propojením může na podporovaném serveru
+uložit i~soukromé a~rozpracované fotky. Snímek, galerie i~celá větev předků
+musí být ověřeně bez NSFW omezení. Volba i~soukromá data patří konkrétní
+instalaci a~ověřenému účtu. Před zobrazením se soukromá data vždy znovu
+ověří na živém serveru, také po restartu. Starší servery a~běžné prohlížení
+chráněných fotek zůstávají dočasné. Čekání podle limitu serveru ukazuje
+odpočet s~možností zrušení; po vyčerpání pokusů zůstávají hotové soubory.
+Nula uložených fotek zobrazí bezpečný důvod místo částečného úspěchu.
+Tlačítko prezentace otevře celou obrazovku a~prochází album ve smyčce podle
+povoleného intervalu serveru nebo po pěti sekundách. Současně spustí povolený
+doprovod. Ovládání hudbu spouští, pozastavuje a~přepíná mezi skladbami.
+Přehrává se místní soubor a~aplikace mezitím připraví další skladbu.
+Pravým tlačítkem na galerii nebo fotce zobrazíte informace a~schválené změny
+viditelnosti. Kliknutí mimo panel nebo Escape ho zavře. Podrobnosti fotky
+zobrazují formát, rozměry, uložený EXIF a~GPS podle nastavení galerie. Kvalita
+náhledů uvádí aktuální nastavení generování na~serveru. Informace o~galerii
+ukazují přímý obsah a~rozsah stažených fotek. Ikona ve~stromu se
+zobrazí po jeho zjištění. Galerii v~kořenu webu přidáte tlačítkem ve~stromu
+a~podgalerii tlačítkem vedle názvu alba. Podgalerii lze přidat také z~nabídky
+galerie nebo prázdného místa mezi fotkami. Kolečko i~posun dvěma prsty
+posouvají mřížku a~v~lightboxu mění přiblížení.
+\ui{Upravit galerii} otevře webový editor vybrané galerie v~pravém panelu
+systémového prohlížeče. Použije jeho vlastní přihlášení správce a~nepředá
+žádné klíče WinAppu. Starší server otevře běžnou celostránkovou editaci.
+Strom si pro každý propojený web a~účet pamatuje rozbalené a~sbalené větve.
+Fotky obnovíte zatočenou šipkou vedle názvu alba. WinApp přibližně každých
+30~sekund ověřuje index zobrazeného alba v~režimu správce a~použije
+nezměněné náhledy znovu. Starší servery podporují ruční obnovu.
+Fotky označíte kliknutím s~Ctrl ve Windows, s~Command na macOS nebo
+v~nabídce fotky. V~kontextové nabídce lze smazat fotku nebo celý výběr.
+WinApp použije stávající připojení správce. V~aplikaci potvrďte každou dávku
+nejvýše 64~fotek. Trvalé smazání proběhne stejnou operací jako ve webovém
+Adminu. Po přerušené odpovědi album obnovte a~zkontrolujte před potvrzením
+dalšího mazání.
+V~nabídce galerie nebo Watcheru zvolte použití této galerie pro sledování.
+WinApp spustí záznam s~dočasným klíčem a~zobrazí červené REC. Ikona Watcheru
+červeně pulzuje ve všech kartách. Plné červené světlo označuje cílové album
+a~jeho nadpis. Duté kolečko označuje sbalenou větev, která cíl skrývá.
+U~rozpoznaného
+simulátoru nabídne SimBrief. Ukončení odešle přijaté snímky, u~letu uloží
+dostupné reporty a~zneplatní klíč sledování. Propojení webu zůstane aktivní.
+Panel Watcheru zobrazí přípravu nebo důvod, proč se sledování nespustilo.
+Při spuštění ukazatel aktivity pojmenuje fázi přípravy. Nový snímek vytvořte
+až po zobrazení REC. Stop a~Finish ihned zobrazí přípravu před dokončením
+fronty a~případných reportů.
+Nedávné události Activity se ukládají v~omezených dávkách na pozadí. Běžné
+ukončení se pokusí zapsat je ve svém časovém limitu. Chyba úložiště, vypršení
+limitu nebo pád může poslední dávku ztratit; selhání se zaznamená do logu.
+Rotující log se zapisuje ihned.
+Výběr cíle kontroluje přijaté importy v~lokální historii nahrávání se stejným
+limitem 256~MiB jako při zápisu stavu. Neověřitelná historie nebo nedokončená
+práce pro jiný cíl změnu dál blokuje.
+Ověření v~nainstalované aplikaci ve Windows zatím chybí. Dřívější
+protokolové ověření proběhlo před touto změnou rozhraní.
+Souborová pojistka zápisů je neaktivní prototyp a~galerijní operace zatím
+nechrání; její koordinace musí být nejprve ověřena.
+Experimentální samostatné oprávnění \texttt{galleries:create} vyžaduje výslovný
+souhlas a~ověřené úložiště oprávnění. Jeho zdroj odmítá obsazené cíle,
+nesoulad kanonického katalogu a~katalog nad
+10\,000~řádků včetně nové galerie; při hledání slugu zkontroluje nejvýše
+128~kandidátů. Nejde o~časové limity. Při nejasném výsledku
+se čekající záměr automaticky neopakuje.
+Čekající rezervace propojeného vytvoření dočasně blokuje Admin import složek,
+přesun objevených fotek, odstranění objevených složek, kopírování výběru,
+přesun galerií do koše i~obnovu z~něj, přesuny organizátoru metadat,
+opravy konzistence i~běžné vytváření
+galerií, také pro jinou cestu. Rezervaci nemažte: bezpečné
+automatické odstranění zatím neexistuje. Upload přes API klíč zůstává dostupný.
+Ochrana v~jedné databázi nenahrazuje zámek souborového systému.
+Před odesláním klient ověří úplný záměr a~výhradně jej zveřejní bez přepsání
+jiného klíče. Před vytvořením i~při
+kontrole uloženého záměru vyžaduje aktuální identitu odpovídající vybranému či
+uloženému účtu správce. Přerušení může
+zanechat starý zámek blokující práci; Windows a~výpadek napájení nejsou
+kvalifikovány. Údržbové CLI umí ze soukromého vstupu ověřit pouze shodu
+v~registru; nedokazuje zastavení původní práce ani neopravňuje k~novému
+vytvoření. \ui{Resume original creation} zobrazí
+původní název a~rodiče k~výslovnému potvrzení a~odešle stejný klíč a~vstupy
+stejnému HTTPS issueru a~ověřenému účtu správce. Existující čekající či nevyřešený
+serverový záznam zůstává blokovaný a~může vyžadovat řešení správcem. Ochrana
+vyžaduje původní serverový registr; obnova starší databázové zálohy jej může
+odstranit. Hlášení o~nejasném výsledku nabízí výslovné obnovení nebo po kontrole
+galerie a~úložiště \ui{Close unresolved creation}. Tato akce zobrazí původní název a~rodiče
+k~výslovnému potvrzení. Lokální záměr odstraní až po potvrzení trvalého uzavření
+stejného klíče serverem; neurčitá odpověď jej zachová. Server čekající claim
+uzavřít odmítne. Uzavření nedokazuje, že
+galerie nebo soubory nevznikly ani že původní práce už skončila. Před novým
+vytvořením ověřte její ukončení a~zkontrolujte galerii i~úložiště; nic se
+nespustí automaticky. Pokud server místo toho ověří dokončený
+výsledek, klient jej uchová k~potvrzení. Nečitelný nebo neplatný lokální záměr
+zůstává blokovaný a~vyžaduje pomoc správce, protože jeho klíč nelze ověřit.
+Potvrzený výsledek zůstává uložený až do výslovného převzetí. Klient před
+výhradním zveřejněním zapíše a~ověří úplné dočasné potvrzení; nejistota
+zachová záměr i~případné zveřejněné potvrzení. Lokální vazba na původní záměr
+brání starému výběru či převzetí ovlivnit jinou operaci se stejnými údaji
+galerie; operační klíč se nezobrazuje. Kontroly nevylučují cizí zásahy do
+souborů ani nedokazují trvanlivost po výpadku napájení. V~podporovaném místním
+profilu volba \ui{Použít vytvořenou galerii} znovu ověří potvrzení
+i~galerii před výběrem pro Watcher a~Import. Vyžaduje samostatný souhlas
+s~uploadem. Server porovná původní ID,
+název a~rodiče s~aktuálními údaji. Přejmenování vrací neurčitý stav; přesun,
+smazání či neověřitelný stav mohou vést k~bezpečnému odmítnutí. Chybějící nebo
+nebezpečně přesměrovaná složka či sidecar také ponechá výsledek neurčitý;
+ověřují se aktuální bezpečné soubory, nikoli jejich původní inode. Ani jedno
+nespustí automaticky náhradní vytvoření. Pokud jsou pole dostupná, nová galerie má běžný přístup, je uvedená
+ve výpisu a~nemá naplánované zveřejnění. Databázový rollback
+nevrátí zápisy do souborového systému.
+Lokální flush nedokazuje obnovu po výpadku napájení; skutečné vytvoření přes
+databázi, HTTPS a~Windows zůstává nekvalifikované.
+Se samostatným výslovným souhlasem může krátkodobý grant
+vypsat všechny galerie včetně soukromých a~nezveřejněných. Grant pouze pro
+ověření identity výpis neumožňuje. Samotný výběr galerie neopravňuje
+k~nahrávání. Samostatné oprávnění k~nahrávání s~výslovným souhlasem zahrnuje
+všechny galerie běžného správce včetně soukromých a~nezveřejněných.
+Propojení Watcheru a~Importu je implementováno, ale není kvalifikováno;
+dosavadní klíč omezený na galerii zůstává nezávisle dostupný.
+
+Instalátor i~aktualizace založí klíč propojení v~databázi. Uložená
+adresa webu určuje přesný původ a~cestu instalace. Stávající výslovně nastavená
+adresa a~klíč mají přednost. Veřejný dotaz připravenost pouze čte. Prohlížeč před
+běžným přihlášením správce uloží krátkodobý identifikátor žádosti do relace.
+Svázání chráněné CSRF vede k~výslovnému souhlasu. \ui{Schválit} doručí
+jednorázový kód na ověřenou návratovou adresu pro výměnu s~PKCE. Hlavní akce žádá přístup k~účtu a~galeriím včetně nahrávání, pokud je
+podporované. Na kompatibilním serveru výslovně schvalte obnovovaný přístup.
+Platí sedm dní od posledního úspěšného ověřeného použití či obnovy. WinApp
+obnovuje 15minutový přístupový token pomocí Klíčenky macOS nebo Správce
+přihlašovacích údajů Windows. Funguje přes ověřené HTTPS i~přímé
+\texttt{http://localhost}. Starší servery používají dočasné propojení nejvýše
+na 15~minut.
+Správce může přístup odvolat v~seznamu připojených
+aplikací. Nevyměněné kódy vyprší do 120~sekund. Viz
+\filepath{docs/APP_LINKING_PHASE_0.md}.
+
+Migrace kapacity scope rozšiřuje čtyři binární sloupce bez změny existujících
+grantů. Při částečné migraci zůstává dostupná ověřená podpora krátkých scope;
+širší kapacita je připravena až po ověření všech čtyř sloupců. Sama nepřidává
+žádná oprávnění. DDL lze opakovat, ale není atomické; starší runtime může širší
+schéma odmítnout a~automatické zúžení není podporováno.
+Čekání na jednotlivý metadata zámek je omezeno nejvýše na pět sekund; přísnější
+původní nastavení se nemění. Snížená hodnota se obnoví, ale celková doba DDL
+omezena není. Zámek callbacku
+končí před zápisem migračního checkpointu runnerem.
+
+Samostatná volba zapamatování ve Windows přes HTTPS používá starší offline
+oprávnění. Vyprší po 30~dnech nebo sedmi dnech nečinnosti podle toho, co
+nastane dříve. WinApp může schválené uložené propojení obnovit po restartu.
+Ověření lze spustit i~volbou \ui{Reconnect saved link}.
+Klient údaj jednou obmění a~ověří identitu serveru. Pokud stejný ověřený
+server výslovně odmítne vypršelý nebo odvolaný obnovovací údaj, WinApp tento
+uložený údaj odstraní. Nové propojení schvalte v~prohlížeči po volbě
+\ui{Link gallery}. Při spuštění zůstává schválení na vás. Nejistá odpověď
+nebo chyba úložiště zablokuje použití původního údaje. Zkontrolujte propojení
+na serveru a~případně použijte \ui{Forget saved link} před novým propojením.
+Místní zapomenutí neruší serverový grant a~současná relace může zůstat aktivní.
+Uložený klíč \texttt{pgu\_} zůstává nezávislý. Skutečné Windows a~obnova po
+výpadku napájení zatím nebyly kvalifikovány. Obnovované odkazy ukládají jednu
+vazbu pro každý přesný issuer. Starší volba Windows přes HTTPS má jednu společnou vazbu. Před výměnou uloženého
+účtu u~stejného issueru vyřešte čekající práci a~zapomeňte místní propojení.
+Serverový grant lze odvolat samostatně. Propojené nahrávání odděluje
+historii i~výhradní zámek podle issueru, účtu
+a~galerie a~před odesláním ukládá značku čekajícího výsledku. Po nejistém
+výsledku ručně zkontrolujte galerii a~zdroj; soubor automaticky neposílejte
+znovu ani nemažte. Experimentální omezená serverová kontrola může vrátit
+\texttt{present}, pokud při čtení nalezne shodné bajty; registraci fotografie
+tím nedokazuje. \texttt{unknown} nedokazuje nepřítomnost ani nepovoluje nové
+odeslání a~klient tuto kontrolu zatím nepoužívá. Časový limit se kontroluje mezi
+voláními souborového systému a~nepřeruší blokující volání. Externí místní
+zásahy do souborů nejsou atomicky vyloučeny. Po~ukončení současné WinApp
+systém uvolní nativní zámek pro další pokus. U~staršího zámku ukončete
+všechny uploadery, zkontrolujte galerii a~zdroje, uchovejte obnovovací JSON
+a~archivujte jen ověřený neaktivní zámek.
+Vlastnosti místního systému souborů a~odolnost při výpadku napájení nejsou
+ověřeny. Propojené letové údaje zůstávají místní a~neodesílají automaticky AI
+úlohy ani PDF pomocí starého klíče. Nastavte limity proxy, webového serveru
+a~PHP: zpracování multipart může spotřebovat prostředky ještě před kontrolou
+aplikace.
+
 \ui{Start Watcher} začne pracovat až po výslovném kliknutí; při běhu stejné
-kontextové tlačítko nabízí \ui{Stop Watcher}. \ui{Check folder only} provede
+kontextové tlačítko nabízí \ui{Stop Watcher}. Během dokončování otevře
+\ui{Show progress}. Po~přerušení otevře \ui{Review pending uploads} původní
+frontu. Znovu připojte a~vyberte stejnou galerii, poté zvolte \ui{Retry}.
+U~propojené relace volba \ui{Keep files locally} po~zastavení pracovníků
+uzavře frontu a~ponechá fotky, zprávy i~historii. Po~uzavření je~znovu
+k~dispozici \ui{Start Watcher}. \ui{Check folder only} provede
 kontrolu složky bez nahrávání a~bez spuštění trvalého sledování. Ozubené kolo
 Watcher otevře nastavení výběru složky, podsložek, intervalu kontroly, stability
 souborů, metadat simulátoru
 a~volitelného mazání zdrojů. Při běžícím sledování nelze nastavení měnit;
 nejprve
-je nutné sledování zastavit. \ui{Save watcher settings} uloží změny pro příští
-spuštění. \ui{Cancel}, klávesa Escape nebo zavření okna obnoví původní cestu,
+je nutné sledování zastavit. \ui{Choose folder…} uloží složku přímo ve
+Watcheru. \ui{Start Watcher} upozorní, pokud složka chybí.
+\ui{Save watcher settings} uloží nastavení Watcheru pro příští spuštění.
+\ui{Cancel}, klávesa Escape nebo zavření okna obnoví původní cestu,
 počet ignorovaných souborů, čas kontroly a~nastavení.
 \ui{Sync UTC time} zůstává volitelná a~je vedle hlavních tlačítek.
 Dlouhé stránky a~dialogy lze posouvat kolečkem myši nebo posuvníkem; textová
@@ -1802,6 +2149,23 @@ Nepoužívá se
 průhlednost celého okna a~nepřidávají se běhové závislosti. Bez Pillow zůstávají
 čitelné ploché styly ttk a~nativní ovládací prvky i~zdrojový režim včetně
 \texttt{--once} zůstávají podporované.
+Před skenem \texttt{--once} ověřuje uložený režim pomocí Windows Credential
+Manageru. Ověřený starší či nemigrovaný profil může použít API klíč; propojený,
+první, neznámý či nedostupný stav skončí nenulovým kódem bez skenu. Tato
+procesová kontrola se opakuje před každým pokusem a~přesměrováním inventáře
+a~uploadu; již běžící požadavek může doběhnout. Nechrání ostatní procesy ani
+grafické pracovní úlohy. Požadavky s~API klíčem odmítají přesměrování na jiný
+server, nepovolený port nebo z~HTTPS na HTTP; případně nastavte cílovou URL.
+Skutečné chování Windows zatím není kvalifikované.
+Ve Windows je mazání sledovaných zdrojů pro nová nastavení zapnuté; výslovně
+uložené vypnutí se zachová. Přepínač v~nastavení Watcheru platí pro linked
+i~API-key záznam. Po úspěšné odpovědi uploadu a~lokálním potvrzení nativní
+handle ověří identitu a~bajty původního souboru a~smaže tentýž otevřený zdroj.
+Změněné, přesměrované, hardlinkované či obsazené soubory zůstanou s~varováním.
+Shoda inventáře ani nejistý upload mazání nepovolí. Ostatní platformy, ruční
+importy a~zdrojové ZIPy zdroje zachovávají. Odvolání API klíče
+z~letového workflow je dočasně nedostupné. Ochrana režimu GUI a~obnova po pádu
+se stále dokončují a~nejsou kvalifikované.
 
 \subsection{Start s~Windows a~jedna běžící instance}
 
@@ -1923,8 +2287,8 @@ instalátoru po úplném ukončení staré aplikace.
 Uploader používá tmavé skleněné panely, navigaci pomocí ikon a~posuvné
 přepínače. Popis ikony se zobrazí při najetí nebo zaměření klávesnicí.
 Podtitulek o~autopilotu je v~hlavičce u~PHP Gallery. Ozubená kolečka jsou
-přímo u~galerie, sledované složky nebo záznamu letu. Cesta a~výběr složky
-jsou v~nastavení Watch folder. Kolečko letu otevírá lokální nastavení
+přímo u~galerie, sledované složky nebo záznamu letu. Watcher zobrazuje cestu
+a~tlačítko \ui{Choose folder…}. Kolečko letu otevírá lokální nastavení
 automatických reportů, jazyků reportů a~rozhraní, průběhu a~složky reportů.
 Spuštění watcheru automaticky připraví záznam; samostatné spuštění letu není
 potřeba. Přepínač Record flight za běhu pozastaví nebo obnoví sběr ve stejné
@@ -1933,6 +2297,25 @@ nepřipojuje. Fotografie se nahrávají nezávisle. Zavření nastavení nezahaj
 žádnou operaci. Skleněný vzhled používá neprůhledné RGB obrázky kvůli
 spolehlivosti Windows Tk; zdrojový režim bez Pillow ponechává funkční
 nativní ovládání pro opravu závislostí.
+
+Windows přednostně používá nainstalované písmo Segoe UI Variable Text,
+případně Segoe UI nebo nativní písmo Tk. Společné textové styly respektují
+systémové vyhlazování; neproporcionální diagnostika zachovává své písmo.
+Běžné ovládací ikony, stav cache, připnutí a~záznam používají vyhlazené
+obrázky vytvořené ve vyšším rozlišení. Bez Pillow zůstávají čitelné nativní
+symboly. Aplikace nestahuje písma ani nemění systémové předvolby.
+Proces ve Windows si před vytvořením oken vyžádá systémovou podporu DPI;
+existující kontext z~manifestu zachová. Nepřidává tím automatické
+přeskupování mezi monitory. Při přesunu mezi monitory s~odlišným měřítkem
+spusťte aplikaci znovu na cílovém monitoru.
+Hlavní okno si automaticky pamatuje běžnou velikost, polohu, maximalizaci
+a~šířku stromu Fotek. Minimalizace, celá obrazovka ani skrytí do tray
+nepřepíší poslední běžné rozměry. Obnovené okno a~dělicí lišta zůstávají
+v~aktuálních mezích displeje. Tyto předvolby vzhledu nemění konfiguraci
+nahrávání ani přihlašovací údaje.
+Přechod mezi alby zruší staré zobrazení. Nový požadavek v~rámci původního
+časového limitu počká na jediný přenosový slot, pokud se předchozí přenos
+ještě ukončuje. Zrušení nového zobrazení ukončí i~toto čekání.
 
 Uložené cesty, URL galerie a~volby funkcí se při příštím spuštění obnoví.
 Jazyk rozhraní se vybírá čtyřmi přímo zobrazenými volbami. Posuvníky jsou
@@ -1967,7 +2350,8 @@ zobrazí pomlčky. Sousední zkratka \ui{PDF} otevře uložené lety.
 počet místních PDF, stav a~uchované chyby. Obnovit čte pouze checkpointy;
 Otevřít log aplikace používá existující log. \ui{Dokončit let a~vytvořit PDF}
 bez potvrzování vytvoří čtyři jazykové verze, dokončí přijatou práci a~povinné
-doručení, poté revokuje uložený klíč. Funguje i~při vypnuté automatické tvorbě.
+doručení a~ponechá připojení připravené. Funguje i~při vypnuté automatické
+tvorbě.
 
 Vybrané jazyky se~generují současně v~samostatných procesech, jeden na~jazyk
 (nyní nejvýše čtyři). Analýza letu i~mapové podklady se~připraví jednou;
@@ -2001,7 +2385,7 @@ obecné
 popisky. Kontrola probíhá každé tři sekundy i~před sledováním nebo při vypnutém
 záznamu a~UTC. SimConnect pouze otevře a~zavře, bez telemetrie a~změn
 simulátoru;
-procesy zůstávají místní. Akce, reporty a~práce s~klíčem se~nemění.
+procesy zůstávají místní.
 Tlačítko načtení/odebrání SimBriefu, jeho nastavení a~stav jsou viditelné pouze
 při detekovaném letu; skrytí zachová načtený plán. Mimo let používají Watcher,
 Import i~průběh \ui{Opustit hru} včetně odpovídajícího potvrzení a~stavu.
@@ -2023,14 +2407,12 @@ fokusu na název zobrazí celou hierarchii složek na samostatných odsazených
 řádcích, od kořene po galerii. Změna připojení aktualizuje název i~tooltip;
 záznamy letů a~historie importů zachovávají úplnou identitu galerie.
 
-Tlačítko dokončení je přímo pod cílovou galerií; jediný klik
-zahájí dokončení a~zrušení klíče. Po~chybě zachová \ui{Ponechat místně a~zrušit
-klíč} i~Opakovat
-již potvrzený záměr pro stejné připojení v~této instanci aplikace. Zrušení
-revokace, změna klíče nebo restart souhlas nepřenáší. Běžné Zastavení klíč
-zachová. Tlačítka obnovy jsou ve~dvou řádcích.
+Tlačítko dokončení je~při sledování pod cílovou galerií. Dokončení
+i~zastavení ponechá připojení pro další relaci. Serverové klíče spravujte
+v~administraci PHP Gallery. Propojená relace používá souhlas z~prohlížeče.
+Po~restartu dialog obnovy předvyplní ověřenou adresu.
 
-\ui{Opustit let} vedle dokončení ve~Watcheru/Importu a~v~průběhu letu
+V~režimu API klíče \ui{Opustit let} ve~Watcheru, Importu a~průběhu
 umožňuje místní obnovu po~smazání galerie nebo zrušení klíče. Po~potvrzení
 se~zastaví pracovníci a~vyčká se~na~běžící požadavky; čekající doručení
 se~opustí a~uložený klíč se~odstraní z~tohoto PC bez kontaktování serveru.
@@ -2050,6 +2432,12 @@ potvrzené kontrolní součty; opakování ověřuje stav na~serveru. Staré pl�
 vazby klíčů a~surová data zůstanou zachované. Zrušení ponechá dokončené verze.
 Chyby protokolu uvádějí anonymizovanou akci, HTTP stav, typ obsahu a~krátký
 výpis odpovědi.
+Před uploadem se ověří stav a~potvrzení musí odpovídat kontrolnímu součtu
+i~velikosti. Při nejasném výsledku nebo změně místního PDF soubor zůstává
+zachován a~vydání se neoznačí jako dokončené. Dříve uložené potvrzení plánu
+je historický doklad, nikoli důkaz současné existence PDF na serveru.
+Dialog vybírá soubor, nikoli hash z~okamžiku potvrzení; pozdější kontroly
+nevylučují atomicky zápis jiného procesu.
 
 Bez uloženého klíče hlavní akce zahájení otevře nastavení
 API. Rozbalte let a~případnou verzi pro jednotlivá PDF; dvojklik otevře
@@ -3591,6 +3979,15 @@ titulní obrázek a~nastavené podklady značky galerie, jsou-li dostupná pří
 schémata. Zápis doprovodného souboru používá stejné kontroly schématu jako
 odpovídající funkce galerie.
 
+Pokud se spustí administrátorská oprava štítků v~doprovodných souborech,
+odmítne neověřitelný cíl nebo cíl mimo nakonfigurovaný kořen galerií; odkazy
+vedoucí dovnitř zůstávají použitelné. Odmítnutí nebo selhání zápisu nezapíše
+potvrzení dokončení. Zápis odmítá vícenásobné pevné odkazy i~nepoužitelnou
+identitu inode a~před zkrácením kontroluje otevřený cíl a~původní obsah;
+pozdější chyba či přerušení může zanechat neúplný soubor. Celý JSON se načítá
+a~znovu zapisuje, takže se může změnit formátování i~podoba čísel. Kontroly
+nevylučují cizí zásah do souborového systému mezi pozorováními.
+
 Při vyhledání a~opravě chybějících rodičů může PHP Gallery číst podporované
 hodnoty z~doprovodného souboru místo odvozování všeho z~názvu složky.
 Importované řádky konzervativně začínají jako nezveřejněné, pokud není
@@ -3745,6 +4142,15 @@ a~poskytuje centrální postup zrušení bez odhalení původních tajných hodn
 Ovládací prvky jednotlivých galerií zůstávají dostupné pro stejné přihlašovací
 údaje s~vymezeným rozsahem.
 
+Veřejný dotaz na adrese relativní k~instalaci
+\texttt{index.php?page=app\_linking\_discovery} hlásí verzi~1 a~ověřuje
+kanonický HTTPS issuer, nezávislý secret, základní schéma a~připravenost
+volitelných schopností. Pokud není připraveno základní propojení, hlásí
+nedostupnost; neznámé volitelné úložiště skryje pouze jeho operaci. Nevyžaduje
+relaci správce a~neodhaluje přihlašovací údaje ani seznam galerií. Stávající API
+klíč omezený na galerii zůstává nezávislý; zjištění dostupnosti neopravňuje
+k~nahrávání.
+
 Doprovodná aplikace pro Windows používá stejný kontrakt nahrávání omezený na
 galerii. Má dva běžné režimy nahrávání. \ui{Sledování složky} ignoruje soubory
 přítomné již při zahájení sledování, čeká na ustálení nových souborů, místně si
@@ -3764,7 +4170,9 @@ s~nízkou prioritou. Převezme jednu ověřenou analytickou úlohu, stáhne pouz
 převzatý podklad, vytvoří interní prohledávatelná metadata pomocí vybrané
 generace místního backendu a~modelu a~vrátí výsledek do stávajícího koncového
 bodu automatizace nahrávání. Tento pracovní proces je oddělený od lidských
-popisků. Akce \ui{Vynutit opětovné generování metadat AI} na úrovni galerie
+popisků. Při zastavení čeká na skutečné dokončení právě probíhajícího heartbeat
+požadavku; blokované HTTP nebo DNS mohou čekání prodloužit nad časový limit socketu.
+Akce \ui{Vynutit opětovné generování metadat AI} na úrovni galerie
 vymaže uložené generované řádky a~starý stav fronty pro danou větev a~zařadí
 novou práci; náročná analýza nadále probíhá v~pracovním procesu Windows.
 
@@ -4742,6 +5150,9 @@ tokeny, volitelný e-mail pro obnovu, nastavenou dobu platnosti a~vybraný
 poštovní transport. Používejte HTTPS, silné přihlašovací údaje správce, omezené
 databázové účty a~chráněné tajné údaje pošty a~API.
 
+Galerie chráněná heslem se ve výpisu může zobrazit jako zamčená karta
+s~názvem a~odkazem; její popis ani náhledový obrázek karta nezobrazuje.
+
 Ochrana cookies správce, schéma generovaných adres a~kontroly HTTPS pro
 návštěvnické účty používají společná pravidla přenosu. Přímé TLS je rozpoznáno
 bez nastavení proxy. Pokud reverzní proxy ukončuje TLS a~předává PHP požadavky
@@ -5173,6 +5584,11 @@ odkazů. Globální pozadí a~grafické prvky Vzhledu jsou omezeny na~své adres
 mezipaměti a~veřejné obrazové odpovědi povolují podporované rastrové formáty,
 nikoli aktivní SVG. Původní soubor pozadí Vzhledu smí zobrazit jen přihlášený
 administrátor, zatímco běžná veřejná odvozenina zůstává přístupná.
+
+U~nového cíle galerie kontrola porovnává skutečnou cestu existujícího rodiče
+s~kořenem galerie. Podporuje tak aliasy jako macOS \filepath{/var} směrovaný
+na~\filepath{/private/var}; nerozpoznané existující položky a~rodiče mimo kořen
+odmítne. Kontrola nebrání souběžné změně souborového systému po~ověření.
 
 Při migraci mezi instalacemi se~umístění zdrojových souborů ověřuje jak při
 sestavení manifestu, tak při jejich vydávání přes API klíč. Přijatý soubor
@@ -7590,6 +8006,11 @@ a~pushnou přesně tuto větev. Nikdy přímo nemění \codeword{develop} ani
 audity, generátory a~smyčky testů jsou výjimečná diagnostika. CI zachovává
 neměnnou merge-base s~\codeword{origin/main}, vydání předchozí stabilní tag.
 Červené ani pomalé CI není důvod pro pouze lokální kvalifikaci.
+
+Pro diagnostiku s~dočasnou MySQL nabízí
+\filepath{scripts/gallery_workflow_mysql.php} režim
+\codeword{--audit-php-regression} přes centrální PHP regresní sadu. K~izolaci
+mezipaměti checkoutu je nutná také jeho samostatná izolovaná kopie.
 
 Povinná hostovaná kvalifikace zahrnuje PHP/Node/WinApp testy, zdrojové
 kontrakty, Chromium, skutečné MySQL/MariaDB scénáře, kompatibilitu PHP a~povinné

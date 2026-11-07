@@ -65,6 +65,12 @@ RECOVERABLE_ITEM_STATES = {
     "cancelled",
 }
 
+# Persisted before a linked transfer so a lost response or crash cannot cause
+# an automatic replay while database-only inventory cannot prove absence.
+LINKED_UPLOAD_UNCERTAIN_REASON = (
+    "Linked upload outcome may be uncertain; review the gallery before retrying."
+)
+
 
 @dataclass
 class ActivityEvent:

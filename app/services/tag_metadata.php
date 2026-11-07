@@ -39,6 +39,7 @@ namespace Gallery\Services;
 use FilesystemIterator;
 use InvalidArgumentException;
 use PDOException;
+use RuntimeException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
@@ -1268,9 +1269,60 @@ function normalize_existing_tags(): int
 }
 
 /**
- * Normalize gallery sidecar tag text recursively so filesystem metadata matches the database convention.
+ * Observe an existing sidecar target inside the configured gallery root.
  *
- * @return int Integer result for the caller.
+ * @param string $path Sidecar path, including any supported in-root link.
+ * @return array{target:string,dev:int,ino:int} Resolved single-link target identity.
+ * @throws RuntimeException When the existing target cannot be verified.
+ */
+function tag_metadata_sidecar_identity(string $path): array
+{
+    clearstatcache(true, $path);
+    $target = realpath($path);
+    if ($target === false || !is_file($target)
+        || !gallery_filesystem_path_inside_root($target)) {
+        throw new RuntimeException(
+            'Gallery sidecar target could not be verified inside storage.',
+        );
+    }
+    clearstatcache(true, $target);
+    $stat = @stat($target);
+    if (!is_array($stat) || !isset($stat['dev'], $stat['ino'])
+        || $stat['ino'] <= 0 || ($stat['nlink'] ?? null) !== 1) {
+        throw new RuntimeException('Gallery sidecar identity is unavailable.');
+    }
+    return ['target' => $target, 'dev' => $stat['dev'], 'ino' => $stat['ino']];
+}
+
+/**
+ * Check that an opened sidecar handle and its path retain the observed identity.
+ *
+ * @param string $path Sidecar path, including any supported in-root link.
+ * @param resource $handle Already opened sidecar stream.
+ * @param array{target:string,dev:int,ino:int} $expected Previously observed target.
+ * @return void Returns only while the observed identities agree.
+ * @throws RuntimeException When an identity or containment check is uncertain.
+ */
+function tag_metadata_assert_sidecar_handle(
+    string $path,
+    mixed $handle,
+    array $expected,
+): void {
+    $current = tag_metadata_sidecar_identity($path);
+    $opened = fstat($handle);
+    if ($current !== $expected || !is_array($opened)
+        || ($opened['dev'] ?? null) !== $expected['dev']
+        || ($opened['ino'] ?? null) !== $expected['ino']
+        || ($opened['nlink'] ?? null) !== 1) {
+        throw new RuntimeException('Gallery sidecar changed during repair.');
+    }
+}
+
+/**
+ * Normalize sidecar tag text while keeping existing targets inside gallery storage.
+ *
+ * @return int Number of sidecars whose tag text was normalized.
+ * @throws RuntimeException When a target is unsafe or sidecar I/O fails.
  */
 function normalize_gallery_sidecar_tags_recursively(): int
 {
@@ -1295,8 +1347,25 @@ function normalize_gallery_sidecar_tags_recursively(): int
         }
         // Variable $path stores this steps working value.
         $path = $file->getPathname();
+        // Identity observations preserve in-root links but cannot exclude an
+        // unrelated process exchanging a path between filesystem calls.
+        $identity = tag_metadata_sidecar_identity($path);
+        $reader = @fopen($path, 'rb');
+        if ($reader === false) {
+            throw new RuntimeException('Gallery sidecar could not be opened.');
+        }
+        try {
+            tag_metadata_assert_sidecar_handle($path, $reader, $identity);
+            $bytes = stream_get_contents($reader);
+            if ($bytes === false) {
+                throw new RuntimeException('Gallery sidecar could not be read.');
+            }
+            tag_metadata_assert_sidecar_handle($path, $reader, $identity);
+        } finally {
+            fclose($reader);
+        }
         // Variable $data stores this steps working value.
-        $data = json_decode((string) file_get_contents($path), true);
+        $data = json_decode($bytes, true);
         if (!is_array($data) || !array_key_exists('tags', $data)) {
             continue;
         }
@@ -1310,12 +1379,49 @@ function normalize_gallery_sidecar_tags_recursively(): int
         $normalized = implode(', ', split_tag_names($source));
         if ($normalized !== $source) {
             $data['tags'] = $normalized;
-            file_put_contents($path, json_encode(
+            $encoded = json_encode(
                 $data,
                 JSON_PRETTY_PRINT
                     | JSON_UNESCAPED_SLASHES
                     | JSON_UNESCAPED_UNICODE,
-            ));
+            );
+            if ($encoded === false) {
+                throw new RuntimeException(
+                    'Gallery sidecar could not be encoded.',
+                );
+            }
+            // Opening r+b does not truncate an exchanged target before its
+            // identity and contents have been checked against the first read.
+            $writer = @fopen($path, 'r+b');
+            if ($writer === false) {
+                throw new RuntimeException('Gallery sidecar could not be opened.');
+            }
+            try {
+                tag_metadata_assert_sidecar_handle($path, $writer, $identity);
+                if (stream_get_contents($writer) !== $bytes) {
+                    throw new RuntimeException('Gallery sidecar changed during repair.');
+                }
+                tag_metadata_assert_sidecar_handle($path, $writer, $identity);
+                if (!rewind($writer) || !ftruncate($writer, 0)) {
+                    throw new RuntimeException('Gallery sidecar could not be prepared.');
+                }
+                $offset = 0;
+                $length = strlen($encoded);
+                while ($offset < $length) {
+                    $written = fwrite($writer, substr($encoded, $offset));
+                    if (!is_int($written) || $written <= 0) {
+                        throw new RuntimeException(
+                            'Gallery sidecar could not be written completely.',
+                        );
+                    }
+                    $offset += $written;
+                }
+                if (!fflush($writer)) {
+                    throw new RuntimeException('Gallery sidecar could not be flushed.');
+                }
+            } finally {
+                fclose($writer);
+            }
             $changed++;
         }
     }

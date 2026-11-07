@@ -21,10 +21,22 @@ opacity. Source mode without Pillow retains usable native controls for repair.
 Import, Activity, AI and Settings share the same card spacing, continuous
 toolbar surfaces and flat table headings as the Watcher view.
 
-The app header groups PHP Gallery with “Your gallery on autopilot”. The Watcher
-screen contains the gallery connection, Watch folder settings and primary
-Start/Stop control. The folder path, picker and open-folder action share the
-Watch folder settings sheet. Settings gears sit immediately beside their
+Windows uses the installed Segoe UI Variable Text family when available,
+with Segoe UI and the native Tk font as fallbacks. Shared fonts cover labels,
+tables, inputs, menus and secondary windows; fixed-width diagnostics keep their
+monospaced font. Native text respects Windows font smoothing/ClearType.
+Known control, cache, pin and recording icons use supersampled artwork rather
+than small emoji or font-substitution glyphs. Pillow-free source mode keeps
+readable native glyphs. No font download or system preference change is needed.
+Before creating Tk windows, an unaware Windows process requests system
+DPI awareness; an existing manifest/host context is preserved. This avoids
+startup bitmap scaling, but does not add per-monitor layout reflow. Restart on
+the destination display when moving between displays with different scaling.
+
+The app header groups PHP Gallery and the linked site. The Watcher screen
+shows the upload gallery, chosen folder and primary Start/Stop control.
+**Choose folder…** is on the Watcher screen; its settings sheet also offers
+the picker and open-folder action. Settings gears sit immediately beside their
 gallery, folder or flight control. Record flight is the only flight preference
 on the main screen. Its
 gear opens a local settings sheet containing automatic report creation, report
@@ -37,6 +49,18 @@ Existing saved paths, Gallery URL, connection and local options are restored on
 restart from `%APPDATA%\PHPGalleryUploader\config.json`. Flight switches and
 languages use the existing `flights/preferences.json` in the same app profile.
 Saving feature preferences never resets unrelated settings.
+
+The main window remembers its normal size and position, maximized state and
+Photos tree width automatically. Minimizing, fullscreen and hiding to the tray
+do not overwrite the last normal rectangle. On a changed display layout, the
+restored rectangle and divider are clamped to usable current bounds. These
+view-only preferences are separate from upload configuration and credentials.
+
+Switching albums cancels the old viewer without releasing a transport that is
+still finishing DNS or socket work. The next request waits within its original
+deadline for that single transport slot instead of showing an immediate busy
+failure. Canceling the new viewer also cancels its wait; no extra network worker
+is admitted while an earlier one is still running.
 
 The Record flight row includes a single compact, background-matched instrument
 line: IAS in knots, altitude in feet and signed V/S in feet per minute. It reads
@@ -76,9 +100,22 @@ workers.
 An existing process in another Windows session must be opened in that session.
 Native coordination failure refuses a second writer. Normal exit or a crash
 releases ownership without a stale lock file. `--once` refuses overlapping work
-with exit code 1; version/runtime probes and the independent updater helper keep
+with exit code 1. Before scanning, it also verifies saved mode evidence through
+Windows Credential Manager and holds a local legacy-work lease for the scan.
+An unavailable vault, first setup, linked mode or ambiguous evidence returns
+nonzero without scanning. A verified legacy or unmigrated legacy configuration,
+including a UNC config path, retains its API-key scan. This guard does not cover
+GUI workers or fence other processes. Once-mode inventory and upload requests
+recheck evidence for each endpoint attempt and redirect; an already-running
+request can finish. Real Windows
+behavior remains unqualified. Version/runtime probes and the independent updater helper keep
 their existing early dispatch. Uninstall removes the Run value for its user;
 other users' profiles remain independently managed.
+
+Requests carrying the saved API key refuse redirects to another host, an
+unapproved port, or from HTTPS to HTTP. Same-host redirects on the same effective
+port and the standard HTTP-to-HTTPS upgrade remain supported. If an installation
+uses a different redirect, configure its final gallery URL directly.
 
 ## Flight recording and reports
 
@@ -173,11 +210,20 @@ report request has a 180-second HTTP timeout. Reports are distinct from OFP
 documents, inherit existing gallery visibility and add no database schema.
 Unsupported servers leave reports local and retryable.
 
+An upload starts only after an unambiguous status confirms that its report is
+absent. A receipt must match the report checksum and byte length. An incomplete
+status or receipt is not success; if bytes may already have been sent, the
+client checks status and retains the report when the outcome remains unknown.
+The PDF is hashed with a bounded read before delivery and checked again before
+recording its receipt. These reads do not atomically exclude an unrelated writer;
+the saved-file confirmation dialog does not capture the file's bytes or hash.
+
 ### Manual completion and saved PDFs
 
-**Finish flight…** sits directly below **Target gallery** in Watcher and Import;
-without an available SimConnect connection it reads **Finish game…** instead.
-The corresponding no-key action is **Begin flight…** or **Begin game…**.
+During capture, **Finish flight…** sits below the upload gallery in Watcher
+and Import. Without flight detection it uses **Finish game…**. **Begin
+flight…** or **Begin game…** opens API-key setup only before a connection
+has been configured in API-key mode.
 A background observer checks every three seconds, even before Watcher starts
 and with recording or UTC sync disabled. SimConnect open/close takes priority;
 it requests no telemetry and changes no simulator state. When it is unavailable,
@@ -185,14 +231,14 @@ known process names owned by the same Windows account provide an optional
 fallback without admin rights. Microsoft Flight Simulator processes retain
 flight wording. Cyberpunk 2077, the Mass Effect trilogy, Skyrim and Dragon Age
 have localized Begin/Finish easter eggs; unknown/ambiguous games retain general
-wording. Button actions, recording, reports and key handling remain unchanged.
+wording.
 The SimBrief Load/Unload button, its settings icon and status appear only for
 a detected flight; changing context hides/restores them without unloading a
 plan.
-Abandon uses **Abandon flight…** or **Abandon game…** consistently in Watcher,
-Import and progress, including its localized confirmation and completion text.
-Abandonment stops uploader work and clears the local key; the game keeps
-running.
+The legacy key action uses **Abandon flight…** or **Abandon game…** in
+Watcher, Import and progress. It clears the local key after its explicit
+confirmation and cleanup. Linked sessions offer **Keep files locally…** in
+Watcher progress.
 
 The bundled offline catalog covers 10,405 games and 10,888 Windows executable
 rules from a dated Discord snapshot; it is broad rather than complete. Detection
@@ -214,28 +260,36 @@ hierarchy on separate indented lines, from the root to the selected gallery.
 The heading and tooltip follow connection changes; the full identity remains
 available to flight records and import history.
 
-One click on Finish stops acquisition,
-drains accepted work, creates all four PDF editions and completes their required
-delivery before revoking the saved key. No confirmation or success message box
-appears; successful progress closes after durable local key cleanup. Errors
-remain visible and retain work for retry. Settings retains direct key
-management.
-Without a saved key the enabled Begin button opens
-connection/API-key settings.
-If report delivery fails, **Keep locally and revoke key** finishes accepted work
-and continues the already-confirmed revocation. Ordinary Stop uses a separate
-local-retention confirmation that keeps the key. Retry preserves only the same
-process's unsubmitted consent for the same endpoint/key; cancellation, changed
-credentials and restart never restore it. Recovery actions wrap into two rows.
+**Stop Watcher** finishes accepted work using the saved report preferences.
+**Finish flight…** also requests all available PDF editions. Both keep the
+current upload connection. Linked reports stay on the computer. Manage
+server-side API key revocation separately in PHP Gallery Admin.
+
+| Watcher state | How it starts | Next action |
+| --- | --- | --- |
+| Ready | Upload target and folder are chosen; the previous session is closed | **Start Watcher**, or use Import for selected files. |
+| Starting | Start verifies the gallery and reads the folder's existing files | The Watcher card shows the current preparation phase and activity. Wait for REC before creating a new screenshot. |
+| Watching | **Start Watcher** captures the current target and ignores files already in the folder | **Stop Watcher** or **Finish flight/game…** stops discovery and finishes the accepted queue. |
+| Finishing | Stop or Finish is draining work or producing reports | **Show progress…** reopens the progress view. Success returns to **Start Watcher**. |
+| Pending | WinApp restarted, the gallery became unavailable or completion failed | **Review pending uploads…**. Reconnect to the same site and choose the original gallery if prompted, then **Retry**. |
+| Closed locally | Confirm **Keep files locally…** for a linked session in progress or recovery | **Start Watcher** becomes available. Sources, reports and uncertain-upload evidence stay on disk. |
+
+The reconnect dialog prefills the verified saved installation address. The
+session's queue retains its original gallery across restarts and target
+changes require resolving it first. When gallery access is gone, local
+closure still works. If a transfer result is uncertain, **Review retained
+upload…** remains the separate decision for continuing other files. Neither
+closing a session nor an inventory check retries the uncertain transfer.
 
 **Abandon flight…** is available beside Finish in Watcher and Import and in
 ordinary flight progress. Use it when the gallery was deleted, its key was
 revoked, or you want to leave the current connection without completing
 delivery.
 After explicit confirmation it stops recording and upload producers, waits for
-in-flight requests to settle, marks unresolved sessions/import bindings as
-abandoned and removes the saved key from this PC. No connection test, report
-generation, further upload or server revocation is required. It also works when
+in-flight requests to settle, marks unresolved Watcher sessions as abandoned
+and removes the saved key from this PC after checking accepted imports. No
+connection test, report generation, upload or server revocation is required.
+It also works when
 no flight tasks remain and only the obsolete key is still configured. Raw
 recordings, queued photograph sources, existing PDFs and acknowledged receipts
 remain local; the main action becomes Begin for a new connection, using
@@ -275,7 +329,7 @@ actions. Creating new PDFs requires
 ReportLab; a missing component gives an installation/repair message rather than
 classifying the recording as damaged.
 
-**Finish flight and create PDFs** uses the same one-click finish/revoke flow,
+**Finish flight and create PDFs** uses the same Finish flow,
 enabling EN/CS/DE/SV for pending sessions even when automatic creation was
 disabled, without changing that saved preference. Loaded OFP is saved to the
 current flight, or the sole pending flight if none is current. It is never
@@ -645,14 +699,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.11.0)
+## Windows installer (next version: 0.12.0)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **0.11.1**; this source version
+Gallery CMS release. The current source targets **0.12.0**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.11.1/`. Existing version outputs and other version folders remain
+`winapp/dist/0.12.0/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -789,12 +843,23 @@ tool remains a source-only utility.
 
 ## Main window
 
-The window opens on **Watcher**, the first task in the navigation order:
-**Watcher**, **Import**, **Activity**, **AI**, and **Settings**. The Watcher
-view
-shows the gallery target. The persistent header connection control opens the
-compact API-key dialog from every view. The app header also has Settings,
-updates, and help controls. Icon controls have
+A normal launch opens **Photos**, the first task in the navigation order:
+**Photos**, **Watcher**, **Import**, **Activity**, **AI**, and **Settings**.
+With an active gallery link, Photos loads a gallery tree on the left and a
+photo grid on the right. It opens an initial gallery automatically. Expand or
+collapse a branch or the whole tree and click a gallery to show its photos in
+the same window. When disconnected, **Connect** opens the existing address
+dialog and browser approval flow. An active listing link can browse public
+photos directly after approval. Large trees offer a continuation control after
+the initial 500 entries. Choose the separate upload destination in
+Watcher or Import using **Use for uploads**. A logon `--startup` launch stays
+in the system tray until restored. An approved saved link can resume on
+startup.
+
+The Watcher view shows the gallery target. The persistent API-key connection
+control opens the compact key dialog from every view. The separate ordinary
+header **Link gallery** flow remains the upload/search path. The app header
+also has Settings, updates, and help controls. Icon controls have
 hover/focus tooltips and keyboard focus; help opens usage guidance.
 Long pages and dialogs scroll with the mouse wheel or scrollbar; text and table
 controls keep their own scrolling.
@@ -805,7 +870,7 @@ click; while active it becomes **■ Stop Watcher**. **Check folder only**
 performs
 a non-uploading dry run and does not start watching. The dedicated Watcher gear
 opens a settings sheet for folder selection, recursion, scan interval, file
-stability, simulator metadata, and the opt-in source-delete setting, with
+stability, simulator metadata, and the saved source-delete setting, with
 explicit
 **Save watcher settings** and **Cancel** actions. **Sync UTC time** remains an
 opt-in control beside the primary actions, with a nearby **?** explanation.
@@ -836,7 +901,9 @@ by default. The app header keeps the connection and watcher states visible.
 3. Copy the key when it is shown.
 4. Run `install.bat` from `winapp`, or start `gallery_watch_upload.pyw`
    directly.
-5. On the default **Watcher** screen, select the top connection control.
+5. Open **Photos** to browse. Use **Connect** there when disconnected. For
+   upload setup, select **Watcher** in the rail and then use the header
+   connection control.
 6. Enter the gallery site URL or upload endpoint.
 7. Paste the API key with the **Paste** button or type it into the masked field.
 8. Press **Save & Test** in the compact connection dialog.
@@ -860,6 +927,379 @@ non-JSON HTTP 404 before PHP Gallery is reached, the client may retry
 `/api/upload` as a compatibility fallback. Gallery-generated JSON errors such as
 invalid/revoked keys, forbidden access, or a missing target gallery remain
 authoritative and are not hidden by route fallback.
+
+### Browser-approved gallery account
+
+Click **Link gallery** in the main window. Choose a recent address or paste
+the gallery address from your browser and confirm **Link gallery**. The
+dialog shows progress while the app checks the gallery and waits for browser
+approval.
+Sign in as an administrator if prompted, then choose **Approve** or **Cancel**
+on the consent page. **Approval received** means you can return to WinApp.
+The app verifies the loopback response and exchanges the
+one-use code using PKCE. On success it closes the dialog, shows the linked
+site's address and loads its first gallery page. If linking fails, the dialog
+shows the error and lets you retry.
+
+Use the **⋯** beside **Unlink gallery** to open the same chooser while
+connected. **Linked now** lists the installations with live access. Select
+one and click **Switch to gallery** to use its current approval. **Recent
+addresses** keeps up to 20 previously used installation URLs across restarts.
+Choose one to resume a saved grant or start browser approval. The power icon
+unlinks the selected live
+site, and the × removes a recent address from the profile. The browsing
+site and the upload destination have independent selections. Use **Choose
+gallery…** and **Use for uploads** to change the upload destination.
+
+A gallery on the same computer can use its direct `http://localhost`
+address. WinApp preserves the installation port and path. For other pasted
+HTTP addresses it tries verified HTTPS at that host and path, preserving any
+explicit port. The server uses its configured address for the exact issuer.
+
+This action requests account and gallery-list access, including
+metadata search when the server offers it. On an admitted local Windows or
+macOS profile it also requests image uploads when offered. Consent shows the
+actual permissions, including access to private and unpublished galleries.
+On compatible servers, the browser also asks you to approve rolling access.
+The approval lasts seven days from the last successful authenticated use or
+refresh. WinApp renews its 15-minute access token with a credential kept in
+macOS Keychain or Windows Credential Manager. This works over verified HTTPS
+or direct `http://localhost`. Older servers use a temporary link lasting up
+to 15 minutes. Expiry or revocation requires new browser approval. Browser
+linking creates no gallery API keys. Open **Settings** → **Manage link…** for
+separate permissions and saved-link controls.
+
+Open **Choose gallery…** beside the linked address and type in **Search
+galleries**. Suggestions favor names, then descriptions, then gallery tags.
+Names also match a nearby spelling, for example `cyberpnuk` or `cyberpuk`
+for `Cyberpunk`. Use quoted phrases, uppercase `AND` or `OR` as on the
+website. Indented rows show nesting and the selected row shows its parent
+titles. The arrow loads more results for the same search. A basic link or a
+catalog beyond the 10,000-gallery search budget can filter the current
+page by title. For catalog search on a supporting server, approve a new link.
+
+Choose a result and click **Use for uploads**. WinApp uses the browser-approved
+upload access for that gallery, including on a fresh profile without an API
+key. After verification the picker closes and **Upload gallery** shows the
+destination in Watcher and Import. Save a folder with **Choose folder…** in
+Watcher or add files in Import. The ellipsis reveals more gallery actions.
+**Unlink gallery**
+ends the current link; a destination using that link needs reconnecting.
+API-key uploads have their own **Gallery URL** and gallery-scoped `pgu_` key.
+The gallery installer and updater provision the linking key
+automatically. The server uses its saved website address, including the
+installation path. Existing installations with explicit linking settings keep
+those settings.
+
+With separately approved read permission, select a gallery and choose
+**Read selected details** to see its ID, title, revision and saved visibility,
+access and listing settings. These are stored values, not inherited effective
+access. A read already checked by the server can complete after concurrent
+revocation. An older server may not support this permission or endpoint; the
+client reports unsupported or unavailable without silently reducing scope.
+The saved `pgu_` upload path remains available. Disposable HTTPS protocol and
+desktop/narrow consent rendering have been exercised. Installed Windows and
+deployed browser pairing remain unqualified. See
+`docs/APP_LINKING_PHASE_0.md` for the current protocol and gates.
+
+The separate `gallery:visibility` permission is offered only when the server
+advertises it, and requires explicit browser approval. Before a change, WinApp
+confirms the current gallery state; a stale revision or schedule conflict
+causes a read-only refresh and never replays the change. Older servers omit
+the permission. PHP Gallery's operator inspection defaults to read-only; only
+an explicit current review fingerprint can reconcile eligible v2 sidecar
+evidence and retire its marker without changing the database revision. Installed
+GUI acceptance, MariaDB and deployed recovery behavior remain unqualified.
+Candidate `8de8e50a` passed BASIC `42107055888` and WinApp `42107055797`; see
+`docs/APP_LINKING_PHASE_0.md` for evidence and limits.
+
+The active gallery listing link permits listed public, non-sensitive photos.
+The same public export policy applies to every ancestor. A supported server
+can request explicit administrator media consent to also show protected,
+hidden and NSFW media in Photos. An earlier link keeps its original consent
+until the administrator approves the added access in the browser. WinApp
+verifies the new grant and replaces the saved connection for the same site
+and account so Photos can use the added permissions immediately and after
+restart. A selected Watcher gallery keeps its existing destination and gets
+the newly approved scope. Explicit `presentation:read` permits presentation
+settings and visible music.
+The server verifies the active grant and direct gallery ownership for every
+media request. Internal photo pages contain up to 64 items, or eight on older
+servers. Each binary is
+limited to 16 MiB. If the selected detail asset exceeds that limit, WinApp can
+show an existing display WebP or JPG that passes the same checks and size cap.
+The server serves detail as unavailable if it has no eligible rendition.
+Presentation lists contain at most 32 visible MP3/WAV tracks.
+WinApp uses the same verified link, Pillow for photos and native audio on
+Windows and macOS.
+For a source launch, use the Python interpreter where `requirements.txt` was
+installed so its Pillow decoder can display thumbnails and detail images.
+The responsive grid scrolls continuously and loads thumbnails in the viewport.
+The default-on **Subgalleries**
+switch shows direct child folder cards above the selected gallery's photos.
+Each folder uses its first authorized direct thumbnail as a cover. When no
+eligible image is available, the card shows a neutral folder. Photos keeps
+listings in memory and uses the current link grant. If the smallest thumbnail
+is missing, the server can use another existing rendition or the existing
+public display file within the same byte limit. Click a thumbnail or focus it and
+press Enter to open the inline lightbox. Left and Right wrap across the whole
+album. F or F11 toggles fullscreen. Pointer motion briefly reveals controls
+including the music transport for an authorized playlist.
+Escape exits fullscreen before closing the lightbox. Closing the lightbox or
+pressing Escape restores the tree and grid, including after an image error.
+Use the mouse wheel or two-finger scrolling to move through the photo grid.
+The same gestures and + and − zoom in either lightbox mode. Press 0 to reset
+the view and drag to pan. When the server permits a
+photo's GPS location, its anchored pin offers **Open in OpenStreetMap**, which
+opens the system browser. The lightbox prepares the previous and next photos
+in bounded memory, including at the wrap points. Thumbnails trim detected
+black bars and show the entire remaining scene at its own aspect ratio.
+Photo and thumbnail downloads have a separate five-minute
+quota of 600 requests per IP and 3,600 globally. If the server returns HTTP 429, Photos
+shows the limit and pauses speculative requests until **Retry**.
+**Fit by content** crops
+detected black bands in windowed and fullscreen views. **Show original frame**
+brings the bands back. Both modes fit the whole resulting frame within the
+available area at its original aspect ratio. The grid reflows when the number
+of columns changes. The lightbox updates a preview during a window resize and
+refines it after the resize settles. On macOS 15 or later, WinApp can display
+HDR detail and fullscreen photos when the selected image retains HDR data,
+the display supports extended dynamic range, and the Python environment has
+PyObjC and a Tk build with the AppKit window bridge. Tk 9 was exercised.
+Pillow/Tk provides 8-bit SDR on other configurations, including Windows.
+Thumbnails use SDR.
+
+One per-user disk cache stores opted-in photo and audio bytes with their
+verified content digests. Its ordinary area keeps up to 4,096 entries or
+1 GiB and evicts the
+least recently accessed entries under storage pressure. A bounded decoded
+thumbnail cache accelerates return visits during the current session. A
+current catalogue validator lets WinApp read matching disk thumbnails before
+making a binary request. Older servers use photo freshness and authorized
+conditional requests. An authorized
+current playlist can reuse a cached track with the same SHA-256, size and media
+type. Servers returning `no-store` supply media for the current view or
+playback. Administrator-only media uses this transient path by default.
+
+Play opens the slideshow in fullscreen. It loops through the full album,
+using the authorized server interval when enabled or a five-second default.
+The authorized configured soundtrack starts with the presentation. Music
+controls can play or pause and choose the previous or next track. Playback
+reads a local file and prepares the next track while the current one plays.
+
+Open a gallery or photo's contextual panel with right-click or Control-click
+on macOS. Click elsewhere or press Escape to close it. The eye action changes
+stored visibility when separately approved. Admin Information shows the
+gallery's direct inventory and settings, or the photo's indexed format,
+size, dimensions, capture settings and EXIF. Location appears when the
+gallery's map policy permits it. JPEG and WebP quality describe the server's
+current settings for generated thumbnails. The gallery card also shows its
+current local cache coverage. A dotted circle marks unchecked coverage. The
+cloud marks online photos, the half circle marks a partial cache, and the
+filled circle marks an album with all authorized photo renditions on disk.
+The tree and heading update automatically from already loaded photo metadata
+and local cache headers. A partial catalogue never claims that an entire
+gallery is cached. The heading's cache icon opens the same gallery menu and
+explains the symbols on hover.
+
+**Preload gallery** reads the selected gallery's direct photos in the
+background, including thumbnails and lightbox renditions. Subgalleries are
+separate targets. Progress reports photo counts and supports cancellation.
+Existing verified local bodies are reused. A bounded server `Retry-After`
+pauses the job with a cancelable countdown; exhausted retries leave an explicit
+retry-later message. Retry continues from available cached bytes.
+**Keep preloaded** also retains the successfully prepared entries in a
+separate hashed gallery area. They survive ordinary eviction and restarts and
+consume neither the ordinary entry count nor its byte quota. Disabling this
+preference returns that gallery to ordinary LRU policy, which can evict excess
+entries. Cancelling an unfinished preload keeps its completed entries and pin
+preference; it does not mark the whole gallery complete.
+An explicit preload with an Admin Photos link can also retain private or draft
+photos when the server advertises the Admin preload capability. The gallery,
+its complete ancestry and each photo must be verified as non-NSFW. The saved
+opt-in and private entries are separated by installation, verified account and
+gallery. Later thumbnail and lightbox reads revalidate private entries through
+the live server before returning their bytes. Ordinary restricted browsing,
+older servers, NSFW media and other `no-store` responses remain transient.
+Preloading uses current gallery permissions; local files do not grant offline
+or expired-link access. Zero stored photos are reported as unavailable for
+preload, with a safe reason, rather than as a partly successful download.
+One explicit preload accepts up to 100,000 direct photos as a bounded work
+operation; this is separate from the ordinary cache quota.
+
+**Edit gallery** opens the selected gallery in the system browser with the
+web Admin editor in its right-side panel. The browser uses its own Admin
+login; WinApp credentials are never included in the URL. Older web servers
+open their ordinary full-page editor instead.
+The add button in the tree toolbar creates a gallery at the site's root.
+Use the add button beside the selected gallery's title, a gallery's context
+menu or blank photo space to create a subgallery. Each form opens inline.
+The first gallery on an empty site opens as soon as the server confirms it.
+The tree restores expanded and collapsed branches for each linked site and
+account. Use the circular arrow beside the album title to refresh its photos.
+While an Admin album is visible, WinApp checks its indexed revision about
+every 30 seconds and refreshes when it changes. The current scroll position
+and unchanged thumbnail data are retained. Older servers support manual
+refresh.
+
+Select photos with Control-click on Windows or Command-click on macOS, or use
+the photo context menu. Open the context menu to delete one photo or the
+selection using the current Admin Photos link. Confirm each batch of up to
+64 photos in WinApp. Deletion uses the same permanent file and index
+operation as web Admin. If
+the server response is interrupted, refresh and review the album before
+confirming another deletion.
+
+Admin album counts and bytes describe direct indexed original photo files.
+Earlier listing grants show how many photos the current grant can see.
+Older servers may require the legacy `media:read` permission or lack the
+media route. Current installed Windows click-through and playback acceptance
+require separate evidence.
+
+With upload permission, use **Use this gallery for Watcher** from a gallery
+context or the Watcher rail menu while Photos is open. WinApp verifies the
+exact gallery and uses the existing Watcher folder, local thumbnail pipeline
+and finish controls. The Watcher panel shows preparation or refusal for that
+request. Before activating the destination, WinApp checks its accepted import
+work against the local upload history. A large existing Watcher history can
+be read within the same 256 MiB bound used for state updates. Unverifiable
+history or unfinished work for another destination still blocks a change.
+The red REC indicator shows active capture. The
+Watcher rail icon pulses red on every tab while capture is active. A small
+filled red light marks the exact upload gallery in the Photos tree and at its
+heading. A hollow light marks a collapsed branch that hides that gallery.
+The context offers SimBrief when a flight simulator is detected. Finish a game
+to drain its screenshots, or finish a flight to save its available reports
+locally. Finishing revokes the temporary capture key and leaves the website
+linked. This action requires the server's temporary Watcher key migration.
+
+The source also contains an experimental **Create gallery** workflow that
+requires separate `galleries:create` browser consent and verified server scope
+storage. It records a local pending intent before sending and keeps an uncertain
+result for manual **Check create status**. **Resume original creation** first
+shows the original title and parent for confirmation, then resends the same
+operation key and inputs to the same HTTPS issuer and verified Admin account.
+The server admits a missing claim once; existing pending or reconciliation
+claims remain blocked and may require an administrator to reconcile them.
+There is no automatic retry. Deduplication requires the original server ledger;
+restoring an older database backup can remove its history.
+**Close unresolved creation** shows the original title and parent and requests
+explicit confirmation before closing the original operation key on the server.
+The unconfirmed-creation message points to both explicit original-request
+resume and closure after gallery and storage review; it never retries automatically.
+The local intent is removed only after the server confirms its durable closure;
+an unavailable or unknown response leaves it in place. Closure does not prove
+that a pending server operation has stopped; the server refuses to close a
+pending claim. Closure also does not prove
+that no gallery or files were created or that an earlier worker has stopped.
+Verify the original work has stopped and inspect the gallery and its storage
+before starting a separate creation; none is started automatically. If the server
+instead verifies a completed result, its receipt remains for acknowledgement.
+If the closure reply is lost, the same explicit action can be repeated for the
+original key; no replacement key is generated for that request.
+An unreadable or invalid local intent cannot supply a trustworthy key; it stays
+blocked and requires administrator assistance rather than automatic deletion.
+A confirmed receipt is kept until **Acknowledge creation**. Choose **Use created
+gallery** to use the child for Watcher and Import. WinApp rechecks the original
+receipt, account and exact gallery independently before publishing the target;
+this requires separately approved upload permission and an admitted local
+profile. The server checks
+the original ID, title and parent against the current gallery. A renamed
+gallery yields unknown; a moved, deleted or unverifiable reference can be
+reported as unavailable. A missing or unsafely redirected gallery directory or
+sidecar also leaves the result unknown; the server verifies current safe files
+rather than requiring their original inode. The client keeps the receipt and does
+not create another gallery automatically.
+The server source refuses occupied paths, catalog drift and catalogs larger
+than 10,000 rows including the proposed gallery. Slug search checks at most
+128 candidates; these limits do not bound elapsed time. A local file flush
+does not prove recovery after power loss.
+The disposable HTTPS/database run exercised receipt recovery and upload to the
+created child. Native Windows mode/receipt tests cover selection and restart.
+Installed Windows click-through remains separate.
+
+With upload permission, select an existing gallery and choose **Use for
+uploads**. WinApp verifies the account and gallery on the server before
+storing the choice separately from the saved API key. After restart, reconnect
+to the same account and explicitly select that gallery before resuming pending
+work. Use the gear beside **Upload gallery**, then **Use saved API key**, to
+select the saved key explicitly. Linked flight reports stay local; AI and
+flight upload actions use the legacy mode.
+
+Linked uploads use a target-specific history and an exclusive local lease.
+Use an unredirected profile on a fixed local Windows drive or an
+owner-controlled local volume when running WinApp from source on macOS.
+Close older WinApp versions that use the same profile. macOS keeps the second
+copy of the non-secret selection in a private profile file under a native
+workspace lock. A new session after restart requires fresh approval.
+An uncertain upload blocks further transfers to that target; review the
+server and source files before resolving it. The operating system releases
+the current build's native lock when its process exits, so **Retry** can
+reopen the same target. An older lock has no verified native owner. Close
+all uploaders and review the gallery and sources before archiving that
+specific lock. Keep the upload history and any pending transfer evidence.
+Watcher source deletion on Windows follows the saved Watcher preference,
+including linked captures. Manual import sources and ZIPs are retained. Durability
+after a power failure and behavior on non-local filesystems remain unverified.
+
+For exactly one uncertain linked upload, **Check uncertain upload** asks for
+the file size in bytes, up to 64 MiB, and checks the stored hash once against the selected
+gallery. It does not open the saved local path. A match reports observed bytes,
+not confirmation of the original upload or its database registration;
+unknown does not prove absence. Both outcomes leave the upload unresolved and
+do not delete files, clear the history or retry the upload. Older servers may
+not support this optional check.
+
+After stopping the Watcher or Import, inspect the gallery and its original
+source. The optional hash check only observes bytes. Select **Review retained
+upload…** for the same gallery; the confirmation defaults to **No**. Review
+preserves the uncertainty marker, original and ZIP. The same source path or
+bytes stay blocked after restart, while other eligible sources can continue in
+that gallery. A pending import retains its original target binding.
+
+Linking requests have a 12-second total deadline; an unresponsive system DNS
+resolver may still occupy the single transport slot until it returns. Uploads
+have a separate size-based deadline. A partially sent request has an uncertain
+outcome and is never automatically retried.
+
+The separate Windows HTTPS remembrance option uses the legacy offline scope
+when offered. That approval expires after 30 days or seven days of inactivity,
+whichever comes first. The saved binding identifies the exact issuer, Admin
+account and approved scope. The `pgu_` upload key is independent.
+If initial linking or secure storage fails after the browser approved it, the
+server grant may still exist. Review it through **Manage gallery links**.
+
+On startup, WinApp can restore the previously approved saved link.
+**Reconnect saved link** in **Manage link…** can also start restoration.
+The client rotates the refresh credential once, checks the current server
+identity and scope, and saves the replacement before using the access token.
+A cross-process lock and pending marker protect rotation. If the same verified
+server explicitly rejects an expired or revoked rolling credential, WinApp
+discards that saved credential. Choose **Link gallery** to approve a new link
+in the browser. Startup leaves browser approval to you. An uncertain response
+or storage failure blocks reuse of the old credential.
+Review the gallery's linked-device list, then use **Forget saved link** and
+relink if needed. Forgetting removes the local binding and credential only; it
+does not revoke the server grant, and an active session may continue. Use
+**Manage gallery links** for server-side revocation. The secure-storage and
+crash-recovery paths have not been qualified on real Windows or after power
+loss; the feature remains experimental.
+
+Rolling links keep separate saved bindings for each exact issuer. To replace
+the saved account for an issuer, resolve pending work and forget its local
+link first. The legacy Windows HTTPS option keeps one shared binding. Local
+forgetting leaves the server grant available for separate revocation and
+does not affect the saved API key.
+
+Use **Unlink gallery** for the current session, or **Manage gallery links**
+to open the gallery's owner list and revoke stored grants.
+The gallery lists grants associated with the same administrator, including
+their original issuers; it warns if its bounded list is incomplete. Approved
+codes not yet exchanged are absent from the list and remain valid for at most
+120 seconds. A failed or interrupted exchange can leave a grant on the server,
+so check the list if its result is uncertain. Revoking a grant does not cancel
+other pending attempts. Saved API-key uploads remain independently available
+when the user explicitly selects that mode.
 
 ### API key insertion and replacement
 
@@ -957,13 +1397,15 @@ Unsupported archive entries are not extracted. Supported entries are staged with
 collision-safe local names while the original archive-relative name is retained
 for diagnostics.
 
-The original ZIP is kept by default. If **Delete original ZIP only after every
-accepted entry succeeds** is enabled, deletion occurs only after all accepted
-items finish as confirmed uploads or confirmed duplicates. Failed or cancelled
-jobs keep the source archive.
+The original ZIP is retained for manual verification, including after legacy
+API-key upload confirmation. An older saved deletion preference does not delete
+the archive. A stale or unverified prior import needs a new preflight before
+its duplicate decisions can be reused.
 
-Stale staging directories are cleaned on later startup after the configured
-conservative age threshold. Staging owned by a recoverable job is retained.
+Original ZIPs and extracted staging directories are retained regardless of age
+or upload confirmation for manual review. The legacy age-based staging cleanup
+entry point is disabled because age and visible job IDs do not prove that
+accepted history was never lost or rolled back.
 
 ## Preflight
 
@@ -1133,20 +1575,46 @@ Watch-folder behavior keeps the established safety semantics:
 - server-side validation remains authoritative.
 
 The **Watcher** screen shows the selected folder path, current status, and the
-source-deletion warning. **Check folder only** inspects existing files without
-uploading or changing upload history. Folder selection, recursion, stability,
-simulator metadata, and the opt-in deletion setting are in the dedicated Watcher
-gear sheet, where **Save watcher settings** and **Cancel** apply.
+source-deletion warning. **Choose folder…** saves a folder independently of
+the gallery connection. **Start Watcher** asks for a folder when one is
+missing.
+The check icon inspects existing files without uploading or changing upload
+history. Folder selection, recursion, stability, simulator metadata, and the
+saved deletion setting are also in the Watcher gear sheet, where
+**Save watcher settings** and **Cancel** apply.
 The sheet does not permit edits while watching; it requires a stop first. Saved
 changes apply on the next start, while **Cancel**, Escape, and closing the sheet
 restore the opening folder and preference values.
 
-### Optional source deletion
+### Watched source deletion
 
-**Delete source only after the gallery confirms a successful upload** is
-destructive and disabled unless selected by the user. It removes only a source
-that PHP Gallery has confirmed as stored. Duplicates, skipped files, and failed
-files are kept.
+**Delete uploaded photos from this PC** in Watcher settings is enabled by
+default for a new or missing setting. An explicitly saved off choice is kept.
+On Windows, Watcher deletes a source only after a successful upload response
+and durable local acknowledgement. It opens the current file through a native
+handle, verifies the captured file identity and sent bytes, and deletes that
+same opened file. A replaced, changed, linked, redirected or busy file stays
+on disk with a warning. The native handle refuses simultaneous writers and
+replacement during this final check.
+
+An inventory match, an uncertain response or a restart never independently
+authorizes source deletion. Files present at startup remain excluded. Manual
+import sources and ZIPs keep their existing retention policy. Other platforms
+retain watched sources until a native deletion owner is available.
+
+Start shows an activity indicator while it verifies the destination and reads
+the initial folder. REC appears after the initial exclusion boundary is ready.
+Stop and Finish open progress with a preparation message and activity before
+loading the pending work. Their subsequent phases describe upload drain and
+any reports. A busy indicator does not estimate a completion percentage.
+
+Recent Activity history is saved in bounded batches on one background writer.
+This avoids repeatedly rewriting a large shared history on the UI thread.
+Normal shutdown attempts to flush the buffer within its existing deadline.
+A storage failure, expired deadline, forced exit or crash can omit the last
+buffered Activity rows; a flush failure is logged and the rotating log is
+written immediately. Upload acknowledgements and pending-work records
+retain their existing synchronous ownership and durability checks.
 
 ## Sync UTC time while watching
 
@@ -1393,9 +1861,14 @@ staging\
 upload-path/hash/failure history is migrated without invalidating successful
 upload history.
 
-Writes use a same-directory temporary file and atomic replace. Malformed
-config/state files are preserved as timestamped `.malformed-*` copies before
-safe defaults are used.
+Configuration writes preserve fields owned by newer versions and compare the
+previous complete file before replacing it. If the configuration is malformed,
+unreadable or cannot be verified, the uploader stops before starting work;
+preserve the original file and restore a valid backup. A missing configuration
+still opens with first-run defaults. Malformed upload-state files keep their
+existing `.malformed-*` backup and default behavior. These checks do not exclude
+older or unrelated writers, and Windows reparse points and power-loss
+durability have not been qualified.
 
 The log uses rotation instead of growing without a bound.
 
@@ -1424,7 +1897,8 @@ If Pillow is unavailable:
 - manual imports still work with server-created thumbnails;
 - local preview/thumbnail capability is reported accurately.
 
-If pystray is unavailable, the desktop window still works without tray hiding.
+The macOS source build runs in its normal Tk window. The Windows tray uses
+pystray when available.
 
 ## Source organization
 

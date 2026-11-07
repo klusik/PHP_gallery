@@ -1,0 +1,167 @@
+{
+  "fixture_version": 1,
+  "purpose": "Replay the frozen pgu_ HTTP request sequence against disposable old and new PHP Gallery servers.",
+  "provenance": {
+    "client_commit": "df36afa1d37e55096242e53cd857a47ba7da1d3a",
+    "client_file": "winapp/gallery_watch_upload.pyw",
+    "client_functions": [
+      "upload_endpoint_candidates",
+      "inventory_candidate",
+      "post_json_resolved",
+      "multipart_upload"
+    ],
+    "user_agent": "PHPGalleryUploader/1.4",
+    "server_commits": {
+      "old": "df36afa1d37e55096242e53cd857a47ba7da1d3a",
+      "new": "15978bc6ca62f40036dab9597dae57817a8ac9c8"
+    },
+    "matrix_result": {
+      "old_client_old_server": "PASS",
+      "old_client_new_server": "PASS",
+      "new_client_old_server": "PASS",
+      "new_client_new_server": "PASS"
+    }
+  },
+  "substitution": {
+    "base_url": "{{disposable_loopback_server_base_url}}",
+    "api_key": "{{synthetic_pgu_api_key_for_that_server}}",
+    "client_id": "{{source_sha256}}",
+    "source_file": "{{unique_synthetic_jpeg_file}}",
+    "jpeg_thumbnail": "{{synthetic_300px_jpeg_thumbnail}}",
+    "webp_thumbnail": "{{synthetic_300px_webp_thumbnail}}"
+  },
+  "endpoint": {
+    "method": "POST",
+    "path": "/index.php?page=upload_automation_upload",
+    "authority_policy": "Literal 127.0.0.1 loopback only; no redirects or proxy."
+  },
+  "headers": {
+    "Accept": "application/json",
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": "{{encoded_json_body_byte_length}}",
+    "X-Gallery-API-Key": "{{synthetic_pgu_api_key_for_that_server}}",
+    "User-Agent": "PHPGalleryUploader/1.4"
+  },
+  "inventory_request": {
+    "body": {
+      "action": "inventory",
+      "files": [
+        {
+          "client_id": "{{source_sha256}}",
+          "filename": "{{source_basename}}",
+          "size": "{{source_byte_length}}",
+          "sha256": "{{source_sha256}}"
+        }
+      ],
+      "deep_check": false
+    },
+    "pre_upload_response": {
+      "ok": true,
+      "action": "inventory",
+      "checked": 1,
+      "matched": 0,
+      "existing": []
+    },
+    "post_upload_response": {
+      "ok": true,
+      "action": "inventory",
+      "checked": 1,
+      "matched": 1,
+      "existing": [
+        {
+          "client_id": "{{source_sha256}}",
+          "sha256": "{{source_sha256}}",
+          "remote_image_id": "{{positive_uploaded_image_id}}",
+          "matched_by": "checksum_sha256",
+          "remote_relative_path": "{{nonempty_server_relative_path}}"
+        }
+      ]
+    }
+  },
+  "multipart_request": {
+    "content_type": "multipart/form-data; boundary=PHPGalleryUpload{{32_lowercase_hex_chars}}",
+    "content_length": "{{encoded_body_byte_length}}",
+    "parts_in_wire_order": [
+      {
+        "kind": "text",
+        "name": "create_thumbnails",
+        "value": "0"
+      },
+      {
+        "kind": "text",
+        "name": "image_client_ids[]",
+        "value": "{{fresh_multipart_image_client_id}}"
+      },
+      {
+        "kind": "file",
+        "name": "images[]",
+        "filename": "{{source_basename}}",
+        "content_type": "image/jpeg",
+        "bytes": "{{synthetic_jpeg_bytes}}"
+      },
+      {
+        "kind": "text",
+        "name": "thumbnail_client_ids[]",
+        "value": "{{fresh_multipart_image_client_id}}"
+      },
+      {
+        "kind": "text",
+        "name": "thumbnail_sizes[]",
+        "value": "300"
+      },
+      {
+        "kind": "text",
+        "name": "thumbnail_formats[]",
+        "value": "jpg"
+      },
+      {
+        "kind": "file",
+        "name": "client_thumbnails[]",
+        "filename": "{{source_stem}}-300.jpg",
+        "content_type": "image/jpeg",
+        "bytes": "{{synthetic_jpeg_thumbnail_bytes}}"
+      },
+      {
+        "kind": "text",
+        "name": "thumbnail_client_ids[]",
+        "value": "{{fresh_multipart_image_client_id}}"
+      },
+      {
+        "kind": "text",
+        "name": "thumbnail_sizes[]",
+        "value": "300"
+      },
+      {
+        "kind": "text",
+        "name": "thumbnail_formats[]",
+        "value": "webp"
+      },
+      {
+        "kind": "file",
+        "name": "client_thumbnails[]",
+        "filename": "{{source_stem}}-300.webp",
+        "content_type": "image/webp",
+        "bytes": "{{synthetic_webp_thumbnail_bytes}}"
+      }
+    ],
+    "response_contract": {
+      "ok": true,
+      "uploaded": 1,
+      "scanned": "integer_at_least_zero",
+      "image_ids": ["{{positive_uploaded_image_id}}"],
+      "thumbnail_failed": 0,
+      "client_thumbnails": {
+        "installed": "integer_at_least_one",
+        "skipped": "integer_at_least_zero",
+        "failed": 0,
+        "errors": []
+      }
+    }
+  },
+  "capture_notes": [
+    "Request fields, ordering, headers and endpoint come from the frozen old client transport named above.",
+    "The API key, image bytes, request-local ID, boundary, file size and checksum are generated per disposable replay.",
+    "Both frozen server versions returned uploaded=1, scanned=1, one client thumbnail installed, one policy-skipped and an exact SHA-256 inventory match in the qualification run.",
+    "This fixture is descriptive and opt-in; it is not registered as a routine CI loop."
+  ]
+}

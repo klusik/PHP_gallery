@@ -1,0 +1,238 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-345-python-qualification.yml
+# Module Type: Scoped Diagnostic Workflow
+# Purpose: Qualify issue #345 on isolated native and MariaDB diagnostics.
+# Responsibilities:
+#   - Check out the exact issue #345 feature commit on Linux and Windows.
+#   - Delegate all Python test discovery and result validation to scripts/audit.php.
+#   - Exercise browser handoff logic through the central Node regression owner.
+#   - Preserve per-test diagnostics and explicit platform-specific skips.
+#   - Smoke the existing Windows installer builder without a release.
+#   - Run the browser-free PHP regression owner on disposable MariaDB.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+# Diagnostic only. The protected FULL matrix and BASIC source checks remain
+# separate; neither may be inferred from this workflow's results.
+name: Issue 345 WinApp Python diagnostics
+
+on:
+  push:
+    branches:
+      - feature/345-browser-approved-linking
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-345-winapp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Browser handoff Node regression
+    runs-on: ubuntu-24.04
+    # Purpose: Bound the existing portable JavaScript diagnostic owner.
+    # Type: int. Units: minutes. Scope: the central Node diagnostic owner.
+    # Consumers: Actions job. Rationale: Ten minutes bounds portable fixtures.
+    timeout-minutes: 10
+    env:
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - name: Checkout exact candidate without retained credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Run the registered Node regression owner
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          php scripts/audit.php --suite=node-full
+
+      - name: Preserve Node diagnostics and explicit browser skips
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-345-node
+          path: cache/test-audit/**/*
+          if-no-files-found: warn
+          # Purpose: Keep diagnostic evidence available for scoped review.
+          # Type: int. Units: days. Scope: this Node artifact.
+          # Consumers: upload-artifact. Rationale: 7 matches sibling retention.
+          retention-days: 7
+
+  winapp:
+    name: WinApp Python regression (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+    env:
+      PHP_GALLERY_REQUIRE_PILLOW: '1'
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - name: Checkout exact candidate without retained credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Reject a mismatched checkout
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $env:EXPECTED_SHA) {
+            throw "Unexpected checkout: expected $env:EXPECTED_SHA, got $actual"
+          }
+          Write-Output "Checking exact commit $actual on ${{ matrix.os }}"
+
+      - name: Select Python
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Select PHP for the central test orchestrator
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install repository-declared native fixture dependencies
+        shell: pwsh
+        run: |
+          $requirements = @(
+            Get-Content winapp/requirements.txt |
+              Where-Object { $_ -match '^(Pillow|reportlab|pypdf)' }
+          )
+          if ($requirements.Count -ne 3) {
+            throw 'Expected exactly three declared Pillow/PDF requirements.'
+          }
+          python -m pip install @requirements
+          if ($LASTEXITCODE -ne 0) {
+            throw "Python dependencies failed with code $LASTEXITCODE"
+          }
+
+      - name: Run registered Python WinApp regression owner only
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          php scripts/audit.php --suite winapp
+          if ($LASTEXITCODE -ne 0) {
+            throw "Central WinApp audit failed with code $LASTEXITCODE"
+          }
+
+      - name: Preserve named Python outcomes and skip reasons
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-345-winapp-${{ matrix.os }}
+          path: cache/test-audit/**/*
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Build a disposable Windows installer with the existing builder
+        if: matrix.os == 'windows-2025'
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (!(Test-Path -LiteralPath $compiler)) {
+            throw 'BLOCKED hosted Inno Setup 6 is unavailable.'
+          }
+          python -m pip install -r winapp/requirements-build.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python winapp/build_installer.py --iscc $compiler --use-installed-dependencies
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = @(Get-ChildItem -LiteralPath winapp/dist -Filter '*.exe' -File -Recurse)
+          $metadata = @(Get-ChildItem -LiteralPath winapp/dist -Filter 'winapp-update.json' -File -Recurse)
+          if ($exe.Count -ne 1 -or $metadata.Count -ne 1) {
+            throw 'BLOCKED ambiguous disposable installer output.'
+          }
+          $asset = (Get-Content -LiteralPath $metadata[0].FullName -Raw | ConvertFrom-Json).assets[0]
+          $digest = (Get-FileHash -LiteralPath $exe[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($asset.name -ne $exe[0].Name -or $asset.size -ne $exe[0].Length -or $asset.sha256 -ne $digest) {
+            throw 'Disposable installer metadata does not match the build.'
+          }
+          Write-Output "PASS disposable installer $($asset.name), SHA-256 $digest"
+
+  php-mariadb:
+    name: PHP 8.5 / MariaDB 10.11 regression (browser disabled)
+    runs-on: ubuntu-24.04
+    # Type: int. Units: minutes. Scope: one diagnostic owner.
+    # Consumers: Actions job. Rationale: 20 allows preparation and PHP tests.
+    timeout-minutes: 20
+    services:
+      database:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          # Use the canonical disposable runner port, separate from local SQL.
+          - 13316:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER_REQUIRED: '0'
+      GALLERY_WORKFLOW_ENABLE: disposable-only
+      GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
+      GALLERY_WORKFLOW_DB_PORT: '13316'
+      GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      GALLERY_WORKFLOW_REQUIRED: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, exif, zip, dom, mbstring, intl
+          coverage: none
+
+      - name: Prepare disposable runtime files and run the central PHP owner
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          php scripts/prepare_candidate.php
+          php scripts/gallery_workflow_ci.php --php-regression
+
+      - name: Preserve PHP and owned database diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-345-php-mariadb
+          path: cache/test-audit/**/*
+          if-no-files-found: warn
+          retention-days: 7

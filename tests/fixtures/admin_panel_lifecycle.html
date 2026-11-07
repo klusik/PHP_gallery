@@ -38,7 +38,7 @@ import {setupAdminBulkSelection} from '/public/assets/gallery-modules/admin-bulk
 import {setupAdminGalleryTitleCompletion} from '/public/assets/gallery-modules/admin-gallery-title-completion.js';
 import {setupAdminGalleryCompactEditor} from '/public/assets/gallery-modules/admin-gallery-compact-editor.js';
 import {setupSimbriefDescriptionGenerator} from '/public/assets/gallery-modules/admin-simbrief-description.js';
-import {setupAdminMetadataOrganizer} from '/public/assets/gallery-modules/admin-metadata-organizer.js?v=20261003-compact-tables-v1';
+import {setupAdminMetadataOrganizer} from '/public/assets/gallery-modules/admin-metadata-organizer.js?v=20261105-uncertain-progress-v1';
 import {ADMIN_PANEL_DRAFT_LIMIT, ADMIN_PANEL_DRAFT_TEXT_LIMIT} from '/public/assets/gallery-modules/admin-panel-policy.js?v=20260920-panel-lifecycle-v1';
 
 /** Millisecond pause used to deliver queued promises and close transitions in Chromium. */
@@ -59,6 +59,7 @@ let failPost = false;
 let failGet = false;
 let holdOrder = false;
 let holdOrganizer = false;
+let failOrganizer = false;
 let lastOrderDetail = null;
 const orderSubmissions = [];
 const imageOrders = new Map();
@@ -235,7 +236,7 @@ function toolForms(id) {
         <table data-admin-image-order-table><thead><tr><th>Name</th><th>Date taken</th></tr></thead>
         <tbody>${imageRows}</tbody></table>
         <button name="action" value="move_new">Move to new child</button></form>
-        <div data-admin-metadata-organizer><div data-admin-metadata-organizer-progress hidden><progress data-admin-metadata-organizer-progress-bar></progress><span data-admin-metadata-organizer-progress-text></span></div>
+        <div data-admin-metadata-organizer><div data-admin-metadata-organizer-progress hidden><progress data-admin-metadata-organizer-progress-bar></progress><span data-admin-metadata-organizer-progress-text></span></div><pre data-admin-metadata-organizer-log hidden></pre>
         <div data-admin-metadata-organizer-results><form data-admin-metadata-organizer-apply-form action="/fixture-organizer?id=${id}" data-candidate-count="1">
         <input type="hidden" name="gallery_id" value="${id}"><input type="hidden" name="csrf_token" value="fixture-only">
         <input type="checkbox" name="confirm_metadata_organizer" value="1" checked><button>Apply fixture organizer</button></form></div></div>`;
@@ -310,6 +311,10 @@ async function fetchPanelFixture(value, options = {}) {
         const payload = {...success(id), result: {done: true, remaining_after: 0, moved_images: 1, requested_images: 1}, bulk_action: 'move_new'};
         if (url.pathname === '/fixture-organizer') {
             payload.result.group_results = [{title: 'Fixture subgallery', date: '2026-10-03', destination_status: 'created', moved: 1}];
+            if (failOrganizer) {
+                const message = 'Move outcome is uncertain; inspect both galleries.';
+                return {ok: false, /** Return a synthetic refused batch. @return {Promise<string>} Error JSON without live data. */ text: async () => JSON.stringify({ok: false, error: message})};
+            }
         }
         const response = {ok: true, headers: new Headers({'Content-Type': 'application/json'}), /** Deliver the captured tool acknowledgment to JSON consumers. @return {Promise<typeof payload>} Original synthetic payload. */ json: async () => payload, /** Deliver the same tool acknowledgment to text parsers. @return {Promise<string>} Captured JSON representation. */ text: async () => JSON.stringify(payload)};
         if (url.pathname === '/fixture-order') {
@@ -720,6 +725,19 @@ try {
         'Current organizer completion did not reach the canonical panel refresh within two seconds');
     check(lastOrganizerDetail?.panelOwner?.isCurrent() === true && field('form') !== organizerReplacement, 'Current organizer completion reaches the canonical panel refresh');
     check(organizerResultTableAtCompletion && location.href === originalUrl && !panel().hidden && panel().classList.contains('is-open'), 'Organizer apply renders result rows in the scroll wrapper before refresh while keeping the panel open and URL unchanged');
+
+    failOrganizer = true;
+    lastOrganizerDetail = null;
+    const organizerPostsBeforeFailure = posts;
+    submitTool('[data-admin-metadata-organizer-apply-form]');
+    await waitUntil(() => field('[data-admin-metadata-organizer-progress-text]').textContent.includes('Move outcome is uncertain'),
+        'Organizer refusal did not display its exact synthetic error');
+    check(field('[data-admin-metadata-organizer-progress-bar]').value === 0
+        && field('[data-admin-metadata-organizer-log]').textContent.includes('Move outcome is uncertain')
+        && !field('[data-admin-metadata-organizer-apply-form] button').disabled
+        && posts === organizerPostsBeforeFailure + 1 && lastOrganizerDetail === null,
+        'Organizer refusal keeps the progress empty, preserves its error, and waits for explicit retry');
+    failOrganizer = false;
 
     submitTool('[data-admin-panel-bulk-form]'); await wait();
     check(lastBulkParent === '42', 'Bulk move submits the enabled hidden parent and ignores disabled fallback');

@@ -45,6 +45,10 @@ namespace Gallery\Core;
  */
 function cms_run_request_maintenance(string $page, ?Kernel $kernel = null): void
 {
+    // Discovery is a passive machine read, including rejected methods.
+    if ($page === 'app_linking_discovery') {
+        return;
+    }
     $cacheAction = is_string($_POST['site_maintenance_action'] ?? null)
         ? $_POST['site_maintenance_action'] : '';
     // Explicit transports own their work and authentication; passive status

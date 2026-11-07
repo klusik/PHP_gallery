@@ -10,6 +10,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Local waypoint evidence cache, independent of the Gallery database."""
 
+from contextlib import closing
 import sqlite3
 from pathlib import Path
 
@@ -33,7 +34,9 @@ def remember_plan(root: Path, plan: DispatchPlan) -> None:
     Raises:
         sqlite3.Error: The cache cannot be updated; session evidence is separate.
     """
-    with sqlite3.connect(root / "navdata.sqlite") as connection:
+    # A sqlite3 connection context commits or rolls back but does not close
+    # the file handle. Explicit closure is required for Windows workspaces.
+    with closing(sqlite3.connect(root / "navdata.sqlite")) as connection, connection:
         connection.execute("CREATE TABLE IF NOT EXISTS fixes (airac TEXT, ident TEXT, latitude REAL, longitude REAL, PRIMARY KEY (airac, ident, latitude, longitude))")
         for point in plan.points:
             connection.execute("INSERT OR REPLACE INTO fixes VALUES (?, ?, ?, ?)",

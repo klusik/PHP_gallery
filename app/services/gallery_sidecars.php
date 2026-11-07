@@ -51,12 +51,271 @@ use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Models\gallery_model_folder_paths;
 use function Gallery\Models\gallery_model_insert;
+use function Gallery\Models\gallery_model_insert_linked_owned;
+use function Gallery\Models\gallery_model_assert_linked_creation_transaction;
+use function Gallery\Models\gallery_model_linked_reservation_assert_pending;
 use function Gallery\Models\gallery_model_prepend_sort_order;
 use function Gallery\Models\gallery_model_unique_slug;
 use function Gallery\Models\gallery_model_attachment_usage_seed_empty;
+use function Gallery\Models\public_path_model_linked_creation_rows;
+use function Gallery\Models\public_path_model_assign_linked_creation;
 
 require_once __DIR__ . '/gallery_creation_safety.php';
 require_once __DIR__ . '/gallery_edit_concurrency.php';
+
+/**
+ * Bound linked gallery folder and URL paths before database insertion.
+ * Type: int. Units: UTF-8 bytes. Scope: one linked gallery path.
+ * Consumers: create_empty_gallery_linked_owned.
+ * Rationale: 1024 bytes conservatively fit the persisted VARCHAR(1024).
+ */
+const LINKED_GALLERY_CREATE_PATH_MAX_BYTES = 1024;
+
+/**
+ * Bound linked gallery legacy and public slugs before database insertion.
+ * Type: int. Units: UTF-8 bytes. Scope: one linked gallery slug.
+ * Consumers: create_empty_gallery_linked_owned.
+ * Rationale: 255 bytes conservatively fit the persisted VARCHAR(255).
+ */
+const LINKED_GALLERY_CREATE_SLUG_MAX_BYTES = 255;
+
+/**
+ * Bound catalog rows considered before linked gallery creation.
+ * Type: int. Units: gallery rows. Scope: one delegated create request.
+ * Consumers: create_empty_gallery_linked_owned.
+ * Rationale: 10000 bounds shared-host memory; larger catalogs fail closed.
+ */
+const LINKED_GALLERY_CREATE_CATALOG_MAX_ROWS = 10000;
+
+/**
+ * Bound indexed slug lookups during delegated gallery creation.
+ * Type: int. Units: candidate slugs. Scope: one linked creation request.
+ * Consumers: create_empty_gallery_linked_owned.
+ * Rationale: 128 indexed candidates bound lock time without allowing collisions.
+ */
+const LINKED_GALLERY_CREATE_SLUG_MAX_ATTEMPTS = 128;
+
+/**
+ * Bound a sidecar read and its prepared replacement for linked visibility.
+ * Type: int. Units: bytes. Scope: one existing gallery.json file.
+ * Consumers: gallery_sidecar_visibility_prepare.
+ * Rationale: 1048576 bytes bounds memory and lock time for delegated changes.
+ */
+const LINKED_VISIBILITY_SIDECAR_MAX_BYTES = 1048576;
+
+/**
+ * Bound a randomly named private sidecar staging file.
+ * Type: int. Units: random bytes. Scope: one staging filename.
+ * Consumers: gallery_sidecar_visibility_prepare.
+ * Rationale: 16 bytes make accidental staging-name collisions negligible.
+ */
+const LINKED_VISIBILITY_SIDECAR_RANDOM_BYTES = 16;
+
+/**
+ * Identify the permanent visibility recovery marker in a gallery folder.
+ * Type: string. Units: relative filename. Scope: one gallery directory.
+ * Consumers: gallery_visibility_marker_prepare,
+ *     gallery_visibility_marker_assert_importable.
+ * Rationale: .gallery-visibility-pending.json gives recovery and writer
+ *     guards the same marker to find after interrupted visibility changes.
+ */
+const LINKED_VISIBILITY_PENDING_MARKER = '.gallery-visibility-pending.json';
+
+/**
+ * Bound physical directories inspected for pending visibility work.
+ * Type: int. Units: directories. Scope: one physical subtree observation.
+ * Consumers: gallery_visibility_marker_assert_tree_clear.
+ * Rationale: 10000 bounds memory and work; larger trees remain unavailable.
+ */
+const LINKED_VISIBILITY_TREE_MAX_DIRECTORIES = 10000;
+
+/**
+ * Bound physical entries inspected for pending visibility work.
+ * Type: int. Units: directory entries. Scope: one physical subtree observation.
+ * Consumers: gallery_visibility_marker_assert_tree_clear.
+ * Rationale: 100000 bounds traversal work without silently skipping entries.
+ */
+const LINKED_VISIBILITY_TREE_MAX_ENTRIES = 100000;
+
+/**
+ * Require proven absence of a visibility marker in a folder and its ancestors.
+ *
+ * @param string $relativePath Canonical gallery-root-relative directory path.
+ * @return void Returns only when every relevant directory proves marker absence.
+ * @throws RuntimeException When a marker exists or any observation is uncertain.
+ */
+function gallery_visibility_marker_assert_importable(string $relativePath): void
+{
+    $normalized = normalize_relative_path($relativePath);
+    if ($normalized === '' || $normalized !== str_replace('\\', '/', $relativePath)) {
+        throw new RuntimeException('Gallery visibility recovery state is unavailable.');
+    }
+    $path = '';
+    foreach (explode('/', $normalized) as $segment) {
+        $path = $path === '' ? $segment : $path . '/' . $segment;
+        if (gallery_creation_target_observation(
+            $path . '/' . LINKED_VISIBILITY_PENDING_MARKER,
+        ) !== \Gallery\Core\FILESYSTEM_OBSERVATION_MISSING) {
+            throw new RuntimeException('Gallery visibility recovery state is unavailable.');
+        }
+    }
+}
+
+/**
+ * Observe a directory and optionally collect its real child directories.
+ *
+ * @param string $directory Canonical directory beneath the trusted root.
+ * @param string $root Canonical independently trusted filesystem root.
+ * @param bool $subtree True to reject links/special entries and collect children.
+ * @param int $entryCount Running bounded count, updated for every entry.
+ * @return list<string> Canonical child directories when subtree traversal is selected.
+ * @throws RuntimeException When observation, identity or limits are uncertain.
+ */
+function gallery_visibility_marker_scan_directory(
+    string $directory,
+    string $root,
+    bool $subtree,
+    int &$entryCount,
+): array {
+    clearstatcache(true, $directory);
+    $before = @lstat($directory);
+    if (!is_array($before) || is_link($directory) || !is_dir($directory)
+        || !is_readable($directory) || realpath($directory) !== $directory
+        || !gallery_normalized_path_inside_root($root, $directory)) {
+        throw new RuntimeException('Gallery visibility recovery state is unavailable.');
+    }
+    $children = [];
+    set_error_handler(static function (int $severity, string $message): never {
+        throw new RuntimeException('Gallery visibility tree observation failed.');
+    });
+    try {
+        $iterator = new DirectoryIterator($directory);
+        foreach ($iterator as $entry) {
+            if ($entry->isDot()) {
+                continue;
+            }
+            $entryCount++;
+            if ($entryCount > LINKED_VISIBILITY_TREE_MAX_ENTRIES) {
+                throw new RuntimeException('Gallery visibility observation limit reached.');
+            }
+            $name = $entry->getFilename();
+            if ($name === LINKED_VISIBILITY_PENDING_MARKER
+                || (PHP_OS_FAMILY === 'Windows'
+                    && strcasecmp($name, LINKED_VISIBILITY_PENDING_MARKER) === 0)) {
+                throw new RuntimeException('Gallery visibility recovery state is unavailable.');
+            }
+            if (!$subtree) {
+                continue;
+            }
+            if ($entry->isLink()) {
+                throw new RuntimeException('Gallery visibility tree is redirected.');
+            }
+            if ($entry->isDir()) {
+                $children[] = $entry->getPathname();
+            } elseif (!$entry->isFile()) {
+                throw new RuntimeException('Gallery visibility tree is unavailable.');
+            }
+        }
+    } catch (Throwable $exception) {
+        throw new RuntimeException('Gallery visibility tree is unavailable.', 0, $exception);
+    } finally {
+        restore_error_handler();
+    }
+    clearstatcache(true, $directory);
+    $after = @lstat($directory);
+    if (!is_array($after) || is_link($directory)
+        || $before['dev'] !== $after['dev'] || $before['ino'] !== $after['ino']
+        || realpath($directory) !== $directory) {
+        throw new RuntimeException('Gallery visibility tree changed during observation.');
+    }
+    return $children;
+}
+
+/**
+ * Refuse pending visibility markers under a caller-verified physical root.
+ *
+ * @param string $absolutePath Canonical existing directory within the trusted root.
+ * @param string $trustedRoot Canonical owner root independently verified by the caller.
+ * @return void Returns only after bounded ancestor and complete subtree observation.
+ * @throws RuntimeException When the root, tree or marker state is uncertain.
+ */
+function gallery_visibility_marker_assert_tree_clear(string $absolutePath, string $trustedRoot): void
+{
+    clearstatcache(true);
+    if (realpath($trustedRoot) !== $trustedRoot || is_link($trustedRoot)
+        || realpath($absolutePath) !== $absolutePath || is_link($absolutePath)
+        || !is_dir($trustedRoot) || !is_dir($absolutePath)
+        || !gallery_normalized_path_inside_root($trustedRoot, $absolutePath)) {
+        throw new RuntimeException('Gallery visibility tree is unavailable.');
+    }
+    $rootStat = @lstat($trustedRoot);
+    if (!is_array($rootStat)) {
+        throw new RuntimeException('Gallery visibility tree is unavailable.');
+    }
+    $entries = 0;
+    $directories = 0;
+    $current = $absolutePath;
+    while ($current !== $trustedRoot) {
+        $parent = dirname($current);
+        if ($parent === $current) {
+            throw new RuntimeException('Gallery visibility tree is unavailable.');
+        }
+        $current = $parent;
+        $directories++;
+        if ($directories > LINKED_VISIBILITY_TREE_MAX_DIRECTORIES) {
+            throw new RuntimeException('Gallery visibility observation limit reached.');
+        }
+        if (!gallery_normalized_path_inside_root($trustedRoot, $current)) {
+            throw new RuntimeException('Gallery visibility tree is unavailable.');
+        }
+        gallery_visibility_marker_scan_directory($current, $trustedRoot, false, $entries);
+    }
+    $pending = [$absolutePath];
+    while ($pending !== []) {
+        $directory = array_pop($pending);
+        $directories++;
+        if ($directories > LINKED_VISIBILITY_TREE_MAX_DIRECTORIES) {
+            throw new RuntimeException('Gallery visibility observation limit reached.');
+        }
+        foreach (gallery_visibility_marker_scan_directory(
+            $directory, $trustedRoot, true, $entries,
+        ) as $child) {
+            $pending[] = $child;
+        }
+    }
+    clearstatcache(true, $trustedRoot);
+    $rootAfter = @lstat($trustedRoot);
+    if (!is_array($rootAfter) || is_link($trustedRoot)
+        || $rootAfter['dev'] !== $rootStat['dev'] || $rootAfter['ino'] !== $rootStat['ino']) {
+        throw new RuntimeException('Gallery visibility tree changed during observation.');
+    }
+}
+
+/**
+ * Inspect one live gallery subtree after checking its marker-bearing ancestors.
+ *
+ * @param string $relativePath Canonical gallery-root-relative directory.
+ * @return void Returns only after complete bounded physical observation.
+ * @throws RuntimeException When the tree or any required observation is unsafe.
+ */
+function gallery_visibility_marker_assert_subtree_clear(string $relativePath): void
+{
+    gallery_visibility_marker_assert_importable($relativePath);
+    $root = realpath(galleries_root());
+    $target = gallery_abs_path($relativePath);
+    $current = galleries_root();
+    foreach (explode('/', $relativePath) as $part) {
+        $current .= DIRECTORY_SEPARATOR . $part;
+        if (is_link($current)) {
+            throw new RuntimeException('Gallery visibility tree is redirected.');
+        }
+    }
+    $targetReal = realpath($target);
+    if (!is_string($root) || !is_string($targetReal)) {
+        throw new RuntimeException('Gallery visibility tree is unavailable.');
+    }
+    gallery_visibility_marker_assert_tree_clear($targetReal, $root);
+}
 
 /**
  * Gallery discovery and sidecar metadata helpers.
@@ -90,6 +349,455 @@ function write_gallery_sidecar_for_path(string $folderPath, array $data): bool
             JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
         )) !== false
     );
+}
+
+/**
+ * Replace one top-level visibility string while retaining all other JSON bytes.
+ *
+ * @param string $json Complete bounded JSON object from an existing sidecar.
+ * @param string $before Exact currently stored visibility.
+ * @param string $after Validated destination visibility.
+ * @return string Replacement JSON with only the value bytes changed.
+ * @throws Throwable When the object is malformed, ambiguous or already inconsistent.
+ */
+function gallery_sidecar_visibility_replacement(string $json, string $before, string $after): string
+{
+    $object = json_decode($json, false, 512, JSON_THROW_ON_ERROR);
+    if (!$object instanceof \stdClass || !property_exists($object, 'visibility')
+        || !is_string($object->visibility) || $object->visibility !== $before) {
+        throw new RuntimeException('Gallery sidecar is unavailable.');
+    }
+    $length = strlen($json);
+    $depth = 0;
+    $previous = '';
+    $start = null;
+    $end = null;
+    for ($index = 0; $index < $length; $index++) {
+        $character = $json[$index];
+        if ($character === '"') {
+            $stringStart = $index;
+            for ($index++; $index < $length; $index++) {
+                if ($json[$index] === '\\') {
+                    $index++;
+                } elseif ($json[$index] === '"') {
+                    break;
+                }
+            }
+            if ($depth === 1 && ($previous === '{' || $previous === ',')) {
+                $key = json_decode(substr($json, $stringStart, $index - $stringStart + 1),
+                    true, 512, JSON_THROW_ON_ERROR);
+                if ($key === 'visibility') {
+                    if ($start !== null) {
+                        throw new RuntimeException('Gallery sidecar is ambiguous.');
+                    }
+                    $cursor = $index + 1;
+                    while ($cursor < $length && ctype_space($json[$cursor])) {
+                        $cursor++;
+                    }
+                    if (($json[$cursor] ?? '') !== ':') {
+                        throw new RuntimeException('Gallery sidecar is invalid.');
+                    }
+                    $cursor++;
+                    while ($cursor < $length && ctype_space($json[$cursor])) {
+                        $cursor++;
+                    }
+                    if (($json[$cursor] ?? '') !== '"') {
+                        throw new RuntimeException('Gallery sidecar is invalid.');
+                    }
+                    $start = $cursor;
+                    for ($cursor++; $cursor < $length; $cursor++) {
+                        if ($json[$cursor] === '\\') {
+                            $cursor++;
+                        } elseif ($json[$cursor] === '"') {
+                            $end = $cursor + 1;
+                            break;
+                        }
+                    }
+                }
+            }
+            if ($depth === 1) {
+                $previous = '"';
+            }
+        } elseif ($character === '{' || $character === '[') {
+            $depth++;
+            if ($depth === 1) {
+                $previous = $character;
+            }
+        } elseif ($character === '}' || $character === ']') {
+            $depth--;
+            if ($depth === 1) {
+                $previous = $character;
+            }
+        } elseif ($depth === 1 && !ctype_space($character)) {
+            $previous = $character;
+        }
+    }
+    if ($start === null || $end === null) {
+        throw new RuntimeException('Gallery sidecar is unavailable.');
+    }
+    return substr($json, 0, $start)
+        . json_encode($after, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)
+        . substr($json, $end);
+}
+
+/**
+ * Synchronize one verified directory or fail closed on unsupported platforms.
+ *
+ * @param string $directory Resolved gallery directory under the trusted root.
+ * @param int $device Expected directory device.
+ * @param int $inode Expected directory inode.
+ * @return void Returns only after the verified directory handle reports fsync success.
+ * @throws RuntimeException When directory identity or synchronization is unavailable.
+ */
+function gallery_visibility_sync_directory(string $directory, int $device, int $inode): void
+{
+    if (!function_exists('fsync') || !in_array(PHP_OS_FAMILY, ['Linux', 'Darwin'], true)
+        || is_link($directory) || realpath($directory) !== $directory
+        || !gallery_filesystem_path_inside_root($directory)) {
+        throw new RuntimeException('Gallery directory synchronization is unavailable.');
+    }
+    $handle = @fopen($directory, 'rb');
+    if ($handle === false) {
+        throw new RuntimeException('Gallery directory synchronization is unavailable.');
+    }
+    try {
+        $before = fstat($handle);
+        clearstatcache(true, $directory);
+        $path = @lstat($directory);
+        if (!is_array($before) || !is_array($path) || !is_dir($directory)
+            || $before['dev'] !== $device || $before['ino'] !== $inode
+            || $path['dev'] !== $device || $path['ino'] !== $inode
+            || !@fsync($handle)) {
+            throw new RuntimeException('Gallery directory synchronization is unavailable.');
+        }
+        clearstatcache(true, $directory);
+        $after = @lstat($directory);
+        if (!is_array($after) || is_link($directory)
+            || $after['dev'] !== $device || $after['ino'] !== $inode) {
+            throw new RuntimeException('Gallery directory changed during synchronization.');
+        }
+    } finally {
+        fclose($handle);
+    }
+}
+
+/**
+ * Synchronize an identified regular file without accepting a redirected path.
+ *
+ * @param string $path Exact already-created file path.
+ * @param int $device Expected device.
+ * @param int $inode Expected inode.
+ * @return void Returns only after a matching regular file reports fsync success.
+ * @throws RuntimeException When file identity or synchronization is unavailable.
+ */
+function gallery_visibility_sync_file(string $path, int $device, int $inode): void
+{
+    if (!function_exists('fsync') || is_link($path)) {
+        throw new RuntimeException('Gallery file synchronization is unavailable.');
+    }
+    $handle = @fopen($path, 'rb');
+    if ($handle === false) {
+        throw new RuntimeException('Gallery file synchronization is unavailable.');
+    }
+    try {
+        $opened = fstat($handle);
+        clearstatcache(true, $path);
+        $current = @lstat($path);
+        if (!is_array($opened) || !is_array($current) || is_link($path)
+            || !is_file($path) || ($current['nlink'] ?? 0) !== 1
+            || $opened['dev'] !== $device || $opened['ino'] !== $inode
+            || $current['dev'] !== $device || $current['ino'] !== $inode
+            || !@fsync($handle)) {
+            throw new RuntimeException('Gallery file synchronization is unavailable.');
+        }
+    } finally {
+        fclose($handle);
+    }
+}
+
+/**
+ * Prepare and verify a private same-directory visibility-only sidecar replacement.
+ *
+ * @param array{folder_path:string,visibility:string,...} $gallery Locked current row.
+ * @param string $visibility Validated destination storage visibility.
+ * @return array{path:string,stage:string,original:string,replacement:string,dev:int,ino:int,stage_dev:int,stage_ino:int,folder_dev:int,folder_ino:int,mode:int}
+ *     Private staging identity retained under the cooperating writer lease.
+ * @throws Throwable When existing content, ownership or staging is uncertain.
+ */
+function gallery_sidecar_visibility_prepare(array $gallery, string $visibility): array
+{
+    $folder = gallery_abs_path($gallery['folder_path']);
+    $realFolder = realpath($folder);
+    if ($realFolder === false || !is_dir($realFolder) || is_link($folder)
+        || !gallery_filesystem_path_inside_root($realFolder)) {
+        throw new RuntimeException('Gallery sidecar directory is unavailable.');
+    }
+    $path = $realFolder . DIRECTORY_SEPARATOR . 'gallery.json';
+    $folderStat = @stat($realFolder);
+    if (!is_array($folderStat)) {
+        throw new RuntimeException('Gallery sidecar directory is unavailable.');
+    }
+    clearstatcache(true, $path);
+    $stat = @lstat($path);
+    if (!is_array($stat) || is_link($path) || !is_file($path) || !is_readable($path)
+        || ($stat['nlink'] ?? 0) !== 1 || ($stat['size'] ?? -1) < 0
+        || $stat['size'] > LINKED_VISIBILITY_SIDECAR_MAX_BYTES) {
+        throw new RuntimeException('Gallery sidecar is unavailable.');
+    }
+    $original = @file_get_contents($path, false, null, 0, LINKED_VISIBILITY_SIDECAR_MAX_BYTES + 1);
+    clearstatcache(true, $path);
+    $afterRead = @lstat($path);
+    if (!is_string($original) || strlen($original) !== $stat['size']
+        || !is_array($afterRead) || $afterRead['dev'] !== $stat['dev']
+        || $afterRead['ino'] !== $stat['ino'] || is_link($path)) {
+        throw new RuntimeException('Gallery sidecar changed during observation.');
+    }
+    $replacement = gallery_sidecar_visibility_replacement(
+        $original, $gallery['visibility'], $visibility,
+    );
+    $stage = $realFolder . DIRECTORY_SEPARATOR . '.gallery-visibility-'
+        . bin2hex(random_bytes(LINKED_VISIBILITY_SIDECAR_RANDOM_BYTES));
+    $handle = @fopen($stage, 'x+b');
+    if ($handle === false) {
+        throw new RuntimeException('Gallery sidecar staging is unavailable.');
+    }
+    try {
+        if (!@chmod($stage, 0600)) {
+            throw new RuntimeException('Gallery sidecar staging is unavailable.');
+        }
+        $offset = 0;
+        $length = strlen($replacement);
+        while ($offset < $length) {
+            $written = fwrite($handle, substr($replacement, $offset));
+            if (!is_int($written) || $written <= 0) {
+                throw new RuntimeException('Gallery sidecar staging is incomplete.');
+            }
+            $offset += $written;
+        }
+        if (!fflush($handle) || !function_exists('fsync') || !@fsync($handle)
+            || !rewind($handle)
+            || stream_get_contents($handle) !== $replacement) {
+            throw new RuntimeException('Gallery sidecar staging is incomplete.');
+        }
+        $stageStat = fstat($handle);
+        if (!is_array($stageStat) || $stageStat['uid'] !== $stat['uid']
+            || $stageStat['gid'] !== $stat['gid']) {
+            throw new RuntimeException('Gallery sidecar permissions cannot be preserved.');
+        }
+    } catch (Throwable $exception) {
+        fclose($handle);
+        // Preserve even incomplete staging evidence; a pathname alone does not
+        // prove that a concurrently replaced object still belongs to us.
+        throw $exception;
+    }
+    fclose($handle);
+    return ['path' => $path, 'stage' => $stage, 'original' => $original,
+        'replacement' => $replacement, 'dev' => $stat['dev'], 'ino' => $stat['ino'],
+        'stage_dev' => $stageStat['dev'], 'stage_ino' => $stageStat['ino'],
+        'folder_dev' => $folderStat['dev'], 'folder_ino' => $folderStat['ino'],
+        'mode' => $stat['mode'] & 0777];
+}
+
+/**
+ * Publish and read back a prepared replacement after the database commit.
+ *
+ * @param array{path:string,stage:string,original:string,replacement:string,dev:int,ino:int,stage_dev:int,stage_ino:int,folder_dev:int,folder_ino:int,mode:int} $prepared
+ *     Private staging identity from the same cooperating writer lease.
+ * @return void Publishes exactly the prepared content or raises uncertainty.
+ * @throws RuntimeException If either file changed or publication failed.
+ */
+function gallery_sidecar_visibility_publish(array $prepared): void
+{
+    clearstatcache(true, $prepared['path']);
+    $stat = @lstat($prepared['path']);
+    $stageStat = @lstat($prepared['stage']);
+    $folder = dirname($prepared['path']);
+    $folderStat = @stat($folder);
+    if (!is_array($stat) || is_link($prepared['path'])
+        || ($stat['nlink'] ?? 0) !== 1
+        || $stat['dev'] !== $prepared['dev'] || $stat['ino'] !== $prepared['ino']
+        || !is_array($folderStat) || realpath($folder) !== $folder
+        || $folderStat['dev'] !== $prepared['folder_dev']
+        || $folderStat['ino'] !== $prepared['folder_ino']
+        || !gallery_filesystem_path_inside_root($folder)
+        || @file_get_contents($prepared['path'], false, null, 0,
+            strlen($prepared['original']) + 1) !== $prepared['original']
+        || !is_array($stageStat) || is_link($prepared['stage'])
+        || ($stageStat['nlink'] ?? 0) !== 1
+        || $stageStat['dev'] !== $prepared['stage_dev']
+        || $stageStat['ino'] !== $prepared['stage_ino']
+        || @file_get_contents($prepared['stage'], false, null, 0,
+            strlen($prepared['replacement']) + 1) !== $prepared['replacement']
+        || !@chmod($prepared['stage'], $prepared['mode'])) {
+        throw new RuntimeException('Gallery sidecar publication is uncertain.');
+    }
+    gallery_visibility_sync_file(
+        $prepared['stage'], $prepared['stage_dev'], $prepared['stage_ino'],
+    );
+    if (!@rename($prepared['stage'], $prepared['path'])) {
+        throw new RuntimeException('Gallery sidecar publication is uncertain.');
+    }
+    clearstatcache(true, $prepared['path']);
+    $published = @lstat($prepared['path']);
+    if (!is_array($published) || is_link($prepared['path'])
+        || ($published['nlink'] ?? 0) !== 1
+        || $published['dev'] !== $prepared['stage_dev']
+        || $published['ino'] !== $prepared['stage_ino']
+        || @file_get_contents($prepared['path'], false, null, 0,
+            strlen($prepared['replacement']) + 1) !== $prepared['replacement']) {
+        throw new RuntimeException('Gallery sidecar publication is uncertain.');
+    }
+    gallery_visibility_sync_directory(
+        $folder, $prepared['folder_dev'], $prepared['folder_ino'],
+    );
+}
+
+/**
+ * Verify the persistent marker for the current visibility transition.
+ *
+ * @param array{path:string,dev:int,ino:int,folder_dev:int,folder_ino:int,content:string} $marker Previously observed marker, directory identities and exact bytes.
+ * @return void Returns only when the same single-link regular marker is intact.
+ * @throws RuntimeException When the marker is missing, redirected or changed.
+ */
+function gallery_visibility_marker_assert_owned(array $marker): void
+{
+    clearstatcache(true, $marker['path']);
+    $folder = dirname($marker['path']);
+    $folderStat = @lstat($folder);
+    $before = @lstat($marker['path']);
+    if (!is_array($folderStat) || is_link($folder) || !is_dir($folder)
+        || realpath($folder) !== $folder || !gallery_filesystem_path_inside_root($folder)
+        || $folderStat['dev'] !== $marker['folder_dev']
+        || $folderStat['ino'] !== $marker['folder_ino']
+        || !is_array($before) || is_link($marker['path']) || !is_file($marker['path'])
+        || ($before['nlink'] ?? 0) !== 1 || $before['dev'] !== $marker['dev']
+        || $before['ino'] !== $marker['ino']
+        || @file_get_contents($marker['path'], false, null, 0,
+            strlen($marker['content']) + 1) !== $marker['content']) {
+        throw new RuntimeException('Gallery visibility marker is unavailable.');
+    }
+    clearstatcache(true, $marker['path']);
+    $after = @lstat($marker['path']);
+    if (!is_array($after) || is_link($marker['path'])
+        || ($after['nlink'] ?? 0) !== 1 || $after['dev'] !== $marker['dev']
+        || $after['ino'] !== $marker['ino']) {
+        throw new RuntimeException('Gallery visibility marker changed.');
+    }
+}
+
+/**
+ * Bind recovery to unchanged gallery fields outside the visibility update.
+ *
+ * @param array<string,int|float|string|bool|null> $row Locked gallery columns.
+ * @return string Lowercase SHA-256 of the remaining columns and their types.
+ */
+function gallery_visibility_row_hash(array $row): string
+{
+    unset($row['visibility'], $row['edit_revision'], $row['updated_at']);
+    ksort($row, SORT_STRING);
+    return hash('sha256', serialize($row));
+}
+
+/**
+ * Persist a recovery marker and private sidecar before any visibility update.
+ *
+ * The marker survives an interrupted write and records which exact sidecar
+ * bytes and gallery row can be reconciled under the shared writer lock.
+ *
+ * @param array{id:int|string,folder_path:string,visibility:string,edit_revision:int|string,...} $gallery Locked current gallery row.
+ * @param string $visibility Requested storage visibility.
+ * @return array{sidecar:array<string,mixed>,marker:array{path:string,dev:int,ino:int,folder_dev:int,folder_ino:int,content:string}} Prepared target sidecar and retained marker proof.
+ * @throws Throwable When synchronization, identity or sidecar state is uncertain.
+ */
+function gallery_visibility_marker_prepare(array $gallery, string $visibility): array
+{
+    if ((int) ($gallery['id'] ?? 0) <= 0
+        || gallery_edit_revision($gallery) === ''
+        || !in_array($visibility, ['public', 'private', 'unpublished', 'draft'], true)) {
+        throw new RuntimeException('Gallery visibility recovery input is unavailable.');
+    }
+    gallery_visibility_marker_assert_importable($gallery['folder_path']);
+    $cursor = galleries_root();
+    foreach (explode('/', $gallery['folder_path']) as $part) {
+        $cursor .= DIRECTORY_SEPARATOR . $part;
+        clearstatcache(true, $cursor);
+        if (is_link($cursor)) {
+            throw new RuntimeException('Gallery visibility directory is redirected.');
+        }
+    }
+    $folder = realpath(gallery_abs_path($gallery['folder_path']));
+    $folderStat = $folder === false ? false : @lstat($folder);
+    if (!is_string($folder) || !is_array($folderStat)
+        || ($folderStat['ino'] ?? 0) <= 0) {
+        throw new RuntimeException('Gallery visibility directory is unavailable.');
+    }
+    // Probe the actual platform and directory before creating any marker.
+    gallery_visibility_sync_directory($folder, $folderStat['dev'], $folderStat['ino']);
+    $existingSidecar = $folder . DIRECTORY_SEPARATOR . 'gallery.json';
+    clearstatcache(true, $existingSidecar);
+    $existingStat = @lstat($existingSidecar);
+    if (!is_array($existingStat) || is_link($existingSidecar)
+        || !is_file($existingSidecar) || ($existingStat['nlink'] ?? 0) !== 1) {
+        throw new RuntimeException('Gallery sidecar is unavailable.');
+    }
+    gallery_visibility_sync_file(
+        $existingSidecar, $existingStat['dev'], $existingStat['ino'],
+    );
+    $private = gallery_sidecar_visibility_prepare($gallery, 'private');
+    $target = gallery_sidecar_visibility_replacement(
+        $private['replacement'], 'private', $visibility,
+    );
+    $content = json_encode([
+        'format' => 'gallery_visibility_pending_v2',
+        'gallery_id' => (int) $gallery['id'],
+        'revision' => (string) $gallery['edit_revision'],
+        'folder_hash' => hash('sha256', $gallery['folder_path']),
+        'original_hash' => hash('sha256', $private['original']),
+        'private_hash' => hash('sha256', $private['replacement']),
+        'target_hash' => hash('sha256', $target),
+        'row_hash' => gallery_visibility_row_hash($gallery),
+    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+    $path = $folder . DIRECTORY_SEPARATOR . LINKED_VISIBILITY_PENDING_MARKER;
+    $handle = @fopen($path, 'x+b');
+    if ($handle === false) {
+        throw new RuntimeException('Gallery visibility marker cannot be created.');
+    }
+    try {
+        $stat = fstat($handle);
+        clearstatcache(true, $path);
+        $entry = @lstat($path);
+        if (!is_array($stat) || !is_array($entry) || is_link($path)
+            || ($stat['ino'] ?? 0) <= 0 || ($stat['nlink'] ?? 0) !== 1
+            || $entry['dev'] !== $stat['dev'] || $entry['ino'] !== $stat['ino']
+            || !@chmod($path, 0600)) {
+            throw new RuntimeException('Gallery visibility marker is unavailable.');
+        }
+        $offset = 0;
+        while ($offset < strlen($content)) {
+            $written = fwrite($handle, substr($content, $offset));
+            if (!is_int($written) || $written <= 0) {
+                throw new RuntimeException('Gallery visibility marker is incomplete.');
+            }
+            $offset += $written;
+        }
+        if (!fflush($handle) || !@fsync($handle) || !rewind($handle)
+            || stream_get_contents($handle) !== $content) {
+            throw new RuntimeException('Gallery visibility marker is incomplete.');
+        }
+    } finally {
+        fclose($handle);
+    }
+    $marker = ['path' => $path, 'dev' => $stat['dev'],
+        'ino' => $stat['ino'], 'folder_dev' => $folderStat['dev'],
+        'folder_ino' => $folderStat['ino'], 'content' => $content];
+    gallery_visibility_marker_assert_owned($marker);
+    gallery_visibility_sync_directory($folder, $folderStat['dev'], $folderStat['ino']);
+    gallery_sidecar_visibility_publish($private);
+    gallery_visibility_marker_assert_owned($marker);
+    $privateGallery = $gallery;
+    $privateGallery['visibility'] = 'private';
+    return ['sidecar' => gallery_sidecar_visibility_prepare($privateGallery, $visibility),
+        'marker' => $marker];
 }
 
 /**
@@ -1028,6 +1736,342 @@ function create_empty_gallery(array $input): array
 }
 
 /**
+ * Exclusively create and read back the new gallery's sidecar.
+ *
+ * Existing files and final-component links are never opened or removed. A
+ * partial owned file is retained as evidence after failure.
+ *
+ * @param string $path Validated path for the new gallery.json sidecar.
+ * @param string $content Exact encoded metadata for the new gallery.
+ * @return array{dev:int,ino:int} Created regular file's physical identity.
+ * @throws RuntimeException When creation, ownership, writing or readback fails.
+ */
+function gallery_linked_creation_write_sidecar(string $path, string $content): array
+{
+    gallery_model_assert_linked_creation_transaction();
+    // Exclusive create rejects existing files and final-component symlinks.
+    $handle = @fopen($path, 'x+b');
+    if ($handle === false) {
+        throw new RuntimeException('Gallery metadata could not be written.');
+    }
+    try {
+        $stat = fstat($handle);
+        if (!is_array($stat) || ($stat['ino'] ?? 0) <= 0
+            || ($stat['nlink'] ?? 0) !== 1) {
+            throw new RuntimeException('Gallery metadata ownership is unavailable.');
+        }
+        $offset = 0;
+        $length = strlen($content);
+        while ($offset < $length) {
+            $written = fwrite($handle, substr($content, $offset));
+            if (!is_int($written) || $written <= 0) {
+                throw new RuntimeException('Gallery metadata could not be written.');
+            }
+            $offset += $written;
+        }
+        if (!fflush($handle) || !rewind($handle)
+            || stream_get_contents($handle) !== $content) {
+            throw new RuntimeException('Gallery metadata could not be verified.');
+        }
+        return ['dev' => $stat['dev'], 'ino' => $stat['ino']];
+    } finally {
+        fclose($handle);
+    }
+}
+
+/**
+ * Recheck the new linked gallery and sidecar without following a final link.
+ *
+ * This is an observation, not a lock on external filesystem writers. The
+ * caller must retain its database transaction and cooperating writer lease.
+ *
+ * @param array{root:string,parent:string,folder:string,sidecar:string,root_dev:int,root_ino:int,parent_dev:int,parent_ino:int,folder_dev:int,folder_ino:int,sidecar_dev:int,sidecar_ino:int,content:string} $proof
+ *     Exact paths, physical identities and bytes observed at creation.
+ * @return void Returns only while all observed identities and content match.
+ * @throws RuntimeException When a path, identity or sidecar cannot be verified.
+ */
+function gallery_linked_creation_assert_filesystem(array $proof): void
+{
+    gallery_model_assert_linked_creation_transaction();
+    clearstatcache(true);
+    $root = realpath(galleries_root());
+    $parent = realpath(dirname($proof['folder']));
+    $folder = realpath($proof['folder']);
+    $rootStat = $root === false ? false : @stat($root);
+    $parentStat = $parent === false ? false : @stat($parent);
+    $folderStat = @lstat($proof['folder']);
+    $sidecarStat = @lstat($proof['sidecar']);
+    if ($root !== $proof['root'] || $parent !== $proof['parent']
+        || $folder !== rtrim($proof['parent'], DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR . basename($proof['folder'])
+        || $proof['sidecar'] !== $proof['folder'] . DIRECTORY_SEPARATOR . 'gallery.json'
+        || !is_array($rootStat) || !is_array($parentStat)
+        || !is_array($folderStat) || !is_array($sidecarStat)
+        || !is_dir($root) || !is_dir($parent) || !is_dir($proof['folder'])
+        || is_link($proof['folder']) || is_link($proof['sidecar'])
+        || !is_file($proof['sidecar']) || ($sidecarStat['nlink'] ?? 0) !== 1
+        || $rootStat['dev'] !== $proof['root_dev'] || $rootStat['ino'] !== $proof['root_ino']
+        || $parentStat['dev'] !== $proof['parent_dev'] || $parentStat['ino'] !== $proof['parent_ino']
+        || $folderStat['dev'] !== $proof['folder_dev'] || $folderStat['ino'] !== $proof['folder_ino']
+        || $sidecarStat['dev'] !== $proof['sidecar_dev'] || $sidecarStat['ino'] !== $proof['sidecar_ino']
+        || !gallery_filesystem_path_inside_root($parent)
+        || !gallery_filesystem_path_inside_root($folder)
+        || @file_get_contents($proof['sidecar'], false, null, 0,
+            strlen($proof['content']) + 1) !== $proof['content']) {
+        throw new RuntimeException('Linked gallery filesystem ownership is unavailable.');
+    }
+    clearstatcache(true, $proof['sidecar']);
+    $after = @lstat($proof['sidecar']);
+    if (!is_array($after) || is_link($proof['sidecar'])
+        || $after['dev'] !== $proof['sidecar_dev'] || $after['ino'] !== $proof['sidecar_ino']) {
+        throw new RuntimeException('Linked gallery sidecar changed during verification.');
+    }
+}
+
+/**
+ * Create only one linked gallery under the caller's writer and database leases.
+ *
+ * Unlike the general Admin workflow this narrow operation never repairs the
+ * global hierarchy or seeds best-effort database indexes. It uses the shared
+ * naming and URL policies and refuses creation when their canonical result
+ * would alter any existing gallery. Filesystem changes cannot be rolled back;
+ * its caller retains a durable pending claim for every uncertain outcome.
+ *
+ * @param array{title:string,parent_id:int} $input Validated title and parent ID,
+ *     with zero denoting the gallery root.
+ * @param array{folder:string,actor_id:int,key_hash:string,payload_hash:string} $reservation Durable claim and normalized target identity.
+ * @param bool $filesystemStarted Monotonic caller-owned marker set before the first mkdir attempt.
+ * @return array{id:int,title:string,parent_id:int|null,_linked_creation_fs:array{root:string,parent:string,folder:string,sidecar:string,root_dev:int,root_ino:int,parent_dev:int,parent_ino:int,folder_dev:int,folder_ino:int,sidecar_dev:int,sidecar_ino:int,content:string}}
+ *     Created uncommitted identity and private filesystem proof for pre-commit verification.
+ * @throws RuntimeException When ownership, storage, hierarchy or URL is unsafe.
+ */
+function create_empty_gallery_linked_owned(
+    array $input, array $reservation, bool &$filesystemStarted,
+): array
+{
+    if ($filesystemStarted) {
+        throw new RuntimeException('Linked creation filesystem state is unavailable.');
+    }
+    gallery_model_assert_linked_creation_transaction();
+    $title = $input['title'];
+    $parentId = $input['parent_id'];
+    if ($title === '' || $parentId < 0) {
+        throw new RuntimeException('Linked gallery input is unavailable.');
+    }
+    $parent = $parentId > 0 ? find_gallery($parentId, true) : null;
+    if ($parentId > 0 && $parent === null) {
+        throw new RuntimeException('Selected parent gallery is unavailable.');
+    }
+    // Unknown or partially migrated access storage must never become an
+    // implicit permission or publication change for the newly created row.
+    gallery_access_assert_public_policy_available();
+    $hasAccess = gallery_access_schema_ready();
+    $hasSchedule = gallery_publication_manual_storage_available();
+    $folder = gallery_child_folder_path($parent, gallery_folder_segment($title));
+    if ($folder === '' || strlen($folder) > LINKED_GALLERY_CREATE_PATH_MAX_BYTES) {
+        throw new RuntimeException('Gallery folder name is unavailable.');
+    }
+    if ($folder !== $reservation['folder']) {
+        throw new RuntimeException('Linked gallery reservation target changed.');
+    }
+    gallery_model_linked_reservation_assert_pending(
+        $folder, $reservation['actor_id'], $reservation['key_hash'], $reservation['payload_hash'],
+    );
+    gallery_creation_assert_catalog_preserved($folder);
+    $target = gallery_target_abs_path($folder);
+    clearstatcache(true, $target);
+    if (file_exists($target) || is_link($target)) {
+        throw new RuntimeException('Gallery folder is already occupied.');
+    }
+    $visibility = gallery_visibility_storage_value('unpublished');
+    if (!in_array($visibility, ['unpublished', 'draft'], true)) {
+        throw new RuntimeException('Unpublished gallery storage is unavailable.');
+    }
+    if ($visibility === 'draft' && !schema_inspection_is_available(
+        schema_inspection_column_definition_contains('galleries', 'visibility', 'draft'),
+    )) {
+        throw new RuntimeException('Unpublished gallery storage is unavailable.');
+    }
+    $sortOrder = next_gallery_prepend_sort_order($parentId);
+    $now = now_sql();
+    $legacySlug = gallery_model_unique_slug(
+        gallery_url_slug_base($title),
+        0,
+        LINKED_GALLERY_CREATE_SLUG_MAX_ATTEMPTS,
+    );
+    if ($legacySlug === '' || strlen($legacySlug) > LINKED_GALLERY_CREATE_SLUG_MAX_BYTES) {
+        throw new RuntimeException('Gallery slug is unavailable.');
+    }
+    $fields = [
+        'parent_id' => $parentId > 0 ? $parentId : null,
+        'folder_path' => $folder,
+        'folder_path_hash' => hash('sha256', $folder),
+        'slug' => $legacySlug,
+        'title' => $title,
+        'description' => '',
+        'sort_order' => $sortOrder,
+        'visibility' => $visibility,
+        'voting_enabled' => 0,
+        'show_filenames' => 0,
+        'created_at' => $now,
+        'updated_at' => $now,
+    ];
+    if ($hasAccess) {
+        $fields['access_mode'] = 'normal';
+        $fields['access_listing'] = 'listed';
+    }
+    if ($hasSchedule) {
+        $fields['scheduled_publish_at'] = null;
+    }
+    $id = gallery_model_insert_linked_owned($fields);
+    if ($id <= 0) {
+        throw new RuntimeException('Linked gallery identity is unavailable.');
+    }
+
+    // One lookahead row distinguishes a full catalog from a truncated scan.
+    $rows = public_path_model_linked_creation_rows(
+        LINKED_GALLERY_CREATE_CATALOG_MAX_ROWS + 1,
+        $hasAccess,
+        $hasSchedule,
+    );
+    if (count($rows) > LINKED_GALLERY_CREATE_CATALOG_MAX_ROWS) {
+        throw new RuntimeException('Gallery catalog exceeds the creation limit.');
+    }
+    $paths = gallery_public_path_assignments($rows);
+    $parents = gallery_parent_id_assignments_from_folder_paths($rows);
+    $newPath = null;
+    foreach ($rows as $row) {
+        $rowId = (int) $row['id'];
+        if ($rowId <= 0 || (string) $rowId !== (string) $row['id']
+            || !isset($paths[$rowId]) || !array_key_exists($rowId, $parents)) {
+            throw new RuntimeException('Gallery catalog is unavailable.');
+        }
+        $assignment = $paths[$rowId];
+        if ($rowId === $id) {
+            if ((int) ($parents[$rowId] ?? 0) !== $parentId
+                || (int) ($row['parent_id'] ?? 0) !== $parentId
+                || $row['title'] !== $title || (int) $row['description_is_empty'] !== 1
+                || $row['folder_path'] !== $folder
+                || $row['folder_path_hash'] !== hash('sha256', $folder)
+                || $row['slug'] !== $legacySlug
+                || $row['visibility'] !== $visibility || (int) $row['sort_order'] !== $sortOrder
+                || (int) $row['voting_enabled'] !== 0 || (int) $row['show_filenames'] !== 0
+                || ($hasAccess && (($row['access_mode'] ?? null) !== 'normal'
+                    || ($row['access_listing'] ?? null) !== 'listed'))
+                || ($hasSchedule && (!array_key_exists('scheduled_publish_at', $row)
+                    || $row['scheduled_publish_at'] !== null))
+                || !preg_match('/\A[1-9][0-9]*\z/D', (string) $row['edit_revision'])
+                || $row['url_slug'] !== null || $row['url_path'] !== null
+                || $row['url_path_hash'] !== null) {
+                throw new RuntimeException('Gallery storage could not be verified.');
+            }
+            $newPath = $assignment;
+            continue;
+        }
+        // The ordinary global repair rewrites existing identities. This
+        // operation instead refuses when it would change any of them.
+        if ((int) ($row['parent_id'] ?? 0) !== (int) ($parents[$rowId] ?? 0)
+            || $row['url_slug'] !== $assignment['slug']
+            || $row['url_path'] !== $assignment['path']
+            || !is_string($row['url_path_hash'])
+            || !hash_equals($row['url_path_hash'], hash('sha256', $assignment['path']))) {
+            throw new RuntimeException('Gallery catalog requires reconciliation.');
+        }
+    }
+    if ($newPath === null || $newPath['slug'] === '' || $newPath['path'] === ''
+        || strlen($newPath['slug']) > LINKED_GALLERY_CREATE_SLUG_MAX_BYTES
+        || strlen($newPath['path']) > LINKED_GALLERY_CREATE_PATH_MAX_BYTES) {
+        throw new RuntimeException('Linked gallery path is unavailable.');
+    }
+
+    // No filesystem or database write follows a swallowed rollback without a
+    // fresh model-owned transaction check. The marker survives any failure.
+    gallery_model_assert_linked_creation_transaction();
+    clearstatcache(true);
+    $rootReal = realpath(galleries_root());
+    $parentReal = realpath(dirname($target));
+    $rootStat = $rootReal === false ? false : @stat($rootReal);
+    $parentStat = $parentReal === false ? false : @stat($parentReal);
+    if (!is_string($rootReal) || !is_string($parentReal)
+        || !is_array($rootStat) || !is_array($parentStat)
+        || !is_dir($rootReal) || !is_dir($parentReal)
+        || ($rootStat['ino'] ?? 0) <= 0 || ($parentStat['ino'] ?? 0) <= 0
+        || !gallery_filesystem_path_inside_root($parentReal)) {
+        throw new RuntimeException('Gallery parent ownership is unavailable.');
+    }
+    gallery_model_linked_reservation_assert_pending(
+        $folder, $reservation['actor_id'], $reservation['key_hash'], $reservation['payload_hash'],
+    );
+    $filesystemStarted = true;
+    if (!mkdir($target, \Gallery\Core\GALLERY_DIRECTORY_PERMISSIONS)) {
+        throw new RuntimeException('Gallery folder could not be created.');
+    }
+    clearstatcache(true);
+    $folderReal = realpath($target);
+    $folderStat = @lstat($target);
+    $rootAfter = @stat($rootReal);
+    $parentAfter = @stat($parentReal);
+    if ($folderReal !== rtrim($parentReal, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR . basename($target)
+        || realpath(galleries_root()) !== $rootReal
+        || realpath(dirname($target)) !== $parentReal
+        || !is_array($folderStat) || !is_array($rootAfter) || !is_array($parentAfter)
+        || !is_dir($target) || is_link($target) || ($folderStat['ino'] ?? 0) <= 0
+        || $rootAfter['dev'] !== $rootStat['dev'] || $rootAfter['ino'] !== $rootStat['ino']
+        || $parentAfter['dev'] !== $parentStat['dev'] || $parentAfter['ino'] !== $parentStat['ino']
+        || !gallery_filesystem_path_inside_root($folderReal)) {
+        throw new RuntimeException('Gallery folder ownership is unavailable.');
+    }
+    $sidecar = [
+        'title' => $title,
+        'description' => '',
+        'visibility' => $visibility,
+        'sort_order' => $sortOrder,
+        'voting_enabled' => 0,
+        'show_filenames' => 0,
+    ];
+    $encoded = json_encode(
+        $sidecar,
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+    );
+    gallery_model_assert_linked_creation_transaction();
+    $sidecarPath = $target . DIRECTORY_SEPARATOR . 'gallery.json';
+    $sidecarStat = gallery_linked_creation_write_sidecar($sidecarPath, $encoded);
+    $proof = [
+        'root' => $rootReal, 'parent' => $parentReal,
+        'folder' => $target, 'sidecar' => $sidecarPath,
+        'root_dev' => $rootStat['dev'], 'root_ino' => $rootStat['ino'],
+        'parent_dev' => $parentStat['dev'], 'parent_ino' => $parentStat['ino'],
+        'folder_dev' => $folderStat['dev'], 'folder_ino' => $folderStat['ino'],
+        'sidecar_dev' => $sidecarStat['dev'], 'sidecar_ino' => $sidecarStat['ino'],
+        'content' => $encoded,
+    ];
+    gallery_linked_creation_assert_filesystem($proof);
+    public_path_model_assign_linked_creation(
+        $id,
+        $newPath['slug'],
+        $newPath['path'],
+        $visibility,
+        [
+            'title' => $title,
+            'parent_id' => $parentId > 0 ? $parentId : null,
+            'folder_path' => $folder,
+            'legacy_slug' => $legacySlug,
+            'sort_order' => $sortOrder,
+        ],
+        $hasAccess,
+        $hasSchedule,
+    );
+    gallery_linked_creation_assert_filesystem($proof);
+    return [
+        'id' => $id,
+        'title' => $title,
+        'parent_id' => $parentId > 0 ? $parentId : null,
+        '_linked_creation_fs' => $proof,
+    ];
+}
+
+/**
  * Create an empty gallery while the caller owns the gallery writer lease.
  * When its authoritative attachment sidecars are absent, best-effort INSERT
  * IGNORE snapshots let public branch counts include this known-empty gallery;
@@ -1169,6 +2213,7 @@ function create_empty_gallery_owned(array $input): array
         $parent,
         $folderName,
     );
+    gallery_linked_reservation_assert_admin_write();
     gallery_creation_assert_catalog_preserved($requestedFolderPath);
     // $folderPath stores an intermediate value used by the surrounding gallery workflow.
     $folderPath = $requestedFolderPath;
@@ -1179,6 +2224,7 @@ function create_empty_gallery_owned(array $input): array
         throw new RuntimeException('Gallery folder already exists.');
     }
     // The verified parent must still exist; never recreate missing ancestors here.
+    gallery_linked_reservation_assert_admin_write();
     if (!mkdir($target, \Gallery\Core\GALLERY_DIRECTORY_PERMISSIONS)) {
         throw new RuntimeException('Could not create gallery folder.');
     }

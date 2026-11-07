@@ -1,5 +1,616 @@
 # Compatibility lifecycle and retirement register
 
+## Identity linking and legacy uploads
+
+Browser-approved linking remains experimental and unqualified. M1 implements
+version-1 readiness discovery and a browser handoff that reuses hashed
+request/PKCE storage without a schema migration. The handle is short-lived and
+non-authorizing; after ordinary Admin login, CSRF-protected session binding
+leads to explicit consent. Only approval or cancellation starts the existing
+one-use PKCE loopback flow. Core readiness requires the verified exact issuer,
+independent secret and complete core schema; unknown optional capability
+storage hides only that operation. M1 source qualification is green at
+`15978bc6`: BASIC `42098837922` and WinApp `42098837757` (Ubuntu 724 pass,
+12 skip; Windows 734 pass, 2 skip). The original gallery-scoped `pgu_` upload path
+is independent. An explicit new scope can list the ordinary Admin's galleries,
+including private and unpublished ones; older identity-only grants do not gain
+that permission. Selecting a gallery alone is not upload authorization. A
+separate explicitly approved upload scope covers all ordinary Admin galleries.
+
+Native gallery typeahead adds two temporary, expressly approved search
+bundles that fit the original scope columns. It reuses gallery and tag
+storage. An existing listing grant or a server without search readiness
+keeps the original paginated GET and a local title filter. The same fallback
+keeps the picker usable beyond the 10,000-row catalog budget. Keep basic
+listing for older servers and for permissions that do not include search.
+Deployed catalog sizes and mixed-version search use are unknown.
+
+The WinApp links chooser retains one live approval per exact installation
+in memory. The browsing view and the upload target have separate bindings,
+including the session captured by an active worker. Expiry and explicit
+unlink affect the matching session. Profile history stores only canonical
+recent addresses in `recent-gallery-links.json`, up to 20. Profiles without
+the file can use the existing saved destination hint. On macOS, startup may
+restore a transient listing grant from the user's Keychain within its original
+expiry, after server identity verification. The application uses the login
+Keychain for source launches. If the vault is unavailable, the live in-memory
+session remains usable. Compatible WinApp links can now request explicit
+rolling consent and rotate a saved credential from Keychain or Windows
+Credential Manager at startup. Older clients still support interactive
+browser approval.
+Installed multi-link use is unknown.
+[Apple Keychain implementations](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains).
+
+Existing linked upload target selection is enabled for a verified local Windows
+profile after native mode/vault/restart qualification at `4fcdd4b5`. After
+restart, the saved linked mode is disconnected and needs explicit selection;
+only an explicit choice can return to the saved API key.
+On a verified first-run profile, explicit upload-target selection initializes
+local settings before publishing linked mode through the existing two owners.
+The API-key URL and credential stay separate. Pending flights are checked
+against the saved destination even without a live session. Unbound import
+previews do not own a target; dispatched work and missing or corrupt binding
+evidence still block a change. Unlinking invalidates the live target without
+choosing legacy mode. Installed Windows coverage for these paths is pending.
+The separate created-gallery shortcut requires the original receipt lease,
+fresh status, current issuer/account/scope and independent target verification.
+Disposable HTTPS evidence covers a lost completed reply, same-key replay,
+explicit resume and upload to the exact child. Native receipt publication and
+disconnected restart passed on Windows at `9eaa718a`. Installed client and
+deployed prevalence remain unknown.
+For one current unknown upload, inspect the gallery and original source before
+review. The optional hash probe observes bytes only; it does not confirm the
+request or prove absence. Review defaults to No and preserves the marker,
+original and ZIP. The same path or bytes remain blocked across restart, while
+other eligible sources can continue. No resend or source deletion follows from
+review. A disposable HTTPS fixture processed two manual Import items and one
+Watcher item through the actual PHP/MySQL 8.0.44 upload pipeline; one stored
+upload reply was lost. Matching inventory did not confirm or resend it, and
+source files remained. This observation does not qualify activation.
+
+Windows Watcher has a separate confirmed-source deletion owner. New or missing
+settings enable deletion, while a saved explicit off choice remains off.
+Only a successful response for the current transfer followed by durable local
+acknowledgement can reach it. It compares the captured source identity and
+digest through a native handle that excludes writers and replacement, then
+deletes that same opened file. Failed, uncertain, inventory-only, restarted or
+replaced sources retain their existing recovery behavior. An unavailable or
+busy native handle retains the file and reports a warning. This policy applies
+to both linked and legacy Watcher uploads. Manual imports and source ZIPs are
+outside it.
+
+The native deletion owner currently supports Windows. Other platforms retain
+sources because a path-only unlink cannot provide the same opened-file deletion
+boundary. Keep that retention path until a platform-specific owner is qualified.
+Real-world prevalence of concurrent source replacement is unknown. Hosted
+fixtures cover same-file success and retention boundaries, and desktop evidence
+must identify the exact candidate and use disposable sources.
+Linked target activation and worker admission require a fixed local Windows
+drive or an owner-controlled local macOS volume and an unredirected profile.
+The macOS source launcher uses a private file and native workspace lock for
+the second non-secret mode record. Loss or mismatch of one record blocks
+upload work. Both files share the same profile, so loss or rollback of the
+whole profile cannot be detected. After restart, reapprove a live session
+and select its exact target. Older incompatible processes sharing that
+profile must be closed. Point-in-time admission cannot fence external
+filesystem changes. Deployed macOS usage is unknown.
+
+The Mac source profile retained a frozen queue with one file after a confirmed
+upload. Rechecking that same path and digest every scan hit the shared server
+request limit, leaving Stop waiting and the UI offering Begin based on its
+empty legacy key. Within one Watcher lifetime, an acknowledged path/digest
+pair now stays settled for its captured gallery. A changed digest and a
+restarted worker still check the gallery. A failed linked inventory or
+expired grant stops capture with the original queue and a recovery reason.
+The verified mode record supplies the original issuer and non-secret binding
+after restart. Retrying uses that target. Explicit local closure waits for
+the workers, records abandonment and preserves the queue, original photos,
+reports, uncertain-upload history and credentials. The existing legacy API
+key editor and its explicit local cleanup remain supported. Deployed adoption
+and installed Windows click-through remain unknown.
+
+The same Mac profile retained a v1 target lock after its uploader closed.
+The v2 marker keeps the old filename as an exclusion fence for older
+processes and binds it to an OS-locked local file. A matching marker can be
+reopened under that native lock after process exit. Unverified markers,
+including v1, still require operator inspection because their live owner
+cannot be proven. A macOS process-exit check exercised recovery and live
+contention. The original Mac v1 lock was archived after checking it had no
+open handle. This does not establish remote completion, repair uncertain
+transfer evidence or qualify power-loss recovery.
+The shared upload service retains the legacy API's gallery-scoped `pgu_`
+authentication, result envelope and upload behavior.
+Real disposable HTTP upload passed in all four pairings of archived
+`df36afa1` and `15978bc6` clients and servers, including inventory, scanner and
+thumbnail handling. Deployed version prevalence remains unknown.
+Keep the legacy upload path available for newer clients with older supported
+galleries and older clients with newer galleries. Actual mixed-version upload
+coverage, deployed version prevalence and safe retirement evidence remain
+unknown, as are installed native-client prevalence and mixed-version linking
+behavior; never remove the fallback based on version numbers alone. Owner grant
+revocation works across stored issuers for the same ordinary
+Admin account within a shared database, without broadening bearer scope. See
+`docs/APP_LINKING_PHASE_0.md` for outstanding security and deployment gates.
+
+Browser linking accepts direct HTTP for a saved `localhost` installation on
+the same computer. This supports local installations with an HTTP website
+address, including an explicit port and a mounted path. PHP requires direct
+loopback endpoints, and WinApp connects only to loopback for this scheme.
+Temporary and rolling credentials bind to the exact HTTP issuer. Remote
+galleries require verified HTTPS. Separate legacy offline grants remain
+HTTPS-only and keep the 30-day absolute and seven-day inactivity limits.
+Rolling grants extend both existing deadlines for seven days on authenticated
+use or rotation. Consumed rolling hashes remain replay evidence for at least
+seven days, subject to the existing 4,096-hash family cap. The database
+transition fixture covers expiry, renewal and replay. Installed Windows and
+mixed-version deployment coverage are pending. Keep transient approval for
+older servers until deployed usage supports retirement.
+
+MAMP's Apache `mod_fastcgi` can drop the bearer header on the PHP request
+after approval. The gallery's `.htaccess` preserves WinApp linking bearers in
+the CGI environment using `mod_setenvif`. The linking controller's existing
+header validation remains authoritative. Keep this rule while supported
+FastCGI installations can strip the header. The prevalence of affected
+installations is unknown.
+
+The unintegrated two-copy upload-mode foundation does not yet repair restart
+mode recovery or change the supported `pgu_` path. Linked target activation is
+disabled in the meantime. Its fixed
+credential namespace is not multi-profile safe, and its generation comparison
+protects only processes that cooperate with the required leases. Loss of both
+copies is indistinguishable from an unmigrated legacy profile; matching rollback
+of both copies to an earlier generation is also undetectable from these records.
+Windows API behavior and Windows tests for this foundation remain unverified.
+Its version 2 path binding checks exact lexical spelling, not Windows file
+identity. The separate work-admission owner is also unintegrated and protects
+only operations explicitly registered within the same process.
+The `--once` path uses the ConfigStore mode port and coordinator before its
+legacy scan. Unavailable vault or ambiguous, linked and first-setup evidence
+returns nonzero before scanning; verified legacy and unmigrated legacy remain
+eligible. This guard holds an in-process lease for the scan, but does not cover
+GUI workers or fence other processes. It rechecks mode evidence before each
+inventory and upload endpoint attempt and redirect; an in-flight request can
+still finish and the check is not atomic with network transmission. The port
+preserves a string `--config` spelling before `Path`
+conversion and checks it against both path owners; `Path` callers supply only
+their already-converted spelling. Verified unmigrated legacy paths, including
+UNC, do not need a v2 binding. Lexical spelling is not proof of native identity;
+aliases and native file identity remain unqualified.
+
+Legacy uploader requests carrying a gallery API key refuse redirects to another
+host, an unapproved port, or from HTTPS to HTTP. Same-host redirects on the
+same effective port and the standard HTTP-to-HTTPS upgrade remain eligible.
+Installations relying on other redirects must update their configured URL;
+their prevalence and real mixed-version impact are unknown. Existing direct
+API-key uploads remain supported. Windows and deployed behavior require
+qualification.
+
+The GUI's legacy workers now use the shared mode owner and captured
+configuration. An unavailable or mismatched mode refuses credential-bearing
+work; settings changes can be refused while admitted work is active. Legacy
+global path/hash history is retained but no longer authorizes a skip for a
+different connection. Old jobs with unverified duplicate decisions require a
+new preflight. Watched source-photo deletion and legacy source-ZIP deletion are
+temporarily disabled; saved preferences are retained. Flight API-key revoke is
+temporarily unavailable until its asynchronous acknowledgement and local save
+share a safe transition. These restrictions affect existing users; prevalence
+and Windows behavior are unknown. The separate experimental pgu journal is not
+integrated and restart after an uncertain transfer is not crash-safe.
+
+The active ConfigStore uses the configuration snapshot primitive for ordinary
+loads, saves and migrations. A malformed or unverifiable configuration now
+blocks startup instead of becoming defaults; a confirmed missing file retains
+first-run behavior. Its 4 MiB document limit, single-link requirement and
+positive device/inode checks can reject existing installations; their prevalence
+and Windows behavior are unknown. Parent aliases and reparse points have not
+been qualified. A readback is not an atomic CAS against older or unrelated
+writers and does not establish power-loss durability. This does not integrate
+the separate two-record upload-mode foundation or cure its restart fallback.
+
+Delegated upload success now requires fresh per-original scanner insertion,
+current target row and observed single-link file identity, including after
+automatic rename; ambiguous evidence refuses the acknowledgement after possible
+disk effects. The client requires one positive image ID for its one-image
+request and the exact `upload_evidence: fresh_insert_v1` acknowledgement.
+Older delegated servers cannot supply that guarantee and leave an upload
+unresolved after a possibly successful write, while the separate `pgu_`
+transport and response retain their existing behavior. Filesystems without
+usable inode identity may also leave delegated uploads unresolved. Prevalence,
+real mixed-version usage
+and safe retirement evidence are unknown. These checks do not exclude external
+filesystem writers or guarantee durability. Database leases coordinate only
+cooperating application writers; shell or FTP writers can race target selection
+and the move. File identity uses inode, size and second-resolution modification
+time, so an external same-size rewrite within that second can go undetected;
+the acknowledgement is not byte-exact proof.
+
+The experimental `galleries:create` source requires separately approved exact
+scope and verified wide storage; existing grants and `pgu_` keys do not gain
+creation rights.
+The narrow owner refuses conflicting paths, canonical catalog drift and more
+than 10,000 catalog rows including the proposed gallery. Slug search checks at
+most 128 candidates; neither count limit is a time limit. A server claim and
+client intent preserve ambiguous attempts for
+reconciliation instead of replay; a confirmed local receipt remains until
+explicit acknowledgement. Its local handle binds the receipt to the original
+intent, so a stale UI selection or acknowledgement cannot consume a later
+operation even when gallery fields match. The operation key is not displayed.
+Real Windows behavior is unqualified. The client rechecks it with the server
+before using
+the created gallery as an upload target. The server checks current ID, title
+and parent against that original receipt; a changed or unavailable reference
+does not permit replay. New galleries retain normal/listed access and no
+scheduled publication where those fields exist. Database commit does not roll back filesystem
+writes, and local flushes do not establish power-loss durability. Actual
+database, HTTPS and Windows behavior is unqualified, and no retirement of the
+manual upload path is justified by this source.
+
+Linked creation now requires the exact reservation migration before writing a
+folder. A pending or malformed reservation temporarily blocks both covered
+Admin in-place import workflows, discovery photo moves and unmanaged-folder
+deletion, picture-manager copies, metadata-organizer moves, moving galleries to
+Trash, Trash restoration, consistency repair and
+browser consistency publication, ordinary Admin creation and
+another linked create, regardless of the
+target path, avoiding filesystem alias assumptions. This temporarily blocks
+otherwise valid discovery disk actions even for unrelated folders; prevalence is
+unknown. Completed reservations do
+not block and their active path key is cleared in the gallery/receipt commit.
+Picture-manager cleanup is skipped if it cannot verify writer-lease ownership;
+metadata-organizer move failures retain new destinations for explicit review.
+The ownership observation is not atomic with subsequent filesystem work.
+An uncertain pending reservation is never automatically removed, including on
+close of a client intent; manual recovery is not yet implemented. A caught failure
+proven before the first filesystem attempt can atomically close the owned claim
+and reservation after verified rollback and renewed authority; uncertain
+ownership or any attempted mkdir keeps pending. The `pgu_` upload path remains
+available. Confirmed missing reservation storage preserves legacy
+Admin behavior only under the deployment assumption that reservation history
+was not lost by an inconsistent restore; partial or unknown schema refuses.
+This is not a filesystem fence: old runtimes, already running writers after a
+lost DB lease, unguarded move/delete/restore, shell/FTP, shared storage with
+independent databases and inconsistent restores are outside its guarantee.
+The global query's `LIMIT 1` caps returned rows, not scan work or elapsed time;
+completed reservation history and its query cost can grow without a timeout.
+
+Before linked creation, the client verifies a fully written staging intent and
+publishes it exclusively without overwriting a previous key. A crash may leave
+an unused stage or stale profile lease; the latter can block later work. Real
+Windows behavior and directory-entry persistence after power loss remain
+unqualified; the change does not establish safe automatic retry or recovery.
+The completed creation receipt is separately staged, flushed, read back and
+published exclusively without replacing an earlier receipt. Identity and link
+count are checked around publication and cleanup; uncertainty retains the
+pending intent and any published receipt for explicit reconciliation. This
+does not atomically exclude unrelated local writers or qualify Windows,
+hardlink behavior or directory durability after power loss.
+
+Explicit linked-create abandonment records a permanent key tombstone without
+claiming no filesystem effects. An older runtime may report this new ledger
+state as unknown but must not replay it. Existing upload claims and states are
+unchanged; deployment and downgrade prevalence are unknown. Retain tombstones
+for the life of the operation identity.
+
+Visibility recovery preserves existing gallery move and deletion behavior:
+same-filesystem moves can retain descendant symbolic links without following
+them, and directory deletion can unlink them. The cross-filesystem Trash copy
+already rejects such links. The v2 marker binds unchanged gallery columns and
+the exact original/private/target sidecar hashes. Default operator inspection
+is read-only; an exact current review fingerprint permits only eligible
+sidecar reconciliation and marker retirement after synchronized readback,
+without a database row or revision write. V1 markers remain inspectable only.
+A disposable HTTPS PHP/MySQL 8.0.44 run observed public/private/unpublished
+flows, fresh GET verification, stale revision and schedule refusal,
+password/unlisted/NSFW preservation and interrupted recovery on both sides of
+database commit. At exact candidate `8de8e50a`, BASIC run `42107055888` and
+WinApp run `42107055797` passed and the client/server visibility gates are
+enabled.
+Each change requires explicit approval and fresh confirmation; stale revision
+or schedule conflicts cause a read-only refresh without replay. Older servers
+do not advertise the optional permission. The current CLI inspection and exact-
+fingerprint recovery behavior is documented in
+`docs/APP_LINKING_PHASE_0.md`. Installed GUI, MariaDB and deployed evidence
+remain unknown. Unrelated filesystem writers and power-loss durability remain
+outside the observed qualification.
+
+The embedded Photos reader accepts a live `galleries:list` link for public
+photo reads. The server verifies the registered scope, issuer, role, live grant
+and public export policy. Direct non-NSFW photos require every ancestor to be
+public, listed, normal-access and non-NSFW. Legacy `media:read` grants remain
+valid, including on older servers that require that suffix. Older servers can
+refuse photo reads from ordinary listing links; the Photos pane handles that
+response inline. `presentation:read` remains explicit for settings and tracks.
+Both paths reuse the existing schema and verified issuer transport. The thumbnail owner
+uses a larger configured derivative or the existing public display rendition
+when a deployment lacks the smallest thumbnail. It retains the same binary
+limit and can serve as long as existing uploads use different rendition sizes.
+Deployed usage of this fallback and mixed-version combinations is unknown.
+
+The separately approved `media:admin` scope adds direct administrator media
+reads when the live grant and current schema allow them. Public-only and
+legacy listing grants keep their existing policy. The linking policy and
+native media owners retain those paths for saved grants and older
+installations. Restricted media uses transient delivery. The current
+administrator role is required for every read and mutation. Creation and
+visibility retain their explicit scope and authoritative server checks.
+Deployment usage of administrator media and rolling grants is unknown.
+
+The separate detailed Information selectors use the existing Admin Photos
+scope. The workspace can show the gallery's direct inventory or the photo
+descriptor from an older server when extended fields are unavailable. These
+owners preserve mixed-version browsing and its current disclosure policy.
+Contextual Watcher capture requires the verified temporary-key table. The
+ordinary linked and classic Watcher transports remain supported on older
+servers. Deployed metadata and contextual capture usage is unknown.
+
+Photos gallery editing delegates to the existing browser Admin editor owner.
+The native link carries only the exact installation and numeric gallery ID.
+Current web servers consume the optional `open_panel=1` GET hint after normal
+Admin authorization and open the existing drawer on the Galleries dashboard.
+Older servers ignore the hint and retain their ordinary full-page editor.
+Keep this credential-free handoff permanently while mixed web/client versions
+are supported; it grants no web Admin session or extra native linking scope.
+Deployed usage is unknown. Native URL/session fixtures and drawer navigation
+fixtures cover the handoff; actual browser login and panel rendering require
+separate desktop qualification.
+
+The native cache keeps its legacy flat object format and public-media admission.
+Explicit retained galleries use separate hashed directories in the same cache
+owner. They are excluded from ordinary LRU entry/byte limits and its flat scan
+budget. Unpinning applies normal quota policy; failed copy preparation retains
+the pinned originals. Pinning an unfinished preload preserves its preference
+and successfully prepared entries without claiming complete coverage. Retention
+never relaxes live-link checks or the default no-store/restricted-media rules.
+Local availability is checked from authorized descriptors; it is not offline
+authentication. Usage of retained galleries is unknown. Cache/worker fixtures
+own quota, restart, failure and cancellation regression; native UI acceptance
+is separate from hosted Python qualification.
+
+Explicit Admin preload extends the existing media owner with the additive
+`media:admin-preload-v1` capability, descriptor fields and a fixed binary opt-in
+header. It preserves older public validators and no-store browsing. Private
+entries and saved opt-ins use a separate issuer/verified-account namespace;
+private display always revalidates the live grant, exact target and current
+non-NSFW eligibility through the server. Complete non-NSFW ancestry and verified
+schema are required; missing rows, cycles, unknown flags and authorization
+changes fail closed. No migration or new linking scope is introduced. Older
+servers remain transient for restricted media permanently while mixed versions
+are supported. Usage is unknown. Server/client fixtures cover persistence,
+identity separation, revocation and refusal boundaries; real Windows private
+preload acceptance remains separate from hosted qualification.
+
+Explicit Admin Photos approval can upgrade the same previously saved rolling
+link. The native linking and vault owners compare the current binding and
+replace it only after identity verification. Saved public grants still open
+with their approved permissions until an upgrade. Older servers keep their
+existing linking capabilities. Mixed-version deployment usage is unknown.
+
+Native photo deletion uses the saved `media:admin` Admin Photos grant.
+The server rechecks the exact live grant, issuer, Admin role and complete
+target batch under the writer lease. The historical `media:delete` bundle
+remains accepted for already-issued grants. The native and browser owners retain the existing
+four-field visibility and media forms for older clients.
+Older servers support the manual Photos refresh. Automatic refresh requires
+the Admin revision selector. Deployment usage and installed regression
+evidence for both features are unknown.
+
+When the selected detail asset exceeds 16 MiB, the media owner may serve an
+already-generated display WebP or JPG under the same validations and size cap.
+The fallback does not generate files. If no eligible rendition exists, detail
+remains unavailable. A read-only MAMP service probe opened 140 of 141 eligible
+photos. Twelve of the 13 oversized assets opened via derivatives that preserved
+their aspect ratio. The remaining 48 MP JPEG had no eligible rendition.
+Authenticated HTTP verification is pending.
+
+The default-on Subgalleries switch displays direct child folder cards above
+the selected gallery's photos. A cover is the first authorized direct
+thumbnail, with a neutral folder fallback. Photos keeps listings in memory
+and uses the current link grant. The native client may prefetch detail pixels
+into bounded memory. The photo grid and default lightbox fit trim detected
+black bands for display while preserving the scene's aspect ratio. The
+original-frame toggle restores the full source in the lightbox. The wheel
+and trackpad zoom in either view. F and F11 toggle fullscreen, with controls
+appearing briefly on pointer movement.
+The native Tk input owner uses packed TouchpadScroll axes where available.
+Legacy MouseWheel events and X11 wheel buttons remain supported for Tk
+builds without precise packets. Installed host and device usage is unknown.
+
+On macOS 15 or later, the native lightbox can retain bounded encoded detail
+bytes and decode compatible HDR data through Core Image. The AppKit owner
+requires a Tk build with a native window bridge, PyObjC and an EDR-capable
+display. The Pillow/Tk fallback preserves the photo viewer on Windows, older
+macOS and Tk combinations, SDR screens and sources without usable HDR data.
+Older and derived renditions may only contain SDR. Both rendering paths
+remain supported for those inputs and environments. Deployed HDR usage is
+unknown.
+
+WinApp requests up to 64 photo descriptors with
+`X-PHP-Gallery-Photo-Page: 64`. Servers that ignore the header retain their
+eight-photo pages and cursors. Requests without the header retain that same
+eight-photo contract.
+
+The per-user disk cache keeps opted-in photo, thumbnail and audio bytes under
+hash-only keys. Photos retain their existing issuer, gallery, image and
+rendition keys and file format. They use `X-PHP-Gallery-Photo-Cache: 1`,
+`Cache-Control: private, max-age=60, must-revalidate`, and
+`Vary: Authorization, X-PHP-Gallery-Photo-Cache`. After 60 seconds, reuse
+requires authorized revalidation. A matching strong validator refreshes the
+file's validation time without rewriting its body. An opted-in current
+catalogue page may supply the strong ETag of an independently public bounded
+thumbnail. A matching disk entry can be reused immediately. The bounded
+decoded thumbnail cache belongs to the live Photos session and follows the
+current catalogue's validation. A legacy no-store 304
+causes one unconditional fetch. A refusal yields no stale body.
+
+Audio persistence requires `X-PHP-Gallery-Track-Cache: 1`,
+`Cache-Control: private, no-cache`, and
+`Vary: Authorization, X-PHP-Gallery-Track-Cache` on a complete authorized
+response. Before using disk, WinApp fetches the current permitted playlist,
+requires its explicit `track_cache: true` capability, and checks that the track still
+matches its verified SHA-256, byte size and MIME type. Older playlist responses
+without the capability use online track delivery even after a downgrade.
+The shared cache holds up to 4,096 entries and 1 GiB. It evicts least recently
+accessed entries as space is needed and retains no credentials or playlist
+metadata. WinApp's media transport owns the older no-store and
+eight-photo behavior while mixed versions are supported. Deployment usage is
+unknown.
+
+The previous separate-reader release was checked with disposable HTTPS and
+hosted Windows Tk at `1844648a`. Native audio was skipped because the hosted
+runner had no output device. Installed Windows and deployment evidence for the
+embedded workspace remain separate.
+
+Native photo descriptors can add a coordinate pair only when the selected
+gallery's effective EXIF map policy is enabled and GPS schema is available.
+This follows the existing public map disclosure policy; no paths or altitude
+are exposed. Disabled maps, missing coordinates, or missing/unknown GPS schema
+preserve the old descriptor shape. New clients accept old servers that omit
+coordinates, and old clients tolerate the extra fields. Deployed use of this
+optional metadata is unknown.
+
+Separately approved `gallery:read` permits a selected gallery's ID, title,
+revision and stored visibility, access mode and listing mode to be read.
+It does not report inherited access or change older grants. An older server
+may lack this capability; the client reports it unsupported or unavailable
+without silently reducing the requested scope. The saved `pgu_` upload path
+remains separate. A read that has passed its live grant and role query may
+finish after concurrent revocation. Actual Windows, HTTPS and database
+qualification for this increment remains outstanding.
+
+Existing explicit app-linking issuer and secret overrides remain supported.
+Removing the issuer override can change the installation binding for current
+grants. Removing the secret override changes the pending request and rate-limit
+key unless the same bytes are otherwise provisioned. Keep both during normal
+upgrades. Installation and update provision a database key for installations
+without an override. Legacy override usage and deployed migration coverage are
+unknown. The ordinary `pgu_` upload workflow retains its separate credentials
+and authorization. Its disposable workflow regression remains the compatibility
+owner.
+
+The scope-capacity migration widens four app-linking scope columns from exact
+64-byte to 255-byte binary storage without changing grants. Current short-scope
+readiness accepts either verified width, including a partially completed
+migration; unknown or unexpected metadata refuses the affected operation.
+Separate wide-capacity readiness requires all four widened columns and grants
+no new permissions. DDL can stop between tables and is replayable, not atomic.
+Older runtime code that insists on exactly 64 bytes can fail closed after the
+schema widens; automatic narrowing is unsafe and unsupported. Actual upgrade,
+downgrade and mixed-database-version evidence remain unknown.
+The callback limits each metadata-lock wait to at most five seconds, preserves
+stricter existing values and verifies restoration when it reduces the original
+session value. This is not a total DDL
+deadline. Its advisory lock ends before the migration runner writes the
+version checkpoint, so it does not itself serialize concurrent checkpoint
+writers.
+
+The optional offline scope issues rotating refresh families only with explicit
+browser consent; legacy grants gain no new scope. When explicitly selected and
+Windows secure storage is available, the client stores a refresh credential in
+the current user's Credential Manager and keeps only its issuer, account ID and
+approved scope in a separate non-secret binding file. Reconnection is a manual
+action: a cross-process lock and pending fence protect the single rotation,
+current identity verification and replacement write. An uncertain response or
+storage failure blocks reuse rather than retrying the old refresh. Explicit
+local forget removes the saved credential and binding, without revoking the
+server grant or necessarily ending the current session. A new browser approval
+may be needed; the legacy `pgu_` configuration is unchanged. The Windows owner
+and its crash fence have not been qualified on Windows or after power loss.
+In the linked upload
+source, target-bound local history and a per-target exclusive lock
+prevent reuse of unrelated legacy history; uncertain transfers remain pending
+for manual review, without automatic replay or source deletion. A validated
+live reply can replace the write-ahead uncertainty only for the same positive
+attempt, unchanged source identity and hash, and the exact prior uncertain
+state with no prior receipt; the reply must confirm one uploaded image, report
+a nonnegative scan count, and carry a positive image ID after the server's
+gallery and `fresh_insert_v1` checks. Unknown or lost replies, hashes or
+inventory never clear the marker. This does not permit retry or deletion and
+does not establish exactly-once behavior. Linked flight
+data stays local and cannot implicitly use a saved legacy key for AI or PDF
+upload. The new bounded server recovery probe supplies positive file-byte
+evidence only: `present` does not prove registration, and `unknown` is not
+absence or permission to retry. The client does not yet use that response.
+Application leases do not atomically exclude external filesystem changes, and
+the scan checks its time budget only between calls, not during a blocked call.
+Filesystem, proxy, mixed-version and real Windows behavior remain
+unverified and must not be inferred from source compatibility alone.
+Source review found that a genuine current linked-upload success was rejected
+when its durable row still held the write-ahead uncertainty. The validator now
+allows only the constrained same-attempt transition described above. Installed
+native-client prevalence, behavior of older or mixed-version clients, and real
+Windows/deployed server use remain unknown.
+
+## Gallery root filesystem aliases
+
+`gallery_filesystem_path_inside_root` keeps configured gallery roots usable
+when the operating system resolves an alias, such as macOS `/var` to
+`/private/var`. For a missing leaf, it checks the resolved existing parent
+against the resolved root; unresolved existing entries and parents outside
+the root are refused. This supports existing configurations permanently;
+the number using aliased roots is unknown. These observations do not prevent
+another process from changing a filesystem ancestor afterward. The
+`image_path_symlink_containment_test.php` fixture covers aliases and escape
+attempts where symlink creation is available; hosted and live-platform
+results must be reported separately.
+
+The Admin tag sidecar repair keeps following symbolic links to existing files
+inside the configured gallery root. Targets outside that root, or targets whose
+containment cannot be verified, interrupt the repair before its completion
+checkpoint. This repair still reads the legacy `gallery_path` configuration
+key, while the documented example and operational defaults use `galleries_root`.
+When the legacy key is absent, the repair can return without scanning and the
+Admin controller can still record its completion checkpoint. The number of
+affected installations, their existing checkpoints and usage of the legacy key
+are unknown. Do not silently substitute the current root: that could initiate
+new bulk writes. A separate transition needs usage and checkpoint evidence,
+an explicit repair plan with bounded marker-aware preflight under the shared
+writer lease, safe handling of supported links and a retryable completion
+checkpoint. No retirement of the legacy path is justified yet. The repair
+rechecks target identity and original bytes on a non-truncating write handle.
+Unlike the former unrestricted writer, it refuses sidecars with multiple hard
+links or an unavailable positive inode identity; in-root symbolic links to a
+single-link file remain supported. Prevalence of hard-linked sidecars and
+storage without usable inode identities is unknown; retain this safety boundary
+until evidence and an equally safe compatibility method justify changing it.
+It does not atomically exclude concurrent external filesystem changes, including
+edits to the same inode after the comparison. An error or interruption after
+truncation can leave partial bytes; decoding and re-encoding the entire JSON
+document can change formatting and numeric representation. It does not provide
+visibility-marker recovery.
+
+## WinApp native text and display scaling
+
+Desktop view preferences are independent of upload state. Geometry saves retain
+the last trusted Photos tree width while the pane is unmapped or restoring;
+the temporary widget default is not a user preference. The pane keeps its own
+validated width through delayed startup and remapping. Invalid display geometry
+falls back to current bounded placement without touching credentials or queues.
+
+Linking transport admission waits within the caller's original total deadline
+for the existing single worker slot. Cancellation and blocked DNS still retain
+that slot until the actual network worker ends; admission never creates a
+replacement worker behind a canceled caller. This permanent compatibility path
+prevents transient gallery-switch failures while retaining the existing network
+resource bound. Native Windows logs identified the formerly immediate busy
+refusal before any media request; delayed DNS/cancellation regressions cover the
+handoff and once-only cleanup.
+
+The shared theme selects an installed UI family rather than installing fonts.
+Windows prefers Segoe UI Variable Text, then Segoe UI; a native Tk family remains
+available on other platforms. Windows text retains its native GDI smoothing
+policy. Supersampled control/cache/recording artwork avoids emoji substitution;
+Pillow-free source launches retain usable glyph controls. The theme owns these
+permanent fallbacks because dependencies and installed fonts vary across source
+and packaged runtimes. Installed prevalence is unknown.
+
+The Windows display bootstrap requests system awareness only for an unaware
+process before creating Tk windows. An existing manifest/host context is never
+replaced. Native API refusal keeps the original toolkit path usable. System
+awareness deliberately matches Tk 8.6 startup scaling; automatic layout reflow
+between differently scaled monitors is not claimed. Native display/ClearType
+appearance, fractional scaling and monitor moves need manual qualification.
+No OS display or smoothing preferences are changed.
+
 ## WinApp update process exit
 
 The updater permanently retains verified downloads, installed-path validation,
@@ -1675,7 +2286,10 @@ before opening the next; no page rendering or database migration is introduced.
 Real-host metadata latency and device coverage remain unknown.
 
 Explicit presentation launches temporarily override default-off music without
-changing persisted preferences. Deferred activation starts audio in the original
+changing persisted preferences. Native presentation and its manual music
+control also honor the stored presentation music preference when the gallery
+playlist defaults to off. Both native paths retain the public playback policy
+and the current visible track filter. Deferred activation starts audio in the original
 click task; shared-link autoplay can still require the existing Play gesture.
 The media-panel copy owner permanently supports denied/unavailable clipboard
 access through a selectable URL. Retain these browser capability paths until
@@ -1822,6 +2436,20 @@ JSON with it in a read-only invalid-key comparison. The client does not solve
 challenges, weaken TLS/authentication or count a send as a receipt. Per-file
 acknowledgements remain required before completion. BASIC only is requested for
 this iteration; no installer, FULL or protected integration is implied.
+
+Flight PDF status and receipt validation requires the action, explicit found and
+conflict booleans and a report byte length matching the locally hashed PDF.
+The current server and the original `flight_reports_v1` owner provide these
+fields. Usage of modified servers that omit them is unknown; their ambiguous
+responses are refused without retrying multipart data, and source PDFs remain.
+The legacy image upload protocol and `pgu_` authentication remain unchanged.
+An already stored plan receipt records a historical acknowledgement, not a
+fresh check that the PDF still exists on the server. HTTP 422 can follow server
+publication, so the client performs a passive status check before reporting the
+outcome; no multipart replay is implied. Concurrent source writes and live
+Windows behavior remain unqualified. The saved-file confirmation identifies a
+revision and path, not a hash captured at dialog time; delivery captures and
+rechecks the hash later without an atomic guard against unrelated writers.
 
 
 Recording and analysis support the shared MSFS 2020/2024 provider path; missing
@@ -3048,6 +3676,31 @@ uses 6.1-terra. No new root menu item or storage migration is introduced.
   explicit public-URL breaking policy and proof for generated/bookmarked URLs.
 
 ## WinApp, upload, and downloads
+
+### WINAPP — Optional discovery and mixed-version upload compatibility
+
+- **Reason / protected scenario:** A newer WinApp must retain manual upload
+  using its existing gallery-scoped `pgu_` key against older supported Gallery
+  installations, including those without discovery. Older uploaders must retain
+  the same authenticated upload API when the Gallery server is newer. Discovery
+  is an optional read and must not become a prerequisite for upload, change
+  saved connection settings, or alter the existing upload authentication.
+  Unknown/error and unsupported discovery do not prove which server version is
+  installed and do not erase the saved configuration.
+- **Owner:** The discovery route and runtime dispatcher own the server response;
+  `winapp/uploader/server_discovery.py` and the connection dialog own the
+  optional client check. Existing upload controller/service/model and uploader
+  transport continue to own gallery-scoped upload authentication and behavior.
+- **Evidence / limits:** Discovery and current-version upload regressions are
+  defined in the disposable server HTTP workflow and WinApp tests; their
+  presence alone does not prove an exact-candidate FULL or real mixed-version
+  upload. Actual supported older version floors, deployment usage and
+  cross-version live upload evidence are unknown. Record exact client/server
+  versions, upload outcomes and environment when qualification is performed.
+- **Retirement:** Preserve manual API-key setup and upload compatibility in both
+  directions until an explicit compatibility policy identifies supported
+  versions, real usage and verified migration/replacement evidence. Discovery
+  availability alone is not sufficient evidence for retiring either path.
 
 ### WINAPP-1 — Query-first upload API and narrow clean-route fallback
 

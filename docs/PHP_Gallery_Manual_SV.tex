@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{0.150.6}
-\newcommand{\manualdate}{2~november~2026}
+\newcommand{\version}{1.0.0}
+\newcommand{\manualdate}{7~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1823,24 +1823,386 @@ obligatoriskt schema avvisar delning och ändringar. Se
 \section{Windows-uppladdaren}
 \subsection{Layout}
 
-Uppladdaren öppnas på fliken \ui{Watcher}; ordningen är \ui{Watcher},
-\ui{Import}, \ui{Activity}, \ui{AI} och \ui{Settings}. Den övre
-anslutningsknappen öppnar en kompakt dialog för API-nyckeln med
-maskerad nyckel och \ui{Save \& Test}; anslutningskontrollen finns kvar i
-sidhuvudet på alla skärmar. Osparade ändringar ersätter inte den
-sparade nyckeln. Appens sidhuvud har även inställningar, uppdateringar och
-hjälp.
+Vid normal start öppnas \ui{Foton}; ordningen är \ui{Foton}, \ui{Watcher},
+\ui{Import}, \ui{Activity}, \ui{AI} och \ui{Settings}. Med en aktiv
+länk visar Foton galleriträdet till vänster och öppnar ett galleri till höger.
+Enskilda grenar och hela trädet kan fällas ut och in. Välj ett galleri för
+att visa dess foton i samma fönster. \ui{Undergallerier} är på som standard
+och visar direkt underordnade mappar ovanför fotona. Omslaget använder den
+första auktoriserade miniatyrbilden i undergalleriet. Om ingen finns visas en
+neutral mappikon. Foton håller gallerilistor i minnet och använder länkens
+aktuella behörighet. Utan länk öppnar \ui{Anslut} den
+befintliga adressdialogen och godkännandet i webbläsaren. Den aktiva länken
+ger sedan direkt åtkomst till offentliga foton. Det separata uppladdningsmålet
+väljs med \ui{Use for uploads}. Start med \texttt{--startup} förblir dold i
+systemfältet tills fönstret återställs. På macOS öppnas det vanliga Tk-fönstret
+vid start från källkod. Tillfälliga länkar upphör med processen.
+
+Watcher-skärmen visar gallerimålet. API-nyckelkontrollen öppnar en kompakt
+dialog med maskerad nyckel och \ui{Save \& Test}; den finns kvar i sidhuvudet
+på alla skärmar. Osparade
+ändringar ersätter inte den sparade nyckeln. Appens sidhuvud har även
+inställningar, uppdateringar och hjälp.
+Om konfigurationen inte kan läsas eller verifieras stoppas starten före arbete.
+Behåll originalfilen och återställ en giltig säkerhetskopia; en saknad fil ger
+fortfarande startvärden. Windows reparse-punkter och beständighet vid strömavbrott
+är ännu inte kvalificerade.
+Klicka på \ui{Link gallery} i huvudfönstret. Klistra in galleriets adress
+från webbläsaren och bekräfta med \ui{Link gallery}. På samma dator kan
+galleriet använda en HTTP-adress på \texttt{localhost}. Fjärrinstallationer
+använder verifierad HTTPS.
+Dialogrutan visar förloppet i väntan på godkännande. Om anslutningen
+misslyckas visas felet i dialogrutan och du kan försöka igen.
+Logga in som administratör i webbläsaren och klicka på \ui{Godkänn}.
+Återvänd till WinApp när webbläsaren visar \ui{Approval received}. Appen
+visar den länkade webbplatsens adress och läser in den första gallerisidan
+automatiskt.
+\ui{Avbryt} avslår begäran.
+
+De tre punkterna bredvid \ui{Unlink gallery} öppnar länklistan.
+Under \ui{Länkade nu} byter du webbplats med det aktuella godkännandet.
+Profilen sparar upp till 20~poster under \ui{Senaste adresser} efter omstart.
+Välj en adress för ett nytt godkännande. Strömikonen kopplar från den
+valda webbplatsen och krysset tar bort en tidigare adress.
+Uppladdningsmålet väljs separat.
+
+Öppna \ui{Choose gallery…} bredvid adressen och skriv i \ui{Sök gallerier}.
+Förslagen prioriterar namn, sedan beskrivningar och galleritaggar. Namn tål
+små stavfel. Citattecken och \texttt{AND}/\texttt{OR} fungerar som på
+webbplatsen. Indrag och överordnade namn för den valda träffen visar hierarkin.
+Pilen läser in fler träffar. Grundläggande liståtkomst kan filtrera namnen på
+den aktuella sidan. Godkänn en ny länk på en server som stöder katalogsökning.
+
+Med godkänd uppladdningsbehörighet väljer du ett galleri och klickar på
+\ui{Använd för uppladdning}. I en lokal profil som stöds använder WinApp den godkända
+uppladdningsbehörigheten automatiskt, även vid körning från källkod på macOS.
+Efter verifieringen visar \ui{Upload gallery}
+målet i Watcher och Import. De tre punkterna visar fler åtgärder.
+\ui{Unlink gallery} avslutar den aktuella länken. Anslut samma konto efter
+omstart och välj galleriet igen. Hantera avancerad åtkomst i
+\ui{Manage link…} i inställningarna. Uppladdning med API-nyckel använder en
+egen \ui{Gallery URL} och en galleribegränsad nyckel.
+
+Välj \ui{Read gallery details} separat och godkänn
+läsbehörigheten. Med \ui{Read selected details} visas det valda galleriets ID,
+titel, revision och sparade synlighet, åtkomst- och listningsläge, inte ärvd
+effektiv åtkomst. En läsning som servern redan har kontrollerat kan avslutas
+efter ett samtidigt återkallande. Äldre servrar kan sakna behörigheten eller
+ändpunkten; klienten rapporterar ej stödd eller otillgänglig utan att tyst
+minska omfattningen. Sparad uppladdning med \texttt{pgu\_} finns kvar.
+Faktiskt Windows, driftsatt HTTPS och databasbeteende är ännu inte
+kvalificerade.
+En länkad uppladdning bekräftas först med en ny bildrad och en observerad
+originalfil på den slutliga gallerisökvägen. Vid osäker bekräftelse kan filen
+redan finnas; klienten försöker inte automatiskt igen. Ett återkallande under
+en pågående uppladdning tar inte tillbaka en redan sparad fil.
+Den nya länkade klienten kräver exakt uppladdningsbeviset
+\texttt{fresh\_insert\_v1}; en äldre länkad server lämnar försöket olöst.
+Uppladdningsvägen \texttt{pgu\_} är oförändrad.
+Ett svar från servern får bara ersätta den förhandslagrade osäkerheten när
+samma positiva försök,
+oförändrad källa och hash samt en bekräftad ny bildrad finns. Svaret måste ange
+en uppladdad bild och ett icke-negativt antal granskade poster; okänt eller
+förlorat svar, hashkontroll eller inventering rensar aldrig markören. Detta
+innebär varken återförsök, källradering eller garanti om exakt en körning.
+Serverns filidentitet bevisar inte varje byte vid externa ändringar. Klientens
+identitets- och hashkontroller är inte atomiska mot lokala skrivare; Windows
+reparse och strömavbrott är ännu inte kvalificerade.
+Originala ZIP-filer och extraherade staging-kataloger behålls för manuell
+granskning oavsett ålder eller uppladdningsbekräftelse; automatisk åldersbaserad
+städning är avstängd eftersom synliga jobb-ID:n inte bevisar fullständig historik.
+För exakt en osäker länkad uppladdning frågar \ui{Check uncertain upload}
+efter filstorleken i byte upp till 64~MiB och kontrollerar den sparade hashen
+en gång utan att öppna den lokala filen. En träff
+visar observerade byte, inte att uppladdningen slutförts eller registrerats i
+databasen; ett okänt resultat bevisar inte frånvaro. Inget resultat raderar
+posten eller filer eller försöker ladda upp igen. Äldre servrar kan sakna denna
+kontroll.
+Granska först galleriet och originalkällan innan en aktuell okänd uppladdning
+hanteras. Den valfria hashkontrollen observerar bara byte; den bekräftar inte
+registrering och bevisar inte frånvaro. Den uttryckliga granskningsfrågan har
+Nej valt som standard. Granskningen behåller osäkerhetsmarkören, originalet och
+ZIP-filen. Samma sökväg eller byte förblir blockerade efter omstart, medan andra
+lämpliga källor kan fortsätta. Den okända källan skickas inte igen eller raderas.
+Länkade uppladdningar kräver en profil utan omdirigerade mappar på en fast
+lokal Windows-enhet eller en lokal macOS-volym som användaren kontrollerar.
+Stäng äldre uppladdare som använder samma profil.
+Den separata behörigheten \texttt{gallery:visibility} erbjuds bara när servern
+annonserar den och kräver uttryckligt godkännande i webbläsaren. Före en ändring
+bekräftar klienten galleriets aktuella tillstånd. En inaktuell revision eller
+konflikt med schemalagd publicering leder till en skrivskyddad uppdatering;
+ändringen skickas inte igen. Äldre servrar annonserar inte behörigheten.
+Operatörskommandot
+\texttt{inspect\_gallery\_visibility.php} är skrivskyddat som standard.
+Endast ett aktuellt \texttt{--reconcile=FINGERPRINT} får reparera matchande
+sidecar-data av version två och ta bort markören efter synkroniserad avläsning;
+databasraden och revisionen ändras inte. Markörer av version ett kan bara
+granskas. Kandidat \texttt{8de8e50a} klarade BASIC-körning
+\texttt{42107055888} och WinApp-körning \texttt{42107055797}. Installerad GUI,
+MariaDB och driftsatt beteende är ännu inte kvalificerade.
+En aktiv länk med gallerilista ger åtkomst till listade offentliga foton
+utan känsligt innehåll. Servrar med stöd erbjuder uttryckligt godkännande
+av \texttt{presentation:read} för presentationsinställningar och synlig musik
+vid vanlig länkning. Vid en länk för offentliga medier måste alla överordnade
+gallerier vara offentliga, listade, ha normal åtkomst och sakna NSFW-innehåll.
+Ett separat administratörsgodkännande visar även dolda, skyddade och
+NSFW-klassade medier. Servern kontrollerar det aktuella godkännandet.
+Interna sidor innehåller högst 64~fotoposter eller åtta på äldre servrar.
+Filer har en gräns på 16~MiB.
+Presentationslistor innehåller högst 32 synliga MP3/WAV-spår. Om den minsta
+miniatyrbilden saknas kan servern använda en annan befintlig version eller
+den offentliga visningsfilen inom gränsen. Fotopanelen och lightboxen delar
+huvudfönstret.
+Det responsiva rutnätet rullar kontinuerligt och laddar synliga miniatyrbilder.
+Klicka på en bild eller fokusera den och tryck Enter för att öppna lightboxen.
+Vänster och höger går runt hela albumet. Stäng lightboxen
+eller tryck Escape för att återställa trädet och rutnätet även vid bildfel.
+Miniatyrerna beskär upptäckta svarta fält och visar hela den återstående scenen
+i dess bildförhållande. Foton och miniatyrer har en separat gräns på 600
+begäranden per IP och 3\,600 totalt under fem minuter. Vid HTTP~429 visar
+Photos att gränsen har nåtts och pausar förhämtning tills du väljer
+\ui{Retry}. Vid start från källkod måste Pillow finnas i den Python-tolk som används.
+\ui{Försök igen} laddar om innehåll som misslyckades. Zooma med mushjulet,
+rullning med två fingrar eller + och~\ensuremath{-}. 0 återställer vyn och med pekaren kan
+du dra bilden. F eller F11 växlar helskärm. När pekaren rör sig visas reglagen
+en kort stund.
+När tillåtna koordinater finns
+öppnar en fäst platsmarkör \ui{Öppna i OpenStreetMap} i~systemets webbläsare.
+Föregående och nästa detaljbild förbereds i begränsat minne.
+\ui{Anpassa efter innehåll} beskär upptäckta svarta fält i fönstret och i
+helskärm. \ui{Visa originalbild} återställer hela ramen. Bilden behåller sina
+proportioner. Under storleksändring visas en löpande förhandsbild som förfinas
+när fönstrets storlek har stabiliserats. Från macOS~15 kan kompatibla
+HDR-bilder visas med AppKit på en EDR-skärm om PyObjC och Tk:s
+fönsteranslutning finns. Andra konfigurationer, inklusive Windows, visar
+8-bitars SDR med Pillow/Tk.
+En gemensam diskcache per användare lagrar godkända foton och spår med
+verifierade kontrollsummor. När den vanliga delen når 4\,096~poster eller
+1~GiB tas de
+minst nyligen använda posterna bort. Ett matchande kontrollvärde i den
+aktuella albumkatalogen gör att en miniatyr kan läsas direkt från disken.
+Annars gäller 60~sekunders färskhet och auktoriserad ETag-kontroll. Den
+aktuella auktoriserade spellistan kan återanvända ett spår med samma SHA-256,
+storlek och format. Medier som endast administratörer kan se sparas
+utanför diskcachen som standard.
+Cacheikoner uppdateras från inlästa metadata: moln betyder online, halvcirkel
+delvis, fylld cirkel lokalt och prickad cirkel ej kontrollerat. En del av
+katalogen bevisar inte full täckning. Ikonen vid albumtiteln öppnar menyn.
+\ui{Förladda galleri} förbereder direkta foton, miniatyrer och lightboxbilder
+i~bakgrunden med förlopp och avbrytning. Undergallerier är separata mål.
+\ui{Behåll förladdat} behåller färdiga filer utanför vanlig rensning samt
+antal- och storleksgränser, även efter omstart. Avstängning återställer vanlig
+cachepolicy, som kan ta bort överskott. Avbrytning behåller färdiga filer och
+inställningen utan att hävda full täckning. Ett nytt försök efter servergränsen
+återanvänder verifierade lokala data. No-store-medier förblir tillfälliga;
+lokala filer kringgår inte inloggning eller utgången länk. En operation
+accepterar högst 100\,000 direkta foton.
+Uttrycklig förladdning med en Admin Photos-länk kan på servrar med stöd även
+spara privata foton och utkast. Fotot, galleriet och hela kedjan av föräldrar
+måste vara verifierat utan NSFW-begränsning. Inställningen och privata filer
+hör till installationen och det verifierade kontot. Före visning verifieras
+privata data alltid mot den aktiva servern, även efter omstart. Äldre servrar
+och vanlig skyddad bläddring förblir tillfälliga. Serverns väntetid visas med
+en avbrytbar nedräkning; färdiga filer behålls när försöken är slut.
+Noll sparade foton visar en säker orsak i stället för delvis framgång.
+Bildspelsknappen öppnar helskärm och går runt hela albumet med serverns
+aktiverade intervall eller fem sekunder som standard. Godkänd musik börjar
+spela när bildspelet startar. Musikreglagen spelar, pausar och byter spår.
+Spelaren läser en lokal fil och förbereder nästa spår.
+Högerklicka på ett galleri eller foto för information och godkända
+synlighetsåtgärder. Klicka utanför panelen eller tryck Escape för att stänga.
+Fotodetaljer visar format, mått, sparade EXIF-data och tillåtna GPS-data.
+Miniatyrkvaliteten avser serverns aktuella inställningar för generering.
+Galleriinformationen visar direkt innehåll och cachens täckning. En ikon
+visas i~trädet när täckningen är känd. Lägg till ett galleri på rotnivå
+med knappen i~trädet. Knappen bredvid albumtiteln, gallerimenyn och tomt
+utrymme mellan foton erbjuder ett undergalleri. Mushjulet och rullning med
+två fingrar rullar rutnätet och zoomar i~lightboxen.
+\ui{Redigera galleri} öppnar det valda galleriets webbredigerare i~systemets
+webbläsare med högerpanelen öppen. Webbläsarens egen administratörsinloggning
+används; inga WinApp-nycklar skickas. Äldre servrar öppnar sin vanliga
+helsidesredigerare.
+Trädet kommer ihåg öppna och stängda grenar per länkad webbplats och konto.
+Den runda pilen bredvid albumtiteln uppdaterar fotona. WinApp kontrollerar
+indexet för det synliga administratörsalbumet ungefär var 30:e sekund och
+återanvänder oförändrade miniatyrer. Äldre servrar stöder manuell uppdatering.
+Markera foton med Ctrl-klick i~Windows, Command-klick i~macOS eller i~fotomenyn.
+I~snabbmenyn kan du radera ett foto eller hela urvalet. WinApp använder
+den aktuella administratörslänken. Bekräfta varje grupp om högst 64~foton
+i~appen. WinApp använder samma permanenta radering som webbadministrationen.
+Uppdatera och granska albumet efter ett avbrutet svar före nästa bekräftelse.
+Starta Watcher för galleriet i~gallerimenyn eller Watcher-menyn. Inspelningen
+använder en tillfällig nyckel och visas med röd REC-markering. Watcher-ikonen
+pulserar rött på alla flikar. En fylld röd punkt markerar målalbumet och dess
+rubrik. En röd ring markerar en stängd gren som döljer det. SimBrief är
+tillgängligt vid en upptäckt flygsimulator. Avslut skickar mottagna bilder,
+sparar tillgängliga flygrapporter och återkallar den tillfälliga nyckeln.
+Webbplatsen förblir länkad.
+Watcher visar förberedelsen eller orsaken om inspelningen inte kan starta.
+Vid start visar en aktivitetsindikator förberedelsens fas. Skapa en ny
+skärmbild först när REC visas. Stop och Finish visar förberedelsen direkt,
+före kön och eventuella rapporter.
+Activity-historiken sparas i~begränsade bakgrundsbatcher. Normal avslutning
+försöker skriva bufferten inom sin tidsgräns. Lagringsfel, tidsgräns eller
+krasch kan förlora buffrade rader; fel loggas och den roterande loggen skrivs
+direkt.
+När ett mål väljs kontrolleras mottagna importer i~den lokala
+uppladdningshistoriken. Samma gräns på 256~MiB gäller när tillståndet sparas.
+Historik som inte går att verifiera eller oavslutat arbete för ett annat mål
+blockerar fortfarande bytet.
+En aktuell installerad Windows-genomgång
+av den inbyggda visaren återstår. Tidigare protokollbevis täcker inte denna
+version av gränssnittet.
+Filsystemets skrivspärr är en inaktiv prototyp och skyddar inte galleriets
+operationer förrän samordningen har kvalificerats.
+Den experimentella separata behörigheten \texttt{galleries:create} kräver
+uttryckligt samtycke och verifierad behörighetslagring. Källkoden avvisar
+upptagna mål, avvikelser i den kanoniska katalogen
+och fler än 10\,000~rader inklusive det nya galleriet; sluggsökningen prövar
+högst 128~kandidater. Dessa antal är inga tidsgränser.
+En väntande länkad reservation blockerar tillfälligt Admin-import av mappar,
+flytt av upptäckta bilder, borttagning av upptäckta mappar, kopiering av urval,
+flytt till och återställning från papperskorgen, flytt i metadataorganiseraren,
+konsistensreparationer och vanlig skapning
+även för andra sökvägar. Ta inte bort reservationen:
+säker automatisk rensning finns ännu inte. Uppladdning med API-nyckel finns
+kvar. Skyddet i samma databas ersätter inte ett filsystemlås.
+Ett osäkert ärende upprepas inte automatiskt. Före skapning eller kontroll av
+en sparad avsikt kräver klienten aktuell serveridentitet för det valda eller
+sparade administratörskontot. Före sändning verifierar
+klienten en fullständig förberedd avsikt och publicerar den exklusivt utan att
+ersätta en annan nyckel. Avbrott kan lämna ett blockerande gammalt lås;
+Windows och strömavbrott är inte kvalificerade. Underhålls-CLI kan jämföra
+privata ursprungsdata från standard in med registret; det bevisar inte att
+arbetaren har stoppat och tillåter inte ny skapning. \ui{Resume original creation}
+visar den ursprungliga titeln och föräldern för uttrycklig bekräftelse och
+skickar samma nyckel och indata till samma HTTPS-utfärdare och verifierade
+administratörskonto. Befintliga väntande eller oklara serverposter förblir
+blockerade och kan kräva administratörens avstämning. Skyddet kräver det
+ursprungliga serverregistret; en äldre databaskopia kan sakna dess historik.
+Det oklara statusmeddelandet erbjuder uttrycklig återupptagning eller
+\ui{Close unresolved creation} efter granskning av galleriet och lagringen.
+Åtgärden visar ursprunglig titel och förälder för
+uttrycklig bekräftelse. Den lokala avsikten tas bort först när servern bekräftat
+att samma nyckel stängts varaktigt; ett oklart svar lämnar den kvar. Servern
+vägrar stänga en väntande claim. Stängningen
+bevisar inte att galleri eller filer saknas eller att tidigare arbete har slutat.
+Kontrollera att arbetet har slutat samt granska galleriet och lagringen innan
+du startar en separat skapning; ingen startas automatiskt. Om servern i
+stället verifierar ett slutfört resultat sparas kvittot för bekräftelse.
+En ogiltig eller oläsbar lokal avsikt förblir blockerad och kräver hjälp av en
+administratör eftersom dess nyckel inte kan verifieras.
+Ett bekräftat kvitto sparas tills användaren uttryckligen kvitterar det. Före
+exklusiv publicering skriver och kontrollerar klienten ett fullständigt
+förberett kvitto; vid osäkerhet bevaras avsikten och ett eventuellt publicerat
+kvitto. En lokal bindning till den ursprungliga avsikten hindrar ett gammalt val
+eller kvitto från att påverka en annan åtgärd med samma galleriuppgifter;
+åtgärdsnyckeln visas inte. Externa filändringar utesluts inte och beständighet
+efter strömavbrott är inte verifierad. I en lokal profil som stöds
+kontrollerar \ui{Använd skapat galleri} kvittot och galleriet igen innan det
+väljs för Watcher och Import. Det kräver separat uppladdningsbehörighet.
+Servern jämför ursprungligt ID, titel och förälder med aktuella uppgifter.
+Ett namnbyte ger okänd status; flytt, radering eller ej verifierbart tillstånd
+kan ge ett säkert avvisande. En saknad eller osäkert omdirigerad katalog eller
+sidecar ger också okänd status; kontrollen gäller aktuella säkra filer, inte
+deras ursprungliga inode. Ingetdera startar automatiskt en ersättning. Där fälten
+finns får det nya galleriet normal listad åtkomst utan schemalagd publicering. En
+databasrollback återställer inte filsystemskrivningar.
+Lokal flushning bevisar inte återställning efter strömavbrott; faktiskt databas-,
+HTTPS- och Windows-beteende är ännu inte kvalificerat.
+Med separat uttryckligt samtycke kan en kortlivad
+behörighet lista alla gallerier, även privata och opublicerade. En behörighet
+för enbart identitet kan inte lista dem. Val av galleri ger inte i sig
+uppladdningsrätt. En separat uttryckligt godkänd uppladdningsrätt omfattar alla
+vanliga administratörens gallerier, även privata och opublicerade. Tillfälligt
+kopplad Watcher och Import är implementerade men inte kvalificerade; den äldre
+galleribegränsade nyckeln finns kvar oberoende.
+
+Installation och uppdatering skapar anslutningsnyckeln i databasen.
+Den sparade webbplatsadressen anger exakt ursprung och installationssökväg.
+Befintliga uttryckliga inställningar för adress och nyckel har företräde.
+Den offentliga frågan läser beredskapen. Webbläsaren sparar en kortlivad
+begäransreferens i sessionen före vanlig administratörsinloggning.
+Den CSRF-skyddade bindningen leder till uttryckligt samtycke.
+\ui{Godkänn} skickar en engångskod till den verifierade returadressen för
+PKCE-utbyte. Huvudåtgärden begär konto- och galleriåtkomst samt bilduppladdning när den
+stöds. På kompatibla servrar godkänner du uttryckligen förnybar åtkomst.
+Den gäller i sju dagar efter senaste lyckade autentiserade användning eller
+förnyelse. WinApp förnyar åtkomsttoken med 15~minuters giltighet via
+Nyckelringen i macOS eller Windows Credential Manager. Verifierad HTTPS
+och direkt \texttt{http://localhost} stöds. Äldre servrar använder en
+tillfällig koppling i upp till 15~minuter.
+Administratören kan återkalla
+åtkomst bland anslutna appar. Koder som ännu inte bytts ut upphör inom
+120~sekunder. Se \filepath{docs/APP_LINKING_PHASE_0.md}.
+
+Migreringen för scope-kapacitet utökar fyra binära scope-kolumner utan att
+ändra befintliga behörigheter. En delvis genomförd migrering behåller verifierat
+stöd för korta scope; större kapacitet är klar först när alla fyra kolumner har
+kontrollerats. Den ger inga nya rättigheter. DDL kan upprepas men är inte
+atomisk; äldre runtime-kod kan avvisa det utökade schemat. Automatisk
+förminskning stöds inte.
+Varje väntan på metadatalås begränsas till högst fem sekunder; en striktare
+befintlig inställning bevaras. Ett sänkt värde återställs, men den totala
+DDL-tiden begränsas inte.
+Callback-låset släpps innan köraren skriver migreringens kontrollpunkt.
+
+Det separata alternativet för sparad åtkomst i Windows via HTTPS använder
+den äldre offlinebehörigheten. Den upphör efter 30~dagar eller sju dagars
+inaktivitet, beroende på vad som inträffar först. WinApp kan återuppta en
+godkänd sparad koppling vid start.
+\ui{Reconnect saved link}
+startar samma kontroll. Klienten roterar uppgiften en gång och kontrollerar
+serveridentiteten. Om samma verifierade server uttryckligen avvisar en
+utgången eller återkallad förnybar uppgift tar WinApp bort just den sparade
+uppgiften. Välj \ui{Link gallery} för att godkänna en ny koppling i
+webbläsaren. Vid start väljer du själv om du vill godkänna den.
+Ett osäkert svar eller lagringsfel
+hindrar återanvändning av den gamla uppgiften. Granska serverns kopplingar och
+välj vid behov \ui{Forget saved link} före ny koppling. Lokal borttagning
+återkallar inte serverbehörigheten och den aktuella sessionen kan fortsätta.
+Den sparade \texttt{pgu\_}-nyckeln är oberoende. Riktig Windows och
+återställning efter strömavbrott är ännu inte kvalificerade. Förnybara kopplingar sparar en bindning per exakt utfärdare.
+Det äldre Windows-alternativet via HTTPS har en gemensam bindning.
+Hantera väntande arbete och ta bort den lokala kopplingen innan du byter
+sparat konto hos samma utfärdare. Serverbehörigheten kan återkallas separat.
+Den kopplade
+uppladdningen skiljer historik och exklusivt lås efter utfärdare,
+konto och galleri och sparar en väntande markering före överföring. Kontrollera
+galleri och källa manuellt vid osäkert resultat; skicka inte om eller radera
+källan automatiskt. En experimentell begränsad serverkontroll ger
+\texttt{present} bara när matchande byte observeras under läsningen; det bevisar
+inte bildregistrering. \texttt{unknown} bevisar inte frånvaro eller tillåter
+omsändning, och klienten använder ännu inte kontrollen. Tidsgränsen kontrolleras
+mellan filsystemanrop och kan inte avbryta ett blockerat anrop. Externa lokala
+filsystemändringar utesluts inte atomärt. När den aktuella WinApp-processen
+avslutas frigör operativsystemet det inbyggda låset för nästa försök. Vid ett
+äldre lås, stäng alla uppladdare, kontrollera galleri och källor, behåll
+återställnings-JSON och arkivera bara det verifierat inaktiva låset.
+Lokalt filsystembeteende och skydd vid strömavbrott är inte
+verifierade. Kopplade flygdata stannar lokalt och skickar inte automatiskt
+AI-jobb eller PDF-filer med en gammal nyckel. Begränsa begäranden i proxy,
+webbserver och PHP: multipart-hantering kan använda resurser före programmets
+kontroll.
+
 Watcher-skärmen visar målgalleriet, den valda mappsökvägen, bevakningsstatus och
 varningen om källborttagning. \ui{Start Watcher} startar först efter ett
 uttryckligt klick;
 medan bevakningen pågår heter samma kontextknapp \ui{Stop Watcher}.
+Under slutförandet öppnar \ui{Show progress} förloppet. Efter ett avbrott
+öppnar \ui{Review pending uploads} den ursprungliga kön. Återanslut och
+välj samma galleri före \ui{Retry}. I en länkad session avslutar
+\ui{Keep files locally} kön när arbetarna stannat och behåller foton,
+rapporter och historik. Därefter visas \ui{Start Watcher} igen.
 \ui{Check folder only} kontrollerar mappen utan att ladda upp eller starta
 kontinuerlig bevakning. Watcher-hjulet öppnar ett inställningsblad för mappval,
 undermappar, skanningsintervall, filstabilitet, simulatorns metadata och det
 frivilliga valet att ta bort
 källfilen. Om bevakningen är aktiv kräver en dialog att den stoppas innan några
-ändringar görs. \ui{Save watcher settings} sparar inställningarna till nästa
-start; \ui{Cancel}, Escape och stängning återställer den tidigare mappen,
+ändringar görs. \ui{Choose folder…} sparar mappen direkt i Watcher.
+\ui{Start Watcher} ber om en mapp när den saknas.
+\ui{Save watcher settings} sparar Watcher-inställningarna till nästa start.
+\ui{Cancel}, Escape och stängning återställer den tidigare mappen,
 antalet ignorerade filer, senaste genomsökning och inställningarna.
 \ui{Sync UTC time} är fortsatt frivilligt och ligger intill huvudåtgärderna.
 Långa sidor och dialoger kan rullas med mushjulet eller rullningslisten;
@@ -1862,6 +2224,24 @@ förblir ogenomskinliga och kontrastrika. Ingen opacitet för hela fönstret
 används och inga
 körningsberoenden läggs till. Utan Pillow finns läsbara, platta ttk-ytor kvar;
 inbyggda kontroller samt källäget, inklusive \texttt{--once}, stöds fortfarande.
+Före skanning kontrollerar \texttt{--once} sparat uppladdningsläge med Windows
+Credential Manager. Ett verifierat äldre eller omigrerat konto kan använda
+API-nyckeln; länkat, första, okänt eller otillgängligt läge ger felkod utan
+skanning. Varje inventerings- och uppladdningsförsök samt omdirigering
+kontrolleras igen; en pågående begäran kan slutföras. Kontrollen skyddar inte
+andra processer eller grafiska arbetare. Begäranden med API-nyckel avvisar
+omdirigering till annan värd, otillåten port eller från HTTPS till HTTP;
+ange vid behov den slutliga galleriadressen. Windows är ännu inte kvalificerat.
+I Windows är radering av bevakade källor aktiverad för nya inställningar;
+ett uttryckligen sparat av-val bevaras. Inställningen gäller länkade
+inspelningar och API-nycklar. Efter bekräftad uppladdning och lokal kvittens
+verifierar ett inbyggt handtag samma filidentitet och byte och raderar just
+den öppnade filen. Ändrade, omdirigerade, hårdlänkade eller upptagna filer
+behålls med en varning. Inventarieträffar och osäkra svar tillåter ingen
+radering. Andra plattformar, manuella importer och käll-ZIP-filer behåller
+sina källor.
+Återkallande av API-nyckel i flygflödet är tillfälligt otillgängligt.
+GUI-lägesskydd och återhämtning efter avbrott är ännu inte kvalificerade.
 
 \subsection{Windows-start och en körande instans}
 
@@ -2000,7 +2380,26 @@ Att stänga inställningarna startar ingen åtgärd. Ogenomskinliga RGB-bilder
 ger säker Windows Tk-visning; utan Pillow finns fungerande inbyggda
 kontroller kvar i källäget för att reparera beroenden.
 
-Mappsökväg och mappval finns tillsammans under Watch folder. Sparade
+Windows föredrar det installerade typsnittet Segoe UI Variable Text,
+med Segoe UI och Tk:s inbyggda typsnitt som reserv. Gemensamma textstilar
+respekterar Windows kantutjämning; diagnostik med fast teckenbredd behåller
+sitt typsnitt. Vanliga kontroll-, cache-, nål- och inspelningssymboler
+använder bilder som ritas i högre upplösning och skalas ned med utjämning.
+Utan Pillow finns läsbara inbyggda tecken kvar. Appen hämtar inga typsnitt
+och ändrar inga systeminställningar. Före det första fönstret begär en
+Windows-process utan DPI-medvetenhet systemets läge och bevarar ett befintligt
+manifestläge. Automatisk layoutanpassning mellan skärmar ingår inte.
+Starta om appen på målskärmen vid flytt mellan olika skalningar.
+Huvudfönstret minns automatiskt normal storlek, position, maximerat läge
+och fototrädets bredd. Minimering, helskärm och döljning i systemfältet
+skriver inte över den senaste normala geometrin. Fönster och avdelare hålls
+inom de aktuella skärmgränserna när de återställs. Dessa visningsval ändrar
+varken uppladdningskonfiguration eller autentiseringsuppgifter.
+Ett albumbyte avbryter den gamla vyn. Den nya begäran väntar inom sin
+ursprungliga tidsgräns på den enda överföringsplatsen medan tidigare
+nätverksarbete avslutas. Att avbryta den nya vyn avbryter även väntan.
+
+Watcher visar mappsökvägen och \ui{Choose folder…}. Sparade
 sökvägar, galleri-URL och funktionsval återställs efter omstart. Fyra synliga
 val väljer gränssnittsspråk. Rullningslister visas bara när innehållet är
 större än vyn; hjälpfönster och verktygstips använder samma mörka färger.
@@ -2035,7 +2434,7 @@ gamla värden ersätts med streck. Genvägen \ui{PDF} öppnar sparade flygningar
 lokala PDF-filer, status och bevarade fel. Uppdatera läser bara checkpoints;
 Öppna applogg använder befintlig logg. \ui{Avsluta flygning och skapa PDF}
 skapar fyra språkversioner utan bekräftelse, slutför accepterat arbete och
-obligatorisk leverans och återkallar sedan den sparade nyckeln. Detta gäller
+obligatorisk leverans och behåller anslutningen. Detta gäller
 även när automatisk PDF-skapning är av.
 
 Valda språk skapas samtidigt i separata processer, en per språk (för närvarande
@@ -2092,14 +2491,13 @@ tangentbordsfokus för att visa hela mapphierarkin på separata indragna rader,
 från roten till galleriet. Anslutningsändringar uppdaterar båda vyerna;
 flygloggar och importhistorik behåller den fullständiga identiteten.
 
-Slutför-åtgärden ligger direkt under målgalleriet; ett klick påbörjar
-återkallelse av nyckeln. Efter fel behåller \ui{Behåll lokalt och återkalla
-nyckeln} och Försök igen det redan bekräftade beslutet för samma anslutning
-i denna appsession. Avbruten återkallelse, nyckelbyte eller omstart överför
-inget samtycke. Vanligt Stop behåller nyckeln. Återställningsknapparna visas
-på två rader.
+Slutför-åtgärden visas under målgalleriet under bevakningen. Slutför och Stop
+behåller anslutningen till nästa session. Hantera servernycklar i PHP Gallery
+Admin. Länkade sessioner använder godkännandet från webbläsaren. Efter
+omstart förifylls den verifierade adressen i dialogen för återanslutning.
 
-\ui{Överge flygning} bredvid Slutför i Watcher/Import och i flygförloppet
+I API-nyckelläget visas \ui{Överge flygning} i Watcher, Import och förloppet.
+Åtgärden
 erbjuder lokal återställning när galleriet raderats eller nyckeln återkallats.
 Efter bekräftelse stoppas arbetare och pågående anrop avslutas; väntande
 leverans överges och den sparade nyckeln tas bort från denna dator utan
@@ -2119,6 +2517,12 @@ utan ny rendering, stopp av annan flygning eller återkallelse. Separata
 stämmer av serverstatus. Gamla planer, nyckelkopplingar och rådata behålls.
 Avbrott behåller färdiga versioner. Protokollfel visar maskerad åtgärd,
 HTTP-status, innehållstyp och ett begränsat utdrag ur svaret.
+Före uppladdning kontrolleras status och kvittot måste matcha kontrollsumma och
+storlek. Vid osäkert resultat eller ändrad lokal PDF behålls filen och utgåvan
+markeras inte som klar. Ett sparat plankvitto är historiskt och bevisar inte att
+PDF-filen fortfarande finns på servern.
+Dialogen väljer en fil, inte en hash från bekräftelsen; senare kontroller
+utesluter inte andra skribenter atomiskt.
 
 Utan sparad nyckel öppnar startåtgärden API-inställningarna. Expanderade
 flygningar och eventuella versioner visar PDF-filer; dubbelklick öppnar
@@ -3699,6 +4103,16 @@ listningspolicy, omslagsreferenser samt konfigurerade profileringsresurser för
 galleriet där dessa scheman är tillgängliga. Sidofilsskrivning följer samma
 schemakontroller som motsvarande gallerifunktioner.
 
+När administratörens reparation av taggar i sidofiler körs avvisar den mål som
+inte kan verifieras eller ligger utanför den konfigurerade galleriroten; länkar
+till mål innanför roten fungerar fortfarande. En avvisning eller misslyckad
+skrivning sparar ingen slutförandemarkering. Flera hårda länkar och oanvändbar
+inode-identitet avvisas. Innan filen töms kontrolleras det öppnade målet och
+det tidigare innehållet; ett senare skrivfel eller avbrott kan lämna
+ofullständigt innehåll. Hela JSON-dokumentet avkodas och kodas om, vilket kan
+ändra formatering och talrepresentation. Kontrollerna utesluter inte externa
+filsystemsändringar mellan observationerna.
+
 Vid upptäckt och reparation av saknade övergallerier kan PHP Gallery läsa stödda
 värden från sidofilen i stället för att härleda allt från mappnamnet.
 Importerade rader får försiktigt standardvärdet opublicerat när ingen synlighet
@@ -3862,6 +4276,15 @@ vid skapandet. Den globala \ui{API-hanteraren} listar automatiseringsuppgifter
 ursprungliga hemligheter. Gallerikontroller finns kvar för samma avgränsade
 uppgifter.
 
+Den offentliga frågan på den installationsrelativa adressen
+\texttt{index.php?page=app\_linking\_discovery} anger version~1 och kontrollerar
+den kanoniska HTTPS-utfärdaren, den oberoende hemligheten, grundschemat och
+valfria funktioners beredskap. Om grundkopplingen inte är klar anges den som
+otillgänglig; okänd valfri lagring döljer bara dess funktion. Frågan kräver ingen
+administratörssession och avslöjar varken inloggningsuppgifter eller
+gallerilistor. Den befintliga galleribegränsade API-nyckeln är oberoende;
+frågan ger inte uppladdningsrätt.
+
 Det kompletterande Windows-programmet använder samma galleribegränsade
 uppladdningskontrakt. Det har två vanliga uppladdningslägen. \ui{Bevaka mapp}
 ignorerar filer som redan fanns när bevakningen börjar, väntar på att nya filer
@@ -3881,7 +4304,9 @@ Samma Windows-program kan vid behov köra en lågprioriterad AI-metadataarbetare
 Den tar ett autentiserat analysjobb, hämtar bara den tilldelade resursen, skapar
 interna sökbara metadata med vald lokal bakände och modellgeneration och skickar
 tillbaka resultatet till den befintliga adressen för uppladdningsautomatisering.
-Arbetaren är åtskild från mänskliga bildtexter. Galleriets åtgärd \ui{Tvinga
+Arbetaren är åtskild från mänskliga bildtexter. Vid stopp väntar den tills en
+pågående heartbeat-begäran verkligen har avslutats; blockerat HTTP eller DNS
+kan förlänga väntan utöver socketens tidsgräns. Galleriets åtgärd \ui{Tvinga
 omgenerering av AI-metadata} rensar lagrade genererade rader och gammalt
 kötillstånd för den gallerigrenen och köar nytt arbete; den tunga analysen körs
 fortfarande på Windows-arbetaren.
@@ -4884,6 +5309,9 @@ hashade, en valfri återställningsadress, konfigurerad giltighetstid och vald
 e-posttransport. Använd HTTPS, starka administratörsuppgifter, begränsade
 databaskonton och skyddade e-post- och API-hemligheter.
 
+Ett listat lösenordsskyddat galleri kan visas som ett låst kort med titel och
+länk; kortet visar inte galleriets beskrivning eller omslagsbild.
+
 Skyddet för administratörscookies, schemat i genererade adresser och
 besökarkontonas HTTPS-kontroll använder samma transportpolicy. Direkt TLS
 identifieras utan proxyinställningar. Om en omvänd proxy avslutar TLS och
@@ -5334,6 +5762,12 @@ temabakgrunder och profilbilder begränsas till sina egna cachekataloger.
 Offentliga bildsvar tillåter säkra rasterformat, inte aktiva SVG-filer. Den
 sparade ursprungliga temabakgrunden är bara tillgänglig för en inloggad
 administratör, medan den vanliga offentliga derivatbilden förblir tillgänglig.
+
+För ett nytt gallerimål jämförs den upplösta befintliga överordnade katalogen
+med den upplösta galleriroten. Filsystemsalias som macOS \filepath{/var} till
+\filepath{/private/var} fungerar; befintliga poster som inte kan upplösas och
+överordnade kataloger utanför roten avvisas. Kontrollen förhindrar inte
+samtidiga ändringar i filsystemet efter kontrollen.
 
 Vid migrering mellan gallerier kontrolleras den slutliga filens placering både
 när manifestet sammanställs och när en autentiserad API-nyckel används för att
@@ -7863,6 +8297,11 @@ behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och
 testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med
 \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller
 långsamt CI motiverar inte enbart lokal kvalificering.
+
+För diagnostik med en tillfällig MySQL-databas erbjuder
+\filepath{scripts/gallery_workflow_mysql.php} läget
+\codeword{--audit-php-regression} via den centrala PHP-regressionssviten.
+Även utcheckningen behöver en separat isolerad kopia för att isolera dess cache.
 
 Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt,
 obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet

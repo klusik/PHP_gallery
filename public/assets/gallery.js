@@ -136,7 +136,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261102-gallery-motion-v1';
+} from './gallery-modules/admin-operations.js?v=20261107-gallery-editor-link-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -200,6 +200,8 @@ function bootGalleryBrowserFeatures() {
     setupImageBulkMoveFields();
     setupThumbnailCacheDeleteConfirmation();
     setupAdminNavigation();
+    // Consume the explicit editor target before tabs normalize dashboard URLs.
+    setupAdminGallerySidePanel();
     setupAdminTabs();
     setupAdminNestedTabs();
     setupAdminDatePickers();
@@ -217,7 +219,6 @@ function bootGalleryBrowserFeatures() {
     setupThumbnailProgress();
     setupGalleryRefreshProgress();
     setupGalleryUploadProgress();
-    setupAdminGallerySidePanel();
     setupPictureGame();
     setupAdminLogStatusForms();
     setupAdminLogLiveFilters();

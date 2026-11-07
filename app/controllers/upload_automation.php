@@ -73,31 +73,27 @@ use function Gallery\Services\presentation_ai_image_analysis_schema_status;
 use function Gallery\Services\presentation_schema_log_degraded;
 use function Gallery\Services\schema_inspection_error_code;
 use function Gallery\Services\create_gallery_upload_automation_token;
-use function Gallery\Services\create_image_thumbnails_result;
 use function Gallery\Services\find_gallery;
-use function Gallery\Services\find_image;
 use function Gallery\Services\find_upload_automation_token;
 use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\gallery_upload_automation_tokens;
 use function Gallery\Services\gallery_upload_entries;
 use function Gallery\Services\mark_upload_automation_token_used;
 use function Gallery\Services\revoke_gallery_upload_automation_token;
-use function Gallery\Services\store_uploaded_gallery_images;
 use function Gallery\Services\t;
-use function Gallery\Services\upload_automation_apply_sim_camera_metadata;
 use function Gallery\Services\upload_automation_bool;
 use function Gallery\Services\upload_automation_client_thumbnail_entries;
 use function Gallery\Services\upload_automation_gallery_inventory_response;
+use function Gallery\Services\upload_automation_generate_derivatives;
 use function Gallery\Services\upload_automation_image_client_ids;
-use function Gallery\Services\upload_automation_install_client_thumbnails;
 use function Gallery\Services\upload_automation_inventory_candidates;
 use function Gallery\Services\upload_automation_request_token;
-use function Gallery\Services\upload_automation_refresh_stored_checksums;
 use function Gallery\Services\upload_automation_schema_ready;
 use function Gallery\Services\upload_automation_schema_status;
 use function Gallery\Services\schema_inspection_is_missing;
 use function Gallery\Services\schema_inspection_is_unknown;
 use function Gallery\Services\upload_automation_sim_camera_metadata;
+use function Gallery\Services\upload_automation_store_images;
 use function Gallery\Services\upload_automation_tokens_for_manager;
 use function Gallery\Services\upload_automation_uploaded_files;
 use function Gallery\Services\upload_automation_with_gallery_lock;
@@ -955,146 +951,36 @@ function cms_upload_automation_upload(): void
         $simCameraMetadata = upload_automation_sim_camera_metadata($_POST);
         // $entries stores validated upload entries returned by the existing upload validator.
         $entries = gallery_upload_entries($files);
-        // $postUploadErrors stores optional post-store failures that must not poison the original upload response.
-        $postUploadErrors = [];
-        // $uploadResult stores the gallery mutation result produced under a
-        // short gallery-scoped advisory lock. The existing scanner reconciles
-        // the whole target folder, so the companion app intentionally serializes
-        // network uploads. The lock remains authoritative for other clients and
-        // prevents two PHP workers from inserting the same discovered image row
-        // concurrently.
-        $uploadResult = upload_automation_with_gallery_lock($galleryId, function () use (
+        // The shared service retains gallery locking and all post-store work.
+        $uploadResult = upload_automation_store_images(
             $galleryId,
             $gallery,
             $entries,
             $clientThumbnailEntries,
             $imageClientIds,
             $simCameraMetadata,
-            &$postUploadErrors,
-        ): array {
-            // $stored stores the existing upload pipeline result after filesystem storage and image scan.
-            $stored = store_uploaded_gallery_images($galleryId, $entries);
-            // Keep database-only watcher inventory authoritative immediately after this API upload.
-            try {
-                $checksumResult = upload_automation_refresh_stored_checksums(
-                    $galleryId,
-                    $gallery,
-                    $stored,
-                );
-                if ((int) ($checksumResult['failed'] ?? 0) > 0) {
-                    $postUploadErrors[] =
-                        'Upload checksum indexing was incomplete: '
-                        . implode('; ', array_slice(
-                            (array) ($checksumResult['errors'] ?? []),
-                            0,
-                            3,
-                        ));
-                }
-            } catch (Throwable $exception) {
-                $postUploadErrors[] =
-                    'Upload checksum indexing failed: '
-                    . $exception->getMessage();
-            }
-            // $simCameraResult stores the optional GPS metadata update for accepted screenshot uploads.
-            $simCameraResult = ['attached' => 0, 'skipped' => 0, 'error' => ''];
-            try {
-                $simCameraResult = upload_automation_apply_sim_camera_metadata(
-                    $galleryId,
-                    $stored,
-                    $simCameraMetadata,
-                );
-                if ((string) ($simCameraResult['error'] ?? '') !== '') {
-                    $postUploadErrors[] =
-                        'Flight Simulator camera metadata was skipped: '
-                        . (string) $simCameraResult['error'];
-                }
-            } catch (Throwable $exception) {
-                $simCameraResult = [
-                    'attached' => 0,
-                    'skipped' => count((array) ($stored['image_ids'] ?? [])),
-                    'error' => $exception->getMessage(),
-                ];
-                $postUploadErrors[] =
-                    'Flight Simulator camera metadata failed: '
-                    . $exception->getMessage();
-            }
-
-            // $clientThumbnailResult stores the thumbnails installed from the client request.
-            $clientThumbnailResult = [
-                'installed' => 0,
-                'skipped' => 0,
-                'failed' => 0,
-                'errors' => [],
-            ];
-            try {
-                $clientThumbnailResult = upload_automation_install_client_thumbnails(
-                    $galleryId,
-                    $gallery,
-                    $clientThumbnailEntries,
-                    $imageClientIds,
-                    $stored,
-                );
-            } catch (Throwable $exception) {
-                $clientThumbnailResult = [
-                    'installed' => 0,
-                    'skipped' => 0,
-                    'failed' => count($clientThumbnailEntries),
-                    'errors' => [$exception->getMessage()],
-                ];
-                $postUploadErrors[] =
-                    'Client thumbnail installation failed: '
-                    . $exception->getMessage();
-            }
-
-            return [$stored, $clientThumbnailResult, $simCameraResult];
-        });
-        // $stored stores the existing upload pipeline result after filesystem storage and image scan.
-        $stored = $uploadResult[0];
-        // $clientThumbnailResult stores the thumbnails installed from the client request.
-        $clientThumbnailResult = $uploadResult[1];
-        // $simCameraResult stores the optional camera-location metadata outcome.
-        $simCameraResult = $uploadResult[2];
-        // $createThumbnails stores whether the watcher asked the server to create derivatives immediately.
+        );
+        $stored = $uploadResult['stored'];
+        $clientThumbnailResult = $uploadResult['client_thumbnails'];
+        $simCameraResult = $uploadResult['sim_camera_metadata'];
+        $postUploadErrors = $uploadResult['post_upload_errors'];
+        // The legacy request flag is interpreted after the original store.
         $createThumbnails = upload_automation_bool(
             $_POST['create_thumbnails'] ?? '1',
             true,
         );
-        // $thumbnails stores the count of generated thumbnails and display derivatives.
-        $thumbnails = 0;
-        // $thumbnailFailed stores derivative failures reported by the thumbnail service.
-        $thumbnailFailed = 0;
-        // $thumbnailErrors stores concise thumbnail diagnostics for JSON and logs.
-        $thumbnailErrors = [];
-
-        if ($createThumbnails) {
-            foreach ((array) ($stored['image_ids'] ?? []) as $imageId) {
-                try {
-                    // $image stores the image row created or updated by the scan.
-                    $image = find_image((int) $imageId);
-                    if (!$image) {
-                        continue;
-                    }
-                    // $thumbnailResult stores per-image derivative generation counts.
-                    $thumbnailResult = create_image_thumbnails_result(
-                        $image,
-                        $gallery,
-                    );
-                    $thumbnails += (int) ($thumbnailResult['created'] ?? 0);
-                    $thumbnailFailed += (int) ($thumbnailResult['failed'] ?? 0);
-                    foreach ((array) (
-                        $thumbnailResult['errors'] ?? []
-                    ) as $thumbnailError) {
-                        $thumbnailErrors[] = (string) $thumbnailError;
-                    }
-                } catch (Throwable $exception) {
-                    $thumbnailFailed++;
-                    $thumbnailErrors[] = $exception->getMessage();
-                    $postUploadErrors[] =
-                        'Thumbnail generation failed: '
-                        . $exception->getMessage();
-                }
-            }
-        }
+        $derivatives = upload_automation_generate_derivatives(
+            $stored,
+            $gallery,
+            $createThumbnails,
+        );
+        $thumbnails = $derivatives['created'];
+        $thumbnailFailed = $derivatives['failed'];
+        $thumbnailErrors = $derivatives['errors'];
+        $postUploadErrors = array_merge(
+            $postUploadErrors,
+            $derivatives['post_upload_errors'],
+        );
 
         try {
             mark_upload_automation_token_used((int) $tokenRow['id']);
