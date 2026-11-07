@@ -19,7 +19,23 @@ from pathlib import Path
 
 from uploader.flight_jobs import ImportBindings
 from uploader.models import ImportItem, ImportJob
-from uploader.state_store import JobStateStore, atomic_write_json, default_upload_state
+from uploader.state_store import (
+    JobStateStore,
+    UploadStateTooLargeError,
+    atomic_write_json,
+    default_upload_state,
+)
+
+# Purpose: Mirror the production complete-state bound in the regression.
+# Type: int; Units: bytes; Scope: one portable state-admission fixture.
+# Consumers: test_valid_legacy_sized_snapshot_uses_existing_rmw_envelope.
+# Rationale: The fixture must remain within the existing strict RMW envelope.
+_STATE_SNAPSHOT_MAX_BYTES = 256 * 1024 * 1024
+# Purpose: Make the valid fixture exceed the obsolete inspection ceiling.
+# Type: int; Units: bytes; Scope: one portable state-admission fixture.
+# Consumers: test_valid_legacy_sized_snapshot_uses_existing_rmw_envelope.
+# Rationale: One byte over 16 MiB reproduces the false refusal boundary.
+_LEGACY_HISTORY_PADDING_BYTES = 16 * 1024 * 1024 + 1
 
 
 class ImportDestinationAdmissionTests(unittest.TestCase):
@@ -230,6 +246,46 @@ class ImportDestinationAdmissionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.admitted_imports_match_target({}, self.second)
         self.assertEqual(tampered, self.path.read_text(encoding='utf-8'))
+
+    def test_valid_legacy_sized_snapshot_uses_existing_rmw_envelope(self) -> None:
+        """Valid large legacy history is inspected within the RMW safety cap.
+
+        Returns:
+            None: The real admission decision preserves an exact pending job.
+        """
+        job = self._job('uploading')
+        document = default_upload_state()
+        document['jobs'] = {job.id: job.to_dict()}
+        message = 'legacy watcher upload history '
+        document['uploaded_paths'] = {
+            message * (_LEGACY_HISTORY_PADDING_BYTES // len(message)): 'x',
+        }
+        encoded = json.dumps(document, separators=(',', ':'))
+        self.path.write_text(encoded, encoding='utf-8')
+        size = self.path.stat().st_size
+
+        self.assertGreater(size, _LEGACY_HISTORY_PADDING_BYTES - 1)
+        self.assertLessEqual(size, _STATE_SNAPSHOT_MAX_BYTES)
+        self.assertFalse(self.store.admitted_imports_match_target(
+            {job.id: self.first}, self.second,
+        ))
+        self.assertTrue(self.store.admitted_imports_match_target(
+            {job.id: self.first}, self.first,
+        ))
+
+    def test_over_cap_history_has_typed_refusal(self) -> None:
+        """A complete state above the active cap is refused as oversized.
+
+        Returns:
+            None: The size failure remains distinct from generic bad evidence.
+        """
+        raw = json.dumps(default_upload_state()).encode('utf-8')
+        self.path.write_bytes(raw)
+        with mock.patch(
+            'uploader.state_store._UPLOAD_STATE_RMW_MAX_BYTES', len(raw) - 1,
+        ):
+            with self.assertRaises(UploadStateTooLargeError):
+                self.store.inspect_jobs_for_target_change()
 
     def test_binding_ledger_rejects_duplicate_and_nonfinite_evidence(self) -> None:
         """Ambiguous JSON must not discard the prior accepted target.

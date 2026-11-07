@@ -1198,6 +1198,15 @@ The temporary key lives in memory during capture. Closing it leaves the
 browser link available to Photos. The feature uses the verified
 `app_linking_watch_keys` schema and existing upload capability.
 
+Before requesting a capture key, destination admission checks accepted import
+work under the existing local owner. The full `upload_state.json` snapshot
+uses the same 256 MiB ceiling for admission and read-modify-write. The previous
+16 MiB admission ceiling rejected a healthy Windows Watcher history before
+gallery verification even though the state writer could still process it.
+Admission still rejects unreadable or ambiguous evidence and protects pending
+work bound to another target. The separate import-binding ledger and linked
+target history keep their own bounds.
+
 Photo metadata uses eight-item pages by default. WinApp can request up to 64 with
 `X-PHP-Gallery-Photo-Page: 64`; older servers ignore this header.
 Responses cap each binary at 16 MiB and use existing live
@@ -2153,8 +2162,9 @@ below. No new security assertion may inherit those old results.
 - `state_store.load_upload_state_for_mutation()` refuses to overwrite existing
   malformed, redirected, changed, truncated or oversized shared state with an
   empty snapshot. Legacy non-admission reads keep their established parser.
-  Mutation reads have a separate bounded 256 MiB limit; the stricter 16 MiB
-  target-admission history limit is unchanged.
+  At this checkpoint, mutation reads had a separate 256 MiB limit and target
+  admission used 16 MiB. The current shared-history contract above supersedes
+  that mismatch.
 - `accepted_work_owner(config_dir)` acquires the stable in-place
   `accepted-work.lock` using native Windows byte-range locking or POSIX
   `flock`, within the process-local `_STATE_LOCK`. Every adopted RMW

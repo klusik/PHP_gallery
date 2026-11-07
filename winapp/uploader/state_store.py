@@ -45,12 +45,11 @@ from .windows_file_identity import WindowsDirectoryAnchor
 
 UPLOAD_STATE_SCHEMA_VERSION = 2
 _STATE_LOCK = threading.RLock()
-# Maximum complete upload-state snapshot inspected before a mode change.
-# Type: int; Units: bytes; Scope: read-only destination admission.
-# Oversized history is unknown, never treated as an empty work queue.
-_MODE_CHANGE_MAX_STATE_BYTES = 16 * 1024 * 1024
 # Keep large legacy watcher histories, but bound destructive RMW parsing.
-# Type: int; Units: bytes; Scope: complete upload-state writer snapshots.
+# Type: int; Units: bytes; Scope: complete upload-state admission and RMW reads.
+# Consumers: load_upload_state_for_mutation and destination-change inspection.
+# Rationale: Match the existing strict RMW envelope so valid legacy history
+#   is not rejected only because read-only admission is more restrictive.
 _UPLOAD_STATE_RMW_MAX_BYTES = 256 * 1024 * 1024
 
 # Purpose: Retain a compact list of recently used gallery installations.
@@ -64,6 +63,10 @@ RECENT_GALLERY_ADDRESS_LIMIT = 20
 # Consumers: load_recent_gallery_addresses.
 # Rationale: 16 KiB fits twenty canonical 512-byte issuers and JSON framing.
 _RECENT_GALLERY_ADDRESS_MAX_BYTES = 16 * 1024
+
+
+class UploadStateTooLargeError(ValueError):
+    """Represent a complete upload-state snapshot beyond its safe size cap."""
 
 
 def linked_upload_state_path(config_dir: Path, binding: str) -> Path:
@@ -871,6 +874,8 @@ class JobStateStore:
             List[ImportJob]: Jobs from one validated complete state snapshot.
 
         Raises:
+            UploadStateTooLargeError: The complete history exceeds the shared
+                safe snapshot envelope.
             ValueError: An existing snapshot is redirected, changed, damaged,
                 oversized or otherwise insufficient to authorize a mode change.
         """
@@ -882,16 +887,19 @@ class JobStateStore:
             except OSError:
                 raise ValueError('Import recovery state is unavailable.') from None
             if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
-                    or before.st_dev <= 0 or before.st_ino <= 0
-                    or before.st_size > _MODE_CHANGE_MAX_STATE_BYTES):
+                    or before.st_dev <= 0 or before.st_ino <= 0):
                 raise ValueError('Import recovery state is unavailable.')
+            if before.st_size > _UPLOAD_STATE_RMW_MAX_BYTES:
+                raise UploadStateTooLargeError(
+                    'Import recovery state exceeds the safe size limit.'
+                )
             flags = (os.O_RDONLY | getattr(os, 'O_BINARY', 0)
                      | getattr(os, 'O_NOFOLLOW', 0)
                      | getattr(os, 'O_NONBLOCK', 0))
             try:
                 with os.fdopen(os.open(self.path, flags), 'rb') as source:
                     opened = os.fstat(source.fileno())
-                    raw = source.read(_MODE_CHANGE_MAX_STATE_BYTES + 1)
+                    raw = source.read(before.st_size + 1)
                     finished = os.fstat(source.fileno())
                 after = self.path.lstat()
 
@@ -906,8 +914,16 @@ class JobStateStore:
                     """
                     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
 
-                if (len(raw) > _MODE_CHANGE_MAX_STATE_BYTES
-                        or not stat.S_ISREG(opened.st_mode)
+                if (
+                    max(opened.st_size, finished.st_size, after.st_size)
+                    > _UPLOAD_STATE_RMW_MAX_BYTES
+                ):
+                    raise UploadStateTooLargeError(
+                        'Import recovery state exceeds the safe size limit.'
+                    )
+                if len(raw) != before.st_size:
+                    raise ValueError('Import recovery state changed.')
+                if (not stat.S_ISREG(opened.st_mode)
                         or not stat.S_ISREG(after.st_mode)
                         or opened.st_nlink != 1 or after.st_nlink != 1
                         or identity(before) != identity(opened)
@@ -949,6 +965,8 @@ class JobStateStore:
                         raise ValueError('Import recovery job is malformed.')
                     jobs.append(ImportJob.from_dict(row))
                 return jobs
+            except UploadStateTooLargeError:
+                raise
             except (OSError, UnicodeError, TypeError, OverflowError, ValueError):
                 raise ValueError('Import recovery state needs manual review.') from None
 

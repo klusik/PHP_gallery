@@ -2176,7 +2176,10 @@ Album verdeckt. Bei erkanntem Flugsimulator
 steht SimBrief zur Verfügung. Beenden verarbeitet angenommene Bilder,
 speichert verfügbare Flugberichte und widerruft den temporären Schlüssel.
 Die Website bleibt verknüpft. Im Watcher erscheint die Vorbereitung oder
-der Grund, falls die Überwachung nicht starten kann. Ein
+der Grund, falls die Überwachung nicht starten kann. Die Zielauswahl prüft
+angenommene Importe im lokalen Uploadverlauf. Es gilt dieselbe Grenze von
+256~MiB wie bei Zustandsänderungen. Ein nicht prüfbarer Verlauf oder offene
+Arbeit für ein anderes Ziel blockiert den Wechsel weiterhin. Ein
 aktueller installierter Windows-Klicktest für die native Ansicht steht noch
 aus. Frühere Protokollnachweise decken diese UI-Version nicht ab.
 Die Dateisystem-Schreibsperre ist ein inaktiver Prototyp und schützt

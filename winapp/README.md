@@ -1100,7 +1100,11 @@ With upload permission, use **Use this gallery for Watcher** from a gallery
 context or the Watcher rail menu while Photos is open. WinApp verifies the
 exact gallery and uses the existing Watcher folder, local thumbnail pipeline
 and finish controls. The Watcher panel shows preparation or refusal for that
-request. The red REC indicator shows active capture. The
+request. Before activating the destination, WinApp checks its accepted import
+work against the local upload history. A large existing Watcher history can
+be read within the same 256 MiB bound used for state updates. Unverifiable
+history or unfinished work for another destination still blocks a change.
+The red REC indicator shows active capture. The
 Watcher rail icon pulses red on every tab while capture is active. A small
 filled red light marks the exact upload gallery in the Photos tree and at its
 heading. A hollow light marks a collapsed branch that hides that gallery.

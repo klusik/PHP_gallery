@@ -8544,6 +8544,16 @@ proof of the original transaction or database registration, and `unknown`
 does not prove absence. These fixtures do not establish actual Windows, deployed
 HTTPS, concurrent external filesystem or power-loss behavior.
 
+The WinApp destination-admission fixture exercises a complete local upload
+snapshot above the former 16 MiB read-only ceiling. Within the shared 256 MiB
+state envelope, an unfinished import retains its exact binding. The fixture
+admits that binding and refuses another one. This portable regression does not
+exercise the real Photos gesture, key issuance or the Watcher upload. For the
+Windows desktop check, use an approved Admin upload link and a disposable
+watched folder. Create a synthetic image after REC begins, confirm its exact
+gallery and checksum, finish the capture, then confirm queue drain, key closure
+and continued Photos access before selecting the next gallery.
+
 The disposable HTTPS/MySQL protocol run created an unpublished child through
 the native journal, withheld a completed reply, recovered the original receipt
 with status after restart, and reissued the same key without a duplicate. The

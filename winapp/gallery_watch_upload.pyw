@@ -165,6 +165,7 @@ from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
 from uploader.windows_file_identity import assert_local_windows_profile
 from uploader.state_store import (
     JobStateStore,
+    UploadStateTooLargeError,
     accepted_work_owner,
     atomic_write_json,
     linked_upload_state_path,
@@ -9564,6 +9565,8 @@ class WatcherApp:
                 )
                 if result is not True:
                     return 'Review unfinished imports in Activity before changing the upload target.'
+        except UploadStateTooLargeError:
+            return 'Local upload history exceeds the safe size limit. Review Activity.'
         except (OSError, ValueError, RuntimeError):
             return 'Local upload history could not be verified. Review Activity.'
         return None
