@@ -308,7 +308,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             master=self.root,
         )
         button.configure(image=external_badge)
-        badge_name = str(button.cget("image"))
+        badge_name = button.cget("image")
         button.event_generate("<Enter>")
         self.root.update()
         self.assertEqual(badge_name, button.cget("image"))
@@ -866,7 +866,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
-        session.gallery_pinned.return_value = False
+        session.gallery_pinned.return_value = True
         session.has_cached_photo.return_value = False
         gallery = LinkedGallery(
             TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Cache album',
@@ -918,7 +918,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session.media_gallery_details.assert_not_called()
 
         workspace.tree.item(parent_id, open=False)
-        workspace._gallery_pins[TEST_GALLERY_ID] = True
         selection = (row_id,)
         workspace.tree.selection_set(selection)
         target = mock.Mock(
@@ -942,6 +941,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             recording_image, workspace.tree.item(row_id, 'image'),
         )
         self.assertEqual(selection, workspace.tree.selection())
+        workspace._tree_marker_images.clear()
+        workspace._recording_images.clear()
         with mock.patch.object(
             photos_workspace, 'create_smooth_icon', return_value=None,
         ):
@@ -950,6 +951,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             fallback_image = workspace.tree.item(row_id, 'image')
             fallback_label = workspace.tree.item(row_id, 'text')
             self.assertTrue(fallback_image)
+            self.assertIsInstance(
+                workspace._recording_images[(False, True)], tk.PhotoImage,
+            )
             self.assertIn('PIN ', fallback_label)
             self.assertIn('Cache album', fallback_label)
             workspace.set_watcher_recording(None, False)

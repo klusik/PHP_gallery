@@ -9,9 +9,10 @@
 
 """Shared visual styling and accessible presentation helpers for the uploader."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from math import cos, radians, sin
+import _tkinter
 import tkinter as tk
 from tkinter import font as tkfont, ttk
 from typing import TYPE_CHECKING, TypeAlias
@@ -78,12 +79,35 @@ _BASE_UI_DPI = 96.0
 # Rationale: 30 px fits the native font and an 18 px status mark compactly.
 _TREEVIEW_ROW_HEIGHT = 30
 
-# Type: tuple[str, str, str, object, object]; Units: ttk option metadata.
-# Scope: one Tkinter widget configuration response. Fields: option name,
-# database name, database class, default value and current Tcl value. The last
-# two values are the native option's scalar, tuple or Tk handle, passed through
-# unchanged rather than interpreted by the presentation helper.
-TtkOptionSpec: TypeAlias = tuple[str, str, str, object, object]
+ButtonImageElement: TypeAlias = str | ThemeImage
+ButtonImageOption: TypeAlias = (
+    ButtonImageElement | tuple[ButtonImageElement, ...]
+)
+ButtonFontOption: TypeAlias = (
+    str | tuple[str, int] | tuple[str, int, str]
+    | tuple[str, int, str, str] | tuple[str, int, str, str, str]
+)
+ButtonSequenceOption: TypeAlias = (
+    tuple[str | int, ...]
+    | tuple[tuple[str | ThemeImage, ...], ...]
+)
+ButtonOptionValue: TypeAlias = (
+    str | int | bool | tk.Variable | ThemeImage | Callable[[], None]
+    | ButtonImageOption | ButtonFontOption | ButtonSequenceOption
+)
+ButtonOptionMapping: TypeAlias = Mapping[str, ButtonOptionValue]
+ButtonQueryScalar: TypeAlias = (
+    str | int | float | bool | tk.Variable | ThemeImage
+    | Callable[[], None] | _tkinter.Tcl_Obj
+)
+ButtonQueryValue: TypeAlias = (
+    ButtonQueryScalar | tuple[ButtonQueryScalar, ...]
+)
+
+# Type: tuple[str, str, str, str, ButtonQueryValue]; Units: ttk option metadata.
+# Scope: one Tkinter widget configuration response. The final field preserves
+# Tkinter's native scalar, Tcl object or typed tuple returned by Tcl.
+TtkOptionSpec: TypeAlias = tuple[str, str, str, str, ButtonQueryValue]
 TtkConfigureResult: TypeAlias = (
     dict[str, TtkOptionSpec] | TtkOptionSpec | str | None
 )
@@ -628,18 +652,20 @@ class SmoothIconButton(ttk.Button):
     Args:
         master (tk.Misc): Parent Tk widget.
         icon (str): Initial semantic icon or display text.
-        **kwargs (object): Standard ttk button configuration options.
+        **kwargs (ButtonOptionValue): Standard ttk option values including
+            text, image, font, state, style, command and sizing options.
     """
 
-    def __init__(self, master: tk.Misc, icon: str, **kwargs: object) -> None:
+    def __init__(
+        self, master: tk.Misc, icon: str, **kwargs: ButtonOptionValue,
+    ) -> None:
         """Create the button and bind state-aware icon refreshes.
 
         Args:
             master (tk.Misc): Parent Tk widget.
             icon (str): Semantic icon or initial display text.
-            **kwargs (object): Native button options, including text/style/state
-                strings, an image handle or state/image tuple, a zero-argument
-                command callback, integer width and boolean takefocus.
+            **kwargs (ButtonOptionValue): Native text, image, font, state, style,
+                command, sizing and inherited ttk option values.
 
         Returns:
             None: The button owns its generated image and event bindings.
@@ -655,18 +681,16 @@ class SmoothIconButton(ttk.Button):
 
     def configure(
         self,
-        cnf: dict[str, object] | str | None = None,
-        **kwargs: object,
+        cnf: ButtonOptionMapping | str | None = None,
+        **kwargs: ButtonOptionValue,
     ) -> TtkConfigureResult:
         """Apply ttk options and refresh artwork after text changes.
 
         Args:
-            cnf (dict[str, object] | str | None): Option-name/value mapping or
+            cnf (ButtonOptionMapping | str | None): Option-name/value mapping or
                 ttk option-name query passed through to Tkinter.
-            **kwargs (object): Native options passed unchanged to Tcl. Text,
-                style and state are strings; image is a Tk handle or a
-                state/image tuple; command is a zero-argument callback; width
-                is an integer and takefocus is boolean.
+            **kwargs (ButtonOptionValue): Ttk option values including text,
+                image, font, style, state, command and sizing options.
 
         Returns:
             TtkConfigureResult: Option metadata for a query, queried Tcl value,
@@ -674,11 +698,11 @@ class SmoothIconButton(ttk.Button):
         """
         text = kwargs.get("text")
         image = kwargs.get("image")
-        if isinstance(cnf, dict) and "text" in cnf:
+        if isinstance(cnf, Mapping) and "text" in cnf:
             text = cnf["text"]
-        if isinstance(cnf, dict) and "image" in cnf:
+        if isinstance(cnf, Mapping) and "image" in cnf:
             image = cnf["image"]
-        style_changed = isinstance(cnf, dict) and (
+        style_changed = isinstance(cnf, Mapping) and (
             "style" in cnf or "state" in cnf
         )
         result = super().configure(cnf, **kwargs)
