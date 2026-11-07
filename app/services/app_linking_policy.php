@@ -60,6 +60,32 @@ const APP_LINKING_MEDIA_READY = true;
 const APP_LINKING_MEDIA_SUFFIX = ' media:read';
 
 /**
+ * Require separate consent to read photos under the current Admin grant.
+ * Type: string. Units: ordered scope suffix. Scope: temporary native links.
+ * Consumers: app_linking_public_client and native media authorization.
+ * Rationale: A public-media grant cannot widen to restricted content.
+ */
+const APP_LINKING_ADMIN_MEDIA_SUFFIX = ' media:admin';
+
+/**
+ * Require explicit consent before native permanent photo deletion.
+ * Type: string. Units: ordered scope suffix. Scope: native Admin photo grants.
+ * Consumers: app_linking_admin_media_scopes and delete authorization.
+ * Rationale: Existing Admin photo grants are read-only and must not gain
+ *     destructive authority during upgrade.
+ */
+const APP_LINKING_ADMIN_DELETE_SUFFIX = ' media:delete';
+
+/**
+ * Include explicitly approved public presentation playback in an Admin link.
+ * Type: string. Units: ordered scope suffix. Scope: native photo and music grants.
+ * Consumers: app_linking_admin_media_scopes and presentation authorization.
+ * Rationale: The additional permission preserves the public playback boundary.
+ */
+const APP_LINKING_ADMIN_PRESENTATION_SUFFIX = APP_LINKING_ADMIN_MEDIA_SUFFIX
+    . ' presentation:read';
+
+/**
  * Add photo and presentation browsing to an explicitly approved link.
  * Type: string. Units: ordered scope suffix. Scope: temporary slideshow and
  * music grants.
@@ -135,6 +161,121 @@ const APP_LINKING_SEARCH_SCOPE = APP_LINKING_GALLERIES_SCOPE . ' galleries:searc
  * gallery metadata.
  */
 const APP_LINKING_UPLOAD_SEARCH_SCOPE = APP_LINKING_UPLOAD_SCOPE . ' galleries:search';
+
+/**
+ * Mark browser-approved refresh families as rolling seven-day authority.
+ * Type: string. Units: ordered scope suffix. Scope: exact rolling bundles.
+ * Consumers: client registration, scope validation and refresh lifetime.
+ * Rationale: old offline_access-only grants keep their 30-day absolute cap.
+ */
+const APP_LINKING_ROLLING_SUFFIX = ' rolling_access offline_access';
+
+/**
+ * Register rolling consent for Admin identity and gallery listing.
+ * Type: string. Units: ordered scope tokens. Scope: WinApp listing grants.
+ * Consumers: app_linking_discovery_capabilities, app_linking_public_client,
+ *     app_linking_scope_base, app_linking_scope_requests_rolling.
+ * Rationale: The rolling suffix renews the exact listing permission bundle.
+ */
+const APP_LINKING_GALLERIES_ROLLING_SCOPE =
+    APP_LINKING_GALLERIES_SCOPE . APP_LINKING_ROLLING_SUFFIX;
+
+/**
+ * Register rolling consent for gallery listing and upload.
+ * Type: string. Units: ordered scope tokens. Scope: WinApp upload grants.
+ * Consumers: app_linking_public_client, app_linking_scope_requests_rolling.
+ * Rationale: The upload base retains the explicitly approved upload permission
+ *     during renewal.
+ */
+const APP_LINKING_UPLOAD_ROLLING_SCOPE =
+    APP_LINKING_UPLOAD_SCOPE . APP_LINKING_ROLLING_SUFFIX;
+
+/**
+ * Register rolling consent for gallery listing and metadata search.
+ * Type: string. Units: ordered scope tokens. Scope: WinApp search grants.
+ * Consumers: app_linking_public_client, app_linking_scope_base,
+ *     app_linking_scope_allows_gallery_search, app_linking_scope_requests_rolling.
+ * Rationale: The search base retains the separately approved search permission
+ *     during renewal.
+ */
+const APP_LINKING_GALLERIES_SEARCH_ROLLING_SCOPE =
+    APP_LINKING_SEARCH_SCOPE . APP_LINKING_ROLLING_SUFFIX;
+
+/**
+ * Register rolling consent for listing, upload and metadata search.
+ * Type: string. Units: ordered scope tokens. Scope: WinApp upload/search grants.
+ * Consumers: app_linking_public_client, app_linking_scope_allows_gallery_search,
+ *     app_linking_scope_requests_rolling.
+ * Rationale: The combined base retains both upload and search permissions
+ *     during renewal.
+ */
+const APP_LINKING_UPLOAD_SEARCH_ROLLING_SCOPE =
+    APP_LINKING_UPLOAD_SEARCH_SCOPE . APP_LINKING_ROLLING_SUFFIX;
+
+/**
+ * Preserve the exact approved presentation permission through rolling renewal.
+ * Type: string. Units: ordered scope tokens. Scope: WinApp listing and playback.
+ * Consumers: app_linking_discovery_capabilities,
+ *     APP_LINKING_PRESENTATION_ROLLING_SCOPES.
+ * Rationale: The presentation suffix binds public photo and music access to
+ *     the listing grant that discovery checks for rolling playback support.
+ */
+const APP_LINKING_GALLERIES_PRESENTATION_ROLLING_SCOPE =
+    APP_LINKING_GALLERIES_SCOPE . APP_LINKING_PRESENTATION_SUFFIX
+    . APP_LINKING_ROLLING_SUFFIX;
+
+/**
+ * Register rolling consent for listing, upload and public presentation.
+ * Type: string. Units: ordered scope tokens. Scope: WinApp upload and playback.
+ * Consumers: APP_LINKING_PRESENTATION_ROLLING_SCOPES.
+ * Rationale: The upload base and presentation suffix preserve both permissions
+ *     during renewal.
+ */
+const APP_LINKING_UPLOAD_PRESENTATION_ROLLING_SCOPE =
+    APP_LINKING_UPLOAD_SCOPE . APP_LINKING_PRESENTATION_SUFFIX
+    . APP_LINKING_ROLLING_SUFFIX;
+
+/**
+ * Register rolling consent for listing, search and public presentation.
+ * Type: string. Units: ordered scope tokens. Scope: WinApp search and playback.
+ * Consumers: APP_LINKING_PRESENTATION_ROLLING_SCOPES,
+ *     app_linking_scope_allows_gallery_search.
+ * Rationale: The search base and presentation suffix preserve both permissions
+ *     during renewal.
+ */
+const APP_LINKING_GALLERIES_SEARCH_PRESENTATION_ROLLING_SCOPE =
+    APP_LINKING_SEARCH_SCOPE . APP_LINKING_PRESENTATION_SUFFIX
+    . APP_LINKING_ROLLING_SUFFIX;
+
+/**
+ * Register rolling consent for listing, upload, search and public presentation.
+ * Type: string. Units: ordered scope tokens.
+ * Scope: WinApp upload, search and playback grants.
+ * Consumers: APP_LINKING_PRESENTATION_ROLLING_SCOPES,
+ *     app_linking_scope_allows_gallery_search.
+ * Rationale: The combined base and presentation suffix retain all three
+ *     additional permissions during renewal.
+ */
+const APP_LINKING_UPLOAD_SEARCH_PRESENTATION_ROLLING_SCOPE =
+    APP_LINKING_UPLOAD_SEARCH_SCOPE . APP_LINKING_PRESENTATION_SUFFIX
+    . APP_LINKING_ROLLING_SUFFIX;
+
+/**
+ * Collect the four registered WinApp rolling presentation bundles.
+ * Type: list<string>. Units: exact ordered scope strings.
+ * Scope: registration, capability resolution and storage readiness.
+ * Consumers: app_linking_public_client, app_linking_scope_without_media,
+ *     app_linking_scope_requests_rolling, app_linking_scope_allows_presentation,
+ *     app_linking_recheck_wide_scope.
+ * Rationale: One allowlist keeps listing, upload and search variants aligned
+ *     across playback authorization and renewal checks.
+ */
+const APP_LINKING_PRESENTATION_ROLLING_SCOPES = [
+    APP_LINKING_GALLERIES_PRESENTATION_ROLLING_SCOPE,
+    APP_LINKING_UPLOAD_PRESENTATION_ROLLING_SCOPE,
+    APP_LINKING_GALLERIES_SEARCH_PRESENTATION_ROLLING_SCOPE,
+    APP_LINKING_UPLOAD_SEARCH_PRESENTATION_ROLLING_SCOPE,
+];
 
 /**
  * Permit WinApp to verify the approved Admin account, list galleries and read
@@ -497,8 +638,49 @@ function app_linking_public_client(string $clientId): ?array
         'redirect_path' => APP_LINKING_WINAPP_REDIRECT_PATH,
         'scopes' => array_merge($scopes, $mediaScopes, [
             APP_LINKING_SEARCH_SCOPE, APP_LINKING_UPLOAD_SEARCH_SCOPE,
-        ]),
+            APP_LINKING_GALLERIES_ROLLING_SCOPE,
+            APP_LINKING_UPLOAD_ROLLING_SCOPE,
+            APP_LINKING_GALLERIES_SEARCH_ROLLING_SCOPE,
+            APP_LINKING_UPLOAD_SEARCH_ROLLING_SCOPE,
+            ...APP_LINKING_PRESENTATION_ROLLING_SCOPES,
+        ], array_keys(app_linking_admin_media_scopes())),
     ];
+}
+
+/**
+ * Register exact Admin photo bundles and their underlying capability bases.
+ *
+ * @return array<string,string> Registered exact scope to base grant mapping.
+ */
+function app_linking_admin_media_scopes(): array
+{
+    static $scopes = [];
+    if ($scopes !== []) {
+        return $scopes;
+    }
+    $bases = [
+        APP_LINKING_GALLERIES_SCOPE, APP_LINKING_UPLOAD_SCOPE,
+        APP_LINKING_READ_SCOPE, APP_LINKING_READ_UPLOAD_SCOPE,
+        APP_LINKING_CREATE_SCOPE, APP_LINKING_READ_CREATE_SCOPE,
+        APP_LINKING_UPLOAD_CREATE_SCOPE, APP_LINKING_READ_UPLOAD_CREATE_SCOPE,
+        APP_LINKING_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_VISIBILITY_SCOPE,
+        APP_LINKING_CREATE_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_CREATE_VISIBILITY_SCOPE,
+    ];
+    foreach ($bases as $base) {
+        foreach (['', ' galleries:search'] as $search) {
+            foreach ([
+                APP_LINKING_ADMIN_MEDIA_SUFFIX,
+                APP_LINKING_ADMIN_MEDIA_SUFFIX . APP_LINKING_ADMIN_DELETE_SUFFIX,
+                APP_LINKING_ADMIN_PRESENTATION_SUFFIX,
+                APP_LINKING_ADMIN_PRESENTATION_SUFFIX . APP_LINKING_ADMIN_DELETE_SUFFIX,
+            ] as $media) {
+                $scope = $base . $search . $media;
+                $scopes[$scope] = $base;
+                $scopes[$scope . APP_LINKING_ROLLING_SUFFIX] = $base;
+            }
+        }
+    }
+    return $scopes;
 }
 
 /**
@@ -509,7 +691,21 @@ function app_linking_public_client(string $clientId): ?array
  */
 function app_linking_scope_without_media(string $scope): string
 {
-    foreach ([APP_LINKING_PRESENTATION_SUFFIX, APP_LINKING_MEDIA_SUFFIX] as $suffix) {
+    $adminBase = app_linking_admin_media_scopes()[$scope] ?? null;
+    if ($adminBase !== null) {
+        return $adminBase;
+    }
+    if (in_array($scope, APP_LINKING_PRESENTATION_ROLLING_SCOPES, true)) {
+        $suffix = APP_LINKING_PRESENTATION_SUFFIX . APP_LINKING_ROLLING_SUFFIX;
+        return substr($scope, 0, -strlen($suffix)) . APP_LINKING_ROLLING_SUFFIX;
+    }
+    foreach ([
+        APP_LINKING_ADMIN_MEDIA_SUFFIX . APP_LINKING_ADMIN_DELETE_SUFFIX,
+        APP_LINKING_ADMIN_PRESENTATION_SUFFIX . APP_LINKING_ADMIN_DELETE_SUFFIX,
+        APP_LINKING_ADMIN_DELETE_SUFFIX,
+        APP_LINKING_PRESENTATION_SUFFIX,
+        APP_LINKING_MEDIA_SUFFIX,
+    ] as $suffix) {
         if (str_ends_with($scope, $suffix)) {
             return substr($scope, 0, -strlen($suffix));
         }
@@ -525,6 +721,17 @@ function app_linking_scope_without_media(string $scope): string
  */
 function app_linking_scope_base(string $scope): ?string
 {
+    if (app_linking_scope_allows_admin_media($scope)) {
+        return app_linking_scope_without_media($scope);
+    }
+    if (app_linking_scope_requests_rolling($scope)) {
+        return match (app_linking_scope_without_media($scope)) {
+            APP_LINKING_GALLERIES_ROLLING_SCOPE,
+            APP_LINKING_GALLERIES_SEARCH_ROLLING_SCOPE => APP_LINKING_GALLERIES_SCOPE,
+            default => APP_LINKING_UPLOAD_SCOPE,
+        };
+    }
+
     return match (app_linking_scope_without_media($scope)) {
         APP_LINKING_IDENTITY_SCOPE, APP_LINKING_IDENTITY_OFFLINE_SCOPE =>
             APP_LINKING_IDENTITY_SCOPE,
@@ -559,18 +766,90 @@ function app_linking_scope_base(string $scope): ?string
 }
 
 /**
- * Recognize the explicitly approved, temporary metadata search permission.
+ * Recognize the gallery listing permission in an exact registered bundle.
+ *
+ * @param string $scope Exact scope string from the live grant.
+ * @return bool True for a known bundle containing the listing permission.
+ */
+function app_linking_scope_allows_gallery_listing(string $scope): bool
+{
+    $base = app_linking_scope_base($scope);
+    return $base !== null && $base !== APP_LINKING_IDENTITY_SCOPE;
+}
+
+/**
+ * Recognize the explicitly approved metadata search permission.
  *
  * @param string $scope Exact consented bundle from the live grant.
- * @return bool True for either registered search bundle.
+ * @return bool True for a registered search bundle.
  */
 function app_linking_scope_allows_gallery_search(string $scope): bool
 {
+    if (app_linking_scope_allows_admin_media($scope)) {
+        return str_contains($scope, ' galleries:search' . APP_LINKING_ADMIN_MEDIA_SUFFIX);
+    }
     return in_array(
         $scope,
-        [APP_LINKING_SEARCH_SCOPE, APP_LINKING_UPLOAD_SEARCH_SCOPE],
+        [
+            APP_LINKING_SEARCH_SCOPE,
+            APP_LINKING_UPLOAD_SEARCH_SCOPE,
+            APP_LINKING_GALLERIES_SEARCH_ROLLING_SCOPE,
+            APP_LINKING_UPLOAD_SEARCH_ROLLING_SCOPE,
+            APP_LINKING_GALLERIES_SEARCH_PRESENTATION_ROLLING_SCOPE,
+            APP_LINKING_UPLOAD_SEARCH_PRESENTATION_ROLLING_SCOPE,
+        ],
         true,
     );
+}
+
+/**
+ * Recognize only the registered rolling access bundles.
+ *
+ * @param string $scope Exact proposed or previously approved scope bundle.
+ * @return bool True for a registered rolling access bundle.
+ */
+function app_linking_scope_requests_rolling(string $scope): bool
+{
+    if (app_linking_scope_allows_admin_media($scope)) {
+        return str_ends_with($scope, APP_LINKING_ROLLING_SUFFIX);
+    }
+    return in_array($scope, [
+        APP_LINKING_GALLERIES_ROLLING_SCOPE,
+        APP_LINKING_UPLOAD_ROLLING_SCOPE,
+        APP_LINKING_GALLERIES_SEARCH_ROLLING_SCOPE,
+        APP_LINKING_UPLOAD_SEARCH_ROLLING_SCOPE,
+        ...APP_LINKING_PRESENTATION_ROLLING_SCOPES,
+    ], true);
+}
+
+/**
+ * Recognize exact temporary and rolling grants for restricted photo access.
+ *
+ * @param string $scope Exact consented scope from the current grant.
+ * @return bool True only for a registered Admin media bundle.
+ */
+function app_linking_scope_allows_admin_media(string $scope): bool
+{
+    return isset(app_linking_admin_media_scopes()[$scope]);
+}
+
+/**
+ * Recognize the exact registered grants with explicit presentation consent.
+ *
+ * @param string $scope Exact scope proposed by the client or stored on a grant.
+ * @return bool True for a registered temporary or rolling presentation grant.
+ */
+function app_linking_scope_allows_presentation(string $scope): bool
+{
+    if (app_linking_scope_allows_admin_media($scope)) {
+        return str_contains($scope, APP_LINKING_ADMIN_PRESENTATION_SUFFIX);
+    }
+    if (in_array($scope, APP_LINKING_PRESENTATION_ROLLING_SCOPES, true)) {
+        return true;
+    }
+    $client = app_linking_public_client(APP_LINKING_WINAPP_CLIENT_ID);
+    return str_ends_with($scope, APP_LINKING_PRESENTATION_SUFFIX)
+        && in_array($scope, $client['scopes'] ?? [], true);
 }
 
 /**
@@ -581,7 +860,7 @@ function app_linking_scope_allows_gallery_search(string $scope): bool
  */
 function app_linking_scope_requests_refresh(string $scope): bool
 {
-    return in_array($scope, [
+    return app_linking_scope_requests_rolling($scope) || in_array($scope, [
         APP_LINKING_IDENTITY_OFFLINE_SCOPE,
         APP_LINKING_GALLERIES_OFFLINE_SCOPE,
         APP_LINKING_UPLOAD_OFFLINE_SCOPE,
@@ -599,7 +878,10 @@ function app_linking_scope_requests_refresh(string $scope): bool
 }
 
 /**
- * Limit direct localhost HTTP linking to temporary access.
+ * Admit rolling renewal on HTTPS and verified direct localhost HTTP.
+ *
+ * The HTTP boundary must obtain the issuer from the configured address and
+ * verify the request socket. Existing offline-only bundles still require HTTPS.
  *
  * @param string $issuer Previously validated exact installation issuer.
  * @param string $scope Exact scope bundle requested or granted.
@@ -608,7 +890,10 @@ function app_linking_scope_requests_refresh(string $scope): bool
 function app_linking_scope_transport_allowed(string $issuer, string $scope): bool
 {
     return str_starts_with($issuer, 'https://')
-        || !app_linking_scope_requests_refresh($scope);
+        || !app_linking_scope_requests_refresh($scope)
+        || (app_linking_scope_requests_rolling($scope)
+            && parse_url($issuer, PHP_URL_SCHEME) === 'http'
+            && parse_url($issuer, PHP_URL_HOST) === 'localhost');
 }
 
 /**
@@ -626,7 +911,9 @@ function app_linking_scope_allowed(string $clientId, string $scope): bool
     }
     if ($scope !== app_linking_scope_without_media($scope)) {
         try {
-            if (!app_linking_media_ready(str_ends_with($scope, APP_LINKING_PRESENTATION_SUFFIX))
+            if (!app_linking_media_ready(app_linking_scope_allows_presentation($scope))
+                || (app_linking_scope_allows_admin_media($scope)
+                    && !app_linking_admin_media_ready())
                 || !schema_inspection_is_available(app_linking_wide_scope_schema_status())) {
                 return false;
             }
@@ -683,18 +970,20 @@ function app_linking_visibility_scope_allowed(string $scope): bool
  *
  * @param string $clientId Registered public-client identifier.
  * @param string $scope Exact proposed or previously approved scope bundle.
- * @return void Returns only while a read or create scope retains verified wide storage.
+ * @return void Returns only while a wide scope retains verified required storage.
  * @throws \RuntimeException When wide storage becomes missing or unknown.
  */
 function app_linking_recheck_wide_scope(string $clientId, string $scope): void
 {
-    if (!in_array(app_linking_scope_base($scope), [
-        APP_LINKING_READ_SCOPE, APP_LINKING_READ_UPLOAD_SCOPE,
-        APP_LINKING_CREATE_SCOPE, APP_LINKING_READ_CREATE_SCOPE,
-        APP_LINKING_UPLOAD_CREATE_SCOPE, APP_LINKING_READ_UPLOAD_CREATE_SCOPE,
-        APP_LINKING_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_VISIBILITY_SCOPE,
-        APP_LINKING_CREATE_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_CREATE_VISIBILITY_SCOPE,
-    ], true)) {
+    if (!app_linking_scope_allows_admin_media($scope)
+        && !in_array($scope, APP_LINKING_PRESENTATION_ROLLING_SCOPES, true)
+        && !in_array(app_linking_scope_base($scope), [
+            APP_LINKING_READ_SCOPE, APP_LINKING_READ_UPLOAD_SCOPE,
+            APP_LINKING_CREATE_SCOPE, APP_LINKING_READ_CREATE_SCOPE,
+            APP_LINKING_UPLOAD_CREATE_SCOPE, APP_LINKING_READ_UPLOAD_CREATE_SCOPE,
+            APP_LINKING_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_VISIBILITY_SCOPE,
+            APP_LINKING_CREATE_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_CREATE_VISIBILITY_SCOPE,
+        ], true)) {
         return;
     }
     schema_inspection_reset_request_cache();

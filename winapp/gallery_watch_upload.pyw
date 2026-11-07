@@ -36,9 +36,9 @@ import copy
 import ctypes
 import email.message
 import hashlib
+import json
 import http.client
 import importlib
-import json
 import math
 import mimetypes
 import multiprocessing
@@ -159,6 +159,8 @@ from uploader.simconnect_time import UtcSyncManager
 from uploader.game_presence import GamePresence
 from uploader.flight_jobs import connection_binding, read_document
 from uploader.flight_report_translations import tr
+from uploader.photos_workspace import PhotosWorkspace
+from uploader.app_linking import LinkedGallery, LinkingSession
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
 from uploader.windows_file_identity import assert_local_windows_profile
 from uploader.state_store import (
@@ -191,6 +193,7 @@ if tk is not None:
     from uploader.ui_theme import (
         GalleryIdentityLabel,
         GlassCard,
+        _PALETTE,
         configure_theme,
         help_button,
         icon_button,
@@ -314,6 +317,7 @@ CONNECTION_DIALOG_SCREEN_MARGIN = (80, 100)
 # Consumers: WatcherApp.build_gallery_link_bar and WatcherApp.build_watch_tab.
 # Rationale: 500 leaves room for neighboring actions at the minimum width.
 WINDOW_SUMMARY_WRAP = 500
+
 # Purpose: Keep watcher preferences readable while allowing shorter screens to scroll.
 # Type: tuple[int, int]; Units: pixels; Scope: watcher settings sheet.
 # Consumers: WatcherApp.open_watcher_settings.
@@ -446,6 +450,17 @@ MIN_STABLE_SECONDS = 0.5
 # request cap for long escaped filenames and their SHA-256 descriptors.
 LINKED_INVENTORY_BATCH_SIZE = 500
 DEFAULT_INVENTORY_REFRESH_SECONDS = 30.0
+
+# Purpose: Bound the watcher recording indicator's accessible color pulse.
+# Type: int. Units: milliseconds. Scope: one active GUI watcher.
+# Consumers: WatcherApp._pulse_watcher_recording.
+# Rationale: 800 ms alternation stays noticeable while never hiding the marker.
+WATCHER_RECORDING_PULSE_MS = 800
+# Purpose: Bound persisted Photos expansion entries against malformed growth.
+# Type: int. Units: gallery IDs. Scope: one site/account preference file.
+# Consumers: WatcherApp.load_photos_tree_state and save_photos_tree_state.
+# Rationale: 10,000 exceeds realistic personal gallery counts while bounding IO.
+PHOTOS_TREE_STATE_MAX_GALLERIES = 10000
 
 # Purpose: Preserve transient-failure backoff without unbound historical state.
 # Type: int. Units: seconds. Scope: one live legacy watcher and source hash.
@@ -6836,6 +6851,13 @@ class WatcherApp:
         self.monitor_detail = "No background worker is active."
         self.log_tags_ready = False
         self.watcher_action_button: Optional["ttk.Button"] = None
+        self._contextual_watch_target: LinkedUploadTarget | None = None
+        self._contextual_watch_is_flight = False
+        self._watcher_key_closing = False
+        self._watcher_recording_pulse = False
+        self._watcher_recording_after: Optional[str] = None
+        self._watcher_recording_target: LinkedUploadTarget | None = None
+        self._watcher_recording_active = False
         self.latest_activity_label: Optional["ttk.Label"] = None
 
         # Uncertain linked uploads remain blocked rather than recoverable, but
@@ -6930,7 +6952,7 @@ class WatcherApp:
 
         Returns:
             None: Builds navigation, update notice, and application views;
-            Watcher remains selected by default.
+            Photos is selected by default; startup mode remains withdrawn.
         """
         configure_theme(self.root)
         ttk.Style(self.root).configure(
@@ -7025,9 +7047,16 @@ class WatcherApp:
         self.navigation_buttons: Dict[str, ttk.Button] = {}
         self.notebook = ttk.Notebook(outer, style="App.TNotebook")
         self.notebook.grid(row=2, column=1, sticky="nsew")
-        tabs: Dict[str, ScrollableFrame] = {}
+        tabs: Dict[str, ttk.Frame | ScrollableFrame] = {}
         self.tab_indices: Dict[str, int] = {}
         for key, label in [
+            (
+                "photos",
+                "▧  " + tr(
+                    self.flights.ui_language.get(),
+                    "photos_pane_title",
+                ),
+            ),
             ("watch", "◉  Watcher"),
             ("import", "⇧  Import"),
             ("activity", "≡  Activity"),
@@ -7038,24 +7067,38 @@ class WatcherApp:
             paint_backdrop(host)
             host.rowconfigure(0, weight=1)
             host.columnconfigure(0, weight=1)
-            scroll = ScrollableFrame(host)
-            scroll.grid(row=0, column=0, sticky="nsew")
-            self.tab_indices[key] = len(tabs)
+            if key == "photos":
+                page = ttk.Frame(host, style="Backdrop.TFrame")
+                page.grid(row=0, column=0, sticky="nsew")
+                paint_backdrop(page)
+                tabs[key] = page
+            else:
+                scroll = ScrollableFrame(host)
+                scroll.grid(row=0, column=0, sticky="nsew")
+                tabs[key] = scroll
             self.notebook.add(host, text=label)
-            tabs[key] = scroll
+            self.tab_indices[key] = self.notebook.index(host)
             self.navigation_buttons[key] = icon_button(
                 rail, label.split()[0],
                 lambda name=key: self.select_tab(name), label.split()[-1],
             )
             self.navigation_buttons[key].pack(pady=(0, 8))
+            if key == "watch":
+                self.navigation_buttons[key].configure(text="◉")
         self.tab_hosts = tabs
 
+        self.build_photos_tab(tabs["photos"])
+        for sequence in ("<Button-3>", "<Button-2>", "<Control-Button-1>"):
+            self.navigation_buttons["watch"].bind(
+                sequence, self.open_watcher_rail_context, add="+",
+            )
         self.build_watch_tab(tabs["watch"].content)
         self.build_manual_tab(tabs["import"].content)
         self.build_activity_tab(tabs["activity"].content)
         self.build_ai_tab(tabs["ai"].content)
         self.build_settings_tab(tabs["settings"].content)
-        self.notebook.select(self.tab_indices["watch"])
+        self._sync_watcher_recording()
+        self.notebook.select(self.tab_indices["photos"])
         self.notebook.bind("<<NotebookTabChanged>>", self.refresh_navigation)
         self.refresh_navigation()
 
@@ -7128,12 +7171,28 @@ class WatcherApp:
             """
             issuer = linked_address.get()
             link.configure(text="Unlink gallery" if issuer else "Link gallery")
+            notebook = getattr(self, "notebook", None)
+            tab_indices = getattr(self, "tab_indices", {})
+            photos_selected = bool(
+                notebook is not None
+                and notebook.index("current") == tab_indices.get("photos")
+            )
             if issuer:
                 address.configure(text="Linked: " + issuer)
                 address.grid(row=0, column=0, sticky="w", padx=(0, 8))
-                choose.grid(row=0, column=1, sticky="w", padx=(0, 6))
-                links.grid(row=0, column=3, sticky="w", padx=(2, 0))
+                if photos_selected:
+                    link.grid_remove()
+                    choose.grid_remove()
+                    links.grid(row=0, column=1, sticky="w", padx=(2, 0))
+                else:
+                    link.grid()
+                    choose.grid(row=0, column=1, sticky="w", padx=(0, 6))
+                    links.grid(row=0, column=3, sticky="w", padx=(2, 0))
             else:
+                if photos_selected:
+                    link.grid_remove()
+                else:
+                    link.grid()
                 address.grid_remove()
                 choose.grid_remove()
                 links.grid_remove()
@@ -7144,6 +7203,7 @@ class WatcherApp:
             else:
                 feedback.grid_remove()
 
+        self._gallery_link_refresh = refresh
         address_trace = linked_address.trace_add("write", refresh)
         status_trace = status.trace_add("write", refresh)
         bar.bind("<Destroy>", lambda event: (
@@ -7235,7 +7295,7 @@ class WatcherApp:
             _event (tk.Event | None): Optional notebook selection event.
 
         Returns:
-            None: Exactly the selected page receives the primary icon style.
+            None: Highlights the selected page and updates contextual link actions.
         """
         selected = self.notebook.index("current")
         for key, button in self.navigation_buttons.items():
@@ -7243,6 +7303,11 @@ class WatcherApp:
                 "IconPrimary.TButton"
                 if self.tab_indices[key] == selected else "App.Icon.TButton"
             ))
+        if getattr(self, "_watcher_recording_active", False):
+            self._render_watcher_recording()
+        refresh_gallery_link = getattr(self, "_gallery_link_refresh", None)
+        if refresh_gallery_link is not None:
+            refresh_gallery_link()
 
     def toggle_watcher(self) -> None:
         """Dispatch the primary Watcher action for the current session state.
@@ -7258,6 +7323,9 @@ class WatcherApp:
         elif state == "active":
             self.stop()
         else:
+            if isinstance(getattr(self, "_contextual_watch_target", None), LinkedUploadTarget):
+                self.release_contextual_watcher()
+                return
             self.start()
 
     def refresh_watcher_action(self) -> None:
@@ -7269,6 +7337,10 @@ class WatcherApp:
         if self.watcher_action_button is None:
             return
         state = self.flights.session_state()
+        if (state == "active"
+                and isinstance(getattr(self, "_contextual_watch_target", None),
+                               LinkedUploadTarget)):
+            self.contextual_watcher_is_flight()
         labels = {
             "active": "■  Stop Watcher",
             "working": self.flights.text("show_upload_progress"),
@@ -7277,6 +7349,124 @@ class WatcherApp:
             "idle": "▶  Start Watcher",
         }
         self.watcher_action_button.configure(text=labels[state])
+        indicator = getattr(self, "watcher_capture_label", None)
+        if indicator is not None:
+            if state == "active":
+                indicator.grid()
+            else:
+                indicator.grid_remove()
+        if (state == "idle"
+                and isinstance(getattr(self, "_contextual_watch_target", None),
+                               LinkedUploadTarget)):
+            self.watcher_action_button.configure(
+                text="Closing Watcher access…" if self._watcher_key_closing
+                else "Retry closing Watcher access",
+            )
+
+    def _set_watcher_recording(
+        self, active: bool, target: LinkedUploadTarget | None = None,
+    ) -> None:
+        """Start or stop the app-wide Watcher recording marker pulse.
+
+        Args:
+            active (bool): Whether an active folder capture owns the indicator.
+            target (LinkedUploadTarget | None): Exact linked target, or None for
+                legacy Watcher capture.
+
+        Returns:
+            None: Updates the rail and Photos workspace and owns one Tk timer.
+        """
+        if not active or self.exiting:
+            if self._watcher_recording_after is not None:
+                self.root.after_cancel(self._watcher_recording_after)
+                self._watcher_recording_after = None
+            self._watcher_recording_target = None
+            self._watcher_recording_active = False
+            self._watcher_recording_pulse = False
+            self._render_watcher_recording()
+            return
+        self._watcher_recording_target = target
+        self._watcher_recording_active = True
+        if self._watcher_recording_after is None:
+            self._watcher_recording_after = self.root.after(
+                WATCHER_RECORDING_PULSE_MS, self._pulse_watcher_recording,
+            )
+        self._render_watcher_recording()
+
+    def _sync_watcher_recording(self) -> None:
+        """Hydrate the recording marker from the live worker lifecycle.
+
+        Returns:
+            None: Reflects active capture without repolling or repainting Photos.
+        """
+        worker = getattr(self, "worker", None)
+        active = bool(
+            not self.exiting and worker is not None and worker.is_alive()
+            and not worker.stop_event.is_set()
+            and not worker.drain_only
+        )
+        target = getattr(worker, "linked_target", None) if active else None
+        if (not isinstance(target, LinkedUploadTarget)
+                and isinstance(getattr(self, "_contextual_watch_target", None),
+                               LinkedUploadTarget)):
+            target = self._contextual_watch_target
+        self._set_watcher_recording(
+            active,
+            target if isinstance(target, LinkedUploadTarget) else None,
+        )
+
+    def _pulse_watcher_recording(self) -> None:
+        """Alternate visible red shades while Watcher capture remains active.
+
+        Returns:
+            None: Schedules the next bounded pulse or clears stale worker state.
+        """
+        self._watcher_recording_after = None
+        worker = getattr(self, "worker", None)
+        if (self.exiting or worker is None or not worker.is_alive()
+                or worker.stop_event.is_set() or worker.drain_only):
+            self._set_watcher_recording(False)
+            return
+        self._watcher_recording_pulse = not self._watcher_recording_pulse
+        self._render_watcher_recording()
+        self._watcher_recording_after = self.root.after(
+            WATCHER_RECORDING_PULSE_MS, self._pulse_watcher_recording,
+        )
+
+    def _render_watcher_recording(self) -> None:
+        """Paint the persistent rail dot and forward exact Photos target state.
+
+        Returns:
+            None: Uses two visible danger-token shades and updates one workspace.
+        """
+        button = getattr(self, "navigation_buttons", {}).get("watch")
+        if button is not None:
+            if self._watcher_recording_active:
+                button.configure(style=(
+                    "Watcher.RecordingBright.Icon.TButton"
+                    if self._watcher_recording_pulse
+                    else "Watcher.RecordingDim.Icon.TButton"
+                ))
+            else:
+                notebook = getattr(self, "notebook", None)
+                try:
+                    selected = (
+                        notebook is not None
+                        and self.tab_indices.get("watch")
+                        == notebook.index("current")
+                    )
+                except (AttributeError, tk.TclError):
+                    selected = False
+                button.configure(style=(
+                    "IconPrimary.TButton" if selected else "App.Icon.TButton"
+                ))
+        workspace = getattr(self, "photos_workspace", None)
+        callback = getattr(workspace, "set_watcher_recording", None)
+        if callback is not None:
+            callback(
+                self._watcher_recording_target,
+                self._watcher_recording_pulse,
+            )
 
 
     def configure_window_icon(self) -> None:
@@ -7339,9 +7529,13 @@ class WatcherApp:
         """Start the Windows tray icon with current update state.
 
         Returns:
-            None: Starts a tray thread with fresh base artwork, current update
-                badge, bounded tooltip text and update-aware menu when available.
+            None: Starts Windows tray integration when supported; the macOS
+                source app remains available in its main window.
         """
+        if sys.platform == "darwin":
+            # Tk owns the Cocoa main loop. A Windows-style tray worker would
+            # call AppKit off the main thread and terminate the source app.
+            return
         if pystray is None or Image is None:
             self.write_log("System tray unavailable. Run install.bat to install pystray and Pillow.", "warning")
             return
@@ -7618,6 +7812,7 @@ class WatcherApp:
             self.api_key_request_blockers()
             or self.semantic_ai_install_running
             or self.api_key_revoke_running
+            or getattr(self, "_watcher_key_closing", False) is True
         )
 
     def handle_window_unmap(self, event: "tk.Event") -> None:
@@ -7692,6 +7887,149 @@ class WatcherApp:
         except Exception:  # noqa: BLE001
             logging.debug("Tray icon shutdown failed.", exc_info=True)
 
+    def build_photos_tab(self, parent: "tk.Misc") -> None:
+        """Build the main-window gallery tree and embedded photo workspace.
+
+        Args:
+            parent (tk.Misc): Main-window frame for the Photos page.
+
+        Returns:
+            None: Loads the exact current linked session without another window.
+        """
+        parent.rowconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
+        self.photos_workspace = PhotosWorkspace(
+            parent,
+            self.linking_manager.photos_session,
+            self.open_photos,
+            language=lambda: self.flights.ui_language.get(),
+            manager=self.linking_manager,
+            format_bytes=self.format_bytes,
+            manage_link=self.manage_gallery_link,
+            start_watcher=self.open_gallery_watcher,
+            simbrief_available=self.simbrief_available,
+            simbrief_action=self.flights.toggle_simbrief,
+            load_tree_state=self.load_photos_tree_state,
+            save_tree_state=self.save_photos_tree_state,
+        )
+        self.photos_workspace.grid(row=0, column=0, sticky="nsew")
+        self._sync_watcher_recording()
+        address_trace = self.linking_manager.linked_address.trace_add(
+            "write", lambda *_trace_info: self.photos_workspace.refresh_session(),
+        )
+        self.photos_workspace.bind(
+            "<Destroy>",
+            lambda event: self.linking_manager.linked_address.trace_remove(
+                "write", address_trace,
+            ) if event.widget is self.photos_workspace else None,
+            add="+",
+        )
+
+    def _photos_tree_state_path(self, session: LinkingSession) -> Path | None:
+        """Build a credential-free preference path for one verified account.
+
+        Args:
+            session (LinkingSession): Exact current Photos session.
+
+        Returns:
+            Path | None: Hashed site/account preference path, or None when stale.
+        """
+        identity_reader = getattr(self.linking_manager, "photos_site_identity", None)
+        identity = identity_reader(session) if identity_reader is not None else None
+        if identity is None:
+            return None
+        issuer, user_id = identity
+        key = hashlib.sha256(
+            f"{issuer}\0{user_id}".encode("utf-8"),
+        ).hexdigest()
+        return CONFIG_DIR / "photos-tree" / f"{key}.json"
+
+    def load_photos_tree_state(
+        self, session: LinkingSession,
+    ) -> Dict[int, bool]:
+        """Load validated gallery expansion preferences for the live account.
+
+        Args:
+            session (LinkingSession): Exact current Photos session.
+
+        Returns:
+            Dict[int, bool]: Positive gallery IDs mapped to open state; invalid
+                or unavailable preferences produce an empty mapping.
+        """
+        path = self._photos_tree_state_path(session)
+        if path is None:
+            return {}
+        try:
+            payload = read_document(path)
+            if (payload.get("version") != 1
+                    or not isinstance(payload.get("open"), dict)):
+                return {}
+            state: Dict[int, bool] = {}
+            for raw_id, opened in payload["open"].items():
+                if len(state) >= PHOTOS_TREE_STATE_MAX_GALLERIES:
+                    break
+                if (not isinstance(raw_id, str) or not raw_id.isdecimal()
+                        or not isinstance(opened, bool)):
+                    continue
+                gallery_id = int(raw_id)
+                if gallery_id > 0:
+                    state[gallery_id] = opened
+            return state
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def save_photos_tree_state(
+        self, session: LinkingSession, state: Dict[int, bool],
+    ) -> None:
+        """Atomically save bounded gallery expansion preferences.
+
+        Args:
+            session (LinkingSession): Exact current Photos session.
+            state (Dict[int, bool]): Positive gallery IDs mapped to booleans.
+
+        Returns:
+            None: Writes only preferences after rechecking exact live identity.
+        """
+        path = self._photos_tree_state_path(session)
+        if path is None:
+            return
+        bounded = {
+            str(gallery_id): opened
+            for gallery_id, opened in state.items()
+            if type(gallery_id) is int and gallery_id > 0
+            and isinstance(opened, bool)
+        }
+        if len(bounded) > PHOTOS_TREE_STATE_MAX_GALLERIES:
+            return
+        try:
+            atomic_write_json(path, {"version": 1, "open": bounded})
+        except (OSError, ValueError):
+            logging.debug("Photos tree preferences could not be saved.")
+
+    def open_photos(self) -> None:
+        """Open the existing connection flow for the Photos workspace.
+
+        Returns:
+            None: Update handoff blocks new UI work; otherwise the existing
+                address dialog starts or changes the live site connection.
+        """
+        if self.updates.blocked():
+            return
+        self.linking_manager.open_address_dialog()
+
+    def open_watcher_rail_context(self, event: "tk.Event") -> str | None:
+        """Open the same selected-gallery card beside the Watcher rail button.
+
+        Args:
+            event (tk.Event): Secondary pointer action on the Watcher trigger.
+
+        Returns:
+            str | None: Tk break for a handled Photos context, otherwise None.
+        """
+        if self.notebook.index("current") == self.tab_indices["photos"]:
+            return self.photos_workspace.open_selected_watcher_context(event)
+        return None
+
     def build_watch_tab(self, parent: "tk.Misc") -> None:
         """
         Build controls dedicated to watch-folder uploading.
@@ -7720,11 +8058,18 @@ class WatcherApp:
             target, "settings", self.open_connection_dialog,
             "Upload via API key",
         ).grid(row=0, column=1, padx=(8, 0))
+        connection = ttk.Frame(hero, style="Card.TFrame")
+        connection.grid(row=0, column=1, sticky="e", padx=(16, 0))
         ttk.Label(
-            hero, textvariable=self.connection_status_var, style="Muted.TLabel",
-        ).grid(row=0, column=1, sticky="e", padx=(16, 0))
+            connection, textvariable=self.connection_status_var, style="Muted.TLabel",
+        ).grid(row=0, column=0)
+        self.watcher_capture_label = ttk.Label(
+            connection, text="● REC", style="Watcher.Active.TLabel",
+        )
+        self.watcher_capture_label.grid(row=0, column=1, padx=(8, 0))
+        self.watcher_capture_label.grid_remove()
         flight_actions = ttk.Frame(hero, style="Card.TFrame")
-        flight_actions.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        flight_actions.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
         self.finish_flight_button = ttk.Button(
             flight_actions, text=self.flights.text("finish_flight"),
             command=self.flight_action,
@@ -7781,7 +8126,10 @@ class WatcherApp:
             card, textvariable=self.watch_folder_display_var,
             style="Muted.TLabel", wraplength=WINDOW_SUMMARY_WRAP,
         ).grid(row=1, column=0, sticky="w", pady=(1, 4))
-        ttk.Label(card, textvariable=self.status_var, style="Status.TLabel").grid(
+        ttk.Label(
+            card, textvariable=self.status_var, style="Status.TLabel",
+            wraplength=WINDOW_SUMMARY_WRAP,
+        ).grid(
             row=2, column=0, sticky="w", pady=(1, 3)
         )
         state = ttk.Frame(card, style="Card.TFrame")
@@ -9176,6 +9524,8 @@ class WatcherApp:
             str | None: Short reason for refusal, or None when the mode
                 and existing work permit the change.
         """
+        if isinstance(getattr(self, "_contextual_watch_target", None), LinkedUploadTarget):
+            return 'Finish the current Watcher capture before changing its gallery.'
         if self.background_work_active() or self.flights.is_alive() or self.flights.busy():
             return 'Wait for the current Watcher, import or flight work to stop.'
         try:
@@ -9384,6 +9734,7 @@ class WatcherApp:
         Returns:
             None: Reports unavailable evidence without opening a fallback mode.
         """
+        self.events.put({"kind": "linking_resume_startup"})
         try:
             self.mode_owner.initialize()
         except ModeCoordinatorError:
@@ -9559,11 +9910,141 @@ class WatcherApp:
         if self.save_config():
             self.test_connection()
 
-    def start(self) -> None:
+    def simbrief_available(self) -> bool:
+        """Check whether the current game supports the shared SimBrief controls.
+
+        Returns:
+            bool: True when the existing game observer reports a flight simulator.
+        """
+        return self.simulator_presence.flight_detected
+
+    def contextual_watcher_is_flight(self) -> bool:
+        """Latch observed simulator evidence for the current contextual capture.
+
+        Returns:
+            bool: True after simulator detection or any retained flight sample,
+                including after the simulator closes.
+        """
+        if self._contextual_watch_is_flight:
+            return True
+        if self.simbrief_available():
+            self._contextual_watch_is_flight = True
+        else:
+            recorder = self.flights.recorder
+            samples = (
+                recorder.diagnostics_snapshot().get("sample_count")
+                if recorder is not None else None
+            )
+            self._contextual_watch_is_flight = type(samples) is int and samples > 0
+        return self._contextual_watch_is_flight
+
+    def open_gallery_watcher(
+        self, session: LinkingSession, gallery: LinkedGallery,
+    ) -> None:
+        """Open Watcher for the exact gallery selected in the Photos workspace.
+
+        Args:
+            session (LinkingSession): Current explicitly approved Photos link.
+            gallery (LinkedGallery): Physical gallery selected for screenshots.
+
+        Returns:
+            None: Opens existing progress or requests temporary Watcher authority.
+        """
+        if self.updates.blocked():
+            return
+        self.select_tab("watch")
+        state = self.flights.session_state()
+        if state == "working":
+            self.flights.show_progress()
+            return
+        if state in ("pending", "blocked"):
+            self.flights.show_recovery()
+            return
+        if state != "idle":
+            return
+        if self._contextual_watch_target is not None:
+            self.release_contextual_watcher()
+            self.status_var.set("Closing previous Watcher access. Try again when it finishes.")
+            return
+        folder = self.watched_folder_var.get().strip()
+        try:
+            ready = bool(folder) and Path(folder).is_dir()
+        except OSError:
+            ready = False
+        if not ready:
+            self.browse_folder()
+            folder = self.watched_folder_var.get().strip()
+            try:
+                if not folder or not Path(folder).is_dir():
+                    return
+            except OSError:
+                return
+        self.status_var.set("Preparing the Watcher connection…")
+        self.linking_manager.start_photos_watcher(
+            session, gallery, self._start_contextual_watcher,
+            self.status_var.set,
+        )
+
+    def _start_contextual_watcher(self, target: LinkedUploadTarget) -> bool:
+        """Start the existing Watcher with one freshly issued temporary key.
+
+        Args:
+            target (LinkedUploadTarget): Verified gallery and in-memory Watcher key.
+
+        Returns:
+            bool: True when the accepted capture owns the temporary credential.
+        """
+        try:
+            self.start(contextual_target=target)
+        except Exception:  # noqa: BLE001
+            self.status_var.set("Watcher could not start.")
+        return self._contextual_watch_target is target
+
+    def release_contextual_watcher(self) -> None:
+        """Revoke one temporary key after the existing finalization completed.
+
+        Returns:
+            None: Starts bounded cleanup or preserves unfinished capture authority.
+        """
+        target = getattr(self, "_contextual_watch_target", None)
+        if (not isinstance(target, LinkedUploadTarget) or target.watch_key is None
+                or self._watcher_key_closing
+                or self.flights.session_state() != "idle"):
+            return
+        key = target.watch_key
+        self._watcher_key_closing = True
+
+        def revoke() -> None:
+            """Revoke the exact captured credential off the Tk thread.
+
+            Returns:
+                None: Queues a confirmation or retryable failure without the key text.
+            """
+            try:
+                target.session.close_watch_key(target.gallery_id, key)
+                closed = True
+            except Exception:  # noqa: BLE001
+                closed = False
+            self.events.put({
+                "kind": "photos_watch_key_closed",
+                "payload": {"target": target, "closed": closed},
+            })
+
+        try:
+            threading.Thread(target=revoke, name="PhotosWatcherKeyClose", daemon=True).start()
+        except RuntimeError:
+            self._watcher_key_closing = False
+        self.refresh_watcher_action()
+
+    def start(self, *, contextual_target: LinkedUploadTarget | None = None) -> None:
         """
         Start the watcher worker using the current form values.
 
         Files already present at start are intentionally counted and ignored.
+
+        Args:
+            contextual_target (LinkedUploadTarget | None): Verified ephemeral
+                authority for this Photos capture, or None for ordinary Watcher.
 
         Returns:
             None: Starts watching and admits UTC work only when selected.
@@ -9594,6 +10075,16 @@ class WatcherApp:
 
         try:
             linked_target = self.capture_linked_target()
+            if contextual_target is not None:
+                if (linked_target is None or contextual_target.watch_key is None
+                        or linked_target.session is not contextual_target.session
+                        or linked_target.binding() != contextual_target.binding()):
+                    raise ValueError('The Watcher gallery changed before capture.')
+                linked_target = contextual_target
+            elif isinstance(getattr(self, "_contextual_watch_target", None),
+                            LinkedUploadTarget):
+                self.release_contextual_watcher()
+                return
             config = (self.current_watcher_config() if linked_target is not None
                       else self.current_config())
             if linked_target is not None and (
@@ -9625,7 +10116,12 @@ class WatcherApp:
                 captured, self.events, linked_target,
                 gui_admission=(self.mode_owner, config_port),
             )
-            directory = self.flights.start_session()
+            contextual_flight = contextual_target is not None and self.simbrief_available()
+            directory = (
+                self.flights.start_session(photos_only=True)
+                if contextual_target is not None and not contextual_flight
+                else self.flights.start_session()
+            )
             self.worker.configure_drain(directory, existing)
             self.worker.start()
         except (OSError, ValueError, RuntimeError) as exc:
@@ -9635,6 +10131,10 @@ class WatcherApp:
             messagebox.showerror("Watcher state", str(exc))
             self.worker = None
             return
+        if contextual_target is not None:
+            self._contextual_watch_target = contextual_target
+            self._contextual_watch_is_flight = contextual_flight
+        self._set_watcher_recording(True, linked_target)
         self.refresh_utc_sync()
         self.status_var.set("Running")
         self.watcher_activity_var.set("Watch: running")
@@ -9647,9 +10147,15 @@ class WatcherApp:
         """Stop observation and finish accepted photographs and flight reports.
 
         Returns:
-            None: Shows the shared progress view without requesting revocation.
+            None: Routes ordinary and contextual captures through shared drain.
         """
-        self.flights.begin(False)
+        self._set_watcher_recording(False)
+        if not isinstance(getattr(self, "_contextual_watch_target", None), LinkedUploadTarget):
+            self.flights.begin(False)
+        elif self.contextual_watcher_is_flight():
+            self.flights.finish_report()
+        else:
+            self.flights.begin(False, photos_only=True)
 
     def resume_flight_photos(self, directory: Path) -> Optional[WatcherThread]:
         """Resume only unfinished photographs from the bound session queue.
@@ -9683,6 +10189,12 @@ class WatcherApp:
         if not drain_folder.is_absolute():
             raise ValueError("The original Watcher folder could not be verified.")
         linked_target = self.capture_linked_target()
+        contextual_target = getattr(self, "_contextual_watch_target", None)
+        if isinstance(contextual_target, LinkedUploadTarget):
+            if (linked_target is None or contextual_target.session is not linked_target.session
+                    or contextual_target.binding() != linked_target.binding()):
+                raise ValueError('The accepted Watcher gallery changed before recovery.')
+            linked_target = contextual_target
         # Resume only a queue admitted under the current exact connection.
         if not any(plan.directory.resolve() == directory.resolve()
                    for plan in self.flights.pending()):
@@ -9974,6 +10486,11 @@ class WatcherApp:
             action_label = self.simulator_presence.action_label(
                 action, self.flights.ui_language.get()
             )
+            if (action == "finish"
+                    and isinstance(getattr(self, "_contextual_watch_target", None),
+                                   LinkedUploadTarget)
+                    and self.contextual_watcher_is_flight()):
+                action_label = self.flights.text("finish_flight")
         else:
             action_label = self.flights.text({
                 "progress": "show_upload_progress",
@@ -10324,7 +10841,12 @@ class WatcherApp:
         if action == "begin":
             self.open_connection_dialog()
         elif action == "finish":
-            self.flights.finish_report()
+            if (isinstance(getattr(self, "_contextual_watch_target", None),
+                           LinkedUploadTarget)
+                    and not self.contextual_watcher_is_flight()):
+                self.flights.begin(False, automatic=True, photos_only=True)
+            else:
+                self.flights.finish_report()
         elif action == "progress":
             self.flights.show_progress()
         elif action == "recover":
@@ -10436,6 +10958,7 @@ class WatcherApp:
         if self.exiting:
             return
         self.exiting = True
+        self._set_watcher_recording(False)
         self.write_log("Application shutdown requested. Stopping background work safely.", "system")
 
         if self.preflight_worker and self.preflight_worker.is_alive():
@@ -10485,6 +11008,7 @@ class WatcherApp:
             ):
                 self.exiting = False
                 self.hide_to_tray()
+                self._sync_watcher_recording()
                 self.root.after(200, self.drain_events)
                 return
         self.set_update_available(None)
@@ -11286,8 +11810,21 @@ class WatcherApp:
                         self.record_activity("error", "Connection test failed: " + message, "system")
                 elif kind == "flight_abandoned":
                     self.flights.forgotten(str(payload.get("binding", "")))
+                elif kind == "photos_watch_key_closed":
+                    if payload.get("target") is self._contextual_watch_target:
+                        self._watcher_key_closing = False
+                        if payload.get("closed") is True:
+                            target = self._contextual_watch_target
+                            self._contextual_watch_target = None
+                            self._contextual_watch_is_flight = False
+                            self.linking_manager.detach_photos_watcher_target(target)
+                        else:
+                            self.status_var.set("Watcher access could not be closed. Retry.")
+                        self.refresh_watcher_action()
                 elif kind == "saved_linked_mode_ready":
                     self.linked_target_changed()
+                elif kind == "linking_resume_startup":
+                    self.linking_manager.resume_recent_links()
                 elif kind == "api_key_revoked":
                     self.api_key_revoke_running = False
                     self.api_key_revoke_thread = None

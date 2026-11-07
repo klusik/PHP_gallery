@@ -34,17 +34,17 @@ the prepared plan covers every registered route before processing requests.
 WinApp's main **Link gallery** action accepts a pasted address in its own
 dialog. The linking workspace keeps that address in memory independently of
 the API-key upload endpoint. Remote addresses use verified HTTPS. The literal
-`http://localhost` issuer works for temporary access when both endpoints of
+`http://localhost` issuer permits temporary and rolling access when both endpoints of
 the PHP request are loopback and the configured authority and mount match.
 WinApp connects only to loopback for that issuer and refuses redirects. The
-scheme is part of the binding. Renewal credentials require HTTPS. On Apache
+scheme is part of the binding. Legacy offline consent requires HTTPS. On Apache
 with `mod_fastcgi`, the gallery's `.htaccess` passes linking bearer headers
 through the CGI environment. The linking controller reads the existing
 `REDIRECT_HTTP_AUTHORIZATION` value when Apache redirects to PHP.
-Confirming the address starts a temporary link with
-gallery listing, plus upload when the local Windows or macOS profile and the
-server support it. The actual scope is shown for approval. The main action never
-requests renewal. After exchange, WinApp shows the verified installation
+Confirming the address requests gallery listing, plus upload when the local
+Windows or macOS profile and server support it. Compatible servers offer
+explicit rolling consent with the exact `rolling_access offline_access`
+suffix. Older servers use the temporary link. After exchange, WinApp shows the verified installation
 address and loads the first gallery page. The gallery picker opens next to
 that address. Watcher and Import show the selected upload destination. On
 macOS, the source app keeps the second mode record in a private, locked
@@ -58,8 +58,8 @@ handle and the exact issuer start URL. The handle reuses the existing hashed
 claim and PKCE request; no schema migration is required. The browser stores it
 in the session, removes it from the visible URL before ordinary Admin login,
 then binds it after login with CSRF protection. The current session displays
-explicit consent for up to 15 minutes and optional separately approved
-30-day/7-day renewal. Only Approve or Cancel starts the existing one-use PKCE
+the exact permissions and expiry policy for explicit consent. Access tokens
+last up to 15 minutes. Only Approve or Cancel starts the existing one-use PKCE
 loopback exchange. Duplicate, mismatched, expired and replayed handles fail.
 The handle alone grants neither authorization nor credentials. The original
 gallery-scoped `pgu_` workflow remains independent.
@@ -73,11 +73,13 @@ reads each page. An invalidated grant is refused rather than represented as an
 empty page. The original `link:identity` grant cannot list galleries.
 The distinct `gallery:upload` bundle requires explicit consent for upload to
 all ordinary Admin galleries, including private and unpublished galleries.
-Listing or selecting a gallery alone grants no upload rights. The separately
-consented `offline_access` flow stores rotating refresh hashes on the server,
-locks the current user and grant, and revokes the family on detected replay.
-When explicitly selected, the Windows client can retain a refresh credential in
-Credential Manager and reconnect manually under a local rotation fence.
+Listing or selecting a gallery alone grants no upload rights. Rolling access
+renews both refresh-family deadlines for seven days on authenticated bearer
+use or rotation. The refresh token inherits those deadlines. The transaction
+locks the user, grant, family and token in order. Legacy offline consent
+retains its 30-day absolute limit and seven-day idle limit. The server stores
+hashes and revokes the family on detected replay. Rolling rotation can prune
+consumed hashes after seven days and retains the 4,096-hash family cap.
 All linking and delegated-upload increments remain experimental and unqualified.
 
 The separately consented `gallery:read` scope, combined with identity and
@@ -90,18 +92,94 @@ cancel an in-flight response. Old grants do not acquire the new scope, and an
 older server may not support it; the client does not silently downgrade.
 Real Windows, HTTPS deployment and database behavior remain unqualified.
 
-Media browsing adds separately approved temporary `media:read` consent and
-optional `presentation:read` consent. The shared public export policy permits
-only direct non-NSFW photos from galleries whose full ancestor chain is public,
-listed, normal-access and non-NSFW. The photo endpoint pages at most eight
-items, caps each binary at 16 MiB and retains existing live authorization,
-scope, HTTPS, ETag and Range checks. Presentation reads expose up to 32 visible
-MP3/WAV tracks and use the existing native Pillow and WinMM path. No dependency
-or schema migration is added. Discovery keeps these controls unavailable when
-an older server does not advertise the scopes. Disposable HTTPS verified the
-media contract and Windows Tk verified the native reader. The internal Codex
-render fixture passed at 1000 and 360 px. Audible Windows playback and an
-installed click-through remain separate evidence.
+Photos uses the current verified `galleries:list` link for media already
+eligible for anonymous public export. The server rechecks the exact issuer,
+live grant, administrator role, readiness and public policy on each request.
+The policy requires direct non-NSFW photos and a public, listed, normal-access,
+non-NSFW gallery ancestor chain. An explicitly approved `media:admin` link
+adds access to administrator media, including hidden and NSFW galleries and
+photos. The server still checks the live administrator and the photo's direct
+gallery ownership. Media eligible only through the administrator lane is
+transient and served with `no-store`. The legacy `media:read` suffix is
+accepted and presentation settings and tracks require `presentation:read`.
+Browser approval offers the supported rolling permissions for this installation.
+Photo metadata uses bounded eight-item legacy or 64-item opt-in pages.
+Binary responses retain the 16 MiB limit and validator checks. Photos and
+thumbnails have a separate limit of 600 requests
+per IP and 3,600 globally per five minutes. Photos displays a limit on HTTP
+429 and pauses speculative work until Retry. The thumbnail route prefers an
+existing configured rendition and can fall back to the existing public display file within those
+limits. Presentation reads expose up to 32 visible MP3/WAV tracks for local
+WinMM or macOS playback. Both paths reuse the current schema.
+
+The normal WinApp launch selects Photos in the main window. Its workspace
+loads the live link's gallery hierarchy from server pages and opens a gallery
+in the adjacent responsive grid automatically. The left tree selects a photo
+gallery independently of the upload target chosen in Watcher or Import.
+WinApp restores an approved rolling link from macOS Keychain or Windows
+Credential Manager by rotating the refresh credential and verifying the same
+issuer, scope and Admin identity. macOS can also restore a legacy temporary
+listing grant before its original expiry.
+An explicitly approved Admin Photos upgrade for the same installation and
+account replaces the matching saved rolling binding and activates its new
+session. The Photos workspace reloads permissions and gallery data from that
+session.
+When disconnected, the Photos pane offers the existing address and browser
+link flow. The `--startup` path stays in the system tray until restored.
+
+The embedded reader binds work to the exact live session and gallery and
+cancels it when that selection is replaced. The default-on Subgalleries switch
+adds direct child folder cards above the photo grid. Each cover is the first
+authorized direct thumbnail, with a neutral folder fallback. Photos keeps
+listings in memory and uses the current link grant. Internal cursor pages
+append to a continuously scrolling grid. The viewport drives thumbnail
+requests. Manual navigation and the slideshow use the same looping album
+order and prepare adjacent details in bounded memory. A per-user cache
+stores server-opted-in photo and audio bytes with content digests up to
+4,096 entries or 1 GiB. An authorized matching ETag revalidates the stored
+photo bytes after their 60-second fresh interval. Authorized playlist
+descriptors bind reused track bytes by SHA-256, size and MIME type. The
+native player consumes local files and prepares the next track for handoff.
+The workspace retains a bounded decoded thumbnail cache across album
+selections under the current authorized session. Viewport changes share one
+in-flight request per thumbnail. Contextual album and photo
+panels show indexed server metadata and local cache coverage. Detailed Admin
+metadata is fetched on demand for the exact gallery or direct photo. Album
+creation and visibility changes go through the same server-owned mutations as
+the corresponding linked management actions. Native photo deletion uses the
+saved Admin Photos `media:admin` grant, including existing links with the
+historical `media:delete` bundle. It rechecks the live bearer and every direct
+image under the gallery writer lease, then delegates to the web Admin
+deletion owner. The bulk runtime
+loads only for the authorized POST. A visible Admin album can check a small
+indexed revision and reconcile loaded photo descriptors with its thumbnail
+cache. Tree expansion is a local preference scoped to site and Admin account.
+The contextual Watcher action
+verifies the gallery through the existing upload mode owner, then gives the
+capture a temporary key bound to its live link and physical gallery. The
+existing finish workflow drains uploads and flight reports before revoking
+that key. Photos retains the site session independently.
+The grid, lightbox, fullscreen and contextual controls
+share the main WinApp window. The lightbox temporarily unmaps the main content
+frame and restores its geometry and focus on dismissal, including after an
+image load error. F and F11 toggle fullscreen. Pointer motion reveals the
+controls briefly, including music transport for an authorized playlist.
+Explicit slideshow launch enters fullscreen, advances through the album and
+starts the configured soundtrack when permitted. The wheel or trackpad zooms
+in either view. Both windowed and fullscreen geometry contain the current
+frame. The default content fit removes detected black bands for display and
+the toggle restores the original frame. Grid tile
+placement changes at column breakpoints. The lightbox coalesces resize work
+into lightweight previews followed by a full-quality render. A photo's location
+action is available when the server supplies authorized coordinates. Installed
+Windows acceptance and audible playback require separate evidence. Native
+photo display uses 8-bit RGB on the Pillow/Tk path. On macOS, an available
+AppKit bridge can decode compatible detail source bytes through Core Image
+and present a 10-bit PQ raster in the same window. Admission checks the
+current display's EDR capability. Core Animation tone maps the raster in a
+floating-point layer using the available display headroom. The bounded
+Pillow/Tk fallback covers Windows, SDR
+displays, older Tk builds and images without usable HDR data.
 
 Visibility changes use the existing gallery edit revision and writer lease;
 they add no schema. A v2 filesystem marker binds unchanged gallery columns and

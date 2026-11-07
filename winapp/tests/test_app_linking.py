@@ -33,7 +33,7 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader import app_linking as linking
-from uploader import offline_linking
+from uploader import gallery_media_cache, offline_linking
 from uploader.flight_report_translations import tr
 from uploader.linked_create import BoundCreateReceipt, CreateIntent
 from uploader.linked_upload import LinkedUploadTarget
@@ -280,6 +280,94 @@ class LinkingTransportTests(unittest.TestCase):
                         ('app_linking_discovery', 'GET', None, None),
                         request.call_args.args[1:5],
                     )
+
+    def test_normal_link_negotiates_rolling_and_keeps_transient_fallback(self) -> None:
+        """Select exact advertised access, including local rolling-only discovery.
+
+        Returns:
+            None: The sole push asks for the expected browser-consent scope.
+        """
+        issuer = 'http://localhost:8888/Galerie'
+        for advertised, expected in (
+            ('rolling_access', linking.ROLLING_GALLERY_SEARCH_SCOPES[1]),
+            ('offline_access', linking.GALLERY_SEARCH_SCOPES[1]),
+        ):
+            with self.subTest(advertised=advertised):
+                envelope = discovery_response(
+                    issuer, linking.GALLERY_SEARCH_SCOPES[1] + ' ' + advertised,
+                )
+                attempt = linking.LinkingAttempt(issuer, scope=linking.GALLERIES_SCOPE)
+                self.addCleanup(attempt.close)
+                with mock.patch.object(
+                    linking, '_request_json',
+                    side_effect=[envelope, handoff_response(issuer)],
+                ) as request:
+                    attempt.push_request(prefer_upload=True, prefer_rolling=True)
+                self.assertEqual(
+                    ('app_linking_discovery', 'app_linking_push'),
+                    tuple(call.args[1] for call in request.call_args_list),
+                )
+                self.assertEqual(
+                    [expected], parse_qs(request.call_args.args[3].decode('ascii'))['scope'],
+                )
+                self.assertEqual(
+                    expected.endswith(linking.ROLLING_SCOPE_SUFFIX),
+                    attempt.requests_offline_access(),
+                )
+
+    def test_normal_link_negotiates_explicit_presentation_bundles(self) -> None:
+        """Preserve basic permissions and negotiate only advertised playback.
+
+        Returns:
+            None: The push retains upload and search or uses the exact fallback.
+        """
+        issuer = 'http://localhost:8888/Galerie'
+        listing = linking.UPLOAD_SCOPE
+        search = linking.GALLERY_SEARCH_SCOPES[1]
+        presentation = linking.PRESENTATION_SCOPE_SUFFIX
+        rolling = linking.ROLLING_SCOPE_SUFFIX
+        media = ' media:read presentation:read'
+        marker = ' presentation:rolling'
+        for advertised, vault, expected in (
+            (search + media + marker, True, search + presentation + rolling),
+            (search + media, True, search + rolling),
+            (listing + media + marker, False, listing + presentation),
+            (search + media + marker, False, search),
+        ):
+            with self.subTest(advertised=advertised, vault=vault):
+                envelope = discovery_response(issuer, advertised + ' rolling_access')
+                attempt = linking.LinkingAttempt(issuer, scope=linking.GALLERIES_SCOPE)
+                self.addCleanup(attempt.close)
+                with mock.patch.object(
+                    linking, '_request_json',
+                    side_effect=[envelope, handoff_response(issuer)],
+                ) as request:
+                    attempt.push_request(
+                        prefer_upload=True, prefer_rolling=vault, prefer_presentation=True,
+                    )
+                self.assertEqual(
+                    [expected], parse_qs(request.call_args.args[3].decode('ascii'))['scope'],
+                )
+                self.assertEqual(linking.UPLOAD_SCOPE, linking.scope_base(expected))
+                self.assertEqual(
+                    'galleries:search' in expected.split(),
+                    linking.scope_allows_gallery_search(expected),
+                )
+                self.assertEqual(
+                    'presentation:read' in expected.split(),
+                    linking.scope_allows_presentation(expected),
+                )
+
+        for invalid in (
+            listing + ' presentation:read' + rolling,
+            listing + presentation + ' offline_access',
+            listing + rolling + presentation,
+            search + presentation,
+            listing + linking.MEDIA_SCOPE_SUFFIX + presentation,
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(linking.scope_allows_presentation(invalid))
+                self.assertIsNone(linking.scope_base(invalid))
 
     def test_push_validates_versioned_handle_url_and_lifetime(self) -> None:
         """Accept extensible handoffs but reject malformed authority data.
@@ -890,6 +978,53 @@ class LinkingTransportTests(unittest.TestCase):
         self.assertEqual(linking.LINKING_HTTPS_DEFAULT_PORT, factory.call_args.args[1])
         connection.request.assert_called_once()
 
+    def test_only_exact_refresh_error_is_a_definite_rejection(self) -> None:
+        """Distinguish a complete invalid-grant reply from uncertain failures.
+
+        Returns:
+            None: The exact response is classified after one same-issuer POST.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        refresh_body = b'grant_type=refresh_token&refresh_token=fixture&client_id=fixture'
+        refusal = b'{"error":"invalid_grant"}'
+        for status, form, cache, payload, truncated, definite in (
+            (400, refresh_body, 'no-store', refusal, False, True),
+            (400, refresh_body, 'no-store', refusal, True, False),
+            (400, refresh_body, 'private', refusal, False, False),
+            (400, refresh_body, 'no-store', b'{"error":"invalid_request"}', False, False),
+            (400, refresh_body, 'no-store',
+             b'{"error":"invalid_grant","extra":true}', False, False),
+            (400, b'grant_type=authorization_code&code=fixture',
+             'no-store', refusal, False, False),
+            (503, refresh_body, 'no-store', refusal, False, False),
+        ):
+            with self.subTest(status=status, form=form, cache=cache, payload=payload,
+                              truncated=truncated):
+                headers = Message()
+                headers['Content-Type'] = 'application/json'
+                headers['Cache-Control'] = cache
+                headers['Content-Length'] = str(len(payload) + int(truncated))
+                response = mock.MagicMock()
+                response.__enter__.return_value = response
+                response.status = status
+                response.headers = headers
+                response.read.return_value = payload
+                connection = mock.MagicMock()
+                connection.getresponse.return_value = response
+                with mock.patch.object(
+                    linking, '_DeadlineHTTPSConnection', return_value=connection,
+                ) as factory, self.assertRaises(linking.LinkingError) as caught:
+                    linking._request_json(issuer, 'app_linking_token', 'POST', form, None)
+                self.assertEqual(definite, isinstance(
+                    caught.exception, linking.LinkingRefreshRejected,
+                ))
+                self.assertEqual('gallery.example', factory.call_args.args[0])
+                connection.request.assert_called_once()
+                self.assertEqual(
+                    ('POST', '/Galerie/index.php?page=app_linking_token'),
+                    connection.request.call_args.args[:2],
+                )
+
     def test_discovery_uses_the_selected_mount_and_no_credentials(self) -> None:
         """Send public discovery over the same bounded HTTPS transport.
 
@@ -958,6 +1093,89 @@ class LinkingTransportTests(unittest.TestCase):
         self.assertNotIn(bearer, sent.args[1])
         self.assertEqual('Bearer ' + bearer, sent.kwargs['headers']['Authorization'])
         connection.request.assert_called_once()
+
+    def test_photo_visibility_posts_only_to_the_fixed_media_route(self) -> None:
+        """Keep the photo write operation on the existing public route.
+
+        Returns:
+            None: The exact fixed path carries a bearer and a JSON POST body.
+        """
+        headers = Message()
+        headers['Content-Type'] = 'application/json'
+        headers['Cache-Control'] = 'no-store'
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.headers = headers
+        response.status = 409
+        response.read.return_value = b'{"error":"revision_conflict"}'
+        connection = mock.MagicMock()
+        connection.getresponse.return_value = response
+        with mock.patch.object(linking, '_DeadlineHTTPSConnection', return_value=connection):
+            result = linking._request_json(
+                'https://gallery.example/Galerie',
+                'app_linking_photo_visibility', 'POST', b'{}', 'fixture',
+            )
+            with self.assertRaises(linking.LinkingError):
+                linking._request_json(
+                    'https://gallery.example/Galerie',
+                    'app_linking_photo_visibility', 'GET', None, 'fixture',
+                )
+        self.assertEqual({'__client_visibility_conflict': 'revision_conflict'}, result)
+        connection.request.assert_called_once_with(
+            'POST', '/Galerie/index.php?page=app_linking_media', body=b'{}',
+            headers={
+                'Accept': 'application/json',
+                'Authorization': 'Bearer fixture',
+                'Content-Type': 'application/json; charset=utf-8',
+            },
+        )
+
+    def test_watcher_credential_lifecycle_and_request_header(self) -> None:
+        """Register a digest and restrict the raw key to capture requests.
+
+        Returns:
+            None: Lifecycle bodies contain the same digest, and only the
+                authenticated capture request carries the raw key header.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        token = 'pgla_' + 'A' * 43
+        gallery_id = 7
+        session = linking.LinkingSession(
+            issuer, token, time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.UPLOAD_SCOPE,
+        )
+        headers = Message()
+        headers['Content-Type'] = 'application/json'
+        headers['Cache-Control'] = 'no-store'
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.headers = headers
+        response.status = 200
+        response.read.side_effect = [
+            json.dumps({'ok': True, 'action': action, 'gallery_id': gallery_id}).encode()
+            for action in ('watch_open', 'watch_close')
+        ] + [b'{}']
+        connection = mock.MagicMock()
+        connection.getresponse.return_value = response
+        with mock.patch.object(linking, '_DeadlineHTTPSConnection', return_value=connection):
+            key = session.open_watch_key(gallery_id)
+            session.close_watch_key(gallery_id, key)
+            linking._request_json(
+                issuer, 'app_linking_inventory', 'POST', b'{}', token, watch_key=key,
+            )
+            with self.assertRaises(linking.LinkingError):
+                linking._request_json(
+                    issuer, 'app_linking_identity', 'GET', None, token, watch_key=key,
+                )
+        calls = connection.request.call_args_list
+        self.assertEqual(3, len(calls))
+        for call, action in zip(calls[:2], ('watch_open', 'watch_close')):
+            self.assertEqual({
+                'action': action, 'gallery_id': gallery_id,
+                'key_hash': hashlib.sha256(key.encode('ascii')).hexdigest(),
+            }, json.loads(call.kwargs['body']))
+            self.assertNotIn('X-PHP-Gallery-Watch-Key', call.kwargs['headers'])
+        self.assertEqual(key, calls[2].kwargs['headers']['X-PHP-Gallery-Watch-Key'])
 
     def test_visibility_accepts_only_exact_prewrite_conflicts(self) -> None:
         """Recognize only the two exact no-store 409 refusal envelopes.
@@ -1455,7 +1673,77 @@ class VisibilitySessionTests(unittest.TestCase):
             linking.VISIBILITY_OFFLINE_SCOPE, linking.UPLOAD_VISIBILITY_OFFLINE_SCOPE,
             linking.CREATE_VISIBILITY_OFFLINE_SCOPE,
             linking.UPLOAD_CREATE_VISIBILITY_OFFLINE_SCOPE,
-        ), offline_linking._OFFLINE_SCOPES[9:])
+        ), offline_linking._OFFLINE_SCOPES[9:13])
+        # Persisted scope indices are append-only. Pin the exact wire order
+        # and verify that rolling access adds no visibility, read or create.
+        rolling = (
+            'link:identity galleries:list rolling_access offline_access',
+            'link:identity galleries:list gallery:upload rolling_access offline_access',
+            'link:identity galleries:list galleries:search rolling_access offline_access',
+            'link:identity galleries:list gallery:upload galleries:search '
+            'rolling_access offline_access',
+        )
+        presentation = (
+            'link:identity galleries:list media:read presentation:read '
+            'rolling_access offline_access',
+            'link:identity galleries:list gallery:upload media:read presentation:read '
+            'rolling_access offline_access',
+            'link:identity galleries:list galleries:search media:read presentation:read '
+            'rolling_access offline_access',
+            'link:identity galleries:list gallery:upload galleries:search '
+            'media:read presentation:read rolling_access offline_access',
+        )
+        # Basic rolling occupies persisted slots 13–16. Presentation was
+        # appended in slots 17–20, leaving every earlier vault record intact.
+        self.assertEqual(rolling, offline_linking._OFFLINE_SCOPES[13:17])
+        self.assertEqual(presentation, offline_linking._OFFLINE_SCOPES[17:21])
+        # Pin the exact Admin wire permutations independently of their production
+        # construction. Appending them must keep all previous byte indices.
+        admin_bases = (
+            '', ' gallery:upload', ' gallery:read',
+            ' gallery:read gallery:upload', ' galleries:create',
+            ' gallery:read galleries:create', ' gallery:upload galleries:create',
+            ' gallery:read gallery:upload galleries:create',
+            ' gallery:read gallery:visibility',
+            ' gallery:read gallery:upload gallery:visibility',
+            ' gallery:read galleries:create gallery:visibility',
+            ' gallery:read gallery:upload galleries:create gallery:visibility',
+        )
+        admin_rolling = tuple(
+            'link:identity galleries:list' + base + search
+            + ' media:admin' + playback + ' rolling_access offline_access'
+            for base in admin_bases
+            for search in ('', ' galleries:search')
+            for playback in ('', ' presentation:read')
+        )
+        self.assertEqual(admin_rolling, linking.ROLLING_ADMIN_MEDIA_SCOPES)
+        self.assertEqual(admin_rolling, offline_linking._OFFLINE_SCOPES[21:69])
+        admin_delete_rolling = tuple(
+            scope.replace(
+                ' rolling_access offline_access',
+                ' media:delete rolling_access offline_access',
+            )
+            for scope in admin_rolling
+        )
+        self.assertEqual(
+            admin_delete_rolling, linking.ROLLING_ADMIN_DELETE_SCOPES,
+        )
+        self.assertEqual(admin_delete_rolling, offline_linking._OFFLINE_SCOPES[69:])
+        for bundles, has_presentation in ((rolling, False), (presentation, True)):
+            for scope, base, has_search in zip(bundles, (
+                linking.GALLERIES_SCOPE, linking.UPLOAD_SCOPE,
+                linking.GALLERIES_SCOPE, linking.UPLOAD_SCOPE,
+            ), (False, False, True, True)):
+                with self.subTest(scope=scope):
+                    self.assertEqual(base, linking.scope_base(scope))
+                    self.assertEqual(has_search, linking.scope_allows_gallery_search(scope))
+                    self.assertEqual(
+                        has_presentation, linking.scope_allows_presentation(scope),
+                    )
+                    self.assertFalse(linking.scope_allows_gallery_visibility(scope))
+                    self.assertFalse(linking.scope_allows_gallery_read(scope))
+                    self.assertFalse(linking.scope_allows_gallery_create(scope))
+                    self.assertIsNone(linking.scope_base(scope + ' gallery:visibility'))
 
     def test_visibility_uses_live_detail_once_and_preserves_other_settings(self) -> None:
         """Bind one POST to readback and forbid replay after any uncertain reply.
@@ -1552,35 +1840,565 @@ class VisibilitySessionTests(unittest.TestCase):
 class NativeMediaSessionTests(unittest.TestCase):
     """Exercise native read scope and server-selected resource identities."""
 
-    def test_native_media_requires_explicit_transient_scope(self) -> None:
-        """Keep upload authority and refuse media or offline elevation.
+    def test_photo_routes_use_listing_scope_but_presentation_stays_explicit(self) -> None:
+        """Use listing access for photos while guarding presentation and music.
 
         Returns:
-            None: Unknown and persistent media scope combinations are refused.
+            None: Listing reads photos, while presentation and identity-only
+                sessions cannot access richer resources.
         """
         issuer = 'https://gallery.example/Galerie'
         token = 'pgla_' + 'A' * 43
-        scope = linking.UPLOAD_SCOPE + linking.MEDIA_SCOPE_SUFFIX
+        scope = linking.UPLOAD_SCOPE
         session = linking.LinkingSession(
             issuer, token, time.monotonic() + 60, scope,
         )
         self.assertTrue(session.can_upload())
         self.assertTrue(session.can_read_media())
         self.assertFalse(session.can_read_presentation())
-        with mock.patch.object(linking, '_run_linking_transport') as request:
+        legacy = linking.LinkingSession(
+            issuer, token, time.monotonic() + 60,
+            scope + linking.MEDIA_SCOPE_SUFFIX,
+        )
+        self.assertTrue(legacy.can_read_media())
+        self.assertFalse(legacy.can_read_presentation())
+        with mock.patch.object(
+            linking, '_run_linking_transport',
+            return_value=(b'{"photos":[]}', 'application/json', None, False),
+        ) as request:
+            self.assertEqual(
+                (b'{"photos":[]}', 'application/json', None, False),
+                session._media_read(42, 'photos', None, None),
+            )
             with self.assertRaises(linking.LinkingError):
                 session.media_presentation(42)
+            request.assert_called_once()
+        identity = linking.LinkingSession(
+            issuer, token, time.monotonic() + 60, linking.IDENTITY_SCOPE,
+        )
+        with mock.patch.object(linking, '_run_linking_transport') as request:
             with self.assertRaises(linking.LinkingError):
-                session.media_photo(42, True, False)
+                identity._media_read(42, 'photos', None, None)
             request.assert_not_called()
         for invalid in (
-            scope + ' offline_access',
+            scope + linking.MEDIA_SCOPE_SUFFIX + ' offline_access',
             linking.IDENTITY_SCOPE + linking.MEDIA_SCOPE_SUFFIX,
             linking.UPLOAD_SCOPE + ' presentation:read',
-            scope + linking.MEDIA_SCOPE_SUFFIX,
+            scope + linking.MEDIA_SCOPE_SUFFIX + linking.MEDIA_SCOPE_SUFFIX,
         ):
             with self.subTest(scope=invalid), self.assertRaises(linking.LinkingError):
                 linking.LinkingSession(issuer, token, time.monotonic() + 60, invalid)
+
+    def test_admin_photo_scope_and_private_disk_refusal(self) -> None:
+        """Retain exact Admin consent and keep restricted photos off disk.
+
+        Returns:
+            None: Public-only grants keep their old scope. Restricted
+                descriptors never consult the persistent cache.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        token = 'pgla_' + 'A' * 43
+        scope = linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX
+        session = linking.LinkingSession(
+            issuer, token, time.monotonic() + TEST_WORKER_WAIT_SECONDS, scope,
+        )
+        restricted = linking.LinkedPhoto(
+            7, 'restricted.jpg', visibility='private', nsfw=True,
+            cache_eligible=False,
+        )
+        self.assertTrue(session.can_read_admin_media())
+        self.assertFalse(session.can_change_photo_visibility())
+        self.assertFalse(linking.scope_allows_admin_media(linking.GALLERIES_SCOPE))
+        self.assertFalse(linking.scope_allows_admin_media(scope + ' offline_access'))
+        with mock.patch.object(linking.GalleryMediaCache, 'for_current_user') as cache:
+            self.assertFalse(session.has_cached_photo(4, restricted))
+            with mock.patch.object(
+                session, '_media_read', return_value=(b'photo', 'image/jpeg', None, False),
+            ) as request:
+                self.assertEqual(
+                    (b'photo', 'image/jpeg'),
+                    session.media_photo(4, 7, True, cache_eligible=False),
+                )
+                request.assert_called_once_with(4, 'thumbnail', 7, None, None)
+            cache.assert_not_called()
+
+    def test_existing_admin_link_deletes_with_exact_acknowledgement(self) -> None:
+        """Use the existing Admin Photos grant and validate the exact result.
+
+        Returns:
+            None: Public listing is refused locally. The active Admin grant
+                requires one fixed mutation and a matching acknowledgement.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        admin_scope = linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+        )
+        self.assertFalse(session.can_delete_admin_media())
+        with mock.patch.object(session, '_request') as request:
+            with self.assertRaises(linking.LinkingError):
+                session.delete_media_photos(44, (301,))
+            request.assert_not_called()
+
+        granted = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, admin_scope,
+        )
+        self.assertTrue(granted.can_delete_admin_media())
+        granted._request = mock.Mock(return_value={'deleted_ids': [301, 302]})
+        self.assertEqual(
+            (301, 302), granted.delete_media_photos(44, (301, 302)),
+        )
+        args, kwargs = granted._request.call_args
+        self.assertEqual('app_linking_media_delete', args[0])
+        self.assertNotIn('gallery_id', kwargs)
+        self.assertEqual(
+            {'action': 'delete', 'gallery_id': 44, 'image_ids': [301, 302]},
+            json.loads(kwargs['body']),
+        )
+        self.assertEqual(1, granted._request.call_count)
+
+        granted._request.return_value = {'deleted_ids': [302, 301]}
+        with self.assertRaises(linking.LinkingError):
+            granted.delete_media_photos(44, (301, 302))
+        self.assertEqual(2, granted._request.call_count)
+
+    def test_delete_transport_uses_only_fixed_media_route(self) -> None:
+        """POST the bounded action on the fixed path with JSON bearer headers.
+
+        Returns:
+            None: Gallery identity stays in JSON and the request is sent once.
+        """
+        headers = Message()
+        headers['Content-Type'] = 'application/json; charset=utf-8'
+        headers['Cache-Control'] = 'no-store'
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.headers = headers
+        response.read.return_value = b'{"deleted_ids":[301]}'
+        connection = mock.MagicMock()
+        connection.getresponse.return_value = response
+        session = linking.LinkingSession(
+            'https://gallery.example/Galerie', 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+        )
+        with mock.patch.object(
+            linking, '_DeadlineHTTPSConnection', return_value=connection,
+        ):
+            result = session.delete_media_photos(44, (301,))
+        self.assertEqual((301,), result)
+        connection.request.assert_called_once()
+        call = connection.request.call_args
+        self.assertEqual('POST', call.args[0])
+        self.assertEqual(
+            '/Galerie/index.php?page=app_linking_media', call.args[1],
+        )
+        self.assertEqual(
+            {'action': 'delete', 'gallery_id': 44, 'image_ids': [301]},
+            json.loads(call.kwargs['body']),
+        )
+        self.assertEqual(
+            'application/json; charset=utf-8',
+            call.kwargs['headers']['Content-Type'],
+        )
+        self.assertEqual(
+            'Bearer ' + 'pgla_' + 'A' * 43,
+            call.kwargs['headers']['Authorization'],
+        )
+
+    def test_legacy_rolling_delete_scope_remains_usable(self) -> None:
+        """Keep existing rolling links that contain the historical suffix.
+
+        Returns:
+            None: The saved binding and live session retain their exact scope.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        scope = (
+            linking.GALLERIES_SCOPE
+            + linking.ADMIN_PRESENTATION_SCOPE_SUFFIX
+            + linking.ADMIN_DELETE_SCOPE_SUFFIX
+            + linking.ROLLING_SCOPE_SUFFIX
+        )
+        binding = offline_linking.OfflineBinding(issuer, 4, scope)
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, binding.scope,
+        )
+        self.assertEqual(scope, session.approved_scope())
+        self.assertTrue(session.can_delete_admin_media())
+        self.assertTrue(session.can_read_presentation())
+
+    def test_rich_metadata_binds_the_admin_gallery_and_photo(self) -> None:
+        """Keep rich metadata bound to its explicit Admin target and projection.
+
+        Returns:
+            None: Indexed metadata survives with the requested IDs, internal
+                paths stay absent and a listing grant cannot start the read.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        token = 'pgla_' + 'A' * 43
+        deadline = time.monotonic() + TEST_WORKER_WAIT_SECONDS
+        admin = linking.LinkingSession(
+            issuer, token, deadline, linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+        )
+        listing = linking.LinkingSession(issuer, token, deadline, linking.GALLERIES_SCOPE)
+        photo = {
+            'gallery_id': 4, 'image_id': 7, 'title': 'Photo', 'width': 1200,
+            'gps_lat': 49.5, 'gps_lng': 14.5, 'relative_path': 'internal/path.jpg',
+        }
+        response = json.dumps(photo).encode(), 'application/json', None, False
+        with mock.patch.object(linking, '_run_linking_transport', return_value=response) as read:
+            details = admin.media_photo_info(4, 7)
+            self.assertEqual((1200, 49.5), (details['width'], details['gps_lat']))
+            self.assertNotIn('relative_path', details)
+            with self.assertRaises(linking.LinkingError):
+                admin.media_photo_info(9, 7)
+            with self.assertRaises(linking.LinkingError):
+                listing.media_photo_info(4, 7)
+            self.assertEqual(2, read.call_count)
+
+    def test_photo_cache_key_revalidation_and_disk_failure(self) -> None:
+        """Keep only exact image variants and gracefully miss on disk errors.
+
+        Returns:
+            None: Expired freshness needs revalidation. Matching validation
+                touches metadata and cannot refresh a replacement file.
+        """
+        body = b'bounded test image bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            key = cache.key('https://gallery.example/Galerie', 4, 7, True)
+            detail_key = cache.key('https://gallery.example/Galerie', 4, 7, False)
+            other_site = cache.key('https://other.example', 4, 7, True)
+            self.assertNotEqual(key, detail_key)
+            self.assertNotEqual(key, other_site)
+            self.assertNotIn('gallery.example', key)
+            # Use an arbitrary fixed clock to check both sides of the limits.
+            stored_at = 100
+            fresh_until = stored_at + gallery_media_cache.PHOTO_CACHE_FRESH_SECONDS
+            self.assertTrue(cache.write(key, body, 'image/jpeg', etag, now=stored_at))
+            self.assertTrue(cache.contains(key, etag))
+            self.assertFalse(cache.contains(key, '"' + ('0' * 64) + '"'))
+            self.assertFalse(cache.contains('invalid-cache-key', etag))
+            fresh = cache.read(key, now=fresh_until)
+            self.assertIsNotNone(fresh)
+            self.assertTrue(cache.is_fresh(fresh, now=fresh_until))
+            stale = cache.read(key, now=fresh_until + 1)
+            self.assertIsNotNone(stale)
+            self.assertFalse(cache.is_fresh(stale, now=fresh_until + 1))
+            # Forty-eight hours exceeds the original one-day retention period.
+            revalidated_at = stored_at + 2 * 24 * 60 * 60
+            stale = cache.read(key, now=revalidated_at)
+            self.assertIsNotNone(stale)
+            path = Path(directory) / (key + '.bin')
+            retained_bytes = path.read_bytes()
+            original_inode = path.stat().st_ino
+            cache.revalidate(key, stale, now=revalidated_at)
+            self.assertEqual(path.read_bytes(), retained_bytes)
+            self.assertEqual(path.stat().st_ino, original_inode)
+            refreshed = cache.read(key, now=revalidated_at)
+            self.assertTrue(cache.is_fresh(refreshed, now=revalidated_at))
+
+            # A 304 for the previous inode cannot freshen a concurrent write.
+            replacement = b'replacement image bytes'
+            replacement_etag = '"' + hashlib.sha256(replacement).hexdigest() + '"'
+            self.assertTrue(cache.write(
+                key, replacement, 'image/jpeg', replacement_etag, now=stored_at,
+            ))
+            cache.revalidate(key, refreshed, now=revalidated_at)
+            current = cache.read(key, now=revalidated_at)
+            self.assertEqual(current.body, replacement)
+            self.assertFalse(cache.is_fresh(current, now=revalidated_at))
+            unavailable = Path(directory) / 'not-a-directory'
+            unavailable.write_text('file')
+            broken = linking.GalleryMediaCache(unavailable / 'cache', 1024)
+            self.assertFalse(broken.write(key, body, 'image/jpeg', etag, now=stored_at))
+            self.assertIsNone(broken.read(key, now=stored_at))
+
+    def test_current_catalogue_proof_reuses_an_expired_thumbnail(self) -> None:
+        """Read a matching old thumbnail before starting binary transport.
+
+        Returns:
+            None: A current matching proof hits disk and a changed proof
+                sends a current binary request.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        gallery_id, photo_id = 4, 7
+        body = b'previously verified thumbnail bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        new_body = b'current thumbnail bytes'
+        new_etag = '"' + hashlib.sha256(new_body).hexdigest() + '"'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+        )
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES)
+            key = cache.key(issuer, gallery_id, photo_id, True)
+            # This epoch predates the server's ordinary cache freshness window.
+            self.assertTrue(cache.write(key, body, 'image/jpeg', etag, now=100))
+            with mock.patch.object(linking.GalleryMediaCache, 'for_current_user', return_value=cache):
+                with mock.patch.object(
+                    session, '_media_read',
+                    return_value=(new_body, 'image/jpeg', new_etag, True),
+                ) as request:
+                    self.assertEqual((body, 'image/jpeg'), session.media_photo(
+                        gallery_id, photo_id, True, thumbnail_etag=etag,
+                        thumbnail_verified_at=time.monotonic(),
+                    ))
+                    request.assert_not_called()
+                    self.assertEqual((new_body, 'image/jpeg'), session.media_photo(
+                        gallery_id, photo_id, True, thumbnail_etag=new_etag,
+                        thumbnail_verified_at=time.monotonic(),
+                    ))
+                    request.assert_called_once_with(
+                        gallery_id, 'thumbnail', photo_id, None, etag,
+                    )
+
+
+    def test_shared_media_cache_evicts_least_recently_accessed_entry(self) -> None:
+        """Exercise one retention budget for both photos and tracks.
+
+        Returns:
+            None: Writing audio retains the recently read photo over an old one.
+        """
+        body = b'fixture bytes'
+        digest = hashlib.sha256(body).hexdigest()
+        etag = '"' + digest + '"'
+        issuer = 'https://gallery.example'
+        with TemporaryDirectory() as directory, mock.patch.object(
+            gallery_media_cache, 'MEDIA_CACHE_MAX_ENTRIES', 2,
+        ):
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            recent = cache.key(issuer, 4, 7, True)
+            old = cache.key(issuer, 4, 8, True)
+            track = cache.track_key(issuer, 4, 'a' * 32, digest)
+            self.assertTrue(cache.write(recent, body, 'image/jpeg', etag, now=100))
+            self.assertTrue(cache.write(old, body, 'image/jpeg', etag, now=101))
+            self.assertIsNotNone(cache.read(recent, now=102))
+            self.assertTrue(cache.write(track, body, 'audio/wav', etag, now=103))
+            self.assertIsNone(cache.read(old))
+            self.assertEqual(cache.read(track).mime, 'audio/wav')
+            self.assertIsNotNone(cache.read(recent))
+
+
+class NativeMediaTransportTests(unittest.TestCase):
+    """Verify opt-in binary cache headers and conditional response handling."""
+
+    def _response(
+        self, status: int, headers: Message, body: bytes = b'',
+    ) -> tuple[mock.MagicMock, mock.MagicMock]:
+        """Build one context-managed binary response and connection.
+
+        Args:
+            status (int): HTTP status returned by the server.
+            headers (Message): Exact synthetic response headers.
+            body (bytes): Bounded binary body returned by ``read``.
+
+        Returns:
+            tuple[mock.MagicMock, mock.MagicMock]: Connection and response spies.
+        """
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.status = status
+        response.headers = headers
+        response.read.return_value = body
+        connection = mock.MagicMock()
+        connection.getresponse.return_value = response
+        return connection, response
+
+    def test_restricted_photo_transport_has_no_cache_validator(self) -> None:
+        """Accept the explicit restricted lane only for an Admin media reader.
+
+        Returns:
+            None: No-store bytes carry no reusable validator or cache admission.
+        """
+        body = b'restricted photo bytes'
+        headers = Message()
+        headers['Content-Type'] = 'image/jpeg'
+        headers['Content-Length'] = str(len(body))
+        headers['Cache-Control'] = 'no-store'
+        headers['X-PHP-Gallery-Media-Restricted'] = '1'
+        query = 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7'
+        connection, _response = self._response(200, headers, body)
+        with mock.patch.object(linking, '_linking_connection', return_value=connection):
+            with self.assertRaises(linking.LinkingError):
+                linking._native_media_read_once(
+                    'https://gallery.example', query, 'fixture', ('image/jpeg',), mock.Mock(),
+                )
+            result = linking._native_media_read_once(
+                'https://gallery.example', query, 'fixture', ('image/jpeg',), mock.Mock(),
+                allow_restricted=True,
+            )
+        self.assertEqual((body, 'image/jpeg', None, False), result)
+
+    def test_photo_binary_cache_opt_in_and_authorized_304(self) -> None:
+        """Accept only the exact private photo cache negotiation contract.
+
+        Returns:
+            None: Valid 200 bytes and matching authorized 304 retain their
+                strong ETag; an older no-store response remains uncached.
+        """
+        body = b'bounded test image bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        control = mock.Mock()
+        headers = Message()
+        headers['Content-Type'] = 'image/jpeg'
+        headers['Content-Length'] = str(len(body))
+        headers['ETag'] = etag
+        headers['Cache-Control'] = 'private, max-age=60, must-revalidate'
+        headers['X-PHP-Gallery-Photo-Cache'] = '1'
+        headers['Vary'] = 'Authorization, X-PHP-Gallery-Photo-Cache'
+        connection, _response = self._response(200, headers, body)
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            result = linking._native_media_read_once(
+                'https://gallery.example',
+                'page=app_linking_media&gallery_id=4&kind=photo&image_id=7',
+                'opaque-test-bearer', ('image/jpeg',), control,
+            )
+        self.assertEqual((body, 'image/jpeg', etag, True), result)
+        self.assertEqual('1', connection.request.call_args.kwargs['headers'][
+            'X-PHP-Gallery-Photo-Cache'
+        ])
+
+        not_modified = Message()
+        not_modified['ETag'] = etag
+        not_modified['Cache-Control'] = 'private, max-age=60, must-revalidate'
+        not_modified['X-PHP-Gallery-Photo-Cache'] = '1'
+        not_modified['Vary'] = 'Authorization, X-PHP-Gallery-Photo-Cache'
+        connection, _response = self._response(304, not_modified)
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            result = linking._native_media_read_once(
+                'https://gallery.example',
+                'page=app_linking_media&gallery_id=4&kind=photo&image_id=7',
+                'opaque-test-bearer', ('image/jpeg',), control, etag,
+            )
+        self.assertEqual((None, '', etag, True), result)
+        self.assertEqual(etag, connection.request.call_args.kwargs['headers']['If-None-Match'])
+
+    def test_legacy_photo_response_remains_uncached(self) -> None:
+        """Keep older no-store image servers usable without disk persistence.
+
+        Returns:
+            None: A valid legacy 200 returns bytes but has no cache admission.
+        """
+        body = b'bounded legacy image'
+        headers = Message()
+        headers['Content-Type'] = 'image/jpeg'
+        headers['Content-Length'] = str(len(body))
+        headers['ETag'] = '"' + hashlib.sha256(body).hexdigest() + '"'
+        headers['Cache-Control'] = 'no-store'
+        connection, _response = self._response(200, headers, body)
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            result = linking._native_media_read_once(
+                'https://gallery.example',
+                'page=app_linking_media&gallery_id=4&kind=photo&image_id=7',
+                'opaque-test-bearer', ('image/jpeg',), mock.Mock(),
+            )
+        self.assertEqual((body, 'image/jpeg', headers['ETag'], False), result)
+
+    def test_native_track_cache_requires_private_negotiation(self) -> None:
+        """Admit complete audio bytes only after the private cache opt-in.
+
+        Returns:
+            None: Valid opt-in allows caching, while legacy no-store plays online.
+        """
+        body = b'bounded track bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        for cacheable in (False, True):
+            headers = Message()
+            headers['Content-Type'] = 'audio/wav'
+            headers['Content-Length'] = str(len(body))
+            headers['ETag'] = etag
+            headers['Cache-Control'] = (
+                'private, no-cache' if cacheable else 'private, no-store, max-age=0'
+            )
+            if cacheable:
+                headers['X-PHP-Gallery-Track-Cache'] = '1'
+                headers['Vary'] = 'Authorization, X-PHP-Gallery-Track-Cache'
+            connection, _response = self._response(200, headers, body)
+            with self.subTest(cacheable=cacheable), mock.patch.object(
+                linking, '_linking_connection', return_value=connection,
+            ):
+                result = linking._native_media_read_once(
+                    'https://gallery.example',
+                    'page=app_linking_media&gallery_id=4&kind=track&track_id=' + 'a' * 32,
+                    'opaque-test-bearer', ('audio/wav',), mock.Mock(),
+                )
+                self.assertEqual((body, 'audio/wav', etag, cacheable), result)
+                self.assertEqual('1', connection.request.call_args.kwargs['headers'][
+                    'X-PHP-Gallery-Track-Cache'
+                ])
+
+    def test_native_media_page_distinguishes_authenticated_target_404(self) -> None:
+        """Preserve only the exact private JSON target-unavailable response.
+
+        Returns:
+            None: Exact target 404 is typed; an unrelated 404 stays generic.
+        """
+        headers = Message()
+        headers['Content-Type'] = 'application/json; charset=utf-8'
+        headers['Cache-Control'] = 'no-store'
+        connection, _response = self._response(
+            404, headers, b'{"error":"target_unavailable"}',
+        )
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            with self.assertRaises(linking.LinkingMediaUnavailable):
+                linking._native_media_read_once(
+                    'https://gallery.example',
+                    'page=app_linking_media&gallery_id=4&kind=photos',
+                    'opaque-test-bearer', ('application/json',), mock.Mock(),
+                )
+        headers['Cache-Control'] = 'public, max-age=30'
+        connection, _response = self._response(
+            404, headers, b'{"error":"target_unavailable"}',
+        )
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            with self.assertRaises(linking.LinkingError) as raised:
+                linking._native_media_read_once(
+                    'https://gallery.example',
+                    'page=app_linking_media&gallery_id=4&kind=photos',
+                    'opaque-test-bearer', ('application/json',), mock.Mock(),
+                )
+        self.assertNotIsInstance(raised.exception, linking.LinkingMediaUnavailable)
+
+    def test_native_media_revision_binds_gallery_and_hash(self) -> None:
+        """Accept only the exact gallery and canonical aggregate hash.
+
+        Returns:
+            None: Malformed or cross-gallery revisions fail closed.
+        """
+        session = linking.LinkingSession(
+            'https://gallery.example', 'pgla_' + 'A' * 43,
+            time.monotonic() + 60, linking.GALLERIES_SCOPE,
+        )
+        good = {'gallery_id': 42, 'revision': 'a' * 64}
+        for row in (good, {**good, 'gallery_id': 43},
+                    {**good, 'revision': 'A' * 64}, {**good, 'extra': 1}):
+            with self.subTest(row=row), mock.patch.object(
+                session, '_media_read', return_value=(
+                    json.dumps(row).encode(), 'application/json', None, False,
+                ),
+            ):
+                if row == good:
+                    self.assertEqual(good['revision'], session.media_revision(42))
+                else:
+                    with self.assertRaises(linking.LinkingError):
+                        session.media_revision(42)
 
     def test_native_media_cursor_and_track_cannot_substitute_resource(self) -> None:
         """Validate the requested page ID and the exact selected audio bytes.
@@ -1594,28 +2412,97 @@ class NativeMediaSessionTests(unittest.TestCase):
             linking.GALLERIES_SCOPE + linking.PRESENTATION_SCOPE_SUFFIX,
         )
         good = {'gallery_id': 42, 'parent_id': 8,
-                'photos': [{'id': 100, 'title': 'Fixture', 'optional': True}],
+                'photos': [{'id': 100, 'title': 'Fixture', 'optional': True,
+                            'latitude': 49.2, 'longitude': 16.6}],
                 'next_after': None, 'optional': 'supported'}
         for page in (good, {**good, 'gallery_id': 8}, {**good, 'next_after': 100}):
             with self.subTest(page=page), mock.patch.object(
-                session, '_media_read', return_value=(json.dumps(page).encode(), 'application/json'),
+                session, '_media_read', return_value=(
+                    json.dumps(page).encode(), 'application/json', None, False,
+                ),
             ):
                 if page == good:
-                    self.assertEqual((linking.LinkedPhoto(100, 'Fixture'),),
+                    self.assertEqual((linking.LinkedPhoto(100, 'Fixture', 49.2, 16.6),),
                                      session.media_page(42, 99).photos)
                 else:
                     with self.assertRaises(linking.LinkingError):
                         session.media_page(42, 99)
+        for page_size in (linking.NATIVE_MEDIA_LEGACY_PAGE_SIZE, linking.NATIVE_MEDIA_PAGE_SIZE):
+            photos = [{'id': index + 100, 'title': 'Fixture'} for index in range(page_size)]
+            page = {**good, 'photos': photos, 'next_after': photos[-1]['id']}
+            with self.subTest(page_size=page_size), mock.patch.object(
+                session, '_media_read', return_value=(
+                    json.dumps(page).encode(), 'application/json', None, False,
+                ),
+            ):
+                result = session.media_page(42, 99)
+                self.assertEqual(len(result.photos), page_size)
+                self.assertEqual(result.next_after, photos[-1]['id'])
+        for location in (
+            {'latitude': 91.0, 'longitude': 16.6},
+            {'latitude': 49.2, 'longitude': None},
+            {'latitude': float('nan'), 'longitude': 16.6},
+        ):
+            page = {**good, 'photos': [{'id': 100, 'title': 'Fixture', **location}]}
+            with self.subTest(location=location), mock.patch.object(
+                session, '_media_read', return_value=(
+                    json.dumps(page).encode(), 'application/json', None, False,
+                ),
+            ), self.assertRaises(linking.LinkingError):
+                session.media_page(42, 99)
         body = b'fixture audio'
         track = linking.LinkedTrack(
             'a' * 32, 'Tone', 'audio/wav', len(body), hashlib.sha256(body).hexdigest(),
         )
-        with mock.patch.object(session, '_media_read', return_value=(body, track.mime)) as read:
+        settings = {'enabled': True, 'autoplay': False, 'interval_seconds': 5,
+                    'transition': 'medium', 'music': True, 'tracks': []}
+        with mock.patch.object(session, '_media_read') as read:
+            read.return_value = (json.dumps(settings).encode(), 'application/json', None, False)
+            self.assertFalse(session.media_presentation(42).track_cache)
+            settings['track_cache'] = True
+            read.return_value = (json.dumps(settings).encode(), 'application/json', None, False)
+            self.assertTrue(session.media_presentation(42).track_cache)
+        legacy_playlist = linking.LinkedPresentation(
+            True, False, 5, 'medium', True, (track,),
+        )
+        playlist = linking.LinkedPresentation(
+            True, False, 5, 'medium', True, (track,), track_cache=True,
+        )
+        etag = '"' + track.sha256 + '"'
+        with TemporaryDirectory() as directory, mock.patch.object(
+            session, 'media_presentation', return_value=legacy_playlist,
+        ) as presentation, mock.patch.object(
+            linking.GalleryMediaCache, 'for_current_user',
+            return_value=linking.GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES),
+        ), mock.patch.object(
+            session, '_media_read', return_value=(body, track.mime, etag, False),
+        ) as read:
             self.assertEqual(body, session.media_track(42, track))
             read.assert_called_once_with(42, 'track', track.track_id, None)
-            read.return_value = (b'different abc', track.mime)
+            # The original no-store server never permits disk reuse.
+            read.return_value = (b'different abc', track.mime, None, False)
             with self.assertRaises(linking.LinkingError):
                 session.media_track(42, track)
+            presentation.return_value = playlist
+            read.return_value = (body, track.mime, etag, True)
+            self.assertEqual(body, session.media_track(42, track))
+            read.reset_mock()
+            presentation.reset_mock()
+            self.assertEqual(body, session.media_track(42, track))
+            presentation.assert_called_once_with(42, None)
+            read.assert_not_called()
+            # The same issuer can downgrade and still offer the same playlist.
+            presentation.return_value = legacy_playlist
+            read.return_value = (body, track.mime, etag, False)
+            with mock.patch.object(linking.GalleryMediaCache, 'read') as disk_read:
+                self.assertEqual(body, session.media_track(42, track))
+                disk_read.assert_not_called()
+            read.assert_called_once_with(42, 'track', track.track_id, None)
+            read.reset_mock()
+            presentation.side_effect = linking.LinkingMediaUnavailable('Playlist refused.')
+            with self.assertRaises(linking.LinkingMediaUnavailable):
+                session.media_track(42, track)
+            read.assert_not_called()
 
 
 @unittest.skipIf(LinkingManager is None, 'Tkinter is unavailable')
@@ -1629,6 +2516,8 @@ class LinkingDeliveryTests(unittest.TestCase):
             None: Only a valid submitted address starts an attempt, using the
                 exact installation path and keeping the prompt for feedback.
         """
+        directory = TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
         known = 'https://previous.example/galerie'
         for action, value, issuer in (
             ('Cancel', 'https://gallery.example/Galerie/', ''),
@@ -1645,6 +2534,9 @@ class LinkingDeliveryTests(unittest.TestCase):
                 manager._session = None
                 manager._session_issuer = ''
                 manager._current_issuer = known
+                manager._offline_store = None
+                manager._offline_binding = None
+                manager._offline_path = Path(directory.name) / 'offline-link.json'
                 manager._status = mock.Mock()
                 manager._refresh = mock.Mock()
                 manager._start = mock.Mock()
@@ -1658,7 +2550,9 @@ class LinkingDeliveryTests(unittest.TestCase):
                     mock.patch('uploader.app_linking_ui._LinkAddressChoices'),
                     mock.patch('uploader.app_linking_ui.icon_button'),
                     mock.patch('uploader.app_linking_ui.place_dialog'),
+                    mock.patch('uploader.app_linking_ui.sys') as platform,
                 ):
+                    platform.platform = 'linux'
                     widgets.Button.side_effect = [confirm, mock.Mock()]
                     widgets.Label.side_effect = [mock.Mock(), hint]
                     dialog = tk.Toplevel.return_value
@@ -1695,6 +2589,311 @@ class LinkingDeliveryTests(unittest.TestCase):
                         manager._start.assert_not_called()
                         self.assertEqual(known, manager.address())
 
+    def test_refused_saved_rolling_link_only_reapproves_on_explicit_action(self) -> None:
+        """Handle a definite refusal differently on startup and explicit Link.
+
+        Returns:
+            None: The old hint is dropped and startup never opens approval.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        binding = offline_linking.OfflineBinding(
+            issuer, 7, linking.ROLLING_GALLERIES_SCOPE,
+        )
+        for explicit in (False, True):
+            with (
+                self.subTest(explicit=explicit),
+                mock.patch('uploader.app_linking_ui.tk.StringVar',
+                           side_effect=lambda *_a, **_kw: mock.Mock()),
+                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                           return_value=()),
+                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+                mock.patch('uploader.app_linking_ui.discover_linking_capabilities',
+                           return_value=frozenset({'rolling_access'})),
+                mock.patch('uploader.app_linking_ui.rotate_saved_offline_access',
+                           side_effect=linking.LinkingRefreshRejected('Refused.')) as rotate,
+            ):
+                thread.return_value.is_alive.return_value = False
+                manager = LinkingManager(mock.Mock())
+                manager._saved_offline_binding = mock.Mock(return_value=binding)
+                store = mock.Mock()
+                manager._native_offline_store = mock.Mock(return_value=store)
+                manager._start = mock.Mock()
+                self.assertTrue(manager.resume_saved_link(
+                    issuer, approve_if_absent=explicit,
+                ))
+                thread.call_args.kwargs['target']()
+                manager._poll()
+                rotate.assert_called_once_with(
+                    store, manager._offline_binding_path(binding), binding,
+                    manager._cancel,
+                )
+                self.assertIsNone(manager._offline_binding)
+                self.assertIsNone(manager._session)
+                if explicit:
+                    manager._start.assert_called_once_with(issuer, direct=True)
+                else:
+                    manager._start.assert_not_called()
+                    manager.status.set.assert_called_with(
+                        'Saved gallery access expired. Approve the link again.',
+                    )
+
+    def test_photos_watcher_key_stays_out_of_selected_upload_mode(self) -> None:
+        """Use the exact issued key only for the contextual Watcher handoff.
+
+        Returns:
+            None: Verifies the selected gallery and revokes an unaccepted key.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        identity = linking.LinkedIdentity(7, 'admin')
+        gallery = linking.LinkedGallery(9, None, 'Screenshot destination')
+        key = 'synthetic watcher key'
+        for accepted, keep_selection in (
+            (True, False), (False, False), (True, True), (False, True),
+        ):
+            with (
+                self.subTest(accepted=accepted, keep_selection=keep_selection),
+                mock.patch('uploader.app_linking_ui.tk.StringVar'),
+                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                           return_value=()),
+                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+            ):
+                thread.return_value.is_alive.return_value = False
+                commit = mock.Mock(return_value=True)
+                start = mock.Mock(return_value=accepted)
+                manager = LinkingManager(
+                    mock.Mock(), commit_linked_target=commit,
+                    saved_linked_selected=mock.Mock(return_value=True),
+                )
+                session = mock.Mock()
+                session.approved_scope.return_value = linking.ROLLING_UPLOAD_SCOPE
+                session.identity.return_value = identity
+                session.gallery_page.return_value = linking.LinkedGalleryPage(
+                    (gallery,), None,
+                )
+                session.open_watch_key.return_value = key
+                manager._session = session
+                manager._session_issuer = manager._current_issuer = issuer
+                manager._session_user_id = identity.user_id
+                previous = (
+                    LinkedUploadTarget(session, issuer, identity.user_id,
+                                       gallery.gallery_id, gallery.title)
+                    if keep_selection else None
+                )
+                manager._active_upload_target = previous
+
+                manager.start_photos_watcher(session, gallery, start, mock.Mock())
+                thread.call_args.kwargs['target']()
+                manager._gallery_search_waiting = True
+                manager._window = mock.Mock()
+                with mock.patch.object(manager, '_load_galleries') as search:
+                    manager._run_gallery_search()
+                    search.assert_not_called()
+                manager._window = None
+                manager._poll()
+
+                session.gallery_page.assert_called_once_with(
+                    gallery.gallery_id - 1, manager._cancel,
+                )
+                session.open_watch_key.assert_called_once_with(
+                    gallery.gallery_id, cancelled=manager._cancel,
+                )
+                contextual = start.call_args.args[0]
+                committed = commit.call_args.args[0]
+                commit.assert_called_once()
+                self.assertIsNone(committed.watch_key)
+                self.assertEqual(key, contextual.watch_key)
+                self.assertEqual(committed.binding(), contextual.binding())
+                self.assertNotIn(key, repr(contextual))
+                if accepted:
+                    self.assertIs(committed, manager.selected_upload_target())
+                    session.close_watch_key.assert_not_called()
+                    manager.detach_photos_watcher_target(contextual)
+                else:
+                    thread.call_args.kwargs['target']()
+                    session.close_watch_key.assert_called_once_with(gallery.gallery_id, key)
+                self.assertIs(previous, manager.selected_upload_target())
+                self.assertTrue(manager.linked_upload_mode_selected())
+                self.assertIs(session, manager.photos_session())
+
+    def test_photos_watcher_refusal_is_visible_and_search_waits_for_result(self) -> None:
+        """Deliver a contextual refusal and preserve queued worker ownership.
+
+        Returns:
+            None: The Watcher receives the guard reason and a queued result
+                prevents the background gallery search from taking ownership.
+        """
+        with (mock.patch('uploader.app_linking_ui.tk.StringVar'),
+              mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                         return_value=())):
+            manager = LinkingManager(mock.Mock())
+            session = mock.Mock()
+            gallery = linking.LinkedGallery(9, None, 'Screenshots')
+            manager._session = session
+            manager._session_issuer = manager._current_issuer = 'https://gallery.example'
+            manager._target_change_refusal = mock.Mock(return_value='Finish pending work.')
+            manager._commit_linked_target = mock.Mock(return_value=True)
+            failure = mock.Mock()
+            manager.start_photos_watcher(session, gallery, mock.Mock(), failure)
+            failure.assert_called_once_with('Finish pending work.')
+
+            manager._gallery_search_waiting = True
+            manager._window = mock.Mock()
+            manager._worker = mock.Mock()
+            manager._worker.is_alive.return_value = False
+            manager._load_galleries = mock.Mock()
+            manager._events.put((object(), 'queued', None))
+            manager._run_gallery_search()
+            manager._load_galleries.assert_not_called()
+            self.assertTrue(manager._gallery_search_waiting)
+            manager._events.get_nowait()
+            manager._run_gallery_search()
+            manager._load_galleries.assert_called_once_with(None)
+            self.assertFalse(manager._gallery_search_waiting)
+
+    def test_admin_photos_approval_replaces_existing_rolling_binding(self) -> None:
+        """Activate an approved Photos scope over a saved public rolling link.
+
+        Returns:
+            None: Verified upload mode and rolling scope agree on success.
+                Busy work or unsuccessful publication preserves old authority.
+        """
+        identity = linking.LinkedIdentity(7, 'admin')
+        for scenario, outcome in (
+            ('photos', 'saved'), ('photos', 'vault_failed'),
+            ('watcher', 'saved'), ('watcher', 'vault_failed'),
+            ('watcher', 'mode_failed'), ('watcher', 'busy'),
+            ('legacy', 'saved'), ('legacy', 'mode_failed'),
+        ):
+            with (
+                self.subTest(scenario=scenario, outcome=outcome),
+                TemporaryDirectory() as directory,
+                mock.patch('uploader.app_linking_ui.tk.StringVar'),
+                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                           return_value=()),
+                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+                mock.patch('uploader.app_linking_ui.LinkingAttempt') as attempt_factory,
+                mock.patch('uploader.app_linking_ui.store_approved_refresh') as persist,
+            ):
+                legacy = scenario == 'legacy'
+                selected = scenario != 'photos'
+                issuer = ('https://gallery.example/Galerie' if legacy
+                          else 'http://localhost:8888/Galerie')
+                old_scope = (
+                    linking.UPLOAD_OFFLINE_SCOPE if legacy
+                    else linking.ROLLING_UPLOAD_SCOPE if selected
+                    else linking.ROLLING_GALLERIES_SCOPE
+                )
+                read_scope = linking.READ_UPLOAD_SCOPE if selected else linking.READ_SCOPE
+                new_scope = (
+                    read_scope + ' galleries:create gallery:visibility'
+                    + linking.ADMIN_MEDIA_SCOPE_SUFFIX + linking.ROLLING_SCOPE_SUFFIX
+                )
+                old_binding = offline_linking.OfflineBinding(
+                    issuer, identity.user_id, old_scope,
+                )
+                new_binding = offline_linking.OfflineBinding(
+                    issuer, identity.user_id, new_scope,
+                )
+                saved = outcome == 'saved'
+                thread.return_value.is_alive.return_value = False
+                commit = mock.Mock(return_value=outcome != 'mode_failed')
+                refusal = mock.Mock(
+                    side_effect=[None, 'Watcher is active.'] if outcome == 'busy'
+                    else None,
+                    return_value=None,
+                )
+                manager = LinkingManager(
+                    mock.Mock(), target_change_refusal=refusal,
+                    commit_linked_target=commit,
+                )
+                manager._offline_path = Path(directory) / 'offline-link.json'
+                manager._recent_link_path = None
+                manager._open_browser = mock.Mock()
+                store = mock.MagicMock()
+                original = b'synthetic old vault record'
+                published = b'synthetic new vault record'
+                store.read.side_effect = [original, published, published]
+                manager._native_offline_store = mock.Mock(return_value=store)
+                old = mock.Mock(spec=linking.LinkingSession)
+                old.approved_scope.return_value = old_scope
+                old.can_read_admin_media.return_value = False
+                old.can_upload.return_value = selected
+                manager._session = old
+                manager._session_issuer = manager._current_issuer = issuer
+                manager._session_user_id = identity.user_id
+                if selected:
+                    manager._active_upload_target = LinkedUploadTarget(
+                        old, issuer, identity.user_id, 9, 'Selected upload gallery',
+                    )
+                path = manager._offline_binding_path(old_binding)
+                new_path = manager._offline_binding_path(new_binding)
+                offline_linking.save_offline_binding(path, old_binding)
+                new = mock.Mock(spec=linking.LinkingSession)
+                new.approved_scope.return_value = new_scope
+                new.identity.return_value = identity
+                new.gallery_page.return_value = linking.LinkedGalleryPage((
+                    linking.LinkedGallery(9, None, 'Selected upload gallery'),
+                ), None)
+                attempt = attempt_factory.return_value
+                attempt.wait_for_callback.return_value = 'approved'
+                attempt.requests_offline_access.return_value = True
+                attempt.exchange_offline_once.return_value = (
+                    new, 'synthetic refresh', offline_linking.OFFLINE_REFRESH_MAX_SECONDS,
+                )
+                if outcome == 'vault_failed':
+                    persist.side_effect = offline_linking.OfflineLinkingError('Vault failure.')
+
+                manager.approve_admin_photos()
+                thread.call_args.kwargs['target']()
+                manager._poll()
+
+                expected_binding = new_binding if saved else old_binding
+                expected_path = new_path if saved else path
+                self.assertEqual(
+                    expected_binding,
+                    offline_linking.load_offline_binding(expected_path, issuer),
+                )
+                if legacy:
+                    self.assertFalse((path if saved else new_path).exists())
+                expected_session = new if saved else old
+                self.assertIs(expected_session, manager.photos_session())
+                target = manager.selected_upload_target()
+                if selected:
+                    self.assertIsNotNone(target)
+                    self.assertIs(expected_session, target.session)
+                    self.assertEqual(9, target.gallery_id)
+                    new.gallery_page.assert_called_once_with(8, manager._cancel)
+                else:
+                    self.assertIsNone(target)
+                    commit.assert_not_called()
+                if saved:
+                    persist.assert_called_once_with(
+                        store, issuer, identity.user_id, new_scope,
+                        'synthetic refresh', mock.ANY,
+                    )
+                    if selected:
+                        commit.assert_called_once_with(target)
+                        self.assertEqual(new_scope, target.session.approved_scope())
+                    old.disable_renewal.assert_called_once_with()
+                    new.enable_renewal.assert_called_once()
+                    manager.approve_admin_photos()
+                    attempt_factory.assert_called_once()
+                else:
+                    old.disable_renewal.assert_not_called()
+                    new.close.assert_called_once_with()
+                    if outcome == 'busy':
+                        persist.assert_not_called()
+                        store.write.assert_not_called()
+                        store.binding_transaction.assert_not_called()
+                    else:
+                        store.write.assert_called_once_with(issuer, identity.user_id, original)
+                        self.assertEqual(
+                            2 if outcome == 'mode_failed' else 1,
+                            store.binding_transaction.call_count,
+                        )
+                    if outcome != 'mode_failed':
+                        commit.assert_not_called()
+
     def test_manage_link_can_request_its_own_address_after_restart(self) -> None:
         """Keep the saved-link management entry reachable on a fresh start.
 
@@ -1720,6 +2919,8 @@ class LinkingDeliveryTests(unittest.TestCase):
             None: Listing sessions load once; identity-only sessions do not list;
                 list failure leaves the verified identity connected.
         """
+        directory = TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
         issuer = 'https://gallery.example/Galerie'
         page = linking.LinkedGalleryPage((
             linking.LinkedGallery(7, None, 'Gallery'),
@@ -1735,7 +2936,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 manager._worker = None
                 manager._offline_store = None
                 manager._offline_binding = None
-                manager._offline_path = Path('/fixture/offline-link.json')
+                manager._offline_path = Path(directory.name) / 'offline-link.json'
                 manager._browse_var = mock.Mock()
                 manager._browse_var.get.return_value = mode != 'identity'
                 for name in (
@@ -1775,6 +2976,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                     time.monotonic() + linking.HANDOFF_MAX_LIFETIME_SECONDS,
                 )
                 attempt.wait_for_callback.return_value = 'approved'
+                attempt.requests_offline_access.return_value = False
                 attempt.exchange_once.return_value = session
                 thread = mock.Mock()
                 thread.is_alive.return_value = False
@@ -1784,7 +2986,10 @@ class LinkingDeliveryTests(unittest.TestCase):
                     'uploader.app_linking_ui.threading.Thread', return_value=thread,
                 ) as thread_factory, mock.patch(
                     'uploader.app_linking_ui.webbrowser.open', return_value=True,
-                ) as open_browser:
+                ) as open_browser, mock.patch(
+                    'uploader.app_linking_ui.sys',
+                ) as platform:
+                    platform.platform = 'linux'
                     if mode == 'direct':
                         manager.link(issuer)
                         factory.assert_called_once_with(issuer, scope=linking.GALLERIES_SCOPE)
@@ -1795,6 +3000,8 @@ class LinkingDeliveryTests(unittest.TestCase):
                     kinds = [event[1] for event in manager._events.queue]
                     self.assertEqual('handoff', kinds[0])
                     self.assertIn('connected', kinds)
+                    attempt.exchange_once.assert_called_once_with()
+                    attempt.exchange_offline_once.assert_not_called()
                     if mode == 'identity':
                         self.assertNotIn('galleries', kinds)
                         self.assertNotIn('galleries_error', kinds)
@@ -2440,7 +3647,7 @@ class LinkingDeliveryTests(unittest.TestCase):
             '_gallery_refresh_button', '_gallery_next_button',
             '_gallery_select_button', '_recovery_button', '_review_button',
             '_detail_button', '_visibility_choice',
-            '_visibility_button', '_media_button', '_create_button',
+            '_visibility_button', '_create_button',
             '_create_status_button', '_create_resume_button', '_create_abandon_button',
             '_use_created_button', '_ack_created_button',
             '_manage_button',
@@ -2848,7 +4055,8 @@ class LinkingDeliveryTests(unittest.TestCase):
             target = LinkedUploadTarget(original, first, 7, gallery.gallery_id, gallery.title)
             manager._active_upload_target = target
 
-            manager.link(second)
+            with mock.patch.object(manager, 'resume_saved_link', return_value=False):
+                manager.link(second)
             manager._start.assert_called_once_with(second, direct=True)
             self.assertEqual(first, manager.address())
             self.assertIs(target, manager.selected_upload_target())
@@ -2871,9 +4079,15 @@ class LinkingDeliveryTests(unittest.TestCase):
             self.assertEqual((first, second), load_recent_gallery_addresses(history))
             self.assertEqual({'addresses': [first, second]}, json.loads(history.read_text()))
 
-            with mock.patch('uploader.app_linking_ui.threading.Thread') as thread:
+            with (
+                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+                mock.patch('uploader.app_linking_ui.delete_transient'),
+                mock.patch('uploader.app_linking_ui.load_offline_binding', return_value=None),
+            ):
                 thread.return_value.is_alive.return_value = False
                 manager.unlink(second)
+                thread.call_args.kwargs['target']()
+                manager._poll()
                 thread.call_args.kwargs['target']()
                 manager._poll()
             other.revoke.assert_called_once_with()
@@ -2915,9 +4129,16 @@ class LinkingDeliveryTests(unittest.TestCase):
         session.revoke.assert_not_called()
 
         manager._target_change_refusal.return_value = None
-        with mock.patch('uploader.app_linking_ui.threading.Thread') as thread:
+        with (
+            mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+            mock.patch('uploader.app_linking_ui.delete_transient'),
+            mock.patch('uploader.app_linking_ui.load_offline_binding', return_value=None),
+        ):
             thread.return_value.is_alive.return_value = False
             manager.unlink()
+            self.assertIs(target, manager.selected_upload_target())
+            thread.call_args.kwargs['target']()
+            manager._poll()
             self.assertIsNone(manager.selected_upload_target())
             thread.call_args.kwargs['target']()
             manager._poll()
@@ -2953,23 +4174,24 @@ class LinkingDeliveryTests(unittest.TestCase):
         self.assertFalse(manager._listing_scope_selected('https://gallery.example'))
 
     def test_closing_window_cancels_inflight_page_without_revoking(self) -> None:
-        """Stop a page read when its window closes and keep the local session.
+        """Stop the picker page read without interrupting the shared viewer.
 
         Returns:
-            None: Cancels the request without calling revoke or session close.
+            None: Cancels only the picker request and keeps the live link.
         """
         manager = object.__new__(LinkingManager)
         manager._session = mock.Mock()
         manager._cancel = threading.Event()
         manager._create_dispatch = None
-        manager._gallery_cancel = None
+        manager._gallery_cancel = threading.Event()
         manager._attempt = None
         manager._handoff = None
         manager._window = None
         manager._owner = object()
         session = manager._session
         manager._close_window()
-        session.cancel_pending.assert_called_once_with(gallery_only=True)
+        self.assertTrue(manager._gallery_cancel.is_set())
+        session.cancel_pending.assert_not_called()
         session.close.assert_not_called()
         session.revoke.assert_not_called()
         self.assertIs(session, manager._session)

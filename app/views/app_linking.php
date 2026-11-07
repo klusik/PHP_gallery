@@ -165,22 +165,36 @@ function view_render_app_linking_start(
             'This permits listing all galleries, reading stored visibility and access settings, changing gallery visibility, creating galleries, and uploading images, including to private and unpublished galleries.'))
         . '</p><p id="scope-visibility-notice" hidden>'
         . e(t('app_linking.consent.visibility_notice',
-            'Only stored gallery visibility can be changed. Other settings remain unchanged, and inherited access restrictions and other protections still apply.'))
+            'Visibility changes apply to the selected gallery. Inherited access rules still apply to visitors.'))
         . '</p><p id="scope-search" hidden>'
         . e(t('app_linking.consent.search_scope',
             'Search those galleries by name, description and tags.'))
         . '</p><p id="scope-offline" hidden>'
         . e(t('app_linking.consent.offline_scope',
             'This also permits the app to renew access while the browser is closed, for up to 30 days and no more than seven days of inactivity. You can revoke the connection.'))
+        . '</p><p id="scope-rolling" hidden>'
+        . e(t(
+            'app_linking.consent.rolling_scope',
+            'The app can stay connected while the browser is closed. Each '
+                . 'successful use restarts the seven-day period. Access expires '
+                . 'after seven days of inactivity or when you revoke the connection.',
+        ))
         . '</p><p id="scope-media" hidden>'
         . e(t('app_linking.consent.media_scope',
             'This permits browsing listed public galleries and their non-sensitive photos. Private, unpublished, unlisted, password-protected and NSFW content remains unavailable.'))
+        . '</p><p id="scope-admin-media" hidden>'
+        . e(t('app_linking.consent.admin_media_scope',
+            'WinApp can browse restricted gallery photos, including private, unpublished and NSFW photos. Restricted photos are kept in memory for viewing. If gallery visibility changes are approved, WinApp can also change photo visibility.'))
         . '</p><p id="scope-presentation" hidden>'
         . e(t('app_linking.consent.presentation_scope',
-            'This also permits authorized slideshow and visible gallery music playback for listed public galleries. Private, unpublished, unlisted, password-protected and NSFW content remains unavailable.'))
+            'WinApp can read presentation settings and play visible music in listed public galleries. '
+        . 'It may keep a local copy for playback.'))
+        . '</p><p id="scope-delete" hidden>'
+        . e(t('app_linking.consent.delete_notice',
+            'WinApp can permanently delete selected original photos and their generated previews from galleries on this site.'))
         . '</p>';
     if (isset($duration)) {
-        echo '<p class="link-duration">' . e($duration) . '</p>';
+        echo '<p id="scope-duration" class="link-duration">' . e($duration) . '</p>';
     }
     echo '<div class="link-actions"><button id="deny" type="button">'
         . e(t('app_linking.consent.cancel', 'Cancel')) . '</button>'
@@ -211,7 +225,11 @@ function view_render_app_linking_start(
     const visibilityNotice = document.getElementById('scope-visibility-notice');
     const searchScope = document.getElementById('scope-search');
     const offlineScope = document.getElementById('scope-offline');
+    const rollingScope = document.getElementById('scope-rolling');
+    const duration = document.getElementById('scope-duration');
     const mediaScope = document.getElementById('scope-media');
+    const adminMediaScope = document.getElementById('scope-admin-media');
+    const deleteScope = document.getElementById('scope-delete');
     const presentationScope = document.getElementById('scope-presentation');
     const approve = document.getElementById('approve');
     const deny = document.getElementById('deny');
@@ -249,33 +267,41 @@ function view_render_app_linking_start(
             'link:identity galleries:list gallery:read galleries:create gallery:visibility',
             'link:identity galleries:list gallery:read gallery:upload galleries:create gallery:visibility'];
         const requestedScope = result.scope;
-        const search = typeof requestedScope === 'string' &&
-            requestedScope.endsWith(' galleries:search');
-        const scopeWithoutSearch = search
-            ? requestedScope.slice(0, -' galleries:search'.length) : requestedScope;
-        const offline = typeof requestedScope === 'string' &&
-            requestedScope.endsWith(' offline_access');
-        const scopeWithoutOffline = offline
-            ? requestedScope.slice(0, -' offline_access'.length) : scopeWithoutSearch;
+        if (typeof requestedScope !== 'string') throw new Error('claim');
+        const offlineSuffix = ' offline_access';
+        const rollingSuffix = ' rolling_access' + offlineSuffix;
+        const rolling = requestedScope.endsWith(rollingSuffix);
+        const offline = requestedScope.endsWith(offlineSuffix);
+        const renewalSuffix = rolling ? rollingSuffix : (offline ? offlineSuffix : '');
+        const scopeWithoutRenewal = renewalSuffix
+            ? requestedScope.slice(0, -renewalSuffix.length) : requestedScope;
         const mediaSuffixes = [
+            ' media:admin presentation:read media:delete',
+            ' media:admin media:delete',
             ' media:read presentation:read', ' media:read',
+            ' media:admin presentation:read', ' media:admin',
         ];
-        const mediaSuffix = typeof scopeWithoutOffline === 'string'
-            ? mediaSuffixes.find(suffix => scopeWithoutOffline.endsWith(suffix))
-            : undefined;
-        const baseScope = mediaSuffix
-            ? scopeWithoutOffline.slice(0, -mediaSuffix.length)
-            : scopeWithoutOffline;
+        const mediaSuffix = mediaSuffixes.find(
+            suffix => scopeWithoutRenewal.endsWith(suffix),
+        );
+        const scopeWithoutMedia = mediaSuffix
+            ? scopeWithoutRenewal.slice(0, -mediaSuffix.length) : scopeWithoutRenewal;
+        const searchSuffix = ' galleries:search';
+        const search = scopeWithoutMedia.endsWith(searchSuffix);
+        const baseScope = search
+            ? scopeWithoutMedia.slice(0, -searchSuffix.length) : scopeWithoutMedia;
         const mediaRequested = typeof mediaSuffix === 'string';
-        const presentationRequested = mediaSuffix ===
-            ' media:read presentation:read';
+        const adminMediaRequested = mediaRequested && mediaSuffix.startsWith(' media:admin');
+        const presentationRequested = mediaRequested &&
+            mediaSuffix.includes(' presentation:read');
         if (result.ok !== true || typeof result.attempt !== 'string' ||
             !result.attempt || !baseScopes.includes(baseScope) ||
-            (search && !['link:identity galleries:list',
-                'link:identity galleries:list gallery:upload'].includes(scopeWithoutSearch)) ||
-            (mediaRequested && (baseScope === 'link:identity' || offline)) ||
-            requestedScope !== scopeWithoutOffline + (offline ? ' offline_access' : '')
-                + (search ? ' galleries:search' : '')) {
+            (!adminMediaRequested && (search || rolling) && !['link:identity galleries:list',
+                'link:identity galleries:list gallery:upload'].includes(baseScope)) ||
+            (search && offline && !rolling) ||
+            (mediaRequested && (baseScope === 'link:identity' ||
+                ((offline || search) && !(rolling && presentationRequested) &&
+                    !(adminMediaRequested && (!offline || rolling)))))) {
             throw new Error('claim');
         }
         identityScope.hidden = baseScope !== 'link:identity';
@@ -308,10 +334,14 @@ function view_render_app_linking_start(
             'link:identity galleries:list gallery:read galleries:create gallery:visibility',
             'link:identity galleries:list gallery:read gallery:upload galleries:create gallery:visibility',
         ].includes(baseScope);
-        offlineScope.hidden = !offline;
+        offlineScope.hidden = !offline || rolling;
+        rollingScope.hidden = !rolling;
+        if (duration) duration.hidden = offline;
         searchScope.hidden = !search;
-        mediaScope.hidden = !mediaRequested;
+        adminMediaScope.hidden = !adminMediaRequested;
+        mediaScope.hidden = baseScope === 'link:identity' || !adminMediaScope.hidden;
         presentationScope.hidden = !presentationRequested;
+        deleteScope.hidden = !adminMediaRequested;
         attempt = result.attempt;
         consent.hidden = false;
         consent.focus();

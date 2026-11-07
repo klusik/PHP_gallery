@@ -29,24 +29,36 @@ import ssl
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as dataclass_replace
 from typing import Callable, Iterable, Literal, TypeVar
 from urllib.parse import SplitResult, parse_qsl, urlencode, urlsplit
 
 from .models import JsonValue
 from .server_discovery import _reject_nonfinite, _unique_object, discovery_url
+from .gallery_media_cache import GalleryMediaCache, PHOTO_CACHE_FRESH_SECONDS
 
 
 CLIENT_ID = 'php-gallery-winapp'
 CALLBACK_PATH = '/oauth2redirect/php-gallery'
 IDENTITY_SCOPE = 'link:identity'
 MEDIA_SCOPE_SUFFIX = ' media:read'
+ADMIN_MEDIA_SCOPE_SUFFIX = ' media:admin'
+ADMIN_PRESENTATION_SCOPE_SUFFIX = ADMIN_MEDIA_SCOPE_SUFFIX + ' presentation:read'
+# Purpose: Add deletion only after the existing explicit Admin media consent.
+# Type: str. Units: ordered OAuth scope suffix. Scope: native Admin Photos.
+# Consumers: ADMIN_MEDIA_SCOPES, LinkingAttempt.push_request.
+# Rationale: Existing read grants remain read-only until fresh browser approval.
+ADMIN_DELETE_SCOPE_SUFFIX = ' media:delete'
 PRESENTATION_SCOPE_SUFFIX = ' media:read presentation:read'
 # Purpose: Limit the memory and network work of a single native media request.
 # Type: int. Units: bytes. Scope: one image or audio response.
 # Consumers: _native_media_read_once, media_track. Rationale: 16 MiB matches
 # the server's bounded display and audio policy.
 NATIVE_MEDIA_MAX_BYTES = 16 * 1024 * 1024
+# Purpose: Bound one exact, explicitly approved native deletion batch.
+# Type: int. Units: photo IDs. Scope: one Admin gallery mutation.
+# Consumers: LinkingSession.delete_media_photos. Rationale: Match the server cap.
+NATIVE_MEDIA_DELETE_BATCH_MAX = 64
 # Purpose: Bound native metadata decoding and gallery navigation.
 # Type: int. Units: bytes. Scope: one photo page or presentation envelope.
 # Consumers: _native_media_read_once. Rationale: 64 KiB fits the maximum
@@ -54,8 +66,22 @@ NATIVE_MEDIA_MAX_BYTES = 16 * 1024 * 1024
 NATIVE_MEDIA_JSON_BYTES = 64 * 1024
 # Purpose: Limit descriptors in a response before creating UI rows.
 # Type: int. Units: photos. Scope: one native gallery page.
-# Consumers: media_page. Rationale: Eight matches the server page bound.
-NATIVE_MEDIA_PAGE_SIZE = 8
+# Consumers: media_page, _native_media_read_once. Rationale: 64 amortizes
+# listing requests for continuous browsing while bounding decode and UI work.
+NATIVE_MEDIA_PAGE_SIZE = 64
+# Purpose: Recognize continuation from older servers that ignore the page header.
+# Type: int. Units: photos. Scope: one legacy native photo response.
+# Consumers: media_page. Rationale: Eight is the original server page bound.
+NATIVE_MEDIA_LEGACY_PAGE_SIZE = 8
+# Purpose: Bound decoding of the larger native photo catalogue.
+# Type: int. Units: bytes. Scope: one photo catalogue response.
+# Consumers: _native_media_read_once. Rationale: 256 KiB covers 64 titles of
+# up to 255 characters even when supplementary characters use surrogate escapes.
+NATIVE_MEDIA_CATALOGUE_BYTES = 256 * 1024
+# Purpose: Keep each optional metadata field usable in an inline card.
+# Type: int. Units: characters. Scope: one detailed media text field.
+# Consumers: _linked_media_details. Rationale: Match the server projection.
+NATIVE_MEDIA_DETAIL_TEXT_CHARS = 512
 # Purpose: Keep native music choice bounded by the server playlist projection.
 # Type: int. Units: tracks. Scope: one native presentation.
 # Consumers: media_presentation. Rationale: 32 is the server projection cap.
@@ -66,8 +92,16 @@ NATIVE_MEDIA_TRACK_LIMIT = 32
 _NATIVE_INTERVAL_SECONDS = (3, 5, 10)
 _NATIVE_IMAGE_TYPES = ('image/jpeg', 'image/png', 'image/gif', 'image/webp')
 _NATIVE_AUDIO_TYPES = ('audio/mpeg', 'audio/wav', 'audio/x-wav')
-_TransportResult = TypeVar('_TransportResult', dict[str, JsonValue], tuple[bytes, str])
-_NativeMediaKind = Literal['photos', 'presentation', 'thumbnail', 'photo', 'track']
+_NativeMediaResponse = tuple[bytes | None, str, str | None, bool]
+_TransportResult = TypeVar(
+    '_TransportResult', dict[str, JsonValue], tuple[bytes, str],
+    _NativeMediaResponse,
+)
+_NativeMediaKind = Literal[
+    'photos', 'presentation', 'thumbnail', 'photo', 'track', 'info',
+    'gallery_info', 'photo_info', 'revision',
+]
+LinkedMediaDetails = dict[str, str | int | float | bool | None]
 GALLERIES_SCOPE = 'link:identity galleries:list'
 UPLOAD_SCOPE = 'link:identity galleries:list gallery:upload'
 GALLERY_SEARCH_SUFFIX = ' galleries:search'
@@ -83,6 +117,22 @@ READ_UPLOAD_CREATE_SCOPE = READ_UPLOAD_SCOPE + ' galleries:create'
 IDENTITY_OFFLINE_SCOPE = IDENTITY_SCOPE + ' offline_access'
 GALLERIES_OFFLINE_SCOPE = GALLERIES_SCOPE + ' offline_access'
 UPLOAD_OFFLINE_SCOPE = UPLOAD_SCOPE + ' offline_access'
+ROLLING_SCOPE_SUFFIX = ' rolling_access offline_access'
+ROLLING_GALLERIES_SCOPE = GALLERIES_SCOPE + ROLLING_SCOPE_SUFFIX
+ROLLING_UPLOAD_SCOPE = UPLOAD_SCOPE + ROLLING_SCOPE_SUFFIX
+ROLLING_GALLERY_SEARCH_SCOPES = (
+    GALLERIES_SCOPE + GALLERY_SEARCH_SUFFIX + ROLLING_SCOPE_SUFFIX,
+    UPLOAD_SCOPE + GALLERY_SEARCH_SUFFIX + ROLLING_SCOPE_SUFFIX,
+)
+ROLLING_SEARCH_PRESENTATION_SCOPES = tuple(
+    scope + PRESENTATION_SCOPE_SUFFIX + ROLLING_SCOPE_SUFFIX
+    for scope in GALLERY_SEARCH_SCOPES
+)
+ROLLING_PRESENTATION_SCOPES = (
+    GALLERIES_SCOPE + PRESENTATION_SCOPE_SUFFIX + ROLLING_SCOPE_SUFFIX,
+    UPLOAD_SCOPE + PRESENTATION_SCOPE_SUFFIX + ROLLING_SCOPE_SUFFIX,
+    *ROLLING_SEARCH_PRESENTATION_SCOPES,
+)
 READ_OFFLINE_SCOPE = READ_SCOPE + ' offline_access'
 READ_UPLOAD_OFFLINE_SCOPE = READ_UPLOAD_SCOPE + ' offline_access'
 CREATE_OFFLINE_SCOPE = CREATE_SCOPE + ' offline_access'
@@ -105,6 +155,45 @@ VISIBILITY_SCOPES = (
 )
 CODE_PREFIX = 'pglc_'
 TOKEN_PREFIX = 'pgla_'
+# Purpose: Generate a capture-specific key with the same entropy as linking.
+# Type: int. Units: random bytes. Scope: one contextual Watcher capture.
+# Consumers: LinkingSession.open_watch_key. Rationale: 32 bytes resist guessing.
+WATCH_KEY_RANDOM_BYTES = 32
+_WATCH_KEY_PATTERN = re.compile(r'pgw_[0-9a-f]{64}')
+
+# Canonical exact bundles mirror the server registration. Keep the order stable
+# for the append-only offline credential representation.
+_ADMIN_MEDIA_BASES = (
+    GALLERIES_SCOPE, UPLOAD_SCOPE, READ_SCOPE, READ_UPLOAD_SCOPE,
+    CREATE_SCOPE, READ_CREATE_SCOPE, UPLOAD_CREATE_SCOPE, READ_UPLOAD_CREATE_SCOPE,
+    VISIBILITY_SCOPE, UPLOAD_VISIBILITY_SCOPE,
+    CREATE_VISIBILITY_SCOPE, UPLOAD_CREATE_VISIBILITY_SCOPE,
+)
+ADMIN_MEDIA_SCOPES = {
+    base + search + media + renewal: base
+    for base in _ADMIN_MEDIA_BASES
+    for search in ('', GALLERY_SEARCH_SUFFIX)
+    for media in (ADMIN_MEDIA_SCOPE_SUFFIX, ADMIN_PRESENTATION_SCOPE_SUFFIX)
+    for renewal in ('', ROLLING_SCOPE_SUFFIX)
+}
+ADMIN_MEDIA_DELETE_SCOPES = {
+    base + search + media + ADMIN_DELETE_SCOPE_SUFFIX + renewal: base
+    for base in _ADMIN_MEDIA_BASES
+    for search in ('', GALLERY_SEARCH_SUFFIX)
+    for media in (ADMIN_MEDIA_SCOPE_SUFFIX, ADMIN_PRESENTATION_SCOPE_SUFFIX)
+    for renewal in ('', ROLLING_SCOPE_SUFFIX)
+}
+ADMIN_MEDIA_SCOPES.update(ADMIN_MEDIA_DELETE_SCOPES)
+ROLLING_ADMIN_MEDIA_SCOPES = tuple(
+    scope for scope in ADMIN_MEDIA_SCOPES
+    if scope.endswith(ROLLING_SCOPE_SUFFIX)
+    and ADMIN_DELETE_SCOPE_SUFFIX not in scope
+)
+ROLLING_ADMIN_DELETE_SCOPES = tuple(
+    scope for scope in ADMIN_MEDIA_DELETE_SCOPES
+    if scope.endswith(ROLLING_SCOPE_SUFFIX)
+)
+
 
 # Purpose: Reject IPv4-compatible IPv6 issuers with ambiguous serialization.
 # Type: IPv6Network. Units: network addresses. Scope: HTTPS issuer hosts.
@@ -400,6 +489,26 @@ class LinkingHttpsError(LinkingError):
     """Report a TLS failure without returning raw certificate or socket errors."""
 
 
+class LinkingMediaUnavailable(LinkingError):
+    """Report an authenticated gallery media target that is unavailable."""
+
+
+class LinkingRevisionUnsupported(LinkingError):
+    """Report an older server that rejects the revision selector."""
+
+
+class LinkingMediaThrottled(LinkingError):
+    """Report a validated server refusal because media requests are limited."""
+
+
+class LinkingGrantRejected(LinkingError):
+    """Report a revoked or expired authenticated linking grant."""
+
+
+class LinkingRefreshRejected(LinkingError):
+    """Report a definite invalid-grant response to an exact refresh request."""
+
+
 class LinkingUnavailable(LinkingError):
     """The selected installation does not advertise the requested linking flow."""
 
@@ -446,6 +555,18 @@ class ExchangeParameters:
     scope: str
 
 
+def scope_allows_admin_media(scope: str) -> bool:
+    """Recognize exact Admin photo bundles with independent browser consent.
+
+    Args:
+        scope (str): Full current grant scope.
+
+    Returns:
+        bool: True for a registered temporary or rolling Admin photo grant.
+    """
+    return scope in ADMIN_MEDIA_SCOPES
+
+
 def _scope_without_media(scope: str) -> str:
     """Remove one canonical transient media extension before scope matching.
 
@@ -455,6 +576,12 @@ def _scope_without_media(scope: str) -> str:
     Returns:
         str: Underlying bundle, or the original when no suffix is present.
     """
+    if scope_allows_admin_media(scope):
+        base = ADMIN_MEDIA_SCOPES[scope]
+        return base
+    if scope in ROLLING_PRESENTATION_SCOPES:
+        suffix = PRESENTATION_SCOPE_SUFFIX + ROLLING_SCOPE_SUFFIX
+        return scope[:-len(suffix)] + ROLLING_SCOPE_SUFFIX
     for suffix in (PRESENTATION_SCOPE_SUFFIX, MEDIA_SCOPE_SUFFIX):
         if scope.endswith(suffix):
             return scope.removesuffix(suffix)
@@ -471,7 +598,7 @@ def scope_base(scope: str) -> str | None:
         str | None: Exact base scope, or None when the bundle is unregistered.
     """
     underlying = _scope_without_media(scope)
-    if underlying != scope and (
+    if underlying != scope and scope not in ROLLING_PRESENTATION_SCOPES and (
         underlying == IDENTITY_SCOPE or underlying.endswith(' offline_access')
         or underlying in GALLERY_SEARCH_SCOPES
     ):
@@ -485,6 +612,10 @@ def scope_base(scope: str) -> str | None:
         IDENTITY_OFFLINE_SCOPE: IDENTITY_SCOPE,
         GALLERIES_OFFLINE_SCOPE: GALLERIES_SCOPE,
         UPLOAD_OFFLINE_SCOPE: UPLOAD_SCOPE,
+        ROLLING_GALLERIES_SCOPE: GALLERIES_SCOPE,
+        ROLLING_UPLOAD_SCOPE: UPLOAD_SCOPE,
+        ROLLING_GALLERY_SEARCH_SCOPES[0]: GALLERIES_SCOPE,
+        ROLLING_GALLERY_SEARCH_SCOPES[1]: UPLOAD_SCOPE,
         READ_SCOPE: GALLERIES_SCOPE,
         READ_OFFLINE_SCOPE: GALLERIES_SCOPE,
         READ_UPLOAD_SCOPE: UPLOAD_SCOPE,
@@ -506,6 +637,46 @@ def scope_base(scope: str) -> str | None:
         CREATE_VISIBILITY_OFFLINE_SCOPE: GALLERIES_SCOPE,
         UPLOAD_CREATE_VISIBILITY_OFFLINE_SCOPE: UPLOAD_SCOPE,
     }.get(underlying)
+
+
+def scope_allows_gallery_search(scope: str) -> bool:
+    """Check the registered bundles granting metadata search.
+
+    Args:
+        scope (str): Exact scope held by the linked session.
+
+    Returns:
+        bool: True when the grant explicitly includes metadata search.
+    """
+    if scope_allows_admin_media(scope):
+        return GALLERY_SEARCH_SUFFIX + ADMIN_MEDIA_SCOPE_SUFFIX in scope
+    return scope in (
+        *GALLERY_SEARCH_SCOPES, *ROLLING_GALLERY_SEARCH_SCOPES,
+        *ROLLING_SEARCH_PRESENTATION_SCOPES,
+    )
+
+
+def scope_allows_presentation(scope: str) -> bool:
+    """Check for an exact temporary or rolling presentation grant.
+
+    Args:
+        scope (str): Exact scope held by the linked session.
+
+    Returns:
+        bool: True when the grant explicitly includes presentation and music.
+    """
+    if scope_allows_admin_media(scope):
+        return ADMIN_PRESENTATION_SCOPE_SUFFIX in scope
+    if scope in ROLLING_PRESENTATION_SCOPES:
+        return True
+    base = _scope_without_media(scope)
+    return (
+        scope == base + PRESENTATION_SCOPE_SUFFIX
+        and base not in (IDENTITY_SCOPE, *GALLERY_SEARCH_SCOPES)
+        and not base.endswith(' offline_access')
+        and _scope_without_media(base) == base
+        and scope_base(base) is not None
+    )
 
 
 def scope_allows_gallery_read(scope: str) -> bool:
@@ -748,7 +919,53 @@ def _discovery_admits_linking(
         return False
     granted = set(capabilities)
     required = set(scope.split()) - {IDENTITY_SCOPE}
+    if scope.endswith(ROLLING_SCOPE_SUFFIX):
+        # Rolling has its own transport policy. Direct localhost need not
+        # advertise the legacy HTTPS-only offline capability.
+        required.remove('offline_access')
+    if (scope in ROLLING_PRESENTATION_SCOPES
+            or (scope in (*ROLLING_ADMIN_MEDIA_SCOPES, *ROLLING_ADMIN_DELETE_SCOPES)
+                and scope_allows_presentation(scope))):
+        required.add('presentation:rolling')
     return 'linking' in granted and required.issubset(granted)
+
+
+def _preferred_admin_media_scope(
+    discovery: dict[str, JsonValue], issuer: str, base: str,
+    rolling: bool, presentation: bool,
+) -> str | None:
+    """Select the advertised normal Photos link for explicit browser consent.
+
+    Args:
+        discovery (dict[str, JsonValue]): Current installation capabilities.
+        issuer (str): Exact trusted installation issuer.
+        base (str): Basic gallery listing bundle with optional approved upload request.
+        rolling (bool): Whether the current client can securely store renewal.
+        presentation (bool): Whether native presentation support is preferred.
+
+    Returns:
+        str | None: Canonical Admin Photos bundle, or None for an older server.
+    """
+    if base not in (GALLERIES_SCOPE, UPLOAD_SCOPE):
+        return None
+    read = READ_UPLOAD_SCOPE if base == UPLOAD_SCOPE else READ_SCOPE
+    create = UPLOAD_CREATE_SCOPE if base == UPLOAD_SCOPE else CREATE_SCOPE
+    for candidate in (
+        read + ' galleries:create gallery:visibility',
+        read + ' gallery:visibility',
+        read + ' galleries:create',
+        read, create, base,
+    ):
+        for renewal in (ROLLING_SCOPE_SUFFIX, '') if rolling else ('',):
+            for media in (
+                ADMIN_PRESENTATION_SCOPE_SUFFIX, ADMIN_MEDIA_SCOPE_SUFFIX,
+            ) if presentation else (ADMIN_MEDIA_SCOPE_SUFFIX,):
+                for search in (GALLERY_SEARCH_SUFFIX, ''):
+                    scope = candidate + search + media + renewal
+                    if (scope_allows_admin_media(scope)
+                            and _discovery_admits_linking(discovery, issuer, scope)):
+                        return scope
+    return None
 
 
 def discover_linking_capabilities(
@@ -1270,7 +1487,8 @@ def _request_json(
         'app_linking_inventory', 'app_linking_upload', 'app_linking_gallery_detail',
         'app_linking_gallery_create', 'app_linking_gallery_create_status',
         'app_linking_gallery_create_abandon',
-        'app_linking_gallery_visibility',
+        'app_linking_gallery_visibility', 'app_linking_photo_visibility',
+        'app_linking_media_delete',
     ],
     method: Literal['GET', 'POST'],
     body: bytes | Iterable[bytes] | None,
@@ -1280,6 +1498,7 @@ def _request_json(
     multipart_boundary: str | None = None,
     content_length: int | None = None,
     gallery_id: int | None = None,
+    watch_key: str | None = None,
 ) -> dict[str, JsonValue]:
     """Bound one HTTPS request, including DNS, and validate its JSON.
 
@@ -1295,7 +1514,8 @@ def _request_json(
         after_id (int | None): Exclusive positive gallery ID cursor, if any.
         multipart_boundary (str | None): Validated generated upload boundary.
         content_length (int | None): Exact multipart body length in bytes.
-        gallery_id (int | None): Positive selected gallery ID for detail only.
+        gallery_id (int | None): Positive selected ID for gallery detail.
+        watch_key (str | None): Supplemental key for a linked Watcher request.
 
     Returns:
         dict[str, JsonValue]: Strict, unique-key decoded JSON object.
@@ -1308,12 +1528,16 @@ def _request_json(
                 method != 'GET' or body is not None or bearer is not None
                 or after_id is not None or gallery_id is not None))
             or (gallery_id is not None and (
-                route != 'app_linking_gallery_detail' or type(gallery_id) is not int
-                or gallery_id <= 0 or gallery_id > LINKING_GALLERY_ID_MAX))
+                route != 'app_linking_gallery_detail'
+                or type(gallery_id) is not int or gallery_id <= 0
+                or gallery_id > LINKING_GALLERY_ID_MAX))
             or (route == 'app_linking_gallery_detail' and (
                 gallery_id is None or method != 'GET' or body is not None
                 or after_id is not None))
-            or (route == 'app_linking_gallery_visibility' and (
+            or (route in (
+                'app_linking_gallery_visibility', 'app_linking_photo_visibility',
+                'app_linking_media_delete',
+            ) and (
                 method != 'POST' or not isinstance(body, bytes)
                 or gallery_id is not None or after_id is not None))
             or (route == 'app_linking_gallery_create_abandon' and (
@@ -1328,6 +1552,11 @@ def _request_json(
                 not isinstance(multipart_boundary, str)
                 or re.fullmatch(r'[A-Za-z0-9]{16,70}', multipart_boundary) is None
                 or type(content_length) is not int or content_length <= 0))
+            or (watch_key is not None and (
+                route not in ('app_linking_inventory', 'app_linking_upload')
+                or method != 'POST' or bearer is None
+                or not isinstance(watch_key, str)
+                or _WATCH_KEY_PATTERN.fullmatch(watch_key) is None))
             or (route != 'app_linking_upload' and (
                 multipart_boundary is not None or content_length is not None))):
         raise LinkingError('Invalid trusted issuer.')
@@ -1349,6 +1578,12 @@ def _request_json(
         Returns:
             dict[str, JsonValue]: The route's strict JSON response object.
         """
+        if watch_key is not None:
+            return _request_json_once(
+                issuer, route, method, body, bearer, control,
+                multipart_boundary=multipart_boundary,
+                content_length=content_length, watch_key=watch_key,
+            )
         if gallery_id is not None:
             return _request_json_once(
                 issuer, route, method, body, bearer, control, gallery_id=gallery_id,
@@ -1390,7 +1625,11 @@ def _run_linking_transport(
     control = _LinkingTransportControl(
         time.monotonic() + deadline_seconds, cancelled, inactivity_seconds,
     )
-    result: queue.Queue[_TransportResult | LinkingHttpsError | None] = (
+    result: queue.Queue[
+        _TransportResult | LinkingHttpsError | LinkingMediaUnavailable
+        | LinkingMediaThrottled | LinkingRevisionUnsupported
+        | LinkingGrantRejected | LinkingRefreshRejected | None
+    ] = (
         queue.Queue(maxsize=1)
     )
 
@@ -1400,11 +1639,31 @@ def _run_linking_transport(
         Returns:
             None: Publishes a response or a sanitized TLS or transport failure.
         """
-        outcome: _TransportResult | LinkingHttpsError | None
+        outcome: (
+            _TransportResult | LinkingHttpsError
+            | LinkingMediaUnavailable | LinkingMediaThrottled
+            | LinkingRevisionUnsupported | LinkingGrantRejected | LinkingRefreshRejected | None
+        )
         try:
             outcome = request_once(control)
         except ssl.SSLError:
             outcome = LinkingHttpsError('Secure HTTPS communication failed.')
+        except LinkingRevisionUnsupported:
+            outcome = LinkingRevisionUnsupported('Gallery revision is unsupported.')
+        except LinkingMediaUnavailable:
+            outcome = LinkingMediaUnavailable(
+                'Photos are unavailable for this gallery.',
+            )
+        except LinkingMediaThrottled:
+            outcome = LinkingMediaThrottled(
+                'Photo requests are limited. Try again shortly.',
+            )
+        except LinkingGrantRejected:
+            outcome = LinkingGrantRejected('The linking grant was rejected.')
+        except LinkingRefreshRejected:
+            outcome = LinkingRefreshRejected(
+                'The saved gallery approval expired or was revoked.',
+            )
         except Exception:  # noqa: BLE001
             outcome = None
         finally:
@@ -1433,6 +1692,14 @@ def _run_linking_transport(
             control.remaining()
             if isinstance(data, LinkingHttpsError):
                 raise data
+            if isinstance(data, LinkingRevisionUnsupported):
+                raise data
+            if isinstance(data, LinkingMediaUnavailable):
+                raise data
+            if isinstance(data, LinkingMediaThrottled):
+                raise data
+            if isinstance(data, (LinkingGrantRejected, LinkingRefreshRejected)):
+                raise data
             if data is None:
                 raise LinkingError('Linking request did not complete safely.')
             return data
@@ -1448,7 +1715,8 @@ def _request_json_once(
         'app_linking_inventory', 'app_linking_upload', 'app_linking_gallery_detail',
         'app_linking_gallery_create', 'app_linking_gallery_create_status',
         'app_linking_gallery_create_abandon',
-        'app_linking_gallery_visibility',
+        'app_linking_gallery_visibility', 'app_linking_photo_visibility',
+        'app_linking_media_delete',
     ],
     method: Literal['GET', 'POST'],
     body: bytes | Iterable[bytes] | None,
@@ -1458,6 +1726,7 @@ def _request_json_once(
     multipart_boundary: str | None = None,
     content_length: int | None = None,
     gallery_id: int | None = None,
+    watch_key: str | None = None,
 ) -> dict[str, JsonValue]:
     """Execute one non-redirecting request on the bounded worker.
 
@@ -1473,7 +1742,8 @@ def _request_json_once(
         after_id (int | None): Validated exclusive gallery ID cursor, if any.
         multipart_boundary (str | None): Generated multipart boundary, if used.
         content_length (int | None): Exact multipart body size in bytes.
-        gallery_id (int | None): Positive selected gallery ID for detail only.
+        gallery_id (int | None): Positive selected ID for gallery detail.
+        watch_key (str | None): Validated temporary Watcher key, if applicable.
 
     Returns:
         dict[str, JsonValue]: Strict JSON object returned by the selected route.
@@ -1485,14 +1755,19 @@ def _request_json_once(
         http.client.HTTPException: The server sent an invalid HTTP response.
     """
     parsed = urlsplit(issuer)
-    path = parsed.path + '/index.php?page=' + route
+    wire_route = 'app_linking_media' if route in (
+        'app_linking_photo_visibility', 'app_linking_media_delete',
+    ) else route
+    path = parsed.path + '/index.php?page=' + wire_route
     if after_id is not None:
         path += '&after=' + str(after_id)
-    if gallery_id is not None:
+    if gallery_id is not None and route == 'app_linking_gallery_detail':
         path += '&gallery_id=' + str(gallery_id)
     headers = {'Accept': 'application/json'}
     if bearer is not None:
         headers['Authorization'] = 'Bearer ' + bearer
+    if watch_key is not None:
+        headers['X-PHP-Gallery-Watch-Key'] = watch_key
     if route in ('app_linking_push', 'app_linking_token') or (
         route == 'app_linking_galleries' and method == 'POST'
     ):
@@ -1500,7 +1775,8 @@ def _request_json_once(
     elif route in ('app_linking_inventory', 'app_linking_gallery_create',
                    'app_linking_gallery_create_status',
                    'app_linking_gallery_create_abandon',
-                   'app_linking_gallery_visibility'):
+                   'app_linking_gallery_visibility', 'app_linking_photo_visibility',
+                   'app_linking_media_delete'):
         headers['Content-Type'] = 'application/json; charset=utf-8'
     elif route == 'app_linking_upload':
         headers['Content-Type'] = 'multipart/form-data; boundary=' + str(multipart_boundary)
@@ -1512,13 +1788,54 @@ def _request_json_once(
         connection.request(method, path, body=body, headers=headers)
         with connection.getresponse() as response:
             content_types = response.headers.get_all('Content-Type', [])
+            cache_headers = response.headers.get_all('Cache-Control', [])
+            access_rejected = (
+                route not in ('app_linking_push', 'app_linking_token',
+                              'app_linking_discovery') and response.status == 401
+            )
+            refresh_rejected = (
+                route == 'app_linking_token' and method == 'POST'
+                and bearer is None and response.status == 400
+                and isinstance(body, bytes)
+                and body.startswith(b'grant_type=refresh_token&')
+            )
+            if ((access_rejected or refresh_rejected) and len(content_types) == 1
+                    and content_types[0].split(';', 1)[0].strip().lower()
+                    == 'application/json'
+                    and len(cache_headers) == 1
+                    and 'no-store' in {
+                        part.strip().lower()
+                        for part in cache_headers[0].split(',')
+                    }
+                    and response.headers.get('Content-Encoding') is None):
+                payload = response.read(LINKING_RESPONSE_MAX_BYTES + 1)
+                if len(payload) <= LINKING_RESPONSE_MAX_BYTES:
+                    try:
+                        rejection = json.loads(
+                            payload.decode('utf-8'),
+                            object_pairs_hook=_unique_object,
+                            parse_constant=_reject_nonfinite,
+                        )
+                    except (UnicodeError, ValueError, RecursionError):
+                        rejection = None
+                    if access_rejected and rejection == {'error': 'invalid_token'}:
+                        raise LinkingGrantRejected(
+                            'The linking grant was rejected.',
+                        )
+                    lengths = response.headers.get_all('Content-Length', [])
+                    if (refresh_rejected and rejection == {'error': 'invalid_grant'}
+                            and (not lengths or lengths == [str(len(payload))])):
+                        raise LinkingRefreshRejected(
+                            'The saved gallery approval expired or was revoked.',
+                        )
             expected_status = 201 if route == 'app_linking_push' else 200
             cache_directives = {
                 directive.strip().lower()
                 for header in response.headers.get_all('Cache-Control', [])
                 for directive in header.split(',')
             }
-            visibility_conflict = (route == 'app_linking_gallery_visibility'
+            visibility_conflict = (route in ('app_linking_gallery_visibility',
+                                             'app_linking_photo_visibility')
                                    and response.status == 409)
             if ((response.status != expected_status and not visibility_conflict)
                     or len(content_types) != 1
@@ -1546,12 +1863,13 @@ def _request_json_once(
         if not isinstance(data, dict):
             raise LinkingError('Linking response was not accepted.')
         if visibility_conflict:
-            if data not in ({'error': 'scheduled_publication_active'},
-                            {'error': 'revision_conflict'}):
+            if (data != {'error': 'revision_conflict'}
+                    and not (route == 'app_linking_gallery_visibility'
+                             and data == {'error': 'scheduled_publication_active'})):
                 raise LinkingError('Linking response was not accepted.')
             # This local marker is only created for an exact pre-write 409.
             return {'__client_visibility_conflict': data['error']}
-        if (route == 'app_linking_gallery_visibility'
+        if (route in ('app_linking_gallery_visibility', 'app_linking_photo_visibility')
                 and '__client_visibility_conflict' in data):
             raise LinkingError('Linking response was not accepted.')
         return data
@@ -1579,7 +1897,7 @@ class LinkingAttempt:
         Raises:
             LinkingError: Issuer, family or exclusive loopback bind is invalid.
         """
-        if (not _issuer_valid(issuer, allow_local_http=not scope.endswith(' offline_access'))
+        if (not _issuer_valid(issuer, allow_local_http=True)
                 or family not in (socket.AF_INET, socket.AF_INET6)
                 or scope_base(scope) is None):
             raise LinkingError('Invalid trusted issuer or callback family.')
@@ -1617,14 +1935,25 @@ class LinkingAttempt:
             self._verifier = ''
             raise LinkingError('Cannot open an exclusive loopback callback.') from None
 
-    def push_request(self, *, prefer_upload: bool = False) -> PushedAuthorization:
+    def push_request(
+        self, *, prefer_upload: bool = False, prefer_rolling: bool = False,
+        prefer_presentation: bool = False, prefer_admin_media: bool = False,
+        require_admin_media: bool = False,
+    ) -> PushedAuthorization:
         """Verify public support, then request one explicitly approved handoff.
 
         Args:
             prefer_upload (bool): Include temporary upload access in a basic
                 listing request when this installation advertises it. The
                 administrator sees the exact scope before approving.
-                Basic temporary links also request search when advertised.
+                Basic links also request search when advertised.
+            prefer_rolling (bool): Request renewal for a basic link when advertised.
+            prefer_presentation (bool): Request explicit playback consent on a
+                supported normal link. A temporary link retains search if offered.
+            prefer_admin_media (bool): Request restricted Photos and the
+                available gallery management capabilities in browser consent.
+            require_admin_media (bool): Refuse a fallback to a legacy grant
+                when explicitly upgrading an existing public Photos link.
 
         Returns:
             PushedAuthorization: Non-authorizing request handle, exact browser
@@ -1652,10 +1981,37 @@ class LinkingAttempt:
                 if (prefer_upload and self._scope == GALLERIES_SCOPE
                         and _discovery_admits_linking(discovery, self._issuer, UPLOAD_SCOPE)):
                     self._scope = UPLOAD_SCOPE
+                admin_scope = _preferred_admin_media_scope(
+                    discovery, self._issuer, self._scope,
+                    prefer_rolling, prefer_presentation,
+                ) if prefer_admin_media or require_admin_media else None
+                if require_admin_media and admin_scope is None:
+                    raise LinkingUnavailable('Admin Photos are unavailable for this gallery.')
                 search_scope = self._scope + GALLERY_SEARCH_SUFFIX
-                if (search_scope in GALLERY_SEARCH_SCOPES
+                if (admin_scope is None and search_scope in GALLERY_SEARCH_SCOPES
                         and _discovery_admits_linking(discovery, self._issuer, search_scope)):
                     self._scope = search_scope
+                rolling_scope = self._scope + ROLLING_SCOPE_SUFFIX
+                presentation_scope = self._scope + PRESENTATION_SCOPE_SUFFIX
+                rolling_presentation_scope = presentation_scope + ROLLING_SCOPE_SUFFIX
+                if admin_scope is not None:
+                    self._scope = admin_scope
+                elif (prefer_presentation and prefer_rolling
+                        and rolling_presentation_scope in ROLLING_PRESENTATION_SCOPES
+                        and _discovery_admits_linking(
+                            discovery, self._issuer, rolling_presentation_scope,
+                        )):
+                    self._scope = rolling_presentation_scope
+                elif (prefer_rolling and rolling_scope in (
+                        ROLLING_GALLERIES_SCOPE, ROLLING_UPLOAD_SCOPE,
+                        *ROLLING_GALLERY_SEARCH_SCOPES,
+                ) and _discovery_admits_linking(discovery, self._issuer, rolling_scope)):
+                    self._scope = rolling_scope
+                elif (prefer_presentation and self._scope in (GALLERIES_SCOPE, UPLOAD_SCOPE)
+                      and _discovery_admits_linking(
+                          discovery, self._issuer, rolling_presentation_scope,
+                      )):
+                    self._scope = presentation_scope
                 if not _discovery_admits_linking(discovery, self._issuer, self._scope):
                     raise LinkingUnavailable('Gallery does not support this linking request.')
                 challenge = base64.urlsafe_b64encode(
@@ -1790,6 +2146,15 @@ class LinkingAttempt:
             self._verifier = ''
             return result
 
+    def requests_offline_access(self) -> bool:
+        """Check the exact scope selected for browser consent.
+
+        Returns:
+            bool: True when the negotiated exchange returns a refresh token.
+        """
+        with self._lock:
+            return self._scope.endswith(' offline_access')
+
     def exchange_once(self) -> 'LinkingSession':
         """Exchange a transient scope once without returning refresh material.
 
@@ -1827,7 +2192,11 @@ class LinkingAttempt:
                                VISIBILITY_OFFLINE_SCOPE,
                                UPLOAD_VISIBILITY_OFFLINE_SCOPE,
                                CREATE_VISIBILITY_OFFLINE_SCOPE,
-                               UPLOAD_CREATE_VISIBILITY_OFFLINE_SCOPE):
+                               UPLOAD_CREATE_VISIBILITY_OFFLINE_SCOPE,
+                               ROLLING_GALLERIES_SCOPE, ROLLING_UPLOAD_SCOPE,
+                               *ROLLING_GALLERY_SEARCH_SCOPES,
+                               *ROLLING_PRESENTATION_SCOPES,
+                               *ROLLING_ADMIN_MEDIA_SCOPES):
             raise LinkingError('Offline scope was not requested.')
         session, refresh, lifetime = self._exchange_approved(True)
         if refresh is None or lifetime is None:
@@ -1922,6 +2291,23 @@ class LinkedIdentity:
 
     user_id: int
     username: str
+
+
+@dataclass(frozen=True)
+class TransientSessionSnapshot:
+    """Carry an already-approved bearer to an OS vault without repr exposure.
+
+    Attributes:
+        issuer (str): Exact installation issuer and mount.
+        scope (str): Exact browser-approved scope bundle.
+        token (str): Original bearer, excluded from object representation.
+        expires_at (float): Original grant deadline as Unix seconds.
+    """
+
+    issuer: str
+    scope: str
+    token: str = field(repr=False)
+    expires_at: float
 
 
 @dataclass(frozen=True)
@@ -2049,10 +2435,140 @@ class LinkedPhoto:
     Args:
         image_id (int): Stable positive server image identity.
         title (str): Bounded display name returned by the server.
+        latitude (float | None): Authorized map latitude, or None if unavailable.
+        longitude (float | None): Authorized map longitude, or None if unavailable.
+        visibility (str | None): Stored Admin visibility, if explicitly authorized.
+        nsfw (bool | None): Stored NSFW Guard state, if explicitly authorized.
+        size (int | None): Indexed original file size in bytes, if known.
+        cache_eligible (bool | None): Current independent public admission, if supplied.
+        thumbnail_etag (str | None): Current validator for an existing public thumbnail.
+        thumbnail_verified_at (float | None): Monotonic time of its authorized page read.
     """
 
     image_id: int
     title: str
+    latitude: float | None = None
+    longitude: float | None = None
+    visibility: str | None = None
+    nsfw: bool | None = None
+    size: int | None = None
+    cache_eligible: bool | None = None
+    thumbnail_etag: str | None = None
+    thumbnail_verified_at: float | None = None
+
+
+def _linked_thumbnail_etag(value: JsonValue) -> str | None:
+    """Validate the optional public thumbnail proof from a catalogue row.
+
+    Args:
+        value (JsonValue): Decoded optional validator from the server.
+
+    Returns:
+        str | None: Strong validator or None when no proof was supplied.
+
+    Raises:
+        LinkingError: A non-null proof was malformed.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or re.fullmatch(r'"[a-f0-9]{64}"', value) is None:
+        raise LinkingError('Gallery thumbnail validator was not accepted.')
+    return value
+
+
+def _linked_admin_photo(row: dict[str, JsonValue]) -> LinkedPhoto:
+    """Validate an Admin photo projection before exposing it to the viewer.
+
+    Args:
+        row (dict[str, JsonValue]): Strict decoded descriptor with stored settings.
+
+    Returns:
+        LinkedPhoto: Bounded metadata and explicit public cache admission.
+
+    Raises:
+        LinkingError: The photo identity or stored settings were malformed.
+    """
+    image_id, title = row.get('id'), row.get('title')
+    visibility, nsfw, size = row.get('visibility'), row.get('nsfw'), row.get('size')
+    cache_eligible = row.get('cache_eligible')
+    thumbnail_etag = _linked_thumbnail_etag(row.get('thumbnail_etag'))
+    if (type(image_id) is not int or not _native_media_id(image_id)
+            or not isinstance(title, str) or not _native_media_title(title)
+            or not isinstance(visibility, str) or visibility not in ('draft', 'private', 'public')
+            or type(nsfw) is not bool or type(cache_eligible) is not bool
+            or (size is not None and (type(size) is not int or size < 0))
+            or (cache_eligible and (nsfw or visibility != 'public'))
+            or (thumbnail_etag is not None and not cache_eligible)):
+        raise LinkingError('Gallery photo settings were not accepted.')
+    return LinkedPhoto(
+        image_id, title, visibility=visibility, nsfw=nsfw,
+        size=size, cache_eligible=cache_eligible, thumbnail_etag=thumbnail_etag,
+    )
+
+
+@dataclass(frozen=True)
+class LinkedMediaGalleryInfo:
+    """Represent the current direct original inventory of a physical gallery.
+
+    Args:
+        gallery_id (int): Exact gallery ID from the request.
+        photo_count (int): Number of direct indexed photos.
+        file_count (int): Number of direct indexed original photo files.
+        size (int): Total indexed original bytes.
+    """
+
+    gallery_id: int
+    photo_count: int
+    file_count: int
+    size: int
+
+
+def _linked_media_gallery_inventory(
+    data: dict[str, JsonValue], gallery_id: int,
+) -> LinkedMediaGalleryInfo:
+    """Validate the shared inventory fields in an Admin gallery response.
+
+    Args:
+        data (dict[str, JsonValue]): Gallery ID, direct photo/file counts and
+            original byte size, with optional detailed fields.
+        gallery_id (int): Exact requested physical gallery ID.
+
+    Returns:
+        LinkedMediaGalleryInfo: Bound direct inventory counts and size.
+
+    Raises:
+        LinkingError: The response names a different gallery or invalid counts.
+    """
+    photos, files, size = (data.get(key) for key in ('photo_count', 'file_count', 'size'))
+    if (type(data.get('gallery_id')) is not int or data['gallery_id'] != gallery_id
+            or type(photos) is not int or photos < 0
+            or type(files) is not int or files < 0
+            or type(size) is not int or size < 0):
+        raise LinkingError('Gallery inventory was not accepted.')
+    return LinkedMediaGalleryInfo(gallery_id, photos, files, size)
+
+
+def _linked_media_details(
+    data: dict[str, JsonValue], fields: tuple[str, ...],
+) -> LinkedMediaDetails:
+    """Project bounded scalar information from an exact Admin response.
+
+    Args:
+        data (dict[str, JsonValue]): Parsed metadata object with allowed text,
+            image geometry, EXIF, location or gallery attributes.
+        fields (tuple[str, ...]): Explicit optional fields for this entity type.
+
+    Returns:
+        LinkedMediaDetails: Present bounded scalars keyed by their wire names.
+    """
+    details: LinkedMediaDetails = {}
+    for key in fields:
+        value = data.get(key)
+        if isinstance(value, str) and len(value) <= NATIVE_MEDIA_DETAIL_TEXT_CHARS:
+            details[key] = ''.join(char if char.isprintable() else ' ' for char in value)
+        elif type(value) in (int, bool) or (type(value) is float and math.isfinite(value)):
+            details[key] = value
+    return details
 
 
 @dataclass(frozen=True)
@@ -2102,6 +2618,7 @@ class LinkedPresentation:
         transition (str): Server's slow, medium or fast transition preset.
         music (bool): Whether the presentation permits gallery music.
         tracks (tuple[LinkedTrack, ...]): Ordered bounded playable tracks.
+        track_cache (bool): Whether the current server permits opted-in track reuse.
     """
 
     enabled: bool
@@ -2110,6 +2627,7 @@ class LinkedPresentation:
     transition: str
     music: bool
     tracks: tuple[LinkedTrack, ...]
+    track_cache: bool = False
 
 
 def _native_media_id(value: JsonValue) -> bool:
@@ -2140,8 +2658,9 @@ def _native_media_title(value: JsonValue) -> bool:
 
 def _native_media_read_once(
     issuer: str, query: str, bearer: str, accepted: tuple[str, ...],
-    control: _LinkingTransportControl,
-) -> tuple[bytes, str]:
+    control: _LinkingTransportControl, if_none_match: str | None = None,
+    *, allow_restricted: bool = False,
+) -> _NativeMediaResponse:
     """Read one current media projection from the exact scoped installation.
 
     Args:
@@ -2150,9 +2669,13 @@ def _native_media_read_once(
         bearer (str): Current opaque token sent only in the authorization header.
         accepted (tuple[str, ...]): Exact expected JSON or binary media types.
         control (_LinkingTransportControl): Absolute worker deadline and socket owner.
+        if_none_match (str | None): Previously verified strong photo ETag for
+            one conditional photo or thumbnail revalidation.
+        allow_restricted (bool): Permit the explicit no-store Admin photo lane.
 
     Returns:
-        tuple[bytes, str]: Complete bounded response and validated media type.
+        _NativeMediaResponse: Body or authorized not-modified marker, media type,
+            strong validator, and whether the server opted into disk caching.
 
     Raises:
         LinkingError: A redirect, unsafe header, length or digest was received.
@@ -2163,38 +2686,140 @@ def _native_media_read_once(
     connection = _linking_connection(parsed, control)
     try:
         control.remaining()
-        connection.request('GET', parsed.path + '/index.php?' + query, headers={
+        headers = {
             'Accept': ', '.join(accepted), 'Authorization': 'Bearer ' + bearer,
-        })
+        }
+        photo_request = any(mime in _NATIVE_IMAGE_TYPES for mime in accepted)
+        track_request = any(mime in _NATIVE_AUDIO_TYPES for mime in accepted)
+        catalogue_request = '&kind=photos' in query
+        cache_header = None
+        cache_policy = ''
+        if photo_request:
+            cache_header = 'X-PHP-Gallery-Photo-Cache'
+            cache_policy = f'private, max-age={PHOTO_CACHE_FRESH_SECONDS}, must-revalidate'
+        elif track_request:
+            cache_header = 'X-PHP-Gallery-Track-Cache'
+            cache_policy = 'private, no-cache'
+        if cache_header is not None:
+            headers[cache_header] = '1'
+        if catalogue_request:
+            headers['X-PHP-Gallery-Photo-Page'] = str(NATIVE_MEDIA_PAGE_SIZE)
+        if if_none_match is not None:
+            if not photo_request or re.fullmatch(r'"[a-f0-9]{64}"', if_none_match) is None:
+                raise LinkingError('Invalid gallery photo validator.')
+            headers['If-None-Match'] = if_none_match
+        connection.request('GET', parsed.path + '/index.php?' + query, headers=headers)
         with connection.getresponse() as response:
             types = response.headers.get_all('Content-Type', [])
             media_type = types[0].split(';', 1)[0].strip().lower() if len(types) == 1 else ''
+            cache_controls = response.headers.get_all('Cache-Control', [])
+            vary_values = response.headers.get_all('Vary', [])
+            vary_tokens = {
+                part.strip().lower()
+                for value in vary_values for part in value.split(',')
+            }
+            cacheable = bool(
+                cache_header is not None
+                and response.headers.get_all(cache_header, []) == ['1']
+                and len(cache_controls) == 1
+                and cache_controls[0].strip().lower() == cache_policy
+                and '*' not in vary_tokens
+                and {'authorization', cache_header.lower()}.issubset(vary_tokens)
+            )
             directives = {part.strip().lower()
-                          for value in response.headers.get_all('Cache-Control', [])
+                          for value in cache_controls
                           for part in value.split(',')}
+            if response.headers.get('Content-Encoding') is not None:
+                raise LinkingError('Gallery media response was not accepted.')
+            if response.status == 401:
+                payload = response.read(NATIVE_MEDIA_JSON_BYTES + 1)
+                if (len(types) == 1 and media_type == 'application/json'
+                        and cache_controls == ['no-store']
+                        and len(payload) <= NATIVE_MEDIA_JSON_BYTES
+                        and _native_media_json(payload) == {'error': 'invalid_token'}):
+                    raise LinkingGrantRejected('The linking grant was rejected.')
+                raise LinkingError('Gallery media response was not accepted.')
+            if response.status == 304:
+                etags = response.headers.get_all('ETag', [])
+                if (if_none_match is None or len(etags) != 1
+                        or etags[0] != if_none_match
+                        or not (cacheable or 'no-store' in directives)):
+                    raise LinkingError('Gallery media validator was not accepted.')
+                control.remaining()
+                return None, '', etags[0], cacheable
+            if response.status == 400 and '&kind=revision' in query:
+                payload = response.read(NATIVE_MEDIA_JSON_BYTES + 1)
+                if (len(types) == 1 and media_type == 'application/json'
+                        and cache_controls == ['no-store']
+                        and len(payload) <= NATIVE_MEDIA_JSON_BYTES
+                        and _native_media_json(payload) == {'error': 'invalid_request'}):
+                    raise LinkingRevisionUnsupported('Gallery revision is unsupported.')
+                raise LinkingError('Gallery media response was not accepted.')
+            if response.status == 404 and catalogue_request:
+                payload = response.read(NATIVE_MEDIA_JSON_BYTES + 1)
+                if (len(types) == 1 and media_type == 'application/json'
+                        and cache_controls == ['no-store']
+                        and len(payload) <= NATIVE_MEDIA_JSON_BYTES):
+                    try:
+                        error_data = _native_media_json(payload)
+                    except LinkingError:
+                        error_data = {}
+                    if error_data == {'error': 'target_unavailable'}:
+                        raise LinkingMediaUnavailable(
+                            'Photos are unavailable for this gallery.',
+                        )
+                raise LinkingError('Gallery media response was not accepted.')
+            if response.status == 429:
+                payload = response.read(NATIVE_MEDIA_JSON_BYTES + 1)
+                if (len(types) == 1 and media_type == 'application/json'
+                        and cache_controls == ['no-store']
+                        and len(payload) <= NATIVE_MEDIA_JSON_BYTES):
+                    try:
+                        error_data = _native_media_json(payload)
+                    except LinkingError:
+                        error_data = {}
+                    if error_data == {'error': 'temporarily_unavailable'}:
+                        raise LinkingMediaThrottled(
+                            'Photo requests are limited. Try again shortly.',
+                        )
+                raise LinkingError('Gallery media response was not accepted.')
             if (response.status != 200 or media_type not in accepted
-                    or 'no-store' not in directives
-                    or response.headers.get('Content-Encoding') is not None):
+                    or not (cacheable or 'no-store' in directives)):
                 raise LinkingError('Gallery media response was not accepted.')
             if media_type == 'application/json':
-                payload = response.read(NATIVE_MEDIA_JSON_BYTES + 1)
-                if len(payload) > NATIVE_MEDIA_JSON_BYTES:
+                max_bytes = (
+                    NATIVE_MEDIA_CATALOGUE_BYTES if catalogue_request else NATIVE_MEDIA_JSON_BYTES
+                )
+                payload = response.read(max_bytes + 1)
+                if len(payload) > max_bytes:
                     raise LinkingError('Gallery media metadata is too large.')
+                etag, cacheable = None, False
             else:
                 lengths = response.headers.get_all('Content-Length', [])
                 etags = response.headers.get_all('ETag', [])
+                restricted = (
+                    allow_restricted and photo_request and cache_controls == ['no-store']
+                    and response.headers.get_all('X-PHP-Gallery-Media-Restricted', []) == ['1']
+                    and not response.headers.get_all('X-PHP-Gallery-Photo-Cache', [])
+                    and not etags
+                )
+                has_validator = (
+                    len(etags) == 1 and re.fullmatch(r'"[a-f0-9]{64}"', etags[0]) is not None
+                )
                 if (len(lengths) != 1 or re.fullmatch(r'[1-9][0-9]{0,7}', lengths[0]) is None
                         or int(lengths[0]) > NATIVE_MEDIA_MAX_BYTES
-                        or len(etags) != 1 or re.fullmatch(r'"[a-f0-9]{64}"', etags[0]) is None
+                        or not (restricted or has_validator)
                         or response.headers.get('Transfer-Encoding') is not None):
                     raise LinkingError('Gallery media size or validator is unavailable.')
                 length = int(lengths[0])
                 payload = response.read(length)
                 if (len(payload) != length
-                        or hashlib.sha256(payload).hexdigest() != etags[0][1:-1]):
+                        or (has_validator
+                            and hashlib.sha256(payload).hexdigest() != etags[0][1:-1])):
                     raise LinkingError('Gallery media bytes changed during transfer.')
+                etag = etags[0] if has_validator else None
             control.remaining()
-            return payload, media_type
+            return payload, media_type, etag, cacheable
     finally:
         connection.close()
 
@@ -2242,7 +2867,7 @@ class LinkingSession:
         Raises:
             LinkingError: Issuer, bearer or expiry is invalid.
         """
-        if (not _issuer_valid(issuer, allow_local_http=not scope.endswith(' offline_access'))
+        if (not _issuer_valid(issuer, allow_local_http=True)
                 or not token.startswith(TOKEN_PREFIX)
                 or not _canonical_256bit(token[len(TOKEN_PREFIX):])
                 or scope_base(scope) is None
@@ -2260,18 +2885,74 @@ class LinkingSession:
         self._expires_at = expires_at
         self._busy = False
         self._active_route = ''
+        self._renew: Callable[[threading.Event], tuple[str, float]] | None = None
         self._closed = False
+
+    def enable_renewal(
+        self, renew: Callable[[threading.Event], tuple[str, float]],
+    ) -> None:
+        """Attach renewal after the approved account binding is persisted.
+
+        Args:
+            renew (Callable[[threading.Event], tuple[str, float]]): Callback
+                returning the same account's verified bearer and monotonic expiry.
+
+        Returns:
+            None: Subsequent operations may renew an expired bearer.
+        """
+        with self._lock:
+            if not self._closed and self._scope.endswith(ROLLING_SCOPE_SUFFIX):
+                self._renew = renew
+
+    def disable_renewal(self) -> None:
+        """Forget renewal after the saved local credential is removed.
+
+        Returns:
+            None: The current bearer retains only its original lifetime.
+        """
+        with self._lock:
+            self._renew = None
+
+    def _renew_if_expired(self, cancelled: threading.Event | None) -> None:
+        """Renew under request admission before sending any protected operation.
+
+        Args:
+            cancelled (threading.Event | None): Optional operation cancellation.
+
+        Returns:
+            None: The request may proceed to normal scope and deadline checks.
+
+        Raises:
+            LinkingError: Rotation or cancellation prevented a usable bearer.
+        """
+        with self._lock:
+            renew = self._renew
+            if (self._closed or renew is None
+                    or time.monotonic() < self._expires_at):
+                return
+            if cancelled is not None and cancelled.is_set():
+                raise LinkingError('Gallery request was cancelled.')
+        try:
+            token, expires_at = renew(self._cancelled)
+        except LinkingRefreshRejected:
+            self.close()
+            raise
+        with self._lock:
+            if self._closed:
+                raise LinkingError('Linking session was cancelled.')
+            self._token = token
+            self._expires_at = expires_at
 
     def available(self) -> bool:
         """Check the local deadline without claiming remote authorization.
 
         Returns:
-            bool: True only while the bearer is locally held and unexpired;
+            bool: True while the bearer is live or the link can renew;
                 the server may already have revoked the underlying grant.
         """
         with self._lock:
             return (not self._closed and bool(self._token)
-                    and time.monotonic() < self._expires_at)
+                    and (self._renew is not None or time.monotonic() < self._expires_at))
 
     def _request(
         self,
@@ -2281,7 +2962,8 @@ class LinkingSession:
             'app_linking_upload', 'app_linking_gallery_detail',
             'app_linking_gallery_create', 'app_linking_gallery_create_status',
             'app_linking_gallery_create_abandon',
-            'app_linking_gallery_visibility',
+            'app_linking_gallery_visibility', 'app_linking_photo_visibility',
+            'app_linking_media_delete',
         ],
         after_id: int | None = None,
         body: bytes | Iterable[bytes] | None = None,
@@ -2289,6 +2971,7 @@ class LinkingSession:
         content_length: int | None = None,
         gallery_cancel: threading.Event | None = None,
         gallery_id: int | None = None,
+        watch_key: str | None = None,
     ) -> dict[str, JsonValue]:
         """Serialize one authenticated operation without retrying it.
 
@@ -2300,7 +2983,8 @@ class LinkingSession:
             content_length (int | None): Exact multipart size in bytes.
             gallery_cancel (threading.Event | None): Dialog-owned cancellation
                 for a listing, detail read or create request, if applicable.
-            gallery_id (int | None): Exact selected ID for gallery detail only.
+            gallery_id (int | None): Exact selected gallery ID for detail or deletion.
+            watch_key (str | None): Supplemental key for capture traffic only.
 
         Returns:
             dict[str, JsonValue]: Strict decoded server response object.
@@ -2317,9 +3001,11 @@ class LinkingSession:
             if not self._request_gate.acquire(timeout=LINKING_SESSION_ADMISSION_TIMEOUT_SECONDS):
                 raise LinkingError('Linking session is busy; try again later.')
             try:
+                if route != 'app_linking_revoke':
+                    self._renew_if_expired(gallery_cancel)
                 return self._request_owned(
                     route, after_id, body, multipart_boundary, content_length,
-                    gallery_cancel, gallery_id,
+                    gallery_cancel, gallery_id, watch_key,
                 )
             finally:
                 self._request_gate.release()
@@ -2333,6 +3019,7 @@ class LinkingSession:
         body: bytes | Iterable[bytes] | None,
         multipart_boundary: str | None, content_length: int | None,
         gallery_cancel: threading.Event | None, gallery_id: int | None,
+        watch_key: str | None,
     ) -> dict[str, JsonValue]:
         """Perform one authenticated operation while holding session admission.
 
@@ -2344,7 +3031,8 @@ class LinkingSession:
             content_length (int | None): Exact multipart body size in bytes.
             gallery_cancel (threading.Event | None): Dialog operation cancellation
                 signal, independent of an active upload.
-            gallery_id (int | None): Selected gallery ID for a detail request.
+            gallery_id (int | None): Selected gallery ID for detail or deletion.
+            watch_key (str | None): Supplemental key for capture traffic only.
 
         Returns:
             dict[str, JsonValue]: Strict decoded server response object.
@@ -2362,7 +3050,7 @@ class LinkingSession:
                     and scope_base(self._scope) not in (GALLERIES_SCOPE, UPLOAD_SCOPE)):
                 raise LinkingError('Gallery listing was not approved.')
             if (route == 'app_linking_galleries' and body is not None
-                    and self._scope not in GALLERY_SEARCH_SCOPES):
+                    and not scope_allows_gallery_search(self._scope)):
                 raise LinkingError('Gallery search was not approved.')
             if (route == 'app_linking_gallery_detail'
                     and not scope_allows_gallery_read(self._scope)):
@@ -2378,9 +3066,17 @@ class LinkingSession:
             if (route == 'app_linking_gallery_visibility'
                     and not scope_allows_gallery_visibility(self._scope)):
                 raise LinkingError('Gallery visibility was not approved.')
+            if (route == 'app_linking_photo_visibility'
+                    and not (scope_allows_admin_media(self._scope)
+                             and scope_allows_gallery_visibility(self._scope))):
+                raise LinkingError('Photo visibility was not approved.')
+            if (route == 'app_linking_media_delete'
+                    and not scope_allows_admin_media(self._scope)):
+                raise LinkingError('Photo deletion requires an Admin Photos link.')
             self._busy = True
             self._active_route = route
             token = self._token
+        watch_options = {'watch_key': watch_key} if watch_key is not None else {}
         try:
             if route == 'app_linking_gallery_detail':
                 data = _request_json(
@@ -2393,6 +3089,7 @@ class LinkingSession:
                     cancelled=self._cancelled,
                     multipart_boundary=multipart_boundary,
                     content_length=content_length,
+                    **watch_options,
                 )
             elif route == 'app_linking_galleries' and body is not None:
                 data = _request_json(
@@ -2402,13 +3099,16 @@ class LinkingSession:
             elif route in ('app_linking_inventory', 'app_linking_gallery_create',
                            'app_linking_gallery_create_status',
                            'app_linking_gallery_create_abandon',
-                           'app_linking_gallery_visibility'):
+                           'app_linking_gallery_visibility', 'app_linking_photo_visibility',
+                           'app_linking_media_delete'):
                 data = _request_json(
                     self._issuer, route, 'POST', body, token,
                     cancelled=(gallery_cancel if route in (
-                        'app_linking_gallery_create', 'app_linking_gallery_visibility',
-                        'app_linking_gallery_create_abandon')
+                        'app_linking_inventory', 'app_linking_gallery_create',
+                        'app_linking_gallery_visibility', 'app_linking_media_delete',
+                        'app_linking_gallery_create_abandon', 'app_linking_photo_visibility')
                                and gallery_cancel is not None else self._cancelled),
+                    **watch_options,
                 )
             elif after_id is None:
                 data = _request_json(
@@ -2431,6 +3131,13 @@ class LinkingSession:
                     self._token = ''
                     self._closed = True
                 return data
+        except LinkingGrantRejected:
+            with self._lock:
+                if self._renew is not None:
+                    # Another process may have rotated the shared credential.
+                    # Admit renewal on the next request, never replay this one.
+                    self._expires_at = time.monotonic()
+            raise
         finally:
             with self._lock:
                 self._busy = False
@@ -2456,12 +3163,77 @@ class LinkingSession:
                 self._cancelled.set()
 
     def can_read_media(self) -> bool:
-        """Check only the live local photo-browsing permission.
+        """Check whether this live listing link can request photo routes.
 
         Returns:
-            bool: True for an unexpired grant with the exact media extension.
+            bool: True for an unexpired gallery-listing grant. The server
+                applies current photo visibility policy to every request.
         """
-        return self.available() and _scope_without_media(self._scope) != self._scope
+        return self.can_list_galleries()
+
+    def can_read_admin_media(self) -> bool:
+        """Check the local live grant for explicitly approved Admin photos.
+
+        Returns:
+            bool: True while the Admin photo permission is available locally.
+        """
+        return self.available() and scope_allows_admin_media(self._scope)
+
+    def can_delete_admin_media(self) -> bool:
+        """Check whether the current Admin Photos link can request deletion.
+
+        Returns:
+            bool: True while the Admin Photos grant is available locally.
+                The server rechecks the live grant and selected photos.
+        """
+        return self.can_read_admin_media()
+
+    def delete_media_photos(
+        self, gallery_id: int, image_ids: tuple[int, ...],
+        cancelled: threading.Event | None = None,
+    ) -> tuple[int, ...]:
+        """Delete one exact bounded photo set without replaying uncertain writes.
+
+        Args:
+            gallery_id (int): Exact selected physical gallery ID.
+            image_ids (tuple[int, ...]): Unique positive direct-photo IDs.
+            cancelled (threading.Event | None): Owning Photos operation cancellation.
+
+        Returns:
+            tuple[int, ...]: IDs confirmed by the server in submitted order.
+
+        Raises:
+            LinkingError: Scope, inputs, transport or exact acknowledgement failed.
+        """
+        if (not _native_media_id(gallery_id) or not image_ids
+                or len(image_ids) > NATIVE_MEDIA_DELETE_BATCH_MAX
+                or any(not _native_media_id(image_id) for image_id in image_ids)
+                or len(set(image_ids)) != len(image_ids)):
+            raise LinkingError('Invalid photo deletion selection.')
+        if not self.can_delete_admin_media():
+            raise LinkingError('Photo deletion requires an Admin Photos link.')
+        body = json.dumps({
+            'action': 'delete', 'gallery_id': gallery_id,
+            'image_ids': list(image_ids),
+        }, separators=(',', ':'), allow_nan=False).encode('utf-8')
+        result = self._request(
+            'app_linking_media_delete', body=body,
+            gallery_cancel=cancelled,
+        )
+        deleted = result.get('deleted_ids')
+        if (set(result) != {'deleted_ids'} or not isinstance(deleted, list)
+                or any(type(item) is not int for item in deleted)
+                or tuple(deleted) != image_ids):
+            raise LinkingError('Photo deletion acknowledgement was not accepted.')
+        return tuple(deleted)
+
+    def can_change_photo_visibility(self) -> bool:
+        """Check whether Admin photo and visibility consents are both live.
+
+        Returns:
+            bool: True when both required permissions are locally available.
+        """
+        return self.can_read_admin_media() and self.can_change_gallery_visibility()
 
     def can_read_presentation(self) -> bool:
         """Check the separately approved presentation and music permission.
@@ -2469,22 +3241,25 @@ class LinkingSession:
         Returns:
             bool: True for a locally live grant containing both read scopes.
         """
-        return self.available() and self._scope.endswith(PRESENTATION_SCOPE_SUFFIX)
+        return self.available() and scope_allows_presentation(self._scope)
 
     def _media_read(
         self, gallery_id: int, kind: _NativeMediaKind,
         selector: int | str | None, cancelled: threading.Event | None,
-    ) -> tuple[bytes, str]:
+        if_none_match: str | None = None,
+    ) -> _NativeMediaResponse:
         """Serialize one exact media read under the shared session and HTTPS gates.
 
         Args:
             gallery_id (int): Selected physical gallery ID.
-            kind (_NativeMediaKind): Page, settings, photo, thumbnail or track.
+            kind (_NativeMediaKind): Page, settings, information, photo, thumbnail or track.
             selector (int | str | None): Cursor, photo ID, track ID, or no selector.
             cancelled (threading.Event | None): Current viewer action cancellation.
+            if_none_match (str | None): Previously verified strong image validator.
 
         Returns:
-            tuple[bytes, str]: Complete bounded current response and MIME type.
+            _NativeMediaResponse: Body/304 status, media type, validator, and
+                negotiated cache permission.
 
         Raises:
             LinkingError: Invalid target, expired grant, unavailable media or unsafe transfer.
@@ -2496,11 +3271,12 @@ class LinkingSession:
         }
         if kind == 'photos' and selector is not None and _native_media_id(selector):
             query['after'] = str(selector)
-        elif kind in ('photo', 'thumbnail') and _native_media_id(selector):
+        elif kind in ('photo', 'thumbnail', 'photo_info') and _native_media_id(selector):
             query['image_id'] = str(selector)
         elif kind == 'track' and isinstance(selector, str) and re.fullmatch(r'[a-f0-9]{32}', selector):
             query['track_id'] = selector
-        elif not (kind in ('photos', 'presentation') and selector is None):
+        elif not (kind in ('photos', 'presentation', 'info', 'gallery_info', 'revision')
+                  and selector is None):
             raise LinkingError('Invalid gallery media selector.')
         encoded = urlencode(query)
         accepted = (_NATIVE_AUDIO_TYPES if kind == 'track' else _NATIVE_IMAGE_TYPES
@@ -2512,12 +3288,21 @@ class LinkingSession:
             if not self._request_gate.acquire(timeout=LINKING_SESSION_ADMISSION_TIMEOUT_SECONDS):
                 raise LinkingError('Linking session is busy; try again later.')
             try:
+                self._renew_if_expired(cancel)
                 with self._lock:
+                    photo_route_allowed = (
+                        scope_base(self._scope) in (GALLERIES_SCOPE, UPLOAD_SCOPE)
+                    )
+                    admin_media = scope_allows_admin_media(self._scope)
+                    route_allowed = photo_route_allowed
+                    if kind in ('presentation', 'track'):
+                        route_allowed = scope_allows_presentation(self._scope)
+                    elif kind in ('info', 'gallery_info', 'photo_info', 'revision'):
+                        route_allowed = admin_media
                     if (self._closed or self._busy or not self._token or cancel.is_set()
-                            or time.monotonic() >= self._expires_at
-                            or _scope_without_media(self._scope) == self._scope
-                            or (kind in ('presentation', 'track')
-                                and not self._scope.endswith(PRESENTATION_SCOPE_SUFFIX))):
+                            or time.monotonic() >= self._expires_at or not route_allowed
+                            or (if_none_match is not None
+                                and kind not in ('photo', 'thumbnail'))):
                         raise LinkingError('Gallery media permission is unavailable.')
                     self._busy = True
                     self._active_route = 'app_linking_media'
@@ -2526,12 +3311,19 @@ class LinkingSession:
                     result = _run_linking_transport(
                         lambda control: _native_media_read_once(
                             self._issuer, encoded, token, accepted, control,
+                            if_none_match, allow_restricted=admin_media,
                         ), cancel, LINKING_REQUEST_DEADLINE_SECONDS,
                         LINKING_SOCKET_TIMEOUT_SECONDS,
                     )
-                    if cancel.is_set() or not self.available():
-                        raise LinkingError('Gallery media is no longer current.')
+                    with self._lock:
+                        if (cancel.is_set() or self._closed
+                                or time.monotonic() >= self._expires_at):
+                            raise LinkingError('Gallery media is no longer current.')
                     return result
+                except LinkingGrantRejected:
+                    with self._lock:
+                        self._expires_at = time.monotonic()
+                    raise
                 finally:
                     with self._lock:
                         self._busy = False
@@ -2543,6 +3335,36 @@ class LinkingSession:
         finally:
             with self._lock:
                 self._pending_gallery_cancels.discard(cancel)
+
+    def media_revision(
+        self, gallery_id: int, cancelled: threading.Event | None = None,
+    ) -> str:
+        """Read the server's compact direct-photo aggregate revision.
+
+        Args:
+            gallery_id (int): Exact selected physical gallery ID.
+            cancelled (threading.Event | None): Viewer lifetime cancellation.
+
+        Returns:
+            str: Validated lowercase SHA-256 aggregate revision.
+
+        Raises:
+            LinkingError: The endpoint, scope or response is unavailable.
+        """
+        payload, _mime, _etag, _cacheable = self._media_read(
+            gallery_id, 'revision', None, cancelled,
+        )
+        if payload is None:
+            raise LinkingError('Gallery revision was not accepted.')
+        row = _native_media_json(payload)
+        revision = row.get('revision')
+        if (set(row) != {'gallery_id', 'revision'}
+                or type(row.get('gallery_id')) is not int
+                or row['gallery_id'] != gallery_id
+                or not isinstance(revision, str)
+                or re.fullmatch(r'[a-f0-9]{64}', revision) is None):
+            raise LinkingError('Gallery revision was not accepted.')
+        return revision
 
     def media_page(
         self, gallery_id: int, after_id: int | None = None,
@@ -2561,7 +3383,11 @@ class LinkingSession:
         Raises:
             LinkingError: The response, target or permission is unavailable.
         """
-        payload, _mime = self._media_read(gallery_id, 'photos', after_id, cancelled)
+        payload, _mime, _etag, _cacheable = self._media_read(
+            gallery_id, 'photos', after_id, cancelled,
+        )
+        if payload is None:
+            raise LinkingError('Gallery photo page was not accepted.')
         page = _native_media_json(payload)
         parent, rows, next_after = page.get('parent_id'), page.get('photos'), page.get('next_after')
         if (type(page.get('gallery_id')) is not int or page['gallery_id'] != gallery_id
@@ -2570,24 +3396,172 @@ class LinkingSession:
                 or not isinstance(rows, list) or len(rows) > NATIVE_MEDIA_PAGE_SIZE):
             raise LinkingError('Gallery photo page was not accepted.')
         photos: list[LinkedPhoto] = []
+        verified_at = time.monotonic()
         previous = after_id or 0
         for row in rows:
             if not isinstance(row, dict):
                 raise LinkingError('Gallery photo row was not accepted.')
             image_id, title = row.get('id'), row.get('title')
+            latitude, longitude = row.get('latitude'), row.get('longitude')
+            has_location = latitude is not None or longitude is not None
+            # Geographic bounds reject extreme integers before float conversion.
+            valid_location = (
+                isinstance(latitude, (int, float))
+                and not isinstance(latitude, bool)
+                and isinstance(longitude, (int, float))
+                and not isinstance(longitude, bool)
+                and -90.0 <= latitude <= 90.0
+                and -180.0 <= longitude <= 180.0
+                and math.isfinite(latitude)
+                and math.isfinite(longitude)
+            )
             if (type(image_id) is not int or not _native_media_id(image_id) or image_id <= previous
-                    or not isinstance(title, str) or not _native_media_title(title)):
+                    or not isinstance(title, str) or not _native_media_title(title)
+                    or (has_location and not valid_location)):
                 raise LinkingError('Gallery photo row was not accepted.')
-            photos.append(LinkedPhoto(image_id, title))
+            photo = (
+                _linked_admin_photo(row) if scope_allows_admin_media(self._scope)
+                else LinkedPhoto(
+                    image_id, title,
+                    thumbnail_etag=_linked_thumbnail_etag(row.get('thumbnail_etag')),
+                )
+            )
+            photos.append(dataclass_replace(
+                photo,
+                latitude=float(latitude) if valid_location else None,
+                longitude=float(longitude) if valid_location else None,
+                thumbnail_verified_at=verified_at if photo.thumbnail_etag is not None else None,
+            ))
             previous = image_id
         if (next_after is not None and (type(next_after) is not int
-                or next_after != previous or len(photos) != NATIVE_MEDIA_PAGE_SIZE)):
+                or next_after != previous
+                or len(photos) not in (NATIVE_MEDIA_LEGACY_PAGE_SIZE, NATIVE_MEDIA_PAGE_SIZE))):
             raise LinkingError('Gallery photo cursor was not accepted.')
         return LinkedMediaPage(gallery_id, parent, tuple(photos), next_after)
 
+    def media_gallery_info(
+        self, gallery_id: int, cancelled: threading.Event | None = None,
+    ) -> LinkedMediaGalleryInfo:
+        """Read the direct indexed original inventory with current Admin consent.
+
+        Args:
+            gallery_id (int): Exact selected physical gallery ID.
+            cancelled (threading.Event | None): Current viewer cancellation.
+
+        Returns:
+            LinkedMediaGalleryInfo: Validated direct original counts and bytes.
+
+        Raises:
+            LinkingError: The target, permission or inventory is unavailable.
+        """
+        payload, _mime, _etag, _cacheable = self._media_read(
+            gallery_id, 'info', None, cancelled,
+        )
+        if payload is None:
+            raise LinkingError('Gallery inventory was not accepted.')
+        return _linked_media_gallery_inventory(_native_media_json(payload), gallery_id)
+
+    def media_gallery_details(
+        self, gallery_id: int, *, cancelled: threading.Event | None = None,
+    ) -> LinkedMediaDetails:
+        """Read descriptive and inventory information for one Admin gallery.
+
+        Args:
+            gallery_id (int): Exact selected physical gallery ID.
+            cancelled (threading.Event | None): Current information card owner.
+
+        Returns:
+            LinkedMediaDetails: Gallery ID, direct counts and size, and optional
+                title, parent, child count, settings and dates.
+
+        Raises:
+            LinkingError: The extended response or current permission is unavailable.
+        """
+        payload, _mime, _etag, _cacheable = self._media_read(
+            gallery_id, 'gallery_info', None, cancelled,
+        )
+        if payload is None:
+            raise LinkingError('Gallery details were not accepted.')
+        data = _native_media_json(payload)
+        info = _linked_media_gallery_inventory(data, gallery_id)
+        fields = _linked_media_details(data, (
+            'title', 'parent_id', 'child_count', 'description', 'visibility',
+            'nsfw', 'listed', 'created_at', 'updated_at', 'jpeg_quality', 'webp_quality',
+        ))
+        return fields | {
+            'gallery_id': info.gallery_id, 'photo_count': info.photo_count,
+            'file_count': info.file_count, 'size': info.size,
+        }
+
+    def media_photo_info(
+        self, gallery_id: int, image_id: int, *, cancelled: threading.Event | None = None,
+    ) -> LinkedMediaDetails:
+        """Read indexed photo metadata without downloading the image.
+
+        Args:
+            gallery_id (int): Exact physical gallery owning the photo.
+            image_id (int): Exact selected direct image ID.
+            cancelled (threading.Event | None): Current information card owner.
+
+        Returns:
+            LinkedMediaDetails: Bound gallery and image IDs, title, and optional
+                file, visibility, EXIF, derivative quality and GPS fields.
+
+        Raises:
+            LinkingError: The selected photo or its metadata is unavailable.
+        """
+        payload, _mime, _etag, _cacheable = self._media_read(
+            gallery_id, 'photo_info', image_id, cancelled,
+        )
+        if payload is None:
+            raise LinkingError('Photo details were not accepted.')
+        data = _native_media_json(payload)
+        title = data.get('title')
+        if (type(data.get('gallery_id')) is not int or data['gallery_id'] != gallery_id
+                or type(data.get('image_id')) is not int or data['image_id'] != image_id
+                or not isinstance(title, str) or not title
+                or len(title) > NATIVE_MEDIA_DETAIL_TEXT_CHARS):
+            raise LinkingError('Photo details were not accepted.')
+        fields = _linked_media_details(data, (
+            'title', 'filename', 'description', 'size', 'mime_type', 'width', 'height',
+            'display_width', 'display_height', 'exif_orientation', 'visibility',
+            'nsfw', 'created_at', 'modified_at', 'exif_taken_at', 'exif_camera_make',
+            'exif_camera_model', 'exif_lens_model', 'exif_focal_length',
+            'exif_aperture', 'exif_exposure_time', 'exif_iso', 'gps_lat', 'gps_lng',
+            'gps_altitude', 'jpeg_quality', 'webp_quality',
+        ))
+        return fields | {'gallery_id': gallery_id, 'image_id': image_id}
+
+    def has_cached_photo(
+        self, gallery_id: int, photo: LinkedPhoto, *, thumbnail: bool = False,
+    ) -> bool:
+        """Inspect verified locally stored photo bytes without network activity.
+
+        Args:
+            gallery_id (int): Current physical gallery containing the descriptor.
+            photo (LinkedPhoto): Current authorized descriptor for a direct photo.
+            thumbnail (bool): Inspect the thumbnail instead of the full rendition.
+
+        Returns:
+            bool: True for an intact eligible disk entry. An available thumbnail
+                proof must match the entry's strong validator.
+        """
+        if (not _native_media_id(gallery_id) or not _native_media_id(photo.image_id)
+                or not self.can_read_media() or photo.cache_eligible is False
+                or (scope_allows_admin_media(self._scope) and photo.cache_eligible is not True)):
+            return False
+        try:
+            cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+            key = cache.key(self._issuer, gallery_id, photo.image_id, thumbnail)
+            return cache.contains(key, photo.thumbnail_etag if thumbnail else None)
+        except (OSError, RuntimeError, ValueError):
+            return False
+
     def media_photo(
         self, gallery_id: int, image_id: int, thumbnail: bool,
-        cancelled: threading.Event | None = None,
+        cancelled: threading.Event | None = None, *,
+        cache_eligible: bool | None = None, thumbnail_etag: str | None = None,
+        thumbnail_verified_at: float | None = None,
     ) -> tuple[bytes, str]:
         """Read one current allowed image or its existing thumbnail.
 
@@ -2596,6 +3570,12 @@ class LinkingSession:
             image_id (int): Exact server photo ID.
             thumbnail (bool): True for the existing small rendition.
             cancelled (threading.Event | None): Current viewer cancellation.
+            cache_eligible (bool | None): Current independent public admission
+                from the authorized descriptor, or None when unknown.
+            thumbnail_etag (str | None): Exact current authorized thumbnail
+                proof from the gallery page, or None for normal freshness checks.
+            thumbnail_verified_at (float | None): Local monotonic time at which
+                that exact authorized catalogue page was read.
 
         Returns:
             tuple[bytes, str]: Validated raster media bytes and media type.
@@ -2605,9 +3585,65 @@ class LinkingSession:
         """
         if type(thumbnail) is not bool:
             raise LinkingError('Invalid gallery photo rendition.')
-        return self._media_read(
-            gallery_id, 'thumbnail' if thumbnail else 'photo', image_id, cancelled,
+        if (not _native_media_id(gallery_id) or not _native_media_id(image_id)
+                or (cancelled is not None and cancelled.is_set())
+                or not self.can_read_media()):
+            raise LinkingError('Gallery photo permission is unavailable.')
+        cache_allowed = (
+            cache_eligible is True
+            or (cache_eligible is None and not scope_allows_admin_media(self._scope))
         )
+        cache: GalleryMediaCache | None = None
+        key = ''
+        entry = None
+        try:
+            if cache_allowed:
+                cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+                key = GalleryMediaCache.key(self._issuer, gallery_id, image_id, thumbnail)
+                entry = cache.read(key)
+        except (OSError, RuntimeError, ValueError):
+            cache = None
+            entry = None
+        verified_thumbnail = (
+            thumbnail and thumbnail_etag is not None and thumbnail_verified_at is not None
+            and 0 <= time.monotonic() - thumbnail_verified_at < PHOTO_CACHE_FRESH_SECONDS
+        )
+        if cache is not None and entry is not None and (
+            entry.etag == thumbnail_etag if verified_thumbnail else cache.is_fresh(entry)
+        ):
+            with self._lock:
+                if (not self._closed and time.monotonic() < self._expires_at
+                        and (cancelled is None or not cancelled.is_set())):
+                    return entry.body, entry.mime
+            # A renewable link must revalidate remotely after its bearer expires.
+
+        kind: _NativeMediaKind = 'thumbnail' if thumbnail else 'photo'
+        response = self._media_read(
+            gallery_id, kind, image_id, cancelled,
+            entry.etag if entry is not None else None,
+        )
+        body, mime, etag, cacheable = response
+        if body is None:
+            if entry is None:
+                raise LinkingError('Gallery photo revalidation was not accepted.')
+            if cacheable and etag == entry.etag:
+                body, mime = entry.body, entry.mime
+            else:
+                # Older servers may answer a conditional read with no-store.
+                # Fetch once without the validator to keep those servers usable.
+                body, mime, etag, cacheable = self._media_read(
+                    gallery_id, kind, image_id, cancelled,
+                )
+                if body is None:
+                    raise LinkingError('Gallery photo refresh was not accepted.')
+        if (cancelled is not None and cancelled.is_set()) or not self.can_read_media():
+            raise LinkingError('Gallery photo permission is unavailable.')
+        if cache is not None and cacheable and etag is not None:
+            if entry is not None and etag == entry.etag and mime == entry.mime:
+                cache.revalidate(key, entry)
+            else:
+                cache.write(key, body, mime, etag)
+        return body, mime
 
     def media_presentation(
         self, gallery_id: int, cancelled: threading.Event | None = None,
@@ -2624,11 +3660,17 @@ class LinkingSession:
         Raises:
             LinkingError: The permission, projection or transport is unavailable.
         """
-        payload, _mime = self._media_read(gallery_id, 'presentation', None, cancelled)
+        payload, _mime, _etag, _cacheable = self._media_read(
+            gallery_id, 'presentation', None, cancelled,
+        )
+        if payload is None:
+            raise LinkingError('Gallery presentation was not accepted.')
         data = _native_media_json(payload)
         enabled, autoplay, music = (data.get(key) for key in ('enabled', 'autoplay', 'music'))
         interval, transition, rows = (data.get(key) for key in ('interval_seconds', 'transition', 'tracks'))
+        track_cache = data.get('track_cache', False)
         if (type(enabled) is not bool or type(autoplay) is not bool or type(music) is not bool
+                or type(track_cache) is not bool
                 or type(interval) is not int or interval not in _NATIVE_INTERVAL_SECONDS
                 or transition not in ('slow', 'medium', 'fast')
                 or not isinstance(rows, list) or len(rows) > NATIVE_MEDIA_TRACK_LIMIT
@@ -2648,13 +3690,15 @@ class LinkingSession:
                 raise LinkingError('Gallery audio row was not accepted.')
             seen.add(key)
             tracks.append(LinkedTrack(key, title, mime, size, digest))
-        return LinkedPresentation(enabled, autoplay, interval, transition, music, tuple(tracks))
+        return LinkedPresentation(
+            enabled, autoplay, interval, transition, music, tuple(tracks), track_cache,
+        )
 
     def media_track(
         self, gallery_id: int, track: LinkedTrack,
         cancelled: threading.Event | None = None,
     ) -> bytes:
-        """Read one allowed track and bind its bytes to the current playlist row.
+        """Read one authorized audio track, using verified disk bytes when available.
 
         Args:
             gallery_id (int): Selected physical gallery ID.
@@ -2662,29 +3706,61 @@ class LinkingSession:
             cancelled (threading.Event | None): Current viewer cancellation.
 
         Returns:
-            bytes: Verified bounded track bytes for transient playback.
+            bytes: Verified bounded track bytes for playback.
 
         Raises:
-            LinkingError: Track identity, access or transfer is unavailable.
+            LinkingError: Track identity, current playlist, access or transfer failed.
         """
         if not isinstance(track, LinkedTrack):
             raise LinkingError('Invalid gallery audio selection.')
-        payload, mime = self._media_read(gallery_id, 'track', track.track_id, cancelled)
+        playlist = self.media_presentation(gallery_id, cancelled)
+        if not any(
+            row.track_id == track.track_id and row.sha256 == track.sha256
+            and row.size == track.size and row.mime == track.mime
+            for row in playlist.tracks
+        ):
+            raise LinkingError('Gallery audio changed; reload the playlist.')
+        etag = '"' + track.sha256 + '"'
+        cache = None
+        entry = None
+        key = ''
+        if playlist.track_cache:
+            try:
+                cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+                key = cache.track_key(self._issuer, gallery_id, track.track_id, track.sha256)
+                entry = cache.read(key)
+            except (OSError, RuntimeError, ValueError):
+                cache = None
+        if (entry is not None and entry.etag == etag
+                and entry.mime == track.mime and len(entry.body) == track.size):
+            with self._lock:
+                if (self._closed or not self._token or time.monotonic() >= self._expires_at
+                        or not scope_allows_presentation(self._scope)
+                        or (cancelled is not None and cancelled.is_set())):
+                    raise LinkingError('Gallery audio permission is unavailable.')
+                return entry.body
+        payload, mime, received_etag, cacheable = self._media_read(
+            gallery_id, 'track', track.track_id, cancelled,
+        )
+        if payload is None:
+            raise LinkingError('Gallery audio was not accepted.')
         if (mime != track.mime or len(payload) != track.size
                 or hashlib.sha256(payload).hexdigest() != track.sha256):
             raise LinkingError('Gallery audio changed; reload the playlist.')
+        if cache is not None and cacheable and received_etag == etag:
+            cache.write(key, payload, mime, etag)
         return payload
 
     def can_list_galleries(self) -> bool:
         """Check the locally retained scope without claiming remote access.
 
         Returns:
-            bool: True while an unexpired gallery-listing scope is held locally.
+            bool: True for a locally available or renewable listing approval.
         """
         with self._lock:
             return (not self._closed and bool(self._token)
                     and scope_base(self._scope) in (GALLERIES_SCOPE, UPLOAD_SCOPE)
-                    and time.monotonic() < self._expires_at)
+                    and (self._renew is not None or time.monotonic() < self._expires_at))
 
     def can_search_galleries(self) -> bool:
         """Check the explicit metadata-search approval for this temporary link.
@@ -2692,29 +3768,23 @@ class LinkingSession:
         Returns:
             bool: True while the current grant can search gallery metadata.
         """
-        return self._scope in GALLERY_SEARCH_SCOPES and self.available()
+        return scope_allows_gallery_search(self._scope) and self.available()
 
     def can_read_gallery_detail(self) -> bool:
-        """Check locally held explicit gallery-detail consent and expiry.
+        """Check locally held explicit gallery-detail consent and renewal.
 
         Returns:
-            bool: True only for a live registered read-scoped local session.
+            bool: True for an available or renewable read-scoped session.
         """
-        with self._lock:
-            return (not self._closed and bool(self._token)
-                    and scope_allows_gallery_read(self._scope)
-                    and time.monotonic() < self._expires_at)
+        return scope_allows_gallery_read(self._scope) and self.available()
 
     def can_change_gallery_visibility(self) -> bool:
         """Check explicit visibility consent without asserting server access.
 
         Returns:
-            bool: True only for a live, explicitly visibility-scoped session.
+            bool: True for an available or renewable visibility-scoped session.
         """
-        with self._lock:
-            return (not self._closed and bool(self._token)
-                    and scope_allows_gallery_visibility(self._scope)
-                    and time.monotonic() < self._expires_at)
+        return scope_allows_gallery_visibility(self._scope) and self.available()
 
     def can_upload(self) -> bool:
         """Check locally held upload scope without claiming server permission.
@@ -2725,7 +3795,7 @@ class LinkingSession:
         with self._lock:
             return (not self._closed and bool(self._token)
                     and scope_base(self._scope) == UPLOAD_SCOPE
-                    and time.monotonic() < self._expires_at)
+                    and (self._renew is not None or time.monotonic() < self._expires_at))
 
     def approved_scope(self) -> str:
         """Read the exact locally held scope without exposing its bearer.
@@ -2738,20 +3808,36 @@ class LinkingSession:
         """
         with self._lock:
             if (self._closed or not self._token
-                    or time.monotonic() >= self._expires_at):
+                    or (self._renew is None and time.monotonic() >= self._expires_at)):
                 raise LinkingError('Linking session is unavailable.')
             return self._scope
+
+    def transient_snapshot(self) -> TransientSessionSnapshot:
+        """Return a live non-offline bearer with its unchanged original expiry.
+
+        Returns:
+            TransientSessionSnapshot: Exact grant suitable for OS-vault storage.
+
+        Raises:
+            LinkingError: The session is closed, expired or uses offline scope.
+        """
+        with self._lock:
+            remaining = self._expires_at - time.monotonic()
+            if (self._closed or not self._token or remaining <= 0
+                    or self._scope.endswith(' offline_access')
+                    or remaining > LINKING_MAX_TOKEN_LIFETIME_SECONDS):
+                raise LinkingError('Transient session is unavailable.')
+            return TransientSessionSnapshot(
+                self._issuer, self._scope, self._token, time.time() + remaining,
+            )
 
     def can_create_gallery(self) -> bool:
         """Check locally held create scope without asserting server access.
 
         Returns:
-            bool: True only while the explicit creation bundle is live.
+            bool: True for an available or renewable creation-scoped session.
         """
-        with self._lock:
-            return (not self._closed and bool(self._token)
-                    and scope_allows_gallery_create(self._scope)
-                    and time.monotonic() < self._expires_at)
+        return scope_allows_gallery_create(self._scope) and self.available()
 
     def gallery_create_request(
         self, operation_key: str, title: str | None = None,
@@ -2840,10 +3926,89 @@ class LinkingSession:
         """
         with self._lock:
             return (not self._closed and self._issuer == issuer and bool(self._token)
-                    and time.monotonic() < self._expires_at)
+                    and (self._renew is not None or time.monotonic() < self._expires_at))
+
+    def open_watch_key(
+        self, gallery_id: int, *, cancelled: threading.Event | None = None,
+    ) -> str:
+        """Register one fresh in-memory credential for the selected capture.
+
+        Args:
+            gallery_id (int): Exact physical upload gallery ID.
+            cancelled (threading.Event | None): Current start action cancellation.
+
+        Returns:
+            str: Opaque capture key sent only with this run's linked requests.
+
+        Raises:
+            LinkingError: The capture credential could not be verified.
+        """
+        if not _native_media_id(gallery_id) or not self.can_upload():
+            raise LinkingError('Watcher access is unavailable.')
+        key = 'pgw_' + secrets.token_hex(WATCH_KEY_RANDOM_BYTES)
+        try:
+            self._change_watch_key('watch_open', gallery_id, key, cancelled)
+        except LinkingError:
+            # The reply may have been lost after registration. A scoped close
+            # cannot remove a newer capture's key, even after a lost reply.
+            try:
+                self.close_watch_key(gallery_id, key)
+            except LinkingError:
+                pass
+            raise
+        return key
+
+    def close_watch_key(
+        self, gallery_id: int, key: str, *, cancelled: threading.Event | None = None,
+    ) -> None:
+        """Revoke the exact temporary key without closing the site link.
+
+        Args:
+            gallery_id (int): Physical gallery that admitted the capture.
+            key (str): Opaque key returned when the same capture started.
+            cancelled (threading.Event | None): Optional cleanup cancellation.
+
+        Returns:
+            None: The server confirmed closure of this key generation.
+
+        Raises:
+            LinkingError: The close request could not be confirmed.
+        """
+        self._change_watch_key('watch_close', gallery_id, key, cancelled)
+
+    def _change_watch_key(
+        self, action: Literal['watch_open', 'watch_close'], gallery_id: int,
+        key: str, cancelled: threading.Event | None,
+    ) -> None:
+        """Send a hash-only lifecycle request on the current upload grant.
+
+        Args:
+            action (Literal['watch_open', 'watch_close']): Exact lifecycle action.
+            gallery_id (int): Physical gallery owned by this capture.
+            key (str): Exact raw key whose hash is registered or closed.
+            cancelled (threading.Event | None): Operation cancellation signal.
+
+        Returns:
+            None: The server acknowledged the same action and gallery.
+
+        Raises:
+            LinkingError: Input, live upload scope or reply was refused.
+        """
+        if (not _native_media_id(gallery_id) or not isinstance(key, str)
+                or _WATCH_KEY_PATTERN.fullmatch(key) is None):
+            raise LinkingError('Invalid Watcher credential.')
+        body = json.dumps({
+            'action': action, 'gallery_id': gallery_id,
+            'key_hash': hashlib.sha256(key.encode('ascii')).hexdigest(),
+        }, separators=(',', ':')).encode('ascii')
+        data = self._request('app_linking_inventory', body=body, gallery_cancel=cancelled)
+        if (data != {'ok': True, 'action': action, 'gallery_id': gallery_id}
+                or data.get('ok') is not True or type(data.get('gallery_id')) is not int):
+            raise LinkingError('Watcher credential change was not confirmed.')
 
     def inventory(
-        self, gallery_id: int, files: list[dict[str, JsonValue]],
+        self, gallery_id: int, files: list[dict[str, JsonValue]], *,
+        watch_key: str | None = None,
     ) -> dict[str, JsonValue]:
         """Read verified inventory in bounded, all-or-nothing request batches.
 
@@ -2851,6 +4016,7 @@ class LinkingSession:
             gallery_id (int): Stable positive server gallery identifier.
             files (list[dict[str, JsonValue]]): Candidate objects containing
                 client_id, filename, nonnegative size and lowercase SHA-256.
+            watch_key (str | None): Supplemental key for a contextual capture.
 
         Returns:
             dict[str, JsonValue]: Combined validated snapshots for this gallery.
@@ -2916,6 +4082,7 @@ class LinkingSession:
         deadline = time.monotonic() + LINKING_INVENTORY_TOTAL_SECONDS
         combined: list[JsonValue] = []
         data: dict[str, JsonValue] = {}
+        watch_options = {'watch_key': watch_key} if watch_key is not None else {}
         for batch in batches:
             if time.monotonic() >= deadline:
                 raise LinkingError('Gallery inventory did not complete safely.')
@@ -2929,7 +4096,7 @@ class LinkingSession:
                 'action': 'inventory', 'gallery_id': gallery_id,
                 'files': batch_files, 'deep_check': False,
             }, separators=(',', ':'), ensure_ascii=True, allow_nan=False).encode('ascii')
-            data = self._request('app_linking_inventory', body=batch_body)
+            data = self._request('app_linking_inventory', body=batch_body, **watch_options)
             if time.monotonic() >= deadline:
                 raise LinkingError('Gallery inventory did not complete safely.')
             existing = data.get('existing')
@@ -3009,7 +4176,7 @@ class LinkingSession:
 
     def upload_multipart(
         self, gallery_id: int, body: Iterable[bytes], boundary: str,
-        content_length: int,
+        content_length: int, *, watch_key: str | None = None,
     ) -> dict[str, JsonValue]:
         """Send one explicitly selected gallery's upload without retrying it.
 
@@ -3018,6 +4185,7 @@ class LinkingSession:
             body (Iterable[bytes]): One-shot multipart bytes and file chunks.
             boundary (str): Generated ASCII multipart delimiter.
             content_length (int): Exact complete request body size in bytes.
+            watch_key (str | None): Supplemental key for a contextual capture.
 
         Returns:
             dict[str, JsonValue]: Server acknowledgement for exactly one image.
@@ -3029,9 +4197,10 @@ class LinkingSession:
         if (type(gallery_id) is not int or gallery_id <= 0
                 or gallery_id > LINKING_GALLERY_ID_MAX):
             raise LinkingError('Invalid gallery upload request.')
+        watch_options = {'watch_key': watch_key} if watch_key is not None else {}
         data = self._request(
             'app_linking_upload', body=body, multipart_boundary=boundary,
-            content_length=content_length,
+            content_length=content_length, **watch_options,
         )
         image_ids, filenames = data.get('image_ids'), data.get('filenames')
         if (data.get('ok') is not True or type(data.get('gallery_id')) is not int
@@ -3174,6 +4343,45 @@ class LinkingSession:
                 raise LinkingError('Linking session is unavailable.')
             self._visibility_snapshot = detail
         return detail
+
+    def change_photo_visibility(
+        self, gallery_id: int, photo: LinkedPhoto, visibility: str,
+        cancelled: threading.Event | None = None,
+    ) -> LinkedPhoto:
+        """Submit one scoped change against the photo's observed visibility.
+
+        Args:
+            gallery_id (int): Exact physical gallery currently displaying the photo.
+            photo (LinkedPhoto): Descriptor containing the observed stored visibility.
+            visibility (str): Explicit public, private or draft target.
+            cancelled (threading.Event | None): Current viewer cancellation.
+
+        Returns:
+            LinkedPhoto: Fresh descriptor confirmed by the server after the write.
+
+        Raises:
+            LinkingError: The change was rejected or its outcome is uncertain.
+            LinkingRevisionConflict: The prior visibility or target changed.
+        """
+        values = ('draft', 'private', 'public')
+        if (not _native_media_id(gallery_id) or not isinstance(photo, LinkedPhoto)
+                or not _native_media_id(photo.image_id) or photo.visibility not in values
+                or visibility not in values or visibility == photo.visibility):
+            raise LinkingError('Invalid photo visibility request.')
+        body = json.dumps({
+            'gallery_id': gallery_id, 'image_id': photo.image_id,
+            'expected_visibility': photo.visibility, 'visibility': visibility,
+        }, separators=(',', ':'), ensure_ascii=True).encode('ascii')
+        data = self._request('app_linking_photo_visibility', body=body, gallery_cancel=cancelled)
+        if data == {'__client_visibility_conflict': 'revision_conflict'}:
+            raise LinkingRevisionConflict('Photo visibility changed.')
+        row = data.get('photo')
+        if set(data) != {'photo'} or not isinstance(row, dict):
+            raise LinkingError('Photo visibility change was not confirmed.')
+        updated = _linked_admin_photo(row)
+        if updated.image_id != photo.image_id or updated.visibility != visibility:
+            raise LinkingError('Photo visibility change was not confirmed.')
+        return updated
 
     def change_gallery_visibility(
         self, detail: LinkedGalleryDetail, visibility: str,

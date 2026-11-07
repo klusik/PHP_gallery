@@ -30,7 +30,7 @@ use function Gallery\Models\app_link_refresh_model_rotate;
 const APP_LINK_REFRESH_TOKEN_PREFIX = 'pglr_';
 
 /**
- * Limit the absolute lifetime of an explicitly approved refresh family.
+ * Limit the absolute lifetime of an approved legacy refresh family.
  * Type: int. Units: seconds. Scope: one newly authorized grant family.
  * Consumers: code exchange and refresh issuance.
  * Rationale: 2592000 seconds is thirty days before fresh browser consent.
@@ -38,10 +38,12 @@ const APP_LINK_REFRESH_TOKEN_PREFIX = 'pglr_';
 const APP_LINK_REFRESH_FAMILY_TTL_SECONDS = 2592000;
 
 /**
- * Expire an unused refresh family before its absolute deadline.
- * Type: int. Units: seconds. Scope: inactivity since initial issue or rotation.
- * Consumers: app_link_refresh_rotate and code exchange.
+ * Expire a refresh family after a week without qualifying activity.
+ * Type: int. Units: seconds. Scope: one refresh family and rolling replay history.
+ * Consumers: code exchange, access authentication and refresh rotation.
  * Rationale: 604800 seconds allows a week between uses while bounding exposure.
+ * Legacy refresh extends idle time up to its original cap. Rolling consent
+ * renews both deadlines and retains consumed hashes for the same interval.
  */
 const APP_LINK_REFRESH_IDLE_TTL_SECONDS = 604800;
 
@@ -280,14 +282,14 @@ function app_link_refresh_token_hash(string $token): ?string
 /**
  * Rotate a valid refresh credential and issue a replacement access credential.
  *
- * The caller must use verified HTTPS, fixed same-issuer transport, bounded
- * rate limits and a generic invalid-grant response. A lost reply is ambiguous:
+ * The caller must use verified same-issuer transport and bounded
+ * rate limits with a generic invalid-grant response. A lost reply is ambiguous:
  * the caller must never automatically replay the old refresh token. A replay
  * revokes the grant and family after the model commits; callers receive null.
  *
  * @param string $refreshToken Plaintext refresh credential; never log or persist it.
  * @param string $clientId Claimed registered public-client identifier.
- * @param string $issuer Independently trusted exact HTTPS issuer and mount.
+ * @param string $issuer Independently verified exact installation issuer and mount.
  * @return array{access_token:string,expires_in:int,refresh_token:string,refresh_expires_in:int,scope:string}|null
  *     Fresh credentials and bounded lifetimes, or null for invalid/replayed input.
  * @throws RuntimeException When schema, randomness or persistence fails.
@@ -300,23 +302,28 @@ function app_link_refresh_rotate(
     $hash = app_link_refresh_token_hash($refreshToken);
     $client = app_linking_public_client($clientId);
     if ($hash === null || $client === null
-        || !str_starts_with($issuer, 'https://') || !app_linking_issuer_valid($issuer)) {
+        || !app_linking_issuer_valid($issuer)) {
         return null;
     }
     try {
         app_linking_require_schema(app_link_refresh_schema_status());
         $accessToken = null;
         $nextRefreshToken = null;
+        $allowedScopes = array_values(array_filter(
+            $client['scopes'],
+            static fn(string $scope): bool =>
+                app_linking_scope_requests_refresh($scope)
+                && app_linking_scope_transport_allowed($issuer, $scope)
+                && app_linking_scope_allowed($clientId, $scope),
+        ));
+        if ($allowedScopes === []) {
+            return null;
+        }
         $result = app_link_refresh_model_rotate(
             $hash,
             $clientId,
             $issuer,
-            array_values(array_filter(
-                $client['scopes'],
-                static fn(string $scope): bool =>
-                    app_linking_scope_requests_refresh($scope)
-                    && app_linking_scope_allowed($clientId, $scope),
-            )),
+            $allowedScopes,
             static function (string $scope) use (
                 $clientId, &$accessToken, &$nextRefreshToken,
             ): array {
@@ -333,6 +340,10 @@ function app_link_refresh_rotate(
             },
             APP_LINKING_ACCESS_TTL_SECONDS,
             APP_LINK_REFRESH_IDLE_TTL_SECONDS,
+            array_values(array_filter(
+                $allowedScopes,
+                static fn(string $scope): bool => app_linking_scope_requests_rolling($scope),
+            )),
         );
         if ($result === null || $result['status'] !== 'rotated'
             || !is_string($accessToken) || !is_string($nextRefreshToken)) {
@@ -354,12 +365,12 @@ function app_link_refresh_rotate(
 /**
  * Revoke a holder's refresh family and grant using narrower verified storage.
  *
- * The HTTPS controller must not reveal whether the credential existed. It must
+ * The controller must not reveal whether the credential existed. It must
  * not equate a lost response with successful revocation or blindly retry it.
  *
  * @param string $refreshToken Plaintext refresh credential; never log it.
  * @param string $clientId Claimed registered public-client identifier.
- * @param string $issuer Independently trusted exact HTTPS issuer and mount.
+ * @param string $issuer Independently verified exact installation issuer and mount.
  * @return bool True for a matching family; false for invalid or absent input.
  * @throws RuntimeException When required schema or persistence is unavailable.
  */
@@ -370,7 +381,7 @@ function app_link_refresh_revoke_token(
 ): bool {
     $hash = app_link_refresh_token_hash($refreshToken);
     if ($hash === null || app_linking_public_client($clientId) === null
-        || !str_starts_with($issuer, 'https://') || !app_linking_issuer_valid($issuer)) {
+        || !app_linking_issuer_valid($issuer)) {
         return false;
     }
     try {

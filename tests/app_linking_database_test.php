@@ -31,6 +31,9 @@ namespace {
     use function Gallery\Models\app_link_model_issue;
     use function Gallery\Models\app_link_model_lookup_token;
     use function Gallery\Models\app_link_model_revoke;
+    use function Gallery\Models\app_link_model_watch_key_open;
+    use function Gallery\Models\app_link_model_watch_key_close;
+    use function Gallery\Models\app_link_model_watch_key_valid;
     use function Gallery\Models\app_link_push_model_installation_key;
     use function Gallery\Models\gallery_model_linked_client_page;
     use function Gallery\Models\gallery_model_linked_upload_target;
@@ -254,6 +257,7 @@ namespace {
     require_once __DIR__ . '/../app/models/app_linking_push.php';
     require_once __DIR__ . '/../app/models/app_linking_refresh.php';
     require_once __DIR__ . '/../app/services/app_linking_refresh.php';
+    require_once __DIR__ . '/../app/services/app_linking_policy.php';
     require_once __DIR__ . '/../app/services/app_linking_recovery.php';
     require_once __DIR__ . '/../app/models/galleries.php';
     require_once __DIR__ . '/../app/models/images.php';
@@ -441,6 +445,83 @@ namespace {
         );
         check(is_array($target) && (int) $target['id'] === $galleryId,
             'Explicitly scoped grant must resolve its actual gallery target.');
+        $watchValid = static fn(int $candidateGrant, string $candidateToken, string $digest): bool =>
+            app_link_model_watch_key_valid(
+                $candidateGrant,
+                $userId,
+                $candidateToken,
+                $issuer,
+                $uploadScope,
+                $galleryId,
+                $digest,
+            );
+        $watchDigest = hash('sha256', 'fixture-watcher-generation-one');
+        check(app_link_model_watch_key_open(
+            $grantId, $userId, $uploadToken, $issuer, $uploadScope,
+            $galleryId, $watchDigest,
+        ) && $watchValid($grantId, $uploadToken, $watchDigest),
+            'An explicitly opened watcher must authorize only its exact live grant and gallery.');
+        $storedWatchHash = $pdo->prepare(
+            'SELECT key_hash FROM app_linking_watch_keys '
+                . 'WHERE grant_id = ? AND gallery_id = ?',
+        );
+        $storedWatchHash->execute([$grantId, $galleryId]);
+        check($storedWatchHash->fetchColumn() === $watchDigest,
+            'Watcher storage must retain only the supplied key digest.');
+        check(!app_link_model_watch_key_open(
+            $grantId, $userId, hash('sha256', 'fixture-wrong-token'), $issuer,
+            $uploadScope, $galleryId, hash('sha256', 'fixture-rejected-open'),
+        ), 'Watcher opening must bind atomically to the live exact access token.');
+        $replacementDigest = hash('sha256', 'fixture-watcher-generation-two');
+        check(app_link_model_watch_key_open(
+            $grantId, $userId, $uploadToken, $issuer, $uploadScope,
+            $galleryId, $replacementDigest,
+        ), 'A new watcher generation must replace the prior exact pair.');
+        app_link_model_watch_key_close($grantId, $galleryId, $watchDigest);
+        check(!$watchValid($grantId, $uploadToken, $watchDigest)
+            && $watchValid($grantId, $uploadToken, $replacementDigest),
+            'A stale close must not revoke the replacement generation.');
+        check(!app_link_model_watch_key_open(
+            $grantId, $userId, $uploadToken, $issuer, $uploadScope,
+            PHP_INT_MAX, hash('sha256', 'fixture-watcher-wrong-gallery'),
+        ), 'Watcher opening must refuse a nonexistent physical gallery.');
+        $expireWatch = $pdo->prepare(
+            "UPDATE app_linking_watch_keys SET expires_at = '2000-01-01 00:00:00' "
+                . 'WHERE grant_id = ? AND gallery_id = ?',
+        );
+        $expireWatch->execute([$grantId, $galleryId]);
+        check(!$watchValid($grantId, $uploadToken, $replacementDigest),
+            'An expired watcher key must not authorize a request.');
+        check(!app_link_model_watch_key_valid(
+            $grantId, $userId, $uploadToken, $issuer, $uploadScope,
+            PHP_INT_MAX, $replacementDigest,
+        ), 'A key for another physical gallery must not authorize this gallery.');
+        check(app_link_model_watch_key_open(
+            $grantId, $userId, $uploadToken, $issuer, $uploadScope,
+            $galleryId, $replacementDigest,
+        ), 'An active watcher may be explicitly reopened after expiry.');
+        $otherToken = hash('sha256', 'fixture-other-upload-token');
+        $insertOtherGrant = $pdo->prepare(
+            'INSERT INTO app_link_grants '
+                . '(user_id, client_id, issuer, scope, created_at, access_token_hash, '
+                . 'access_issued_at, access_expires_at) '
+                . 'VALUES (?, ?, ?, ?, UTC_TIMESTAMP(6), ?, UTC_TIMESTAMP(6), '
+                . 'DATE_ADD(UTC_TIMESTAMP(6), INTERVAL 900 SECOND))',
+        );
+        $insertOtherGrant->execute([
+            $userId, $client, $issuer, $uploadScope, $otherToken,
+        ]);
+        $otherGrantId = (int) $pdo->lastInsertId();
+        check(app_link_model_watch_key_open(
+            $otherGrantId, $userId, $otherToken, $issuer, $uploadScope,
+            $galleryId, $replacementDigest,
+        ) && $watchValid($grantId, $uploadToken, $replacementDigest)
+            && $watchValid($otherGrantId, $otherToken, $replacementDigest),
+            'The same digest may exist independently for two exact grants.');
+        app_link_model_watch_key_close($grantId, $galleryId, $replacementDigest);
+        check(!$watchValid($grantId, $uploadToken, $replacementDigest)
+            && $watchValid($otherGrantId, $otherToken, $replacementDigest),
+            'Closing one grant must never affect another grant row.');
         check(gallery_model_linked_upload_target(
             $grantId, $userId, $uploadToken, 'https://other.example.test',
             $uploadScope, $galleryId,
@@ -452,7 +533,9 @@ namespace {
         check(app_link_model_revoke($userId, $grantId, null)
             && gallery_model_linked_upload_target(
                 $grantId, $userId, $uploadToken, $issuer, $uploadScope, $galleryId,
-            ) === null, 'Revocation must remove upload authority immediately.');
+            ) === null && !$watchValid(
+                $grantId, $uploadToken, $replacementDigest,
+            ), 'Revocation must remove upload and Watcher authority immediately.');
         check(\Gallery\Services\app_linking_recovery_probe(
             $galleryId,
             $target,
@@ -463,10 +546,11 @@ namespace {
             ),
         ) === null, 'A revoked grant must not receive recovery evidence.');
         // The real lock owner executes the guard after acquisition and before
-        // storage. A revoked principal must never reach the upload workflow.
+        // storage. A wrong Watcher key must never reach the upload workflow.
         $guardCalled = false;
         $guardHeldLock = false;
         $guardHeldWriter = false;
+        $wrongWatchDigest = hash('sha256', 'fixture-wrong-watcher-key');
         $databaseName = (string) $pdo->query('SELECT DATABASE()')->fetchColumn();
         $writerName = hash('sha256', $databaseName . \Gallery\Core\GALLERY_EDIT_LOCK_SUFFIX);
         try {
@@ -474,7 +558,8 @@ namespace {
                 $galleryId, $target, [], [], [], null,
                 static function () use (
                     $pdo, $galleryId, $writerName, &$guardCalled,
-                    &$guardHeldLock, &$guardHeldWriter,
+                    &$guardHeldLock, &$guardHeldWriter, $otherGrantId,
+                    $wrongWatchDigest, $watchValid, $otherToken,
                 ): bool {
                     $guardCalled = true;
                     $lock = $pdo->prepare('SELECT IS_USED_LOCK(?) = CONNECTION_ID()');
@@ -482,7 +567,9 @@ namespace {
                     $guardHeldLock = (int) $lock->fetchColumn() === 1;
                     $lock->execute([$writerName]);
                     $guardHeldWriter = (int) $lock->fetchColumn() === 1;
-                    return false;
+                    return $watchValid(
+                        $otherGrantId, $otherToken, $wrongWatchDigest,
+                    );
                 },
             );
             check(false, 'A refused guard must prevent the upload.');
@@ -499,6 +586,51 @@ namespace {
         $countImages->execute([$galleryId]);
         check((int) $countImages->fetchColumn() === 0,
             'A refused upload guard must not create any image.');
+        $denyUploadGuard = static function (
+            int $watchGalleryId,
+            string $watchDigest,
+        ) use (
+            $galleryId,
+            $target,
+            $otherGrantId,
+            $userId,
+            $otherToken,
+            $issuer,
+            $uploadScope,
+        ): void {
+            try {
+                upload_automation_store_images(
+                    $galleryId, $target, [], [], [], null,
+                    static fn(): bool => app_link_model_watch_key_valid(
+                        $otherGrantId,
+                        $userId,
+                        $otherToken,
+                        $issuer,
+                        $uploadScope,
+                        $watchGalleryId,
+                        $watchDigest,
+                    ),
+                );
+                check(false, 'A denied Watcher key must stop the upload workflow.');
+            } catch (\RuntimeException $exception) {
+                check($exception->getMessage() === 'Upload authority is unavailable.',
+                    'Watcher refusal must retain the opaque upload authorization error.');
+            }
+        };
+        $expireOtherWatchForUpload = $pdo->prepare(
+            "UPDATE app_linking_watch_keys SET expires_at = '2000-01-01 00:00:00' "
+                . 'WHERE grant_id = ? AND gallery_id = ?',
+        );
+        $expireOtherWatchForUpload->execute([$otherGrantId, $galleryId]);
+        $denyUploadGuard($galleryId, $replacementDigest);
+        check(app_link_model_watch_key_open(
+            $otherGrantId, $userId, $otherToken, $issuer, $uploadScope,
+            $galleryId, $replacementDigest,
+        ), 'The live second grant must restore its watcher after upload expiry coverage.');
+        $denyUploadGuard(PHP_INT_MAX, $replacementDigest);
+        $countImages->execute([$galleryId]);
+        check((int) $countImages->fetchColumn() === 0,
+            'Expired and wrong-gallery watcher refusals must not write images.');
         // Duplicate image rows must not expand or truncate delegated matches.
         $firstHash = hash('sha256', 'bounded-inventory-one');
         $secondHash = hash('sha256', 'bounded-inventory-two');
@@ -530,6 +662,73 @@ namespace {
             && ($byHash[$secondHash] ?? null) === 'second.jpg'
             && !isset($byHash[$nestedHash]),
             'Bounded lookup must include every direct hash exactly once.');
+        $inventoryCandidates = [[
+            'client_id' => 'watch-fixture',
+            'filename' => 'first.jpg',
+            'size' => 1,
+            'sha256' => $firstHash,
+        ]];
+        $firstIndexedMatch = null;
+        foreach ($matches as $match) {
+            if (($match['checksum_sha256'] ?? null) === $firstHash) {
+                $firstIndexedMatch = $match;
+                break;
+            }
+        }
+        check(is_array($firstIndexedMatch),
+            'An indexed row is required to seed the inventory recheck fixture.');
+        $inventoryInitial = ['existing' => [[
+            'sha256' => $firstHash,
+            'remote_image_id' => (int) $firstIndexedMatch['id'],
+            'remote_relative_path' => (string) $firstIndexedMatch['relative_path'],
+            'size' => (int) $firstIndexedMatch['file_size'],
+        ]]];
+        check($inventoryInitial['existing'] !== []
+            && \Gallery\Services\app_linking_inventory_confirm_indexed(
+                $galleryId,
+                $target,
+                $inventoryCandidates,
+                $inventoryInitial,
+                static fn(): ?array => $watchValid(
+                    $otherGrantId, $otherToken, $wrongWatchDigest,
+                ) ? $target : null,
+            ) === null,
+            'A wrong watcher key must fail the locked inventory recheck before file evidence.');
+        $expireOtherWatch = $pdo->prepare(
+            "UPDATE app_linking_watch_keys SET expires_at = '2000-01-01 00:00:00' "
+                . 'WHERE grant_id = ? AND gallery_id = ?',
+        );
+        $expireOtherWatch->execute([$otherGrantId, $galleryId]);
+        check(\Gallery\Services\app_linking_inventory_confirm_indexed(
+            $galleryId,
+            $target,
+            $inventoryCandidates,
+            $inventoryInitial,
+            static fn(): ?array => $watchValid(
+                $otherGrantId, $otherToken, $replacementDigest,
+            ) ? $target : null,
+        ) === null, 'An expired watcher must fail the locked inventory recheck.');
+        check(app_link_model_watch_key_open(
+            $otherGrantId, $userId, $otherToken, $issuer, $uploadScope,
+            $galleryId, $replacementDigest,
+        ), 'The second live grant must reopen its watcher after the expiry case.');
+        $revokeOtherGrant = $pdo->prepare(
+            'UPDATE app_link_grants SET revoked_at = UTC_TIMESTAMP(6) WHERE id = ?',
+        );
+        $revokeOtherGrant->execute([$otherGrantId]);
+        $denyUploadGuard($galleryId, $replacementDigest);
+        check(\Gallery\Services\app_linking_inventory_confirm_indexed(
+            $galleryId,
+            $target,
+            $inventoryCandidates,
+            $inventoryInitial,
+            static fn(): ?array => $watchValid(
+                $otherGrantId, $otherToken, $replacementDigest,
+            ) ? $target : null,
+        ) === null, 'A revoked grant must fail the locked inventory recheck.');
+        $countImages->execute([$galleryId]);
+        check((int) $countImages->fetchColumn() === 4,
+            'A revoked watcher refusal must leave the existing inventory unchanged.');
         $tooManyHashes = [];
         for ($index = 0;
             $index <= \Gallery\Models\IMAGE_MODEL_DELEGATED_INVENTORY_HASH_LIMIT;
@@ -609,6 +808,12 @@ namespace {
                 \Gallery\Services\APP_LINK_REFRESH_IDLE_TTL_SECONDS,
             'First refresh must preserve consent and report the idle bound.');
         $offlineId = (int) $offlineGrant['grant_id'];
+        $familyTimes = $pdo->prepare(
+            'SELECT expires_at, idle_expires_at, issued_count '
+                . 'FROM app_link_refresh_families WHERE grant_id = ?',
+        );
+        $familyTimes->execute([$offlineId]);
+        $legacyTimes = $familyTimes->fetch(\PDO::FETCH_ASSOC);
         $storedRefresh = $pdo->prepare(
             'SELECT token_hash FROM app_link_refresh_tokens WHERE grant_id = ?',
         );
@@ -651,6 +856,9 @@ namespace {
                 \Gallery\Services\APP_LINK_REFRESH_IDLE_TTL_SECONDS
             && app_link_model_lookup_token($accessTwo, $issuer) !== null,
             'Rotation must issue a scoped bearer with bounded refresh lifetime.');
+        $familyTimes->execute([$offlineId]);
+        check($familyTimes->fetch(\PDO::FETCH_ASSOC)['expires_at'] ===
+            $legacyTimes['expires_at'], 'Legacy rotation must preserve its absolute cap.');
         $history = $pdo->prepare(
             'SELECT token_hash, active_slot, consumed_at FROM app_link_refresh_tokens '
                 . 'WHERE grant_id = ? ORDER BY id',
@@ -667,6 +875,130 @@ namespace {
             && app_link_model_lookup_token($accessTwo, $issuer) === null
             && $rotate($refreshTwo, $issuer, $client) === null,
             'Replay must revoke the entire family and its active bearer.');
+
+        $rollingScope = \Gallery\Services\APP_LINKING_GALLERIES_ROLLING_SCOPE;
+        $rollingIssuer = 'http://localhost:8888/Galerie';
+        $rollingTtl = \Gallery\Services\APP_LINK_REFRESH_IDLE_TTL_SECONDS;
+        $rollingCode = hash('sha256', 'fixture-rolling-code');
+        $rollingAccess = hash('sha256', 'fixture-rolling-access');
+        $rollingRefresh = hash('sha256', 'fixture-rolling-refresh');
+        check(app_link_model_issue(
+            $userId, $client, $rollingIssuer, $rollingScope,
+            static fn(): string => $rollingCode, $redirect, $challenge,
+            \Gallery\Services\APP_LINKING_CODE_TTL_SECONDS,
+        ) !== null, 'Rolling authorization code must be issued.');
+        $rollingGrant = app_link_model_exchange(
+            $rollingCode, $client, $rollingIssuer, $redirect, $challenge,
+            [$rollingScope], static fn(): string => $rollingAccess,
+            \Gallery\Services\APP_LINKING_ACCESS_TTL_SECONDS,
+            [$rollingScope], static fn(): string => $rollingRefresh,
+            'ready', $rollingTtl, $rollingTtl, $rollingScope,
+        );
+        check(is_array($rollingGrant) && $rollingGrant['scope'] === $rollingScope
+            && $rollingGrant['refresh_expires_in'] > 0
+            && $rollingGrant['refresh_expires_in'] <= $rollingTtl,
+            'Rolling exchange must report the explicitly approved window.');
+        $rollingId = $rollingGrant['grant_id'];
+        $familyTimes->execute([$rollingId]);
+        $initialTimes = $familyTimes->fetch(\PDO::FETCH_ASSOC);
+        check($initialTimes['expires_at'] === $initialTimes['idle_expires_at'],
+            'Rolling exchange must initialize equal deadlines.');
+        // Shorten a live window without sleeping or changing the database clock.
+        $shortenRolling = $pdo->prepare(
+            'UPDATE app_link_refresh_families SET '
+                . 'expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND), '
+                . 'idle_expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND) '
+                . 'WHERE grant_id = ?',
+        );
+        $shortWindow = \Gallery\Services\APP_LINKING_ACCESS_TTL_SECONDS;
+        $shortenRolling->execute([$shortWindow, $shortWindow, $rollingId]);
+        $familyTimes->execute([$rollingId]);
+        $shortened = $familyTimes->fetch(\PDO::FETCH_ASSOC);
+        $renewRolling = static fn(string $access, string $origin): bool =>
+            \Gallery\Models\app_link_refresh_model_extend_on_access(
+                $rollingId, $userId, $access, $client, $origin, $rollingScope,
+                $rollingTtl,
+            );
+        check(!$renewRolling($rollingAccess, $issuer),
+            'Wrong issuer must not extend a rolling family.');
+        $familyTimes->execute([$rollingId]);
+        check($familyTimes->fetch(\PDO::FETCH_ASSOC) === $shortened,
+            'Rejected access must leave both deadlines untouched.');
+        check($renewRolling($rollingAccess, $rollingIssuer),
+            'Authenticated access must renew the rolling family.');
+        $familyTimes->execute([$rollingId]);
+        $renewed = $familyTimes->fetch(\PDO::FETCH_ASSOC);
+        check($renewed['expires_at'] > $shortened['expires_at']
+            && $renewed['expires_at'] === $renewed['idle_expires_at'],
+            'Authenticated use must extend both deadlines together.');
+        $storedRefresh->execute([$rollingId]);
+        check($storedRefresh->fetchAll(\PDO::FETCH_COLUMN) === [$rollingRefresh],
+            'Using a bearer must preserve the current active refresh hash.');
+
+        $rotateRolling = static fn(
+            string $refresh, string $nextAccess, string $nextRefresh,
+        ): ?array => \Gallery\Models\app_link_refresh_model_rotate(
+            $refresh, $client, $rollingIssuer, [$rollingScope],
+            static fn(): array => [
+                'access_hash' => $nextAccess, 'refresh_hash' => $nextRefresh,
+            ],
+            \Gallery\Services\APP_LINKING_ACCESS_TTL_SECONDS, $rollingTtl,
+            [$rollingScope],
+        );
+        $rollingAccessTwo = hash('sha256', 'fixture-rolling-access-two');
+        $rollingRefreshTwo = hash('sha256', 'fixture-rolling-refresh-two');
+        $shortenRolling->execute([$shortWindow, $shortWindow, $rollingId]);
+        $familyTimes->execute([$rollingId]);
+        $shortened = $familyTimes->fetch(\PDO::FETCH_ASSOC);
+        $firstRolling = $rotateRolling($rollingRefresh, $rollingAccessTwo, $rollingRefreshTwo);
+        check(($firstRolling['status'] ?? null) === 'rotated', 'Current rolling refresh must rotate.');
+        $familyTimes->execute([$rollingId]);
+        $rotatedTimes = $familyTimes->fetch(\PDO::FETCH_ASSOC);
+        check($rotatedTimes['expires_at'] > $shortened['expires_at']
+            && $rotatedTimes['expires_at'] === $rotatedTimes['idle_expires_at']
+            && !$renewRolling($rollingAccess, $rollingIssuer),
+            'Rotation must extend both deadlines and invalidate the prior access token.');
+
+        // Move the consumed hash beyond its usable window. A later rotation
+        // may discard only this aged hash while retaining fresh replay evidence.
+        $ageConsumed = $pdo->prepare(
+            "UPDATE app_link_refresh_tokens SET consumed_at = '2000-01-01 00:00:00' "
+                . 'WHERE grant_id = ? AND token_hash = ? AND active_slot IS NULL',
+        );
+        $ageConsumed->execute([$rollingId, $rollingRefresh]);
+        $rollingAccessThree = hash('sha256', 'fixture-rolling-access-three');
+        $rollingRefreshThree = hash('sha256', 'fixture-rolling-refresh-three');
+        $secondRolling = $rotateRolling(
+            $rollingRefreshTwo, $rollingAccessThree, $rollingRefreshThree,
+        );
+        check(($secondRolling['status'] ?? null) === 'rotated', 'A rolling family must rotate after aging replay evidence.');
+        $history->execute([$rollingId]);
+        $rollingRows = $history->fetchAll(\PDO::FETCH_ASSOC);
+        $familyTimes->execute([$rollingId]);
+        $retained = $familyTimes->fetch(\PDO::FETCH_ASSOC);
+        check(count($rollingRows) === 2
+            && (int) $retained['issued_count'] === count($rollingRows)
+            && $rollingRows[0]['token_hash'] === $rollingRefreshTwo
+            && $rollingRows[0]['consumed_at'] !== null
+            && $rollingRows[1]['token_hash'] === $rollingRefreshThree
+            && (int) $rollingRows[1]['active_slot'] === 1,
+            'Rolling pruning must keep the active hash and recent replay evidence.');
+        check($rotateRolling($rollingRefresh, $rollingAccess, $rollingRefresh) === null
+            && $renewRolling($rollingAccessThree, $rollingIssuer),
+            'A pruned refresh hash must not consume or revoke the active family.');
+        $expireRolling = $pdo->prepare(
+            "UPDATE app_link_refresh_families SET expires_at = '2000-01-01 00:00:00', "
+                . "idle_expires_at = '2000-01-01 00:00:00' WHERE grant_id = ?",
+        );
+        $expireRolling->execute([$rollingId]);
+        check(!$renewRolling($rollingAccessThree, $rollingIssuer)
+            && $rotateRolling($rollingRefreshThree, $rollingAccess, $rollingRefresh) === null,
+            'Even a live bearer must not resurrect an expired rolling family.');
+        $shortenRolling->execute([$shortWindow, $shortWindow, $rollingId]);
+        $rollingReplay = $rotateRolling($rollingRefreshTwo, $rollingAccess, $rollingRefresh);
+        check(($rollingReplay['status'] ?? null) === 'replayed'
+            && !$renewRolling($rollingAccessThree, $rollingIssuer),
+            'A recently consumed rolling hash must still revoke the whole family.');
 
         // Revoke a separate family even after its idle deadline has elapsed.
         $expiredCode = hash('sha256', 'fixture-expired-offline-code');

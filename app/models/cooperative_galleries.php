@@ -280,21 +280,46 @@ function cooperative_model_groups_page(string $afterId, int $limit): array
     return $result;
 }
 
+/**
+ * Cap SQL lookahead for cooperative photo export.
+ * Type: int. Units: rows. Scope: one cooperative photo export page.
+ * Consumers: cooperative_model_photos_page. Rationale: Eight existing
+ *     descriptors plus one lookahead preserve the cooperative wire contract.
+ */
+const COOPERATIVE_PHOTO_ROW_LIMIT = 9;
+
+/**
+ * Cap SQL lookahead for native catalogue requests.
+ * Type: int. Units: rows. Scope: one authorized native photo catalogue page.
+ * Consumers: cooperative_model_photos_page. Rationale: 64 descriptors plus one
+ *     lookahead reduce request volume without widening cooperative exports.
+ */
+const COOPERATIVE_NATIVE_PHOTO_ROW_LIMIT = 65;
+
 /** Read a stable bounded page of direct public non-NSFW photos for an authorized album.
  * @param int $galleryId Exact local gallery identity chosen by the policy service.
- * @param int $afterId Exclusive primary-key cursor; insertions do not reorder earlier pages.
+ * @param int $afterId Exclusive primary-key cursor; inserts do not reorder prior pages.
  * @param int $limit Bounded page size including lookahead.
- * @return list<array<string,mixed>> Source rows for service-level filtering and whitelisting.
+ * @param bool $includeGps Whether confirmed GPS columns are added to source rows.
+ * @param bool $nativeCatalogue Whether the authorized native catalogue opted in.
+ * @return list<array{id:int|string,gallery_id:int|string,filename:string,relative_path:string,visibility:string,nsfw_enabled:int|string,gps_lat?:float|string|null,gps_lng?:float|string|null}> Source rows for service filtering and whitelisting.
  */
 function cooperative_model_photos_page(
     int $galleryId,
     int $afterId,
     int $limit,
+    bool $includeGps = false,
+    bool $nativeCatalogue = false,
 ): array {
-    if ($limit < 1 || $limit > 9 || $galleryId < 1 || $afterId < 0) {
+    $maxRows = $nativeCatalogue ? COOPERATIVE_NATIVE_PHOTO_ROW_LIMIT
+        : COOPERATIVE_PHOTO_ROW_LIMIT;
+    if ($limit < 1 || $limit > $maxRows || $galleryId < 1 || $afterId < 0) {
         throw new \InvalidArgumentException('Invalid photo page.');
     }
-    $statement = db()->prepare("SELECT id, gallery_id, filename, relative_path, visibility, nsfw_enabled FROM images
+    $columns = $includeGps
+        ? 'id, gallery_id, filename, relative_path, visibility, nsfw_enabled, gps_lat, gps_lng'
+        : 'id, gallery_id, filename, relative_path, visibility, nsfw_enabled';
+    $statement = db()->prepare("SELECT {$columns} FROM images
         WHERE gallery_id = ? AND id > ? AND visibility = 'public' AND nsfw_enabled = 0
         AND relative_path NOT LIKE '%/%' ORDER BY id LIMIT "
         . $limit);

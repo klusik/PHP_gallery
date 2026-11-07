@@ -24,6 +24,8 @@ use function Gallery\Services\app_linking_recovery_probe;
 use function Gallery\Services\app_linking_scope_base;
 use function Gallery\Services\app_linking_upload_target;
 use function Gallery\Services\app_linking_upload_feature_enabled;
+use function Gallery\Services\app_linking_watch_key_open;
+use function Gallery\Services\app_linking_watch_key_close;
 use function Gallery\Services\gallery_upload_entries;
 use function Gallery\Services\upload_automation_bool;
 use function Gallery\Services\upload_automation_client_thumbnail_entries;
@@ -44,7 +46,7 @@ use const Gallery\Services\APP_LINKING_UPLOAD_CREATE_VISIBILITY_SCOPE;
  * Admit one delegated upload action without touching legacy API-key handling.
  *
  * @param string $page Exact fixed route selected by the dispatcher.
- * @return array{issuer:string,token:string}|null Verified request context, or
+ * @return array{issuer:string,token:string,identity:array{grant_id:int,user_id:int,scope:string}}|null Verified request context, or
  *     null after a bounded JSON refusal has been sent.
  */
 function app_linking_upload_admission(string $page): ?array
@@ -82,7 +84,7 @@ function app_linking_upload_admission(string $page): ?array
         app_linking_json_error(403, 'insufficient_scope');
         return null;
     }
-    return ['issuer' => $issuer, 'token' => $token];
+    return ['issuer' => $issuer, 'token' => $token, 'identity' => $identity];
 }
 
 /**
@@ -120,6 +122,44 @@ function cms_app_linking_inventory(): void
             app_linking_json_error(400, 'invalid_request');
             return;
         }
+        if (is_array($payload) && in_array($payload['action'] ?? null, [
+            'watch_open', 'watch_close',
+        ], true)) {
+            $rawWatchKey = $_SERVER['HTTP_X_PHP_GALLERY_WATCH_KEY'] ?? null;
+            if ($rawWatchKey !== null || array_diff(array_keys($payload), [
+                'action', 'gallery_id', 'key_hash',
+            ]) !== [] || !is_int($payload['gallery_id'] ?? null)
+                || $payload['gallery_id'] <= 0
+                || !is_string($payload['key_hash'] ?? null)
+                || preg_match('/\A[a-f0-9]{64}\z/D', $payload['key_hash']) !== 1) {
+                app_linking_json_error(400, 'invalid_request');
+                return;
+            }
+            $galleryId = $payload['gallery_id'];
+            if ($payload['action'] === 'watch_open') {
+                $success = app_linking_watch_key_open(
+                    $auth['identity'], $auth['token'], $auth['issuer'],
+                    $galleryId, $payload['key_hash'],
+                );
+                if (!$success) {
+                    app_linking_json_error(404, 'target_unavailable');
+                    return;
+                }
+            } else {
+                app_linking_watch_key_close(
+                    $auth['identity']['grant_id'], $galleryId, $payload['key_hash'],
+                );
+            }
+            clear_response_cache_headers();
+            app_linking_security_headers();
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode([
+                'ok' => true,
+                'action' => $payload['action'],
+                'gallery_id' => $galleryId,
+            ], JSON_THROW_ON_ERROR);
+            return;
+        }
         if (!is_array($payload) || array_diff(array_keys($payload), [
             'action', 'gallery_id', 'files', 'deep_check',
         ]) !== [] || ($payload['action'] ?? null) !== 'inventory'
@@ -152,7 +192,13 @@ function cms_app_linking_inventory(): void
             $inventorySizes[$hash] = $row['size'];
         }
         $galleryId = $payload['gallery_id'];
-        $gallery = app_linking_upload_target($auth['token'], $auth['issuer'], $galleryId);
+        $watchKey = $_SERVER['HTTP_X_PHP_GALLERY_WATCH_KEY'] ?? null;
+        if ($watchKey !== null && (!is_string($watchKey)
+            || preg_match('/\Apgw_[a-f0-9]{64}\z/D', $watchKey) !== 1)) {
+            app_linking_json_error(401, 'invalid_token');
+            return;
+        }
+        $gallery = app_linking_upload_target($auth['token'], $auth['issuer'], $galleryId, $watchKey);
         if ($gallery === null) {
             $current = app_linking_authenticate($auth['token'], $auth['issuer']);
             app_linking_json_error(
@@ -172,10 +218,10 @@ function cms_app_linking_inventory(): void
                 $gallery,
                 strtolower($candidate['sha256']),
                 $candidate['size'],
-                static function () use ($auth, $galleryId): ?array {
+                static function () use ($auth, $galleryId, $watchKey): ?array {
                     return app_linking_upload_feature_enabled()
                         ? app_linking_upload_target(
-                            $auth['token'], $auth['issuer'], $galleryId,
+                            $auth['token'], $auth['issuer'], $galleryId, $watchKey,
                         ) : null;
                 },
             );
@@ -201,9 +247,9 @@ function cms_app_linking_inventory(): void
             try {
                 $response = app_linking_inventory_confirm_indexed(
                     $galleryId, $gallery, $candidates, $response,
-                    static function () use ($auth, $galleryId): ?array {
+                    static function () use ($auth, $galleryId, $watchKey): ?array {
                         return app_linking_upload_feature_enabled()
-                            ? app_linking_upload_target($auth['token'], $auth['issuer'], $galleryId)
+                            ? app_linking_upload_target($auth['token'], $auth['issuer'], $galleryId, $watchKey)
                             : null;
                     },
                 );
@@ -216,7 +262,7 @@ function cms_app_linking_inventory(): void
             }
         }
         if (!app_linking_upload_feature_enabled()
-            || app_linking_upload_target($auth['token'], $auth['issuer'], $galleryId) === null) {
+            || app_linking_upload_target($auth['token'], $auth['issuer'], $galleryId, $watchKey) === null) {
             app_linking_json_error(401, 'invalid_token');
             return;
         }
@@ -304,7 +350,15 @@ function cms_app_linking_upload(): void
             return;
         }
         $galleryId = (int) $rawId;
-        $gallery = app_linking_upload_target($auth['token'], $auth['issuer'], $galleryId);
+        $watchKey = $_SERVER['HTTP_X_PHP_GALLERY_WATCH_KEY'] ?? null;
+        if ($watchKey !== null && (!is_string($watchKey)
+            || preg_match('/\Apgw_[a-f0-9]{64}\z/D', $watchKey) !== 1)) {
+            app_linking_json_error(401, 'invalid_token');
+            return;
+        }
+        $gallery = app_linking_upload_target(
+            $auth['token'], $auth['issuer'], $galleryId, $watchKey,
+        );
         if ($gallery === null) {
             $current = app_linking_authenticate($auth['token'], $auth['issuer']);
             app_linking_json_error(
@@ -362,18 +416,20 @@ function cms_app_linking_upload(): void
         $camera = upload_automation_sim_camera_metadata($_POST);
         $storedResult = upload_automation_store_images(
             $galleryId, $gallery, $entries, $thumbnails, $clientIds, $camera,
-            static function () use ($auth, $galleryId, $gallery): bool {
+            static function () use ($auth, $galleryId, $gallery, $watchKey): bool {
                 if (!app_linking_upload_feature_enabled()) {
                     return false;
                 }
-                $current = app_linking_upload_target($auth['token'], $auth['issuer'], $galleryId);
+                $current = app_linking_upload_target(
+                    $auth['token'], $auth['issuer'], $galleryId, $watchKey,
+                );
                 return $current !== null
                     && ($current['folder_path'] ?? null) === ($gallery['folder_path'] ?? null);
             },
             upload_automation_bool($_POST['create_thumbnails'] ?? '1', true),
             static fn(): ?array => app_linking_upload_feature_enabled()
                 ? app_linking_upload_target(
-                    $auth['token'], $auth['issuer'], $galleryId,
+                    $auth['token'], $auth['issuer'], $galleryId, $watchKey,
                 ) : null,
         );
         $stored = $storedResult['stored'];

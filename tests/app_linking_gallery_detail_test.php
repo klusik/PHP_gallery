@@ -26,16 +26,53 @@ namespace Gallery\Core {
     }
 }
 
+namespace Gallery\Services {
+    /**
+     * Model an owned writer lease for pre-mutation authority tests.
+     *
+     * @return string Fixture lease identifier.
+     */
+    function gallery_edit_writer_begin(): string
+    {
+        return 'fixture';
+    }
+
+    /**
+     * Release the fixture writer lease.
+     *
+     * @param string $lock Fixture lease identifier.
+     * @return void The fixture has no external lock.
+     */
+    function gallery_edit_writer_end(string $lock): void {}
+
+    /**
+     * Record delegation after all preconditions pass, without deleting files.
+     *
+     * @param int $galleryId Owning gallery identifier.
+     * @param list<int> $ids Validated photo identifiers.
+     * @return array{deleted:int} Number of fixture photos accepted.
+     */
+    function delete_gallery_images_owned(int $galleryId, array $ids): array
+    {
+        $GLOBALS['app_link_delete_calls'][] = [$galleryId, $ids];
+        return ['deleted' => count($ids)];
+    }
+}
+
 namespace {
     use function Gallery\Models\app_link_model_exchange;
     use function Gallery\Models\app_link_model_issue;
     use function Gallery\Models\app_link_model_revoke;
     use function Gallery\Services\app_linking_access_token_generate;
     use function Gallery\Services\app_linking_access_token_hash;
+    use function Gallery\Services\app_linking_admin_media_change_photo_visibility;
+    use function Gallery\Services\app_linking_admin_media_gallery;
     use function Gallery\Services\app_linking_authenticate;
     use function Gallery\Services\app_linking_gallery_detail;
     use function Gallery\Services\app_linking_gallery_page;
     use function Gallery\Services\app_linking_gallery_search_page;
+    use function Gallery\Services\app_linking_media_gallery;
+    use function Gallery\Services\app_linking_media_page;
     use function Gallery\Services\app_linking_scope_allowed;
     use function Gallery\Services\app_linking_upload_target;
     use function GalleryWorkflow\check;
@@ -48,6 +85,7 @@ namespace {
     require_once __DIR__ . '/../app/services/mutation_schema_policy.php';
     require_once __DIR__ . '/../app/models/app_linking.php';
     require_once __DIR__ . '/../app/models/galleries.php';
+    require_once __DIR__ . '/../app/models/images.php';
     require_once __DIR__ . '/../app/helpers_runtime.php';
     require_once __DIR__ . '/../app/services/content_localization.php';
     require_once __DIR__ . '/../app/services/public_search.php';
@@ -56,6 +94,8 @@ namespace {
     require_once __DIR__ . '/../app/services/app_linking_policy.php';
     require_once __DIR__ . '/../app/services/security_tokens.php';
     require_once __DIR__ . '/../app/services/app_linking.php';
+    require_once __DIR__ . '/../app/services/gallery_access.php';
+    require_once __DIR__ . '/../app/services/app_linking_media.php';
 
     if (!getenv('GALLERY_WORKFLOW_FIXTURE')) {
         $required = getenv('GALLERY_WORKFLOW_REQUIRED') === '1';
@@ -148,6 +188,111 @@ namespace {
         check(app_link_model_revoke($userId, $readGrant, null)
             && app_linking_gallery_detail($readToken, $issuer, $galleryId) === null,
             'Revocation must immediately deny stored gallery details.');
+
+        $mediaScope = \Gallery\Services\APP_LINKING_GALLERIES_SCOPE
+            . \Gallery\Services\APP_LINKING_ADMIN_MEDIA_SUFFIX;
+        [$mediaToken, $mediaGrant] = $issue($mediaScope);
+        $mediaIdentity = app_linking_authenticate($mediaToken, $issuer);
+        $oldIdentity = app_linking_authenticate($oldToken, $issuer);
+        check(is_array($mediaIdentity) && is_array($oldIdentity),
+            'The fixture requires current Admin bearers.');
+        $mediaGallery = app_linking_admin_media_gallery(
+            $mediaIdentity, $mediaToken, $issuer, $galleryId,
+        );
+        check(is_array($mediaGallery)
+            && app_linking_admin_media_gallery($oldIdentity, $oldToken, $issuer, $galleryId) === null
+            && app_linking_media_gallery($oldIdentity['scope'], $galleryId, false) === null,
+            'Only explicit Admin media consent admits photos in the restricted gallery.');
+
+        $insert = $pdo->prepare(
+            'INSERT INTO images (gallery_id, relative_path, relative_path_hash, '
+                . 'filename, visibility, nsfw_enabled, created_at, updated_at) '
+                . "VALUES (?, ?, ?, ?, 'private', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())",
+        );
+        $filename = 'fixture-private.jpg';
+        $insert->execute([$galleryId, $filename, hash('sha256', $filename), $filename]);
+        $imageId = (int) $pdo->lastInsertId();
+        $GLOBALS['app_link_delete_calls'] = [];
+        check(\Gallery\Services\app_linking_admin_media_delete_photos(
+            $mediaIdentity, $mediaToken, $issuer, $galleryId, [$imageId],
+        ) === [$imageId] && $GLOBALS['app_link_delete_calls'] === [[$galleryId, [$imageId]]],
+            'A saved Admin Photos grant must delete through the shared owner.');
+        $GLOBALS['app_link_delete_calls'] = [];
+        $deleteScope = $mediaScope . \Gallery\Services\APP_LINKING_ADMIN_DELETE_SUFFIX;
+        [$deleteToken] = $issue($deleteScope);
+        $deleteIdentity = app_linking_authenticate($deleteToken, $issuer);
+        check(is_array($deleteIdentity), 'Legacy delete fixture requires an authorized bearer.');
+        try {
+            \Gallery\Services\app_linking_admin_media_delete_photos(
+                $oldIdentity, $oldToken, $issuer, $galleryId, [$imageId],
+            );
+            throw new \LogicException('Public-only authority admitted photo deletion.');
+        } catch (\DomainException) {
+            check($GLOBALS['app_link_delete_calls'] === [],
+                'Public-only grant must refuse before mutation.');
+        }
+        foreach ([[$imageId, PHP_INT_MAX]] as $staleIds) {
+            try {
+                \Gallery\Services\app_linking_admin_media_delete_photos(
+                    $deleteIdentity, $deleteToken, $issuer, $galleryId, $staleIds,
+                );
+                throw new \LogicException('Stale deletion batch was admitted.');
+            } catch (\DomainException) {
+                check($GLOBALS['app_link_delete_calls'] === [], 'A stale batch must make no mutation call.');
+            }
+        }
+        $otherFolder = $folder . '_other';
+        $otherGallery = $pdo->prepare(
+            'INSERT INTO galleries (folder_path, folder_path_hash, slug, title, '
+                . 'visibility, created_at, updated_at) VALUES (?, ?, ?, ?, '
+                . "'private', UTC_TIMESTAMP(), UTC_TIMESTAMP())",
+        );
+        $otherGallery->execute([$otherFolder, hash('sha256', $otherFolder), $otherFolder, 'Other']);
+        $otherGalleryId = (int) $pdo->lastInsertId();
+        try {
+            \Gallery\Services\app_linking_admin_media_delete_photos(
+                $deleteIdentity, $deleteToken, $issuer, $otherGalleryId, [$imageId],
+            );
+            throw new \LogicException('Cross-gallery photo was admitted.');
+        } catch (\DomainException) {
+            check($GLOBALS['app_link_delete_calls'] === [], 'Cross-gallery deletion must not mutate.');
+        }
+        $pdo->prepare('DELETE FROM galleries WHERE id = ?')->execute([$otherGalleryId]);
+        $GLOBALS['app_link_delete_calls'] = [];
+        check(\Gallery\Services\app_linking_admin_media_delete_photos(
+            $deleteIdentity, $deleteToken, $issuer, $galleryId, [$imageId],
+        ) === [$imageId] && $GLOBALS['app_link_delete_calls'] === [[$galleryId, [$imageId]]],
+            'A valid batch must delegate exactly once to the shared owner.');
+        $expected = [
+            'id' => $imageId, 'title' => $filename, 'visibility' => 'private',
+            'nsfw' => true, 'size' => null, 'cache_eligible' => false,
+        ];
+        check(app_linking_media_page($mediaGallery, 0, false, true)['photos'] === [$expected],
+            'The Admin catalogue must include the restricted photo without cache admission.');
+        try {
+            app_linking_admin_media_change_photo_visibility(
+                $mediaIdentity, $mediaToken, $issuer, $galleryId, $imageId, 'private', 'public',
+            );
+            throw new \LogicException('Admin media without visibility scope edited visibility.');
+        } catch (\RuntimeException $error) {
+            check($error->getMessage() === 'Photo visibility authority is unavailable.',
+                'The visibility scope must be checked before writing.');
+        }
+        check(app_linking_media_page($mediaGallery, 0, false, true)['photos'] === [$expected]
+            && app_link_model_revoke($userId, $mediaGrant, null)
+            && app_linking_authenticate($mediaToken, $issuer) === null
+            && app_linking_admin_media_gallery($mediaIdentity, $mediaToken, $issuer, $galleryId) === null,
+            'A refused write preserves visibility and a revoked bearer cannot reuse its identity.');
+        $GLOBALS['app_link_delete_calls'] = [];
+        try {
+            \Gallery\Services\app_linking_admin_media_delete_photos(
+                $mediaIdentity, $mediaToken, $issuer, $galleryId, [$imageId],
+            );
+            throw new \LogicException('Revoked Admin authority admitted photo deletion.');
+        } catch (\DomainException) {
+            check($GLOBALS['app_link_delete_calls'] === [],
+                'A revoked bearer must fail the locked deletion recheck.');
+        }
 
         // Keep three owned matches with the same expression in distinct fields.
         $phrase = 'Cyberpunk ' . $folder;

@@ -830,7 +830,8 @@ class FlightUI:
         Returns:
             None: Uses a loaded OFP and all editions for explicit flight
                 completion. Finishes accepted work with the current connection
-                and closes progress after success. Credentials stay in place.
+                and closes progress after success. A contextual Watcher key
+                is released only after the shared operation completes.
         """
         if self.busy():
             self.show_progress()
@@ -1654,13 +1655,17 @@ class FlightUI:
             return False
         return True
 
-    def start_session(self) -> Path:
+    def start_session(self, *, photos_only: bool = False) -> Path:
         """Prepare automatic acquisition before the photo watcher becomes active.
 
         Returns:
             Path: Shared session directory for the photograph queue and recorder.
                 An opted-out recorder waits without opening SimConnect, allowing
                 the recording switch to admit acquisition later in this session.
+
+        Args:
+            photos_only (bool): Start a contextual game capture with reports
+                disabled in its initial plan.
 
         Raises:
             ValueError: Exclusive ownership or preferences cannot be saved.
@@ -1702,7 +1707,9 @@ class FlightUI:
             directory=directory,
             binding=target_binding if target_binding is not None else self.binding(),
             languages=self.preferences.languages,
-            reports_enabled=self.preferences.reports and self.preferences.recording,
+            reports_enabled=(
+                not photos_only and self.preferences.reports and self.preferences.recording
+            ),
             local_only=linked,
         )
         if linked and self.plan.reports_enabled:
@@ -1827,13 +1834,18 @@ class FlightUI:
             remaining = max(0.0, timeout - (time.monotonic() - started)) if timeout is not None else None
             self.dispatch_worker.join(timeout=remaining)
 
-    def begin(self, revoke: bool = False, *, automatic: bool = False) -> None:
+    def begin(
+        self, revoke: bool = False, *, automatic: bool = False,
+        photos_only: bool = False,
+    ) -> None:
         """Start or join Stop; refuse Revoke until its cleanup is fenced.
 
         Args:
             revoke (bool): Whether this explicit action should finally revoke.
             automatic (bool): Finish already authorizes the captured operation;
                 skip confirmation and close its views only after verified success.
+            photos_only (bool): Persist report suppression for a contextual
+                game capture before draining, including later recovery.
 
         Returns:
             None: Shows progress for Stop, or explains that remote revocation
@@ -1897,6 +1909,13 @@ class FlightUI:
                 # A linked destination owns one exclusive photo worker. Older
                 # profiles with multiple plans recover one session per Retry.
                 plans = plans[:1]
+            if photos_only:
+                if not linked:
+                    raise ValueError("A linked Watcher capture is required.")
+                for plan in plans:
+                    if plan.reports_enabled:
+                        plan.reports_enabled = False
+                        plan.save()
             remote_reports = any(
                 plan.reports_enabled and not plan.local_only and not plan.abandoned
                 for plan in plans
@@ -2611,6 +2630,9 @@ class FlightUI:
                     self.host.watcher_activity_var.set(
                         self.text("phase_" + progress.phase),
                     )
+                    release_watcher = getattr(self.host, "release_contextual_watcher", None)
+                    if progress.phase == "completed" and release_watcher is not None:
+                        release_watcher()
                 self.refresh_reports()
                 self.host.refresh_connection_controls()
                 if (

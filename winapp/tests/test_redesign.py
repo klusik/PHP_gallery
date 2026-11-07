@@ -53,6 +53,36 @@ from uploader.state_store import (
 # workers to schedule without letting a failed fixture wait indefinitely.
 TEST_HEARTBEAT_WAIT_SECONDS = 5.0
 
+# Purpose: Give black-bar trimming a known symmetric fixture boundary.
+# Type: tuple[int, int]; Units: pixels; Scope: source-raster edge policy test.
+# Consumers: PhotoPresentationPolicyTests.test_symmetric_black_edges_are_trimmed.
+# Rationale: 120 by 100 makes the 10 px bars safely exceed the minimum width.
+TEST_BLACK_BAR_IMAGE_SIZE = (120, 100)
+
+# Purpose: Define clear symmetric letterbox bars in the trim fixture.
+# Type: int; Units: pixels; Scope: synthetic source-raster edge test.
+# Consumers: PhotoPresentationPolicyTests.
+# Rationale: Ten pixel bands exceed the minimum while remaining under 12%.
+TEST_BLACK_BAR_WIDTH = 10
+
+# Purpose: Represent matched black sides around a dim flat photo scene.
+# Type: tuple[int, int]. Units: pixels. Scope: low-texture matte regression.
+# Consumers: PhotoPresentationPolicyTests flat-matte regression.
+# Rationale: The 250 by 90 frame gives 20 px sides and a 21:9 interior.
+TEST_FLAT_DARK_MATTE_SIZE = (250, 90)
+
+# Purpose: Give the synthetic flat-scene mattes a known symmetric width.
+# Type: int. Units: pixels. Scope: low-texture matte regression.
+# Consumers: PhotoPresentationPolicyTests flat-matte regression.
+# Rationale: 20 px yields a visible paired band within the 30% scan cap.
+TEST_FLAT_DARK_MATTE_WIDTH = 20
+
+# Purpose: Exercise a common 4:3 frame letterboxed inside a 16:9 raster.
+# Type: tuple[int, int]; Units: pixels; Scope: combined matte fixture.
+# Consumers: PhotoPresentationPolicyTests.
+# Rationale: Side mattes are 12.5%; top mattes are 12.5%.
+TEST_COMBINED_MATTE_SIZE = (160, 90)
+
 
 def load_main_module():
     """Load the compatibility .pyw entry point without starting Tkinter."""
@@ -67,6 +97,273 @@ def load_main_module():
 
 
 MAIN = load_main_module()
+
+
+class PhotoPresentationPolicyTests(unittest.TestCase):
+    """Keep Photos crops conservative and tooltip surfaces in-window."""
+
+    def test_symmetric_black_edges_are_trimmed_without_mutating_source(self) -> None:
+        """Trim only clear opposing bars and retain original source pixels.
+
+        Returns:
+            None: Crop bounds and untouched normalized source are verified.
+        """
+        try:
+            from PIL import Image, ImageDraw
+            from uploader.gallery_lightbox import PhotoLightbox
+        except ImportError:
+            self.skipTest("Pillow is an optional visual enhancement.")
+
+        width, height = TEST_BLACK_BAR_IMAGE_SIZE
+        band = TEST_BLACK_BAR_WIDTH
+        source = Image.new("RGB", (width, height), "black")
+        ImageDraw.Draw(source).rectangle(
+            (0, band, width - 1, height - band - 1),
+            fill="#b83d55",
+        )
+        lightbox = object.__new__(PhotoLightbox)
+        self.assertEqual(
+            (0, band, width, height - band),
+            lightbox._trim_black_bars(source),
+        )
+        self.assertEqual((0, 0, 0), source.getpixel((0, 0)))
+        self.assertEqual((184, 61, 85), source.getpixel((0, band)))
+
+        one_sided = Image.new("RGB", (width, height), "#b83d55")
+        ImageDraw.Draw(one_sided).rectangle(
+            (0, 0, width - 1, band - 1),
+            fill="black",
+        )
+        self.assertEqual(
+            (0, 0, width, height),
+            lightbox._trim_black_bars(one_sided),
+        )
+        dark = Image.new("RGB", (width, height), "black")
+        self.assertEqual(
+            (0, 0, width, height),
+            lightbox._trim_black_bars(dark),
+        )
+
+    def test_content_fit_toggle_restores_original_frame(self) -> None:
+        """Switch between detected content bounds and the complete frame.
+
+        Returns:
+            None: Both fit states retain the original Pillow image dimensions.
+        """
+        try:
+            from PIL import Image, ImageDraw
+            from uploader.gallery_lightbox import PhotoLightbox
+        except ImportError:
+            self.skipTest("Pillow is an optional visual enhancement.")
+
+        width, height = TEST_BLACK_BAR_IMAGE_SIZE
+        band = TEST_BLACK_BAR_WIDTH
+        source = Image.new("RGB", (width, height), "black")
+        ImageDraw.Draw(source).rectangle(
+            (0, band, width - 1, height - band - 1), fill="#b83d55",
+        )
+        lightbox = object.__new__(PhotoLightbox)
+        lightbox._source_image = source
+        lightbox._crop_box = lightbox._trim_black_bars(source)
+        lightbox._content_crop_enabled = True
+        lightbox._zoom = 2.0
+        lightbox._fullscreen_center = None
+        lightbox._fit_tooltip = mock.Mock()
+        lightbox.text = lambda key: key
+        lightbox._render_image = lambda: None
+
+        lightbox._fit_image()
+        self.assertEqual((0, 0, width, height), lightbox._crop_box)
+        self.assertFalse(lightbox._content_crop_enabled)
+        self.assertEqual(1.0, lightbox._zoom)
+        lightbox._fit_tooltip.set.assert_called_with("fit_content")
+        lightbox._fit_image()
+        self.assertEqual((0, band, width, height - band), lightbox._crop_box)
+        self.assertTrue(lightbox._content_crop_enabled)
+        lightbox._fit_tooltip.set.assert_called_with("show_original_frame")
+        source.close()
+
+    def test_combined_side_and_top_mattes_are_detected(self) -> None:
+        """Detect paired side and top bars without changing source pixels.
+
+        Returns:
+            None: The fitted box excludes all four synthetic mattes.
+        """
+        try:
+            from PIL import Image, ImageDraw
+            from uploader.gallery_lightbox import PhotoLightbox
+        except ImportError:
+            self.skipTest("Pillow is an optional visual enhancement.")
+
+        width, height = TEST_COMBINED_MATTE_SIZE
+        source = Image.new("RGB", (width, height), "black")
+        ImageDraw.Draw(source).rectangle(
+            (20, 11, width - 21, height - 12), fill="#376b91",
+        )
+        crop = object.__new__(PhotoLightbox)._trim_black_bars(source)
+        self.assertEqual((20, 11, width - 20, height - 11), crop)
+        self.assertEqual((0, 0, 0), source.getpixel((0, height // 2)))
+        source.close()
+
+    def test_cinematic_letterbox_is_detected(self) -> None:
+        """Detect wide cinematic content without cropping its scene.
+
+        Returns:
+            None: Only the clear top and bottom matte bands are removed.
+        """
+        try:
+            from PIL import Image, ImageDraw
+            from uploader.gallery_lightbox import PhotoLightbox
+        except ImportError:
+            self.skipTest("Pillow is an optional visual enhancement.")
+
+        source = Image.new("RGB", (220, 100), "black")
+        ImageDraw.Draw(source).rectangle(
+            (0, 20, 219, 79), fill="#376b91",
+        )
+        crop = object.__new__(PhotoLightbox)._trim_black_bars(source)
+        self.assertEqual((0, 20, 220, 80), crop)
+        source.close()
+
+    def test_clean_21_by_9_photo_keeps_its_full_frame(self) -> None:
+        """Keep a clean cinematic photograph untrimmed for laptop fit.
+
+        Returns:
+            None: Natural dark scene edges do not qualify as mattes.
+        """
+        try:
+            from PIL import Image, ImageDraw
+            from uploader.gallery_lightbox import PhotoLightbox
+        except ImportError:
+            self.skipTest("Pillow is an optional visual enhancement.")
+
+        source = Image.new("RGB", (210, 90), "#07090b")
+        ImageDraw.Draw(source).rectangle(
+            (5, 5, 204, 84), fill="#111820",
+        )
+        crop = object.__new__(PhotoLightbox)._trim_black_bars(source)
+        self.assertEqual((0, 0, 210, 90), crop)
+        source.close()
+
+    def test_flat_dark_scene_with_paired_black_mattes_is_trimmed(self) -> None:
+        """Trim balanced black sides before a dim, low-texture scene.
+
+        Returns:
+            None: Both mattes are removed while the flat scene remains intact.
+        """
+        try:
+            from PIL import Image
+            from uploader.gallery_lightbox import PhotoLightbox
+        except ImportError:
+            self.skipTest("Pillow is an optional visual enhancement.")
+
+        width, height = TEST_FLAT_DARK_MATTE_SIZE
+        band = TEST_FLAT_DARK_MATTE_WIDTH
+        source = Image.new("RGB", (width, height), "black")
+        for x in range(band, width - band):
+            for y in range(height):
+                source.putpixel((x, y), (16, 16, 16))
+        crop = object.__new__(PhotoLightbox)._trim_black_bars(source)
+        self.assertEqual((band, 0, width - band, height), crop)
+        source.close()
+
+    def test_inline_tooltip_uses_existing_surface_and_photo_style(self) -> None:
+        """Host hover help in its existing glass surface without a Toplevel.
+
+        Returns:
+            None: The themed label is placed beside the trigger in-window.
+        """
+        from uploader import ui_theme
+
+        widget = mock.Mock()
+        widget.winfo_exists.return_value = True
+        widget.winfo_ismapped.return_value = True
+        widget.winfo_rootx.return_value = 30
+        widget.winfo_rooty.return_value = 40
+        widget.winfo_height.return_value = 24
+        widget.after.return_value = "tooltip-timer"
+        surface = mock.Mock()
+        surface._inline_tooltip_state = None
+        surface.winfo_exists.return_value = True
+        surface.winfo_ismapped.return_value = True
+        surface.winfo_rootx.return_value = 0
+        surface.winfo_rooty.return_value = 0
+        surface.winfo_width.return_value = 500
+        surface.winfo_height.return_value = 300
+        label = mock.Mock()
+        label.winfo_reqwidth.return_value = 100
+        label.winfo_reqheight.return_value = 30
+
+        with (
+            mock.patch.object(ui_theme.ttk, "Label", return_value=label),
+            mock.patch.object(ui_theme.tk, "Toplevel") as transient_window,
+        ):
+            ui_theme.attach_inline_tooltip(widget, "Open photo", surface)
+            enter = next(
+                call.args[1]
+                for call in widget.bind.call_args_list
+                if call.args[0] == "<Enter>"
+            )
+            enter()
+            show = widget.after.call_args.args[1]
+            show()
+
+        transient_window.assert_not_called()
+        label.place.assert_called_once_with(x=36, y=70, width=100)
+        label.lift.assert_called_once_with()
+
+    def test_icon_button_accepts_scoped_photo_style_and_tooltip_surface(self) -> None:
+        """Route Photos icon controls through the themed in-window help path.
+
+        Returns:
+            None: Scoped style and existing tooltip host reach the button owner.
+        """
+        from uploader import ui_theme
+
+        parent = mock.Mock()
+        surface = mock.Mock()
+        button = mock.Mock()
+        with (
+            mock.patch.object(ui_theme.ttk, "Button", return_value=button) as build,
+            mock.patch.object(ui_theme, "attach_inline_tooltip") as inline,
+            mock.patch.object(ui_theme, "_attach_tooltip") as popup,
+        ):
+            result = ui_theme.icon_button(
+                parent,
+                "□",
+                lambda: None,
+                "Fit photo",
+                tooltip_surface=surface,
+                style_override="Photos.Icon.TButton",
+            )
+
+        self.assertIs(button, result)
+        self.assertEqual(
+            "Photos.Icon.TButton",
+            build.call_args.kwargs["style"],
+        )
+        inline.assert_called_once_with(button, "Fit photo", surface)
+        popup.assert_not_called()
+
+    def test_shared_tooltip_uses_the_existing_toplevel_surface(self) -> None:
+        """Keep legacy tooltip callers inside their owning window.
+
+        Returns:
+            None: Shared help binding delegates to the inline themed surface.
+        """
+        from uploader import ui_theme
+
+        widget = mock.Mock()
+        surface = mock.Mock()
+        widget.winfo_toplevel.return_value = surface
+        with (
+            mock.patch.object(ui_theme, "attach_inline_tooltip") as inline,
+            mock.patch.object(ui_theme.tk, "Toplevel") as transient_window,
+        ):
+            ui_theme._attach_tooltip(widget, "Open photo")
+
+        inline.assert_called_once_with(widget, "Open photo", surface)
+        transient_window.assert_not_called()
 
 
 class LinkedUploadHistoryTests(unittest.TestCase):
@@ -3065,19 +3362,24 @@ class NavigationTests(unittest.TestCase):
             None: Confirms selection is delegated to the registered notebook index.
         """
         app = mock.Mock()
-        # Notebook indices are zero-based and follow the Watcher-first task order.
+        # Notebook indices are zero-based and start with the Photos workspace.
         app.tab_indices = {
-            "watch": 0,
-            "import": 1,
-            "activity": 2,
-            "ai": 3,
-            "settings": 4,
+            "photos": 0,
+            "watch": 1,
+            "import": 2,
+            "activity": 3,
+            "ai": 4,
+            "settings": 5,
         }
 
+        MAIN.WatcherApp.select_tab(app, "photos")
         MAIN.WatcherApp.select_tab(app, "activity")
         MAIN.WatcherApp.select_tab(app, "missing")
 
-        app.notebook.select.assert_called_once_with(2)
+        self.assertEqual(
+            [mock.call(0), mock.call(3)],
+            app.notebook.select.call_args_list,
+        )
 
 
 class FlightDeliveryCoordinationTests(unittest.TestCase):
@@ -3280,9 +3582,9 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
 
         Returns:
             None: Independent widget spies verify the action container below
-                the title, Finish beside SimBrief within it, the expanding
-                identity's source/title bindings without a site-link picker,
-                and the offline Abandon action. No Tk root is built.
+                the title and recording state, Finish beside SimBrief within
+                it, the expanding identity's source/title bindings, and the
+                offline Abandon action. No Tk root is built.
         """
         app = mock.Mock()
         app.flights.text.return_value = "Finish flight…"
@@ -3290,6 +3592,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         # Distinct widgets preserve the real parent/child grid hierarchy.
         widgets.Frame.side_effect = lambda *_args, **_kwargs: mock.Mock()
         widgets.Button.side_effect = lambda *_args, **_kwargs: mock.Mock()
+        widgets.Label.side_effect = lambda *_args, **_kwargs: mock.Mock()
         title_widget = mock.Mock()
         with (
             mock.patch.object(MAIN, "ttk", widgets),
@@ -3317,7 +3620,21 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         self.assertIsNot(actions, title.args[0])
         title.args[0].columnconfigure.assert_called_once_with(0, weight=1)
         title.args[0].grid.assert_called_once_with(row=0, column=0, sticky="ew")
-        actions.grid.assert_called_once_with(row=1, column=0, sticky="w", pady=(6, 0))
+        actions.grid.assert_called_once_with(
+            row=1, column=0, columnspan=2, sticky="w", pady=(6, 0),
+        )
+        capture = next(
+            call for call in widgets.Label.call_args_list
+            if call.kwargs.get("style") == "Watcher.Active.TLabel"
+        )
+        self.assertEqual("● REC", capture.kwargs["text"])
+        capture.args[0].grid.assert_called_once_with(
+            row=0, column=1, sticky="e", padx=(16, 0),
+        )
+        app.watcher_capture_label.grid.assert_called_once_with(
+            row=0, column=1, padx=(8, 0),
+        )
+        app.watcher_capture_label.grid_remove.assert_called_once_with()
         app.finish_flight_button.grid.assert_called_once_with(row=0, column=0, sticky="w")
         simbrief = buttons[app.flights.toggle_simbrief]
         self.assertIs(actions, simbrief.args[0])
@@ -3708,20 +4025,87 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
 class WatcherActionTests(unittest.TestCase):
     """Keep the primary watcher action aligned with worker state."""
 
-    def test_primary_action_starts_when_the_worker_is_stopped(self) -> None:
-        """Start the watcher when no worker is active.
+    def test_contextual_watcher_finish_latches_a_departed_simulator(self) -> None:
+        """Use flight Finish only when this capture observed a simulator.
 
         Returns:
-            None: Confirms the contextual action uses the existing start path.
+            None: Explicit game Finish and Stop both suppress report rendering.
+        """
+        app = mock.Mock()
+        app._contextual_watch_target = MAIN.LinkedUploadTarget(
+            mock.Mock(), "https://gallery.example", 7, 9, "Screenshots",
+            "synthetic watcher key",
+        )
+        app._contextual_watch_is_flight = False
+        app.updates.blocked.return_value = False
+        app.flight_action_state.return_value = "finish"
+        app.contextual_watcher_is_flight = (
+            MAIN.WatcherApp.contextual_watcher_is_flight.__get__(app)
+        )
+        app.simbrief_available.return_value = False
+        app.flights.recorder.diagnostics_snapshot.return_value = {"sample_count": 0}
+        MAIN.WatcherApp.flight_action(app)
+        app.flights.begin.assert_called_once_with(False, automatic=True, photos_only=True)
+        app.flights.begin.reset_mock()
+        MAIN.WatcherApp.stop(app)
+        app.flights.begin.assert_called_once_with(False, photos_only=True)
+        app.flights.finish_report.assert_not_called()
+
+        app.simbrief_available.return_value = True
+        self.assertTrue(app.contextual_watcher_is_flight())
+        app.simbrief_available.return_value = False
+        MAIN.WatcherApp.flight_action(app)
+        app.flights.finish_report.assert_called_once_with()
+
+    def test_contextual_watcher_closes_only_after_the_owned_queue_finishes(self) -> None:
+        """Retain the issued key while the shared flight workflow still owns work.
+
+        Returns:
+            None: Idle cleanup revokes the exact gallery key off Tk.
+        """
+        app = mock.Mock()
+        app.events = MAIN.queue.Queue()
+        app._watcher_key_closing = False
+        session = mock.Mock()
+        key = "synthetic watcher key"
+        target = MAIN.LinkedUploadTarget(
+            session, "https://gallery.example", 7, 9, "Screenshots", key,
+        )
+        app._contextual_watch_target = target
+        with mock.patch.object(MAIN.threading, "Thread") as thread:
+            for state in ("active", "working", "pending", "blocked"):
+                app.flights.session_state.return_value = state
+                MAIN.WatcherApp.release_contextual_watcher(app)
+            thread.assert_not_called()
+            app.flights.session_state.return_value = "idle"
+            MAIN.WatcherApp.release_contextual_watcher(app)
+            self.assertTrue(app._watcher_key_closing)
+            thread.call_args.kwargs["target"]()
+        session.close_watch_key.assert_called_once_with(target.gallery_id, key)
+        self.assertEqual({
+            "kind": "photos_watch_key_closed",
+            "payload": {"target": target, "closed": True},
+        }, app.events.get_nowait())
+
+    def test_primary_action_starts_when_the_worker_is_stopped(self) -> None:
+        """Start the ordinary Watcher even while a Photos gallery is selected.
+
+        Returns:
+            None: The ordinary action uses its saved destination path.
         """
         app = mock.Mock()
         app.worker = None
         app.flights.session_state.return_value = "idle"
+        app.linking_manager.selected_upload_target.return_value = None
+        app.photos_workspace.selected_watcher_gallery.return_value = (
+            mock.Mock(), mock.Mock(),
+        )
 
         MAIN.WatcherApp.toggle_watcher(app)
 
         app.start.assert_called_once_with()
         app.stop.assert_not_called()
+        app.open_gallery_watcher.assert_not_called()
 
     def test_primary_action_stops_an_active_worker(self) -> None:
         """Stop the watcher when its worker is already active.
@@ -3898,6 +4282,24 @@ class ScrollableFrameWheelTests(unittest.TestCase):
 
 class TrayUpdateIndicatorTests(unittest.TestCase):
     """Keep an available update visible and actionable on app and tray surfaces."""
+
+    def test_macos_source_skips_background_pystray_startup(self) -> None:
+        """Keep the macOS source window alive without entering AppKit on a worker.
+
+        Returns:
+            None: A present pystray dependency is never started on macOS.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        icon_factory = mock.Mock()
+        tray = types.SimpleNamespace(Icon=icon_factory)
+        platform = types.SimpleNamespace(platform="darwin")
+
+        with mock.patch.object(MAIN, "sys", platform), \
+                mock.patch.object(MAIN, "pystray", tray), \
+                mock.patch.object(MAIN, "Image", object()):
+            MAIN.WatcherApp.start_tray_icon(app)
+
+        icon_factory.assert_not_called()
 
     def test_badge_uses_fresh_pixels_without_mutating_or_accumulating(self) -> None:
         """Compose marked and unmarked images from the unchanged source art.
@@ -4163,6 +4565,9 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.preflight_worker = None
         app.worker = mock.Mock()
         app.worker.is_alive.return_value = True
+        app.worker.stop_event.is_set.return_value = False
+        app.worker.drain_only = False
+        app.worker.linked_target = None
         app.manual_worker = None
         app.ai_worker = None
         app.api_key_revoke_thread = None
@@ -4171,6 +4576,10 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.write_log = mock.Mock()
         app.hide_to_tray = mock.Mock()
         app.root = mock.Mock()
+        app._watcher_recording_after = "watcher-recording-pulse"
+        app._watcher_recording_active = True
+        app._watcher_recording_pulse = True
+        app._watcher_recording_target = None
         app.stop_tray_icon = mock.Mock()
 
         with mock.patch.object(MAIN, "messagebox") as dialogs:
@@ -4183,6 +4592,18 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.hide_to_tray.assert_called_once_with()
         app.stop_tray_icon.assert_not_called()
         app.root.destroy.assert_not_called()
+        app.root.after_cancel.assert_called_once_with(
+            "watcher-recording-pulse",
+        )
+        self.assertIsNotNone(app._watcher_recording_after)
+        self.assertTrue(app._watcher_recording_active)
+        self.assertTrue(
+            any(
+                call.args[0] == MAIN.WATCHER_RECORDING_PULSE_MS
+                and call.args[1] == app._pulse_watcher_recording
+                for call in app.root.after.call_args_list
+            )
+        )
         app.simulator_presence.stop.assert_not_called()
 
     def test_update_close_exits_all_threads_without_worker_checks(self) -> None:
@@ -4250,6 +4671,10 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             side_effect=lambda: self.assertIsNone(app.update_available_version)
         )
         app.root = mock.Mock()
+        app._watcher_recording_after = "watcher-recording-pulse"
+        app._watcher_recording_active = True
+        app._watcher_recording_pulse = True
+        app._watcher_recording_target = None
         app.root.destroy.side_effect = lambda: self.assertIsNone(
             app.update_available_version
         )
@@ -4261,6 +4686,11 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         self.assertIsNone(app.update_available_version)
         app.stop_tray_icon.assert_called_once_with()
         app.root.destroy.assert_called_once_with()
+        app.root.after_cancel.assert_called_once_with(
+            "watcher-recording-pulse",
+        )
+        self.assertIsNone(app._watcher_recording_after)
+        self.assertFalse(app._watcher_recording_active)
         app.linking_manager.close.assert_called_once_with()
         app.simulator_presence.stop.assert_called_once_with()
 

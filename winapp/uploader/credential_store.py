@@ -1,31 +1,31 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/uploader/credential_store.py
-# Module Type: Windows Client Credential Storage
-# Purpose: Store a linked credential in the current Windows user's vault.
+# Module Type: Native Client Credential Storage
+# Purpose: Store a linked credential in the current user's native vault.
 # Responsibilities:
 #   - Bind each credential reference and stored record to an issuer and account.
-#   - Use Windows Credential Manager without a plaintext fallback.
+#   - Use Windows Credential Manager or Keychain for opaque records.
 #   - Bound and validate native data before returning any credential bytes.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
-"""Unintegrated Windows-only storage owner for linked-client credentials.
-
-Callers must establish the canonical HTTPS issuer and live account identity
-before using this module. Storage does not prove token validity, scope or remote
-revocation. A later integration must check those with the server and manage
-replacement, expiry and revocation explicitly.
-"""
+"""Native storage and fenced replacement for issuer-bound credentials."""
 
 import ctypes
 import hashlib
 import hmac
+import os
+import stat
 import struct
 import sys
 import threading
+from pathlib import Path
 from types import TracebackType
 
 from .app_linking import _issuer_valid
+from .session_resume import (
+    delete_keychain_record, read_keychain_record, write_keychain_record,
+)
 from .upload_mode import ModeRecord, decode_mode_record, encode_mode_record
 
 
@@ -134,7 +134,7 @@ def _binding_bytes(issuer: str, account_id: int) -> tuple[bytes, bytes]:
     """Validate and encode the exact issuer and unsigned account identity.
 
     Args:
-        issuer (str): Previously trusted canonical HTTPS issuer with its mount.
+        issuer (str): Previously trusted canonical issuer with its mount.
         account_id (int): Positive current Admin ID returned by the server.
 
     Returns:
@@ -144,7 +144,7 @@ def _binding_bytes(issuer: str, account_id: int) -> tuple[bytes, bytes]:
         CredentialStoreError: The issuer or account identity is invalid.
     """
     if (not isinstance(issuer, str)
-            or not _issuer_valid(issuer, allow_local_http=False)
+            or not _issuer_valid(issuer, allow_local_http=True)
             or type(account_id) is not int
             or account_id <= 0 or account_id > CREDENTIAL_ACCOUNT_ID_MAX):
         raise CredentialStoreError('Invalid credential binding.')
@@ -158,7 +158,7 @@ def credential_target_name(issuer: str, account_id: int) -> str:
     """Derive a deterministic vault target from one exact issuer and account.
 
     Args:
-        issuer (str): Previously trusted canonical HTTPS issuer with its mount.
+        issuer (str): Previously trusted canonical issuer with its mount.
         account_id (int): Positive current Admin ID returned by the server.
 
     Returns:
@@ -177,7 +177,7 @@ def _encode_record(issuer: str, account_id: int, payload: bytes) -> bytes:
     """Bind opaque credential bytes to their exact server and account.
 
     Args:
-        issuer (str): Previously trusted canonical HTTPS issuer with its mount.
+        issuer (str): Previously trusted canonical issuer with its mount.
         account_id (int): Positive current Admin ID returned by the server.
         payload (bytes): Nonempty opaque credential; never log or write as JSON.
 
@@ -203,7 +203,7 @@ def _decode_record(issuer: str, account_id: int, record: bytes) -> bytes:
     """Validate the complete stored record before returning credential bytes.
 
     Args:
-        issuer (str): Previously trusted canonical HTTPS issuer with its mount.
+        issuer (str): Previously trusted canonical issuer with its mount.
         account_id (int): Positive current Admin ID returned by the server.
         record (bytes): Raw versioned binary record read from the user vault.
 
@@ -652,31 +652,35 @@ class _WindowsCredentialMutex:
         return False
 
 
-class WindowsCredentialStore:
-    """Store one opaque credential per exact issuer and Admin in the vault.
+class NativeCredentialStore:
+    """Bind native vault operations and refresh fencing to one exact account.
 
-    The vault is available to the current Windows user on this computer. A
-    process acting as that user can access its credentials; it does not protect
-    against a compromised account. Operations share a bounded cross-process
-    mutex for the effective Windows user and exact gallery account. A pending
-    refresh blocks ordinary access until the user explicitly discards it.
-    Writing again replaces its previous record without revoking
-    the old server grant; local deletion likewise does not revoke server access.
+    The platform adapter provides the vault and cross-process lock. A pending
+    refresh blocks access until the user explicitly discards it.
     """
 
-    def __init__(self) -> None:
-        """Open the required native Credential Manager for the current user.
+    _api: '_WindowsCredentialApi | _KeychainCredentialApi'
+
+    def _mutex(
+        self, issuer: str, account_id: int, *, metadata: bool = False,
+    ) -> '_WindowsCredentialMutex | _KeychainCredentialMutex':
+        """Select the native lock for a binding or shared metadata.
+
+        Args:
+            issuer (str): Canonical exact issuer and mount.
+            account_id (int): Verified server Admin ID.
+            metadata (bool): Select the separate outer metadata lock.
 
         Returns:
-            None: Creates a store without reading any credential.
+            _WindowsCredentialMutex | _KeychainCredentialMutex: Unentered lock.
 
         Raises:
-            CredentialStoreUnavailable: The operating system or API is unavailable.
+            NotImplementedError: A platform adapter is required.
         """
-        self._api = _WindowsCredentialApi()
+        raise NotImplementedError
 
     def is_available(self) -> bool:
-        """Probe whether the effective Windows logon has a usable vault.
+        """Probe whether the effective user has a usable native vault.
 
         Returns:
             bool: True when a harmless generic-credential read succeeded or
@@ -685,10 +689,12 @@ class WindowsCredentialStore:
         try:
             self._api.read('RudolfKlusal.PHPGallery.AvailabilityProbe.v1')
             return True
-        except CredentialStoreError:
+        except RuntimeError:
             return False
 
-    def binding_transaction(self, issuer: str, account_id: int) -> '_WindowsCredentialMutex':
+    def binding_transaction(
+        self, issuer: str, account_id: int,
+    ) -> '_WindowsCredentialMutex | _KeychainCredentialMutex':
         """Serialize non-secret binding-file changes for the current user.
 
         The metadata mutex has its own namespace shared across all gallery
@@ -696,34 +702,34 @@ class WindowsCredentialStore:
         credential-specific mutexes remain nested inside this owner.
 
         Args:
-            issuer (str): Canonical HTTPS issuer used to validate the request.
+            issuer (str): Canonical issuer used to validate the request.
             account_id (int): Positive server Admin identity.
 
         Returns:
-            _WindowsCredentialMutex: Unentered cross-process metadata lock.
+            _WindowsCredentialMutex | _KeychainCredentialMutex: Unentered metadata lock.
 
         Raises:
             CredentialStoreError: The binding or native mutex is unavailable.
         """
-        return _WindowsCredentialMutex(issuer, account_id, metadata=True)
+        return self._mutex(issuer, account_id, metadata=True)
 
     def write(self, issuer: str, account_id: int, payload: bytes) -> None:
         """Store or replace the record bound to one exact gallery account.
 
         Args:
-            issuer (str): Previously trusted canonical HTTPS issuer and mount.
+            issuer (str): Previously trusted canonical issuer and mount.
             account_id (int): Positive Admin ID confirmed by the server.
             payload (bytes): Nonempty opaque credential; never log or save as JSON.
 
         Returns:
-            None: Windows acknowledged the credential write.
+            None: The vault acknowledged the credential write.
 
         Raises:
             CredentialStoreError: The input is invalid or the native write fails.
         """
         target = credential_target_name(issuer, account_id)
         record = _encode_record(issuer, account_id, payload)
-        with _WindowsCredentialMutex(issuer, account_id) as mutex:
+        with self._mutex(issuer, account_id) as mutex:
             mutex.check_identity()
             self._ensure_not_pending(target)
             mutex.check_identity()
@@ -733,7 +739,7 @@ class WindowsCredentialStore:
         """Load a record only if its embedded binding matches this account.
 
         Args:
-            issuer (str): Previously trusted canonical HTTPS issuer and mount.
+            issuer (str): Previously trusted canonical issuer and mount.
             account_id (int): Positive Admin ID confirmed by the server.
 
         Returns:
@@ -743,7 +749,7 @@ class WindowsCredentialStore:
             CredentialStoreError: The input, record or native read is invalid.
         """
         target = credential_target_name(issuer, account_id)
-        with _WindowsCredentialMutex(issuer, account_id) as mutex:
+        with self._mutex(issuer, account_id) as mutex:
             mutex.check_identity()
             self._ensure_not_pending(target)
             mutex.check_identity()
@@ -756,7 +762,7 @@ class WindowsCredentialStore:
         """Delete the local record without claiming a remote revocation.
 
         Args:
-            issuer (str): Previously trusted canonical HTTPS issuer and mount.
+            issuer (str): Previously trusted canonical issuer and mount.
             account_id (int): Positive Admin ID confirmed by the server.
 
         Returns:
@@ -766,7 +772,7 @@ class WindowsCredentialStore:
             CredentialStoreError: The input or native deletion is invalid.
         """
         target = credential_target_name(issuer, account_id)
-        with _WindowsCredentialMutex(issuer, account_id) as mutex:
+        with self._mutex(issuer, account_id) as mutex:
             mutex.check_identity()
             self._ensure_not_pending(target)
             mutex.check_identity()
@@ -790,7 +796,7 @@ class WindowsCredentialStore:
     def refresh_transaction(
         self, issuer: str, account_id: int,
     ) -> '_CredentialRefresh':
-        """Create a fenced transaction for a future refresh integration.
+        """Create a fenced transaction for one refresh.
 
         The caller must enter the context, read the credential, successfully
         persist the pending marker, and only then send the network request.
@@ -799,7 +805,7 @@ class WindowsCredentialStore:
         never retries the old credential or clears a failed rotation itself.
 
         Args:
-            issuer (str): Previously trusted canonical HTTPS issuer and mount.
+            issuer (str): Previously trusted canonical issuer and mount.
             account_id (int): Positive Admin ID confirmed by the server.
 
         Returns:
@@ -815,11 +821,11 @@ class WindowsCredentialStore:
 
         Remove and verify the old local credential before clearing the marker.
         A crash or error before that point leaves the marker in place. This
-        operation does not revoke any grant on the server. A future integration
-        must require a fresh user action and browser authorization afterward.
+        operation does not revoke any grant on the server. Fresh browser
+        authorization is required afterward.
 
         Args:
-            issuer (str): Previously trusted canonical HTTPS issuer and mount.
+            issuer (str): Previously trusted canonical issuer and mount.
             account_id (int): Positive Admin ID confirmed by the server.
 
         Returns:
@@ -830,7 +836,7 @@ class WindowsCredentialStore:
         """
         target = credential_target_name(issuer, account_id)
         marker = target + _PENDING_SUFFIX
-        with _WindowsCredentialMutex(issuer, account_id) as mutex:
+        with self._mutex(issuer, account_id) as mutex:
             mutex.check_identity()
             if self._api.read(marker) is None:
                 return False
@@ -843,6 +849,201 @@ class WindowsCredentialStore:
             if not self._api.delete(marker):
                 raise CredentialStoreError('Credential refresh marker disappeared.')
             return True
+
+
+class WindowsCredentialStore(NativeCredentialStore):
+    """Store credentials in the current Windows user's Credential Manager."""
+
+    def __init__(self) -> None:
+        """Load the native Windows vault interface.
+
+        Returns:
+            None: The store is ready to probe or access its vault.
+
+        Raises:
+            CredentialStoreUnavailable: The operating system or API is unavailable.
+        """
+        self._api = _WindowsCredentialApi()
+
+    def _mutex(
+        self, issuer: str, account_id: int, *, metadata: bool = False,
+    ) -> _WindowsCredentialMutex:
+        """Select the Credential Manager lock for this Windows user.
+
+        Args:
+            issuer (str): Canonical exact issuer and mount.
+            account_id (int): Verified server Admin ID.
+            metadata (bool): Select the separate outer metadata lock.
+
+        Returns:
+            _WindowsCredentialMutex: Unentered named Windows mutex.
+        """
+        if metadata:
+            return _WindowsCredentialMutex(issuer, account_id, metadata=True)
+        return _WindowsCredentialMutex(issuer, account_id)
+
+
+_KEYCHAIN_REFRESH_SERVICE = 'RudolfKlusal.PHPGallery.Refresh.v1'
+
+
+class _KeychainCredentialApi:
+    """Keep refresh records and their durable markers in native Keychain items."""
+
+    def write(self, target: str, record: bytes) -> None:
+        """Insert or replace one opaque credential or fence.
+
+        Args:
+            target (str): Exact derived Keychain account name.
+            record (bytes): Encoded vault payload.
+
+        Returns:
+            None: Native Keychain acknowledged the write.
+        """
+        write_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target, record)
+
+    def read(self, target: str) -> bytes | None:
+        """Read one credential or fence by exact account name.
+
+        Args:
+            target (str): Exact derived Keychain account name.
+
+        Returns:
+            bytes | None: Native Keychain record or None when absent.
+        """
+        return read_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target)
+
+    def delete(self, target: str) -> bool:
+        """Delete a credential or fence by exact account name.
+
+        Args:
+            target (str): Exact derived Keychain account name.
+
+        Returns:
+            bool: True when the item existed and was removed.
+        """
+        return delete_keychain_record(_KEYCHAIN_REFRESH_SERVICE, target)
+
+
+class _KeychainCredentialMutex:
+    """Hold a process-released flock separately from the durable vault fence."""
+
+    def __init__(self, path: Path) -> None:
+        """Select one stable private profile lock file.
+
+        Args:
+            path (Path): Stable lock file shared by the current user's clients.
+
+        Returns:
+            None: Prepares an unentered lock without touching the profile.
+        """
+        self._path = path
+        self._descriptor: int | None = None
+        self._uid = os.geteuid()
+        self._thread = threading.current_thread()
+
+    def __enter__(self) -> '_KeychainCredentialMutex':
+        """Acquire an exclusive lock or fail before any vault operation.
+
+        Returns:
+            _KeychainCredentialMutex: Active lock held on the owning thread.
+
+        Raises:
+            CredentialStoreError: The profile, lock or owner is unsafe or busy.
+        """
+        import fcntl
+
+        try:
+            self._path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            directory = self._path.parent.lstat()
+            if (not stat.S_ISDIR(directory.st_mode)
+                    or directory.st_uid != self._uid or directory.st_mode & 0o022):
+                raise OSError('Unsafe vault lock directory.')
+            self._descriptor = os.open(
+                self._path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600,
+            )
+            fcntl.flock(self._descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.check_identity()
+        except (OSError, CredentialStoreError):
+            if self._descriptor is not None:
+                os.close(self._descriptor)
+                self._descriptor = None
+            raise CredentialStoreError('Native credential lock is unavailable.') from None
+        return self
+
+    def check_identity(self) -> None:
+        """Verify the current user, thread and still-current lock inode.
+
+        Returns:
+            None: The active lock is the private regular profile file.
+
+        Raises:
+            CredentialStoreError: The lock or effective user changed.
+        """
+        descriptor = self._descriptor
+        if (descriptor is None or os.geteuid() != self._uid
+                or threading.current_thread() is not self._thread):
+            raise CredentialStoreError('Native credential lock owner changed.')
+        try:
+            held = os.fstat(descriptor)
+            current = self._path.lstat()
+        except OSError:
+            raise CredentialStoreError('Native credential lock changed.') from None
+        if (not stat.S_ISREG(held.st_mode) or held.st_uid != self._uid
+                or held.st_mode & 0o077 or held.st_nlink != 1
+                or (held.st_dev, held.st_ino) != (current.st_dev, current.st_ino)):
+            raise CredentialStoreError('Native credential lock changed.')
+
+    def __exit__(
+        self, exc_type: type[BaseException] | None,
+        exc_value: BaseException | None, traceback: TracebackType | None,
+    ) -> bool:
+        """Close the descriptor and release the lock on every exit.
+
+        Args:
+            exc_type (type[BaseException] | None): Protected-block exception type.
+            exc_value (BaseException | None): Protected-block exception instance.
+            traceback (TracebackType | None): Protected-block traceback.
+
+        Returns:
+            bool: False to preserve any protected-block exception.
+        """
+        if self._descriptor is not None:
+            os.close(self._descriptor)
+            self._descriptor = None
+        return False
+
+
+class KeychainCredentialStore(NativeCredentialStore):
+    """Use macOS Keychain with a per-user profile lock for refresh operations."""
+
+    def __init__(self, profile: Path) -> None:
+        """Bind the vault to the uploader's shared per-user profile.
+
+        Args:
+            profile (Path): Existing uploader profile, shared by its processes.
+
+        Returns:
+            None: The store is ready to probe Keychain.
+        """
+        self._profile = profile
+        self._api = _KeychainCredentialApi()
+
+    def _mutex(
+        self, issuer: str, account_id: int, *, metadata: bool = False,
+    ) -> _KeychainCredentialMutex:
+        """Select a separate metadata or credential lock.
+
+        Args:
+            issuer (str): Canonical exact issuer and mount.
+            account_id (int): Verified server Admin ID.
+            metadata (bool): Select the outer binding-file lock.
+
+        Returns:
+            _KeychainCredentialMutex: Unentered private profile file lock.
+        """
+        target = credential_target_name(issuer, account_id)
+        key = 'binding' if metadata else hashlib.sha256(target.encode('ascii')).hexdigest()
+        return _KeychainCredentialMutex(self._profile / ('.offline-' + key + '.lock'))
 
 
 class WindowsUploadModeStore:
@@ -975,13 +1176,13 @@ class _CredentialRefresh:
     """Hold a user-bound lock and persistent fence across one rotation."""
 
     def __init__(
-        self, store: WindowsCredentialStore, issuer: str, account_id: int,
+        self, store: NativeCredentialStore, issuer: str, account_id: int,
     ) -> None:
         """Prepare a single-use refresh transaction for an exact binding.
 
         Args:
-            store (WindowsCredentialStore): Owner of the current user's vault.
-            issuer (str): Previously trusted canonical HTTPS issuer and mount.
+            store (NativeCredentialStore): Owner of the current user's vault.
+            issuer (str): Previously trusted canonical issuer and mount.
             account_id (int): Positive Admin ID confirmed by the server.
 
         Returns:
@@ -1013,7 +1214,7 @@ class _CredentialRefresh:
         if self._used:
             raise CredentialStoreError('Credential transaction was already used.')
         self._used = True
-        mutex = _WindowsCredentialMutex(self._issuer, self._account_id)
+        mutex = self._store._mutex(self._issuer, self._account_id)
         mutex.__enter__()
         try:
             mutex.check_identity()
@@ -1063,7 +1264,7 @@ class _CredentialRefresh:
         """Persist and verify the fence before any refresh network request.
 
         Returns:
-            None: Windows acknowledged and returned the pending marker.
+            None: The vault acknowledged and returned the pending marker.
 
         Raises:
             CredentialStoreError: The marker or transaction cannot be verified.
@@ -1094,7 +1295,7 @@ class _CredentialRefresh:
             payload (bytes): Nonempty rotated credential returned by the server.
 
         Returns:
-            None: Windows acknowledged the replacement and marker deletion.
+            None: The vault acknowledged the replacement and marker deletion.
 
         Raises:
             CredentialStoreError: Validation, storage or verification fails.

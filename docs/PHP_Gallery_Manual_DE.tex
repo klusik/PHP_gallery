@@ -1963,10 +1963,28 @@ Schema verweigert Freigaben und Änderungen. Betriebsgrenzen beschreibt
 \section{Windows-Uploader}
 \subsection{Aufbau}
 
-Der Uploader öffnet zunächst \ui{Watcher}; die Reihenfolge lautet
-\ui{Watcher}, \ui{Import}, \ui{Activity}, \ui{AI} und \ui{Settings}. Die obere
-Verbindungssteuerung öffnet einen kompakten Dialog für den API-Schlüssel
-mit maskiertem Schlüssel und \ui{Save \& Test}; die Verbindungssteuerung bleibt
+Beim normalen Start öffnet sich \ui{Fotos}; die Reihenfolge lautet
+\ui{Fotos}, \ui{Watcher}, \ui{Import}, \ui{Activity}, \ui{AI} und
+\ui{Settings}. Bei aktiver Verknüpfung lädt Fotos links den Galeriebaum
+und öffnet rechts automatisch eine erste Galerie. Einzelne Zweige und der
+gesamte Baum lassen sich ein- und ausklappen. Die Galerieauswahl zeigt
+ihre Fotos im selben Fenster.
+Die standardmäßig eingeschaltete Option \ui{Untergalerien} zeigt direkte
+Unterordnerkarten über den Fotos. Als Titelbild dient das erste autorisierte
+direkte Vorschaubild. Fehlt es, erscheint ein neutrales Ordnersymbol.
+Fotos hält Galerielisten im Arbeitsspeicher und verwendet die aktuelle
+Berechtigung der Verknüpfung.
+Ohne Verknüpfung öffnet \ui{Verbinden} den
+vorhandenen Adressdialog und die Zustimmung im Browser. Die aktive
+Verknüpfung erlaubt anschließend das direkte Anzeigen öffentlicher Fotos.
+Das getrennte Uploadziel wird über \ui{Use for uploads} gewählt.
+Ein Start mit \texttt{--startup} bleibt bis zum Wiederherstellen im
+Infobereich. Unter macOS verwendet der Start aus dem Quellcode das normale
+Tk-Fenster. Temporäre Verknüpfungen enden mit dem Prozess.
+
+Der Watcher-Bildschirm zeigt die Zielgalerie. Die obere API-Schlüsselsteuerung
+öffnet einen kompakten Dialog mit maskiertem Schlüssel und \ui{Save \& Test};
+diese Steuerung bleibt
 in der Kopfzeile auf allen Bildschirmen verfügbar. Ungespeicherte Änderungen
 ersetzen den gespeicherten Schlüssel nicht. Die App-Kopfzeile enthält außerdem
 Einstellungen, Updates und Hilfe. Der Watcher-Bildschirm zeigt die Zielgalerie,
@@ -1980,7 +1998,7 @@ sind noch nicht qualifiziert.
 Klicken Sie im Hauptfenster auf \ui{Link gallery}. Fügen Sie die Galerieadresse
 aus dem Browser ein und bestätigen Sie mit \ui{Link gallery}. Auf demselben
 Computer kann die Galerie eine HTTP-Adresse auf \texttt{localhost} verwenden.
-Andere Adressen und die gespeicherte Erneuerung verwenden HTTPS.
+Entfernte Installationen verwenden geprüftes HTTPS.
 Der Dialog zeigt den Fortschritt bis zur Genehmigung.
 Schlägt die Verbindung fehl, zeigt er den Fehler an und ermöglicht einen
 neuen Versuch. Melden Sie sich im Browser als Administrator an und klicken
@@ -2077,20 +2095,90 @@ entfernen; Datenbankzeile und Revision bleiben unverändert. Marker der Version
 eins sind nur lesbar. Kandidat \texttt{8de8e50a} bestand BASIC-Lauf
 \texttt{42107055888} und WinApp-Lauf \texttt{42107055797}. Installiertes GUI,
 MariaDB und produktives Verhalten sind noch nicht qualifiziert.
-Die separate temporäre Zustimmung zu \texttt{media:read} erlaubt nur
-das Durchsuchen gelisteter öffentlicher Galerien und nicht sensibler Fotos;
-die optionale Zustimmung zu \texttt{presentation:read} erlaubt autorisierte
-Diashows und sichtbare Musik. Jeder Vorfahr muss öffentlich, gelistet,
-normal zugänglich und frei von NSFW-Inhalten sein. Private, unveröffentlichte,
-nicht gelistete, passwortgeschützte und NSFW-Inhalte werden abgelehnt. Fotoseiten
-enthalten höchstens acht Bilder mit einer Binärgrenze von 16~MiB; Listen
-enthalten höchstens 32 sichtbare MP3/WAV-Titel. Es gibt keine Migration oder
-neue Abhängigkeit. Wählen Sie bei einer berechtigten Galerie \ui{Fotoansicht
-öffnen}. Eine ausdrücklich gestartete Diashow verwendet das Serverintervall
-und lädt bei Bedarf die nächste Seite. Ältere Server zeigen die Steuerelemente nicht.
-Die Codex-Darstellung wurde bei 1000/360~px mit beiden Berechtigungstexten und
-44~px schmalen Bedienelementen geprüft. Auf Wunsch des Eigentümers wurde kein
-HTTPS-Browserlauf durchgeführt; Windows-Wiedergabe ist nicht geprüft.
+Eine aktive Verknüpfung mit Galerieliste erlaubt das Anzeigen gelisteter,
+öffentlicher Fotos ohne sensible Inhalte. Unterstützte Server bieten beim
+normalen Verknüpfen die ausdrückliche Zustimmung zu \texttt{presentation:read}
+für Präsentationseinstellungen und sichtbare Musik an. Bei einer öffentlichen
+Verknüpfung müssen alle übergeordneten Galerien öffentlich, gelistet, normal
+zugänglich und frei von NSFW-Inhalten sein. Eine separate Administratorfreigabe
+erlaubt auch ausgeblendete, geschützte und NSFW-Medien. Der Server prüft die
+aktuelle Administratorfreigabe erneut.
+Interne Seiten enthalten bis zu 64~Fotoeinträge oder acht
+auf älteren Servern. Für Dateien gilt die Grenze von 16~MiB. Die Präsentationsliste enthält bis
+zu 32 sichtbare MP3/WAV-Titel. Fehlt die kleinste Miniatur, kann der Server
+eine andere vorhandene Variante oder die öffentliche Anzeigedatei innerhalb
+des Limits liefern. Fotobereich und Lightbox bleiben im Hauptfenster.
+Vorschaubilder schneiden erkannte schwarze Balken ab und zeigen die ganze
+verbleibende Szene im eigenen Seitenverhältnis. Für Fotos und Vorschaubilder gilt ein
+separates Limit von 600 Anfragen je IP und 3\,600 insgesamt in fünf Minuten.
+Bei HTTP~429 zeigt Photos die Begrenzung an und pausiert das Vorabladen
+bis zur Auswahl von \ui{Retry}.
+Das responsive Raster scrollt durchgehend und lädt sichtbare Vorschaubilder. Klicken Sie ein
+Bild an oder fokussieren Sie es und drücken Sie Enter, um die Lightbox zu öffnen.
+Links und Rechts durchlaufen das ganze Album in einer Schleife. Schließen oder Escape stellt Baum und Raster
+auch nach einem Bildfehler wieder her. Beim Start aus dem Quellcode muss
+Pillow im verwendeten Python-Interpreter installiert sein.
+\ui{Erneut versuchen} lädt fehlgeschlagene Inhalte erneut. Mausrad,
+Zweifinger-Scrollen oder + und~− ändern den Zoom. 0 setzt die Ansicht zurück.
+Ziehen verschiebt das Bild. F oder F11 schalten Vollbild um. Eine
+Zeigerbewegung blendet die Steuerung kurz ein.
+Wenn erlaubte Koordinaten vorhanden sind, öffnet
+eine angeheftete Standortmarke \ui{In OpenStreetMap öffnen} im Systembrowser.
+Das vorherige und nächste Detailbild werden im begrenzten Arbeitsspeicher
+vorbereitet. \ui{An Inhalt anpassen} beschneidet erkannte schwarze Balken
+im Fenster und im Vollbild. \ui{Originalbild anzeigen} stellt den ganzen
+Rahmen wieder her. Das Bild behält sein Seitenverhältnis. Beim Ändern der
+Fenstergröße aktualisiert die Bildansicht eine Vorschau und verfeinert sie
+anschließend. Ab macOS~15 können geeignete HDR-Dateien über AppKit auf einem
+EDR-Display erscheinen, wenn PyObjC und die Tk-Fensteranbindung verfügbar
+sind. Andere Konfigurationen einschließlich Windows verwenden 8-Bit-SDR
+über Pillow/Tk.
+Ein gemeinsamer Cache pro Benutzer speichert freigegebene Fotos und Titel mit
+verifizierten Inhaltsprüfsummen. Bei mehr als 4\,096~Einträgen oder 1~GiB
+entfernt er die am längsten ungenutzten Daten. Ein passender Prüfwert aus
+dem aktuellen Albumkatalog ermöglicht die direkte Nutzung der Miniatur.
+Sonst gelten 60~Sekunden Frische und die autorisierte ETag-Prüfung.
+Die aktuell autorisierte Wiedergabeliste kann einen Titel anhand von SHA-256,
+Größe und Format wiederverwenden. Nur für Administratoren zugängliche Medien
+bleiben vom Festplattencache ausgeschlossen.
+Die Diashow-Taste öffnet das Vollbild und wiederholt das gesamte Album im
+aktivierten Serverintervall oder standardmäßig alle fünf Sekunden. Dabei
+startet die freigegebene Begleitmusik. Die Musiksteuerung kann die Wiedergabe
+starten, pausieren und den Titel wechseln. Der Player liest eine lokale Datei
+und bereitet den nächsten Titel vor.
+Per Rechtsklick auf eine Galerie oder ein Foto öffnen Sie Informationen und
+freigegebene Sichtbarkeitsaktionen. Ein Klick außerhalb oder Escape schließt
+das Menü. Fotodetails zeigen Format, Abmessungen, gespeicherte EXIF-Daten und
+zulässige GPS-Daten. Die Vorschauqualität zeigt die aktuellen
+Generierungseinstellungen des Servers. Die Galerieinformationen zeigen
+direkte Inhalte und Cache-Abdeckung. Das Symbol im Galeriebaum erscheint,
+sobald sie bekannt
+ist. Die Hinzufügen-Schaltfläche im Baum erstellt eine Galerie auf der
+obersten Ebene. Die Schaltfläche am Albumtitel, das Galeriemenü und eine
+freie Stelle im Fotoraster bieten eine Untergalerie an. Mausrad und
+Zweifinger-Scrollen bewegen das Raster und ändern den Lightbox-Zoom.
+Der Baum merkt sich geöffnete und geschlossene Zweige je verknüpfter Website
+und Konto. Der runde Pfeil neben dem Albumtitel aktualisiert die Fotos.
+WinApp prüft den Index des sichtbaren Admin-Albums etwa alle 30~Sekunden
+und verwendet unveränderte Miniaturen erneut. Ältere Server unterstützen
+die manuelle Aktualisierung.
+Wählen Sie Fotos per Strg-Klick unter Windows, Command-Klick unter macOS
+oder im Fotomenü. Das Kontextmenü löscht ein Foto oder die Auswahl.
+WinApp nutzt die aktuelle Admin-Verknüpfung. Bestätigen Sie in der Anwendung
+jeweils bis zu 64~Fotos. WinApp verwendet dieselbe endgültige
+Löschoperation wie die Web-Administration. Aktualisieren und prüfen Sie das
+Album nach einer unterbrochenen Antwort vor einer weiteren Bestätigung.
+Über das Galeriekontextmenü oder das Watcher-Menü starten Sie die Überwachung mit einem
+temporären Schlüssel und roter REC-Anzeige. Das Watcher-Symbol pulsiert auf
+allen Registerkarten rot. Ein ausgefüllter roter Punkt markiert das Zielalbum
+und seinen Titel. Ein roter Ring markiert einen geschlossenen Zweig, der das
+Album verdeckt. Bei erkanntem Flugsimulator
+steht SimBrief zur Verfügung. Beenden verarbeitet angenommene Bilder,
+speichert verfügbare Flugberichte und widerruft den temporären Schlüssel.
+Die Website bleibt verknüpft. Im Watcher erscheint die Vorbereitung oder
+der Grund, falls die Überwachung nicht starten kann. Ein
+aktueller installierter Windows-Klicktest für die native Ansicht steht noch
+aus. Frühere Protokollnachweise decken diese UI-Version nicht ab.
 Die Dateisystem-Schreibsperre ist ein inaktiver Prototyp und schützt
 Galerieoperationen erst nach geprüfter Koordination.
 Die experimentelle separate Berechtigung \texttt{galleries:create} erfordert
@@ -2167,16 +2255,20 @@ qualifiziert; der bisherige galeriegebundene Schlüssel bleibt unabhängig
 verfügbar.
 
 Installation und Aktualisierung legen den Verbindungsschlüssel in der
-Datenbank an. Die gespeicherte HTTPS-Websiteadresse bestimmt Ursprung und
+Datenbank an. Die gespeicherte Websiteadresse bestimmt Ursprung und
 Installationspfad. Vorhandene explizite Angaben für Adresse und Schlüssel
 haben Vorrang. Die öffentliche Abfrage liest die Bereitschaft. Vor der
 normalen Admin-Anmeldung speichert der Browser eine kurzlebige Anfragekennung
 in der Sitzung. Die CSRF-geschützte Bindung führt zur ausdrücklichen Zustimmung.
 \ui{Genehmigen} liefert einen einmaligen Code an die geprüfte Rücksprungadresse
-für den Austausch mit PKCE. Die Hauptaktion fordert bis zu 15~Minuten
-Konto- und Listenzugriff sowie Bild-Uploads an, wenn das lokale Profil und der
-Server diese unterstützen. Sichere Verlängerung unter Windows erfordert
-eine separate Zustimmung.
+für den Austausch mit PKCE. Die Hauptaktion fordert Konto- und Galeriezugriff sowie Bild-Uploads an,
+wenn diese unterstützt werden. Auf kompatiblen Servern bestätigen Sie den
+verlängerbaren Zugriff ausdrücklich. Er gilt sieben Tage nach der letzten
+erfolgreichen authentifizierten Nutzung oder Erneuerung. WinApp erneuert das
+15-Minuten-Zugriffstoken über den macOS-Schlüsselbund oder Windows Credential
+Manager. Geprüftes HTTPS und direktes \texttt{http://localhost} werden
+unterstützt. Ältere Server nutzen eine temporäre Verbindung von bis zu
+15~Minuten.
 Administratoren können Zugriffe unter den verbundenen Anwendungen widerrufen.
 Nicht ausgetauschte Codes verfallen innerhalb von 120~Sekunden. Siehe
 \filepath{docs/APP_LINKING_PHASE_0.md}.
@@ -2192,23 +2284,27 @@ eine strengere vorhandene Einstellung bleibt erhalten. Ein abgesenkter Wert
 wird wiederhergestellt; die gesamte DDL-Zeit ist nicht begrenzt. Die
 Callback-Sperre endet vor dem Migrationscheckpoint.
 
-Für fortgesetzten Zugriff wählen Sie ausdrücklich \ui{Remember securely on
-this Windows account} und bestätigen die separate Berechtigung im Browser.
-Windows Credential Manager speichert die Erneuerungsdaten; eine separate
-lokale Bindung enthält nur Issuer, Konto-ID und genehmigten Umfang. Wählen Sie
-nach dem Neustart ausdrücklich \ui{Reconnect saved link}. Der Client erneuert
-die Daten einmal und prüft die Serveridentität. Eine unklare Antwort oder ein
+Die separate Windows-Speicheroption über HTTPS verwendet den bisherigen
+Offline-Scope. Er läuft nach 30~Tagen oder sieben Tagen Inaktivität ab,
+je nachdem, was zuerst eintritt. WinApp kann eine gespeicherte genehmigte
+Verknüpfung beim Start wiederherstellen.
+\ui{Reconnect saved link} startet dieselbe Prüfung. Der Client erneuert
+die Daten einmal und prüft die Serveridentität. Lehnt derselbe geprüfte
+Server abgelaufene oder widerrufene verlängerbare Zugangsdaten ausdrücklich ab,
+entfernt WinApp diese gespeicherten Daten. Wählen Sie \ui{Link gallery} für
+eine neue Genehmigung im Browser. Beim Start bleibt die Genehmigung Ihnen
+überlassen. Eine unklare Antwort oder ein
 Speicherfehler sperrt die Wiederverwendung der alten Daten. Prüfen Sie die
 Verbindungen auf dem Server und wählen Sie bei Bedarf \ui{Forget saved link}
 vor einer erneuten Verknüpfung. Lokales Vergessen widerruft den Server-Grant
 nicht; die aktuelle Sitzung kann aktiv bleiben. Der gespeicherte
 \texttt{pgu\_}-Schlüssel bleibt unabhängig. Echte Windows- und
-Stromausfallwiederherstellung sind noch nicht qualifiziert. Fortgesetzter
-Zugriff ist auf 30~Tage und sieben Tage Inaktivität begrenzt. Es wird jeweils
-nur eine Offline-Bindung gespeichert: Öffnen Sie zum Wechsel von Issuer oder
-Konto den alten Issuer, klären Sie offene Arbeit und vergessen Sie die lokale
-Verknüpfung vor dem Speichern der neuen. Widerrufen Sie den alten Grant bei
-Bedarf separat in der Galerie. Der verknüpfte Upload trennt Verlauf und
+Stromausfallwiederherstellung sind noch nicht qualifiziert. Verlängerbare
+Verbindungen speichern eine Bindung je exaktem Issuer.
+Die bisherige Windows-Option über HTTPS verwendet eine gemeinsame Bindung.
+Klären Sie offene Arbeit und entfernen Sie die lokale Verknüpfung vor
+einem Kontowechsel beim selben Issuer. Den Server-Grant können Sie separat
+widerrufen. Der verknüpfte Upload trennt Verlauf und
 exklusive Sperre nach Issuer, Konto und Galerie und speichert vor dem Senden
 eine ausstehende Markierung. Prüfen Sie nach unklarem Ergebnis Galerie und
 Quelle manuell; Quelle nicht automatisch erneut senden oder löschen. Eine

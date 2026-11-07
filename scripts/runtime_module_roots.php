@@ -321,6 +321,15 @@ return [
             'Gallery\\Core\\cms_runtime_kernel',
             'Gallery\\Controllers\\gallery_music_stream_document',
         ],
+        // Native delete loads the existing bulk owner only for an authorized POST.
+        'Gallery\\Controllers\\app_linking_media_photo_delete' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+        ],
+        'Gallery\\Services\\app_linking_admin_media_delete_photos' => [
+            'Gallery\\Services\\gallery_edit_writer_begin',
+            'Gallery\\Services\\gallery_edit_writer_end',
+            'Gallery\\Services\\delete_gallery_images_owned',
+        ],
         'Gallery\\Services\\app_linking_media_presentation' => [
             'Gallery\\Services\\gallery_music_playlist',
         ],

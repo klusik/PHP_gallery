@@ -237,6 +237,8 @@ namespace {
     require_once dirname(__DIR__) . '/app/models/app_settings.php';
     require_once dirname(__DIR__) . '/app/models/schema_inspection.php';
     require_once dirname(__DIR__) . '/app/services/gallery_music.php';
+    require_once dirname(__DIR__) . '/app/services/gallery_lightbox_mode.php';
+    require_once dirname(__DIR__) . '/app/services/app_linking_media.php';
 
     /**
      * Assert one observed service behavior.
@@ -493,6 +495,24 @@ namespace {
             'Same-size tampering must not bypass the stored original digest.',
         );
         file_put_contents($read['path'], $wav);
+        $nativeGallery = $gallery + [
+            'presentation_json' => '{"version":1,"enabled":true,"music":true}',
+        ];
+        $nativePresentation = \Gallery\Services\app_linking_media_presentation($nativeGallery);
+        $nativeTrack = \Gallery\Services\app_linking_media_track($nativeGallery, $id);
+        music_assert(
+            !$first['enabled']
+                && array_column($nativePresentation['tracks'], 'id') === [$id]
+                && $nativeTrack !== null
+                && file_get_contents($nativeTrack['path']) === $wav,
+            'Explicit native presentation must play a visible default-off soundtrack.',
+        );
+        $nativeGallery['presentation_json'] = '{"version":1,"enabled":true,"music":false}';
+        music_assert(
+            \Gallery\Services\app_linking_media_presentation($nativeGallery)['tracks'] === []
+                && \Gallery\Services\app_linking_media_track($nativeGallery, $id) === null,
+            'Disabled presentation music must refuse native metadata and track delivery.',
+        );
         music_assert(\Gallery\Services\gallery_music_track([
             'id' => 2,
             'folder_path' => 'two',

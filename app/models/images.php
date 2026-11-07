@@ -896,20 +896,79 @@ function image_model_metadata_organizer_candidate_count(
  * Return a compact summary for direct images in one gallery.
  *
  * @param int $galleryId Gallery identifier.
- * @return array{image_count:int,newest_update:string,total_size:string} Direct-image inventory summary.
+ * @return array{image_count:int,newest_id:int,newest_update:string,total_size:string} Direct-image inventory summary.
  */
 function image_model_direct_inventory_summary(int $galleryId): array
 {
     $stmt = db()->prepare(
-        "SELECT COUNT(*) AS image_count, COALESCE(MAX(updated_at), '') AS newest_update, COALESCE(SUM(COALESCE(file_size, 0)), 0) AS total_size FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'",
+        "SELECT COUNT(*) AS image_count, COALESCE(MAX(id), 0) AS newest_id, "
+            . "COALESCE(MAX(updated_at), '') AS newest_update, "
+            . 'COALESCE(SUM(COALESCE(file_size, 0)), 0) AS total_size '
+            . "FROM images WHERE gallery_id = ? AND relative_path NOT LIKE '%/%'",
     );
     $stmt->execute([$galleryId]);
     $row = $stmt->fetch() ?: [];
     return [
         'image_count' => (int) ($row['image_count'] ?? 0),
+        'newest_id' => (int) ($row['newest_id'] ?? 0),
         'newest_update' => (string) ($row['newest_update'] ?? ''),
         'total_size' => (string) ($row['total_size'] ?? '0'),
     ];
+}
+
+/**
+ * Read direct indexed photos for an already authorized Admin gallery.
+ *
+ * @param int $galleryId Exact authorized physical gallery ID.
+ * @param int $afterId Exclusive image ID cursor or zero for the first page.
+ * @param int $limit Positive row limit including a possible lookahead.
+ * @param bool $includeGps Whether verified GPS coordinates are selected.
+ * @return list<array{id:int|string,gallery_id:int|string,filename:string,relative_path:string,visibility:string,nsfw_enabled:int|string,file_size:int|string|null,gps_lat?:float|string|null,gps_lng?:float|string|null}>
+ *     Indexed direct photos in increasing ID order.
+ */
+function image_model_linked_admin_photo_page(
+    int $galleryId,
+    int $afterId,
+    int $limit,
+    bool $includeGps,
+): array {
+    $coordinates = $includeGps ? ', gps_lat, gps_lng' : '';
+    $stmt = db()->prepare(
+        'SELECT id, gallery_id, filename, relative_path, visibility, nsfw_enabled, file_size'
+            . $coordinates . ' FROM images '
+            . "WHERE gallery_id = ? AND id > ? AND relative_path NOT LIKE '%/%' "
+            . 'ORDER BY id LIMIT ?',
+    );
+    $stmt->bindValue(1, $galleryId, \PDO::PARAM_INT);
+    $stmt->bindValue(2, $afterId, \PDO::PARAM_INT);
+    $stmt->bindValue(3, $limit, \PDO::PARAM_INT);
+    $stmt->execute();
+    return $stmt->fetchAll(\PDO::FETCH_ASSOC);
+}
+
+/**
+ * Lock a direct photo for its caller's live Admin authority transaction.
+ *
+ * @param int $galleryId Exact gallery to which the photo must belong.
+ * @param int $imageId Positive selected photo ID.
+ * @return array{id:int|string,filename:string,visibility:string,nsfw_enabled:int|string,file_size:int|string|null}|null
+ *     Current editable photo fields, or null if the photo is no longer direct.
+ * @throws \RuntimeException When the caller has no active transaction.
+ */
+function image_model_linked_admin_photo_lock(int $galleryId, int $imageId): ?array
+{
+    $pdo = db();
+    if (!$pdo->inTransaction()) {
+        throw new \RuntimeException('Missing photo visibility transaction.');
+    }
+    $stmt = $pdo->prepare(
+        'SELECT id, filename, visibility, nsfw_enabled, file_size FROM images '
+            . "WHERE gallery_id = ? AND id = ? AND relative_path NOT LIKE '%/%' "
+            . 'FOR UPDATE',
+    );
+    $stmt->execute([$galleryId, $imageId]);
+    $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+    return is_array($row) ? $row : null;
 }
 
 /**

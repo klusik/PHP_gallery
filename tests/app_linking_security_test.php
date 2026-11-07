@@ -59,6 +59,7 @@ namespace Gallery\Core {
 
 namespace {
     use function Gallery\Controllers\app_linking_configured_issuer;
+    use function Gallery\Controllers\app_linking_media_query;
     use function Gallery\Services\app_link_push_code_generate;
     use function Gallery\Services\app_link_push_key;
     use function Gallery\Services\app_linking_access_token_generate;
@@ -69,6 +70,12 @@ namespace {
     use function Gallery\Services\app_linking_pkce_s256_verify;
     use function Gallery\Services\app_linking_redirect_uri_valid;
     use function Gallery\Services\app_linking_scope_allowed;
+    use function Gallery\Services\app_linking_scope_allows_admin_media;
+    use function Gallery\Services\app_linking_scope_allows_gallery_listing;
+    use function Gallery\Services\app_linking_scope_allows_gallery_search;
+    use function Gallery\Services\app_linking_scope_allows_presentation;
+    use function Gallery\Services\app_linking_scope_requests_rolling;
+    use function Gallery\Services\app_linking_visibility_scope_allowed;
     use function Gallery\Services\upload_automation_generate_token_value;
     use function Gallery\Services\upload_automation_request_token;
     use function Gallery\Services\upload_automation_token_hash;
@@ -99,6 +106,73 @@ namespace {
             throw new \RuntimeException($message);
         }
     }
+
+    app_link_test_check(
+        app_linking_scope_allows_gallery_listing('link:identity galleries:list')
+            && app_linking_scope_allows_gallery_listing('link:identity galleries:list galleries:search')
+            && app_linking_scope_allows_gallery_listing('link:identity galleries:list offline_access')
+            && app_linking_scope_allows_gallery_listing('link:identity galleries:list media:read')
+            && !app_linking_scope_allows_gallery_listing('link:identity')
+            && !app_linking_scope_allows_gallery_listing('link:identity offline_access')
+            && !app_linking_scope_allows_gallery_listing('galleries:list'),
+        'Public photo admission must use the existing exact listing bundles.',
+    );
+
+    app_link_test_check(
+        app_linking_media_query('page=app_linking_media') === null
+            && app_linking_media_query('page=app_linking_media&gallery_id=4&kind=photos')
+                === ['gallery_id' => 4, 'kind' => 'photos', 'cursor' => 0, 'image_id' => 0, 'track_id' => '']
+            && app_linking_media_query('page=app_linking_media&gallery_id=4&kind=photo_visibility')
+                === null,
+        'The fixed write query and visibility selector must never qualify as media reads.',
+    );
+    app_link_test_check(
+        app_linking_media_query(
+            'page=app_linking_media&gallery_id=4&kind=gallery_info',
+        ) === ['gallery_id' => 4, 'kind' => 'gallery_info', 'cursor' => 0,
+            'image_id' => 0, 'track_id' => '']
+            && app_linking_media_query(
+                'page=app_linking_media&gallery_id=4&kind=photo_info&image_id=12',
+            ) === ['gallery_id' => 4, 'kind' => 'photo_info', 'cursor' => 0,
+                'image_id' => 12, 'track_id' => '']
+            && app_linking_media_query(
+                'page=app_linking_media&gallery_id=4&kind=photo_info',
+            ) === null
+            && app_linking_media_query(
+                'page=app_linking_media&gallery_id=4&kind=photo_info&image_id=12&after=3',
+            ) === null,
+        'Detailed Admin metadata selectors must require one exact canonical target.',
+    );
+
+    app_link_test_check(
+        app_linking_media_query(
+            'page=app_linking_media&gallery_id=4&kind=revision',
+        ) === ['gallery_id' => 4, 'kind' => 'revision', 'cursor' => 0,
+            'image_id' => 0, 'track_id' => '']
+            && app_linking_media_query(
+                'page=app_linking_media&gallery_id=4&kind=revision&after=3',
+            ) === null,
+        'Revision reads require one exact gallery without a cursor.',
+    );
+
+    $adminRead = 'link:identity galleries:list media:admin';
+    $adminEdit = 'link:identity galleries:list gallery:read gallery:visibility '
+        . 'galleries:search media:admin presentation:read rolling_access offline_access';
+    app_link_test_check(
+        app_linking_scope_allows_admin_media($adminRead)
+            && app_linking_scope_allows_admin_media($adminEdit)
+            && app_linking_scope_allows_gallery_search($adminEdit)
+            && app_linking_scope_allows_presentation($adminEdit)
+            && app_linking_scope_requests_rolling($adminEdit)
+            && app_linking_visibility_scope_allowed($adminEdit)
+            && !app_linking_visibility_scope_allowed($adminRead)
+            && !app_linking_scope_allows_admin_media('link:identity galleries:list')
+            && !app_linking_scope_allows_admin_media('link:identity galleries:list media:read')
+            && !app_linking_scope_allows_admin_media('link:identity media:admin')
+            && !app_linking_scope_allows_admin_media($adminRead . ' offline_access')
+            && !app_linking_scope_allows_admin_media($adminRead . ' media:admin'),
+        'Restricted media must require exact separate consent and retain each granted operation.',
+    );
 
     // RFC 7636 appendix B gives a fixed verifier/challenge pair.
     $verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
@@ -392,6 +466,9 @@ namespace {
         ['HTTP_HOST' => '127.0.0.1:8888'],
         ['HTTP_X_FORWARDED_FOR' => '192.0.2.1'],
         ['HTTP_FORWARDED' => 'for=192.0.2.1'],
+        ['HTTP_X_FORWARDED' => 'for=192.0.2.1'],
+        ['HTTP_VIA' => '1.1 proxy'],
+        ['HTTP_X_REAL_IP' => '192.0.2.1'],
     ] as $otherTransport) {
         $_SERVER = array_replace($localServer, $otherTransport);
         app_link_test_check(app_linking_configured_issuer() === null,
@@ -421,8 +498,79 @@ namespace {
         && !\Gallery\Services\app_linking_scope_transport_allowed(
             $localIssuer, \Gallery\Services\APP_LINKING_IDENTITY_OFFLINE_SCOPE,
         ),
-        'Local HTTP is limited to temporary access.',
+        'Local HTTP preserves temporary access and refuses legacy offline access.',
     );
+    // All four canonical combinations share renewal but keep upload and
+    // search authority distinct. The issuer stays bound to the direct route.
+    $rollingBase = 'link:identity galleries:list';
+    foreach ([
+        '' => false,
+        ' gallery:upload' => false,
+        ' galleries:search' => true,
+        ' gallery:upload galleries:search' => true,
+    ] as $extras => $allowsSearch) {
+        $rolling = $rollingBase . $extras . ' rolling_access offline_access';
+        app_link_test_check(
+            app_linking_scope_allowed($client, $rolling)
+                && !app_linking_scope_allowed('other-client', $rolling)
+                && app_linking_scope_allows_gallery_listing($rolling)
+                && \Gallery\Services\app_linking_scope_allows_gallery_search($rolling)
+                    === $allowsSearch
+                && \Gallery\Services\app_linking_scope_requests_refresh($rolling)
+                && \Gallery\Services\app_linking_scope_transport_allowed(
+                    $localIssuer, $rolling,
+                )
+                && !\Gallery\Services\app_linking_scope_transport_allowed(
+                    'http://127.0.0.1:8888/Galerie', $rolling,
+                ),
+            'Rolling scopes must preserve the exact client and gallery permissions.',
+        );
+    }
+    $registered = \Gallery\Services\app_linking_public_client($client)['scopes'];
+    foreach ([
+        '' => false,
+        ' gallery:upload' => false,
+        ' galleries:search' => true,
+        ' gallery:upload galleries:search' => true,
+    ] as $extras => $allowsSearch) {
+        $base = $rollingBase . $extras;
+        $basic = $base . ' rolling_access offline_access';
+        $presentation = $base . ' media:read presentation:read rolling_access offline_access';
+        app_link_test_check(
+            in_array($presentation, $registered, true)
+                && \Gallery\Services\app_linking_scope_base($presentation)
+                    === \Gallery\Services\app_linking_scope_base($basic)
+                && \Gallery\Services\app_linking_scope_allows_gallery_search($presentation)
+                    === $allowsSearch
+                && \Gallery\Services\app_linking_scope_allows_presentation($presentation)
+                && !\Gallery\Services\app_linking_scope_allows_presentation($basic)
+                && \Gallery\Services\app_linking_scope_requests_refresh($presentation)
+                && \Gallery\Services\app_linking_scope_transport_allowed(
+                    $localIssuer, $presentation,
+                )
+                && !\Gallery\Services\app_linking_scope_transport_allowed(
+                    'http://127.0.0.1:8888/Galerie', $presentation,
+                ),
+            'Rolling presentation must add only the expressly approved presentation permission.',
+        );
+    }
+    foreach ([
+        'link:identity rolling_access offline_access',
+        $rollingBase . ' offline_access rolling_access',
+        $rollingBase . ' rolling_access',
+        $rollingBase . ' galleries:search offline_access',
+        $rollingBase . ' gallery:read rolling_access offline_access',
+        $rollingBase . ' presentation:read rolling_access offline_access',
+        $rollingBase . ' media:read rolling_access offline_access',
+        $rollingBase . ' rolling_access offline_access media:read presentation:read',
+    ] as $unregistered) {
+        app_link_test_check(
+            !app_linking_scope_allowed($client, $unregistered)
+                && !\Gallery\Services\app_linking_scope_requests_rolling($unregistered)
+                && !\Gallery\Services\app_linking_scope_allows_presentation($unregistered),
+            'Unregistered renewal bundles must fail closed.',
+        );
+    }
     $_SERVER = $previousServer;
     $GLOBALS['app_link_test_config'] = $previousConfig;
     $GLOBALS['app_link_test_mount'] = '/Galerie';

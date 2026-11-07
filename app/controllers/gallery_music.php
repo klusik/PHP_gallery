@@ -886,15 +886,17 @@ function cms_gallery_music(): void
  * @param array{path:string,track:array{filename:string,mime:string,size:int}}|null
  *     $document Verified source, or null for an opaque not-found response.
  * @param bool $download Whether attachment disposition was authorized.
+ * @param bool $nativeCache Whether the authorized native caller opted in.
  * @return void Emit GET/HEAD byte ranges, or an opaque HTTP refusal.
  */
 function gallery_music_stream_document(
     ?array $document,
     bool $download = false,
+    bool $nativeCache = false,
 ): void {
     $range = $document !== null
         ? \Gallery\Services\gallery_music_byte_range(
             http_media_range_header(), $document['track']['size'],
         ) : null;
-    stream_verified_audio_document($document, $range, $download);
+    stream_verified_audio_document($document, $range, $download, $nativeCache);
 }

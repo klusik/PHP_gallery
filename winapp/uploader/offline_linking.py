@@ -9,14 +9,15 @@
 #   - Expose an access token only after verified persistent replacement.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
-"""Explicit offline linking workflow with secure platform-owned credentials.
+"""Browser-approved offline linking with native vault credentials.
 
-The caller supplies an already constructed Windows credential owner. Browser
-consent and initial live identity verification belong to the eventual caller.
-A failed or ambiguous rotation remains fenced and requires explicit discard
-and fresh authorization. Local discard never asserts remote revocation.
+The caller establishes browser consent and verifies the initial live identity.
+Ambiguous rotation remains fenced until explicit discard. A definitive rolling
+refusal permits cleanup and fresh authorization. Local discard never asserts
+remote revocation.
 """
 
+import hashlib
 import hmac
 import time
 from dataclasses import dataclass, field
@@ -39,13 +40,18 @@ from .app_linking import (
     UPLOAD_VISIBILITY_OFFLINE_SCOPE,
     CREATE_VISIBILITY_OFFLINE_SCOPE,
     UPLOAD_CREATE_VISIBILITY_OFFLINE_SCOPE,
+    ROLLING_GALLERIES_SCOPE, ROLLING_UPLOAD_SCOPE, ROLLING_SCOPE_SUFFIX,
+    ROLLING_ADMIN_MEDIA_SCOPES, ROLLING_ADMIN_DELETE_SCOPES,
+    ROLLING_GALLERY_SEARCH_SCOPES, ROLLING_PRESENTATION_SCOPES,
     TOKEN_PREFIX,
     UPLOAD_SCOPE,
     _canonical_256bit,
     _issuer_valid,
     _request_json,
+    LinkingError, LinkingRefreshRejected, LinkingSession,
+    discover_linking_capabilities,
 )
-from .credential_store import CREDENTIAL_ACCOUNT_ID_MAX, WindowsCredentialStore
+from .credential_store import CREDENTIAL_ACCOUNT_ID_MAX, NativeCredentialStore
 
 # Purpose: Bound a rotated access credential to the current server policy.
 # Type: int. Units: seconds. Scope: one newly rotated access bearer.
@@ -55,7 +61,7 @@ OFFLINE_ACCESS_MAX_SECONDS = 900
 # Purpose: Bound a refresh credential by the server's inactivity policy.
 # Type: int. Units: seconds. Scope: one current refresh generation.
 # Consumers: store_approved_refresh, _validated_rotation.
-# Rationale: 604800 is seven days and is below the absolute 30-day family cap.
+# Rationale: 604800 matches the server inactivity policy for either family.
 OFFLINE_REFRESH_MAX_SECONDS = 604800
 
 _REFRESH_PREFIX = 'pglr_'
@@ -75,6 +81,12 @@ _OFFLINE_SCOPES = (
     UPLOAD_VISIBILITY_OFFLINE_SCOPE,
     CREATE_VISIBILITY_OFFLINE_SCOPE,
     UPLOAD_CREATE_VISIBILITY_OFFLINE_SCOPE,
+    ROLLING_GALLERIES_SCOPE,
+    ROLLING_UPLOAD_SCOPE,
+    *ROLLING_GALLERY_SEARCH_SCOPES,
+    *ROLLING_PRESENTATION_SCOPES,
+    *ROLLING_ADMIN_MEDIA_SCOPES,
+    *ROLLING_ADMIN_DELETE_SCOPES,
 )
 
 
@@ -87,11 +99,12 @@ class OfflineAccess:
     """Hold a verified access bearer and its monotonic in-memory expiry.
 
     Attributes:
-        issuer (str): Exact trusted HTTPS origin and gallery installation mount.
+        issuer (str): Exact trusted origin and gallery installation mount.
         account_id (int): Current positive Admin identifier verified by server.
         scope (str): Exact explicitly approved scope including offline_access.
         expires_at (float): Monotonic deadline measured from request start.
         token (str): In-memory bearer; excluded from the object's representation.
+        username (str): Current Admin username from the verified identity response.
     """
 
     issuer: str
@@ -99,22 +112,27 @@ class OfflineAccess:
     scope: str
     expires_at: float
     token: str = field(repr=False)
+    username: str
 
 
 def _binding_valid(issuer: str, account_id: int, scope: str) -> bool:
     """Check one exact trusted installation, account and offline bundle.
 
     Args:
-        issuer (str): Previously trusted canonical HTTPS issuer and mount.
+        issuer (str): Previously trusted canonical issuer and mount.
         account_id (int): Positive current server Admin identifier.
         scope (str): Exact explicitly approved offline scope bundle.
 
     Returns:
         bool: True only for a canonical supported binding.
     """
-    return (isinstance(issuer, str) and _issuer_valid(issuer, allow_local_http=False)
-            and type(account_id) is int and 0 < account_id <= CREDENTIAL_ACCOUNT_ID_MAX
-            and isinstance(scope, str) and scope in _OFFLINE_SCOPES)
+    return (
+        isinstance(scope, str) and scope in _OFFLINE_SCOPES
+        and isinstance(issuer, str) and _issuer_valid(
+            issuer, allow_local_http=scope.endswith(ROLLING_SCOPE_SUFFIX),
+        )
+        and type(account_id) is int and 0 < account_id <= CREDENTIAL_ACCOUNT_ID_MAX
+    )
 
 
 def _valid_token(value: object, prefix: str) -> bool:
@@ -180,7 +198,7 @@ def _unpack_refresh(record: bytes, scope: str) -> str:
 
 
 def store_approved_refresh(
-    store: WindowsCredentialStore, issuer: str, account_id: int,
+    store: NativeCredentialStore, issuer: str, account_id: int,
     scope: str, refresh_token: str, refresh_expires_in: int,
 ) -> None:
     """Persist the initial refresh after explicit consent and identity proof.
@@ -190,8 +208,8 @@ def store_approved_refresh(
     not perform authorization, identity lookup or remote grant revocation.
 
     Args:
-        store (WindowsCredentialStore): Current Windows user's vault owner.
-        issuer (str): Independently trusted exact HTTPS issuer and mount.
+        store (NativeCredentialStore): Current user's native vault owner.
+        issuer (str): Independently trusted exact issuer and mount.
         account_id (int): Admin ID independently verified with the new bearer.
         scope (str): Exact offline bundle explicitly approved in the browser.
         refresh_token (str): Canonical refresh token from that same exchange.
@@ -215,7 +233,7 @@ def store_approved_refresh(
 
 
 def rotate_offline_access(
-    store: WindowsCredentialStore, issuer: str, account_id: int,
+    store: NativeCredentialStore, issuer: str, account_id: int,
     scope: str, cancelled: Event | None = None,
 ) -> OfflineAccess:
     """Rotate exactly once and verify the live account before releasing access.
@@ -226,8 +244,8 @@ def rotate_offline_access(
     trusted request; the server's token response has no issuer or client fields.
 
     Args:
-        store (WindowsCredentialStore): Current Windows user's vault owner.
-        issuer (str): Independently trusted exact HTTPS issuer and mount.
+        store (NativeCredentialStore): Current user's native vault owner.
+        issuer (str): Independently trusted exact issuer and mount.
         account_id (int): Admin ID independently bound during initial approval.
         scope (str): Exact explicitly approved offline scope bundle.
         cancelled (Event | None): Optional cancellation signal for both requests.
@@ -237,6 +255,7 @@ def rotate_offline_access(
 
     Raises:
         OfflineLinkingError: Binding, identity, transport or secure storage fails.
+        LinkingRefreshRejected: A rolling refresh was definitively refused.
     """
     if not _binding_valid(issuer, account_id, scope):
         raise OfflineLinkingError('Offline connection is invalid.')
@@ -296,7 +315,14 @@ def rotate_offline_access(
                     or time.monotonic() >= started + lifetime
                     or time.monotonic() >= started + refresh_lifetime):
                 raise OfflineLinkingError('Offline connection expired.')
-            return OfflineAccess(issuer, account_id, scope, started + lifetime, access)
+            return OfflineAccess(
+                issuer, account_id, scope, started + lifetime, access,
+                user['username'],
+            )
+    except LinkingRefreshRejected:
+        if scope.endswith(ROLLING_SCOPE_SUFFIX):
+            raise
+        raise OfflineLinkingError('Offline refresh did not complete safely.') from None
     except Exception:
         # A timeout or malformed reply may follow a committed server rotation.
         # Never expose exception text, repeat the token request or clear a fence.
@@ -304,13 +330,13 @@ def rotate_offline_access(
 
 
 def discard_uncertain_refresh(
-    store: WindowsCredentialStore, issuer: str, account_id: int,
+    store: NativeCredentialStore, issuer: str, account_id: int,
 ) -> bool:
     """Explicitly discard an uncertain local refresh without remote claims.
 
     Args:
-        store (WindowsCredentialStore): Current Windows user's vault owner.
-        issuer (str): Independently trusted canonical HTTPS issuer and mount.
+        store (NativeCredentialStore): Current user's native vault owner.
+        issuer (str): Independently trusted canonical issuer and mount.
         account_id (int): Positive Admin ID bound to the local record.
 
     Returns:
@@ -320,7 +346,7 @@ def discard_uncertain_refresh(
         OfflineLinkingError: The binding or local discard could not be verified.
     """
     if (not isinstance(issuer, str)
-            or not _issuer_valid(issuer, allow_local_http=False)
+            or not _issuer_valid(issuer, allow_local_http=True)
             or type(account_id) is not int
             or not 0 < account_id <= CREDENTIAL_ACCOUNT_ID_MAX):
         raise OfflineLinkingError('Offline connection is invalid.')
@@ -346,7 +372,7 @@ class OfflineBinding:
     """Describe non-secret restart hints; authority still requires the server.
 
     Attributes:
-        issuer (str): Canonical HTTPS issuer and installation mount.
+        issuer (str): Canonical issuer and installation mount.
         account_id (int): Admin ID checked again after every token rotation.
         scope (str): Previously approved exact offline scope bundle.
     """
@@ -356,15 +382,20 @@ class OfflineBinding:
     scope: str
 
 
-def save_offline_binding(path: Path, binding: OfflineBinding) -> None:
-    """Atomically publish a new non-secret restart hint, never credentials.
+def save_offline_binding(
+    path: Path, binding: OfflineBinding, *, replaces: OfflineBinding | None = None,
+) -> None:
+    """Atomically publish a new or explicitly upgraded non-secret restart hint.
 
     Args:
         path (Path): Dedicated binding file separate from legacy configuration.
         binding (OfflineBinding): Canonical previously consented account hint.
+        replaces (OfflineBinding | None): Exact preceding hint for the same
+            account and issuer. The caller holds the vault's binding transaction
+            when replacing it. None requires an unoccupied destination.
 
     Returns:
-        None: The complete hint was published without replacing an existing one.
+        None: The complete hint was published under the requested policy.
 
     Raises:
         OfflineLinkingError: The binding or local persistence is invalid.
@@ -376,6 +407,12 @@ def save_offline_binding(path: Path, binding: OfflineBinding) -> None:
 
     if not _binding_valid(binding.issuer, binding.account_id, binding.scope):
         raise OfflineLinkingError('Offline binding is invalid.')
+    if replaces is not None and (
+        replaces.issuer != binding.issuer
+        or replaces.account_id != binding.account_id
+        or load_offline_binding(path, binding.issuer) != replaces
+    ):
+        raise OfflineLinkingError('Saved gallery binding changed.')
     payload = json.dumps({
         'issuer': binding.issuer, 'account_id': binding.account_id,
         'scope': binding.scope,
@@ -407,9 +444,12 @@ def save_offline_binding(path: Path, binding: OfflineBinding) -> None:
             os.fsync(handle.fileno())
         if path.parent.is_symlink() or path.is_symlink():
             raise OSError('Unsafe binding path.')
-        # Atomic exclusive publication prevents concurrent link attempts from
-        # overwriting an existing account hint or silently stranding its grant.
-        os.link(temporary, path)
+        if replaces is None:
+            # Exclusive publication prevents independent approvals from
+            # silently replacing another account's restart hint.
+            os.link(temporary, path)
+        else:
+            os.replace(temporary, path)
     except (OSError, ValueError):
         raise OfflineLinkingError('Offline binding could not be saved.') from None
     finally:
@@ -441,7 +481,7 @@ def load_offline_binding(path: Path, expected_issuer: str) -> OfflineBinding | N
     from .server_discovery import _unique_object
 
     if (not isinstance(expected_issuer, str)
-            or not _issuer_valid(expected_issuer, allow_local_http=False)):
+            or not _issuer_valid(expected_issuer, allow_local_http=True)):
         raise OfflineLinkingError('Offline binding is invalid.')
     try:
         if path.parent.is_symlink() or path.is_symlink():
@@ -463,11 +503,11 @@ def load_offline_binding(path: Path, expected_issuer: str) -> OfflineBinding | N
 
 
 def remove_offline_binding(path: Path, binding: OfflineBinding) -> None:
-    """Remove only the same current hint following explicit local discard.
+    """Remove the current hint after local discard or definite refusal.
 
     Args:
         path (Path): Dedicated non-secret binding file.
-        binding (OfflineBinding): Exact binding the user elected to remove.
+        binding (OfflineBinding): Exact binding approved for local cleanup.
 
     Returns:
         None: The matching hint is absent, or no hint existed.
@@ -484,3 +524,154 @@ def remove_offline_binding(path: Path, binding: OfflineBinding) -> None:
         path.unlink()
     except OSError:
         raise OfflineLinkingError('Offline binding could not be removed.') from None
+
+
+def remove_saved_offline_link(
+    store: NativeCredentialStore, path: Path, binding: OfflineBinding,
+    *, capture_refresh: bool = False,
+) -> bytes | None:
+    """Forget one saved link and capture a safely readable refresh record.
+
+    Args:
+        store (NativeCredentialStore): Current user's native vault.
+        path (Path): Exact dedicated or legacy restart hint path.
+        binding (OfflineBinding): Approved issuer, Admin and scope to remove.
+        capture_refresh (bool): Read the current record for remote revocation.
+
+    Returns:
+        bytes | None: Record for one remote revocation, or None when no
+            verified current refresh is available.
+
+    Raises:
+        OfflineLinkingError: The binding changed or pending state cannot clear.
+        CredentialStoreError: The native vault or its lock cannot be accessed.
+    """
+    with store.binding_transaction(binding.issuer, binding.account_id):
+        if load_offline_binding(path, binding.issuer) != binding:
+            raise OfflineLinkingError('Saved binding changed.')
+        record = None
+        if not discard_uncertain_refresh(store, binding.issuer, binding.account_id):
+            if capture_refresh:
+                record = store.read(binding.issuer, binding.account_id)
+            store.delete(binding.issuer, binding.account_id)
+        remove_offline_binding(path, binding)
+        return record
+
+
+def revoke_saved_refresh(binding: OfflineBinding, record: bytes) -> None:
+    """Send one revocation with the newest locally held refresh credential.
+
+    Args:
+        binding (OfflineBinding): Exact issuer, Admin and approved scope.
+        record (bytes): Last securely stored record from that binding.
+
+    Returns:
+        None: The trusted issuer acknowledged the revoke request.
+
+    Raises:
+        LinkingError: The request was refused or its outcome is uncertain.
+        OfflineLinkingError: The record does not match the exact approved scope.
+    """
+    token = _unpack_refresh(record, binding.scope)
+    response = _request_json(
+        binding.issuer, 'app_linking_revoke', 'POST', b'', token,
+    )
+    if response != {}:
+        raise LinkingError('Revocation response was not accepted.')
+
+
+def offline_binding_path(legacy_path: Path, issuer: str) -> Path:
+    """Select the independent restart hint for one rolling link.
+
+    Args:
+        legacy_path (Path): Existing Windows hint path and uploader profile.
+        issuer (str): Exact canonical issuer including the installation mount.
+
+    Returns:
+        Path: Non-secret restart hint path keyed by this exact issuer.
+    """
+    key = hashlib.sha256(issuer.encode('ascii')).hexdigest()
+    return legacy_path.with_name(f'rolling-link-{key}.json')
+
+
+def rotate_saved_offline_access(
+    store: NativeCredentialStore, path: Path, binding: OfflineBinding,
+    cancelled: Event,
+) -> OfflineAccess:
+    """Rotate one current binding and clear only a definitively refused grant.
+
+    Args:
+        store (NativeCredentialStore): Current user's native vault.
+        path (Path): Restart hint dedicated to this binding.
+        binding (OfflineBinding): Verified issuer, Admin and scope.
+        cancelled (Event): Cancellation for network operations.
+
+    Returns:
+        OfflineAccess: Same-identity access after the replacement is committed.
+
+    Raises:
+        LinkingRefreshRejected: The rolling credential was refused and removed.
+        OfflineLinkingError: The hint changed or refresh could not complete safely.
+        CredentialStoreError: The native metadata lock is unavailable.
+    """
+    with store.binding_transaction(binding.issuer, binding.account_id):
+        if load_offline_binding(path, binding.issuer) != binding:
+            raise OfflineLinkingError('Saved gallery binding changed.')
+        try:
+            return rotate_offline_access(
+                store, binding.issuer, binding.account_id, binding.scope,
+                cancelled,
+            )
+        except LinkingRefreshRejected:
+            # Rotation has released its inner lock. The metadata lock still
+            # excludes a concurrent replacement of this binding or generation.
+            if not discard_uncertain_refresh(store, binding.issuer, binding.account_id):
+                raise OfflineLinkingError('Refused gallery credential could not be removed.')
+            remove_offline_binding(path, binding)
+            raise
+
+
+def enable_rolling_renewal(
+    session: LinkingSession, store: NativeCredentialStore,
+    path: Path, binding: OfflineBinding,
+) -> None:
+    """Keep future requests on the same verified, securely saved account.
+
+    Args:
+        session (LinkingSession): Live session holding the approved scope.
+        store (NativeCredentialStore): Current user's native vault.
+        path (Path): Dedicated non-secret restart hint for this binding.
+        binding (OfflineBinding): Verified issuer, account and scope.
+
+    Returns:
+        None: Rolling sessions can renew in place on an expired request.
+    """
+    if not binding.scope.endswith(ROLLING_SCOPE_SUFFIX):
+        return
+
+    def renew(cancelled: Event) -> tuple[str, float]:
+        """Verify current support and rotate a single credential generation.
+
+        Args:
+            cancelled (Event): Session shutdown cancellation.
+
+        Returns:
+            tuple[str, float]: Verified access bearer and monotonic deadline.
+
+        Raises:
+            LinkingError: Discovery, binding or fenced refresh failed.
+        """
+        try:
+            # Failed discovery leaves the existing refresh and fence untouched.
+            if 'rolling_access' not in discover_linking_capabilities(
+                binding.issuer, cancelled,
+            ):
+                raise LinkingError('Saved gallery renewal is unavailable.')
+            access = rotate_saved_offline_access(store, path, binding, cancelled)
+            return access.token, access.expires_at
+        except LinkingRefreshRejected:
+            raise
+        except (RuntimeError, OSError):
+            raise LinkingError('Saved gallery renewal is unavailable.') from None
+
+    session.enable_renewal(renew)

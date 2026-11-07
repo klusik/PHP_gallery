@@ -817,6 +817,29 @@ class FlightUITests(unittest.TestCase):
         factory.assert_not_called()
         host.forget_flight_connection.assert_not_called()
 
+    def test_contextual_game_finish_disables_saved_report_preferences(self) -> None:
+        """Persist report suppression before the accepted photo queue drains.
+
+        Returns:
+            None: Finalization and any later retry see a photo-only plan.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            host = self._host()
+            ui = self._ui(host)
+            host.linking_manager.linked_upload_mode_selected.return_value = True
+            directory = Path(temporary)
+            plan = SessionPlan(directory, 'c' * 64, ('en',), True, local_only=True)
+            plan.save()
+            ui.pending.return_value = [plan]
+            operation = SimpleNamespace(
+                wants_revoke=False, local_reports=False, saved_upload=False,
+                abandonment=False, start=Mock(),
+            )
+            with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
+                flight_ui.FlightUI.begin(ui, photos_only=True)
+            self.assertFalse(factory.call_args.args[0][0].reports_enabled)
+            self.assertFalse(SessionPlan.load(directory).reports_enabled)
+
     def test_interrupted_linked_session_can_close_locally_after_restart(self) -> None:
         """Resolve a retained Watcher queue without any live upload credential.
 

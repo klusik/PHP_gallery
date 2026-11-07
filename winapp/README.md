@@ -818,12 +818,23 @@ tool remains a source-only utility.
 
 ## Main window
 
-The window opens on **Watcher**, the first task in the navigation order:
-**Watcher**, **Import**, **Activity**, **AI**, and **Settings**. The Watcher
-view
-shows the gallery target. The persistent header connection control opens the
-compact API-key dialog from every view. The app header also has Settings,
-updates, and help controls. Icon controls have
+A normal launch opens **Photos**, the first task in the navigation order:
+**Photos**, **Watcher**, **Import**, **Activity**, **AI**, and **Settings**.
+With an active gallery link, Photos loads a gallery tree on the left and a
+photo grid on the right. It opens an initial gallery automatically. Expand or
+collapse a branch or the whole tree and click a gallery to show its photos in
+the same window. When disconnected, **Connect** opens the existing address
+dialog and browser approval flow. An active listing link can browse public
+photos directly after approval. Large trees offer a continuation control after
+the initial 500 entries. Choose the separate upload destination in
+Watcher or Import using **Use for uploads**. A logon `--startup` launch stays
+in the system tray until restored. An approved saved link can resume on
+startup.
+
+The Watcher view shows the gallery target. The persistent API-key connection
+control opens the compact key dialog from every view. The separate ordinary
+header **Link gallery** flow remains the upload/search path. The app header
+also has Settings, updates, and help controls. Icon controls have
 hover/focus tooltips and keyboard focus; help opens usage guidance.
 Long pages and dialogs scroll with the mouse wheel or scrollbar; text and table
 controls keep their own scrolling.
@@ -865,7 +876,9 @@ by default. The app header keeps the connection and watcher states visible.
 3. Copy the key when it is shown.
 4. Run `install.bat` from `winapp`, or start `gallery_watch_upload.pyw`
    directly.
-5. On the default **Watcher** screen, select the top connection control.
+5. Open **Photos** to browse. Use **Connect** there when disconnected. For
+   upload setup, select **Watcher** in the rail and then use the header
+   connection control.
 6. Enter the gallery site URL or upload endpoint.
 7. Paste the API key with the **Paste** button or type it into the masked field.
 8. Press **Save & Test** in the compact connection dialog.
@@ -907,7 +920,8 @@ Use the **⋯** beside **Unlink gallery** to open the same chooser while
 connected. **Linked now** lists the installations with live access. Select
 one and click **Switch to gallery** to use its current approval. **Recent
 addresses** keeps up to 20 previously used installation URLs across restarts.
-Choose one to prefill a fresh link. The power icon unlinks the selected live
+Choose one to resume a saved grant or start browser approval. The power icon
+unlinks the selected live
 site, and the × removes a recent address from the profile. The browsing
 site and the upload destination have independent selections. Use **Choose
 gallery…** and **Use for uploads** to change the upload destination.
@@ -917,14 +931,18 @@ address. WinApp preserves the installation port and path. For other pasted
 HTTP addresses it tries verified HTTPS at that host and path, preserving any
 explicit port. The server uses its configured address for the exact issuer.
 
-This action requests temporary account and gallery-list access, including
+This action requests account and gallery-list access, including
 metadata search when the server offers it. On an admitted local Windows or
 macOS profile it also requests image uploads when offered. Consent shows the
 actual permissions, including access to private and unpublished galleries.
-Each grant lasts up to 15 minutes and its access token stays in memory.
-Open **Settings** → **Manage link…** for separate
-permissions or, on Windows, secure renewal over HTTPS. Enter the linking
-address if prompted, then approve the requested access in the browser.
+On compatible servers, the browser also asks you to approve rolling access.
+The approval lasts seven days from the last successful authenticated use or
+refresh. WinApp renews its 15-minute access token with a credential kept in
+macOS Keychain or Windows Credential Manager. This works over verified HTTPS
+or direct `http://localhost`. Older servers use a temporary link lasting up
+to 15 minutes. Expiry or revocation requires new browser approval. Browser
+linking creates no gallery API keys. Open **Settings** → **Manage link…** for
+separate permissions and saved-link controls.
 
 Open **Choose gallery…** beside the linked address and type in **Search
 galleries**. Suggestions favor names, then descriptions, then gallery tags.
@@ -970,21 +988,126 @@ GUI acceptance, MariaDB and deployed recovery behavior remain unqualified.
 Candidate `8de8e50a` passed BASIC `42107055888` and WinApp `42107055797`; see
 `docs/APP_LINKING_PHASE_0.md` for evidence and limits.
 
-The media scopes are separate temporary approvals: `media:read` for
-listed public, non-sensitive photos, with optional `presentation:read` for
-authorized slideshows and visible music. The server applies the same public
-export policy to every ancestor and serves direct photos only: ancestors must
-be public, listed, normal-access and non-NSFW; protected, hidden or NSFW media
-stays unavailable. Photo pages contain at most eight items and each binary is
-limited to 16 MiB. Presentation lists contain at most 32 visible MP3/WAV tracks.
-WinApp reuses its existing HTTPS authorization and native Pillow/WinMM support;
-no dependency or server migration is required. Select an eligible gallery and
-choose **Open photo viewer**. Start the slideshow explicitly; it follows the
-server interval and loads the next bounded page when needed. Play and stop a
-selected MP3/WAV track on a Windows device with audio output. Older servers
-disable these controls when discovery omits the scopes. Hosted Windows Tk
-tests passed; the runner has no audio output, so playback on a device and
-installed click-through remain separate evidence.
+The active gallery listing link permits listed public, non-sensitive photos.
+The same public export policy applies to every ancestor. A supported server
+can request explicit administrator media consent to also show protected,
+hidden and NSFW media in Photos. An earlier link keeps its original consent
+until the administrator approves the added access in the browser. WinApp
+verifies the new grant and replaces the saved connection for the same site
+and account so Photos can use the added permissions immediately and after
+restart. A selected Watcher gallery keeps its existing destination and gets
+the newly approved scope. Explicit `presentation:read` permits presentation
+settings and visible music.
+The server verifies the active grant and direct gallery ownership for every
+media request. Internal photo pages contain up to 64 items, or eight on older
+servers. Each binary is
+limited to 16 MiB. If the selected detail asset exceeds that limit, WinApp can
+show an existing display WebP or JPG that passes the same checks and size cap.
+The server serves detail as unavailable if it has no eligible rendition.
+Presentation lists contain at most 32 visible MP3/WAV tracks.
+WinApp uses the same verified link, Pillow for photos and native audio on
+Windows and macOS.
+For a source launch, use the Python interpreter where `requirements.txt` was
+installed so its Pillow decoder can display thumbnails and detail images.
+The responsive grid scrolls continuously and loads thumbnails in the viewport.
+The default-on **Subgalleries**
+switch shows direct child folder cards above the selected gallery's photos.
+Each folder uses its first authorized direct thumbnail as a cover. When no
+eligible image is available, the card shows a neutral folder. Photos keeps
+listings in memory and uses the current link grant. If the smallest thumbnail
+is missing, the server can use another existing rendition or the existing
+public display file within the same byte limit. Click a thumbnail or focus it and
+press Enter to open the inline lightbox. Left and Right wrap across the whole
+album. F or F11 toggles fullscreen. Pointer motion briefly reveals controls
+including the music transport for an authorized playlist.
+Escape exits fullscreen before closing the lightbox. Closing the lightbox or
+pressing Escape restores the tree and grid, including after an image error.
+Use the mouse wheel or two-finger scrolling to move through the photo grid.
+The same gestures and + and − zoom in either lightbox mode. Press 0 to reset
+the view and drag to pan. When the server permits a
+photo's GPS location, its anchored pin offers **Open in OpenStreetMap**, which
+opens the system browser. The lightbox prepares the previous and next photos
+in bounded memory, including at the wrap points. Thumbnails trim detected
+black bars and show the entire remaining scene at its own aspect ratio.
+Photo and thumbnail downloads have a separate five-minute
+quota of 600 requests per IP and 3,600 globally. If the server returns HTTP 429, Photos
+shows the limit and pauses speculative requests until **Retry**.
+**Fit by content** crops
+detected black bands in windowed and fullscreen views. **Show original frame**
+brings the bands back. Both modes fit the whole resulting frame within the
+available area at its original aspect ratio. The grid reflows when the number
+of columns changes. The lightbox updates a preview during a window resize and
+refines it after the resize settles. On macOS 15 or later, WinApp can display
+HDR detail and fullscreen photos when the selected image retains HDR data,
+the display supports extended dynamic range, and the Python environment has
+PyObjC and a Tk build with the AppKit window bridge. Tk 9 was exercised.
+Pillow/Tk provides 8-bit SDR on other configurations, including Windows.
+Thumbnails use SDR.
+
+One per-user disk cache stores opted-in photo and audio bytes with their
+verified content digests. It keeps up to 4,096 entries or 1 GiB and evicts the
+least recently accessed entries under storage pressure. A bounded decoded
+thumbnail cache accelerates return visits during the current session. A
+current catalogue validator lets WinApp read matching disk thumbnails before
+making a binary request. Older servers use photo freshness and authorized
+conditional requests. An authorized
+current playlist can reuse a cached track with the same SHA-256, size and media
+type. Servers returning `no-store` supply media for the current view or
+playback. Administrator-only media uses this transient path.
+
+Play opens the slideshow in fullscreen. It loops through the full album,
+using the authorized server interval when enabled or a five-second default.
+The authorized configured soundtrack starts with the presentation. Music
+controls can play or pause and choose the previous or next track. Playback
+reads a local file and prepares the next track while the current one plays.
+
+Open a gallery or photo's contextual panel with right-click or Control-click
+on macOS. Click elsewhere or press Escape to close it. The eye action changes
+stored visibility when separately approved. Admin Information shows the
+gallery's direct inventory and settings, or the photo's indexed format,
+size, dimensions, capture settings and EXIF. Location appears when the
+gallery's map policy permits it. JPEG and WebP quality describe the server's
+current settings for generated thumbnails. The gallery card also shows its
+current local cache coverage. Icons appear when coverage is known. The
+cloud marks online photos, the half circle marks a partial cache, and the
+filled circle marks an album with all authorized photo renditions on disk.
+The add button in the tree toolbar creates a gallery at the site's root.
+Use the add button beside the selected gallery's title, a gallery's context
+menu or blank photo space to create a subgallery. Each form opens inline.
+The first gallery on an empty site opens as soon as the server confirms it.
+The tree restores expanded and collapsed branches for each linked site and
+account. Use the circular arrow beside the album title to refresh its photos.
+While an Admin album is visible, WinApp checks its indexed revision about
+every 30 seconds and refreshes when it changes. The current scroll position
+and unchanged thumbnail data are retained. Older servers support manual
+refresh.
+
+Select photos with Control-click on Windows or Command-click on macOS, or use
+the photo context menu. Open the context menu to delete one photo or the
+selection using the current Admin Photos link. Confirm each batch of up to
+64 photos in WinApp. Deletion uses the same permanent file and index
+operation as web Admin. If
+the server response is interrupted, refresh and review the album before
+confirming another deletion.
+
+Admin album counts and bytes describe direct indexed original photo files.
+Earlier listing grants show how many photos the current grant can see.
+Older servers may require the legacy `media:read` permission or lack the
+media route. Current installed Windows click-through and playback acceptance
+require separate evidence.
+
+With upload permission, use **Use this gallery for Watcher** from a gallery
+context or the Watcher rail menu while Photos is open. WinApp verifies the
+exact gallery and uses the existing Watcher folder, local thumbnail pipeline
+and finish controls. The Watcher panel shows preparation or refusal for that
+request. The red REC indicator shows active capture. The
+Watcher rail icon pulses red on every tab while capture is active. A small
+filled red light marks the exact upload gallery in the Photos tree and at its
+heading. A hollow light marks a collapsed branch that hides that gallery.
+The context offers SimBrief when a flight simulator is detected. Finish a game
+to drain its screenshots, or finish a flight to save its available reports
+locally. Finishing revokes the temporary capture key and leaves the website
+linked. This action requires the server's temporary Watcher key migration.
 
 The source also contains an experimental **Create gallery** workflow that
 requires separate `galleries:create` browser consent and verified server scope
@@ -1074,23 +1197,22 @@ resolver may still occupy the single transport slot until it returns. Uploads
 have a separate size-based deadline. A partially sent request has an uncertain
 outcome and is never automatically retried.
 
-On Windows, **Remember securely on this Windows account** separately requests
-continuing access in the browser consent. When the current Windows credential
-store is available, the refresh credential is stored in Windows Credential
-Manager, bound to this issuer and Admin account. A separate local file keeps only
-the issuer, account ID and approved scope; the saved `pgu_` key is unchanged.
-Without this choice, linking remains temporary. The server limits continuing
-access to 30 days and seven days of inactivity; either limit may require a new
-browser approval.
+The separate Windows HTTPS remembrance option uses the legacy offline scope
+when offered. That approval expires after 30 days or seven days of inactivity,
+whichever comes first. The saved binding identifies the exact issuer, Admin
+account and approved scope. The `pgu_` upload key is independent.
 If initial linking or secure storage fails after the browser approved it, the
 server grant may still exist. Review it through **Manage gallery links**.
 
-After restarting, open **Manage link…**, enter the same HTTPS address and
-explicitly choose **Reconnect saved link**. The client rotates the refresh
-credential once, checks the current server identity and scope, and saves the
-replacement before using the access token. A cross-process lock and pending
-marker protect rotation. An uncertain response or storage failure blocks reuse
-of the old credential.
+On startup, WinApp can restore the previously approved saved link.
+**Reconnect saved link** in **Manage link…** can also start restoration.
+The client rotates the refresh credential once, checks the current server
+identity and scope, and saves the replacement before using the access token.
+A cross-process lock and pending marker protect rotation. If the same verified
+server explicitly rejects an expired or revoked rolling credential, WinApp
+discards that saved credential. Choose **Link gallery** to approve a new link
+in the browser. Startup leaves browser approval to you. An uncertain response
+or storage failure blocks reuse of the old credential.
 Review the gallery's linked-device list, then use **Forget saved link** and
 relink if needed. Forgetting removes the local binding and credential only; it
 does not revoke the server grant, and an active session may continue. Use
@@ -1098,12 +1220,11 @@ does not revoke the server grant, and an active session may continue. Use
 crash-recovery paths have not been qualified on real Windows or after power
 loss; the feature remains experimental.
 
-The uploader keeps one shared saved offline binding at a time. To remember a
-different installation or account, open the old HTTPS issuer, resolve any
-pending work, and use **Forget saved link** before linking and remembering the
-new one. Review or revoke the old grant on its gallery separately if desired;
-local forget does not revoke it. Switching the address alone does not replace
-the existing binding or copy the saved API key.
+Rolling links keep separate saved bindings for each exact issuer. To replace
+the saved account for an issuer, resolve pending work and forget its local
+link first. The legacy Windows HTTPS option keeps one shared binding. Local
+forgetting leaves the server grant available for separate revocation and
+does not affect the saved API key.
 
 Use **Unlink gallery** for the current session, or **Manage gallery links**
 to open the gallery's owner list and revoke stored grants.
@@ -1688,7 +1809,8 @@ If Pillow is unavailable:
 - manual imports still work with server-created thumbnails;
 - local preview/thumbnail capability is reported accurately.
 
-If pystray is unavailable, the desktop window still works without tray hiding.
+The macOS source build runs in its normal Tk window. The Windows tray uses
+pystray when available.
 
 ## Source organization
 

@@ -29,6 +29,36 @@ else:
 # Rationale: 550 ms avoids flicker while retaining timely discovery.
 _TOOLTIP_DELAY_MS = 550
 
+# Purpose: Keep inline tooltip panels clear of trigger controls and edges.
+# Type: int; Units: pixels; Scope: one themed inline tooltip placement.
+# Consumers: attach_inline_tooltip.
+# Rationale: 6 px separates the label without detaching it from its trigger.
+_INLINE_TOOLTIP_GAP = 6
+
+# Purpose: Pad inline tooltip labels for legibility over the current surface.
+# Type: tuple[int, int]; Units: pixels; Scope: themed inline tooltip label.
+# Consumers: Inline.Tooltip.TLabel.
+# Rationale: 8 horizontal and 5 vertical pixels keep the inline label compact.
+_INLINE_TOOLTIP_PADDING = (8, 5)
+
+# Purpose: Pad the centered loading badge while leaving the prior photo visible.
+# Type: tuple[int, int]; Units: pixels; Scope: Photos status label.
+# Consumers: Photos.Status.TLabel.
+# Rationale: 10 by 6 px makes short status text readable over imagery.
+_PHOTOS_STATUS_PADDING = (10, 6)
+
+# Purpose: Keep Photos toolbar targets compact and consistently padded.
+# Type: tuple[int, int]; Units: pixels; Scope: Photos icon button style.
+# Consumers: Photos.Icon.TButton.
+# Rationale: 4 px padding retains a small target without an opaque image tile.
+_PHOTOS_ICON_PADDING = (4, 4)
+
+# Purpose: Match Photos toolbar glyph sizing to shared uploader icon controls.
+# Type: int; Units: points; Scope: Photos icon button glyphs.
+# Consumers: Photos.Icon.TButton.
+# Rationale: 12 pt stays legible within the compact toolbar.
+_PHOTOS_ICON_FONT_SIZE = 12
+
 # Purpose: Keep help instructions comfortably readable in a compact overlay.
 # Type: int; Units: pixels; Scope: help window minimum content width.
 # Consumers: help overlay geometry.
@@ -160,6 +190,8 @@ _PALETTE = {
     "success": "#46D68C",
     "warning": "#F2C581",
     "danger": "#FF91A2",
+    "recording": "#FF6673",
+    "recording_dim": "#B93A45",
 }
 
 # Purpose: Map common actions to consistent single-line icon glyphs.
@@ -233,6 +265,14 @@ def configure_theme(root: tk.Tk) -> None:
                     foreground=colors["ink"])
     style.configure("Muted.TLabel", background=colors["card_surface"],
                     foreground=colors["muted"])
+    style.configure("Inline.Tooltip.TLabel",
+                    background=colors["card_surface"],
+                    foreground=colors["ink"],
+                    padding=_INLINE_TOOLTIP_PADDING)
+    style.configure("Photos.Status.TLabel",
+                    background=colors["card_surface"],
+                    foreground=colors["ink"],
+                    padding=_PHOTOS_STATUS_PADDING)
     style.configure("Title.TLabel", font=("Segoe UI Semibold", 20),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
@@ -262,6 +302,8 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("Warning.TLabel",
                     background=colors["card_surface_alt"],
                     foreground=colors["warning"], padding=(10, 8))
+    style.configure("Watcher.Active.TLabel", font=("Segoe UI Semibold", 10),
+                    background=colors["card_surface"], foreground=colors["danger"])
     style.configure("Body.TLabel", background=colors["card_surface"],
                     foreground=colors["ink"])
     style.configure("Footer.TLabel", background=colors["card_surface"],
@@ -313,6 +355,24 @@ def configure_theme(root: tk.Tk) -> None:
                     font=("Segoe UI Symbol", 12),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
+    style.configure("Photos.Icon.TButton", padding=_PHOTOS_ICON_PADDING,
+                    borderwidth=0,
+                    background=colors["card_surface"],
+                    foreground=colors["ink"],
+                    font=("Segoe UI Symbol", _PHOTOS_ICON_FONT_SIZE))
+    style.map("Photos.Icon.TButton",
+              background=[("pressed", colors["line"]),
+                          ("active", colors["surface_alt"])],
+              foreground=[("disabled", colors["muted"])])
+    style.layout("Photos.Icon.TButton", [(
+        "Button.border", {"sticky": "nsew", "children": [
+            ("Button.padding", {"sticky": "nsew", "children": [
+                ("Button.label", {"sticky": "nsew"}),
+            ]}),
+        ]},
+    )])
+    style.configure("Action.Photos.Icon.TButton",
+                    padding=(6, 3), font="TkDefaultFont", anchor="w")
     style.configure("IconPrimary.TButton", padding=(3, 3),
                     font=("Segoe UI Symbol", 12),
                     background=colors["primary"], foreground="#F2F6FA")
@@ -320,6 +380,20 @@ def configure_theme(root: tk.Tk) -> None:
               foreground=[("disabled", "#F0EFFC")],
               background=[("pressed", colors["primary_pressed"]),
                           ("active", colors["primary_hover"])])
+    for phase, tone in (("Bright", "recording"), ("Dim", "recording_dim")):
+        name = f"Watcher.Recording{phase}.Icon.TButton"
+        style.configure(
+            name, padding=(3, 3), font=("Segoe UI Symbol", 12),
+            background=colors["background"], foreground=colors[tone],
+        )
+        style.map(name, foreground=[
+            ("disabled", colors[tone]),
+            ("focus", colors[tone]),
+            ("active", colors[tone]),
+        ], background=[
+            ("pressed", colors["surface"]),
+            ("active", colors["surface_alt"]),
+        ])
     style.map("Icon.TButton",
               foreground=[("disabled", colors["muted"])])
     style.configure("TEntry", fieldbackground=colors["surface"],
@@ -888,22 +962,28 @@ def _install_focus_styles(style: ttk.Style) -> None:
     """
     focus = _PALETTE["focus"]
     for name in ("TButton", "Primary.TButton", "Icon.TButton",
-                 "IconPrimary.TButton", "TEntry", "TCombobox"):
+                 "IconPrimary.TButton", "Photos.Icon.TButton",
+                 "TEntry", "TCombobox"):
         style.map(name, bordercolor=[("focus", focus)])
     style.map("Gallery.Section.TLabel", foreground=[("focus", focus)])
 
 
 def icon_button(parent: tk.Misc, icon: str,
-                command: Callable[[], None], tooltip: str,
-                primary: bool = False) -> ttk.Button:
+                command: Callable[[], None], tooltip: str | tk.StringVar,
+                primary: bool = False,
+                tooltip_surface: tk.Misc | None = None,
+                style_override: str | None = None) -> ttk.Button:
     """Create a compact icon button with an accessible tooltip.
 
     Args:
         parent (tk.Misc): Tk widget that owns the new button.
         icon (str): Semantic icon key, single glyph or short visible label.
         command (Callable[[], None]): Action invoked by mouse or keyboard.
-        tooltip (str): Concise accessible description shown on hover/focus.
+        tooltip (str | tk.StringVar): Fixed or live accessible hover description.
         primary (bool): Whether to use the cyan primary action style.
+        tooltip_surface (tk.Misc | None): Existing widget that may host an
+            inline tooltip instead of creating a transient window.
+        style_override (str | None): Optional ttk style for scoped controls.
 
     Returns:
         ttk.Button: The themed, bound button widget.
@@ -913,20 +993,28 @@ def icon_button(parent: tk.Misc, icon: str,
         len(icon.strip()) == 1
         and not any(character.isspace() for character in icon)
     )
-    style = (
-        "IconPrimary.TButton" if primary else "Icon.TButton"
-    ) if icon_only else ("Primary.TButton" if primary else "TButton")
-    if icon_only and not primary:
-        container_style = str(parent.cget("style"))
-        background = ttk.Style(parent).lookup(container_style, "background")
-        if background == _PALETTE["background"]:
-            style = "App.Icon.TButton"
+    if style_override is not None:
+        style = style_override
+    else:
+        style = (
+            "IconPrimary.TButton" if primary else "Icon.TButton"
+        ) if icon_only else ("Primary.TButton" if primary else "TButton")
+        if icon_only and not primary:
+            container_style = str(parent.cget("style"))
+            background = ttk.Style(parent).lookup(
+                container_style, "background",
+            )
+            if background == _PALETTE["background"]:
+                style = "App.Icon.TButton"
     button = ttk.Button(parent, text=glyph, command=command, style=style,
                         takefocus=True,
                         width=_ICON_BUTTON_COLUMNS if icon_only else -1)
     button.configure(cursor="hand2")
     if tooltip:
-        _attach_tooltip(button, tooltip)
+        if tooltip_surface is None:
+            _attach_tooltip(button, tooltip)
+        else:
+            attach_inline_tooltip(button, tooltip, tooltip_surface)
     return button
 
 
@@ -986,11 +1074,12 @@ class GlassCard(ttk.Frame):
 
 
 @dataclass(slots=True)
-class _TooltipState:
-    """Track the exact delayed callback and popup owned by one tooltip."""
+class _InlineTooltipState:
+    """Track one delayed tooltip and its dismissal callback."""
 
     timer: str | None = None
-    window: tk.Toplevel | None = None
+    label: ttk.Label | None = None
+    hide: Callable[[tk.Event | None], None] | None = None
 
 
 class GalleryIdentityLabel(ttk.Label):
@@ -1079,93 +1168,126 @@ class GalleryIdentityLabel(ttk.Label):
 
 
 def _attach_tooltip(widget: tk.Misc, message: str | tk.StringVar) -> None:
-    """Bind a delayed tooltip to pointer and keyboard focus events.
+    """Bind a delayed in-window tooltip to hover and keyboard focus.
 
     Args:
         widget (tk.Misc): Widget that owns pointer and keyboard tooltip bindings.
         message (str | tk.StringVar): Fixed help or live formatted tooltip text.
 
     Returns:
-        None: Bindings manage popup creation, dismissal and destruction.
+        None: The widget's existing toplevel hosts the themed tooltip label.
     """
-    state = _TooltipState()
+    try:
+        surface = widget.winfo_toplevel()
+    except tk.TclError:
+        return
+    attach_inline_tooltip(widget, message, surface)
 
-    def hide(_event: tk.Event | None = None) -> None:
-        """Cancel pending display and close the tooltip popup.
+
+def attach_inline_tooltip(
+    widget: tk.Misc,
+    message: str | tk.StringVar,
+    surface: tk.Misc,
+) -> None:
+    """Show a delayed themed tooltip inside an existing mapped surface.
+
+    Args:
+        widget (tk.Misc): Control that owns hover and keyboard focus events.
+        message (str | tk.StringVar): Fixed or live accessible description.
+        surface (tk.Misc): Existing widget that hosts the placed label.
+    Returns:
+        None: Tooltip lifecycle is bound without creating a separate window.
+    """
+    state = _InlineTooltipState()
+
+    def hide(event: tk.Event | None = None) -> None:
+        """Cancel display and hide the label owned by this trigger.
 
         Args:
-            _event (tk.Event | None): Optional Tk event that caused
-                dismissal.
-
+            event (tk.Event | None): Optional widget event that caused hiding.
         Returns:
-            None: Any scheduled callback and popup are safely discarded.
+            None: The scheduled callback and mapped label are cleared.
         """
+        if (event is not None
+                and event.type in (tk.EventType.Configure, tk.EventType.Unmap)
+                and event.widget is not widget):
+            return
         timer = state.timer
+        state.timer = None
         if timer is not None:
             try:
                 widget.after_cancel(timer)
             except tk.TclError:
                 pass
-        state.timer = None
-        popup = state.window
-        if popup is not None:
-            try:
-                if popup.winfo_exists():
-                    popup.destroy()
-            except tk.TclError:
-                pass
-        state.window = None
+        if getattr(surface, "_inline_tooltip_state", None) is state:
+            surface._inline_tooltip_state = None
+        label = state.label
+        if label is None:
+            return
+        try:
+            if event is not None:
+                label.destroy()
+                state.label = None
+            else:
+                label.place_forget()
+        except tk.TclError:
+            state.label = None
 
     def show() -> None:
-        """Create the tooltip if the widget remains alive and eligible.
+        """Place the themed label beside its still-mapped trigger.
 
         Returns:
-            None: A small tooltip is shown beside the active widget.
+            None: The surface contains a viewport-clamped tooltip if eligible.
         """
         state.timer = None
-        popup: tk.Toplevel | None = None
         try:
             if not widget.winfo_exists() or not widget.winfo_ismapped():
                 return
-            popup = tk.Toplevel(widget)
-            state.window = popup
-            popup.wm_overrideredirect(True)
-            popup.attributes("-topmost", True)
-            label = tk.Label(
-                popup,
-                text=message if isinstance(message, str) else "",
-                textvariable=message if isinstance(message, tk.StringVar) else "",
-                bg=_PALETTE["surface"],
-                fg=_PALETTE["ink"],
-                padx=9,
-                pady=6,
-                font=("Segoe UI", 9),
-                justify="left",
-                wraplength=_HELP_TEXT_WRAP,
+            if not surface.winfo_exists() or not surface.winfo_ismapped():
+                return
+            previous = getattr(surface, "_inline_tooltip_state", None)
+            if previous is not None and previous is not state:
+                if previous.hide is not None:
+                    previous.hide(None)
+            surface._inline_tooltip_state = state
+            if state.label is None:
+                state.label = ttk.Label(
+                    surface,
+                    text=message if isinstance(message, str) else "",
+                    textvariable=(
+                        message if isinstance(message, tk.StringVar) else ""
+                    ),
+                    style="Inline.Tooltip.TLabel",
+                    wraplength=_HELP_TEXT_WRAP,
+                )
+            label = state.label
+            surface.update_idletasks()
+            gap = _INLINE_TOOLTIP_GAP
+            label.configure(
+                wraplength=max(1, surface.winfo_width() - 2 * gap),
             )
-            label.pack()
-            x = widget.winfo_rootx() + 8
-            y = widget.winfo_rooty() + widget.winfo_height() + 6
-            popup.geometry(f"+{x}+{y}")
-            state.window = popup
+            label.update_idletasks()
+            width = min(label.winfo_reqwidth(), surface.winfo_width())
+            height = min(label.winfo_reqheight(), surface.winfo_height())
+            x = widget.winfo_rootx() - surface.winfo_rootx() + gap
+            y = (widget.winfo_rooty() - surface.winfo_rooty()
+                 + widget.winfo_height() + gap)
+            if y + height > surface.winfo_height():
+                y = widget.winfo_rooty() - surface.winfo_rooty() - height - gap
+            x = max(0, min(surface.winfo_width() - width, x))
+            y = max(0, min(surface.winfo_height() - height, y))
+            label.place(x=x, y=y, width=width)
+            label.lift()
         except tk.TclError:
-            if popup is not None:
-                try:
-                    if popup.winfo_exists():
-                        popup.destroy()
-                except tk.TclError:
-                    pass
-            state.window = None
+            return
 
     def schedule(_event: tk.Event | None = None) -> None:
-        """Schedule tooltip display after the shared hover delay.
+        """Schedule display after the shared hover and focus delay.
 
         Args:
-            _event (tk.Event | None): Optional event that triggered
-                pointer entry or keyboard focus.
-
+            _event (tk.Event | None): Optional entry or focus event.
         Returns:
-            None: Existing tooltip state is replaced with one safe timer.
+            None: One safe delayed callback replaces any earlier callback.
         """
         hide()
         try:
@@ -1179,6 +1301,22 @@ def _attach_tooltip(widget: tk.Misc, message: str | tk.StringVar) -> None:
     widget.bind("<FocusOut>", hide, add="+")
     widget.bind("<Escape>", hide, add="+")
     widget.bind("<Destroy>", hide, add="+")
+    widget.bind("<Unmap>", hide, add="+")
+    widget.bind("<Configure>", hide, add="+")
+    state.hide = hide
+
+
+def hide_inline_tooltip(surface: tk.Misc) -> None:
+    """Hide the one active inline tooltip hosted by a widget surface.
+
+    Args:
+        surface (tk.Misc): Existing widget that owns the inline tooltip label.
+    Returns:
+        None: No label remains mapped over a content or overlay transition.
+    """
+    state = getattr(surface, "_inline_tooltip_state", None)
+    if state is not None and state.hide is not None:
+        state.hide(None)
 
 
 def place_dialog(dialog: tk.Toplevel, owner: tk.Misc) -> None:

@@ -52,6 +52,8 @@ const APP_LINKING_RATE_STALE_SECONDS = 86400;
  * Rationale: Five-minute windows cap public request volume, with tighter
  *     per-IP and per-Admin limits than the shared global circuit breakers.
  *     Identity reads permit a higher count because they are non-mutating.
+ *     Photo bytes have a separate 600 per IP and 3600 global allowance for
+ *     five-minute bursts so thumbnails do not lock gallery navigation.
  */
 const APP_LINKING_RATE_POLICIES = [
     'app_link_start_ip' => [
@@ -100,6 +102,14 @@ const APP_LINKING_RATE_POLICIES = [
     ],
     'app_link_galleries_global' => [
         'kind' => 'global', 'max_attempts' => 1200,
+        'window_seconds' => 300, 'lock_seconds' => 300,
+    ],
+    'app_link_photo_ip' => [
+        'kind' => 'ip', 'max_attempts' => 600,
+        'window_seconds' => 300, 'lock_seconds' => 300,
+    ],
+    'app_link_photo_global' => [
+        'kind' => 'global', 'max_attempts' => 3600,
         'window_seconds' => 300, 'lock_seconds' => 300,
     ],
     'app_link_upload_ip' => [

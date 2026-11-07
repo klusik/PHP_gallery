@@ -54,6 +54,14 @@ const APP_LINKING_CODE_OWNER_CAP = 64;
 const APP_LINKING_CODE_CLEANUP_BATCH = 32;
 
 /**
+ * Bound a persisted Watcher key when a client disappears without closing it.
+ * Type: int. Units: seconds. Scope: one gallery-specific watcher generation.
+ * Consumers: app_link_model_watch_key_open. Rationale: one day bounds abandoned
+ * credentials. Normal clients revoke when their contextual Watcher ends.
+ */
+const APP_LINKING_WATCH_KEY_TTL_SECONDS = 86400;
+
+/**
  * Reject a value that cannot be a lowercase SHA-256 credential hash.
  *
  * @param string $hash Lowercase hexadecimal one-way SHA-256 digest.
@@ -65,6 +73,130 @@ function app_link_model_assert_hash(string $hash): void
     if (preg_match('/^[a-f0-9]{64}$/D', $hash) !== 1) {
         throw new InvalidArgumentException('Invalid credential hash.');
     }
+}
+
+/**
+ * Replace one gallery watch generation after locking its live grant and owner.
+ * @param int $grantId Current live grant identifier.
+ * @param int $userId Grant owner identifier.
+ * @param string $tokenHash Current access credential hash.
+ * @param string $issuer Exact authenticated installation issuer.
+ * @param string $scope Exact current upload-capable scope.
+ * @param int $galleryId Authorized physical gallery identifier.
+ * @param string $keyHash SHA-256 hash of the client-generated watcher key.
+ * @return bool True when the locked current grant and gallery accepted the key.
+ */
+function app_link_model_watch_key_open(
+    int $grantId,
+    int $userId,
+    string $tokenHash,
+    string $issuer,
+    string $scope,
+    int $galleryId,
+    string $keyHash,
+): bool {
+    app_link_model_assert_hash($keyHash);
+    $pdo = db();
+    if ($pdo->inTransaction()) {
+        throw new RuntimeException('Watcher opening requires its own transaction.');
+    }
+    $pdo->beginTransaction();
+    try {
+        $grant = $pdo->prepare(
+            'SELECT ag.id FROM app_link_grants ag '
+                . 'INNER JOIN users u ON u.id = ag.user_id '
+                . 'WHERE ag.id = ? AND ag.user_id = ? '
+                . 'AND BINARY ag.access_token_hash = BINARY ? '
+                . 'AND BINARY ag.issuer = BINARY ? AND BINARY ag.scope = BINARY ? '
+                . 'AND ag.revoked_at IS NULL AND ag.access_expires_at > UTC_TIMESTAMP(6) '
+                . "AND BINARY u.role = BINARY 'admin' FOR UPDATE",
+        );
+        $grant->execute([$grantId, $userId, $tokenHash, $issuer, $scope]);
+        if ($grant->fetchColumn() === false) {
+            $pdo->rollBack();
+            return false;
+        }
+        $insert = $pdo->prepare(
+            'INSERT INTO app_linking_watch_keys (grant_id, gallery_id, key_hash, expires_at) '
+                . 'SELECT ?, g.id, ?, DATE_ADD(UTC_TIMESTAMP(6), INTERVAL '
+                . APP_LINKING_WATCH_KEY_TTL_SECONDS . ' SECOND) '
+                . 'FROM galleries g WHERE g.id = ? '
+                . 'ON DUPLICATE KEY UPDATE key_hash = VALUES(key_hash), '
+                . 'expires_at = VALUES(expires_at)',
+        );
+        $insert->execute([$grantId, $keyHash, $galleryId]);
+        $verify = $pdo->prepare(
+            'SELECT 1 FROM app_linking_watch_keys WHERE grant_id = ? '
+                . 'AND gallery_id = ? AND key_hash = ? '
+                . 'AND expires_at > UTC_TIMESTAMP(6)',
+        );
+        $verify->execute([$grantId, $galleryId, $keyHash]);
+        if ($verify->fetchColumn() === false) {
+            $pdo->rollBack();
+            return false;
+        }
+        $pdo->commit();
+        return true;
+    } catch (Throwable $exception) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $exception;
+    }
+}
+
+/**
+ * Revoke only the matching generation; a stale close cannot delete a replacement.
+ * @param int $grantId Current grant identifier.
+ * @param int $galleryId Physical gallery identifier.
+ * @param string $keyHash SHA-256 watcher key hash to revoke.
+ * @return void Deletes only an exact current match; absence is idempotent.
+ */
+function app_link_model_watch_key_close(int $grantId, int $galleryId, string $keyHash): void
+{
+    app_link_model_assert_hash($keyHash);
+    db()->prepare(
+        'DELETE FROM app_linking_watch_keys WHERE grant_id = ? AND gallery_id = ? '
+            . 'AND key_hash = ?',
+    )->execute([$grantId, $galleryId, $keyHash]);
+}
+
+/**
+ * Check an unexpired key against the exact currently authenticated grant/gallery.
+ * @param int $grantId Authenticated grant identifier.
+ * @param int $userId Authenticated grant owner.
+ * @param string $tokenHash Current access credential hash.
+ * @param string $issuer Exact installation issuer.
+ * @param string $scope Exact authenticated scope.
+ * @param int $galleryId Selected physical gallery identifier.
+ * @param string $keyHash Supplied key digest.
+ * @return bool True only while the exact stored generation remains unexpired.
+ */
+function app_link_model_watch_key_valid(
+    int $grantId,
+    int $userId,
+    string $tokenHash,
+    string $issuer,
+    string $scope,
+    int $galleryId,
+    string $keyHash,
+): bool {
+    app_link_model_assert_hash($keyHash);
+    $statement = db()->prepare(
+        'SELECT 1 FROM app_linking_watch_keys wk '
+            . 'INNER JOIN app_link_grants ag ON ag.id = wk.grant_id '
+            . 'INNER JOIN users u ON u.id = ag.user_id '
+            . 'WHERE wk.grant_id = ? AND wk.gallery_id = ? AND wk.key_hash = ? '
+            . 'AND ag.user_id = ? AND BINARY ag.access_token_hash = BINARY ? '
+            . 'AND BINARY ag.issuer = BINARY ? AND BINARY ag.scope = BINARY ? '
+            . 'AND wk.expires_at > UTC_TIMESTAMP(6) AND ag.revoked_at IS NULL '
+            . 'AND ag.access_expires_at > UTC_TIMESTAMP(6) '
+            . "AND BINARY u.role = BINARY 'admin' LIMIT 1",
+    );
+    $statement->execute([
+        $grantId, $galleryId, $keyHash, $userId, $tokenHash, $issuer, $scope,
+    ]);
+    return $statement->fetchColumn() !== false;
 }
 
 /**

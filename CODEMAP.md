@@ -605,6 +605,12 @@ tag controller through the pagination and description-layout services.
 | Upload API | `app/controllers/upload_automation.php`, handler `cms_upload_automation_upload` |
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
 | Windows watcher | `winapp/gallery_watch_upload.pyw` |
+| WinApp Photos tree, contextual management and folder cards | `winapp/uploader/photos_workspace.py`, `winapp/uploader/gallery_folders.py` |
+| WinApp browser link and startup resume | `winapp/uploader/app_linking_ui.py`, `winapp/uploader/session_resume.py`, `winapp/uploader/offline_linking.py` |
+| App Linking rolling expiry and refresh replay | `app/services/app_linking.php`, `app/services/app_linking_refresh.php`, `app/models/app_linking_refresh.php`, `tests/app_linking_database_test.php` |
+| Linked binary media rate limits | `app/controllers/app_linking/media.php`, `app/services/app_linking_rate_limits.php` |
+| WinApp Photos, local playback and media cache | `winapp/uploader/native_gallery_viewer.py`, `winapp/uploader/gallery_lightbox.py`, `winapp/uploader/gallery_media_cache.py` |
+| WinApp macOS extended-range photo surface | `winapp/uploader/gallery_hdr_macos.py` |
 | Windows watcher installer | `winapp/install.bat`, `winapp/run_gallery_watcher.bat` |
 | Uploader release discovery and verified download | `winapp/uploader/self_update.py`, `winapp/tests/test_self_update.py` |
 | Update scheduling, progress and worker drain | `winapp/uploader/update_ui.py`, `winapp/gallery_watch_upload.pyw`, `winapp/tests/test_update_ui.py` |

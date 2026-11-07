@@ -19,7 +19,7 @@ import secrets
 import stat
 import threading
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator
 
@@ -633,6 +633,8 @@ class LinkedUploadTarget:
         user_id (int): Positive administrator ID confirmed by the server.
         gallery_id (int): Positive server-owned selected gallery identifier.
         title (str): Last server-provided title, used only for display.
+        watch_key (str | None): In-memory temporary API key for one contextual
+            Watcher capture. It never contributes to the durable target binding.
     """
 
     session: LinkingSession
@@ -640,6 +642,7 @@ class LinkedUploadTarget:
     user_id: int
     gallery_id: int
     title: str
+    watch_key: str | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Require a live upload scope and an exact installation binding.
@@ -679,7 +682,9 @@ class LinkedUploadTarget:
         Raises:
             LinkingError: Scope, session, target, response or request failed.
         """
-        return self.session.inventory(self.gallery_id, files)
+        if self.watch_key is None:
+            return self.session.inventory(self.gallery_id, files)
+        return self.session.inventory(self.gallery_id, files, watch_key=self.watch_key)
 
     def upload(
         self, image: Path, create_thumbnails: bool,
@@ -709,8 +714,13 @@ class LinkedUploadTarget:
             self.gallery_id, image, create_thumbnails, expected_sha256, thumbnails,
             client_upload_id, metadata,
         )
+        if self.watch_key is None:
+            return self.session.upload_multipart(
+                self.gallery_id, body, body.boundary, body.content_length,
+            )
         return self.session.upload_multipart(
             self.gallery_id, body, body.boundary, body.content_length,
+            watch_key=self.watch_key,
         )
 
 

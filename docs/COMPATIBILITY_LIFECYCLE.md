@@ -7,7 +7,7 @@ version-1 readiness discovery and a browser handoff that reuses hashed
 request/PKCE storage without a schema migration. The handle is short-lived and
 non-authorizing; after ordinary Admin login, CSRF-protected session binding
 leads to explicit consent. Only approval or cancellation starts the existing
-one-use PKCE loopback flow. Core readiness requires the canonical HTTPS issuer,
+one-use PKCE loopback flow. Core readiness requires the verified exact issuer,
 independent secret and complete core schema; unknown optional capability
 storage hides only that operation. M1 source qualification is green at
 `15978bc6`: BASIC `42098837922` and WinApp `42098837757` (Ubuntu 724 pass,
@@ -30,8 +30,16 @@ in memory. The browsing view and the upload target have separate bindings,
 including the session captured by an active worker. Expiry and explicit
 unlink affect the matching session. Profile history stores only canonical
 recent addresses in `recent-gallery-links.json`, up to 20. Profiles without
-the file can use the existing saved destination hint. Windows secure renewal
-keeps its separate, explicit approval. Installed multi-link use is unknown.
+the file can use the existing saved destination hint. On macOS, startup may
+restore a transient listing grant from the user's Keychain within its original
+expiry, after server identity verification. The application uses the login
+Keychain for source launches. If the vault is unavailable, the live in-memory
+session remains usable. Compatible WinApp links can now request explicit
+rolling consent and rotate a saved credential from Keychain or Windows
+Credential Manager at startup. Older clients still support interactive
+browser approval.
+Installed multi-link use is unknown.
+[Apple Keychain implementations](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains).
 
 Existing linked upload target selection is enabled for a verified local Windows
 profile after native mode/vault/restart qualification at `4fcdd4b5`. After
@@ -110,8 +118,15 @@ Browser linking accepts direct HTTP for a saved `localhost` installation on
 the same computer. This supports local installations with an HTTP website
 address, including an explicit port and a mounted path. PHP requires direct
 loopback endpoints, and WinApp connects only to loopback for this scheme.
-Temporary credentials bind to the exact HTTP issuer. Verified HTTPS supports
-remote galleries and saved renewal. Installed Windows coverage is pending.
+Temporary and rolling credentials bind to the exact HTTP issuer. Remote
+galleries require verified HTTPS. Separate legacy offline grants remain
+HTTPS-only and keep the 30-day absolute and seven-day inactivity limits.
+Rolling grants extend both existing deadlines for seven days on authenticated
+use or rotation. Consumed rolling hashes remain replay evidence for at least
+seven days, subject to the existing 4,096-hash family cap. The database
+transition fixture covers expiry, renewal and replay. Installed Windows and
+mixed-version deployment coverage are pending. Keep transient approval for
+older servers until deployed usage supports retirement.
 
 MAMP's Apache `mod_fastcgi` can drop the bearer header on the PHP request
 after approval. The gallery's `.htaccess` preserves WinApp linking bearers in
@@ -280,18 +295,124 @@ fingerprint recovery behavior is documented in
 remain unknown. Unrelated filesystem writers and power-loss durability remain
 outside the observed qualification.
 
-M5 adds temporary `media:read` consent and optional `presentation:read` consent
-to the existing HTTPS identity/listing flow. The shared export permits direct
-non-NSFW photos only when every ancestor is public, listed, normal-access and
-non-NSFW. It pages at most eight photos, caps each binary at 16 MiB and exposes
-at most 32 visible MP3/WAV tracks through the existing native Pillow/WinMM
-path. Existing authentication, scope and HTTPS checks remain; no dependency or
-schema migration is added. Old servers omit the scopes, so the client disables
-the controls. Codex desktop/narrow rendering passed at 1000/360 px with both
-descriptions and 44 px narrow actions. Disposable HTTPS verified the binary
-and access policy, and hosted Windows Tk passed at `1844648a`. The reader is
-enabled. Native audio was not played on the hosted runner because it exposed
-no output device. Installed Windows and deployed prevalence remain unknown.
+The embedded Photos reader accepts a live `galleries:list` link for public
+photo reads. The server verifies the registered scope, issuer, role, live grant
+and public export policy. Direct non-NSFW photos require every ancestor to be
+public, listed, normal-access and non-NSFW. Legacy `media:read` grants remain
+valid, including on older servers that require that suffix. Older servers can
+refuse photo reads from ordinary listing links; the Photos pane handles that
+response inline. `presentation:read` remains explicit for settings and tracks.
+Both paths reuse the existing schema and verified issuer transport. The thumbnail owner
+uses a larger configured derivative or the existing public display rendition
+when a deployment lacks the smallest thumbnail. It retains the same binary
+limit and can serve as long as existing uploads use different rendition sizes.
+Deployed usage of this fallback and mixed-version combinations is unknown.
+
+The separately approved `media:admin` scope adds direct administrator media
+reads when the live grant and current schema allow them. Public-only and
+legacy listing grants keep their existing policy. The linking policy and
+native media owners retain those paths for saved grants and older
+installations. Restricted media uses transient delivery. The current
+administrator role is required for every read and mutation. Creation and
+visibility retain their explicit scope and authoritative server checks.
+Deployment usage of administrator media and rolling grants is unknown.
+
+The separate detailed Information selectors use the existing Admin Photos
+scope. The workspace can show the gallery's direct inventory or the photo
+descriptor from an older server when extended fields are unavailable. These
+owners preserve mixed-version browsing and its current disclosure policy.
+Contextual Watcher capture requires the verified temporary-key table. The
+ordinary linked and classic Watcher transports remain supported on older
+servers. Deployed metadata and contextual capture usage is unknown.
+
+Explicit Admin Photos approval can upgrade the same previously saved rolling
+link. The native linking and vault owners compare the current binding and
+replace it only after identity verification. Saved public grants still open
+with their approved permissions until an upgrade. Older servers keep their
+existing linking capabilities. Mixed-version deployment usage is unknown.
+
+Native photo deletion uses the saved `media:admin` Admin Photos grant.
+The server rechecks the exact live grant, issuer, Admin role and complete
+target batch under the writer lease. The historical `media:delete` bundle
+remains accepted for already-issued grants. The native and browser owners retain the existing
+four-field visibility and media forms for older clients.
+Older servers support the manual Photos refresh. Automatic refresh requires
+the Admin revision selector. Deployment usage and installed regression
+evidence for both features are unknown.
+
+When the selected detail asset exceeds 16 MiB, the media owner may serve an
+already-generated display WebP or JPG under the same validations and size cap.
+The fallback does not generate files. If no eligible rendition exists, detail
+remains unavailable. A read-only MAMP service probe opened 140 of 141 eligible
+photos. Twelve of the 13 oversized assets opened via derivatives that preserved
+their aspect ratio. The remaining 48 MP JPEG had no eligible rendition.
+Authenticated HTTP verification is pending.
+
+The default-on Subgalleries switch displays direct child folder cards above
+the selected gallery's photos. A cover is the first authorized direct
+thumbnail, with a neutral folder fallback. Photos keeps listings in memory
+and uses the current link grant. The native client may prefetch detail pixels
+into bounded memory. The photo grid and default lightbox fit trim detected
+black bands for display while preserving the scene's aspect ratio. The
+original-frame toggle restores the full source in the lightbox. The wheel
+and trackpad zoom in either view. F and F11 toggle fullscreen, with controls
+appearing briefly on pointer movement.
+The native Tk input owner uses packed TouchpadScroll axes where available.
+Legacy MouseWheel events and X11 wheel buttons remain supported for Tk
+builds without precise packets. Installed host and device usage is unknown.
+
+On macOS 15 or later, the native lightbox can retain bounded encoded detail
+bytes and decode compatible HDR data through Core Image. The AppKit owner
+requires a Tk build with a native window bridge, PyObjC and an EDR-capable
+display. The Pillow/Tk fallback preserves the photo viewer on Windows, older
+macOS and Tk combinations, SDR screens and sources without usable HDR data.
+Older and derived renditions may only contain SDR. Both rendering paths
+remain supported for those inputs and environments. Deployed HDR usage is
+unknown.
+
+WinApp requests up to 64 photo descriptors with
+`X-PHP-Gallery-Photo-Page: 64`. Servers that ignore the header retain their
+eight-photo pages and cursors. Requests without the header retain that same
+eight-photo contract.
+
+The per-user disk cache keeps opted-in photo, thumbnail and audio bytes under
+hash-only keys. Photos retain their existing issuer, gallery, image and
+rendition keys and file format. They use `X-PHP-Gallery-Photo-Cache: 1`,
+`Cache-Control: private, max-age=60, must-revalidate`, and
+`Vary: Authorization, X-PHP-Gallery-Photo-Cache`. After 60 seconds, reuse
+requires authorized revalidation. A matching strong validator refreshes the
+file's validation time without rewriting its body. An opted-in current
+catalogue page may supply the strong ETag of an independently public bounded
+thumbnail. A matching disk entry can be reused immediately. The bounded
+decoded thumbnail cache belongs to the live Photos session and follows the
+current catalogue's validation. A legacy no-store 304
+causes one unconditional fetch. A refusal yields no stale body.
+
+Audio persistence requires `X-PHP-Gallery-Track-Cache: 1`,
+`Cache-Control: private, no-cache`, and
+`Vary: Authorization, X-PHP-Gallery-Track-Cache` on a complete authorized
+response. Before using disk, WinApp fetches the current permitted playlist,
+requires its explicit `track_cache: true` capability, and checks that the track still
+matches its verified SHA-256, byte size and MIME type. Older playlist responses
+without the capability use online track delivery even after a downgrade.
+The shared cache holds up to 4,096 entries and 1 GiB. It evicts least recently
+accessed entries as space is needed and retains no credentials or playlist
+metadata. WinApp's media transport owns the older no-store and
+eight-photo behavior while mixed versions are supported. Deployment usage is
+unknown.
+
+The previous separate-reader release was checked with disposable HTTPS and
+hosted Windows Tk at `1844648a`. Native audio was skipped because the hosted
+runner had no output device. Installed Windows and deployment evidence for the
+embedded workspace remain separate.
+
+Native photo descriptors can add a coordinate pair only when the selected
+gallery's effective EXIF map policy is enabled and GPS schema is available.
+This follows the existing public map disclosure policy; no paths or altitude
+are exposed. Disabled maps, missing coordinates, or missing/unknown GPS schema
+preserve the old descriptor shape. New clients accept old servers that omit
+coordinates, and old clients tolerate the extra fields. Deployed use of this
+optional metadata is unknown.
 
 Separately approved `gallery:read` permits a selected gallery's ID, title,
 revision and stored visibility, access mode and listing mode to be read.
@@ -2078,7 +2199,10 @@ before opening the next; no page rendering or database migration is introduced.
 Real-host metadata latency and device coverage remain unknown.
 
 Explicit presentation launches temporarily override default-off music without
-changing persisted preferences. Deferred activation starts audio in the original
+changing persisted preferences. Native presentation and its manual music
+control also honor the stored presentation music preference when the gallery
+playlist defaults to off. Both native paths retain the public playback policy
+and the current visible track filter. Deferred activation starts audio in the original
 click task; shared-link autoplay can still require the existing Play gesture.
 The media-panel copy owner permanently supports denied/unavailable clipboard
 access through a selectable URL. Retain these browser capability paths until

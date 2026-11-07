@@ -134,7 +134,7 @@ Tracking issue: https://github.com/klusik/PHP_gallery/issues/345
 
 ### Current M1 implementation state
 
-Version-1 discovery verifies the canonical HTTPS issuer, independent crypto
+Version-1 discovery verifies the exact trusted issuer, independent crypto
 secret, full core schema and readiness of optional capability owners. If core
 linking is not ready it returns `available: false`; unknown optional storage
 hides only that operation. The existing gallery-scoped `pgu_` path remains
@@ -147,8 +147,10 @@ expiry. This reuses existing hashed claim/PKCE storage and adds no migration.
 The browser saves the handle in session state and redirects to the fixed start
 route without the query before ordinary Admin login. After login, a CSRF
 protected request binds the handle to the current session and shows explicit
-consent for 15-minute access and separately optional 30-day access with a
-seven-day idle limit. Only Approve issues a one-use code; Cancel returns
+consent for the exact scope and expiry policy. The bearer lasts up to 15
+minutes. Compatible normal links request rolling consent, with a seven-day
+window. The separate legacy offline option retains its 30-day absolute and
+seven-day idle limits. Only Approve issues a one-use code; Cancel returns
 a denial to the native listener. A current session may redisplay the same
 consent; duplicate, mismatched, cross-account, expired or replayed handles
 fail. The handle alone
@@ -184,7 +186,7 @@ and `X-Content-Type-Options: nosniff`. There is no clean-URL requirement.
 
 The response never includes credentials, identities, gallery lists, internal
 feature settings or database configuration. Availability requires the
-canonical HTTPS issuer, independent linking secret, complete core schema and
+verified exact issuer, independent linking secret, complete core schema and
 ready optional capability owners. Unknown optional storage hides only its
 operation. The gallery-scoped `pgu_` upload credentials and POST upload
 semantics are unchanged. Discovery is not authentication.
@@ -223,7 +225,8 @@ the upload transport before selecting extension points.
 4. Preserve the PHP Gallery server as the only gallery data authority.
 5. Keep storage and HTTP changes within the existing MVC ownership model.
 6. Reject unknown schema state before security-sensitive writes.
-7. Keep native client networking client-initiated and HTTPS-only.
+7. Keep native client networking client-initiated. Use verified HTTPS for remote
+   galleries and direct loopback for an exact configured localhost HTTP issuer.
 8. Do not change gallery visibility, access rights or publication semantics.
 9. Do not add mobile code or gallery-management operations during the first
    secure linking increment.
@@ -334,7 +337,7 @@ Client interpretation:
    must **not** be treated as proof of availability. Report unknown/error
    separately, while leaving existing saved manual settings unchanged.
 
-The client must validate the HTTPS origin and installation mount before
+The client must validate the exact origin and installation mount before
 contacting this unauthenticated route, limit redirects to the same verified
 origin/mount, bound network/JSON sizes and timeout, and never send existing
 `pgu_` keys during discovery. No CORS wildcard or browser cross-origin
@@ -437,7 +440,8 @@ require the identical URI during code exchange. Validate URI syntax before any
 redirect, compare registered components unambiguously, and do not treat a client
 ID or callback path as proof that the caller is a trusted executable.
 
-All server authorization, exchange and resource requests use verified HTTPS.
+Remote authorization, exchange and resource requests use verified HTTPS. The
+local HTTP exception requires a verified direct localhost issuer.
 The client establishes the trusted installation origin **and mount path** before
 starting a request, maintains that issuer binding throughout the flow, and
 rejects issuer or origin/mount changes, unexpected redirects and TLS errors.
@@ -602,13 +606,15 @@ claim RFC 9126 interoperability.
 
 The client pushes the request without following redirects. Remote galleries
 use verified HTTPS. An installation saved as literal `http://localhost` can
-issue temporary access on direct loopback. PHP checks both socket endpoints,
+issue temporary and rolling access on direct loopback. PHP checks both socket endpoints,
 the exact configured port and mount, and the absence of forwarding headers.
 The native HTTP transport connects only to numeric loopback addresses
 returned for `localhost`. This uses the browser's special-use localhost
 name and keeps the issuer scheme in the existing exact binding.
 [RFC 6761, section 6.3](https://www.rfc-editor.org/rfc/rfc6761.html#section-6.3).
-Refresh credentials and saved renewal require HTTPS.
+Legacy offline consent requires HTTPS. Rolling access also works for the
+verified direct localhost issuer. A macOS restart can still reuse an
+unexpired temporary bearer for the exact issuer.
 The system browser receives a short-lived handle, which the start endpoint
 stores in the session before redirecting to a clean URL. After ordinary Admin
 login the browser binds the handle automatically and shows the requested access
@@ -623,10 +629,13 @@ the model retains atomic claim/consumption. This requires the session handler's
 exclusive request lock. A same-origin browser response carries the
 approved code or denial, `state` and `iss` for navigation to the exact
 registered loopback callback, without an HTTP 3xx. The client checks the
-issuer and state, exchanges an approved code with PKCE S256, and retains its
-short-lived access token only in memory. Continuing access is a separate,
-explicitly approved option; the identity scope neither grants uploads nor
-replaces the existing `pgu_` key.
+issuer and state and exchanges an approved code with PKCE S256. On macOS,
+an identity-verified temporary listing bearer may be saved in the user's
+Keychain up to its original 15-minute deadline. Before publishing a restored
+session, the client checks the exact issuer, approved scope and Admin ID
+against the server. Revocation or expiry requires fresh approval. Rolling access requires explicit approval of the exact
+`rolling_access offline_access` bundle. Older servers use temporary access. The identity scope leaves
+uploads to their separate grant or existing `pgu_` key.
 The distinct `link:identity galleries:list` scope explicitly authorizes a
 bounded list of all galleries visible to an ordinary Admin, including private
 and unpublished galleries. It provides IDs, parent IDs and titles, not disk
@@ -635,7 +644,8 @@ grant, scope and current role in the same database read. A previously issued
 identity-only grant gains no listing access.
 
 When discovery offers `galleries:search`, the basic native link requests the
-temporary search bundle with or without upload access. The same consent
+search bundle with or without upload access. If discovery also advertises
+`rolling_access`, the bundle includes the rolling suffix. The same consent
 discloses metadata search, including private and unpublished galleries.
 The picker sends its expression and continuation ID in a bounded form POST
 to `app_linking_galleries`. Queries use the public parser and rank names
@@ -693,23 +703,40 @@ bodies must not be logged or included in URLs except for the specified
 one-time loopback callback. A lost response is ambiguous and must not cause
 blind replay; begin a fresh attempt.
 
-The distinct `offline_access` scope requires explicit consent and creates an
-idle- and lifetime-bounded server refresh family. A transaction rotates both
-token hashes and revokes the grant and family if a consumed refresh is replayed.
-A lost response is ambiguous and the old refresh must not be automatically
-retried. If the user selects secure remembrance and approves the offline scope,
-WinApp stores the refresh credential in the current Windows user's Credential
-Manager and the non-secret issuer, account ID and exact scope in a separate
-local binding. Reconnection is explicit, not an automatic startup action. A
+The four exact basic rolling bundles combine gallery listing with optional
+search and upload, followed by `rolling_access offline_access`. Their four
+presentation counterparts insert `media:read presentation:read` immediately
+before the renewal suffix. Discovery advertises `presentation:rolling` only
+on verified rolling transport with current wide scope, refresh, and
+presentation storage. That marker is a discovery capability. The browser
+shows the exact presentation permission before consent, and renewal preserves
+the approved bundle. Previously issued links keep their original scope. When
+secure storage is unavailable, a new link can use temporary presentation on a
+server advertising the marker if the link does not also request search.
+On successful
+authenticated use or rotation, both existing family deadlines advance to
+seven days from that use. The active refresh token inherits those deadlines.
+Legacy `offline_access` bundles retain the 30-day absolute limit and
+seven-day inactivity limit. Rotation updates the hashes transactionally and
+revokes the family and grant when a retained consumed hash is replayed.
+Rolling families can prune consumed hashes after seven days, when the
+consumed credential would already have expired. The family retains a
+maximum of 4,096 hashes. Legacy families retain all hashes until deletion.
+WinApp saves the approved refresh credential in Windows Credential Manager
+or macOS Keychain. The local binding keeps the non-secret issuer, account ID
+and exact scope. Startup can attempt the same saved link. A
 cross-process lock and durable pending fence cover one refresh, live identity
-validation and verified replacement storage. An uncertain outcome or storage
-failure blocks reuse and requires review. Explicit local forget removes the
+validation and verified replacement storage. A definitive expired or revoked
+rolling-refresh rejection from the same verified issuer discards the affected
+saved credential. An explicit Link action can then start the normal browser
+approval flow. Startup leaves approval to the user. An uncertain outcome or
+storage failure blocks reuse and requires review. Explicit local forget removes the
 saved credential and binding without revoking the server grant; the active
 session may remain valid. Server-side revocation remains available separately.
-The client keeps one shared offline binding at a time. To use a different
-issuer or account, open the old issuer, resolve outstanding work and explicitly
-forget that binding before saving the new one; review or revoke its grant on
-the old gallery separately. Changing the issuer alone cannot replace it.
+Rolling links keep one saved binding per exact issuer. The legacy Windows
+HTTPS option keeps one shared binding. Resolve outstanding work and forget
+the local binding before replacing a saved account for the same issuer.
+Review or revoke the previous server grant separately.
 Neither the Windows integration nor its recovery after crash or power loss has
 been qualified on real Windows; source support does not establish durability or
 production readiness.
@@ -778,12 +805,11 @@ consistent proxy, web-server and PHP body, upload and temporary-storage limits
 upstream; application checks cannot undo pre-parser resource consumption.
 
 Normal installation and application updates provision the installation key in
-`app_link_installation_key`. The configured HTTPS website address
+`app_link_installation_key`. The configured website address
 (`base_url`) supplies the canonical authority and exact mount. The request
-must match that address, with HTTPS established by direct transport or the
-existing trusted proxy policy. An empty or HTTP website address leaves
-browser linking unavailable until the site's ordinary website address is set
-to its HTTPS URL. Discovery reads readiness without provisioning anything.
+must match that address. HTTPS can use direct transport or the existing
+trusted proxy policy. Literal `http://localhost` requires direct loopback on
+both endpoints and rejects forwarded requests. Discovery reads readiness without provisioning anything.
 
 Keep nonempty legacy `app_linking.issuer` and `app_linking_secret` overrides
 for installations already using them. They take precedence independently and
@@ -1111,18 +1137,133 @@ connection; replacement also needs assessed ACL and extended-metadata policy.
 
 ### Current M5 media and presentation source
 
-M5 adds a separately approved temporary `media:read` scope and an optional
-`presentation:read` suffix. The shared public export policy admits only
-non-NSFW photos from galleries whose full ancestor chain is public, listed,
-normal-access and non-NSFW; private, unpublished, unlisted, password-protected
-and NSFW media is refused. Photo responses page at most eight images, cap each
-binary at 16 MiB and retain existing authorization, scope and HTTPS checks with
-ETag/Range support. Optional presentation reads expose at most 32 visible
-MP3/WAV tracks and use the existing native Pillow and WinMM playback path. No
-dependency or schema migration is added. Discovery disables the new controls
-when an older server omits the scopes.
+The native photo endpoints accept the active gallery listing grant for media
+already eligible for public export. The legacy `media:read` suffix is still
+accepted. The shared policy admits only direct non-NSFW photos whose gallery
+and ancestors are public, listed, normal-access and non-NSFW. The separate
+`media:admin` capability adds explicit browser consent for restricted,
+unpublished and NSFW gallery and photo reads. It requires an active
+administrator grant on the current installation. A photo must still belong
+directly to the selected physical gallery. Older grants retain their original
+scope. Rolling Admin Photos bundles can carry the supported presentation,
+creation, visibility, search and upload permissions, with their own readiness
+and authorization checks. The connected-applications page identifies Admin
+photo access and combined gallery and photo visibility by name.
+Gallery information returns direct indexed inventory.
+Admin-only `gallery_info` and `photo_info` selectors extend Information on
+demand. They keep the original `info` response available to earlier clients.
+The server binds photo details to the requested physical gallery, returns
+opaque refusal for a nonmatching photo, and sends bounded JSON with no-store.
+The projection includes indexed dimensions, MIME type, capture and EXIF data.
+GPS follows the gallery's map policy. The optional JPEG and WebP quality
+values describe current server thumbnail generation settings.
+An explicit Admin Photos upgrade can replace a saved native binding after
+the app verifies the same issuer and administrator account. It compares the
+exact prior hint under the binding lock before publishing the newly approved
+scope and vault credential. An earlier Windows global hint moves to the
+per-issuer rolling location. A selected upload destination receives the new
+scope through its existing mode owner. If publication fails, the client
+restores the prior credential and hint while its generation still matches.
+Photo visibility also requires the visibility permission and the previously
+observed value. The server binds the change to the current grant, gallery,
+photo and stored visibility. An uncertain response requires a fresh read.
+The write uses the fixed `POST index.php?page=app_linking_media` query.
+Photo and presentation reads require their existing GET/HEAD selectors.
 
-The internal Codex render fixture passed desktop 1000 px and narrow 360 px with
+The Admin `kind=revision` selector returns a no-store hash of the indexed
+direct photo count, newest image ID, newest update and total bytes. It uses the
+same gallery authority as Admin photo listing and reads no thumbnail files.
+The aggregate is a change hint. A changed revision triggers a photo catalogue
+refresh, and the circular arrow can request a refresh directly.
+
+Permanent photo deletion uses the current saved `media:admin` grant.
+Previously issued grants with the exact historical `media:delete` scope
+remain valid. Discovery advertises deletion with the existing core deletion
+schema. The fixed POST accepts `action: delete`, one positive `gallery_id`,
+and a unique JSON array of 1–64 positive `image_ids`. It returns
+`deleted_ids` on confirmation.
+Under the gallery writer lease, the server rechecks the exact live issuer,
+bearer, Admin role and scope, then validates every direct photo before calling
+the same deletion owner as web Admin. A stale batch is refused as a whole.
+An unknown outcome requires a fresh read; clients must not blindly retry.
+
+An explicit contextual Watcher start uses the already approved upload scope.
+The client generates a `pgw_` key for the selected gallery. `watch_open` and
+`watch_close` on the existing inventory POST send its SHA-256 hash, and
+keyed capture requests carry the key in `X-PHP-Gallery-Watch-Key`. The server
+requires the exact live grant and gallery, with a 24-hour key expiry. It
+rechecks keyed upload authority at the existing commit boundary. Close
+matches only its original hash and can be repeated after an uncertain reply.
+The temporary key lives in memory during capture. Closing it leaves the
+browser link available to Photos. The feature uses the verified
+`app_linking_watch_keys` schema and existing upload capability.
+
+Photo metadata uses eight-item pages by default. WinApp can request up to 64 with
+`X-PHP-Gallery-Photo-Page: 64`; older servers ignore this header.
+Responses cap each binary at 16 MiB and use existing live
+grant checks, verified issuer transport and ETag/Range support. Photos and
+thumbnails have a separate five-minute quota of 600 requests per IP and
+3,600 globally. Thumbnails fit the scene after matte detection. On HTTP 429, Photos reports
+the limit and pauses speculative work until Retry. Thumbnail requests can use other
+configured renditions or the existing public display file under the same
+limits. Explicit `presentation:read` remains required for settings and up to
+32 visible MP3/WAV tracks under the public playback policy. The consent text
+discloses the local playback copy of authorized music. Native display uses
+the AppKit HDR surface on compatible macOS setups and Pillow/Tk SDR elsewhere. Audio
+playback uses a local file with WinMM or the macOS system player. Both use
+the current schema. A server with the older scope requirement can return
+an unavailable photo response to an ordinary listing link.
+
+Photo descriptors may also include a latitude/longitude pair when the selected
+gallery's effective EXIF map policy is enabled and the GPS schema is available.
+This reuses the public map disclosure policy and includes no path or altitude.
+Missing coordinates, disabled maps, or missing/unknown GPS schema leave the
+existing descriptor shape unchanged. The WinApp accepts older server responses
+without coordinates, and older clients tolerate the additive fields. Deployed
+server/client combinations and use of this metadata remain unknown.
+
+The embedded Photos workspace shows direct child folders above the selected
+gallery's photos when its default-on Subgalleries switch is enabled. A folder
+cover uses the first authorized direct thumbnail. A neutral folder represents
+absent or denied media. Photos keeps listings in memory and uses the current
+link grant. Photo metadata appends to the scrollable grid. The viewport
+drives thumbnail requests and the same looping sequence drives manual
+navigation and the slideshow. Adjacent details are prepared in bounded
+memory. The grid and default lightbox fit share black-bar detection. The
+lightbox offers an original-frame toggle, wheel and trackpad zoom, and F or
+F11 for fullscreen. Moving the pointer reveals controls briefly. The
+presentation action enters fullscreen, advances through the album and starts
+the configured authorized soundtrack. Contextual gallery and photo actions
+use the same live session and main window.
+
+The optional binary cache applies when a photo or thumbnail request includes
+`X-PHP-Gallery-Photo-Cache: 1` and passes the live grant and public-photo
+policy checks. A cacheable 200 or authorized
+304 carries `X-PHP-Gallery-Photo-Cache: 1`,
+`Cache-Control: private, max-age=60, must-revalidate`, and
+`Vary: Authorization, X-PHP-Gallery-Photo-Cache`. WinApp stores validated
+bytes and their SHA-256 ETag under a digest of canonical issuer, gallery,
+image and rendition. After 60 seconds, a matching authorized 304 refreshes
+validation metadata while retaining the bytes. An opt-in catalogue page can
+include the current strong ETag of an existing public thumbnail up to 128 KiB.
+The server computes proofs only for materialized thumbnails.
+WinApp can reuse the matching verified local bytes immediately. Admin-only
+media receives `no-store` and is excluded from persistent media reads and
+writes. On an older server that
+returns `no-store` to a conditional request, WinApp retries once without
+the validator and accepts only a validated 200 body.
+
+The same cache holds track bytes under a digest of issuer, gallery, track ID
+and SHA-256. An authorized playlist advertises persistence with
+`track_cache: true`. A full authorized track response can opt in with
+`X-PHP-Gallery-Track-Cache: 1` and `Cache-Control: private, no-cache`.
+A current authorized playlist must match the track ID, digest, size and
+format before disk reuse. WinApp plays the selected verified local file and
+prepares the next track. The cache caps storage at 4,096 entries or 1 GiB and
+evicts least-recently-used entries under capacity pressure.
+
+Before the embedded workspace, the Codex render fixture passed desktop 1000 px
+and narrow 360 px with
 both consent descriptions and 44 px narrow actions. No browser HTTPS journey
 was run by owner choice. The disposable HTTPS run passed an eight-plus-one
 photo page, thumbnail and detail, same-gallery binding, ETag and Range, and

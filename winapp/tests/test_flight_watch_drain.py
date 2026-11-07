@@ -549,6 +549,44 @@ class WatchDrainTests(unittest.TestCase):
             saved = self.main.read_document(workspace / "watch-drain.json")
             self.assertEqual([], saved["pending"])
 
+    def test_resume_reuses_the_exact_contextual_watcher_key(self) -> None:
+        """Retain the original keyed target for an in-process drain retry.
+
+        Returns:
+            None: A changed linked session refuses recovery before any worker starts.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory)
+            self.main.atomic_write_json(workspace / "watch-drain.json", {
+                "folder": directory,
+                "recursive": False,
+                "pending": ["retained-photo"],
+                "frozen": True,
+            })
+            session = mock.Mock()
+            issuer = "https://gallery.example.test"
+            target = self.main.LinkedUploadTarget(session, issuer, 7, 9, "Screenshots")
+            contextual = self.main.LinkedUploadTarget(
+                session, issuer, 7, 9, "Screenshots", "synthetic watcher key",
+            )
+            app = mock.Mock()
+            app._contextual_watch_target = contextual
+            app.capture_linked_target.return_value = target
+            app.flights.pending.return_value = [mock.Mock(directory=workspace)]
+            with (
+                mock.patch.object(self.main, "capture_worker_config"),
+                mock.patch.object(self.main, "WatcherThread") as worker,
+            ):
+                result = self.main.WatcherApp.resume_flight_photos(app, workspace)
+                self.assertIs(worker.return_value, result)
+                self.assertIs(contextual, worker.call_args.args[2])
+                app.capture_linked_target.return_value = self.main.LinkedUploadTarget(
+                    mock.Mock(), issuer, 7, 9, "Screenshots",
+                )
+                with self.assertRaisesRegex(ValueError, "gallery changed"):
+                    self.main.WatcherApp.resume_flight_photos(app, workspace)
+                worker.assert_called_once()
+
     def test_cancellation_preserves_unfinished_queue(self) -> None:
         """Keep a queued photo when the watcher stops before processing it.
 

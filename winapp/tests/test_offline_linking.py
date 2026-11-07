@@ -14,6 +14,7 @@ import base64
 import tempfile
 import time
 from pathlib import Path
+from threading import Event
 import unittest
 from types import TracebackType
 from unittest.mock import MagicMock, patch
@@ -391,6 +392,33 @@ class OfflineLinkingTests(unittest.TestCase):
         with patch.object(linking, '_request_json', return_value=self.identity):
             self.assertEqual(self.account, session.identity().user_id)
 
+    def test_rolling_presentation_keeps_exact_scope_through_rotation(self) -> None:
+        """Round-trip the new scope through the vault and live identity check.
+
+        Returns:
+            None: Renewed access retains presentation, search, and upload.
+        """
+        scope = linking.ROLLING_SEARCH_PRESENTATION_SCOPES[1]
+        store = _Store()
+        offline.store_approved_refresh(
+            store, self.issuer, self.account, scope, self.old,
+            offline.OFFLINE_ACCESS_MAX_SECONDS,
+        )
+        response = {**self.response, 'scope': scope}
+        identity = {**self.identity, 'scope': scope}
+        with patch.object(offline, '_request_json', side_effect=[response, identity]):
+            access = offline.rotate_offline_access(
+                store, self.issuer, self.account, scope,
+            )
+        self.assertEqual(scope, access.scope)
+        session = linking.LinkingSession(
+            self.issuer, access.token, access.expires_at, access.scope,
+        )
+        self.addCleanup(session.close)
+        self.assertTrue(session.can_read_presentation())
+        self.assertTrue(session.can_search_galleries())
+        self.assertTrue(session.can_upload())
+
     def test_offline_upload_session_keeps_base_authority(self) -> None:
         """Allow only the upload and listing actions present in the base scope.
 
@@ -422,6 +450,105 @@ class OfflineLinkingTests(unittest.TestCase):
         with patch.object(credentials, '_WindowsCredentialMutex') as mutex:
             store.binding_transaction(self.issuer, self.account)
         mutex.assert_called_once_with(self.issuer, self.account, metadata=True)
+
+    def test_expired_rolling_session_renews_before_one_protected_request(self) -> None:
+        """Keep the same session and dispatch an operation once after renewal.
+
+        Returns:
+            None: Rejection never replays a request and the next call renews.
+        """
+        scope = linking.ROLLING_GALLERY_SEARCH_SCOPES[1]
+        session = linking.LinkingSession(
+            self.issuer, self.access,
+            time.monotonic() + offline.OFFLINE_ACCESS_MAX_SECONDS, scope,
+        )
+        self.addCleanup(session.close)
+        renewed = _token('pgla_', b'd')
+        identity = {'user': {'id': self.account, 'username': 'admin'}, 'scope': scope}
+        renew = MagicMock(return_value=(
+            renewed, time.monotonic() + offline.OFFLINE_ACCESS_MAX_SECONDS,
+        ))
+        session.enable_renewal(renew)
+        with patch.object(linking, '_request_json', side_effect=[
+            linking.LinkingGrantRejected('Rejected bearer.'), identity,
+        ]) as request:
+            with self.assertRaises(linking.LinkingGrantRejected):
+                session.identity()
+            request.assert_called_once()
+            renew.assert_not_called()
+            self.assertTrue(session.can_upload())
+            self.assertTrue(session.can_search_galleries())
+            self.assertEqual(self.account, session.identity().user_id)
+        renew.assert_called_once()
+        self.assertEqual([self.access, renewed], [
+            call.args[4] for call in request.call_args_list
+        ])
+
+    def test_saved_rolling_refusal_alone_clears_credential_and_hint(self) -> None:
+        """Keep a failed refresh fenced unless the server definitely refused it.
+
+        Returns:
+            None: Rolling refusal removes just its binding, without replay.
+        """
+        refusal = linking.LinkingRefreshRejected('Server refused fixture grant.')
+        ambiguous = linking.LinkingError('Fixture response lost.')
+        for scope, error, removed in (
+            (linking.ROLLING_GALLERIES_SCOPE, refusal, True),
+            (linking.ROLLING_GALLERIES_SCOPE, ambiguous, False),
+            (self.scope, refusal, False),
+        ):
+            with (
+                self.subTest(scope=scope, removed=removed),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                binding = offline.OfflineBinding(self.issuer, self.account, scope)
+                path = Path(directory) / 'offline-link.json'
+                store = _Store()
+                offline.save_offline_binding(path, binding)
+                offline.store_approved_refresh(
+                    store, self.issuer, self.account, scope, self.old,
+                    offline.OFFLINE_REFRESH_MAX_SECONDS,
+                )
+                expected = (linking.LinkingRefreshRejected if removed
+                            else offline.OfflineLinkingError)
+                with (
+                    patch.object(store, 'binding_transaction', create=True,
+                                 new_callable=MagicMock) as lock,
+                    patch.object(offline, '_request_json', side_effect=error) as send,
+                    self.assertRaises(expected),
+                ):
+                    offline.rotate_saved_offline_access(store, path, binding, Event())
+                lock.assert_called_once_with(self.issuer, self.account)
+                send.assert_called_once()
+                self.assertEqual('app_linking_token', send.call_args.args[1])
+                self.assertEqual(not removed, store.pending)
+                self.assertEqual(removed, store.record is None)
+                self.assertEqual(None if removed else binding,
+                                 offline.load_offline_binding(path, self.issuer))
+
+    def test_definite_refresh_refusal_closes_active_session(self) -> None:
+        """Make an expired rolling session unavailable after definite refusal.
+
+        Returns:
+            None: The protected operation is never dispatched or replayed.
+        """
+        session = linking.LinkingSession(
+            self.issuer, self.access,
+            time.monotonic() + offline.OFFLINE_ACCESS_MAX_SECONDS,
+            linking.ROLLING_GALLERIES_SCOPE,
+        )
+        self.addCleanup(session.close)
+        session._expires_at = time.monotonic()
+        renew = MagicMock(side_effect=linking.LinkingRefreshRejected('Refused.'))
+        session.enable_renewal(renew)
+        with patch.object(linking, '_request_json') as request:
+            with self.assertRaises(linking.LinkingRefreshRejected):
+                session.gallery_page()
+            with self.assertRaises(linking.LinkingError):
+                session.gallery_page()
+        renew.assert_called_once()
+        request.assert_not_called()
+        self.assertFalse(session.available())
 
     def test_storage_failure_never_exposes_new_access(self) -> None:
         """Retain the fence when replacement storage has uncertain outcome.

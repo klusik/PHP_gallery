@@ -1284,7 +1284,8 @@ function gallery_model_linked_upload_target(
  * @param string $issuer Exact trusted installation issuer.
  * @param string $scope Exact consented gallery-read scope bundle.
  * @param int $galleryId Requested positive physical gallery identifier.
- * @return array{id:int|string,title:string,edit_revision:int|string,visibility:string,access_mode:string,access_listing:string,folder_path:string}|null
+ * @param bool $includeMediaFields Include full internal gallery state for a media caller.
+ * @return array{id:int|string,title:string,edit_revision:int|string,visibility:string,access_mode:string,access_listing:string,folder_path:string}|GalleryDatabaseRow|null
  *     Stored settings and the internal recovery-marker location, or null if
  *     the grant or gallery fails.
  */
@@ -1295,10 +1296,12 @@ function gallery_model_linked_detail(
     string $issuer,
     string $scope,
     int $galleryId,
+    bool $includeMediaFields = false,
 ): ?array {
+    $fields = $includeMediaFields ? 'g.*' : 'g.id, g.title, g.edit_revision, '
+        . 'g.visibility, g.access_mode, g.access_listing, g.folder_path';
     $statement = db()->prepare(
-        'SELECT g.id, g.title, g.edit_revision, g.visibility, '
-            . 'g.access_mode, g.access_listing, g.folder_path FROM galleries g '
+        'SELECT ' . $fields . ' FROM galleries g '
             . 'INNER JOIN app_link_grants ag ON ag.id = ? AND ag.user_id = ? '
             . 'INNER JOIN users u ON u.id = ag.user_id '
             . 'WHERE g.id = ? AND BINARY ag.access_token_hash = BINARY ? '

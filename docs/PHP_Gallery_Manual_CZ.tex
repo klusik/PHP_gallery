@@ -1765,10 +1765,25 @@ i~mutace. Podrobnosti a~omezení nasazení uvádí
 \section{Windows uploader}
 \subsection{Rozvržení}
 
-Uploader se otevírá na kartě \ui{Watcher}; pořadí karet je \ui{Watcher},
-\ui{Import}, \ui{Activity}, \ui{AI} a~\ui{Settings}. Horní ovládací prvek
-připojení otevře kompaktní dialog klíče API se skrytým klíčem a~volbou
-\ui{Save \& Test}; ovládání připojení zůstává v~záhlaví dostupné na každé
+Při běžném spuštění se otevře karta \ui{Fotky}; pořadí je \ui{Fotky},
+\ui{Watcher}, \ui{Import}, \ui{Activity}, \ui{AI} a~\ui{Settings}.
+S~aktivním propojením karta Fotky načte vlevo strom galerií a~vpravo
+automaticky otevře výchozí galerii. Rozbalit či sbalit lze jednotlivé větve
+i~celý strom. Výběr galerie zobrazí její fotky přímo v~tomtéž okně.
+Přepínač \ui{Podgalerie} je ve výchozím stavu zapnutý a~zobrazí nad fotkami
+karty přímých podgalerií. Titulní obrázek tvoří první povolený náhled fotky
+z~podgalerie. Pokud chybí, karta zobrazí ikonu složky. Karta Fotky drží výpis
+galerií v~paměti a~využívá aktuální oprávnění propojení.
+Při odpojení otevře \ui{Připojit} stávající dialog s~adresou a~schválení
+v~prohlížeči. Platné propojení pak zpřístupní veřejné fotky přímo.
+Samostatný cíl nahrávání nastavuje \ui{Use for uploads}.
+Spuštění s~\texttt{--startup} zůstane v~oznamovací oblasti až do obnovení
+okna. Při spuštění ze zdrojů na macOS se používá běžné okno Tk.
+Dočasné propojení skončí s~procesem.
+
+Obrazovka Watcher zobrazuje cílovou galerii. Horní ovládání API klíče otevře
+kompaktní dialog se skrytým klíčem a~volbou
+\ui{Save \& Test}; toto ovládání zůstává v~záhlaví dostupné na každé
 obrazovce. Neuložené změny nenahradí uložený klíč. Hlavička aplikace
 nabízí také Nastavení, aktualizace a~nápovědu. Obrazovka Watcher zobrazuje
 cílovou galerii, vybranou cestu složky, stav sledování a~varování před smazáním
@@ -1780,7 +1795,7 @@ výpadku napájení zatím nejsou ověřeny.
 V~hlavním okně klikněte na \ui{Link gallery}. Do dialogu vložte adresu
 galerie z~prohlížeče a~potvrďte ji tlačítkem \ui{Link gallery}.
 Na stejném počítači funguje i~HTTP adresa na \texttt{localhost}.
-Ostatní adresy a~uložené obnovení přístupu používají HTTPS. Dialog ukazuje
+Vzdálené instalace používají ověřené HTTPS. Dialog ukazuje
 průběh až do schválení. Pokud spojení selže, zobrazí chybu a~umožní další
 pokus. V~prohlížeči se přihlaste jako správce a~klikněte na \ui{Schválit}.
 Po zobrazení \ui{Approval received} se vraťte do WinApp. Aplikace zobrazí
@@ -1866,20 +1881,81 @@ databáze ani revizi nemění. Markery verze jedna lze pouze prohlížet.
 Kandidát \texttt{8de8e50a} prošel kontrolou BASIC \texttt{42107055888}
 a~kontrolou WinApp \texttt{42107055797}. Nainstalované GUI, MariaDB
 a~nasazené chování zatím ověřeny nejsou.
-Samostatné dočasné schválení \texttt{media:read} dovolí pouze
-prohlížení veřejných galerií zařazených do výpisu a~jejich fotografií bez
-citlivého obsahu; volitelné
-\texttt{presentation:read} povolí autorizované prezentace a~viditelnou hudbu.
-Všichni předci musí být veřejní, uvedení, s~běžným přístupem a~bez NSFW.
-Soukromý, nezveřejněný, neuvedený, heslem chráněný a~NSFW obsah se odmítá.
-Stránka obsahuje nejvýše osm fotografií, binární soubor má limit 16~MiB
-a~výpis obsahuje nejvýše 32~viditelných skladeb MP3/WAV. Není nutná migrace
-ani nová závislost. Ve způsobilé galerii zvolte \ui{Otevřít prohlížeč fotek}.
-Výslovně spuštěná prezentace používá interval serveru a~podle potřeby načítá
-další stránku. Starší servery tato ovládání nezobrazí. Codex ověřil
-vykreslení při šířkách 1000/360~px, oba popisy oprávnění a~44px úzké ovládací
-prvky. HTTPS v~prohlížeči se z~rozhodnutí vlastníka netestovalo a~přehrávání
-ve Windows ověřeno nebylo.
+Aktivní propojení s~oprávněním pro výpis galerií umožňuje prohlížet veřejné
+fotky bez citlivého obsahu. Podporovaný server při běžném propojení nabídne
+výslovný souhlas \texttt{presentation:read} pro nastavení prezentace
+a~viditelnou hudbu. U~běžného propojení musejí být všichni předci veřejní,
+uvedení, s~běžným přístupem a~bez NSFW. Samostatný souhlas správce umožňuje
+zobrazit i~skrytá, chráněná a~NSFW média. Server znovu ověřuje platné
+oprávnění správce. Interní dávka obsahuje nejvýše 64~záznamů o~fotkách
+nebo osm na starším serveru. Soubor má limit 16~MiB. Výpis hudby zahrnuje nejvýše 32~viditelných
+skladeb MP3/WAV. Pokud nejmenší miniatura chybí, server může použít jinou
+existující variantu nebo veřejný zobrazovací obrázek v~daném limitu.
+Panel fotek i~lightbox jsou součástí hlavního okna WinApp.
+Responzivní mřížka plynule posouvá přehled a~načítá viditelné náhledy.
+Kliknutím nebo stiskem Enter na~zaměřené fotografii otevřete lightbox.
+Šipkami vlevo a~vpravo procházíte celé album ve smyčce.
+Zavření lightboxu nebo klávesa Escape obnoví strom a~mřížku
+i~po chybě obrázku. Náhledy oříznou rozpoznané černé pruhy a~zobrazí celou scénu
+v~jejím poměru stran. Fotografie a~náhledy mají
+samostatný limit 600 požadavků na IP a~3\,600 celkem za pět minut.
+Při HTTP~429 aplikace zobrazí upozornění a~pozastaví načítání dopředu do
+volby \ui{Retry}. Při spuštění ze zdrojů musí být Pillow ve stejném
+interpretu Pythonu. Volba \ui{Zkusit znovu}
+načte obsah, který se~nepodařilo načíst. Kolečkem, posunem dvěma prsty nebo
+klávesami + a~− měníte přiblížení. Klávesa 0 pohled obnoví a~tažením fotku
+posunete. F nebo F11 přepne celou obrazovku. Pohyb ukazatele na chvíli zobrazí
+ovládání.
+Pokud jsou povoleny souřadnice, připnutá značka polohy nabídne
+\ui{Otevřít v~OpenStreetMap} v~systémovém prohlížeči. Předchozí a~další
+fotka se připraví předem do omezené paměti.
+\ui{Přizpůsobit podle obsahu} ořízne rozpoznané černé pruhy v~okně i~na celé
+obrazovce. \ui{Zobrazit původní snímek} vrátí celý rám snímku. Fotka si zachová
+poměr stran. Při změně velikosti okna se průběžně vykresluje náhled a~po
+ustálení se zobrazí v~plné kvalitě. Od macOS~15 lze kompatibilní HDR snímky
+zobrazit přes AppKit na EDR displeji, pokud je dostupné PyObjC a~propojení
+okna Tk. Ostatní konfigurace včetně Windows zobrazují 8bitové SDR přes
+Pillow/Tk.
+Společná uživatelská disková cache ukládá schválené fotky a~skladby
+s~ověřenými otisky obsahu. Při překročení 4\,096~položek nebo 1~GiB
+uvolní nejdéle nepoužívaná data. Pokud se shoduje ověřovací údaj z~aktuálního
+výpisu alba, aplikace náhled vezme rovnou z~disku. Bez něj platí čerstvost
+60~sekund a~ověření ETagem. Aktuální schválený playlist znovu použije skladbu
+se stejným SHA-256, velikostí a~formátem. Média dostupná pouze správcům se
+na disk neukládají.
+Tlačítko prezentace otevře celou obrazovku a~prochází album ve smyčce podle
+povoleného intervalu serveru nebo po pěti sekundách. Současně spustí povolený
+doprovod. Ovládání hudbu spouští, pozastavuje a~přepíná mezi skladbami.
+Přehrává se místní soubor a~aplikace mezitím připraví další skladbu.
+Pravým tlačítkem na galerii nebo fotce zobrazíte informace a~schválené změny
+viditelnosti. Kliknutí mimo panel nebo Escape ho zavře. Podrobnosti fotky
+zobrazují formát, rozměry, uložený EXIF a~GPS podle nastavení galerie. Kvalita
+náhledů uvádí aktuální nastavení generování na~serveru. Informace o~galerii
+ukazují přímý obsah a~rozsah stažených fotek. Ikona ve~stromu se
+zobrazí po jeho zjištění. Galerii v~kořenu webu přidáte tlačítkem ve~stromu
+a~podgalerii tlačítkem vedle názvu alba. Podgalerii lze přidat také z~nabídky
+galerie nebo prázdného místa mezi fotkami. Kolečko i~posun dvěma prsty
+posouvají mřížku a~v~lightboxu mění přiblížení.
+Strom si pro každý propojený web a~účet pamatuje rozbalené a~sbalené větve.
+Fotky obnovíte zatočenou šipkou vedle názvu alba. WinApp přibližně každých
+30~sekund ověřuje index zobrazeného alba v~režimu správce a~použije
+nezměněné náhledy znovu. Starší servery podporují ruční obnovu.
+Fotky označíte kliknutím s~Ctrl ve Windows, s~Command na macOS nebo
+v~nabídce fotky. V~kontextové nabídce lze smazat fotku nebo celý výběr.
+WinApp použije stávající připojení správce. V~aplikaci potvrďte každou dávku
+nejvýše 64~fotek. Trvalé smazání proběhne stejnou operací jako ve webovém
+Adminu. Po přerušené odpovědi album obnovte a~zkontrolujte před potvrzením
+dalšího mazání.
+V~nabídce galerie nebo Watcheru zvolte použití této galerie pro sledování.
+WinApp spustí záznam s~dočasným klíčem a~zobrazí červené REC. Ikona Watcheru
+červeně pulzuje ve všech kartách. Plné červené světlo označuje cílové album
+a~jeho nadpis. Duté kolečko označuje sbalenou větev, která cíl skrývá.
+U~rozpoznaného
+simulátoru nabídne SimBrief. Ukončení odešle přijaté snímky, u~letu uloží
+dostupné reporty a~zneplatní klíč sledování. Propojení webu zůstane aktivní.
+Panel Watcheru zobrazí přípravu nebo důvod, proč se sledování nespustilo.
+Ověření v~nainstalované aplikaci ve Windows zatím chybí. Dřívější
+protokolové ověření proběhlo před touto změnou rozhraní.
 Souborová pojistka zápisů je neaktivní prototyp a~galerijní operace zatím
 nechrání; její koordinace musí být nejprve ověřena.
 Experimentální samostatné oprávnění \texttt{galleries:create} vyžaduje výslovný
@@ -1943,15 +2019,19 @@ všechny galerie běžného správce včetně soukromých a~nezveřejněných.
 Propojení Watcheru a~Importu je implementováno, ale není kvalifikováno;
 dosavadní klíč omezený na galerii zůstává nezávisle dostupný.
 
-Instalátor i~aktualizace založí klíč propojení v~databázi. Uložená HTTPS
+Instalátor i~aktualizace založí klíč propojení v~databázi. Uložená
 adresa webu určuje přesný původ a~cestu instalace. Stávající výslovně nastavená
 adresa a~klíč mají přednost. Veřejný dotaz připravenost pouze čte. Prohlížeč před
 běžným přihlášením správce uloží krátkodobý identifikátor žádosti do relace.
 Svázání chráněné CSRF vede k~výslovnému souhlasu. \ui{Schválit} doručí
-jednorázový kód na ověřenou návratovou adresu pro výměnu s~PKCE. Hlavní akce
-žádá nejvýše 15~minut přístupu k~účtu a~seznamu galerií. Nahrávání přidá,
-pokud ho podporuje místní profil i~server. Bezpečné obnovení ve Windows vyžaduje
-samostatný souhlas. Správce může přístup odvolat v~seznamu připojených
+jednorázový kód na ověřenou návratovou adresu pro výměnu s~PKCE. Hlavní akce žádá přístup k~účtu a~galeriím včetně nahrávání, pokud je
+podporované. Na kompatibilním serveru výslovně schvalte obnovovaný přístup.
+Platí sedm dní od posledního úspěšného ověřeného použití či obnovy. WinApp
+obnovuje 15minutový přístupový token pomocí Klíčenky macOS nebo Správce
+přihlašovacích údajů Windows. Funguje přes ověřené HTTPS i~přímé
+\texttt{http://localhost}. Starší servery používají dočasné propojení nejvýše
+na 15~minut.
+Správce může přístup odvolat v~seznamu připojených
 aplikací. Nevyměněné kódy vyprší do 120~sekund. Viz
 \filepath{docs/APP_LINKING_PHASE_0.md}.
 
@@ -1965,20 +2045,22 @@ původní nastavení se nemění. Snížená hodnota se obnoví, ale celková do
 omezena není. Zámek callbacku
 končí před zápisem migračního checkpointu runnerem.
 
-Pro pokračující přístup výslovně vyberte \ui{Remember securely on this Windows
-account} a~schvalte samostatné oprávnění v~prohlížeči. Windows Credential
-Manager uloží obnovovací údaj; samostatný místní soubor obsahuje pouze issuer,
-ID účtu a~schválený rozsah. Po restartu použijte výslovně \ui{Reconnect saved
-link}. Klient údaj jednou obmění a~ověří identitu serveru. Nejistá odpověď
+Samostatná volba zapamatování ve Windows přes HTTPS používá starší offline
+oprávnění. Vyprší po 30~dnech nebo sedmi dnech nečinnosti podle toho, co
+nastane dříve. WinApp může schválené uložené propojení obnovit po restartu.
+Ověření lze spustit i~volbou \ui{Reconnect saved link}.
+Klient údaj jednou obmění a~ověří identitu serveru. Pokud stejný ověřený
+server výslovně odmítne vypršelý nebo odvolaný obnovovací údaj, WinApp tento
+uložený údaj odstraní. Nové propojení schvalte v~prohlížeči po volbě
+\ui{Link gallery}. Při spuštění zůstává schválení na vás. Nejistá odpověď
 nebo chyba úložiště zablokuje použití původního údaje. Zkontrolujte propojení
 na serveru a~případně použijte \ui{Forget saved link} před novým propojením.
 Místní zapomenutí neruší serverový grant a~současná relace může zůstat aktivní.
 Uložený klíč \texttt{pgu\_} zůstává nezávislý. Skutečné Windows a~obnova po
-výpadku napájení zatím nebyly kvalifikovány. Pokračující přístup je omezen
-na 30~dní a~sedm dní nečinnosti. Uložena může být vždy jen jedna offline vazba:
-pro změnu issueru či účtu otevřete původní issuer, vyřešte čekající práci
-a~zapomeňte místní propojení před uložením nového. Starý grant případně zrušte
-samostatně v~galerii. Propojené nahrávání odděluje
+výpadku napájení zatím nebyly kvalifikovány. Obnovované odkazy ukládají jednu
+vazbu pro každý přesný issuer. Starší volba Windows přes HTTPS má jednu společnou vazbu. Před výměnou uloženého
+účtu u~stejného issueru vyřešte čekající práci a~zapomeňte místní propojení.
+Serverový grant lze odvolat samostatně. Propojené nahrávání odděluje
 historii i~výhradní zámek podle issueru, účtu
 a~galerie a~před odesláním ukládá značku čekajícího výsledku. Po nejistém
 výsledku ručně zkontrolujte galerii a~zdroj; soubor automaticky neposílejte

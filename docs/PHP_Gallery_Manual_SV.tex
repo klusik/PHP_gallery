@@ -1823,21 +1823,34 @@ obligatoriskt schema avvisar delning och ändringar. Se
 \section{Windows-uppladdaren}
 \subsection{Layout}
 
-Uppladdaren öppnas på fliken \ui{Watcher}; ordningen är \ui{Watcher},
-\ui{Import}, \ui{Activity}, \ui{AI} och \ui{Settings}. Den övre
-anslutningsknappen öppnar en kompakt dialog för API-nyckeln med
-maskerad nyckel och \ui{Save \& Test}; anslutningskontrollen finns kvar i
-sidhuvudet på alla skärmar. Osparade ändringar ersätter inte den
-sparade nyckeln. Appens sidhuvud har även inställningar, uppdateringar och
-hjälp.
+Vid normal start öppnas \ui{Foton}; ordningen är \ui{Foton}, \ui{Watcher},
+\ui{Import}, \ui{Activity}, \ui{AI} och \ui{Settings}. Med en aktiv
+länk visar Foton galleriträdet till vänster och öppnar ett galleri till höger.
+Enskilda grenar och hela trädet kan fällas ut och in. Välj ett galleri för
+att visa dess foton i samma fönster. \ui{Undergallerier} är på som standard
+och visar direkt underordnade mappar ovanför fotona. Omslaget använder den
+första auktoriserade miniatyrbilden i undergalleriet. Om ingen finns visas en
+neutral mappikon. Foton håller gallerilistor i minnet och använder länkens
+aktuella behörighet. Utan länk öppnar \ui{Anslut} den
+befintliga adressdialogen och godkännandet i webbläsaren. Den aktiva länken
+ger sedan direkt åtkomst till offentliga foton. Det separata uppladdningsmålet
+väljs med \ui{Use for uploads}. Start med \texttt{--startup} förblir dold i
+systemfältet tills fönstret återställs. På macOS öppnas det vanliga Tk-fönstret
+vid start från källkod. Tillfälliga länkar upphör med processen.
+
+Watcher-skärmen visar gallerimålet. API-nyckelkontrollen öppnar en kompakt
+dialog med maskerad nyckel och \ui{Save \& Test}; den finns kvar i sidhuvudet
+på alla skärmar. Osparade
+ändringar ersätter inte den sparade nyckeln. Appens sidhuvud har även
+inställningar, uppdateringar och hjälp.
 Om konfigurationen inte kan läsas eller verifieras stoppas starten före arbete.
 Behåll originalfilen och återställ en giltig säkerhetskopia; en saknad fil ger
 fortfarande startvärden. Windows reparse-punkter och beständighet vid strömavbrott
 är ännu inte kvalificerade.
 Klicka på \ui{Link gallery} i huvudfönstret. Klistra in galleriets adress
 från webbläsaren och bekräfta med \ui{Link gallery}. På samma dator kan
-galleriet använda en HTTP-adress på \texttt{localhost}. Övriga adresser
-och sparad förnyelse använder HTTPS.
+galleriet använda en HTTP-adress på \texttt{localhost}. Fjärrinstallationer
+använder verifierad HTTPS.
 Dialogrutan visar förloppet i väntan på godkännande. Om anslutningen
 misslyckas visas felet i dialogrutan och du kan försöka igen.
 Logga in som administratör i webbläsaren och klicka på \ui{Godkänn}.
@@ -1927,20 +1940,83 @@ databasraden och revisionen ändras inte. Markörer av version ett kan bara
 granskas. Kandidat \texttt{8de8e50a} klarade BASIC-körning
 \texttt{42107055888} och WinApp-körning \texttt{42107055797}. Installerad GUI,
 MariaDB och driftsatt beteende är ännu inte kvalificerade.
-Det separata tillfälliga godkännandet \texttt{media:read} tillåter
-endast bläddring bland listade offentliga gallerier och icke-känsliga foton;
-det valfria \texttt{presentation:read} tillåter godkända bildspel och synlig
-musik. Alla överordnade gallerier måste vara offentliga, listade, ha normal
-åtkomst och sakna NSFW-innehåll. Privat, opublicerat, olistat,
-lösenordsskyddat och NSFW-innehåll avvisas. Fotosidor innehåller högst åtta
-bilder med en binärgräns på 16~MiB; listor innehåller högst 32 synliga
-MP3/WAV-spår. Ingen migrering eller ny beroendekomponent tillkommer.
-Välj \ui{Öppna fotovisaren} i ett behörigt galleri. Ett uttryckligen startat
-bildspel använder serverns intervall och laddar nästa sida vid behov.
-Äldre servrar visar inte kontrollerna. Codex-renderingen klarade
-1000/360~px, båda behörighetsbeskrivningarna och 44~px smala kontroller. Ingen
-HTTPS-webbläsarkörning gjordes på ägarens begäran;
-uppspelning i Windows är inte verifierad.
+En aktiv länk med gallerilista ger åtkomst till listade offentliga foton
+utan känsligt innehåll. Servrar med stöd erbjuder uttryckligt godkännande
+av \texttt{presentation:read} för presentationsinställningar och synlig musik
+vid vanlig länkning. Vid en länk för offentliga medier måste alla överordnade
+gallerier vara offentliga, listade, ha normal åtkomst och sakna NSFW-innehåll.
+Ett separat administratörsgodkännande visar även dolda, skyddade och
+NSFW-klassade medier. Servern kontrollerar det aktuella godkännandet.
+Interna sidor innehåller högst 64~fotoposter eller åtta på äldre servrar.
+Filer har en gräns på 16~MiB.
+Presentationslistor innehåller högst 32 synliga MP3/WAV-spår. Om den minsta
+miniatyrbilden saknas kan servern använda en annan befintlig version eller
+den offentliga visningsfilen inom gränsen. Fotopanelen och lightboxen delar
+huvudfönstret.
+Det responsiva rutnätet rullar kontinuerligt och laddar synliga miniatyrbilder.
+Klicka på en bild eller fokusera den och tryck Enter för att öppna lightboxen.
+Vänster och höger går runt hela albumet. Stäng lightboxen
+eller tryck Escape för att återställa trädet och rutnätet även vid bildfel.
+Miniatyrerna beskär upptäckta svarta fält och visar hela den återstående scenen
+i dess bildförhållande. Foton och miniatyrer har en separat gräns på 600
+begäranden per IP och 3\,600 totalt under fem minuter. Vid HTTP~429 visar
+Photos att gränsen har nåtts och pausar förhämtning tills du väljer
+\ui{Retry}. Vid start från källkod måste Pillow finnas i den Python-tolk som används.
+\ui{Försök igen} laddar om innehåll som misslyckades. Zooma med mushjulet,
+rullning med två fingrar eller + och~−. 0 återställer vyn och med pekaren kan
+du dra bilden. F eller F11 växlar helskärm. När pekaren rör sig visas reglagen
+en kort stund.
+När tillåtna koordinater finns
+öppnar en fäst platsmarkör \ui{Öppna i OpenStreetMap} i~systemets webbläsare.
+Föregående och nästa detaljbild förbereds i begränsat minne.
+\ui{Anpassa efter innehåll} beskär upptäckta svarta fält i fönstret och i
+helskärm. \ui{Visa originalbild} återställer hela ramen. Bilden behåller sina
+proportioner. Under storleksändring visas en löpande förhandsbild som förfinas
+när fönstrets storlek har stabiliserats. Från macOS~15 kan kompatibla
+HDR-bilder visas med AppKit på en EDR-skärm om PyObjC och Tk:s
+fönsteranslutning finns. Andra konfigurationer, inklusive Windows, visar
+8-bitars SDR med Pillow/Tk.
+En gemensam diskcache per användare lagrar godkända foton och spår med
+verifierade kontrollsummor. När den når 4\,096~poster eller 1~GiB tas de
+minst nyligen använda posterna bort. Ett matchande kontrollvärde i den
+aktuella albumkatalogen gör att en miniatyr kan läsas direkt från disken.
+Annars gäller 60~sekunders färskhet och auktoriserad ETag-kontroll. Den
+aktuella auktoriserade spellistan kan återanvända ett spår med samma SHA-256,
+storlek och format. Medier som endast administratörer kan se sparas
+utanför diskcachen.
+Bildspelsknappen öppnar helskärm och går runt hela albumet med serverns
+aktiverade intervall eller fem sekunder som standard. Godkänd musik börjar
+spela när bildspelet startar. Musikreglagen spelar, pausar och byter spår.
+Spelaren läser en lokal fil och förbereder nästa spår.
+Högerklicka på ett galleri eller foto för information och godkända
+synlighetsåtgärder. Klicka utanför panelen eller tryck Escape för att stänga.
+Fotodetaljer visar format, mått, sparade EXIF-data och tillåtna GPS-data.
+Miniatyrkvaliteten avser serverns aktuella inställningar för generering.
+Galleriinformationen visar direkt innehåll och cachens täckning. En ikon
+visas i~trädet när täckningen är känd. Lägg till ett galleri på rotnivå
+med knappen i~trädet. Knappen bredvid albumtiteln, gallerimenyn och tomt
+utrymme mellan foton erbjuder ett undergalleri. Mushjulet och rullning med
+två fingrar rullar rutnätet och zoomar i~lightboxen.
+Trädet kommer ihåg öppna och stängda grenar per länkad webbplats och konto.
+Den runda pilen bredvid albumtiteln uppdaterar fotona. WinApp kontrollerar
+indexet för det synliga administratörsalbumet ungefär var 30:e sekund och
+återanvänder oförändrade miniatyrer. Äldre servrar stöder manuell uppdatering.
+Markera foton med Ctrl-klick i~Windows, Command-klick i~macOS eller i~fotomenyn.
+I~snabbmenyn kan du radera ett foto eller hela urvalet. WinApp använder
+den aktuella administratörslänken. Bekräfta varje grupp om högst 64~foton
+i~appen. WinApp använder samma permanenta radering som webbadministrationen.
+Uppdatera och granska albumet efter ett avbrutet svar före nästa bekräftelse.
+Starta Watcher för galleriet i~gallerimenyn eller Watcher-menyn. Inspelningen
+använder en tillfällig nyckel och visas med röd REC-markering. Watcher-ikonen
+pulserar rött på alla flikar. En fylld röd punkt markerar målalbumet och dess
+rubrik. En röd ring markerar en stängd gren som döljer det. SimBrief är
+tillgängligt vid en upptäckt flygsimulator. Avslut skickar mottagna bilder,
+sparar tillgängliga flygrapporter och återkallar den tillfälliga nyckeln.
+Webbplatsen förblir länkad.
+Watcher visar förberedelsen eller orsaken om inspelningen inte kan starta.
+En aktuell installerad Windows-genomgång
+av den inbyggda visaren återstår. Tidigare protokollbevis täcker inte denna
+version av gränssnittet.
 Filsystemets skrivspärr är en inaktiv prototyp och skyddar inte galleriets
 operationer förrän samordningen har kvalificerats.
 Den experimentella separata behörigheten \texttt{galleries:create} kräver
@@ -2007,15 +2083,20 @@ kopplad Watcher och Import är implementerade men inte kvalificerade; den äldre
 galleribegränsade nyckeln finns kvar oberoende.
 
 Installation och uppdatering skapar anslutningsnyckeln i databasen.
-Den sparade HTTPS-webbplatsadressen anger exakt ursprung och installationssökväg.
+Den sparade webbplatsadressen anger exakt ursprung och installationssökväg.
 Befintliga uttryckliga inställningar för adress och nyckel har företräde.
 Den offentliga frågan läser beredskapen. Webbläsaren sparar en kortlivad
 begäransreferens i sessionen före vanlig administratörsinloggning.
 Den CSRF-skyddade bindningen leder till uttryckligt samtycke.
 \ui{Godkänn} skickar en engångskod till den verifierade returadressen för
-PKCE-utbyte. Huvudåtgärden begär konto- och liståtkomst i upp till 15~minuter
-samt bilduppladdning när den lokala profilen och servern stöder det.
-Säker förnyelse i Windows kräver separat godkännande. Administratören kan återkalla
+PKCE-utbyte. Huvudåtgärden begär konto- och galleriåtkomst samt bilduppladdning när den
+stöds. På kompatibla servrar godkänner du uttryckligen förnybar åtkomst.
+Den gäller i sju dagar efter senaste lyckade autentiserade användning eller
+förnyelse. WinApp förnyar åtkomsttoken med 15~minuters giltighet via
+Nyckelringen i macOS eller Windows Credential Manager. Verifierad HTTPS
+och direkt \texttt{http://localhost} stöds. Äldre servrar använder en
+tillfällig koppling i upp till 15~minuter.
+Administratören kan återkalla
 åtkomst bland anslutna appar. Koder som ännu inte bytts ut upphör inom
 120~sekunder. Se \filepath{docs/APP_LINKING_PHASE_0.md}.
 
@@ -2030,21 +2111,25 @@ befintlig inställning bevaras. Ett sänkt värde återställs, men den totala
 DDL-tiden begränsas inte.
 Callback-låset släpps innan köraren skriver migreringens kontrollpunkt.
 
-För fortsatt åtkomst, välj uttryckligen \ui{Remember securely on this Windows
-account} och godkänn den separata behörigheten i webbläsaren. Windows
-Credential Manager lagrar förnyelseuppgiften; en separat lokal bindning
-innehåller endast utfärdare, konto-ID och godkänd behörighet. Efter omstart,
-välj uttryckligen \ui{Reconnect saved link}. Klienten roterar uppgiften en
-gång och kontrollerar serveridentiteten. Ett osäkert svar eller lagringsfel
+Det separata alternativet för sparad åtkomst i Windows via HTTPS använder
+den äldre offlinebehörigheten. Den upphör efter 30~dagar eller sju dagars
+inaktivitet, beroende på vad som inträffar först. WinApp kan återuppta en
+godkänd sparad koppling vid start.
+\ui{Reconnect saved link}
+startar samma kontroll. Klienten roterar uppgiften en gång och kontrollerar
+serveridentiteten. Om samma verifierade server uttryckligen avvisar en
+utgången eller återkallad förnybar uppgift tar WinApp bort just den sparade
+uppgiften. Välj \ui{Link gallery} för att godkänna en ny koppling i
+webbläsaren. Vid start väljer du själv om du vill godkänna den.
+Ett osäkert svar eller lagringsfel
 hindrar återanvändning av den gamla uppgiften. Granska serverns kopplingar och
 välj vid behov \ui{Forget saved link} före ny koppling. Lokal borttagning
 återkallar inte serverbehörigheten och den aktuella sessionen kan fortsätta.
 Den sparade \texttt{pgu\_}-nyckeln är oberoende. Riktig Windows och
-återställning efter strömavbrott är ännu inte kvalificerade. Fortsatt åtkomst
-är begränsad till 30~dagar och sju dagars inaktivitet. Endast en offlinebindning
-sparas åt gången: för att byta utfärdare eller konto, öppna den gamla
-utfärdaren, lös väntande arbete och ta bort den lokala kopplingen innan den
-nya sparas. Återkalla vid behov den gamla behörigheten separat i galleriet.
+återställning efter strömavbrott är ännu inte kvalificerade. Förnybara kopplingar sparar en bindning per exakt utfärdare.
+Det äldre Windows-alternativet via HTTPS har en gemensam bindning.
+Hantera väntande arbete och ta bort den lokala kopplingen innan du byter
+sparat konto hos samma utfärdare. Serverbehörigheten kan återkallas separat.
 Den kopplade
 uppladdningen skiljer historik och exklusivt lås efter utfärdare,
 konto och galleri och sparar en väntande markering före överföring. Kontrollera

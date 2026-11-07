@@ -522,3 +522,23 @@ function app_linking_upload_schema_status(): array
         $inventory['requirements'],
     ));
 }
+
+/**
+ * Observe storage used only by explicit native Watcher generations.
+ * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state watcher-key readiness.
+ */
+function app_linking_watch_key_schema_status(): array
+{
+    $status = mutation_schema_tables_status('app_linking.watch_keys', [
+        'app_linking_watch_keys' => [
+            'grant_id', 'gallery_id', 'key_hash', 'expires_at',
+        ],
+    ]);
+    $status['requirements'][] = schema_inspection_index_exact(
+        'app_linking_watch_keys', 'PRIMARY', ['grant_id', 'gallery_id'], true,
+    );
+    $status['requirements'][] = schema_inspection_index_exact(
+        'app_linking_watch_keys', 'app_linking_watch_key_expiry', ['expires_at'], false,
+    );
+    return schema_inspection_feature('app_linking.watch_keys', $status['requirements']);
+}

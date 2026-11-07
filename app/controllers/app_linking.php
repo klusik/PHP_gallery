@@ -23,6 +23,7 @@ require_once __DIR__ . '/app_linking/create.php';
 require_once __DIR__ . '/app_linking/media.php';
 
 use Throwable;
+use const Gallery\Services\APP_LINKING_RATE_POLICIES;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
@@ -46,7 +47,10 @@ use function Gallery\Services\app_linking_list_owner;
 use function Gallery\Services\app_linking_pkce_s256_challenge_valid;
 use function Gallery\Services\app_linking_public_client;
 use function Gallery\Services\app_linking_scope_allowed;
+use function Gallery\Services\app_linking_scope_allows_admin_media;
 use function Gallery\Services\app_linking_scope_allows_gallery_search;
+use function Gallery\Services\app_linking_scope_allows_gallery_listing;
+use function Gallery\Services\app_linking_scope_allows_presentation;
 use function Gallery\Services\app_linking_scope_base;
 use function Gallery\Services\app_linking_scope_requests_refresh;
 use function Gallery\Services\app_link_refresh_revoke_token;
@@ -223,7 +227,12 @@ function app_linking_direct_loopback_request(int $port): bool
     }
     foreach (array_keys($_SERVER) as $name) {
         if (str_starts_with((string) $name, 'HTTP_X_FORWARDED_')
-            || in_array($name, ['HTTP_FORWARDED', 'HTTP_VIA', 'HTTP_X_REAL_IP'], true)) {
+            || in_array($name, [
+                'HTTP_FORWARDED',
+                'HTTP_VIA',
+                'HTTP_X_FORWARDED',
+                'HTTP_X_REAL_IP',
+            ], true)) {
             return false;
         }
     }
@@ -308,6 +317,7 @@ function app_linking_discovery_model(): array
     }
     $capabilities = app_linking_discovery_capabilities(
         str_starts_with($issuer, 'https://'),
+        true,
     );
     if (!in_array('linking', $capabilities, true)) {
         return ['available' => false];
@@ -411,16 +421,28 @@ function app_linking_json_error(int $status, string $error): void
  *
  * @param string $ipBucket Fixed app-linking IP bucket name.
  * @param string $globalBucket Fixed app-linking global bucket name.
+ * @param bool $sendRetryAfter Whether a rate-limit refusal includes a retry hint.
  * @return bool True only after both independently committed attempts succeed.
  */
-function app_linking_admit_public(string $ipBucket, string $globalBucket): bool
-{
-    $ip = app_linking_rate_limit_consume($ipBucket, request_client_ip());
-    if (!$ip['allowed']) {
-        return false;
+function app_linking_admit_public(
+    string $ipBucket,
+    string $globalBucket,
+    bool $sendRetryAfter = false,
+): bool {
+    $bucket = $ipBucket;
+    $admission = app_linking_rate_limit_consume($bucket, request_client_ip());
+    if ($admission['allowed']) {
+        $bucket = $globalBucket;
+        $admission = app_linking_rate_limit_consume($bucket, 'global');
     }
-    $global = app_linking_rate_limit_consume($globalBucket, 'global');
-    return $global['allowed'];
+    if ($sendRetryAfter && !$admission['allowed']
+        && $admission['retry_after_seconds'] > 0) {
+        header('Retry-After: ' . min(
+            $admission['retry_after_seconds'],
+            APP_LINKING_RATE_POLICIES[$bucket]['lock_seconds'],
+        ));
+    }
+    return $admission['allowed'];
 }
 
 /**
@@ -931,14 +953,7 @@ function cms_app_linking_galleries(): void
             app_linking_json_error(401, 'invalid_token');
             return;
         }
-        if (!in_array(app_linking_scope_base($identity['scope']), [
-            APP_LINKING_GALLERIES_SCOPE, APP_LINKING_UPLOAD_SCOPE,
-            APP_LINKING_READ_SCOPE, APP_LINKING_READ_UPLOAD_SCOPE,
-            APP_LINKING_CREATE_SCOPE, APP_LINKING_READ_CREATE_SCOPE,
-            APP_LINKING_UPLOAD_CREATE_SCOPE, APP_LINKING_READ_UPLOAD_CREATE_SCOPE,
-            APP_LINKING_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_VISIBILITY_SCOPE,
-            APP_LINKING_CREATE_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_CREATE_VISIBILITY_SCOPE,
-        ], true)) {
+        if (!app_linking_scope_allows_gallery_listing($identity['scope'])) {
             app_linking_json_error(403, 'insufficient_scope');
             return;
         }
@@ -1219,6 +1234,7 @@ function cms_app_linking_devices(): void
             $client = $grant['client_id'] === APP_LINKING_WINAPP_CLIENT_ID
                 ? t('app_linking.devices.winapp', 'PHP Gallery for Windows (unverified)')
                 : t('app_linking.devices.unknown_client', 'Unknown client (unverified)');
+            $adminMedia = app_linking_scope_allows_admin_media($grant['scope']);
             $scope = match (app_linking_scope_base($grant['scope'])) {
                 APP_LINKING_IDENTITY_SCOPE => t(
                     'app_linking.devices.identity_scope',
@@ -1258,15 +1274,16 @@ function cms_app_linking_devices(): void
                 APP_LINKING_CREATE_VISIBILITY_SCOPE,
                 APP_LINKING_UPLOAD_CREATE_VISIBILITY_SCOPE,
             ], true)) {
-                $scope .= ' · ' . t(
-                    'app_linking.devices.visibility_scope',
-                    'Change gallery visibility',
-                );
+                $scope .= ' · ' . ($adminMedia
+                    ? t('app_linking.devices.media_visibility_scope', 'Change gallery and photo visibility')
+                    : t('app_linking.devices.visibility_scope', 'Change gallery visibility'));
             }
-            if ($grant['scope'] !== \Gallery\Services\app_linking_scope_without_media($grant['scope'])) {
+            if ($adminMedia) {
+                $scope .= ' · ' . t('app_linking.devices.admin_media_scope', 'Admin photo access');
+            } elseif (app_linking_scope_allows_gallery_listing($grant['scope'])) {
                 $scope .= ' · ' . t('app_linking.devices.media_scope', 'Public photo browsing');
             }
-            if (str_ends_with($grant['scope'], \Gallery\Services\APP_LINKING_PRESENTATION_SUFFIX)) {
+            if (app_linking_scope_allows_presentation($grant['scope'])) {
                 $scope .= ' · ' . t('app_linking.devices.presentation_scope', 'Public presentation and music');
             }
             if (app_linking_scope_requests_refresh($grant['scope'])) {

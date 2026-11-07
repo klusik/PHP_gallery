@@ -163,10 +163,19 @@ changes are support-policy documentation and direct disposable engine regression
 coverage; existing schema inspection and interrupted-DDL replay semantics remain
 unchanged.
 
-The experimental WinApp `media:read` and optional `presentation:read` scopes
-add no table, column, index or dependency. Their temporary consent and read
-operations reuse existing linking authorization and public-media policy.
-Older servers that do not advertise the scopes keep the controls disabled.
+The WinApp `media:read` and `presentation:read` scopes reuse existing linking
+authorization and public-media policy. The four exact rolling presentation
+bundles require the existing 255-byte scope columns on requests, codes,
+grants, and refresh families, plus current refresh and presentation storage.
+Renewal retains the exact approved scope, including upload or metadata search
+when consented. Existing bundles retain their original permissions and storage
+requirements.
+
+The separately approved WinApp `media:admin` bundles reuse the same scope
+columns and existing grants. Admin gallery inventory and photo descriptors
+read indexed image and gallery metadata. Photo visibility changes fence the
+live grant and current photo state before updating the existing visibility
+field. No additional gallery, photo or cache table is required.
 
 ## Gallery music storage
 
@@ -1254,9 +1263,16 @@ hashed generations in `app_link_refresh_tokens`. Transactional row locks
 serialize rotation and replay revocation; foreign keys cascade grant removal
 to the family and its token hashes. Absolute and idle expiry bound authority,
 and retained generations provide replay evidence. Raw access and refresh
-credentials are not stored in these tables. Missing or unknown refresh schema
-does not authorize offline issuance or rotation. Legacy `gallery_upload_tokens`
-remain separate. The explicitly selected client refresh path is experimental
+credentials are not stored in these tables. Rolling consent reuses the
+existing family deadlines. Authenticated use or rotation advances both to
+seven days from the operation. The current refresh hash inherits that expiry.
+Rolling rotation can prune hashes consumed at least seven days ago and keeps
+`issued_count` equal to the retained hash count, with the existing 4,096 cap.
+Legacy offline consent retains its original 30-day absolute deadline,
+seven-day idle window and all consumed hashes until family deletion. Missing
+or unknown refresh schema does not authorize offline issuance or rotation.
+Legacy `gallery_upload_tokens` remain separate. The client refresh path is
+experimental
 and has not been qualified on Windows.
 
 The browser handoff reuses the existing hashed `app_link_requests` claim and
@@ -1271,6 +1287,16 @@ also checks the canonical issuer and core schema. The scheme, authority and
 mount bind each grant. Direct localhost HTTP grants are temporary. Unknown
 optional storage disables only its owned operation. Gallery-scoped `pgu_` credentials
 remain in `gallery_upload_tokens`.
+
+Migration `202611060001_app_linking_watch_keys` adds a separate
+`app_linking_watch_keys` table for contextual WinApp capture. Each row binds a
+SHA-256 key hash and UTC expiry to one exact `(grant_id, gallery_id)` primary
+key. Foreign keys cascade deletion of its linking grant or physical gallery.
+The live grant and temporary key must both authorize keyed inventory and
+upload requests. Keys expire after 24 hours. A confirmed finish deletes the
+matching hash, and a later capture replaces only its own grant/gallery row.
+Missing or unknown schema prevents temporary key operations. Classic
+`gallery_upload_tokens` and browser-link credential storage have separate owners.
 
 The experimental linked `galleries:create` scope is explicitly consented and
 requires verified wide scope storage. Its source prepares a durable

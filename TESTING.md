@@ -8185,7 +8185,11 @@ that HTTP refuses remote peers, proxy headers, and offline access and that
 WinApp filters non-loopback resolutions of localhost. Fresh install
 and update use the same key migration. Replay must preserve the installed key,
 and discovery GET and HEAD must leave key and request state unchanged. Test
-unavailable core readiness and unknown optional storage separately.
+unavailable core readiness and unknown optional storage separately. Scope
+fixtures distinguish the four basic rolling bundles from the four exact
+presentation bundles, verify preserved upload and search, and reject reordered
+or partial presentation authority. Discovery negotiation covers older servers
+and temporary fallback when the native credential vault is unavailable.
 For the browser handoff, cover the exact issuer/start URL, short-lived
 non-authorizing handle, session storage and query stripping before login,
 CSRF-protected binding, repeated consent in the same session, and refusal of
@@ -8221,6 +8225,158 @@ returns to **Link gallery** and disables access through that target while
 leaving saved API-key settings intact. Review consent at desktop and narrow
 widths. Verify Windows upload-target activation and saved credential storage
 separately from the portable linking flow.
+
+Verify Photos in the main window at normal and minimum width. With a live
+listing link, the hierarchy and initial photo grid should load directly after
+approval and when returning to Photos. With no live link, the pane's **Connect**
+action should open the existing address and browser approval flow. Include
+parents and children spanning server pages, individual and bulk expansion,
+rapid selection changes, empty galleries, and a gallery refused by public
+policy. Select a parent with folders and no direct photos. Verify the
+default-on **Subgalleries** switch, folder covers and placeholders, and that
+opening a card selects its child in the tree. Turning the switch off and on
+should preserve the tree and selected album. Confirm selection changes replace
+only the photo pane, including while Watcher has an upload target. Lightbox,
+fullscreen and contextual controls should stay in the main window and restore
+the grid and focus on dismissal. Exercise an album with more photos than a
+legacy or extended server page. Scroll into unvisited rows and check the
+network for viewport-driven thumbnails and bounded cursor reads. Switch
+albums with requests pending. Check Left and Right across both album ends,
+first-to-last before the complete metadata is loaded, and adjacent detail
+prefetch. Start a slideshow with and without scoped server settings and
+verify full-album looping. Use F and F11 to toggle fullscreen. Check that
+the toolbar, edge arrows and location panel are hidden there and that Escape
+restores windowed controls. Check
+that a clean 21:9 frame retains both edges in the thumbnail, lightbox and
+fullscreen. Include a dim scene with paired black side bars and a dark photo
+without bars. Thumbnails should show the resulting scene at its aspect ratio.
+Verify that the content-fit toggle removes and restores vertical and horizontal
+black bars in both lightbox viewing modes. Drag the window through several grid
+column breakpoints. Check for preview repaints during the drag and final image
+quality when it ends.
+Pass a 16-bit source through the native display path and record the rendered
+mode. The current Pillow/Tk surface uses 8-bit RGB.
+On macOS, launch from source with all `requirements.txt` dependencies in the
+same interpreter. Verify the normal window opens and exits. Compare the
+repaint after Close and Escape at normal and minimum widths. Include a loaded
+photo and a failed photo read so the underlying tree and tiles both redraw.
+Hover and focus a tile and an icon near a window edge. Verify that the themed
+tooltip stays readable inside the main window and disappears when navigating.
+Verify a stale or revoked link cannot publish gallery results, and confirm
+that the logon `--startup` path still starts in the system tray.
+On macOS and Windows, approve a continuing listing link, quit WinApp and
+launch it again after the short access token expires. Check HTTPS and direct
+localhost HTTP. Verify that Photos resumes after live identity verification
+without a browser prompt. Exercise active requests across access-token rotation,
+watcher and upload target continuity, and fresh approval after seven idle days,
+explicit unlink or server revocation. After a definitive rolling refresh refusal,
+verify passive startup and start fresh approval with the ordinary Link action.
+An ambiguous reply must keep the refresh fenced. The database fixture advances
+stored deadlines to exercise the seven-day extension on authenticated use and
+rotation, expiry, refresh replay, and the legacy HTTPS refresh cap. With the
+server temporarily unreachable before refresh, verify that a retry can reuse the
+original valid grant. Inspect the profile for address-only history and
+non-secret bindings. The rotating credential belongs in Keychain or Windows
+Credential Manager. Check temporary-link fallback on an older server.
+
+Use a current listing grant and an identity-only grant against the native
+photo endpoints. Listing must allow already-public photos, including from an
+existing upload or search session. Identity-only, revoked and wrong-issuer
+grants must fail. Check restricted ancestors, non-public/NSFW photos, and the
+separate `presentation:read` requirement for settings and tracks. With the
+smallest thumbnail missing, check the next existing rendition, then the
+bounded public display file when all configured thumbnails are absent.
+Request a detail whose source exceeds 16 MiB. Verify that an existing bounded
+display rendition is returned, and that an absent or oversized rendition
+produces the opaque unavailable response without generating files.
+Send `X-PHP-Gallery-Photo-Cache: 1` on a photo or thumbnail read and verify the
+private 60-second response and `Vary` on authorization and the opt-in header.
+Verify an authorized 304 refreshes metadata without rewriting the file.
+Check a matching entry older than 24 hours, warm reads, updated content and
+revocation. Exercise legacy eight-photo responses and the exact 64-photo
+opt-in. Send `X-PHP-Gallery-Track-Cache: 1` for a complete scoped track and
+check private opt-in, matching hash reuse, changed hash replacement and
+hidden or removed track refusal. Omit cache opt-ins and check that JSON,
+audio range and refused media keep `no-store`.
+With a two-track playlist, verify manual local playback, preparation of
+exactly the next track, handoff while disconnected, Stop and album-close
+cleanup. Use Windows audio output and the macOS source application. Confirm
+the shared cache keeps earlier photo entries, uses one byte and entry budget,
+and evicts by access when it reaches capacity.
+
+For Admin Photos, compare the ordinary link and newly consented rolling
+`media:admin` link against an unpublished or NSFW gallery and direct photo.
+Check a closed or revoked grant and cross-gallery photo requests. Inspect
+the restricted binary's no-store response and the absence of a persistent
+cache entry. Try a photo visibility change with the previous value, then
+with a stale value. Refresh the source after a conflict or uncertain reply.
+Check root and child creation under the existing creation intent and receipt.
+Approve Admin Photos over an existing saved rolling listing link. Verify the
+same issuer and account, immediate Photos inventory and creation actions, and
+renewal after restart. Exercise vault publication failure and retain the old
+link. Check root and child creation from their toolbar controls, gallery rows
+and blank photo space. Review the inline music action at narrow width.
+
+Use a photo with indexed geometry, capture settings and GPS for Admin
+Information. Check the photo's own gallery, wrong-gallery refusal, no-store,
+and the gallery's map setting. Verify that public-only scopes cannot obtain
+the detail response. Compare short and long details in the anchored card and
+click the tree, a photo, blank space or the navigation rail to dismiss it.
+
+Check that the manual refresh and a changed Admin revision show newly indexed
+photos while retaining the current scroll position and unchanged thumbnails.
+Check first-probe reconciliation, delayed responses after switching albums, and
+retry after a transient failure. Close and reopen the app to verify tree state
+for the same Admin and isolation between sites and accounts. During capture
+inspect the pulsing rail and the filled target and hollow collapsed-branch
+markers at desktop and narrow widths.
+
+The disposable `app_linking_gallery_detail_test.php` fixture checks that a
+saved `media:admin` grant delegates a valid batch once, while public-only,
+revoked, stale and cross-gallery authority fails before delegation. It also verifies
+that an already-issued exact `media:delete` scope remains usable. It records
+delegation. Filesystem mutation belongs to the web Admin deletion owner. In WinApp,
+confirm one photo and a selection, cancel a confirmation, and inspect the album
+after an interrupted response.
+
+Start Watcher from the chosen Photos gallery and from the Watcher rail menu.
+Queue a deferred gallery search during preparation and check that the Watcher
+receives its start result first. Check the Watcher panel's refusal feedback.
+Verify the displayed destination, configured folder, active REC indicator,
+and successful upload with the exact capture key. Try a mismatched gallery,
+grant, expired key, and stale close after replacement. The final write
+admission must recheck the key. Finish a game without making reports and
+finish a captured simulator flight after exiting the simulator. Verify the
+queue drains, available flight reports are saved locally, and the capture
+key is revoked while Photos can still use the site link. Exercise an
+uncertain close and a retry against the same key generation.
+
+Return to an earlier album with an expired disk thumbnail. A matching strong
+validator from the current authorized metadata must let the grid use the
+cached bytes without another binary request. Exercise a changed validator,
+a missing validator on an older server, and a gallery that is no longer
+public. Compare cloud, partial and downloaded cache indicators against
+current catalogue and local-file coverage.
+
+Open the lightbox with a compatible HDR source and an EDR display on macOS.
+Check the same-window AppKit surface and extended image headroom before and
+after fullscreen, zoom, pan and control reveal. Check SDR fallback with an
+SDR source or display. Verify the wheel or trackpad zoom, 0 reset, movement
+reveal and timed hide. Start a configured presentation from the grid and
+verify fullscreen, automatic advance, automatic music and manual pause or
+track changes. Compare contextual panels at desktop and narrow widths,
+including an outside click, Escape, and macOS Control-click.
+Deliver both a legacy wheel notch and a packed Tk TouchpadScroll event over
+a thumbnail and in the photo overlay. Verify grid movement and zoom in both
+lightbox modes. Check that unknown cache coverage has no tree icon.
+The native Tk fixture reclaims destroyed widget cycles on the Tk owner thread
+between tests so finalizers cannot consume the cover worker's readiness deadline.
+
+Drive at least 125 photo or thumbnail requests within the same rate window
+and verify that the catalogue and media metadata still load. Include conditional
+GETs. Separately exhaust the photo budget and check the 429 response, bounded
+`Retry-After`, the photo viewer's rate-limit message and recovery through Retry.
+Verify that anonymous or invalid photo requests still have bounded admission.
 
 On MAMP with Apache `mod_fastcgi` and no `mod_rewrite`, check that approval
 finishes code exchange and that the subsequent bearer requests verify identity
@@ -8444,11 +8600,11 @@ commit through exact-fingerprint CLI recovery. Installed GUI, MariaDB and
 deployed behavior remain unqualified. See `docs/APP_LINKING_PHASE_0.md` for the
 recovery boundary and remaining acceptance.
 
-M5 adds separately approved temporary `media:read` consent and optional
-`presentation:read` consent. The internal Codex render fixture passed at
-desktop 1000 px and narrow 360 px, including both permission descriptions and
-44 px narrow actions. No browser HTTPS journey was run by owner choice. The
-disposable HTTPS protocol fixture verified thumbnails, paging, permission
+The earlier separate media reader used temporary `media:read` consent and
+optional `presentation:read` consent. A browser render fixture passed at
+desktop 1000 px and narrow 360 px for both permission descriptions and 44 px
+narrow actions. The disposable HTTPS protocol fixture verified thumbnails,
+paging, permission
 denials, ETag and WAV bytes with an authorized range. In the first native Tk
 run, the displayed image was correct but the test expected RGB instead of
 RGBA; the test now checks every channel. The Windows audio fixture attempts
@@ -8459,6 +8615,23 @@ The feature retains existing authorization and HTTPS policy, pages at
 most eight direct public photos, limits each binary to 16 MiB, and exposes at
 most 32 visible MP3/WAV tracks. See `docs/APP_LINKING_PHASE_0.md` for the
 ancestor and visibility restrictions.
+
+Current viewer source coverage lives in
+`winapp/tests/test_native_gallery_viewer.py` and
+`winapp/tests/test_app_linking.py`. It checks responsive grid columns, selected
+photo detail, tile Return activation, keyboard navigation across a page cursor,
+bounded zoom, Escape ordering, outside-click close and focus return, slideshow
+page continuation, Escape during a pending page read and parent-destroy
+cancellation. Adjacent prefetch coverage checks foreground use of prepared
+pixels without a second download. Transport fixtures cover fresh disk reuse,
+conditional revalidation, expiry, exact installation and rendition keys,
+legacy `no-store` responses, and denied stale reads. The page fixture asserts
+cursor requests `[None, TEST_SECOND_IMAGE_ID, None]` and previous-page selection.
+Location coverage checks absent GPS, valid-to-absent clearing, the anchored
+panel and the exact OpenStreetMap URL after explicit activation. Connection
+coverage keeps closing the upload picker independent of the active Photos
+reader. Installed Windows click-through and audible playback require separate
+verification.
 
 The issue #345 feature diagnostic also prepares runtime artifacts in an
 ephemeral checkout and delegates PHP regression to the existing disposable

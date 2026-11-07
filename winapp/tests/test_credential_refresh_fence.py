@@ -10,7 +10,10 @@
 # License: MIT License (see LICENSE file in repository)
 """Exercise the refresh protocol with in-memory vault and mutex doubles."""
 
+import os
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import TracebackType
 from unittest.mock import MagicMock, patch
 
@@ -353,6 +356,37 @@ class CredentialProcessMutexTests(unittest.TestCase):
         mutex._kernel.CloseHandle.assert_called_once_with(42)
         key = credentials._enter_process_mutex(b'test-sid', 'test-target')
         credentials._leave_process_mutex(key)
+
+
+
+class KeychainRefreshFenceTests(unittest.TestCase):
+    """Exercise the native profile lock with an isolated Keychain boundary."""
+
+    @unittest.skipUnless(os.name == 'posix', 'Keychain adapter uses POSIX flock.')
+    def test_pending_marker_survives_lock_release_and_store_reopen(self) -> None:
+        """Refuse concurrent rotation and block the old record after failure.
+
+        Returns:
+            None: Separate owners share one lock and a persistent vault fence.
+        """
+        issuer = 'http://localhost:8888/Galerie'
+        account = 12
+        vault = _Vault()
+        with TemporaryDirectory() as directory, (
+            patch.object(credentials, '_KeychainCredentialApi', return_value=vault)
+        ):
+            first = credentials.KeychainCredentialStore(Path(directory))
+            reopened = credentials.KeychainCredentialStore(Path(directory))
+            first.write(issuer, account, b'old')
+            with first.refresh_transaction(issuer, account) as transaction:
+                self.assertEqual(b'old', transaction.read_current())
+                transaction.begin_rotation()
+                with self.assertRaises(credentials.CredentialStoreError):
+                    reopened.read(issuer, account)
+            with self.assertRaises(credentials.CredentialStoreError):
+                reopened.read(issuer, account)
+            self.assertTrue(reopened.discard_pending_refresh(issuer, account))
+            self.assertIsNone(first.read(issuer, account))
 
 
 if __name__ == '__main__':

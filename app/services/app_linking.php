@@ -25,6 +25,10 @@ use function Gallery\Models\app_link_model_lookup_token;
 use function Gallery\Models\app_link_model_pending_code_scope;
 use function Gallery\Models\app_link_model_revoke;
 use function Gallery\Models\app_link_model_revoke_token;
+use function Gallery\Models\app_link_model_watch_key_open;
+use function Gallery\Models\app_link_model_watch_key_close;
+use function Gallery\Models\app_link_model_watch_key_valid;
+use function Gallery\Models\app_link_refresh_model_extend_on_access;
 use function Gallery\Models\app_settings_model_get;
 use function Gallery\Models\gallery_model_linked_client_page;
 use function Gallery\Models\gallery_model_linked_detail;
@@ -199,12 +203,15 @@ function app_linking_require_schema(array $status): void
  * account, grant, scope and target. Missing optional storage hides only that
  * operation, while unavailable core storage hides linking altogether.
  *
- * @param bool $allowRefresh Whether the transport permits offline access.
+ * @param bool $allowRefresh Whether the transport permits legacy offline access.
+ * @param bool $allowRolling Whether the verified issuer permits rolling access.
  * @return list<string> Ready capability identifiers, or an empty list when
  *     linking cannot safely issue and revoke its own credentials.
  */
-function app_linking_discovery_capabilities(bool $allowRefresh = true): array
-{
+function app_linking_discovery_capabilities(
+    bool $allowRefresh = true,
+    bool $allowRolling = false,
+): array {
     try {
         app_link_push_key('discovery');
         foreach ([
@@ -226,9 +233,11 @@ function app_linking_discovery_capabilities(bool $allowRefresh = true): array
         'gallery:read' => APP_LINKING_READ_SCOPE,
         'gallery:upload' => APP_LINKING_UPLOAD_SCOPE,
         'offline_access' => APP_LINKING_IDENTITY_OFFLINE_SCOPE,
+        'rolling_access' => APP_LINKING_GALLERIES_ROLLING_SCOPE,
     ];
     foreach ($optional as $capability => $scope) {
-        if ($capability === 'offline_access' && !$allowRefresh) {
+        if (($capability === 'offline_access' && !$allowRefresh)
+            || ($capability === 'rolling_access' && !$allowRolling)) {
             continue;
         }
         try {
@@ -236,7 +245,7 @@ function app_linking_discovery_capabilities(bool $allowRefresh = true): array
                 'galleries:list' => app_linking_gallery_listing_schema_status(),
                 'gallery:read' => app_linking_gallery_detail_schema_status(),
                 'gallery:upload' => app_linking_upload_schema_status(),
-                'offline_access' => app_link_refresh_schema_status(),
+                'offline_access', 'rolling_access' => app_link_refresh_schema_status(),
             };
             if (schema_inspection_is_available($status)
                 && app_linking_scope_allowed(APP_LINKING_WINAPP_CLIENT_ID, $scope)
@@ -283,10 +292,30 @@ function app_linking_discovery_capabilities(bool $allowRefresh = true): array
         $capabilities[] = 'media:read';
         if (app_linking_scope_allowed(
             APP_LINKING_WINAPP_CLIENT_ID,
+            APP_LINKING_GALLERIES_SCOPE . APP_LINKING_ADMIN_MEDIA_SUFFIX,
+        )) {
+            $capabilities[] = 'media:admin';
+            if (app_linking_admin_media_delete_ready() && app_linking_scope_allowed(
+                APP_LINKING_WINAPP_CLIENT_ID,
+                APP_LINKING_GALLERIES_SCOPE . APP_LINKING_ADMIN_MEDIA_SUFFIX
+                    . APP_LINKING_ADMIN_DELETE_SUFFIX,
+            )) {
+                $capabilities[] = 'media:delete';
+            }
+        }
+        if (app_linking_scope_allowed(
+            APP_LINKING_WINAPP_CLIENT_ID,
             APP_LINKING_GALLERIES_SCOPE . APP_LINKING_PRESENTATION_SUFFIX,
         )) {
             $capabilities[] = 'presentation:read';
         }
+    }
+    if (in_array('rolling_access', $capabilities, true)
+        && in_array('presentation:read', $capabilities, true)
+        && app_linking_scope_allowed(
+            APP_LINKING_WINAPP_CLIENT_ID, APP_LINKING_GALLERIES_PRESENTATION_ROLLING_SCOPE,
+        )) {
+        $capabilities[] = 'presentation:rolling';
     }
     return $capabilities;
 }
@@ -444,21 +473,13 @@ function app_linking_exchange_code(
                 && ($refreshReady || !app_linking_scope_requests_refresh($scope))
                 && app_linking_scope_allowed($clientId, $scope),
         ));
-        $refreshScopes = $refreshReady ? [
-            APP_LINKING_IDENTITY_OFFLINE_SCOPE,
-            APP_LINKING_GALLERIES_OFFLINE_SCOPE,
-            APP_LINKING_UPLOAD_OFFLINE_SCOPE,
-            APP_LINKING_READ_OFFLINE_SCOPE,
-            APP_LINKING_READ_UPLOAD_OFFLINE_SCOPE,
-            APP_LINKING_CREATE_OFFLINE_SCOPE,
-            APP_LINKING_READ_CREATE_OFFLINE_SCOPE,
-            APP_LINKING_UPLOAD_CREATE_OFFLINE_SCOPE,
-            APP_LINKING_READ_UPLOAD_CREATE_OFFLINE_SCOPE,
-            APP_LINKING_VISIBILITY_OFFLINE_SCOPE,
-            APP_LINKING_UPLOAD_VISIBILITY_OFFLINE_SCOPE,
-            APP_LINKING_CREATE_VISIBILITY_OFFLINE_SCOPE,
-            APP_LINKING_UPLOAD_CREATE_VISIBILITY_OFFLINE_SCOPE,
-        ] : [];
+        // Only the locked pending scope can be exchanged. Every registered
+        // offline bundle uses the same atomic refresh issuance owner.
+        $refreshScopes = $refreshReady
+            && app_linking_scope_requests_refresh($pendingScope)
+            ? $allowedScopes : [];
+        $familyTtl = app_linking_scope_requests_rolling($pendingScope)
+            ? APP_LINK_REFRESH_IDLE_TTL_SECONDS : APP_LINK_REFRESH_FAMILY_TTL_SECONDS;
         $rawToken = null;
         $rawRefreshToken = null;
         $grant = app_link_model_exchange(
@@ -488,7 +509,7 @@ function app_linking_exchange_code(
                 return $hash;
             },
             $reclaimState,
-            APP_LINK_REFRESH_FAMILY_TTL_SECONDS,
+            $familyTtl,
             APP_LINK_REFRESH_IDLE_TTL_SECONDS,
             $pendingScope,
         );
@@ -516,7 +537,7 @@ function app_linking_exchange_code(
 }
 
 /**
- * Resolve an active identity token only against its live permitted grant.
+ * Resolve a live permitted grant and renew its rolling inactivity window.
  *
  * @param string $token Raw bearer token supplied by the client.
  * @param string $issuer Independently trusted exact installation origin and mount.
@@ -533,9 +554,22 @@ function app_linking_authenticate(string $token, string $issuer): ?array
     try {
         app_linking_require_schema(app_linking_authentication_schema_status());
         $identity = app_link_model_lookup_token($hash, $issuer);
-        return $identity !== null
-            && app_linking_scope_allowed(APP_LINKING_WINAPP_CLIENT_ID, $identity['scope'])
-            ? $identity : null;
+        if ($identity === null
+            || !app_linking_scope_transport_allowed($issuer, $identity['scope'])
+            || !app_linking_scope_allowed(APP_LINKING_WINAPP_CLIENT_ID, $identity['scope'])) {
+            return null;
+        }
+        if (app_linking_scope_requests_rolling($identity['scope'])) {
+            app_linking_require_schema(app_link_refresh_schema_status());
+            if (!app_link_refresh_model_extend_on_access(
+                $identity['grant_id'], $identity['user_id'], $hash,
+                APP_LINKING_WINAPP_CLIENT_ID, $issuer, $identity['scope'],
+                APP_LINK_REFRESH_IDLE_TTL_SECONDS,
+            )) {
+                return null;
+            }
+        }
+        return $identity;
     } catch (Throwable) {
         throw new RuntimeException('App linking is unavailable.');
     }
@@ -565,16 +599,7 @@ function app_linking_gallery_page(
         return null;
     }
     $identity = app_linking_authenticate($token, $issuer);
-    if ($identity === null || !in_array(
-        app_linking_scope_base($identity['scope']),
-        [APP_LINKING_GALLERIES_SCOPE, APP_LINKING_UPLOAD_SCOPE,
-            APP_LINKING_READ_SCOPE, APP_LINKING_READ_UPLOAD_SCOPE,
-            APP_LINKING_CREATE_SCOPE, APP_LINKING_READ_CREATE_SCOPE,
-            APP_LINKING_UPLOAD_CREATE_SCOPE, APP_LINKING_READ_UPLOAD_CREATE_SCOPE,
-            APP_LINKING_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_VISIBILITY_SCOPE,
-            APP_LINKING_CREATE_VISIBILITY_SCOPE, APP_LINKING_UPLOAD_CREATE_VISIBILITY_SCOPE],
-        true,
-    )) {
+    if ($identity === null || !app_linking_scope_allows_gallery_listing($identity['scope'])) {
         return null;
     }
     try {
@@ -737,6 +762,7 @@ function app_linking_gallery_detail(
  * @param string $token Raw native bearer provided over verified HTTPS.
  * @param string $issuer Exact configured installation issuer.
  * @param int $galleryId Positive server-owned physical gallery identifier.
+ * @param string|null $watchKey Optional client-generated gallery watcher key.
  * @return array{id:int|string,folder_path:string,title:string,...}|null Current
  *     authorized gallery database row for the internal workflow, or null when
  *     identity, scope, grant or target is no longer valid.
@@ -746,6 +772,7 @@ function app_linking_upload_target(
     string $token,
     string $issuer,
     int $galleryId,
+    ?string $watchKey = null,
 ): ?array {
     if ($galleryId <= 0) {
         return null;
@@ -765,13 +792,67 @@ function app_linking_upload_target(
         if ($hash === null) {
             return null;
         }
-        return gallery_model_linked_upload_target(
+        $target = gallery_model_linked_upload_target(
             $identity['grant_id'], $identity['user_id'], $hash, $issuer,
             $identity['scope'], $galleryId,
         );
+        if ($target === null || $watchKey === null) {
+            return $target;
+        }
+        if (preg_match('/\Apgw_[a-f0-9]{64}\z/D', $watchKey) !== 1) {
+            return null;
+        }
+        app_linking_require_schema(app_linking_watch_key_schema_status());
+        return app_link_model_watch_key_valid(
+            $identity['grant_id'], $identity['user_id'], $hash, $issuer,
+            $identity['scope'], $galleryId, hash('sha256', $watchKey),
+        ) ? $target : null;
     } catch (Throwable) {
         throw new RuntimeException('App linking is unavailable.');
     }
+}
+
+/**
+ * Open or replace the exact gallery watcher generation after explicit client action.
+ * @param array{grant_id:int,user_id:int,scope:string} $identity Authenticated grant identity.
+ * @param string $token Current bearer credential.
+ * @param string $issuer Exact configured installation issuer.
+ * @param int $galleryId Selected physical gallery.
+ * @param string $keyHash Lowercase SHA-256 digest of the client key.
+ * @return bool True when the current grant still owns the authorized gallery.
+ */
+function app_linking_watch_key_open(
+    array $identity, string $token, string $issuer, int $galleryId, string $keyHash,
+): bool {
+    app_linking_require_schema(app_linking_upload_schema_status());
+    app_linking_require_schema(app_linking_watch_key_schema_status());
+    $target = app_linking_upload_target($token, $issuer, $galleryId);
+    $current = app_linking_authenticate($token, $issuer);
+    if ($target === null || $current === null
+        || $current['grant_id'] !== $identity['grant_id']) {
+        return false;
+    }
+    $tokenHash = app_linking_access_token_hash($token);
+    if ($tokenHash === null) {
+        return false;
+    }
+    return app_link_model_watch_key_open(
+        $identity['grant_id'], $identity['user_id'], $tokenHash, $issuer,
+        $identity['scope'], $galleryId, $keyHash,
+    );
+}
+
+/**
+ * Close only the exact watcher generation supplied by this client.
+ * @param int $grantId Current authenticated grant identifier.
+ * @param int $galleryId Selected gallery identifier.
+ * @param string $keyHash Client generation digest.
+ * @return void Removal is idempotent and cannot revoke a replacement hash.
+ */
+function app_linking_watch_key_close(int $grantId, int $galleryId, string $keyHash): void
+{
+    app_linking_require_schema(app_linking_watch_key_schema_status());
+    app_link_model_watch_key_close($grantId, $galleryId, $keyHash);
 }
 
 /**
