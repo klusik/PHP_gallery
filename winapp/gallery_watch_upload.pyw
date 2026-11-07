@@ -126,7 +126,9 @@ from uploader.linked_upload import (
     LinkedTargetLease,
     LinkedThumbnail,
     LinkedUploadTarget,
+    _FileSegment,
     capture_linked_source,
+    delete_verified_linked_source,
     linked_target_binding,
     verify_linked_source,
 )
@@ -457,6 +459,12 @@ DEFAULT_INVENTORY_REFRESH_SECONDS = 30.0
 # Consumers: WatcherApp._pulse_watcher_recording.
 # Rationale: 800 ms alternation stays noticeable while never hiding the marker.
 WATCHER_RECORDING_PULSE_MS = 800
+
+# Purpose: Animate unknown-duration Watcher linking and initial folder capture.
+# Type: int. Units: milliseconds. Scope: Watcher startup activity only.
+# Consumers: WatcherApp._set_watch_start_activity.
+# Rationale: 50 ms keeps activity visible without suggesting measured progress.
+WATCHER_START_ACTIVITY_MS = 50
 # Purpose: Bound persisted Photos expansion entries against malformed growth.
 # Type: int. Units: gallery IDs. Scope: one site/account preference file.
 # Consumers: WatcherApp.load_photos_tree_state and save_photos_tree_state.
@@ -522,8 +530,8 @@ class WatcherConfig:
 
     Args:
         schema_version (int): Existing configuration migration marker.
-        delete_uploaded_files (bool): Saved deletion preference; source
-            deletion is temporarily unavailable and files are retained.
+        delete_uploaded_files (bool): Saved preference to delete a watched
+            source after exact captured bytes receive upload confirmation.
         watch_recursive (bool): Include descendants in watch-folder discovery.
         manual_thumbnail_mode (str): Server or local thumbnail generation.
         archive_max_entries (int): Maximum accepted ZIP entry count.
@@ -601,7 +609,7 @@ class WatcherConfig:
     attach_sim_camera_metadata: bool = True
     simconnect_dll_path: str = ""
     sync_utc_time: bool = False
-    delete_uploaded_files: bool = False
+    delete_uploaded_files: bool = True
     watch_recursive: bool = bool(REDESIGN_CONFIG_DEFAULTS["watch_recursive"])
     manual_thumbnail_mode: str = str(REDESIGN_CONFIG_DEFAULTS["manual_thumbnail_mode"])
     manual_thumbnail_workers: int = 0
@@ -666,7 +674,7 @@ class WatcherConfig:
             attach_sim_camera_metadata=bool(data.get("attach_sim_camera_metadata", True)),
             simconnect_dll_path=str(data.get("simconnect_dll_path", "")),
             sync_utc_time=data.get("sync_utc_time", False) is True,
-            delete_uploaded_files=bool(data.get("delete_uploaded_files", False)),
+            delete_uploaded_files=bool(data.get("delete_uploaded_files", True)),
             watch_recursive=bool(data.get("watch_recursive", REDESIGN_CONFIG_DEFAULTS["watch_recursive"])),
             manual_thumbnail_mode=str(data.get("manual_thumbnail_mode", REDESIGN_CONFIG_DEFAULTS["manual_thumbnail_mode"]) or "server"),
             manual_thumbnail_workers=int(data.get("manual_thumbnail_workers", 0) or 0),
@@ -4617,13 +4625,14 @@ class WatcherThread(threading.Thread):
         self.stop_event.set()
 
     def configure_drain(
-        self, directory: Path, initial: Iterable[Path], resume: bool = False
+        self, directory: Path, initial: Iterable[Path] | None, resume: bool = False
     ) -> None:
         """Persist photograph admission before starting the watcher thread.
 
         Args:
             directory (Path): Connection-bound flight session workspace.
-            initial (Iterable[Path]): Files present at explicit watcher start.
+            initial (Iterable[Path] | None): Captured startup exclusions, or
+                None to capture the initial folder on the worker before REC.
             resume (bool): Restore only a previously frozen accepted file set.
 
         Returns:
@@ -4648,10 +4657,12 @@ class WatcherThread(threading.Thread):
                 self._linked_lease.release()
                 raise
         self.drain_manifest = directory / "watch-drain.json"
-        self.initial_paths = set(initial)
-        self.initial_captured = True
+        self.initial_paths = set(initial) if initial is not None else set()
+        self.initial_captured = initial is not None
         if resume:
             row = read_document(self.drain_manifest)
+            if row.get("initial_captured", True) is not True:
+                raise ValueError("Watcher startup did not finish; no photos were accepted.")
             paths = row.get("pending")
             if not isinstance(paths, list):
                 raise ValueError("Pending photograph queue is malformed.")
@@ -4695,7 +4706,11 @@ class WatcherThread(threading.Thread):
                                   else self._watch_recursive_override),
                     "initial": sorted(str(path) for path in self.initial_paths),
                     "pending": sorted(str(path) for path in self.accepted_paths),
-                    "frozen": self.drain_only,
+                    # An interrupted initial scan accepted nothing. Keeping
+                    # that empty boundary frozen also makes older readers
+                    # retain historical files instead of discovering them.
+                    "initial_captured": self.initial_captured,
+                    "frozen": self.drain_only or not self.initial_captured,
                     "cutoff": self.drain_requested_at,
                     "checkpoint": time.time(),
                     "error": self.drain_error,
@@ -4776,6 +4791,10 @@ class WatcherThread(threading.Thread):
             if self._linked_lease is not None:
                 self._linked_lease.release()
 
+            self.events.put({
+                "kind": "watcher_start_finished", "payload": {"worker": self},
+            })
+
     def _run_owned(self) -> None:
         """Observe new photographs, then drain a frozen recoverable queue.
 
@@ -4800,9 +4819,27 @@ class WatcherThread(threading.Thread):
             self.emit("error", self.drain_error)
             return
         if not self.initial_captured:
-            self.initial_paths = set(
-                iter_candidate_files(folder, recursive)
-            )
+            try:
+                existing = set(iter_candidate_files(folder, recursive))
+                with self._admission_lock:
+                    self.initial_paths = existing
+                    self.initial_captured = True
+                    # Stop during startup admits no new screenshots. The
+                    # complete initial snapshot must never become its queue.
+                    if self.drain_event.is_set() or self.stop_event.is_set():
+                        self.drain_only = True
+                    self.persist_drain()
+            except (OSError, ValueError, RuntimeError):
+                self.drain_error = "Could not read the screenshot folder. Check access and retry."
+                self.stop_event.set()
+                self.persist_drain()
+                self.emit("error", self.drain_error)
+                return
+        if not self.drain_only and not self.stop_event.is_set():
+            self.events.put({
+                "kind": "watcher_start_ready",
+                "payload": {"worker": self, "ignored": len(self.initial_paths)},
+            })
         self.emit("info", f"Watching {folder}")
         self.emit("info", f"Upload endpoint: {upload_url}")
         self.emit(
@@ -5047,10 +5084,8 @@ class WatcherThread(threading.Thread):
                         self.emit("info", f"[simconnect] Stored Flight Simulator location for {path.name}.")
                     elif sim_error:
                         self.emit("warning", f"Uploaded {path.name}, but simulator location metadata was not stored: {sim_error}")
-                if self.config.delete_uploaded_files and self.linked_target is None:
-                    self.delete_uploaded_file(path, payload)
-                elif self.config.delete_uploaded_files:
-                    self.emit('info', 'Linked upload keeps the local source file.')
+                if self.config.delete_uploaded_files:
+                    self.delete_uploaded_file(path, payload, linked_source)
             except (ModeCoordinatorError, GalleryKeyRedirectError):
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -5247,22 +5282,40 @@ class WatcherThread(threading.Thread):
             self.emit("warning", f"[simconnect] Simulator location acquisition failed for {path.name}: {exc}. Upload will continue without simulator location.")
             return {}
 
-    def delete_uploaded_file(self, path: Path, payload: Dict[str, Any]) -> None:
-        """Retain the source while safe deletion ownership is unavailable.
+    def delete_uploaded_file(
+        self, path: Path, payload: Dict[str, Any],
+        snapshot: _FileSegment | None = None,
+    ) -> None:
+        """Delete only a Windows source matching exact upload evidence.
 
         Args:
             path (Path): Local image path that was submitted.
             payload (Dict[str, Any]): Gallery response with ok/uploaded and
-                optional metadata; it cannot prove the current path identity.
+                optional metadata, validated by the upload owner.
+            snapshot (_FileSegment | None): Captured source identity and digest;
+                None for direct callers without a verified candidate.
 
         Returns:
-            None: The saved deletion preference remains intact and the
-                current source is kept for manual review.
+            None: Deletes the exact positively uploaded source, or retains it
+                with a warning when safe same-handle deletion is unavailable.
         """
-        self.emit(
-            "warning",
-            f"Kept {path.name}: automatic source deletion is temporarily unavailable.",
-        )
+        if (payload.get('ok') is not True or type(payload.get('uploaded')) is not int
+                or payload.get('uploaded') != 1 or snapshot is None
+                or snapshot.path != path):
+            self.emit(
+                'warning',
+                f'Kept {path.name}: upload confirmation or source identity was unavailable.',
+            )
+            return
+        try:
+            delete_verified_linked_source(snapshot)
+        except Exception:  # noqa: BLE001
+            self.emit(
+                'warning',
+                f'Kept {path.name}: the confirmed source could not be safely deleted.',
+            )
+            return
+        self.emit('info', f'Deleted confirmed upload source: {path.name}')
 
 
 class ManualUploadThread(threading.Thread):
@@ -6788,7 +6841,6 @@ class WatcherApp:
         self.sync_utc_time_var = tk.BooleanVar(value=self.config.sync_utc_time)
         self.utc_sync_status_var = tk.StringVar(value="UTC sync stopped")
         self.delete_uploaded_files_var = tk.BooleanVar(value=self.config.delete_uploaded_files)
-        self.delete_unavailable_var = tk.BooleanVar(value=False)
         self.watch_recursive_var = tk.BooleanVar(value=self.config.watch_recursive)
         self.manual_folder_recursive_var = tk.BooleanVar(value=False)
         self.delete_source_zip_var = tk.BooleanVar(value=False)
@@ -6859,6 +6911,8 @@ class WatcherApp:
         self._watcher_recording_after: Optional[str] = None
         self._watcher_recording_target: LinkedUploadTarget | None = None
         self._watcher_recording_active = False
+        self._watch_start_pending = False
+        self.watch_start_progress: Optional[ttk.Progressbar] = None
         self.latest_activity_label: Optional["ttk.Label"] = None
 
         # Uncertain linked uploads remain blocked rather than recoverable, but
@@ -7316,6 +7370,8 @@ class WatcherApp:
         Returns:
             None: Starts, finishes or opens the pending queue for recovery.
         """
+        if getattr(self, "_watch_start_pending", False) is True:
+            return
         state = self.flights.session_state()
         if state == "working":
             self.flights.show_progress()
@@ -7337,6 +7393,12 @@ class WatcherApp:
         """
         if self.watcher_action_button is None:
             return
+        if getattr(self, "_watch_start_pending", False) is True:
+            self.watcher_action_button.configure(
+                text="Starting Watcher…", state="disabled",
+            )
+            return
+        self.watcher_action_button.configure(state="normal")
         state = self.flights.session_state()
         if (state == "active"
                 and isinstance(getattr(self, "_contextual_watch_target", None),
@@ -7405,6 +7467,8 @@ class WatcherApp:
             not self.exiting and worker is not None and worker.is_alive()
             and not worker.stop_event.is_set()
             and not worker.drain_only
+            and not worker.drain_event.is_set()
+            and getattr(worker, "initial_captured", True)
         )
         target = getattr(worker, "linked_target", None) if active else None
         if (not isinstance(target, LinkedUploadTarget)
@@ -8127,12 +8191,20 @@ class WatcherApp:
             card, textvariable=self.watch_folder_display_var,
             style="Muted.TLabel", wraplength=WINDOW_SUMMARY_WRAP,
         ).grid(row=1, column=0, sticky="w", pady=(1, 4))
+        startup_status = ttk.Frame(card, style="Card.TFrame")
+        startup_status.grid(row=2, column=0, sticky="ew", pady=(1, 3))
+        startup_status.columnconfigure(0, weight=1)
         ttk.Label(
-            card, textvariable=self.status_var, style="Status.TLabel",
+            startup_status, textvariable=self.status_var, style="Status.TLabel",
             wraplength=WINDOW_SUMMARY_WRAP,
-        ).grid(
-            row=2, column=0, sticky="w", pady=(1, 3)
+        ).grid(row=0, column=0, sticky="w")
+        self.watch_start_progress = ttk.Progressbar(
+            startup_status, mode="indeterminate",
         )
+        self.watch_start_progress.grid(
+            row=1, column=0, sticky="ew", pady=(4, 4),
+        )
+        self.watch_start_progress.grid_remove()
         state = ttk.Frame(card, style="Card.TFrame")
         state.grid(row=3, column=0, sticky="ew", pady=(0, 5))
         ttk.Label(state, textvariable=self.watch_ignored_var, style="Muted.TLabel").pack(side="left")
@@ -8263,15 +8335,15 @@ class WatcherApp:
         ).grid(row=6, column=0, sticky="w", pady=(8, 0))
         ttk.Checkbutton(
             panel,
-            text="Automatic deletion unavailable",
-            variable=self.delete_unavailable_var,
-            state="disabled",
+            text="Delete uploaded photos from this PC",
+            variable=self.delete_uploaded_files_var,
             command=self.refresh_watch_delete_warning,
         ).grid(row=7, column=0, sticky="w", pady=(6, 0))
         ttk.Label(
             panel,
-            text="Photos are kept for manual review.",
+            text="After confirmed upload. Existing and changed files are kept.",
             style="Muted.TLabel",
+            wraplength=WINDOW_SUMMARY_WRAP,
         ).grid(row=8, column=0, sticky="w", padx=(24, 0), pady=(1, 0))
         footer = GlassCard(dialog, padding=(14, 10))
         footer.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 12))
@@ -9941,6 +10013,49 @@ class WatcherApp:
             self._contextual_watch_is_flight = type(samples) is int and samples > 0
         return self._contextual_watch_is_flight
 
+    def _set_watch_start_activity(self, active: bool, message: str = "") -> None:
+        """Paint explicit startup feedback without admitting screenshot work.
+
+        Args:
+            active (bool): Whether linking or the initial folder scan is pending.
+            message (str): Current preparation phase, or empty to retain status.
+
+        Returns:
+            None: Shows activity and prevents repeated Start actions until ready.
+        """
+        self._watch_start_pending = active
+        if message:
+            self.status_var.set(message)
+        progress = getattr(self, "watch_start_progress", None)
+        if progress is not None:
+            if active:
+                progress.grid()
+                progress.start(WATCHER_START_ACTIVITY_MS)
+            else:
+                progress.stop()
+                progress.grid_remove()
+        button = getattr(self, "watcher_action_button", None)
+        if button is not None:
+            button.configure(
+                text="Starting Watcher…" if active else "▶  Start Watcher",
+                state="disabled" if active else "normal",
+            )
+        if active:
+            # Paint the phase before synchronous local ownership checks. The
+            # potentially long folder scan itself runs on the watcher thread.
+            self.root.update_idletasks()
+
+    def _watch_start_failed(self, message: str) -> None:
+        """End the original Photos startup request with its safe refusal.
+
+        Args:
+            message (str): Fixed user-facing refusal supplied by the link owner.
+
+        Returns:
+            None: Restores the idle action and leaves the reason in Watcher.
+        """
+        self._set_watch_start_activity(False, message)
+
     def open_gallery_watcher(
         self, session: LinkingSession, gallery: LinkedGallery,
     ) -> None:
@@ -9953,19 +10068,24 @@ class WatcherApp:
         Returns:
             None: Opens existing progress or requests temporary Watcher authority.
         """
-        if self.updates.blocked():
+        if self.updates.blocked() or getattr(self, "_watch_start_pending", False) is True:
             return
         self.select_tab("watch")
+        self._set_watch_start_activity(True, "Checking the Watcher connection…")
         state = self.flights.session_state()
         if state == "working":
+            self._set_watch_start_activity(False)
             self.flights.show_progress()
             return
         if state in ("pending", "blocked"):
+            self._set_watch_start_activity(False)
             self.flights.show_recovery()
             return
         if state != "idle":
+            self._set_watch_start_activity(False)
             return
         if self._contextual_watch_target is not None:
+            self._set_watch_start_activity(False)
             self.release_contextual_watcher()
             self.status_var.set("Closing previous Watcher access. Try again when it finishes.")
             return
@@ -9979,13 +10099,15 @@ class WatcherApp:
             folder = self.watched_folder_var.get().strip()
             try:
                 if not folder or not Path(folder).is_dir():
+                    self._set_watch_start_activity(False)
                     return
             except OSError:
+                self._set_watch_start_activity(False)
                 return
         self.status_var.set("Preparing the Watcher connection…")
         self.linking_manager.start_photos_watcher(
             session, gallery, self._start_contextual_watcher,
-            self.status_var.set,
+            self._watch_start_failed,
         )
 
     def _start_contextual_watcher(self, target: LinkedUploadTarget) -> bool:
@@ -10000,7 +10122,7 @@ class WatcherApp:
         try:
             self.start(contextual_target=target)
         except Exception:  # noqa: BLE001
-            self.status_var.set("Watcher could not start.")
+            self._watch_start_failed("Watcher could not start.")
         return self._contextual_watch_target is target
 
     def release_contextual_watcher(self) -> None:
@@ -10040,6 +10162,29 @@ class WatcherApp:
         self.refresh_watcher_action()
 
     def start(self, *, contextual_target: LinkedUploadTarget | None = None) -> None:
+        """Show startup activity before preparing the shared Watcher worker.
+
+        Args:
+            contextual_target (LinkedUploadTarget | None): Exact temporary
+                Photos authority, or None for ordinary Watcher startup.
+
+        Returns:
+            None: Accepts startup once; REC waits for the initial folder boundary.
+        """
+        if (getattr(self, "_watch_start_pending", False) is True
+                and contextual_target is None):
+            return
+        if self.worker is not None and self.worker.is_alive():
+            self.write_log("Watcher is already running.")
+            return
+        self._set_watch_start_activity(True, "Checking the Watcher settings…")
+        try:
+            WatcherApp._start_watcher(self, contextual_target=contextual_target)
+        finally:
+            if self.worker is None or not self.worker.is_alive():
+                self._set_watch_start_activity(False)
+
+    def _start_watcher(self, *, contextual_target: LinkedUploadTarget | None = None) -> None:
         """
         Start the watcher worker using the current form values.
 
@@ -10108,9 +10253,9 @@ class WatcherApp:
             messagebox.showerror("Connection", "Gallery URL and API key are required before starting the watcher.")
             return
 
-        existing = iter_candidate_files(folder, config.watch_recursive)
-        self.watch_ignored_var.set(f"Ignored at startup: {len(existing)}")
-        self.watch_last_scan_var.set("Last scan: starting now")
+        self._set_watch_start_activity(True, "Reading existing screenshots…")
+        self.watch_ignored_var.set("Ignored at startup: checking existing files…")
+        self.watch_last_scan_var.set("Last scan: preparing")
         self.utc_sync.stop()
         try:
             captured = capture_worker_config(config)
@@ -10125,24 +10270,22 @@ class WatcherApp:
                 if contextual_target is not None and not contextual_flight
                 else self.flights.start_session()
             )
-            self.worker.configure_drain(directory, existing)
+            self.worker.configure_drain(directory, None)
             self.worker.start()
         except (OSError, ValueError, RuntimeError) as exc:
             if self.worker is not None and self.worker._linked_lease is not None:
                 self.worker._linked_lease.release()
             self.flights.stop()
+            self._watch_start_failed("Watcher could not prepare its local queue. Check the error and retry.")
             messagebox.showerror("Watcher state", str(exc))
             self.worker = None
             return
         if contextual_target is not None:
             self._contextual_watch_target = contextual_target
             self._contextual_watch_is_flight = contextual_flight
-        self._set_watcher_recording(True, linked_target)
         self.refresh_utc_sync()
-        self.status_var.set("Running")
-        self.watcher_activity_var.set("Watch: running")
-        self.write_log("Watcher started.", "success")
-        self.record_activity("success", "Watcher started.", "watcher")
+        self.watcher_activity_var.set("Watch: starting")
+        self.write_log("Watcher preparation started.", "system")
         self.refresh_activity_monitor_state()
         self.refresh_revoke_button_state()
 
@@ -11193,16 +11336,15 @@ class WatcherApp:
         """Explain the active source-deletion policy in the Watcher card.
 
         Returns:
-            None: Shows the server-confirmed deletion warning only when enabled;
-                the retained-source policy remains explained in local settings.
+            None: Explains exact-byte deletion only when the preference is on.
         """
         if not hasattr(self, "watch_delete_warning"):
             return
         if self.delete_uploaded_files_var.get():
             self.watch_delete_warning.grid()
             self.watch_delete_warning.configure(
-                text="Source deletion is temporarily unavailable. Photos stay on this PC.",
-                style="Warning.TLabel",
+                text="Uploaded photos will be deleted from this PC.",
+                style="Muted.TLabel",
             )
         else:
             self.watch_delete_warning.grid_remove()
@@ -11682,6 +11824,30 @@ class WatcherApp:
             if isinstance(event, dict):
                 kind = str(event.get("kind", "") or "")
                 payload = event.get("payload", {}) if isinstance(event.get("payload", {}), dict) else {}
+                if kind in ("watcher_start_ready", "watcher_start_finished"):
+                    if payload.get("worker") is not self.worker:
+                        continue
+                    if kind == "watcher_start_ready":
+                        self._set_watch_start_activity(False)
+                        self.watch_ignored_var.set(
+                            f"Ignored at startup: {payload['ignored']}"
+                        )
+                        if (self.worker.is_alive()
+                                and not self.worker.stop_event.is_set()
+                                and not self.worker.drain_event.is_set()):
+                            self.status_var.set("Running")
+                            self.watcher_activity_var.set("Watch: running")
+                            self._set_watcher_recording(True, self.worker.linked_target)
+                            self.write_log("Watcher started.", "success")
+                    elif (self.worker.drain_error
+                            or not self.worker.initial_captured
+                            or getattr(self, "_watch_start_pending", False) is True):
+                        self._set_watch_start_activity(
+                            False, self.worker.drain_error
+                            or "Watcher stopped before capture began.",
+                        )
+                    self.refresh_watcher_action()
+                    continue
                 if 'preflight_owner' in payload:
                     worker = self.preflight_worker
                     if worker is None or payload['preflight_owner'] is not worker._preflight_owner:

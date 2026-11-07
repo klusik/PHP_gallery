@@ -2176,7 +2176,10 @@ Album verdeckt. Bei erkanntem Flugsimulator
 steht SimBrief zur Verfügung. Beenden verarbeitet angenommene Bilder,
 speichert verfügbare Flugberichte und widerruft den temporären Schlüssel.
 Die Website bleibt verknüpft. Im Watcher erscheint die Vorbereitung oder
-der Grund, falls die Überwachung nicht starten kann. Die Zielauswahl prüft
+der Grund, falls die Überwachung nicht starten kann. Beim Start zeigt eine
+Aktivitätsanzeige die Vorbereitungsphase. Neue Bilder erst nach REC erzeugen.
+Stop und Finish zeigen die Vorbereitung sofort vor der Warteschlange und
+den Berichten. Die Zielauswahl prüft
 angenommene Importe im lokalen Uploadverlauf. Es gilt dieselbe Grenze von
 256~MiB wie bei Zustandsänderungen. Ein nicht prüfbarer Verlauf oder offene
 Arbeit für ein anderes Ziel blockiert den Wechsel weiterhin. Ein
@@ -2379,8 +2382,14 @@ Anfragen können enden. Die Prüfung schützt weder andere Prozesse noch die GUI
 Anfragen mit API-Schlüssel verweigern Weiterleitungen zu anderen Hosts,
 nicht erlaubten Ports oder von HTTPS zu HTTP; verwenden Sie die endgültige URL.
 Das tatsächliche Windows-Verhalten ist noch nicht qualifiziert.
-In diesem Entwicklungsstand ist das automatische Löschen überwachter Fotos
-und ursprünglicher ZIP-Dateien nicht verfügbar; die Quellen bleiben erhalten.
+Unter Windows ist das Löschen überwachter Quellen bei neuen Einstellungen
+standardmäßig aktiv; eine ausdrücklich gespeicherte Abschaltung bleibt erhalten.
+Der Schalter gilt für verknüpfte und API-Schlüssel-Aufnahmen. Nach bestätigtem
+Upload und lokaler Quittierung prüft ein natives Handle Identität und Bytes
+und löscht genau diese geöffnete Datei. Geänderte, umgeleitete, hartverknüpfte
+oder belegte Dateien bleiben mit einer Warnung erhalten. Inventartreffer und
+ungewisse Uploads erlauben keine Löschung. Andere Plattformen, manuelle Importe
+und Quell-ZIPs behalten ihre Quellen.
 Der API-Schlüsselwiderruf im Flugablauf ist vorübergehend nicht verfügbar.
 GUI-Modusschutz und Wiederherstellung nach Absturz sind noch nicht qualifiziert.
 

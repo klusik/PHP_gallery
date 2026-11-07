@@ -2014,6 +2014,9 @@ tillgängligt vid en upptäckt flygsimulator. Avslut skickar mottagna bilder,
 sparar tillgängliga flygrapporter och återkallar den tillfälliga nyckeln.
 Webbplatsen förblir länkad.
 Watcher visar förberedelsen eller orsaken om inspelningen inte kan starta.
+Vid start visar en aktivitetsindikator förberedelsens fas. Skapa en ny
+skärmbild först när REC visas. Stop och Finish visar förberedelsen direkt,
+före kön och eventuella rapporter.
 När ett mål väljs kontrolleras mottagna importer i~den lokala
 uppladdningshistoriken. Samma gräns på 256~MiB gäller när tillståndet sparas.
 Historik som inte går att verifiera eller oavslutat arbete för ett annat mål
@@ -2200,8 +2203,14 @@ kontrolleras igen; en pågående begäran kan slutföras. Kontrollen skyddar int
 andra processer eller grafiska arbetare. Begäranden med API-nyckel avvisar
 omdirigering till annan värd, otillåten port eller från HTTPS till HTTP;
 ange vid behov den slutliga galleriadressen. Windows är ännu inte kvalificerat.
-I detta utvecklingsläge är automatisk borttagning av bevakade foton och
-ursprungliga ZIP-filer inte tillgänglig; källorna sparas för kontroll.
+I Windows är radering av bevakade källor aktiverad för nya inställningar;
+ett uttryckligen sparat av-val bevaras. Inställningen gäller länkade
+inspelningar och API-nycklar. Efter bekräftad uppladdning och lokal kvittens
+verifierar ett inbyggt handtag samma filidentitet och byte och raderar just
+den öppnade filen. Ändrade, omdirigerade, hårdlänkade eller upptagna filer
+behålls med en varning. Inventarieträffar och osäkra svar tillåter ingen
+radering. Andra plattformar, manuella importer och käll-ZIP-filer behåller
+sina källor.
 Återkallande av API-nyckel i flygflödet är tillfälligt otillgängligt.
 GUI-lägesskydd och återhämtning efter avbrott är ännu inte kvalificerade.
 

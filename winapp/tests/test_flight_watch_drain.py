@@ -29,6 +29,12 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader.flight_workflow import FinalizationWorker
 
+# Purpose: Bound completion of the synthetic initial-folder worker.
+# Type: float. Units: seconds. Scope: startup exclusion regression only.
+# Consumers: test_interrupted_initial_scan_never_admits_historical_photos.
+# Rationale: Three seconds expose a deadlock without hanging hosted discovery.
+PREPARATION_WAIT_SECONDS = 3.0
+
 
 def load_main_module() -> ModuleType:
     """Import the .pyw entry point without running its desktop application.
@@ -118,6 +124,60 @@ class WatchDrainTests(unittest.TestCase):
         )
         return watcher
 
+    def test_interrupted_initial_scan_never_admits_historical_photos(self) -> None:
+        """Keep startup exclusions safe when Stop arrives during folder reading.
+
+        Returns:
+            None: Preparation stays frozen until a background scan accepts nothing.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder, workspace = root / "watch", root / "session"
+            folder.mkdir()
+            workspace.mkdir()
+            old = folder / "existing.jpg"
+            old.write_bytes(b"preexisting screenshot")
+            watcher = self.make_watcher(folder, workspace)
+            owner_thread = threading.get_ident()
+            scan_threads: list[int] = []
+
+            def capture_initial(selected: Path, recursive: bool) -> list[Path]:
+                """Stop during the worker-owned initial directory observation.
+
+                Args:
+                    selected (Path): Exact fixture screenshot folder.
+                    recursive (bool): Captured recursion preference.
+
+                Returns:
+                    list[Path]: The original file, which must remain excluded.
+                """
+                self.assertEqual(folder, selected)
+                self.assertFalse(recursive)
+                scan_threads.append(threading.get_ident())
+                watcher.request_drain()
+                watcher.stop_event.set()
+                return [old]
+
+            with mock.patch.object(MAIN, "iter_candidate_files", side_effect=capture_initial) as scan:
+                watcher.configure_drain(workspace, None)
+                before = self.main.read_document(watcher.drain_manifest)
+                self.assertIs(before["initial_captured"], False)
+                self.assertIs(before["frozen"], True)
+                scan.assert_not_called()
+                worker = threading.Thread(target=watcher._run_owned, daemon=True)
+                worker.start()
+                worker.join(PREPARATION_WAIT_SECONDS)
+                self.assertFalse(worker.is_alive())
+
+            self.assertEqual(1, len(scan_threads))
+            self.assertNotEqual(owner_thread, scan_threads[0])
+            self.assertEqual({old}, watcher.initial_paths)
+            after = self.main.read_document(watcher.drain_manifest)
+            self.assertIs(after["frozen"], True)
+            self.assertEqual([], after["pending"])
+            watcher.upload_watched_file.assert_not_called()
+            self.assertTrue(old.exists())
+
     def test_cutoff_uses_saved_recursive_choice_after_config_changes(self) -> None:
         """Do not lose nested photos admitted by the original Stop cutoff.
 
@@ -170,6 +230,47 @@ class WatchDrainTests(unittest.TestCase):
             worker.scan_once(watched, 'https://gallery.example')
             worker.remote_inventory.refresh.assert_called_once()
             worker.upload_watched_file.assert_not_called()
+
+    def test_source_deletion_follows_confirmed_upload_but_not_inventory_match(self) -> None:
+        """Delete requests belong only to a positively confirmed fresh upload.
+
+        Returns:
+            None: An inventory match remains on disk; fresh ACK uses the exact
+                captured source snapshot for the Windows deletion owner.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'watch'
+            folder.mkdir()
+            workspace = root / 'session'
+            workspace.mkdir()
+            uploaded = folder / 'uploaded.jpg'
+            uploaded.write_bytes(b'confirmed bytes')
+            worker = self.make_watcher(folder, workspace)
+            worker.config.delete_uploaded_files = True
+            worker.upload_watched_file.return_value = {
+                'ok': True, 'uploaded': 1, 'scanned': 0,
+            }
+            with mock.patch.object(
+                self.main, 'delete_verified_linked_source',
+            ) as delete:
+                worker.scan_once(folder, 'https://gallery.example.test/upload')
+                delete.assert_called_once()
+                snapshot = delete.call_args.args[0]
+                self.assertEqual(uploaded, snapshot.path)
+                self.assertEqual(
+                    self.main.hashlib.sha256(b'confirmed bytes').hexdigest(),
+                    snapshot.expected_sha256,
+                )
+
+                duplicate = folder / 'already-present.jpg'
+                duplicate.write_bytes(b'existing bytes')
+                worker.remote_inventory.refresh.return_value = True
+                worker.remote_inventory.has_hash.return_value = True
+                worker.initial_paths.clear()
+                worker.scan_once(folder, 'https://gallery.example.test/upload')
+                delete.assert_called_once()
+                self.assertTrue(duplicate.exists())
 
     def test_existing_startup_files_are_never_admitted(self) -> None:
         """Preserve the rule that pre-existing photos are ignored on start.

@@ -410,6 +410,151 @@ def verify_linked_source(snapshot: _FileSegment) -> None:
             raise LinkingError('Linked source changed during inventory.')
 
 
+def delete_verified_linked_source(snapshot: _FileSegment) -> None:
+    """Delete only the exact acknowledged source through a verified Windows handle.
+
+    The handle denies concurrent write and delete opens. Its identity and bytes
+    are checked before delete disposition is applied to that same file object,
+    avoiding a path swap between verification and deletion.
+
+    Args:
+        snapshot (_FileSegment): Captured path, identity, size and digest for
+            the exact source whose upload was positively acknowledged.
+
+    Returns:
+        None: The verified file object is marked for deletion.
+
+    Raises:
+        OSError: Windows cannot safely admit or delete the verified source.
+        LinkingError: The path no longer identifies the captured bytes.
+        RuntimeError: Safe handle deletion is unavailable on this platform.
+    """
+    if os.name != 'nt':
+        raise RuntimeError('Safe source deletion is unavailable on this platform.')
+    if (snapshot.device <= 0 or snapshot.inode <= 0 or snapshot.size < 0
+            or re.fullmatch(r'[a-f0-9]{64}', snapshot.expected_sha256) is None):
+        raise LinkingError('Captured source identity is invalid.')
+
+    import ctypes
+    import msvcrt
+
+    # LOAD_LIBRARY_SEARCH_SYSTEM32 prevents an adjacent DLL from shadowing it.
+    kernel32 = ctypes.WinDLL(
+        'kernel32.dll', use_last_error=True, winmode=0x00000800,
+    )
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = (
+        ctypes.c_wchar_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p,
+        ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p,
+    )
+    create_file.restype = ctypes.c_void_p
+    get_information = kernel32.GetFileInformationByHandle
+    get_information.argtypes = (ctypes.c_void_p, ctypes.c_void_p)
+    get_information.restype = ctypes.c_int
+    set_information = kernel32.SetFileInformationByHandle
+    set_information.argtypes = (
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_ulong,
+    )
+    set_information.restype = ctypes.c_int
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = (ctypes.c_void_p,)
+    close_handle.restype = ctypes.c_int
+
+    # Purpose: Request exact read, metadata and deletion rights on one source.
+    # Type: int; Units: Win32 access mask; Scope: acknowledged source deletion.
+    # Consumers: CreateFileW. Rationale: Hash and delete the same file handle.
+    desired_access = 0x0001 | 0x0080 | 0x10000
+    # Purpose: Deny concurrent writers and path deletion while verifying bytes.
+    # Type: int; Units: Win32 share mask; Scope: acknowledged source deletion.
+    # Consumers: CreateFileW. Rationale: Existing reads may continue safely.
+    share_mode = 0x0001
+    # Purpose: Open the existing entry itself without following reparse points.
+    # Type: int; Units: Win32 creation disposition; Scope: source admission.
+    # Consumers: CreateFileW. Rationale: Never create or truncate a source.
+    open_existing = 3
+    # FILE_FLAG_OPEN_REPARSE_POINT inspects the entry itself, not its target.
+    open_reparse_point = 0x00200000
+    # INVALID_HANDLE_VALUE is the Win32 (HANDLE)-1 failure sentinel.
+    invalid_handle = ctypes.c_void_p(-1).value
+    handle = create_file(
+        str(snapshot.path), desired_access, share_mode, None, open_existing,
+        open_reparse_point, None,
+    )
+    if handle is None or handle == invalid_handle:
+        raise OSError(ctypes.get_last_error(), 'Source could not be safely opened.')
+
+    descriptor: int | None = None
+    try:
+        descriptor = msvcrt.open_osfhandle(
+            int(handle), os.O_RDONLY | getattr(os, 'O_BINARY', 0),
+        )
+        handle = None
+        with os.fdopen(descriptor, 'rb') as source:
+            descriptor = None
+            # BY_HANDLE_FILE_INFORMATION is a 52-byte Win32 ABI record.
+            info = ctypes.create_string_buffer(52)
+            native_handle = msvcrt.get_osfhandle(source.fileno())
+            if not get_information(native_handle, info):
+                raise OSError(ctypes.get_last_error(), 'Source identity is unavailable.')
+            # ABI offsets: attributes DWORD at 0; link-count DWORD at 40.
+            attributes = int.from_bytes(info.raw[0:4], 'little')
+            link_count = int.from_bytes(info.raw[40:44], 'little')
+            # FILE_ATTRIBUTE_DIRECTORY and FILE_ATTRIBUTE_REPARSE_POINT.
+            if attributes & (0x10 | 0x400) or link_count != 1:
+                raise LinkingError('Source is not a single regular file.')
+
+            before = os.fstat(source.fileno())
+            path_before = snapshot.path.lstat()
+            expected_identity = (snapshot.device, snapshot.inode, snapshot.size,
+                                 snapshot.modified_ns)
+
+            def matches(info: os.stat_result) -> bool:
+                """Compare one open or path observation with the captured source.
+
+                Args:
+                    info (os.stat_result): Current descriptor or path metadata.
+
+                Returns:
+                    bool: True when type, link count, identity, size and time match.
+                """
+                return (
+                    stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+                    and (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+                    == expected_identity
+                )
+
+            if not matches(before) or not matches(path_before):
+                raise LinkingError('Source changed after upload acknowledgement.')
+            digest = hashlib.sha256()
+            remaining = snapshot.size
+            while remaining:
+                chunk = source.read(min(remaining, LINKED_UPLOAD_CHUNK_BYTES))
+                if not chunk:
+                    raise LinkingError(
+                        'Source changed after upload acknowledgement.'
+                    )
+                remaining -= len(chunk)
+                digest.update(chunk)
+            if source.read(1):
+                raise LinkingError('Source changed after upload acknowledgement.')
+            after = os.fstat(source.fileno())
+            path_after = snapshot.path.lstat()
+            if (not matches(after) or not matches(path_after)
+                    or digest.hexdigest() != snapshot.expected_sha256):
+                raise LinkingError('Source changed after upload acknowledgement.')
+            # FILE_DISPOSITION_INFO uses class 4 and a one-byte BOOLEAN.
+            disposition = ctypes.c_byte(1)
+            if not set_information(
+                native_handle, 4, ctypes.byref(disposition), ctypes.sizeof(disposition),
+            ):
+                raise OSError(ctypes.get_last_error(), 'Source could not be safely deleted.')
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if handle is not None:
+            close_handle(handle)
+
+
 def _text_part(boundary: str, name: str, value: str) -> bytes:
     """Encode a bounded fixed-name multipart field without header injection.
 

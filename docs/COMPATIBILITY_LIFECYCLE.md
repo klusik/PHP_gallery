@@ -67,6 +67,24 @@ review. A disposable HTTPS fixture processed two manual Import items and one
 Watcher item through the actual PHP/MySQL 8.0.44 upload pipeline; one stored
 upload reply was lost. Matching inventory did not confirm or resend it, and
 source files remained. This observation does not qualify activation.
+
+Windows Watcher has a separate confirmed-source deletion owner. New or missing
+settings enable deletion, while a saved explicit off choice remains off.
+Only a successful response for the current transfer followed by durable local
+acknowledgement can reach it. It compares the captured source identity and
+digest through a native handle that excludes writers and replacement, then
+deletes that same opened file. Failed, uncertain, inventory-only, restarted or
+replaced sources retain their existing recovery behavior. An unavailable or
+busy native handle retains the file and reports a warning. This policy applies
+to both linked and legacy Watcher uploads. Manual imports and source ZIPs are
+outside it.
+
+The native deletion owner currently supports Windows. Other platforms retain
+sources because a path-only unlink cannot provide the same opened-file deletion
+boundary. Keep that retention path until a platform-specific owner is qualified.
+Real-world prevalence of concurrent source replacement is unknown. Hosted
+fixtures cover same-file success and retention boundaries, and desktop evidence
+must identify the exact candidate and use disposable sources.
 Linked target activation and worker admission require a fixed local Windows
 drive or an owner-controlled local macOS volume and an unredirected profile.
 The macOS source launcher uses a private file and native workspace lock for

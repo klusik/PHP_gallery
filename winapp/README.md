@@ -244,6 +244,7 @@ server-side API key revocation separately in PHP Gallery Admin.
 | Watcher state | How it starts | Next action |
 | --- | --- | --- |
 | Ready | Upload target and folder are chosen; the previous session is closed | **Start Watcher**, or use Import for selected files. |
+| Starting | Start verifies the gallery and reads the folder's existing files | The Watcher card shows the current preparation phase and activity. Wait for REC before creating a new screenshot. |
 | Watching | **Start Watcher** captures the current target and ignores files already in the folder | **Stop Watcher** or **Finish flight/game…** stops discovery and finishes the accepted queue. |
 | Finishing | Stop or Finish is draining work or producing reports | **Show progress…** reopens the progress view. Success returns to **Start Watcher**. |
 | Pending | WinApp restarted, the gallery became unavailable or completion failed | **Review pending uploads…**. Reconnect to the same site and choose the original gallery if prompted, then **Retry**. |
@@ -845,7 +846,7 @@ click; while active it becomes **■ Stop Watcher**. **Check folder only**
 performs
 a non-uploading dry run and does not start watching. The dedicated Watcher gear
 opens a settings sheet for folder selection, recursion, scan interval, file
-stability, simulator metadata, and the opt-in source-delete setting, with
+stability, simulator metadata, and the saved source-delete setting, with
 explicit
 **Save watcher settings** and **Cancel** actions. **Sync UTC time** remains an
 opt-in control beside the primary actions, with a nearby **?** explanation.
@@ -1178,7 +1179,8 @@ the current build's native lock when its process exits, so **Retry** can
 reopen the same target. An older lock has no verified native owner. Close
 all uploaders and review the gallery and sources before archiving that
 specific lock. Keep the upload history and any pending transfer evidence.
-Automatic source and ZIP deletion is disabled in linked mode. Durability
+Watcher source deletion on Windows follows the saved Watcher preference,
+including linked captures. Manual import sources and ZIPs are retained. Durability
 after a power failure and behavior on non-local filesystems remain unverified.
 
 For exactly one uncertain linked upload, **Check uncertain upload** asks for
@@ -1519,18 +1521,33 @@ the gallery connection. **Start Watcher** asks for a folder when one is
 missing.
 The check icon inspects existing files without uploading or changing upload
 history. Folder selection, recursion, stability, simulator metadata, and the
-opt-in deletion setting are also in the Watcher gear sheet, where
+saved deletion setting are also in the Watcher gear sheet, where
 **Save watcher settings** and **Cancel** apply.
 The sheet does not permit edits while watching; it requires a stop first. Saved
 changes apply on the next start, while **Cancel**, Escape, and closing the sheet
 restore the opening folder and preference values.
 
-### Optional source deletion
+### Watched source deletion
 
-Automatic deletion of watched source photos is temporarily unavailable. The
-saved preference is retained, but photos stay on disk for manual verification.
-The watcher checks the current file against the sent bytes before marking a
-drain item complete; this is not an atomic filesystem fence.
+**Delete uploaded photos from this PC** in Watcher settings is enabled by
+default for a new or missing setting. An explicitly saved off choice is kept.
+On Windows, Watcher deletes a source only after a successful upload response
+and durable local acknowledgement. It opens the current file through a native
+handle, verifies the captured file identity and sent bytes, and deletes that
+same opened file. A replaced, changed, linked, redirected or busy file stays
+on disk with a warning. The native handle refuses simultaneous writers and
+replacement during this final check.
+
+An inventory match, an uncertain response or a restart never independently
+authorizes source deletion. Files present at startup remain excluded. Manual
+import sources and ZIPs keep their existing retention policy. Other platforms
+retain watched sources until a native deletion owner is available.
+
+Start shows an activity indicator while it verifies the destination and reads
+the initial folder. REC appears after the initial exclusion boundary is ready.
+Stop and Finish open progress with a preparation message and activity before
+loading the pending work. Their subsequent phases describe upload drain and
+any reports. A busy indicator does not estimate a completion percentage.
 
 ## Sync UTC time while watching
 

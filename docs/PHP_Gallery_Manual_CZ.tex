@@ -1954,6 +1954,9 @@ U~rozpoznaného
 simulátoru nabídne SimBrief. Ukončení odešle přijaté snímky, u~letu uloží
 dostupné reporty a~zneplatní klíč sledování. Propojení webu zůstane aktivní.
 Panel Watcheru zobrazí přípravu nebo důvod, proč se sledování nespustilo.
+Při spuštění ukazatel aktivity pojmenuje fázi přípravy. Nový snímek vytvořte
+až po zobrazení REC. Stop a~Finish ihned zobrazí přípravu před dokončením
+fronty a~případných reportů.
 Výběr cíle kontroluje přijaté importy v~lokální historii nahrávání se stejným
 limitem 256~MiB jako při zápisu stavu. Neověřitelná historie nebo nedokončená
 práce pro jiný cíl změnu dál blokuje.
@@ -2126,8 +2129,13 @@ a~uploadu; již běžící požadavek může doběhnout. Nechrání ostatní pro
 grafické pracovní úlohy. Požadavky s~API klíčem odmítají přesměrování na jiný
 server, nepovolený port nebo z~HTTPS na HTTP; případně nastavte cílovou URL.
 Skutečné chování Windows zatím není kvalifikované.
-V~tomto rozpracovaném stavu není dostupné automatické mazání sledovaných
-fotografií ani zdrojových ZIPů; zdroje zůstávají k~ověření. Odvolání API klíče
+Ve Windows je mazání sledovaných zdrojů pro nová nastavení zapnuté; výslovně
+uložené vypnutí se zachová. Přepínač v~nastavení Watcheru platí pro linked
+i~API-key záznam. Po úspěšné odpovědi uploadu a~lokálním potvrzení nativní
+handle ověří identitu a~bajty původního souboru a~smaže tentýž otevřený zdroj.
+Změněné, přesměrované, hardlinkované či obsazené soubory zůstanou s~varováním.
+Shoda inventáře ani nejistý upload mazání nepovolí. Ostatní platformy, ruční
+importy a~zdrojové ZIPy zdroje zachovávají. Odvolání API klíče
 z~letového workflow je dočasně nedostupné. Ochrana režimu GUI a~obnova po pádu
 se stále dokončují a~nejsou kvalifikované.
 

@@ -1875,12 +1875,26 @@ class ConfigStateTests(unittest.TestCase):
         self.assertEqual(10000.0, migrated["archive_max_compression_ratio"])
         self.assertEqual("server", migrated["manual_thumbnail_mode"])
 
-    def test_config_defaults_are_conservative(self):
+    def test_config_defaults_preserve_saved_deletion_opt_out(self) -> None:
+        """Enable new Watcher deletion settings while preserving a saved off choice.
+
+        Returns:
+            None: Other existing configuration defaults retain their contract.
+        """
         migrated, _ = migrate_config_payload({})
         self.assertFalse(migrated["watch_recursive"])
+        self.assertTrue(migrated["delete_uploaded_files"])
+        self.assertFalse(
+            migrate_config_payload({"delete_uploaded_files": False})[0][
+                "delete_uploaded_files"
+            ]
+        )
         self.assertEqual("server", migrated["manual_thumbnail_mode"])
         self.assertTrue(migrated["close_to_tray"])
-        self.assertEqual(DEFAULTS["activity_history_limit"], migrated["activity_history_limit"])
+        self.assertEqual(
+            DEFAULTS["activity_history_limit"],
+            migrated["activity_history_limit"],
+        )
 
     def test_atomic_state_write_and_restart_job_recovery(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -3671,6 +3685,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                 worker.stop_event = mock.Mock()
                 worker.stop_event.is_set.return_value = True
                 worker.initial_captured = True
+                worker.events = MAIN.queue.Queue()
                 worker.initial_paths = set()
                 worker.emit = mock.Mock()
                 worker.persist_drain = mock.Mock()
@@ -3951,20 +3966,48 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         worker.assert_not_called()
 
     def test_source_deletion_keeps_replaced_photo_after_ack(self) -> None:
-        """Keep the current path even when an earlier upload was acknowledged.
+        """Keep a replacement path even after the original bytes were acknowledged.
 
         Returns:
-            None: A replacement photo survives and the user receives a warning.
+            None: Captured-source mismatch prevents deletion and warns the user.
         """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'photo.jpg'
+            path.write_bytes(b'original')
+            snapshot = MAIN.capture_linked_source(
+                path, MAIN.hashlib.sha256(b'original').hexdigest(), 8,
+            )
             path.write_bytes(b'replacement')
             worker = mock.Mock()
             MAIN.WatcherThread.delete_uploaded_file(worker, path, {
                 'ok': True, 'uploaded': 1,
-            })
+            }, snapshot)
             self.assertEqual(b'replacement', path.read_bytes())
             worker.emit.assert_called_once()
+
+    def test_source_deletion_requires_positive_upload_confirmation(self) -> None:
+        """Delete only the exact captured bytes with a positive upload count.
+
+        Returns:
+            None: The native delete owner runs for confirmed uploads only.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'photo.jpg'
+            contents = b'confirmed photo'
+            path.write_bytes(contents)
+            snapshot = MAIN.capture_linked_source(
+                path, MAIN.hashlib.sha256(contents).hexdigest(), len(contents),
+            )
+            worker = mock.Mock()
+            with mock.patch.object(MAIN, 'delete_verified_linked_source') as delete:
+                MAIN.WatcherThread.delete_uploaded_file(worker, path, {
+                    'ok': True, 'uploaded': 1,
+                }, snapshot)
+                delete.assert_called_once_with(snapshot)
+                MAIN.WatcherThread.delete_uploaded_file(worker, path, {
+                    'ok': True, 'uploaded': 0,
+                }, snapshot)
+                delete.assert_called_once_with(snapshot)
 
     def test_replaced_source_remains_in_watcher_drain_after_upload(self) -> None:
         """Do not acknowledge a path replaced while its upload was in flight.
@@ -4024,6 +4067,18 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
 
 class WatcherActionTests(unittest.TestCase):
     """Keep the primary watcher action aligned with worker state."""
+
+    def test_preparing_watcher_rejects_duplicate_start_action(self) -> None:
+        """Keep repeated primary clicks from entering startup twice.
+
+        Returns:
+            None: No lifecycle check or second start runs during preparation.
+        """
+        app = mock.Mock()
+        app._watch_start_pending = True
+        MAIN.WatcherApp.toggle_watcher(app)
+        app.flights.session_state.assert_not_called()
+        app.start.assert_not_called()
 
     def test_contextual_watcher_finish_latches_a_departed_simulator(self) -> None:
         """Use flight Finish only when this capture observed a simulator.
@@ -4567,6 +4622,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.worker.is_alive.return_value = True
         app.worker.stop_event.is_set.return_value = False
         app.worker.drain_only = False
+        app.worker.drain_event.is_set.return_value = False
+        app.worker.initial_captured = True
         app.worker.linked_target = None
         app.manual_worker = None
         app.ai_worker = None

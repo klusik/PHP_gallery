@@ -1207,6 +1207,20 @@ Admission still rejects unreadable or ambiguous evidence and protects pending
 work bound to another target. The separate import-binding ledger and linked
 target history keep their own bounds.
 
+Watcher startup exposes a preparation phase before reading the initial folder.
+The folder exclusion scan runs in the worker, and REC indicates that the initial
+boundary is ready. Stop and Finish present a populated activity view while
+preparing the existing drain workflow.
+
+On Windows, the Watcher deletion preference also applies to linked captures.
+A fresh successful transfer response and durable acknowledgement precede
+native same-handle source deletion. Captured identity, size and digest must
+match, and the handle excludes concurrent writers and replacement during the
+check. Failure retains the source with a warning. Neither inventory matches
+nor uncertain/restarted work independently authorize deletion. Manual import
+sources and ZIPs retain the existing policy. Other platforms keep their sources
+until an equivalent native owner is available.
+
 Photo metadata uses eight-item pages by default. WinApp can request up to 64 with
 `X-PHP-Gallery-Photo-Page: 64`; older servers ignore this header.
 Responses cap each binary at 16 MiB and use existing live

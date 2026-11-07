@@ -1955,6 +1955,9 @@ SimBrief is available for a~detected flight simulator. Finish
 drains screenshots, saves available flight reports for~a simulator session
 and~revokes the~capture key. The~website stays linked.
 The~Watcher panel reports preparation or~a reason it could not start.
+During startup, a~busy indicator names the~preparation phase. Wait for~REC
+before creating a~new screenshot. Stop and~Finish show preparation immediately
+before the~upload drain and~report phases.
 Destination selection checks accepted imports in~the~local upload history.
 It uses the~same 256~MiB history limit as~state updates. Unverifiable history
 or~unfinished work for~another destination still blocks the~change.
@@ -2093,7 +2096,7 @@ history. Once the~session is~closed, \ui{Start Watcher} is~available again.
 a~folder
 dry run without uploads or~starting continuous watching. The~Watcher gear opens
 a~settings sheet for~folder choice, recursion, scan interval, file stability,
-simulator metadata, and~the~opt-in deletion setting. The~sheet requires stopping
+simulator metadata, and~the~saved deletion setting. The~sheet requires stopping
 the~watcher before
 edits. \ui{Choose folder…} saves the~folder from the~main Watcher view.
 \ui{Start Watcher} asks for~a~folder when one is~missing.
@@ -2129,8 +2132,14 @@ check does not~fence other processes or~protect graphical workers.
 API-key requests refuse redirects to~another host, an~unapproved port, or~from
 HTTPS to~HTTP. Use the~final gallery URL if a~server requires such a~redirect.
 Actual Windows behavior remains unqualified.
-In this development checkpoint, automatic deletion of watched photos and
-legacy source ZIPs is unavailable; sources are retained for review. Flight
+On Windows, watched-source deletion is enabled by~default for~new settings;
+an~explicit saved off choice is retained. The~Watcher settings switch controls
+both linked and~API-key captures. After a~successful upload response and~local
+acknowledgement, a~native handle verifies the~same file identity and~bytes
+before deleting that opened source. Changed, redirected, hardlinked or~busy
+files remain with a~warning. Inventory matches and~uncertain uploads do~not
+authorize deletion. Other platforms, manual imports and~source ZIPs retain
+their sources. Flight
 API-key revocation is temporarily unavailable. GUI mode protection and crash
 recovery are still being implemented and are not qualified.
 

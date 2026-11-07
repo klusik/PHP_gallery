@@ -8554,6 +8554,20 @@ watched folder. Create a synthetic image after REC begins, confirm its exact
 gallery and checksum, finish the capture, then confirm queue drain, key closure
 and continued Photos access before selecting the next gallery.
 
+Watcher preparation fixtures cover immediate busy feedback, background initial
+folder capture and exclusion of preexisting screenshots. Exercise Stop and
+interruption during preparation before claiming that recovery cannot admit
+historical files. Finish progress must have a phase and activity indicator on
+its first visible frame, including before pending-plan refresh.
+
+Windows source-deletion coverage must compare the source captured before the
+send with the native opened file after acknowledgement. Verify successful
+same-file deletion, explicit-off retention, replacement/change, hardlink/reparse
+and native-open failure. An inventory skip or uncertain response must retain
+the source. Use synthetic files in an owned folder for a desktop upload and
+confirm both the server image and local disappearance. These checks do not
+qualify manual-import/ZIP deletion or source deletion on other platforms.
+
 The disposable HTTPS/MySQL protocol run created an unpublished child through
 the native journal, withheld a completed reply, recovered the original receipt
 with status after restart, and reissued the same key without a duplicate. The
