@@ -354,6 +354,18 @@ Deployed usage is unknown. Native URL/session fixtures and drawer navigation
 fixtures cover the handoff; actual browser login and panel rendering require
 separate desktop qualification.
 
+The native cache keeps its legacy flat object format and public-media admission.
+Explicit retained galleries use separate hashed directories in the same cache
+owner. They are excluded from ordinary LRU entry/byte limits and its flat scan
+budget. Unpinning applies normal quota policy; failed copy preparation retains
+the pinned originals. Pinning an unfinished preload preserves its preference
+and successfully prepared entries without claiming complete coverage. Retention
+never relaxes live-link checks or the server's no-store/restricted-media rules.
+Local availability is checked from authorized descriptors; it is not offline
+authentication. Usage of retained galleries is unknown. Cache/worker fixtures
+own quota, restart, failure and cancellation regression; native UI acceptance
+is separate from hosted Python qualification.
+
 Explicit Admin Photos approval can upgrade the same previously saved rolling
 link. The native linking and vault owners compare the current binding and
 replace it only after identity verification. Saved public grants still open

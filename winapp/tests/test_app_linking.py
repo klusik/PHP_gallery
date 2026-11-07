@@ -58,6 +58,15 @@ TEST_REQUEST_HANDLE = base64.b32encode(
     b'p' * linking.REQUEST_HANDLE_RANDOM_BYTES,
 ).rstrip(b'=').decode('ascii')
 
+# Purpose: Keep retained-cache quota vectors small while exceeding one entry.
+# Type: int. Units: bytes. Scope: focused gallery cache retention fixtures.
+# Consumers: NativeMediaSessionTests. Rationale: 64 bytes keeps each fixture
+# body valid while patched ordinary limits exercise eviction deterministically.
+TEST_PINNED_CACHE_BODY_BYTES = 64
+TEST_PINNED_CACHE_ENTRY_BYTES = (
+    gallery_media_cache._CACHE_HEADER.size + TEST_PINNED_CACHE_BODY_BYTES
+)
+
 
 def discovery_response(
     issuer: str, scope: str,
@@ -1840,6 +1849,69 @@ class VisibilitySessionTests(unittest.TestCase):
 class NativeMediaSessionTests(unittest.TestCase):
     """Exercise native read scope and server-selected resource identities."""
 
+    def test_gallery_preference_and_local_preparation_use_exact_issuer(self) -> None:
+        """Persist a gallery pin and promote a current local byte on inspection.
+
+        Returns:
+            None: A listing-only link controls local retention without extra
+                grants, and another issuer's entry remains isolated.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+        )
+        body = b'current cached thumbnail'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        photo = linking.LinkedPhoto(
+            7, 'Photo', thumbnail_etag=etag,
+        )
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            key = cache.key(issuer, 4, 7, True)
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ):
+                self.assertTrue(session.set_gallery_pinned(4, True))
+                self.assertTrue(session.gallery_pinned(4))
+                self.assertTrue(session.prepare_cached_photo(4, photo, thumbnail=True))
+                self.assertFalse((Path(directory) / (key + '.bin')).exists())
+                self.assertTrue(session.set_gallery_pinned(4, False))
+                self.assertFalse(session.gallery_pinned(4))
+            self.assertIsNotNone(cache.read(key))
+
+    def test_no_store_photo_is_not_written_to_pinned_gallery(self) -> None:
+        """Keep a server no-store response out of the retained area.
+
+        Returns:
+            None: Playback-compatible bytes reach the caller while no persistent
+                object is retained, even after the gallery has been pinned.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+        )
+        body = b'no-store image bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                session, '_media_read',
+                return_value=(body, 'image/jpeg', etag, False),
+            ):
+                self.assertEqual(body, session.media_photo(4, 7, True)[0])
+            key = cache.key(issuer, 4, 7, True)
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertIsNone(cache.read(key, gallery_key=gallery_key))
+
     def test_photo_routes_use_listing_scope_but_presentation_stays_explicit(self) -> None:
         """Use listing access for photos while guarding presentation and music.
 
@@ -2184,6 +2256,174 @@ class NativeMediaSessionTests(unittest.TestCase):
             self.assertIsNone(cache.read(old))
             self.assertEqual(cache.read(track).mime, 'audio/wav')
             self.assertIsNotNone(cache.read(recent))
+
+    def test_pinned_gallery_isolated_from_ordinary_limits_and_restarts(self) -> None:
+        """Keep retained media outside ordinary quota and scan accounting.
+
+        Returns:
+            None: Multiple pinned renditions survive pressure and a new cache
+                owner, while ordinary storage retains only its configured item.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b'p' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory, mock.patch.multiple(
+            gallery_media_cache,
+            MEDIA_CACHE_MAX_ENTRIES=1,
+            MEDIA_CACHE_MAX_BYTES=TEST_PINNED_CACHE_ENTRY_BYTES,
+        ):
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            pinned_keys = [
+                cache.key(issuer, 4, image_id, thumbnail)
+                for image_id in (7, 8, 9)
+                for thumbnail in (True, False)
+            ]
+            for key in pinned_keys:
+                self.assertTrue(cache.write(
+                    key, body, 'image/jpeg', etag,
+                    gallery_key=gallery_key,
+                ))
+            ordinary_key = cache.key(issuer, 99, 1, True)
+            self.assertTrue(cache.write(ordinary_key, body, 'image/jpeg', etag))
+            self.assertEqual(1, len(cache._inventory()))
+
+            restarted = linking.GalleryMediaCache(Path(directory), len(body))
+            self.assertTrue(restarted.is_gallery_pinned(issuer, 4))
+            for key in pinned_keys:
+                self.assertIsNotNone(restarted.read(
+                    key, gallery_key=gallery_key,
+                ))
+            self.assertIsNotNone(restarted.read(ordinary_key))
+
+    def test_pin_promotes_legacy_hit_and_unpin_restores_ordinary_scope(self) -> None:
+        """Promote legacy flat entries and return retained files on unpin.
+
+        Returns:
+            None: The selected gallery moves out of flat accounting, then back;
+                another issuer's pinned directory remains untouched.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        other_issuer = 'https://other.example/Galerie'
+        body = b'q' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            key = cache.key(issuer, 4, 7, True)
+            other_key = cache.key(other_issuer, 4, 7, True)
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.set_gallery_pinned(other_issuer, 4, True))
+            self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
+            self.assertTrue(cache.write(
+                other_key, body, 'image/jpeg', etag,
+                gallery_key=cache.gallery_key(other_issuer, 4),
+            ))
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertIsNotNone(cache.read(key, gallery_key=gallery_key))
+            self.assertFalse((Path(directory) / (key + '.bin')).exists())
+            retained_path = (
+                Path(directory) / '.retained' / gallery_key / (key + '.bin')
+            )
+            self.assertTrue(retained_path.is_file())
+
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, False))
+            self.assertFalse(cache.is_gallery_pinned(issuer, 4))
+            self.assertTrue((Path(directory) / (key + '.bin')).is_file())
+            self.assertTrue(cache.is_gallery_pinned(other_issuer, 4))
+            self.assertIsNotNone(cache.read(
+                other_key,
+                gallery_key=cache.gallery_key(other_issuer, 4),
+            ))
+
+    def test_failed_pin_promotion_is_not_reported_as_retained(self) -> None:
+        """Refuse a local-retention proof when promotion cannot commit.
+
+        Returns:
+            None: A verified legacy flat body remains intact, but a failed
+                retained write cannot be returned as a pinned-cache hit.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b's' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            key = cache.key(issuer, 4, 7, True)
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            with mock.patch.object(cache, '_write_locked', return_value=False):
+                self.assertIsNone(cache.read(key, gallery_key=gallery_key))
+            self.assertTrue((Path(directory) / (key + '.bin')).is_file())
+            retained_path = (
+                Path(directory) / '.retained' / gallery_key / (key + '.bin')
+            )
+            self.assertFalse(retained_path.exists())
+
+    def test_failed_unpin_keeps_marker_and_retained_original(self) -> None:
+        """Leave a pin intact when ordinary admission cannot finish.
+
+        Returns:
+            None: A failed quota-managed copy does not remove the preference or
+                any retained gallery object.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b'r' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            gallery_key = cache.gallery_key(issuer, 4)
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertTrue(cache.write(
+                key, body, 'image/jpeg', etag, gallery_key=gallery_key,
+            ))
+            with mock.patch.object(cache, '_write_locked', return_value=False):
+                self.assertFalse(cache.set_gallery_pinned(issuer, 4, False))
+            self.assertTrue(cache.is_gallery_pinned(issuer, 4))
+            self.assertIsNotNone(cache.read(key, gallery_key=gallery_key))
+
+    def test_retained_cleanup_failure_keeps_pin_marker(self) -> None:
+        """Keep the pin active when a retained file cannot be removed.
+
+        Returns:
+            None: A failed cleanup after ordinary copying returns false and
+                leaves the marker and the busy retained entry in place.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b't' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            gallery_key = cache.gallery_key(issuer, 4)
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertTrue(cache.write(
+                key, body, 'image/jpeg', etag, gallery_key=gallery_key,
+            ))
+            retained_path = (
+                Path(directory) / '.retained' / gallery_key / (key + '.bin')
+            )
+            with mock.patch.object(
+                cache, '_unlink_if_matches', side_effect=[False],
+            ):
+                self.assertFalse(cache.set_gallery_pinned(issuer, 4, False))
+            self.assertTrue(cache.is_gallery_pinned(issuer, 4))
+            self.assertTrue(retained_path.is_file())
+
+    def test_gallery_pinning_rejects_unsafe_directory(self) -> None:
+        """Refuse retained paths whose hashed parent is not a real directory.
+
+        Returns:
+            None: An unexpected regular file at the retained root fails closed.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            retained_root = Path(directory) / '.retained'
+            retained_root.write_text('not a directory', encoding='utf-8')
+            self.assertFalse(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertFalse(cache.is_gallery_pinned(issuer, 4))
 
 
 class NativeMediaTransportTests(unittest.TestCase):

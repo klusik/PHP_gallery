@@ -3553,7 +3553,83 @@ class LinkingSession:
         try:
             cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
             key = cache.key(self._issuer, gallery_id, photo.image_id, thumbnail)
-            return cache.contains(key, photo.thumbnail_etag if thumbnail else None)
+            gallery_key = cache.gallery_key(self._issuer, gallery_id)
+            return cache.contains(
+                key, photo.thumbnail_etag if thumbnail else None,
+                gallery_key=gallery_key,
+            )
+        except (OSError, RuntimeError, ValueError):
+            return False
+
+    def gallery_pinned(self, gallery_id: int) -> bool:
+        """Read one gallery's local retained-cache preference.
+
+        Args:
+            gallery_id (int): Exact physical gallery whose preference is read.
+
+        Returns:
+            bool: True when the current media-readable link has a retained pin.
+                False for an absent pin, invalid target or unavailable cache.
+                This preference grants no remote or offline access.
+        """
+        if not _native_media_id(gallery_id) or not self.can_read_media():
+            return False
+        try:
+            cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+            return cache.is_gallery_pinned(self._issuer, gallery_id)
+        except (OSError, RuntimeError, ValueError):
+            return False
+
+    def set_gallery_pinned(self, gallery_id: int, pinned: bool) -> bool:
+        """Change one gallery's local cache retention preference.
+
+        Args:
+            gallery_id (int): Exact physical gallery whose preference changes.
+            pinned (bool): Whether verified cache bytes should be retained.
+
+        Returns:
+            bool: True when local persistence or unpin conversion succeeds.
+                False when validation, storage or conversion fails. This
+                preference grants no remote or offline access.
+        """
+        if (not _native_media_id(gallery_id) or type(pinned) is not bool
+                or not self.can_read_media()):
+            return False
+        try:
+            cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+            return cache.set_gallery_pinned(self._issuer, gallery_id, pinned)
+        except (OSError, RuntimeError, ValueError):
+            return False
+
+    def prepare_cached_photo(
+        self, gallery_id: int, photo: LinkedPhoto, *, thumbnail: bool = False,
+    ) -> bool:
+        """Verify one local photo body without remote revalidation.
+
+        Args:
+            gallery_id (int): Current physical gallery containing the descriptor.
+            photo (LinkedPhoto): Current authorized direct-photo descriptor.
+            thumbnail (bool): Verify the thumbnail instead of full rendition.
+
+        Returns:
+            bool: True for a hash-valid locally retained eligible body. This
+                local result is not current server authorization or availability.
+                False for a miss, ineligible descriptor or failed retention.
+        """
+        if (not _native_media_id(gallery_id) or not _native_media_id(photo.image_id)
+                or not self.can_read_media() or photo.cache_eligible is False
+                or (scope_allows_admin_media(self._scope)
+                    and photo.cache_eligible is not True)):
+            return False
+        try:
+            cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+            key = cache.key(self._issuer, gallery_id, photo.image_id, thumbnail)
+            gallery_key = cache.gallery_key(self._issuer, gallery_id)
+            entry = cache.read(key, gallery_key=gallery_key)
+            if entry is None:
+                return False
+            return (not thumbnail or photo.thumbnail_etag is None
+                    or entry.etag == photo.thumbnail_etag)
         except (OSError, RuntimeError, ValueError):
             return False
 
@@ -3600,7 +3676,8 @@ class LinkingSession:
             if cache_allowed:
                 cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
                 key = GalleryMediaCache.key(self._issuer, gallery_id, image_id, thumbnail)
-                entry = cache.read(key)
+                gallery_key = cache.gallery_key(self._issuer, gallery_id)
+                entry = cache.read(key, gallery_key=gallery_key)
         except (OSError, RuntimeError, ValueError):
             cache = None
             entry = None
@@ -3640,9 +3717,9 @@ class LinkingSession:
             raise LinkingError('Gallery photo permission is unavailable.')
         if cache is not None and cacheable and etag is not None:
             if entry is not None and etag == entry.etag and mime == entry.mime:
-                cache.revalidate(key, entry)
+                cache.revalidate(key, entry, gallery_key=gallery_key)
             else:
-                cache.write(key, body, mime, etag)
+                cache.write(key, body, mime, etag, gallery_key=gallery_key)
         return body, mime
 
     def media_presentation(
@@ -3728,7 +3805,8 @@ class LinkingSession:
             try:
                 cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
                 key = cache.track_key(self._issuer, gallery_id, track.track_id, track.sha256)
-                entry = cache.read(key)
+                gallery_key = cache.gallery_key(self._issuer, gallery_id)
+                entry = cache.read(key, gallery_key=gallery_key)
             except (OSError, RuntimeError, ValueError):
                 cache = None
         if (entry is not None and entry.etag == etag
@@ -3748,7 +3826,7 @@ class LinkingSession:
                 or hashlib.sha256(payload).hexdigest() != track.sha256):
             raise LinkingError('Gallery audio changed; reload the playlist.')
         if cache is not None and cacheable and received_etag == etag:
-            cache.write(key, payload, mime, etag)
+            cache.write(key, payload, mime, etag, gallery_key=gallery_key)
         return payload
 
     def can_list_galleries(self) -> bool:

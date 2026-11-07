@@ -743,6 +743,107 @@ class NativeGalleryViewerTests(unittest.TestCase):
         ))
         workspace.destroy()
 
+    def test_cache_icons_update_from_viewer_without_information_request(self) -> None:
+        """Observe local coverage automatically from loaded viewer metadata.
+
+        Returns:
+            None: The tree changes from cloud to local without another server
+                catalogue or an explicit Information request.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.gallery_pinned.return_value = False
+        session.has_cached_photo.return_value = False
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Cache album')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self._wait_until(
+            lambda: workspace._cache_state.get(TEST_GALLERY_ID) == 'cloud',
+            'A loaded viewer did not publish its automatic cloud cache icon.',
+        )
+        self.assertIn('☁', workspace.tree.item(str(TEST_GALLERY_ID), 'text'))
+        self._wait_until(
+            lambda: workspace._viewer._gallery_viewer_controller._worker is None,
+            'The initial viewer requests did not settle before the local probe.',
+        )
+        metadata_reads = session.media_page.call_count
+        session.has_cached_photo.return_value = True
+        controller = workspace._viewer._gallery_viewer_controller
+        controller.on_cache_changed(controller._photos, True)
+        self._wait_until(
+            lambda: workspace._cache_state.get(TEST_GALLERY_ID) == 'local',
+            'Local cache completion did not update the tree icon.',
+        )
+        self.assertIn('●', workspace.tree.item(str(TEST_GALLERY_ID), 'text'))
+        controller.on_cache_changed(controller._photos, False)
+        self._wait_until(
+            lambda: workspace._cache_state.get(TEST_GALLERY_ID) == 'partial',
+            'A partial catalogue incorrectly claimed that the whole album was cached.',
+        )
+        self.assertEqual(metadata_reads, session.media_page.call_count)
+        session.media_gallery_info.assert_not_called()
+        session.media_gallery_details.assert_not_called()
+        workspace.destroy()
+
+    def test_cache_context_starts_and_cancels_only_selected_gallery(self) -> None:
+        """Wire explicit preload and Keep preloaded to the captured gallery.
+
+        Returns:
+            None: A worker receives the exact session/target and its cancellation
+                leaves unrelated gallery and upload actions untouched.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.gallery_pinned.return_value = False
+        session.has_cached_photo.return_value = False
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Preload album')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self._wait_until(
+            lambda: TEST_GALLERY_ID in workspace._gallery_pins,
+            'Local pin preference did not become available.',
+        )
+        worker = mock.Mock(spec=photos_workspace.GalleryPreloadWorker)
+        worker.is_alive.return_value = True
+        worker.snapshot.return_value = photos_workspace.PreloadProgress(
+            'preloading', TEST_GALLERY_ID, len(page.photos),
+            0, 0, 0, 0, False, '',
+        )
+        event = mock.Mock()
+        event.widget = workspace.tree
+        event.x_root = workspace.tree.winfo_rootx() + 20
+        event.y_root = workspace.tree.winfo_rooty() + 20
+        for pinned in (None, True):
+            workspace._preload_worker = None
+            workspace._gallery_context(TEST_GALLERY_ID, event)
+            with mock.patch.object(
+                photos_workspace, 'GalleryPreloadWorker', return_value=worker,
+            ) as factory:
+                if pinned is True:
+                    workspace._cache_pin_button.invoke()
+                else:
+                    preload = next(
+                        widget for widget in workspace._context_card.winfo_children()
+                        if widget.winfo_class() == 'TButton'
+                        and widget.cget('text') == workspace._text('preload')
+                    )
+                    preload.invoke()
+                factory.assert_called_once_with(
+                    session, TEST_GALLERY_ID, pinned=pinned, download=True,
+                )
+            self.assertIsNone(workspace._context_card)
+            self.assertEqual('grid', workspace._preload_strip.winfo_manager())
+            workspace._cancel_preload()
+        self.assertEqual(2, worker.start.call_count)
+        self.assertEqual(2, worker.stop.call_count)
+        workspace.destroy()
+
     def test_photos_information_is_explicit_grouped_and_scope_filtered(self) -> None:
         """Fetch rich information only on demand and suppress public GPS rows.
 

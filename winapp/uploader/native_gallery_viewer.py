@@ -330,6 +330,9 @@ class _NativeGalleryViewer:
         self._thumbnail_memory = thumbnail_memory or GalleryThumbnailMemory()
         self._context_menu = context_menu
         self.on_photos_changed: Callable[[], None] | None = None
+        self.on_cache_changed: Callable[
+            [tuple[LinkedPhoto, ...], bool], None
+        ] | None = None
         self.window = parent.winfo_toplevel()
         self._main_content = parent
         while (self._main_content is not self.window
@@ -1840,7 +1843,8 @@ class _NativeGalleryViewer:
         """Apply queued worker results on Tk's owning thread.
 
         Returns:
-            None: Active worker results are delivered without idle polling.
+            None: Delivers results and reports authorized cache snapshots
+                without idle polling or another catalogue request.
         """
         self._after_id = None
         if self._closed:
@@ -1848,6 +1852,7 @@ class _NativeGalleryViewer:
         if not self.session.can_read_media():
             self.close()
             return
+        cache_changed = False
         while True:
             try:
                 generation, kind, result = self._events.get_nowait()
@@ -1862,6 +1867,9 @@ class _NativeGalleryViewer:
                 if kind == 'revision':
                     if self.frame.winfo_viewable() and self._lightbox is None:
                         if self._revision is None or self._revision != result:
+                            if (self._revision is not None
+                                    and self.on_photos_changed is not None):
+                                self.on_photos_changed()
                             self._refresh_revision = result
                             self._refresh_pending = True
                 elif kind == 'refresh':
@@ -1969,6 +1977,14 @@ class _NativeGalleryViewer:
                     self._refresh_revision = None
                 if kind != 'refresh' or self._refresh_foreground:
                     self.status.configure(text=self._text('linking_media_error'))
+            if kind in (
+                'page', 'more', 'slide_more', 'refresh',
+                'thumbnail', 'detail', 'prefetch',
+            ):
+                cache_changed = True
+        cache_callback = getattr(self, 'on_cache_changed', None)
+        if cache_changed and cache_callback is not None and not self._closed:
+            cache_callback(self._photos, self._next_after is None)
         if (self._worker is not None and not self._worker.is_alive()
                 and not self._events.empty()):
             self._schedule_queue_poll()

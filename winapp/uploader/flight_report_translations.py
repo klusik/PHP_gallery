@@ -2534,3 +2534,131 @@ for _photos_language, _photos_labels in _PHOTOS_DETAIL_LABELS.items():
         "photos_workspace_" + _photos_key: _photos_value
         for _photos_key, _photos_value in _photos_labels.items()
     })
+
+_PHOTOS_PRELOAD_LABELS = {
+    'en': {
+        'cache_count': '{cached}/{total} photos',
+        'cache_loaded_count': '{cached}/{total} checked photos',
+        'cache_legend': '☁ online · ◐ partial · ● local · ◌ unchecked',
+        'preload': 'Preload gallery',
+        'keep_preloaded': 'Keep preloaded',
+        'keep_preloaded_hint': (
+            'Keep this gallery outside automatic cleanup and the normal cache '
+            'limit. Only photos permitted for disk caching can be retained.'
+        ),
+        'preload_cancel': 'Cancel preload',
+        'preload_close_status': 'Close preload status',
+        'preload_listing': 'Reading gallery…',
+        'preload_preloading': 'Preloading photos…',
+        'preload_checking': 'Checking saved photos…',
+        'preload_complete': 'Preload complete',
+        'preload_partial': 'Partly preloaded',
+        'preload_cancelled': 'Preload cancelled',
+        'preload_error': 'Preload could not finish',
+        'preload_unpinning': 'Releasing retained photos…',
+        'preload_unpinned': 'Gallery returned to the normal cache',
+        'preload_cancelling': 'Stopping preload…',
+        'preload_counts': '{done}/{total} photos · {cached} stored · {skipped} skipped',
+        'preload_reason_throttled': 'Server limit reached. Retry later.',
+        'preload_reason_session': 'Gallery connection unavailable.',
+        'preload_reason_storage': 'Local cache could not be saved.',
+        'preload_reason_unavailable': 'Some photos could not be loaded.',
+        'preload_reason_too_large': 'Gallery exceeds the preload work limit.',
+        'preload_reason_no_store': 'Some photos cannot be stored locally.',
+    },
+    'cs': {
+        'cache_count': '{cached}/{total} fotek',
+        'cache_loaded_count': '{cached}/{total} ověřených fotek',
+        'cache_legend': '☁ online · ◐ částečně · ● místně · ◌ neověřeno',
+        'preload': 'Přednačíst galerii',
+        'keep_preloaded': 'Uchovat přednačtenou',
+        'keep_preloaded_hint': (
+            'Galerie zůstane mimo automatické čištění a běžný limit cache. '
+            'Uchovat lze pouze fotky, které server dovoluje ukládat na disk.'
+        ),
+        'preload_cancel': 'Zrušit přednačítání',
+        'preload_close_status': 'Zavřít stav přednačítání',
+        'preload_listing': 'Načítám seznam fotek…',
+        'preload_preloading': 'Přednačítám fotky…',
+        'preload_checking': 'Ověřuji uložené fotky…',
+        'preload_complete': 'Přednačítání dokončeno',
+        'preload_partial': 'Částečně přednačteno',
+        'preload_cancelled': 'Přednačítání zrušeno',
+        'preload_error': 'Přednačítání se nepodařilo dokončit',
+        'preload_unpinning': 'Uvolňuji uchované fotky…',
+        'preload_unpinned': 'Galerie vrácena do běžné cache',
+        'preload_cancelling': 'Zastavuji přednačítání…',
+        'preload_counts': '{done}/{total} fotek · {cached} uloženo · {skipped} přeskočeno',
+        'preload_reason_throttled': 'Dosažen limit serveru. Zkuste to později.',
+        'preload_reason_session': 'Propojení s galerií není dostupné.',
+        'preload_reason_storage': 'Místní cache se nepodařilo uložit.',
+        'preload_reason_unavailable': 'Některé fotky se nepodařilo načíst.',
+        'preload_reason_too_large': 'Galerie překračuje pracovní limit přednačítání.',
+        'preload_reason_no_store': 'Některé fotky nelze uchovat na disku.',
+    },
+    'de': {
+        'cache_count': '{cached}/{total} Fotos',
+        'cache_loaded_count': '{cached}/{total} geprüfte Fotos',
+        'cache_legend': '☁ online · ◐ teilweise · ● lokal · ◌ ungeprüft',
+        'preload': 'Galerie vorladen',
+        'keep_preloaded': 'Vorgeladen behalten',
+        'keep_preloaded_hint': (
+            'Diese Galerie bleibt außerhalb der automatischen Bereinigung und '
+            'des normalen Cache-Limits. Nur erlaubte Fotos werden gespeichert.'
+        ),
+        'preload_cancel': 'Vorladen abbrechen',
+        'preload_close_status': 'Vorladestatus schließen',
+        'preload_listing': 'Galerie wird gelesen…',
+        'preload_preloading': 'Fotos werden vorgeladen…',
+        'preload_checking': 'Gespeicherte Fotos werden geprüft…',
+        'preload_complete': 'Vorladen abgeschlossen',
+        'preload_partial': 'Teilweise vorgeladen',
+        'preload_cancelled': 'Vorladen abgebrochen',
+        'preload_error': 'Vorladen konnte nicht abgeschlossen werden',
+        'preload_unpinning': 'Behaltene Fotos werden freigegeben…',
+        'preload_unpinned': 'Galerie wieder im normalen Cache',
+        'preload_cancelling': 'Vorladen wird gestoppt…',
+        'preload_counts': '{done}/{total} Fotos · {cached} gespeichert · {skipped} übersprungen',
+        'preload_reason_throttled': 'Serverlimit erreicht. Später erneut versuchen.',
+        'preload_reason_session': 'Galerieverbindung nicht verfügbar.',
+        'preload_reason_storage': 'Lokaler Cache konnte nicht gespeichert werden.',
+        'preload_reason_unavailable': 'Einige Fotos konnten nicht geladen werden.',
+        'preload_reason_too_large': 'Galerie überschreitet das Vorladelimit.',
+        'preload_reason_no_store': 'Einige Fotos dürfen nicht gespeichert werden.',
+    },
+    'sv': {
+        'cache_count': '{cached}/{total} foton',
+        'cache_loaded_count': '{cached}/{total} kontrollerade foton',
+        'cache_legend': '☁ online · ◐ delvis · ● lokalt · ◌ ej kontrollerat',
+        'preload': 'Förladda galleri',
+        'keep_preloaded': 'Behåll förladdat',
+        'keep_preloaded_hint': (
+            'Galleriet undantas från automatisk rensning och normal cachegräns. '
+            'Endast foton som får lagras på disk kan behållas.'
+        ),
+        'preload_cancel': 'Avbryt förladdning',
+        'preload_close_status': 'Stäng förladdningsstatus',
+        'preload_listing': 'Läser galleriet…',
+        'preload_preloading': 'Förladdar foton…',
+        'preload_checking': 'Kontrollerar sparade foton…',
+        'preload_complete': 'Förladdningen klar',
+        'preload_partial': 'Delvis förladdat',
+        'preload_cancelled': 'Förladdning avbruten',
+        'preload_error': 'Förladdningen kunde inte slutföras',
+        'preload_unpinning': 'Frigör behållna foton…',
+        'preload_unpinned': 'Galleriet finns åter i normal cache',
+        'preload_cancelling': 'Stoppar förladdningen…',
+        'preload_counts': '{done}/{total} foton · {cached} sparade · {skipped} överhoppade',
+        'preload_reason_throttled': 'Servergränsen nådd. Försök senare.',
+        'preload_reason_session': 'Gallerianslutningen är inte tillgänglig.',
+        'preload_reason_storage': 'Den lokala cachen kunde inte sparas.',
+        'preload_reason_unavailable': 'Vissa foton kunde inte läsas in.',
+        'preload_reason_too_large': 'Galleriet överskrider förladdningsgränsen.',
+        'preload_reason_no_store': 'Vissa foton får inte sparas lokalt.',
+    },
+}
+for _preload_language, _preload_labels in _PHOTOS_PRELOAD_LABELS.items():
+    _TRANSLATIONS[_preload_language].update({
+        'photos_workspace_' + _preload_key: _preload_value
+        for _preload_key, _preload_value in _preload_labels.items()
+    })

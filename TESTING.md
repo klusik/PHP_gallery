@@ -8553,6 +8553,17 @@ confirm the exact gallery's existing right editor panel, check desktop/narrow
 layout and Escape, and verify an unauthenticated browser reaches normal Admin
 login. An older server may show its ordinary full-page editor.
 
+Gallery preload fixtures exercise ordered pagination, local-body reuse,
+eligibility/no-store handling, cancellation, throttling and a final cache check.
+Progress counts photos rather than their two stored renditions. A successful
+download attempt does not imply full coverage after ordinary LRU eviction.
+Cache fixtures pin one exact issuer/gallery across restart, pressure the
+ordinary item/byte quota, reject unsafe paths and preserve retained originals
+when an unpin copy fails. Retained files do not consume ordinary inventory work.
+Native UI coverage must observe icons without opening Information, preload
+progress/cancel, persisted Keep preloaded, and returning an album to normal
+cache policy. Use an existing test gallery and avoid unrelated cache deletion.
+
 The WinApp destination-admission fixture exercises a complete local upload
 snapshot above the former 16 MiB read-only ceiling. Within the shared 256 MiB
 state envelope, an unfinished import retains its exact binding. The fixture

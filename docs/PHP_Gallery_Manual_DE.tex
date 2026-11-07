@@ -2134,13 +2134,28 @@ EDR-Display erscheinen, wenn PyObjC und die Tk-Fensteranbindung verfügbar
 sind. Andere Konfigurationen einschließlich Windows verwenden 8-Bit-SDR
 über Pillow/Tk.
 Ein gemeinsamer Cache pro Benutzer speichert freigegebene Fotos und Titel mit
-verifizierten Inhaltsprüfsummen. Bei mehr als 4\,096~Einträgen oder 1~GiB
-entfernt er die am längsten ungenutzten Daten. Ein passender Prüfwert aus
+verifizierten Inhaltsprüfsummen. Bei mehr als
+4\,096~Einträgen oder 1~GiB
+entfernt der normale Bereich die am längsten ungenutzten Daten. Ein passender Prüfwert aus
 dem aktuellen Albumkatalog ermöglicht die direkte Nutzung der Miniatur.
 Sonst gelten 60~Sekunden Frische und die autorisierte ETag-Prüfung.
 Die aktuell autorisierte Wiedergabeliste kann einen Titel anhand von SHA-256,
 Größe und Format wiederverwenden. Nur für Administratoren zugängliche Medien
 bleiben vom Festplattencache ausgeschlossen.
+Cache-Symbole aktualisieren sich aus geladenen Metadaten: Wolke bedeutet
+online, Halbkreis teilweise, voller Kreis lokal und gepunkteter Kreis
+ungeprüft. Ein Teilkatalog beweist keine vollständige Abdeckung. Das Symbol
+am Albumtitel öffnet das Galeriemenü.
+\ui{Galerie vorladen} lädt direkte Fotos mit Miniaturen und Lightbox-Bildern
+im Hintergrund mit Fortschritt und Abbruch. Untergalerien bleiben getrennt.
+\ui{Vorgeladen behalten} bewahrt erfolgreich vorbereitete Dateien außerhalb
+normaler Bereinigung, Anzahl- und Größenlimits auch nach Neustarts auf.
+Deaktivieren stellt die normale Cache-Regel wieder her; überschüssige Daten
+können entfallen. Abbruch behält fertige Dateien und die Behalten-Einstellung,
+behauptet aber keine vollständige Abdeckung. Ein erneuter Versuch nach einem
+Serverlimit verwendet geprüfte lokale Daten weiter. No-store-Medien bleiben
+temporär; lokale Dateien umgehen weder Anmeldung noch Linkablauf. Ein Vorgang
+akzeptiert höchstens 100\,000 direkte Fotos.
 Die Diashow-Taste öffnet das Vollbild und wiederholt das gesamte Album im
 aktivierten Serverintervall oder standardmäßig alle fünf Sekunden. Dabei
 startet die freigegebene Begleitmusik. Die Musiksteuerung kann die Wiedergabe

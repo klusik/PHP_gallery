@@ -1046,7 +1046,8 @@ Pillow/Tk provides 8-bit SDR on other configurations, including Windows.
 Thumbnails use SDR.
 
 One per-user disk cache stores opted-in photo and audio bytes with their
-verified content digests. It keeps up to 4,096 entries or 1 GiB and evicts the
+verified content digests. Its ordinary area keeps up to 4,096 entries or
+1 GiB and evicts the
 least recently accessed entries under storage pressure. A bounded decoded
 thumbnail cache accelerates return visits during the current session. A
 current catalogue validator lets WinApp read matching disk thumbnails before
@@ -1069,9 +1070,30 @@ gallery's direct inventory and settings, or the photo's indexed format,
 size, dimensions, capture settings and EXIF. Location appears when the
 gallery's map policy permits it. JPEG and WebP quality describe the server's
 current settings for generated thumbnails. The gallery card also shows its
-current local cache coverage. Icons appear when coverage is known. The
+current local cache coverage. A dotted circle marks unchecked coverage. The
 cloud marks online photos, the half circle marks a partial cache, and the
 filled circle marks an album with all authorized photo renditions on disk.
+The tree and heading update automatically from already loaded photo metadata
+and local cache headers. A partial catalogue never claims that an entire
+gallery is cached. The heading's cache icon opens the same gallery menu and
+explains the symbols on hover.
+
+**Preload gallery** reads the selected gallery's direct photos in the
+background, including thumbnails and lightbox renditions. Subgalleries are
+separate targets. Progress reports photo counts and supports cancellation.
+Existing verified local bodies are reused; server limits stop the job with
+an explicit retry-later message. Retry continues from available cached bytes.
+**Keep preloaded** also retains the successfully prepared entries in a
+separate hashed gallery area. They survive ordinary eviction and restarts and
+consume neither the ordinary entry count nor its byte quota. Disabling this
+preference returns that gallery to ordinary LRU policy, which can evict excess
+entries. Cancelling an unfinished preload keeps its completed entries and pin
+preference; it does not mark the whole gallery complete.
+Preloading uses current gallery permissions. Restricted/no-store media stays
+transient, and disk availability does not grant offline or expired-link access.
+One explicit preload accepts up to 100,000 direct photos as a bounded work
+operation; this is separate from the ordinary cache quota.
+
 **Edit gallery** opens the selected gallery in the system browser with the
 web Admin editor in its right-side panel. The browser uses its own Admin
 login; WinApp credentials are never included in the URL. Older web servers

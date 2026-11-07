@@ -1977,13 +1977,26 @@ HDR-bilder visas med AppKit på en EDR-skärm om PyObjC och Tk:s
 fönsteranslutning finns. Andra konfigurationer, inklusive Windows, visar
 8-bitars SDR med Pillow/Tk.
 En gemensam diskcache per användare lagrar godkända foton och spår med
-verifierade kontrollsummor. När den når 4\,096~poster eller 1~GiB tas de
+verifierade kontrollsummor. När den vanliga delen når 4\,096~poster eller
+1~GiB tas de
 minst nyligen använda posterna bort. Ett matchande kontrollvärde i den
 aktuella albumkatalogen gör att en miniatyr kan läsas direkt från disken.
 Annars gäller 60~sekunders färskhet och auktoriserad ETag-kontroll. Den
 aktuella auktoriserade spellistan kan återanvända ett spår med samma SHA-256,
 storlek och format. Medier som endast administratörer kan se sparas
 utanför diskcachen.
+Cacheikoner uppdateras från inlästa metadata: moln betyder online, halvcirkel
+delvis, fylld cirkel lokalt och prickad cirkel ej kontrollerat. En del av
+katalogen bevisar inte full täckning. Ikonen vid albumtiteln öppnar menyn.
+\ui{Förladda galleri} förbereder direkta foton, miniatyrer och lightboxbilder
+i~bakgrunden med förlopp och avbrytning. Undergallerier är separata mål.
+\ui{Behåll förladdat} behåller färdiga filer utanför vanlig rensning samt
+antal- och storleksgränser, även efter omstart. Avstängning återställer vanlig
+cachepolicy, som kan ta bort överskott. Avbrytning behåller färdiga filer och
+inställningen utan att hävda full täckning. Ett nytt försök efter servergränsen
+återanvänder verifierade lokala data. No-store-medier förblir tillfälliga;
+lokala filer kringgår inte inloggning eller utgången länk. En operation
+accepterar högst 100\,000 direkta foton.
 Bildspelsknappen öppnar helskärm och går runt hela albumet med serverns
 aktiverade intervall eller fem sekunder som standard. Godkänd musik börjar
 spela när bildspelet startar. Musikreglagen spelar, pausar och byter spår.

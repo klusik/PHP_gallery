@@ -26,11 +26,12 @@ from .app_linking import (
 from .app_linking_ui import LinkingManager
 from .flight_report_translations import tr
 from .gallery_folders import GalleryFolderShelf
+from .gallery_preload import GalleryPreloadWorker, PreloadProgress
 from .linked_create import BoundCreateReceipt
 from .linked_upload import LinkedUploadTarget
 from .native_gallery_viewer import GalleryThumbnailMemory, mount_native_gallery_view
 from .tk_scroll_input import vertical_scroll_delta
-from .ui_theme import GlassCard, _PALETTE, icon_button
+from .ui_theme import GlassCard, _PALETTE, attach_inline_tooltip, icon_button
 
 
 # Purpose: Keep Tk result delivery responsive during sequential page loading.
@@ -87,9 +88,18 @@ PHOTOS_HEADING_STACK_WIDTH = 440
 # Rationale: Nine pixels remain legible without changing the tree row height.
 PHOTOS_RECORDING_DOT_SIZE = 9
 
+# Purpose: Coalesce successful media reads before checking local cache headers.
+# Type: int; Units: milliseconds; Scope: the current Photos workspace.
+# Consumers: PhotosWorkspace._cache_snapshot_changed.
+# Rationale: 300 ms groups thumbnail completions without remote metadata reads.
+PHOTOS_CACHE_REFRESH_MS = 300
+
 _GalleryResult: TypeAlias = tuple[int, LinkedGalleryPage | None]
 _InfoRow: TypeAlias = tuple[str, str | int | float | bool | None]
 _InfoGroup: TypeAlias = tuple[str, list[_InfoRow]]
+# Each row contains state, complete-photo count, observed-photo count,
+# catalogue completeness and the locally persisted pin (None if unavailable).
+_CacheRow: TypeAlias = tuple[str | None, int, int, bool, bool | None]
 
 
 class PhotosWorkspace(ttk.Frame):
@@ -171,6 +181,24 @@ class PhotosWorkspace(ttk.Frame):
         self._tree_state: dict[int, bool] = {}
         self._thumbnail_memory = GalleryThumbnailMemory()
         self._cache_state: dict[int, str] = {}
+        self._gallery_pins: dict[int, bool] = {}
+        self._cache_counts: dict[int, tuple[int, int, bool]] = {}
+        self._cache_pending: dict[
+            int, tuple[tuple[LinkedPhoto, ...] | None, bool]
+        ] = {}
+        self._cache_worker: threading.Thread | None = None
+        self._cache_results: queue.Queue[
+            tuple[int, dict[int, _CacheRow]]
+        ] = queue.Queue()
+        self._cache_after: str | None = None
+        self._preload_worker: GalleryPreloadWorker | None = None
+        self._preload_generation = 0
+        self._preload_last: PreloadProgress | None = None
+        self._preload_unpin = False
+        self._cache_context_gallery: int | None = None
+        self._cache_context_status: tk.StringVar | None = None
+        self._cache_pin_var: tk.BooleanVar | None = None
+        self._cache_pin_button: ttk.Checkbutton | None = None
         self._context_card: GlassCard | None = None
         self._context_origin: tk.Misc | None = None
         self._context_xy = (0, 0)
@@ -333,6 +361,12 @@ class PhotosWorkspace(ttk.Frame):
         self._heading_controls = ttk.Frame(self._gallery_heading, style="Card.TFrame")
         self._heading_title.grid(row=0, column=0, sticky="ew")
         self._heading_controls.grid(row=0, column=1, sticky="e")
+        self._cache_tooltip = tk.StringVar(self, self._text('cache_unknown'))
+        self._cache_button = icon_button(
+            self._heading_controls, '◌', self._open_cache_context,
+            self._cache_tooltip,
+        )
+        self._cache_button.pack(side='right', padx=(0, 8))
         self._gallery_title = tk.StringVar(self._gallery_heading)
         self._show_subgalleries = tk.BooleanVar(self._gallery_heading, value=True)
         self.refresh_button = icon_button(
@@ -363,6 +397,24 @@ class PhotosWorkspace(ttk.Frame):
             style="Section.TLabel", justify="left",
         )
         self._gallery_title_label.pack(side="left", fill="x", expand=True)
+        self._preload_strip = ttk.Frame(self._gallery_heading, style='Card.TFrame')
+        self._preload_strip.columnconfigure(0, weight=1)
+        self._preload_text = tk.StringVar(self)
+        self._preload_cancel_hint = tk.StringVar(self, self._text('preload_cancel'))
+        self._preload_label = ttk.Label(
+            self._preload_strip, textvariable=self._preload_text,
+            style='Muted.TLabel', wraplength=440,
+        )
+        self._preload_label.grid(row=0, column=0, sticky='w')
+        self._preload_cancel = icon_button(
+            self._preload_strip, '×', self._cancel_preload,
+            self._preload_cancel_hint,
+        )
+        self._preload_cancel.grid(row=0, column=1, padx=(6, 0))
+        self._preload_bar = ttk.Progressbar(
+            self._preload_strip, mode='indeterminate',
+        )
+        self._preload_bar.grid(row=1, column=0, columnspan=2, sticky='ew')
         self._gallery_heading.bind("<Configure>", self._on_heading_resize, add="+")
         self._folder_shelf = GalleryFolderShelf(
             self.viewer_pane, self._open_subgallery, self._gallery_context,
@@ -384,7 +436,8 @@ class PhotosWorkspace(ttk.Frame):
             event (tk.Event): Heading width change from Tk geometry management.
 
         Returns:
-            None: Title wrapping follows available width without pulse relayout.
+            None: Wraps the title and keeps preload progress below both control
+                rows without changing layout during recording pulses.
         """
         stacked = event.width < PHOTOS_HEADING_STACK_WIDTH
         if stacked != self._heading_stacked:
@@ -393,6 +446,9 @@ class PhotosWorkspace(ttk.Frame):
                 row=1 if stacked else 0, column=0 if stacked else 1,
                 sticky="w" if stacked else "e", pady=(4, 0) if stacked else 0,
             )
+            if self._preload_strip.winfo_manager() == 'grid':
+                self._preload_strip.grid_configure(row=2 if stacked else 1)
+        self._preload_label.configure(wraplength=max(160, event.width - 48))
         available = event.width
         if not stacked:
             available -= self._heading_controls.winfo_reqwidth()
@@ -420,7 +476,9 @@ class PhotosWorkspace(ttk.Frame):
         """
         if gallery_id in self._cache_state:
             del self._cache_state[gallery_id]
+            self._cache_counts.pop(gallery_id, None)
             self._render_tree([gallery_id])
+            self._refresh_cache_widgets(gallery_id)
 
     def _refresh_photos(self) -> None:
         """Refresh the selected gallery through its current viewer owner.
@@ -562,6 +620,13 @@ class PhotosWorkspace(ttk.Frame):
             if session is not None and self._load_tree_state is not None else {}
         )
         self._cache_state.clear()
+        self._gallery_pins.clear()
+        self._cache_counts.clear()
+        self._cache_pending.clear()
+        if self._preload_worker is not None:
+            self._preload_worker.stop()
+        self._preload_strip.grid_remove()
+        self._preload_bar.stop()
         self._create_receipt = None
         self._generation += 1
         self._cancel.set()
@@ -666,6 +731,7 @@ class PhotosWorkspace(ttk.Frame):
             None: Current results apply before pending catalogue work advances.
         """
         self._poll_id = None
+        self._poll_cache_work()
         while True:
             try:
                 generation, completion = self._context_results.get_nowait()
@@ -692,7 +758,10 @@ class PhotosWorkspace(ttk.Frame):
             self._pending_cursor = None
             self._has_pending_page = False
             self._request_page(cursor)
-        if self._worker is not None or self._has_pending_page or self._context_busy:
+        if (self._worker is not None or self._has_pending_page or self._context_busy
+                or self._cache_worker is not None or self._cache_pending
+                or (self._preload_worker is not None
+                    and self._preload_worker.is_alive())):
             self._schedule_poll()
 
     def _accept_page(self, page: LinkedGalleryPage | None) -> None:
@@ -719,6 +788,9 @@ class PhotosWorkspace(ttk.Frame):
                     gallery.parent_id, set(),
                 ).add(gallery.gallery_id)
         self._render_tree(page_gallery_ids)
+        for gallery_id in page_gallery_ids:
+            self._cache_pending.setdefault(gallery_id, (None, False))
+        self._start_cache_probe()
         self._sync_subgalleries()
         self._pages_this_pass += 1
         self._next_after = page.next_after
@@ -1148,6 +1220,9 @@ class PhotosWorkspace(ttk.Frame):
             controller.on_photos_changed = lambda: self._photos_changed(
                 gallery.gallery_id,
             )
+            controller.on_cache_changed = lambda photos, complete: (
+                self._cache_snapshot_changed(gallery.gallery_id, photos, complete)
+            )
             self._viewer.pack(fill="both", expand=True)
         except tk.TclError:
             self.viewer_status.configure(text=self._text("error"))
@@ -1155,6 +1230,7 @@ class PhotosWorkspace(ttk.Frame):
             if implicit:
                 self._on_implicit_preview(gallery.gallery_id, False)
         self._sync_subgalleries()
+        self._refresh_cache_widgets(gallery.gallery_id)
 
     def _sync_subgalleries(self) -> None:
         """Project the selected gallery's direct children into its folder strip.
@@ -1770,6 +1846,8 @@ class PhotosWorkspace(ttk.Frame):
                 )
         gallery = self._galleries.get(gallery_id) if gallery_id is not None else None
         if gallery is not None:
+            if not creation_only and session.can_read_media():
+                self._add_cache_actions(card, session, gallery)
             if not creation_only and self._manager is not None:
                 open_editor = getattr(
                     self._manager, 'open_photos_gallery_editor', None,
@@ -2006,6 +2084,354 @@ class PhotosWorkspace(ttk.Frame):
             ),
         )
 
+    def _open_cache_context(self) -> None:
+        """Open the selected gallery's existing anchored action panel.
+
+        Returns:
+            None: Exposes cache status, preload and retention beside the trigger.
+        """
+        gallery_id = self._selected_gallery_id
+        if gallery_id is not None:
+            self._gallery_context(gallery_id, self._context_event(self._cache_button))
+
+    def _cache_description(self, gallery_id: int) -> str:
+        """Describe observed local availability without claiming offline access.
+
+        Args:
+            gallery_id (int): Exact gallery represented by the status.
+
+        Returns:
+            str: Localized availability, optional observed count and retention.
+        """
+        state = self._cache_state.get(gallery_id, 'unknown')
+        message = self._text('cache_' + state)
+        counts = self._cache_counts.get(gallery_id)
+        if counts is not None:
+            cached, total, complete = counts
+            message += ' · ' + self._text(
+                'cache_count' if complete else 'cache_loaded_count',
+            ).format(cached=cached, total=total)
+        if self._gallery_pins.get(gallery_id) is True:
+            message += ' · ' + self._text('keep_preloaded')
+        return message
+
+    def _refresh_cache_widgets(self, gallery_id: int) -> None:
+        """Refresh existing cache controls after a background observation.
+
+        Args:
+            gallery_id (int): Exact current site's gallery whose result changed.
+
+        Returns:
+            None: Updates the selected heading and any surviving cache menu.
+        """
+        if self._destroyed:
+            return
+        if self._selected_gallery_id == gallery_id:
+            self._cache_button.configure(text=self._cache_glyph(gallery_id))
+            self._cache_tooltip.set(
+                self._cache_description(gallery_id) + '\n' + self._text('cache_legend'),
+            )
+        if self._cache_context_gallery != gallery_id:
+            return
+        button = self._cache_pin_button
+        if button is None or not button.winfo_exists():
+            return
+        if self._cache_context_status is not None:
+            self._cache_context_status.set(self._cache_description(gallery_id))
+        active = self._preload_worker is not None and self._preload_worker.is_alive()
+        known = gallery_id in self._gallery_pins
+        if not active and self._cache_pin_var is not None:
+            self._cache_pin_var.set(self._gallery_pins.get(gallery_id, False))
+        button.state(['!disabled'] if known and not active else ['disabled'])
+
+    def _cache_snapshot_changed(
+        self, gallery_id: int, photos: tuple[LinkedPhoto, ...], complete: bool,
+    ) -> None:
+        """Coalesce authorized viewer snapshots for local-only cache checks.
+
+        Args:
+            gallery_id (int): Exact gallery owned by the notifying viewer.
+            photos (tuple[LinkedPhoto, ...]): Already authorized loaded descriptors.
+            complete (bool): Whether this snapshot reaches the catalogue's end.
+
+        Returns:
+            None: Queues one latest snapshot per gallery without network reads.
+        """
+        if self._destroyed or gallery_id not in self._galleries:
+            return
+        self._cache_pending[gallery_id] = (photos, complete)
+        if self._cache_after is None:
+            self._cache_after = self.after(
+                PHOTOS_CACHE_REFRESH_MS, self._start_cache_probe,
+            )
+        self._schedule_poll()
+
+    def _start_cache_probe(self) -> None:
+        """Inspect one bounded batch of local headers and pin preferences.
+
+        Returns:
+            None: One daemon reader publishes only current-generation results.
+        """
+        self._cache_after = None
+        session = self._session
+        if (self._destroyed or session is None or self._cache_worker is not None
+                or not self._cache_pending):
+            return
+        requests, self._cache_pending = self._cache_pending, {}
+        generation, cancel = self._generation, self._cancel
+
+        def read() -> None:
+            """Read local metadata without loading another server catalogue.
+
+            Returns:
+                None: Publishes state/count/completeness/pin rows for this batch.
+            """
+            rows: dict[int, _CacheRow] = {}
+            for gallery_id, (photos, complete) in requests.items():
+                if cancel.is_set():
+                    return
+                try:
+                    pin_method = getattr(session, 'gallery_pinned', None)
+                    pinned = pin_method(gallery_id) is True if callable(pin_method) else False
+                    state: str | None = None
+                    cached = 0
+                    any_cached = False
+                    if photos is not None:
+                        for photo in photos:
+                            if cancel.is_set():
+                                return
+                            thumb = session.has_cached_photo(
+                                gallery_id, photo, thumbnail=True,
+                            )
+                            detail = session.has_cached_photo(gallery_id, photo)
+                            cached += int(bool(thumb and detail))
+                            any_cached |= bool(thumb or detail)
+                        state = (
+                            'local' if complete and photos and cached == len(photos)
+                            else 'partial' if any_cached
+                            else 'cloud' if complete else 'unknown'
+                        )
+                    rows[gallery_id] = (
+                        state, cached, len(photos or ()), complete, pinned,
+                    )
+                except Exception:
+                    rows[gallery_id] = ('unknown', 0, 0, False, None)
+            self._cache_results.put((generation, rows))
+
+        self._cache_worker = threading.Thread(
+            target=read, name='GalleryCacheStatus', daemon=True,
+        )
+        self._cache_worker.start()
+        self._schedule_poll()
+
+    def _poll_cache_work(self) -> None:
+        """Apply local cache observations and explicit preload progress on Tk.
+
+        Returns:
+            None: Rejects stale sessions and starts at most one next local probe.
+        """
+        while True:
+            try:
+                generation, rows = self._cache_results.get_nowait()
+            except queue.Empty:
+                break
+            if (generation != self._generation
+                    or self._session_provider() is not self._session):
+                continue
+            changed: list[int] = []
+            for gallery_id, (state, cached, total, complete, pinned) in rows.items():
+                if gallery_id not in self._galleries:
+                    continue
+                if state is not None:
+                    prior = self._cache_counts.get(gallery_id)
+                    retained_complete = (
+                        self._gallery_pins.get(gallery_id) is True
+                        and self._cache_state.get(gallery_id) == 'local'
+                        and prior is not None and prior[2]
+                        and not complete and total > 0 and cached == total
+                    )
+                    if not retained_complete:
+                        self._cache_state[gallery_id] = state
+                        self._cache_counts[gallery_id] = (cached, total, complete)
+                if pinned is not None:
+                    self._gallery_pins[gallery_id] = pinned
+                else:
+                    self._gallery_pins.pop(gallery_id, None)
+                changed.append(gallery_id)
+                self._refresh_cache_widgets(gallery_id)
+            if changed:
+                self._render_tree(changed)
+        if self._cache_worker is not None and not self._cache_worker.is_alive():
+            self._cache_worker = None
+        if self._cache_pending and self._cache_after is None:
+            self._start_cache_probe()
+        worker = self._preload_worker
+        if worker is None or self._preload_generation != self._generation:
+            return
+        progress = worker.snapshot()
+        if progress == self._preload_last:
+            return
+        self._preload_last = progress
+        self._show_preload_progress(progress)
+        if progress.phase in ('complete', 'partial', 'cancelled', 'error'):
+            gallery_id = progress.gallery_id
+            if progress.cache_state != 'unknown':
+                self._cache_state[gallery_id] = progress.cache_state
+                self._cache_counts[gallery_id] = (
+                    progress.cached, progress.total or 0, True,
+                )
+            self._cache_pending.setdefault(gallery_id, (None, False))
+            if gallery_id in self._galleries:
+                self._render_tree([gallery_id])
+                self._refresh_cache_widgets(gallery_id)
+
+    def _add_cache_actions(
+        self, card: GlassCard, session: LinkingSession, gallery: LinkedGallery,
+    ) -> None:
+        """Add explicit preload and retention to the existing gallery menu.
+
+        Args:
+            card (GlassCard): Exact gallery's current action card.
+            session (LinkingSession): Current authorized Photos session.
+            gallery (LinkedGallery): Exact listed physical gallery.
+
+        Returns:
+            None: Shows observed status and a pending-safe local preference.
+        """
+        gallery_id = gallery.gallery_id
+        self._cache_context_gallery = gallery_id
+        self._cache_context_status = tk.StringVar(
+            card, self._cache_description(gallery_id),
+        )
+        ttk.Label(
+            card, textvariable=self._cache_context_status, style='Muted.TLabel',
+            wraplength=PHOTOS_INFO_CARD_MAX_WIDTH,
+        ).pack(anchor='w', fill='x', pady=(4, 2))
+        active = self._preload_worker is not None and self._preload_worker.is_alive()
+        if active:
+            self._context_action(card, self._text('preload_cancel'), self._cancel_preload)
+        else:
+            self._context_action(
+                card, self._text('preload'),
+                lambda: self._launch_preload(card, session, gallery),
+            )
+        self._cache_pin_var = tk.BooleanVar(
+            card, self._gallery_pins.get(gallery_id, False),
+        )
+        self._cache_pin_button = ttk.Checkbutton(
+            card, text=self._text('keep_preloaded'), style='Card.TCheckbutton',
+            variable=self._cache_pin_var,
+            command=lambda: self._launch_preload(
+                card, session, gallery,
+                pinned=self._cache_pin_var.get(),
+            ),
+        )
+        self._cache_pin_button.pack(anchor='w', pady=(4, 2))
+        attach_inline_tooltip(
+            self._cache_pin_button, self._text('keep_preloaded_hint'),
+            self.winfo_toplevel(),
+        )
+        self._cache_pending.setdefault(gallery_id, (None, False))
+        self._start_cache_probe()
+        self._refresh_cache_widgets(gallery_id)
+
+    def _launch_preload(
+        self, card: GlassCard, session: LinkingSession, gallery: LinkedGallery,
+        *, pinned: bool | None = None,
+    ) -> None:
+        """Start one explicit, cancellable preload for the captured gallery.
+
+        Args:
+            card (GlassCard): Current menu containing the activated action.
+            session (LinkingSession): Exact session captured at menu opening.
+            gallery (LinkedGallery): Exact listed target of this action.
+            pinned (bool | None): Set retention, or None to preserve it.
+
+        Returns:
+            None: Starts work off Tk; disabling retention performs no download.
+        """
+        if (self._context_card is not card or self._session is not session
+                or self._session_provider() is not session
+                or self._galleries.get(gallery.gallery_id) is not gallery):
+            return
+        if self._preload_worker is not None and self._preload_worker.is_alive():
+            self._preload_strip.grid(
+                row=2 if self._heading_stacked else 1,
+                column=0, columnspan=2, sticky='ew',
+            )
+            return
+        self._preload_worker = GalleryPreloadWorker(
+            session, gallery.gallery_id, pinned=pinned, download=pinned is not False,
+        )
+        self._preload_generation = self._generation
+        self._preload_last = None
+        self._preload_unpin = pinned is False
+        self._preload_text.set(self._text('preload_listing'))
+        self._preload_strip.grid(
+            row=2 if self._heading_stacked else 1,
+            column=0, columnspan=2, sticky='ew', pady=(4, 0),
+        )
+        self._preload_bar.configure(mode='indeterminate')
+        self._preload_bar.grid()
+        self._preload_bar.start(PHOTOS_CATALOG_POLL_MS)
+        self._preload_cancel.state(['!disabled'])
+        self._preload_worker.start()
+        self._dismiss_context()
+        self._schedule_poll()
+
+    def _show_preload_progress(self, progress: PreloadProgress) -> None:
+        """Show truthful transfer counts and terminal reasons in the heading.
+
+        Args:
+            progress (PreloadProgress): Latest immutable worker snapshot.
+
+        Returns:
+            None: Updates activity or measured progress without touching storage.
+        """
+        gallery = self._galleries.get(progress.gallery_id)
+        title = gallery.title if gallery is not None else ''
+        phase = self._text(
+            'preload_unpinned' if self._preload_unpin and progress.phase == 'complete'
+            else 'preload_' + progress.phase,
+        )
+        if progress.total is not None:
+            phase += ' · ' + self._text('preload_counts').format(
+                done=progress.completed, total=progress.total,
+                cached=progress.cached, skipped=progress.skipped,
+            )
+        if progress.reason:
+            phase += ' · ' + self._text('preload_reason_' + progress.reason)
+        self._preload_text.set((title + ': ' if title else '') + phase)
+        terminal = progress.phase in ('complete', 'partial', 'cancelled', 'error')
+        self._preload_cancel_hint.set(self._text(
+            'preload_close_status' if terminal else 'preload_cancel',
+        ))
+        if terminal:
+            self._preload_bar.stop()
+            self._preload_bar.grid_remove()
+            self._preload_cancel.state(['!disabled'])
+        elif progress.phase in ('listing', 'unpinning'):
+            self._preload_bar.configure(mode='indeterminate')
+        else:
+            self._preload_bar.stop()
+            self._preload_bar.configure(
+                mode='determinate', maximum=max(1, progress.total or 1),
+                value=progress.completed,
+            )
+
+    def _cancel_preload(self) -> None:
+        """Cancel new reads, or dismiss a completed preload status strip.
+
+        Returns:
+            None: Keeps any explicitly pinned bytes and existing cache contents.
+        """
+        if self._preload_worker is not None and self._preload_worker.is_alive():
+            self._preload_worker.stop()
+            self._preload_text.set(self._text('preload_cancelling'))
+            self._preload_cancel.state(['disabled'])
+        else:
+            self._preload_strip.grid_remove()
+
     def _cache_glyph(self, gallery_id: int) -> str:
         """Return the icon for the latest local coverage check.
 
@@ -2013,11 +2439,13 @@ class PhotosWorkspace(ttk.Frame):
             gallery_id (int): Exact gallery being displayed.
 
         Returns:
-            str: Cloud, partial circle, local circle or empty when unchecked.
+            str: Cloud, partial/local circle, or dotted circle when unchecked;
+                a pin marks a locally retained gallery.
         """
-        return {"cloud": "☁", "local": "●", "partial": "◐"}.get(
-            self._cache_state.get(gallery_id, "unknown"), "",
+        glyph = {"cloud": "☁", "local": "●", "partial": "◐"}.get(
+            self._cache_state.get(gallery_id, "unknown"), "◌",
         )
+        return ('📌 ' if self._gallery_pins.get(gallery_id) is True else '') + glyph
 
     def _gallery_info(
         self, card: GlassCard, session: LinkingSession, gallery_id: int,
@@ -2164,6 +2592,8 @@ class PhotosWorkspace(ttk.Frame):
         if visible_count is not None:
             fields.setdefault("photo_count", visible_count)
         self._cache_state[gallery_id] = state
+        self._cache_counts.pop(gallery_id, None)
+        self._refresh_cache_widgets(gallery_id)
         if gallery_id in self._galleries:
             self._render_tree([gallery_id])
         groups = [
@@ -2788,6 +3218,13 @@ class PhotosWorkspace(ttk.Frame):
         self._dismiss_context(restore=False)
         self._generation += 1
         self._cancel.set()
+        if self._preload_worker is not None:
+            self._preload_worker.stop()
+        if self._cache_after is not None:
+            try:
+                self.after_cancel(self._cache_after)
+            except tk.TclError:
+                pass
         if self._poll_id is not None:
             try:
                 self.after_cancel(self._poll_id)

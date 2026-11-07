@@ -1917,12 +1917,25 @@ zobrazit přes AppKit na EDR displeji, pokud je dostupné PyObjC a~propojení
 okna Tk. Ostatní konfigurace včetně Windows zobrazují 8bitové SDR přes
 Pillow/Tk.
 Společná uživatelská disková cache ukládá schválené fotky a~skladby
-s~ověřenými otisky obsahu. Při překročení 4\,096~položek nebo 1~GiB
+s~ověřenými otisky obsahu. Běžná část při překročení 4\,096~položek nebo 1~GiB
 uvolní nejdéle nepoužívaná data. Pokud se shoduje ověřovací údaj z~aktuálního
 výpisu alba, aplikace náhled vezme rovnou z~disku. Bez něj platí čerstvost
 60~sekund a~ověření ETagem. Aktuální schválený playlist znovu použije skladbu
 se stejným SHA-256, velikostí a~formátem. Média dostupná pouze správcům se
 na disk neukládají.
+Ikony cache se aktualizují automaticky z~načtených údajů: oblak znamená
+online, půlkruh částečné pokrytí, plný kruh místní data a~tečkovaný kruh
+neověřený stav. Část katalogu neprokazuje úplné pokrytí. Ikona v~záhlaví
+otevře nabídku galerie.
+\ui{Přednačíst galerii} připraví přímé fotky, náhledy i~snímky pro lightbox,
+na pozadí s~průběhem a~možností zrušení. Podgalerie jsou samostatné cíle.
+\ui{Uchovat přednačtenou} ponechá úspěšně připravená data mimo běžné čištění
+i~limity počtu a~velikosti, také po restartu. Vypnutí vrátí galerii pod běžná
+pravidla cache, která mohou přebytečná data uvolnit. Zrušení ponechá hotové
+soubory i~volbu uchování, ale neoznačí celou galerii za přednačtenou.
+Opakování po limitu serveru znovu využije ověřená místní data. Média
+s~\texttt{no-store} zůstávají dočasná; uložené soubory neobcházejí přihlášení
+ani platnost propojení. Jedna operace přijme nejvýše 100\,000~přímých fotek.
 Tlačítko prezentace otevře celou obrazovku a~prochází album ve smyčce podle
 povoleného intervalu serveru nebo po pěti sekundách. Současně spustí povolený
 doprovod. Ovládání hudbu spouští, pozastavuje a~přepíná mezi skladbami.

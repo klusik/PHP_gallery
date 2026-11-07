@@ -1916,12 +1916,26 @@ On~macOS~15 or later, compatible HDR source data can use AppKit on~an~EDR
 display when PyObjC and~the~Tk window bridge are~available. Other configurations
 use the~8-bit Pillow/Tk SDR renderer, including Windows.
 One per-user disk cache stores opted-in photos and~tracks with verified
-content digests. It~evicts the~least recently accessed items above
+content digests. Its ordinary area evicts the~least recently accessed items above
 4,096~entries or~1~GiB. A~matching validator from the~current album catalogue
 reuses a~local thumbnail immediately. Photos without this proof use the~usual
 60-second freshness and~authorized ETag revalidation. The~current authorized
 playlist can reuse a~track by SHA-256, size and~format. Media available
 only to~administrators is~excluded from the~disk cache.
+Cache icons update automatically from loaded metadata: cloud means online,
+half-circle partial, filled circle local and~dotted circle unchecked.
+A~partial catalogue cannot prove full coverage. The~heading's cache icon
+opens the~gallery menu.
+\ui{Preload gallery} prepares direct photos, including thumbnails and~lightbox
+images, in~the~background with progress and~Cancel. Subgalleries are~separate
+targets. \ui{Keep preloaded} retains successfully prepared files outside
+ordinary cleanup, entry limits and~byte limits, including after restart.
+Disabling it~returns the~gallery to~ordinary cache policy, which may evict
+excess files. Cancel keeps prepared files and~the~retention preference without
+claiming full coverage. Existing verified bytes are~reused when retrying after
+a~server limit. No-store media remains transient; retained bytes grant
+no~offline access or~expired-link permission. One explicit preload accepts
+up~to~100,000 direct photos as~a bounded work operation.
 The~presentation button opens fullscreen and~loops through the~album at~the
 server's enabled interval or~a five-second default. The~authorized soundtrack
 starts with the~presentation. The~music controls play, pause and~change tracks.
