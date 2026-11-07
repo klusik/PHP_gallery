@@ -343,6 +343,17 @@ Contextual Watcher capture requires the verified temporary-key table. The
 ordinary linked and classic Watcher transports remain supported on older
 servers. Deployed metadata and contextual capture usage is unknown.
 
+Photos gallery editing delegates to the existing browser Admin editor owner.
+The native link carries only the exact installation and numeric gallery ID.
+Current web servers consume the optional `open_panel=1` GET hint after normal
+Admin authorization and open the existing drawer on the Galleries dashboard.
+Older servers ignore the hint and retain their ordinary full-page editor.
+Keep this credential-free handoff permanently while mixed web/client versions
+are supported; it grants no web Admin session or extra native linking scope.
+Deployed usage is unknown. Native URL/session fixtures and drawer navigation
+fixtures cover the handoff; actual browser login and panel rendering require
+separate desktop qualification.
+
 Explicit Admin Photos approval can upgrade the same previously saved rolling
 link. The native linking and vault owners compare the current binding and
 replace it only after identity verification. Saved public grants still open

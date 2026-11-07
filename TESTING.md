@@ -8544,6 +8544,15 @@ proof of the original transaction or database registration, and `unknown`
 does not prove absence. These fixtures do not establish actual Windows, deployed
 HTTPS, concurrent external filesystem or power-loss behavior.
 
+The gallery-editor handoff fixtures bind the current Photos session and exact
+installation, validate numeric gallery IDs and keep credentials out of browser
+URLs. The browser drawer fixture covers subdirectory mounts, signed 64-bit
+IDs, malformed/repeated navigation hints and preservation of the dashboard URL.
+For desktop acceptance, invoke Edit gallery from the tree and a gallery card,
+confirm the exact gallery's existing right editor panel, check desktop/narrow
+layout and Escape, and verify an unauthenticated browser reaches normal Admin
+login. An older server may show its ordinary full-page editor.
+
 The WinApp destination-admission fixture exercises a complete local upload
 snapshot above the former 16 MiB read-only ceiling. Within the shared 256 MiB
 state envelope, an unfinished import retains its exact binding. The fixture

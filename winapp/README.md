@@ -1072,6 +1072,10 @@ current settings for generated thumbnails. The gallery card also shows its
 current local cache coverage. Icons appear when coverage is known. The
 cloud marks online photos, the half circle marks a partial cache, and the
 filled circle marks an album with all authorized photo renditions on disk.
+**Edit gallery** opens the selected gallery in the system browser with the
+web Admin editor in its right-side panel. The browser uses its own Admin
+login; WinApp credentials are never included in the URL. Older web servers
+open their ordinary full-page editor instead.
 The add button in the tree toolbar creates a gallery at the site's root.
 Use the add button beside the selected gallery's title, a gallery's context
 menu or blank photo space to create a subgallery. Each form opens inline.

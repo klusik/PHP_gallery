@@ -60,7 +60,8 @@ use function Gallery\Views\view_render_admin_gallery_editor_form_open;
 /**
  * Authenticate the editor request and render fields and revision from the same gallery snapshot.
  *
- * @return void Emits a complete editor or delegates its POST/panel response.
+ * @return void Emits an editor, delegates POST/panel responses, or redirects an
+ *     explicit browser handoff to the existing Admin gallery drawer.
  * @author Rudolf Klusal
  */
 function cms_admin_edit_gallery(): void
@@ -86,6 +87,18 @@ function cms_admin_edit_gallery(): void
 
     if (request_method() === 'POST') {
         admin_edit_gallery_handle_post($gallery, $capabilities);
+        return;
+    }
+    if (request_method() === 'GET'
+        && ($_GET['open_panel'] ?? '') === '1'
+        && ($_GET['panel'] ?? '') !== '1'
+    ) {
+        // Resolve the exact gallery under normal browser Admin authorization.
+        // Older servers ignore open_panel and retain their full editor page.
+        \Gallery\Core\redirect_to(url_for('admin', [
+            'dashboard_tab' => 'galleries',
+            'edit_gallery' => (int) $gallery['id'],
+        ]));
         return;
     }
     if ((string) ($_GET['tab'] ?? '') === 'admin-edit-documents') {

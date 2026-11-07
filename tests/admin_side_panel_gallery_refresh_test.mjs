@@ -39,6 +39,9 @@ const createControllerPath = path.join(rootDir, 'app/controllers/admin_galleries
 const sidePanelSource = fs.readFileSync(sidePanelPath, 'utf8');
 const operationsSource = fs.readFileSync(operationsPath, 'utf8');
 const createControllerSource = fs.readFileSync(createControllerPath, 'utf8');
+const galleryEntrySource = fs.readFileSync(
+    path.join(rootDir, 'public/assets/gallery.js'), 'utf8',
+);
 
 /**
  * Extract a named function declaration from JavaScript source.
@@ -188,6 +191,7 @@ const delegatedDocument = {
 delegatedDocument.body.dataset = {};
 let delegatedCreateCalls = 0;
 let delegatedEditCalls = 0;
+let delegatedDeepLinkCalls = 0;
 const setupDelegatedSidePanel = evaluateFunction(
     extractFunction(sidePanelSource, 'setupAdminGallerySidePanel').replace(/^export\s+/, ''),
     {
@@ -196,6 +200,7 @@ const setupDelegatedSidePanel = evaluateFunction(
         HTMLElement: DelegatedHtmlElement,
         HTMLAnchorElement: DelegatedAnchorElement,
         HTMLFormElement: DelegatedFormElement,
+        openAdminGalleryDeepLink: async () => { delegatedDeepLinkCalls++; },
         submitAdminGalleryPanelCreateForm: async () => {
             delegatedCreateCalls++;
         },
@@ -206,6 +211,8 @@ const setupDelegatedSidePanel = evaluateFunction(
 );
 setupDelegatedSidePanel();
 assert.equal(delegatedDocument.body.dataset.adminGallerySidePanelBound, '1');
+assert.equal(delegatedDeepLinkCalls, 1,
+    'The installed drawer must consume its initial gallery handoff once.');
 
 async function dispatchDelegatedSubmit(form) {
     const event = {
@@ -269,5 +276,55 @@ assert.doesNotMatch(canonicalRefreshSource, /history\.(?:pushState|replaceState)
 
 // Changing the side-panel module must also change its import cache key.
 assert.match(operationsSource, /admin-side-panel\.js\?v=[^'"\s]+/);
+
+// Navigation identities retain all signed 64-bit digits. Invalid, repeated or
+// URL-shaped input must not reach the authenticated editor fetch owner.
+const galleryDeepLinkMaximum = vm.runInNewContext(
+    sidePanelSource.match(/const ADMIN_GALLERY_DEEP_LINK_ID_MAX = [0-9]+n;/)[0]
+        + '\nADMIN_GALLERY_DEEP_LINK_ID_MAX;',
+);
+assert(galleryEntrySource.indexOf('setupAdminGallerySidePanel();')
+    < galleryEntrySource.indexOf('setupAdminTabs();'),
+    'Consume the editor target before the tabs normalize the dashboard URL.');
+for (const [query, expectedId] of [
+    ['page=admin&dashboard_tab=galleries&edit_gallery=64', '64'],
+    ['page=admin&edit_gallery=9223372036854775807', '9223372036854775807'],
+    ['page=admin&edit_gallery=9223372036854775808', null],
+    ['page=admin&edit_gallery=64&edit_gallery=65', null],
+    ['page=admin&page=gallery&edit_gallery=64', null],
+    ['page=admin_login&edit_gallery=64', null],
+    ['page=gallery&edit_gallery=64', null],
+    ['page=admin&edit_gallery=0', null],
+    ['page=admin&edit_gallery=-1', null],
+    ['page=admin&edit_gallery=064', null],
+    ['page=admin&edit_gallery=6e1', null],
+    ['page=admin&edit_gallery=https%3A%2F%2Fother.example%2F', null],
+]) {
+    const originalUrl = 'https://gallery.example/nested/index.php?' + query
+        + '#admin-tab-galleries';
+    const browserWindow = {
+        location: {href: originalUrl}, fetch: () => {}, DOMParser: () => {},
+    };
+    const openedLinks = [];
+    const openDeepLink = evaluateFunction(
+        extractFunction(sidePanelSource, 'openAdminGalleryDeepLink'),
+        {
+            URL, window: browserWindow,
+            document: {createElement: () => ({dataset: {}})},
+            ADMIN_GALLERY_DEEP_LINK_ID_MAX: galleryDeepLinkMaximum,
+            openAdminGallerySidePanel: async link => { openedLinks.push(link); },
+        },
+    );
+    await openDeepLink();
+    assert.equal(browserWindow.location.href, originalUrl,
+        'Opening an editor must preserve the dashboard URL.');
+    assert.equal(openedLinks.length, expectedId === null ? 0 : 1, query);
+    if (expectedId !== null) {
+        assert.equal(openedLinks[0].href,
+            'https://gallery.example/nested/index.php?page=admin_edit_gallery&id='
+                + expectedId);
+        assert.equal(openedLinks[0].dataset.adminSidePanelWorkflow, 'gallery-edit');
+    }
+}
 
 console.log('PASS admin_side_panel_gallery_refresh_test');

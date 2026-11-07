@@ -1770,12 +1770,57 @@ class PhotosWorkspace(ttk.Frame):
                 )
         gallery = self._galleries.get(gallery_id) if gallery_id is not None else None
         if gallery is not None:
+            if not creation_only and self._manager is not None:
+                open_editor = getattr(
+                    self._manager, 'open_photos_gallery_editor', None,
+                )
+                if callable(open_editor):
+                    self._context_action(
+                        card, self._text('edit_gallery'),
+                        lambda: self._launch_gallery_editor(
+                            card, session, gallery,
+                        ),
+                    )
             self._add_host_gallery_actions(card, session, gallery)
         self._add_gallery_creation_action(card, session, gallery_id)
         if gallery_id is not None and allow_root:
             self._add_gallery_creation_action(card, session, None)
         self._place_context(card)
         return "break"
+
+    def _launch_gallery_editor(
+        self, card: GlassCard, session: LinkingSession,
+        gallery: LinkedGallery,
+    ) -> None:
+        """Open only the current listed gallery in its authenticated browser.
+
+        Args:
+            card (GlassCard): Gallery context containing the action.
+            session (LinkingSession): Exact live session captured by the menu.
+            gallery (LinkedGallery): Exact gallery row captured by the menu.
+
+        Returns:
+            None: Opens the editor or reports a localized safe failure in Photos.
+        """
+        open_editor = getattr(
+            self._manager, 'open_photos_gallery_editor', None,
+        )
+        if (self._context_card is not card or self._session is not session
+                or self._session_provider() is not session
+                or self._galleries.get(gallery.gallery_id) is not gallery
+                or not callable(open_editor)):
+            self._dismiss_context()
+            return
+        try:
+            opened = open_editor(session, gallery)
+        except Exception:  # noqa: BLE001
+            opened = False
+        if opened:
+            self._dismiss_context()
+            return
+        self.tree_status.configure(text=self._text('edit_gallery_failed'))
+        self._context_content(card, self._text('edit_gallery_failed'))
+        self._place_context(card)
 
     def selected_watcher_gallery(
         self,

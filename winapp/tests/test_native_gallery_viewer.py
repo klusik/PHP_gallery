@@ -38,6 +38,7 @@ from uploader.app_linking import (
     LinkingMediaUnavailable,
     LinkingSession,
 )
+from uploader.flight_report_translations import tr
 
 try:
     import tkinter as tk
@@ -692,6 +693,55 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertTrue(workspace.winfo_viewable())
         self._assert_no_browsing_toplevels()
         connect.assert_not_called()
+
+    def test_gallery_context_opens_editor_only_for_gallery_rows(self) -> None:
+        """Expose the browser editor action only on a real gallery context.
+
+        Returns:
+            None: The action receives the exact current session and listed
+                gallery, while creation-only contexts omit the editor action.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Album')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        manager = mock.Mock()
+        manager.open_photos_gallery_editor.return_value = True
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+            manager=manager,
+        )
+        workspace.pack(fill='both', expand=True)
+        self._wait_until(
+            lambda: workspace.tree.exists(str(TEST_GALLERY_ID)),
+            'The editor fixture gallery did not load.',
+        )
+        event = mock.Mock()
+        event.widget = workspace.tree
+        event.x_root = workspace.tree.winfo_rootx() + 20
+        event.y_root = workspace.tree.winfo_rooty() + 20
+        workspace._gallery_context(TEST_GALLERY_ID, event)
+        editor = next(
+            widget for widget in workspace._context_card.winfo_children()
+            if widget.winfo_class() == 'TButton'
+            and widget.cget('text') == tr('en', 'photos_workspace_edit_gallery')
+        )
+        editor.invoke()
+        manager.open_photos_gallery_editor.assert_called_once_with(
+            session, gallery,
+        )
+
+        workspace._gallery_context(
+            TEST_GALLERY_ID, event, creation_only=True,
+        )
+        self.assertFalse(any(
+            widget.winfo_class() == 'TButton'
+            and widget.cget('text') == tr(
+                'en', 'photos_workspace_edit_gallery',
+            )
+            for widget in workspace._context_card.winfo_children()
+        ))
+        workspace.destroy()
 
     def test_photos_information_is_explicit_grouped_and_scope_filtered(self) -> None:
         """Fetch rich information only on demand and suppress public GPS rows.

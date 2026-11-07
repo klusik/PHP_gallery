@@ -55,6 +55,12 @@ import {setupAdminGalleryGridControls} from './admin-gallery-grid-controls.js?v=
 import {setupGalleryUploadClipboard} from './admin-upload-selection.js?v=20261021-upload-media-v1';
 import {setupGalleryUploadPreviews, clearGalleryUploadQueue, allowGalleryUploadQueueTransition, hasPendingGalleryUploadQueue} from './admin-upload-preview.js?v=20261029-manual-zip-v1';
 
+// Purpose: Preserve the server's signed 64-bit gallery identity in deep links.
+// Type: bigint; Units: gallery ID; Scope: Admin drawer browser navigation.
+// Consumers: openAdminGalleryDeepLink.
+// Rationale: Matches the PHP/SQL ID boundary without JavaScript Number rounding.
+const ADMIN_GALLERY_DEEP_LINK_ID_MAX = 9223372036854775807n;
+
 /**
  * Presentation metadata resolved from an enhanced link; refreshes need only name.
  * @typedef {Object} AdminPanelWorkflow
@@ -804,6 +810,39 @@ export function setupAdminGallerySidePanel() {
         }
         runAdminSidePanelSuccessTask(panel, /** Reflect this acknowledged gallery creation result through its existing synchronization path. @return {Promise<void>} The enclosing success task handles reflection rejection after persistence. */ () => reflectCreatedGalleryInCurrentView(result));
     });
+    void openAdminGalleryDeepLink();
+}
+
+/**
+ * Open one explicit gallery handoff through the existing authenticated drawer.
+ *
+ * Only the protected Admin dashboard consumes this numeric navigation hint.
+ * The destination stays on its current script/mount; no supplied URL or app
+ * credential is accepted. The editor endpoint keeps its normal Admin checks.
+ * @return {Promise<void>} Opens the requested editor or ignores an invalid hint.
+ */
+async function openAdminGalleryDeepLink() {
+    const url = new URL(window.location.href);
+    const pages = url.searchParams.getAll('page');
+    const targets = url.searchParams.getAll('edit_gallery');
+    if (pages.length !== 1 || pages[0] !== 'admin' || targets.length !== 1
+        || !/^[1-9][0-9]{0,18}$/.test(targets[0])
+        || BigInt(targets[0]) > ADMIN_GALLERY_DEEP_LINK_ID_MAX
+        || !window.fetch || !window.DOMParser) return;
+
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set('page', 'admin_edit_gallery');
+    url.searchParams.set('id', targets[0]);
+    const link = document.createElement('a');
+    link.href = url.toString();
+    link.dataset.adminSidePanelWorkflow = 'gallery-edit';
+    try {
+        await openAdminGallerySidePanel(link);
+    } catch {
+        // The existing drawer reports load failures in its own visible surface.
+        console.error('Could not open the requested gallery editor.');
+    }
 }
 
 /**

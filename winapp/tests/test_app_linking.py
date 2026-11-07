@@ -2509,6 +2509,108 @@ class NativeMediaTransportTests(unittest.TestCase):
 class LinkingDeliveryTests(unittest.TestCase):
     """Exercise worker-event delivery without opening a Tk window."""
 
+    def test_photos_gallery_editor_uses_current_site_and_browser_session(self) -> None:
+        """Open only a bounded listed gallery on the live Photos site.
+
+        Returns:
+            None: The fixed editor route preserves a local subdirectory issuer,
+                rejects stale sessions and invalid IDs, and exposes no token.
+        """
+        for issuer in (
+            'http://localhost:8888/Galerie',
+            'https://gallery.example/photos',
+        ):
+            with self.subTest(issuer=issuer):
+                session = mock.Mock(spec=linking.LinkingSession)
+                session.available.return_value = True
+                session.can_list_galleries.return_value = True
+                session.matches_issuer.return_value = True
+                manager = object.__new__(LinkingManager)
+                manager._shutting_down = False
+                manager._session = session
+                manager._session_issuer = issuer
+                manager._current_issuer = issuer
+                manager._session_user_id = 7
+                gallery = linking.LinkedGallery(42, None, 'Listed gallery')
+                with mock.patch(
+                    'uploader.app_linking_ui.webbrowser.open',
+                    return_value=True,
+                ) as open_browser:
+                    self.assertTrue(
+                        manager.open_photos_gallery_editor(session, gallery),
+                    )
+                open_browser.assert_called_once_with(
+                    issuer + '/index.php?page=admin_edit_gallery'
+                    '&id=42&open_panel=1',
+                )
+
+        for gallery_id in (0, True, linking.LINKING_GALLERY_ID_MAX + 1):
+            with self.subTest(gallery_id=gallery_id):
+                session = mock.Mock(spec=linking.LinkingSession)
+                session.available.return_value = True
+                session.can_list_galleries.return_value = True
+                session.matches_issuer.return_value = True
+                manager = object.__new__(LinkingManager)
+                manager._shutting_down = False
+                manager._session = session
+                manager._session_issuer = 'http://localhost/Galerie'
+                manager._current_issuer = manager._session_issuer
+                manager._session_user_id = 7
+                with mock.patch(
+                    'uploader.app_linking_ui.webbrowser.open',
+                ) as open_browser:
+                    self.assertFalse(manager.open_photos_gallery_editor(
+                        session,
+                        linking.LinkedGallery(gallery_id, None, 'Invalid'),
+                    ))
+                open_browser.assert_not_called()
+
+        session = mock.Mock(spec=linking.LinkingSession)
+        session.available.return_value = True
+        session.can_list_galleries.return_value = True
+        session.matches_issuer.return_value = True
+        manager = object.__new__(LinkingManager)
+        manager._shutting_down = False
+        manager._session = mock.Mock(spec=linking.LinkingSession)
+        manager._session_issuer = 'http://localhost/Galerie'
+        manager._current_issuer = manager._session_issuer
+        manager._session_user_id = 7
+        with mock.patch(
+            'uploader.app_linking_ui.webbrowser.open',
+        ) as open_browser:
+            self.assertFalse(manager.open_photos_gallery_editor(
+                session, linking.LinkedGallery(42, None, 'Stale'),
+            ))
+            open_browser.assert_not_called()
+
+    def test_photos_gallery_editor_reports_browser_failure(self) -> None:
+        """Treat an unavailable browser as a safe refusal.
+
+        Returns:
+            None: Both a false browser result and an exception remain a simple
+                false result without exposing URL or exception details.
+        """
+        session = mock.Mock(spec=linking.LinkingSession)
+        session.available.return_value = True
+        session.can_list_galleries.return_value = True
+        session.matches_issuer.return_value = True
+        manager = object.__new__(LinkingManager)
+        manager._shutting_down = False
+        manager._session = session
+        manager._session_issuer = 'http://localhost/Galerie'
+        manager._current_issuer = manager._session_issuer
+        manager._session_user_id = 7
+        gallery = linking.LinkedGallery(42, None, 'Listed gallery')
+        with mock.patch(
+            'uploader.app_linking_ui.webbrowser.open', return_value=False,
+        ):
+            self.assertFalse(manager.open_photos_gallery_editor(session, gallery))
+        with mock.patch(
+            'uploader.app_linking_ui.webbrowser.open',
+            side_effect=OSError('private browser error'),
+        ):
+            self.assertFalse(manager.open_photos_gallery_editor(session, gallery))
+
     def test_address_dialog_accepts_copied_addresses(self) -> None:
         """Exercise cancellation, correction and submission from the prompt.
 
