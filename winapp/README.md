@@ -21,6 +21,18 @@ opacity. Source mode without Pillow retains usable native controls for repair.
 Import, Activity, AI and Settings share the same card spacing, continuous
 toolbar surfaces and flat table headings as the Watcher view.
 
+Windows uses the installed Segoe UI Variable Text family when available,
+with Segoe UI and the native Tk font as fallbacks. Shared fonts cover labels,
+tables, inputs, menus and secondary windows; fixed-width diagnostics keep their
+monospaced font. Native text respects Windows font smoothing/ClearType.
+Known control, cache, pin and recording icons use supersampled artwork rather
+than small emoji or font-substitution glyphs. Pillow-free source mode keeps
+readable native glyphs. No font download or system preference change is needed.
+Before creating Tk windows, an unaware Windows process requests system
+DPI awareness; an existing manifest/host context is preserved. This avoids
+startup bitmap scaling, but does not add per-monitor layout reflow. Restart on
+the destination display when moving between displays with different scaling.
+
 The app header groups PHP Gallery and the linked site. The Watcher screen
 shows the upload gallery, chosen folder and primary Start/Stop control.
 **Choose folder…** is on the Watcher screen; its settings sheet also offers
@@ -37,6 +49,18 @@ Existing saved paths, Gallery URL, connection and local options are restored on
 restart from `%APPDATA%\PHPGalleryUploader\config.json`. Flight switches and
 languages use the existing `flights/preferences.json` in the same app profile.
 Saving feature preferences never resets unrelated settings.
+
+The main window remembers its normal size and position, maximized state and
+Photos tree width automatically. Minimizing, fullscreen and hiding to the tray
+do not overwrite the last normal rectangle. On a changed display layout, the
+restored rectangle and divider are clamped to usable current bounds. These
+view-only preferences are separate from upload configuration and credentials.
+
+Switching albums cancels the old viewer without releasing a transport that is
+still finishing DNS or socket work. The next request waits within its original
+deadline for that single transport slot instead of showing an immediate busy
+failure. Canceling the new viewer also cancels its wait; no extra network worker
+is admitted while an earlier one is still running.
 
 The Record flight row includes a single compact, background-matched instrument
 line: IAS in knots, altitude in feet and signed V/S in feet per minute. It reads
@@ -244,6 +268,7 @@ server-side API key revocation separately in PHP Gallery Admin.
 | Watcher state | How it starts | Next action |
 | --- | --- | --- |
 | Ready | Upload target and folder are chosen; the previous session is closed | **Start Watcher**, or use Import for selected files. |
+| Starting | Start verifies the gallery and reads the folder's existing files | The Watcher card shows the current preparation phase and activity. Wait for REC before creating a new screenshot. |
 | Watching | **Start Watcher** captures the current target and ignores files already in the folder | **Stop Watcher** or **Finish flight/game…** stops discovery and finishes the accepted queue. |
 | Finishing | Stop or Finish is draining work or producing reports | **Show progress…** reopens the progress view. Success returns to **Start Watcher**. |
 | Pending | WinApp restarted, the gallery became unavailable or completion failed | **Review pending uploads…**. Reconnect to the same site and choose the original gallery if prompted, then **Retry**. |
@@ -845,7 +870,7 @@ click; while active it becomes **■ Stop Watcher**. **Check folder only**
 performs
 a non-uploading dry run and does not start watching. The dedicated Watcher gear
 opens a settings sheet for folder selection, recursion, scan interval, file
-stability, simulator metadata, and the opt-in source-delete setting, with
+stability, simulator metadata, and the saved source-delete setting, with
 explicit
 **Save watcher settings** and **Cancel** actions. **Sync UTC time** remains an
 opt-in control beside the primary actions, with a nearby **?** explanation.
@@ -1045,7 +1070,8 @@ Pillow/Tk provides 8-bit SDR on other configurations, including Windows.
 Thumbnails use SDR.
 
 One per-user disk cache stores opted-in photo and audio bytes with their
-verified content digests. It keeps up to 4,096 entries or 1 GiB and evicts the
+verified content digests. Its ordinary area keeps up to 4,096 entries or
+1 GiB and evicts the
 least recently accessed entries under storage pressure. A bounded decoded
 thumbnail cache accelerates return visits during the current session. A
 current catalogue validator lets WinApp read matching disk thumbnails before
@@ -1053,7 +1079,7 @@ making a binary request. Older servers use photo freshness and authorized
 conditional requests. An authorized
 current playlist can reuse a cached track with the same SHA-256, size and media
 type. Servers returning `no-store` supply media for the current view or
-playback. Administrator-only media uses this transient path.
+playback. Administrator-only media uses this transient path by default.
 
 Play opens the slideshow in fullscreen. It loops through the full album,
 using the authorized server interval when enabled or a five-second default.
@@ -1068,9 +1094,43 @@ gallery's direct inventory and settings, or the photo's indexed format,
 size, dimensions, capture settings and EXIF. Location appears when the
 gallery's map policy permits it. JPEG and WebP quality describe the server's
 current settings for generated thumbnails. The gallery card also shows its
-current local cache coverage. Icons appear when coverage is known. The
+current local cache coverage. A dotted circle marks unchecked coverage. The
 cloud marks online photos, the half circle marks a partial cache, and the
 filled circle marks an album with all authorized photo renditions on disk.
+The tree and heading update automatically from already loaded photo metadata
+and local cache headers. A partial catalogue never claims that an entire
+gallery is cached. The heading's cache icon opens the same gallery menu and
+explains the symbols on hover.
+
+**Preload gallery** reads the selected gallery's direct photos in the
+background, including thumbnails and lightbox renditions. Subgalleries are
+separate targets. Progress reports photo counts and supports cancellation.
+Existing verified local bodies are reused. A bounded server `Retry-After`
+pauses the job with a cancelable countdown; exhausted retries leave an explicit
+retry-later message. Retry continues from available cached bytes.
+**Keep preloaded** also retains the successfully prepared entries in a
+separate hashed gallery area. They survive ordinary eviction and restarts and
+consume neither the ordinary entry count nor its byte quota. Disabling this
+preference returns that gallery to ordinary LRU policy, which can evict excess
+entries. Cancelling an unfinished preload keeps its completed entries and pin
+preference; it does not mark the whole gallery complete.
+An explicit preload with an Admin Photos link can also retain private or draft
+photos when the server advertises the Admin preload capability. The gallery,
+its complete ancestry and each photo must be verified as non-NSFW. The saved
+opt-in and private entries are separated by installation, verified account and
+gallery. Later thumbnail and lightbox reads revalidate private entries through
+the live server before returning their bytes. Ordinary restricted browsing,
+older servers, NSFW media and other `no-store` responses remain transient.
+Preloading uses current gallery permissions; local files do not grant offline
+or expired-link access. Zero stored photos are reported as unavailable for
+preload, with a safe reason, rather than as a partly successful download.
+One explicit preload accepts up to 100,000 direct photos as a bounded work
+operation; this is separate from the ordinary cache quota.
+
+**Edit gallery** opens the selected gallery in the system browser with the
+web Admin editor in its right-side panel. The browser uses its own Admin
+login; WinApp credentials are never included in the URL. Older web servers
+open their ordinary full-page editor instead.
 The add button in the tree toolbar creates a gallery at the site's root.
 Use the add button beside the selected gallery's title, a gallery's context
 menu or blank photo space to create a subgallery. Each form opens inline.
@@ -1100,7 +1160,11 @@ With upload permission, use **Use this gallery for Watcher** from a gallery
 context or the Watcher rail menu while Photos is open. WinApp verifies the
 exact gallery and uses the existing Watcher folder, local thumbnail pipeline
 and finish controls. The Watcher panel shows preparation or refusal for that
-request. The red REC indicator shows active capture. The
+request. Before activating the destination, WinApp checks its accepted import
+work against the local upload history. A large existing Watcher history can
+be read within the same 256 MiB bound used for state updates. Unverifiable
+history or unfinished work for another destination still blocks a change.
+The red REC indicator shows active capture. The
 Watcher rail icon pulses red on every tab while capture is active. A small
 filled red light marks the exact upload gallery in the Photos tree and at its
 heading. A hollow light marks a collapsed branch that hides that gallery.
@@ -1174,7 +1238,8 @@ the current build's native lock when its process exits, so **Retry** can
 reopen the same target. An older lock has no verified native owner. Close
 all uploaders and review the gallery and sources before archiving that
 specific lock. Keep the upload history and any pending transfer evidence.
-Automatic source and ZIP deletion is disabled in linked mode. Durability
+Watcher source deletion on Windows follows the saved Watcher preference,
+including linked captures. Manual import sources and ZIPs are retained. Durability
 after a power failure and behavior on non-local filesystems remain unverified.
 
 For exactly one uncertain linked upload, **Check uncertain upload** asks for
@@ -1515,18 +1580,41 @@ the gallery connection. **Start Watcher** asks for a folder when one is
 missing.
 The check icon inspects existing files without uploading or changing upload
 history. Folder selection, recursion, stability, simulator metadata, and the
-opt-in deletion setting are also in the Watcher gear sheet, where
+saved deletion setting are also in the Watcher gear sheet, where
 **Save watcher settings** and **Cancel** apply.
 The sheet does not permit edits while watching; it requires a stop first. Saved
 changes apply on the next start, while **Cancel**, Escape, and closing the sheet
 restore the opening folder and preference values.
 
-### Optional source deletion
+### Watched source deletion
 
-Automatic deletion of watched source photos is temporarily unavailable. The
-saved preference is retained, but photos stay on disk for manual verification.
-The watcher checks the current file against the sent bytes before marking a
-drain item complete; this is not an atomic filesystem fence.
+**Delete uploaded photos from this PC** in Watcher settings is enabled by
+default for a new or missing setting. An explicitly saved off choice is kept.
+On Windows, Watcher deletes a source only after a successful upload response
+and durable local acknowledgement. It opens the current file through a native
+handle, verifies the captured file identity and sent bytes, and deletes that
+same opened file. A replaced, changed, linked, redirected or busy file stays
+on disk with a warning. The native handle refuses simultaneous writers and
+replacement during this final check.
+
+An inventory match, an uncertain response or a restart never independently
+authorizes source deletion. Files present at startup remain excluded. Manual
+import sources and ZIPs keep their existing retention policy. Other platforms
+retain watched sources until a native deletion owner is available.
+
+Start shows an activity indicator while it verifies the destination and reads
+the initial folder. REC appears after the initial exclusion boundary is ready.
+Stop and Finish open progress with a preparation message and activity before
+loading the pending work. Their subsequent phases describe upload drain and
+any reports. A busy indicator does not estimate a completion percentage.
+
+Recent Activity history is saved in bounded batches on one background writer.
+This avoids repeatedly rewriting a large shared history on the UI thread.
+Normal shutdown attempts to flush the buffer within its existing deadline.
+A storage failure, expired deadline, forced exit or crash can omit the last
+buffered Activity rows; a flush failure is logged and the rotating log is
+written immediately. Upload acknowledgements and pending-work records
+retain their existing synchronous ownership and durability checks.
 
 ## Sync UTC time while watching
 

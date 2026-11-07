@@ -16,6 +16,7 @@ from dataclasses import replace
 import ctypes
 import hashlib
 import io
+import logging
 import os
 import queue
 import signal
@@ -25,9 +26,10 @@ import tempfile
 import threading
 import time
 import tkinter as tk
+import traceback
 from tkinter import ttk
 import uuid
-from typing import Callable, TypeAlias
+from typing import Callable, Literal, TypeAlias
 
 from .app_linking import (
     NATIVE_MEDIA_DELETE_BATCH_MAX,
@@ -274,6 +276,64 @@ _WorkerPayload: TypeAlias = (
 _WorkerEvent: TypeAlias = tuple[int, str, _WorkerPayload]
 _MciSender: TypeAlias = Callable[[str, ctypes.c_wchar_p | None, int, int | None], int]
 
+# Purpose: Restrict diagnostic labels to fixed, non-user-supplied operations.
+# Type: frozenset[str]; Units: operation labels; Scope: Photos failure logs.
+# Consumers: _log_safe_media_failure.
+# Rationale: Prevent accidental URL, title or payload text from entering logs.
+_SAFE_PHOTOS_DIAGNOSTIC_KINDS = frozenset({
+    "page", "more", "slide_more", "refresh", "revision", "thumbnail",
+    "detail", "prefetch", "audio_track", "other",
+})
+
+# Purpose: Limit source locations in safe media diagnostics to local owners.
+# Type: frozenset[str]; Units: Python source basenames; Scope: Photos logs.
+# Consumers: _safe_media_error_site. Rationale: Never expose arbitrary paths.
+_SAFE_PHOTOS_SOURCE_FILES = frozenset({
+    "native_gallery_viewer.py", "app_linking.py",
+})
+
+
+def _safe_media_error_site(error: Exception) -> str:
+    """Return a whitelisted source basename, function and line when available.
+
+    Args:
+        error (Exception): Caught worker or Tk-application failure.
+
+    Returns:
+        str: Safe local source-site label, or the fixed value ``unknown``.
+    """
+    frames = traceback.extract_tb(error.__traceback__)
+    for frame in reversed(frames):
+        basename = os.path.basename(frame.filename)
+        if (basename in _SAFE_PHOTOS_SOURCE_FILES
+                and frame.name.isidentifier() and frame.lineno > 0):
+            return f"{basename}:{frame.name}:{frame.lineno}"
+    return "unknown"
+
+
+def _log_safe_media_failure(
+    phase: Literal["page-fetch", "media-fetch", "page-apply", "media-apply"],
+    kind: str,
+    error: Exception,
+) -> None:
+    """Log safe phase metadata without exception messages or request data.
+
+    Args:
+        phase (Literal["page-fetch", "media-fetch", "page-apply", "media-apply"]):
+            Fixed worker-fetch or Tk-result application phase.
+        kind (str): Internal viewer operation, reduced to a known safe label.
+        error (Exception): Caught failure whose class name is diagnostic only.
+
+    Returns:
+        None: Emits one fixed-format warning with no exception text or traceback.
+    """
+    safe_kind = kind if kind in _SAFE_PHOTOS_DIAGNOSTIC_KINDS else "other"
+    site = _safe_media_error_site(error)
+    logging.getLogger(__name__).warning(
+        "Photos failure phase=%s kind=%s error_type=%s site=%s",
+        phase, safe_kind, type(error).__name__, site,
+    )
+
 
 class _NativeGalleryViewer:
     """Own one embedded gallery view, worker and temporary playback file.
@@ -330,6 +390,9 @@ class _NativeGalleryViewer:
         self._thumbnail_memory = thumbnail_memory or GalleryThumbnailMemory()
         self._context_menu = context_menu
         self.on_photos_changed: Callable[[], None] | None = None
+        self.on_cache_changed: Callable[
+            [tuple[LinkedPhoto, ...], bool], None
+        ] | None = None
         self.window = parent.winfo_toplevel()
         self._main_content = parent
         while (self._main_content is not self.window
@@ -1205,9 +1268,15 @@ class _NativeGalleryViewer:
                 if self._cancelled.is_set():
                     return
                 self._events.put((generation, kind + '_throttled', error_payload))
-            except Exception:
+            except Exception as exc:
                 if self._cancelled.is_set():
                     return
+                phase = (
+                    "page-fetch"
+                    if kind in ("page", "more", "slide_more")
+                    else "media-fetch"
+                )
+                _log_safe_media_failure(phase, kind, exc)
                 self._events.put((generation, kind + '_error', error_payload))
 
         self._worker = threading.Thread(
@@ -1745,6 +1814,11 @@ class _NativeGalleryViewer:
                 thumbnail_verified_at=getattr(
                     photo, 'thumbnail_verified_at', None,
                 ),
+                preload_eligible=getattr(photo, 'preload_eligible', None),
+                preload_thumbnail_etag=getattr(
+                    photo, 'preload_thumbnail_etag', None,
+                ),
+                preload_verified_at=getattr(photo, 'preload_verified_at', None),
             )
             return index, self._prepare_thumbnail(body)
         except LinkingMediaThrottled:
@@ -1840,7 +1914,8 @@ class _NativeGalleryViewer:
         """Apply queued worker results on Tk's owning thread.
 
         Returns:
-            None: Active worker results are delivered without idle polling.
+            None: Delivers results and reports authorized cache snapshots
+                without idle polling or another catalogue request.
         """
         self._after_id = None
         if self._closed:
@@ -1848,6 +1923,7 @@ class _NativeGalleryViewer:
         if not self.session.can_read_media():
             self.close()
             return
+        cache_changed = False
         while True:
             try:
                 generation, kind, result = self._events.get_nowait()
@@ -1862,6 +1938,9 @@ class _NativeGalleryViewer:
                 if kind == 'revision':
                     if self.frame.winfo_viewable() and self._lightbox is None:
                         if self._revision is None or self._revision != result:
+                            if (self._revision is not None
+                                    and self.on_photos_changed is not None):
+                                self.on_photos_changed()
                             self._refresh_revision = result
                             self._refresh_pending = True
                 elif kind == 'refresh':
@@ -1964,11 +2043,25 @@ class _NativeGalleryViewer:
                         self.retry_button.configure(state='normal')
                         self.retry_button.pack(side='left', padx=(8, 0))
                         self._retry_kind = 'page'
-            except Exception:
+            except Exception as exc:
+                phase = (
+                    "page-apply"
+                    if kind in ("page", "more", "slide_more")
+                    else "media-apply"
+                )
+                _log_safe_media_failure(phase, kind, exc)
                 if kind == 'refresh':
                     self._refresh_revision = None
                 if kind != 'refresh' or self._refresh_foreground:
                     self.status.configure(text=self._text('linking_media_error'))
+            if kind in (
+                'page', 'more', 'slide_more', 'refresh',
+                'thumbnail', 'detail', 'prefetch',
+            ):
+                cache_changed = True
+        cache_callback = getattr(self, 'on_cache_changed', None)
+        if cache_changed and cache_callback is not None and not self._closed:
+            cache_callback(self._photos, self._next_after is None)
         if (self._worker is not None and not self._worker.is_alive()
                 and not self._events.empty()):
             self._schedule_queue_poll()
@@ -2057,6 +2150,17 @@ class _NativeGalleryViewer:
         if not isinstance(encoded, bytes) or len(encoded) > NATIVE_MEDIA_MAX_BYTES:
             image.close()
             return
+        photo = next(
+            (item for item in self._photos if item.image_id == image_id), None,
+        )
+        if (self.session.can_read_admin_media() and photo is not None
+                and photo.cache_eligible is not True):
+            previous = self._detail_cache.pop(image_id, None)
+            if previous is not None:
+                self._detail_cache_bytes -= previous[3]
+                previous[1].close()
+            image.close()
+            return
         memory_size = self._image_memory_size(image) + len(encoded)
         if memory_size > MEDIA_DETAIL_CACHE_MAX_BYTES:
             image.close()
@@ -2089,6 +2193,15 @@ class _NativeGalleryViewer:
         entry = self._detail_cache.get(image_id)
         if entry is None:
             return None
+        photo = next(
+            (item for item in self._photos if item.image_id == image_id), None,
+        )
+        if (self.session.can_read_admin_media() and photo is not None
+                and photo.cache_eligible is not True):
+            del self._detail_cache[image_id]
+            self._detail_cache_bytes -= entry[3]
+            entry[1].close()
+            return None
         fetched_at, image, _encoded, memory_size = entry
         if time.monotonic() - fetched_at > MEDIA_DETAIL_CACHE_FRESH_SECONDS:
             del self._detail_cache[image_id]
@@ -2106,7 +2219,8 @@ class _NativeGalleryViewer:
         Returns:
             bytes | None: Encoded response body, or None after absence/expiry.
         """
-        self._cached_detail(image_id)
+        if self._cached_detail(image_id) is None:
+            return None
         entry = self._detail_cache.get(image_id)
         return entry[2] if entry is not None else None
 
@@ -2183,6 +2297,13 @@ class _NativeGalleryViewer:
                     thumbnail_verified_at=getattr(
                         photo, 'thumbnail_verified_at', None,
                     ),
+                    preload_eligible=getattr(photo, 'preload_eligible', None),
+                    preload_thumbnail_etag=getattr(
+                        photo, 'preload_thumbnail_etag', None,
+                    ),
+                    preload_verified_at=getattr(
+                        photo, 'preload_verified_at', None,
+                    ),
                 )
                 return photo.image_id, self._prepare_detail(body), body
 
@@ -2254,6 +2375,9 @@ class _NativeGalleryViewer:
         Returns:
             Image.Image | None: Independent source raster, or None on a miss.
         """
+        if (self.session.can_read_admin_media()
+                and photo.cache_eligible is not True):
+            return None
         key = (
             self.gallery.gallery_id, photo.image_id,
             getattr(photo, 'cache_eligible', None),
@@ -2282,6 +2406,9 @@ class _NativeGalleryViewer:
         Returns:
             None: Oldest thumbnails close when the LRU bound is exceeded.
         """
+        if (self.session.can_read_admin_media()
+                and photo.cache_eligible is not True):
+            return
         key = (
             self.gallery.gallery_id, photo.image_id,
             getattr(photo, 'cache_eligible', None),
@@ -2384,6 +2511,11 @@ class _NativeGalleryViewer:
                 thumbnail_verified_at=getattr(
                     photo, 'thumbnail_verified_at', None,
                 ),
+                preload_eligible=getattr(photo, 'preload_eligible', None),
+                preload_thumbnail_etag=getattr(
+                    photo, 'preload_thumbnail_etag', None,
+                ),
+                preload_verified_at=getattr(photo, 'preload_verified_at', None),
             )
             image = self._prepare_detail(body)
             return detail_serial, photo.image_id, image, image.copy(), body

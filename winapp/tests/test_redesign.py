@@ -99,6 +99,138 @@ def load_main_module():
 MAIN = load_main_module()
 
 
+class UiLayoutPreferenceTests(unittest.TestCase):
+    """Keep desktop geometry preferences bounded and separate from uploads."""
+
+    def test_layout_round_trip_preserves_unrelated_preferences(self) -> None:
+        """Persist layout fields atomically without dropping other sections.
+
+        Returns:
+            None: Window and Photos fields round-trip beside unrelated values.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ui-layout.json"
+            state = MAIN.ViewLayoutState(1024, 720, 40, 55, "zoomed", 280)
+            MAIN._write_ui_layout(path, state)
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["other"] = {"keep": True}
+            path.write_text(json.dumps(document), encoding="utf-8")
+
+            updated = MAIN.ViewLayoutState(1100, 760, 60, 65, "normal", 310)
+            MAIN._write_ui_layout(path, updated)
+
+            self.assertEqual(
+                updated,
+                MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+            )
+            self.assertEqual(
+                {"keep": True},
+                json.loads(path.read_text(encoding="utf-8"))["other"],
+            )
+
+    def test_layout_load_clamps_monitor_and_invalid_values(self) -> None:
+        """Clamp saved geometry to current bounds and reject booleans as ints.
+
+        Returns:
+            None: The result is visible, minimum-sized and within this display.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ui-layout.json"
+            path.write_text(json.dumps({
+                "version": 1,
+                "window": {
+                    "width": 99999, "height": 2, "x": -9000, "y": 8000,
+                    "state": "fullscreen",
+                },
+                "photos": {"tree_width": True},
+            }), encoding="utf-8")
+
+            state = MAIN._read_ui_layout(
+                path, (-100, 20, 1200, 800), (840, 500),
+            )
+
+        self.assertEqual(
+            MAIN.ViewLayoutState(1200, 500, -100, 320, "normal", 210),
+            state,
+        )
+
+    def test_window_saver_preserves_normal_rect_while_zoomed_or_hidden(self) -> None:
+        """Save maximize state without replacing normal geometry with transient data.
+
+        Returns:
+            None: A later normal state updates geometry, while hidden state does not.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ui-layout.json"
+            initial = MAIN.ViewLayoutState(1000, 700, 25, 40, "normal", 330)
+            MAIN._write_ui_layout(path, initial)
+
+            fake_root = types.SimpleNamespace(
+                state=lambda: "zoomed",
+                attributes=lambda *_args: False,
+                winfo_viewable=lambda: 1,
+                winfo_width=lambda: 1600,
+                winfo_height=lambda: 900,
+                winfo_x=lambda: 0,
+                winfo_y=lambda: 0,
+                winfo_vrootx=lambda: 0,
+                winfo_vrooty=lambda: 0,
+                winfo_vrootwidth=lambda: 1600,
+                winfo_vrootheight=lambda: 900,
+            )
+            app = object.__new__(MAIN.WatcherApp)
+            app.root = fake_root
+            app.exiting = False
+            app._ui_layout_save_after = None
+            app._ui_layout_path = path
+            app._ui_layout_state = initial
+            app.photos_workspace = types.SimpleNamespace(
+                current_tree_width=lambda: None,
+            )
+
+            with mock.patch.object(
+                MAIN, "_layout_display_bounds", return_value=(0, 0, 1600, 900),
+            ):
+                app._save_ui_layout_now()
+                self.assertEqual(
+                    MAIN.ViewLayoutState(1000, 700, 25, 40, "zoomed", 330),
+                    MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+                )
+                self.assertEqual(330, app._ui_layout_state.photos_tree_width)
+
+                fake_root.state = lambda: "iconic"
+                fake_root.winfo_viewable = lambda: 0
+                app._save_ui_layout_now()
+                self.assertEqual(
+                    MAIN.ViewLayoutState(1000, 700, 25, 40, "zoomed", 330),
+                    MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+                )
+
+                fake_root.state = lambda: "normal"
+                fake_root.winfo_viewable = lambda: 1
+                fake_root.winfo_width = lambda: 1100
+                fake_root.winfo_height = lambda: 760
+                fake_root.winfo_x = lambda: 80
+                fake_root.winfo_y = lambda: 90
+                app._save_ui_layout_now()
+
+            self.assertEqual(
+                MAIN.ViewLayoutState(1100, 760, 80, 90, "normal", 330),
+                MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+            )
+
+            fake_root.state = lambda: "iconic"
+            fake_root.winfo_width = lambda: 1150
+            fake_root.winfo_height = lambda: 770
+            fake_root.winfo_x = lambda: -32000
+            fake_root.winfo_y = lambda: -32000
+            app._save_ui_layout_now(allow_iconic=True)
+            self.assertEqual(
+                MAIN.ViewLayoutState(1150, 770, 80, 90, "normal", 330),
+                MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
+            )
+
+
 class PhotoPresentationPolicyTests(unittest.TestCase):
     """Keep Photos crops conservative and tooltip surfaces in-window."""
 
@@ -324,7 +456,9 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         surface = mock.Mock()
         button = mock.Mock()
         with (
-            mock.patch.object(ui_theme.ttk, "Button", return_value=button) as build,
+            mock.patch.object(
+                ui_theme, "SmoothIconButton", return_value=button,
+            ) as build,
             mock.patch.object(ui_theme, "attach_inline_tooltip") as inline,
             mock.patch.object(ui_theme, "_attach_tooltip") as popup,
         ):
@@ -344,6 +478,54 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         )
         inline.assert_called_once_with(button, "Fit photo", surface)
         popup.assert_not_called()
+
+    def test_theme_font_family_prefers_an_installed_static_variable_face(self) -> None:
+        """Use the installed UI family while preserving the fixed-width face.
+
+        Returns:
+            None: Common Tk fonts share the selected family; fixed-width stays.
+        """
+        from uploader import ui_theme
+
+        root = mock.Mock()
+        fonts = {name: mock.Mock() for name in (
+            "TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont",
+            "TkCaptionFont", "TkSmallCaptionFont", "TkIconFont",
+            "TkTooltipFont", "TkFixedFont",
+        )}
+        fonts["TkDefaultFont"].actual.return_value = "TkDefault"
+        with (
+            mock.patch.object(
+                ui_theme.tkfont, "families",
+                return_value=("TkDefault", "Segoe UI", "Segoe UI Variable Text"),
+            ),
+            mock.patch.object(
+                ui_theme.tkfont, "nametofont",
+                side_effect=lambda name, root=None: fonts[name],
+            ),
+        ):
+            family = ui_theme._select_ui_font_family(root)
+
+        self.assertEqual("Segoe UI Variable Text", family)
+        fonts["TkDefaultFont"].configure.assert_called_once_with(
+            family="Segoe UI Variable Text",
+        )
+        fonts["TkHeadingFont"].configure.assert_called_once_with(
+            family="Segoe UI Variable Text", weight="bold",
+        )
+        fonts["TkFixedFont"].configure.assert_not_called()
+        root.option_add.assert_not_called()
+        with (
+            mock.patch.object(
+                ui_theme.tkfont, "families", return_value=("TkDefault",),
+            ),
+            mock.patch.object(
+                ui_theme.tkfont, "nametofont",
+                side_effect=lambda name, root=None: fonts[name],
+            ),
+        ):
+            fallback = ui_theme._select_ui_font_family(root)
+        self.assertEqual("TkDefault", fallback)
 
     def test_shared_tooltip_uses_the_existing_toplevel_surface(self) -> None:
         """Keep legacy tooltip callers inside their owning window.
@@ -1875,12 +2057,26 @@ class ConfigStateTests(unittest.TestCase):
         self.assertEqual(10000.0, migrated["archive_max_compression_ratio"])
         self.assertEqual("server", migrated["manual_thumbnail_mode"])
 
-    def test_config_defaults_are_conservative(self):
+    def test_config_defaults_preserve_saved_deletion_opt_out(self) -> None:
+        """Enable new Watcher deletion settings while preserving a saved off choice.
+
+        Returns:
+            None: Other existing configuration defaults retain their contract.
+        """
         migrated, _ = migrate_config_payload({})
         self.assertFalse(migrated["watch_recursive"])
+        self.assertTrue(migrated["delete_uploaded_files"])
+        self.assertFalse(
+            migrate_config_payload({"delete_uploaded_files": False})[0][
+                "delete_uploaded_files"
+            ]
+        )
         self.assertEqual("server", migrated["manual_thumbnail_mode"])
         self.assertTrue(migrated["close_to_tray"])
-        self.assertEqual(DEFAULTS["activity_history_limit"], migrated["activity_history_limit"])
+        self.assertEqual(
+            DEFAULTS["activity_history_limit"],
+            migrated["activity_history_limit"],
+        )
 
     def test_atomic_state_write_and_restart_job_recovery(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1968,6 +2164,8 @@ class URLAndUploadStateTests(unittest.TestCase):
             watcher.config = MAIN.WatcherConfig(watched_folder=str(root))
             watcher.accepted_paths = {source}
             watcher.initial_paths = set()
+            watcher.initial_captured = True
+            watcher.events = MAIN.queue.Queue()
             watcher.drain_manifest = root / 'watch-drain.json'
             watcher.drain_only = True
             watcher.drain_requested_at = 0.0
@@ -3349,7 +3547,8 @@ class SimConnectActivityTests(unittest.TestCase):
         self.assertEqual("warning", event.level)
         self.assertEqual("Failure [REDACTED]", event.message)
         app.latest_activity_var.set.assert_called_once_with("Simconnect · Failure [REDACTED]")
-        app.job_store.append_event.assert_called_once_with(event)
+        app.activity_writer.submit.assert_called_once_with(event)
+        app.job_store.append_event.assert_not_called()
 
 
 class NavigationTests(unittest.TestCase):
@@ -3671,6 +3870,8 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                 worker.stop_event = mock.Mock()
                 worker.stop_event.is_set.return_value = True
                 worker.initial_captured = True
+                worker.events = MAIN.queue.Queue()
+                worker.drain_only = False
                 worker.initial_paths = set()
                 worker.emit = mock.Mock()
                 worker.persist_drain = mock.Mock()
@@ -3951,20 +4152,48 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         worker.assert_not_called()
 
     def test_source_deletion_keeps_replaced_photo_after_ack(self) -> None:
-        """Keep the current path even when an earlier upload was acknowledged.
+        """Keep a replacement path even after the original bytes were acknowledged.
 
         Returns:
-            None: A replacement photo survives and the user receives a warning.
+            None: Captured-source mismatch prevents deletion and warns the user.
         """
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'photo.jpg'
+            path.write_bytes(b'original')
+            snapshot = MAIN.capture_linked_source(
+                path, MAIN.hashlib.sha256(b'original').hexdigest(), 8,
+            )
             path.write_bytes(b'replacement')
             worker = mock.Mock()
             MAIN.WatcherThread.delete_uploaded_file(worker, path, {
                 'ok': True, 'uploaded': 1,
-            })
+            }, snapshot)
             self.assertEqual(b'replacement', path.read_bytes())
             worker.emit.assert_called_once()
+
+    def test_source_deletion_requires_positive_upload_confirmation(self) -> None:
+        """Delete only the exact captured bytes with a positive upload count.
+
+        Returns:
+            None: The native delete owner runs for confirmed uploads only.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'photo.jpg'
+            contents = b'confirmed photo'
+            path.write_bytes(contents)
+            snapshot = MAIN.capture_linked_source(
+                path, MAIN.hashlib.sha256(contents).hexdigest(), len(contents),
+            )
+            worker = mock.Mock()
+            with mock.patch.object(MAIN, 'delete_verified_linked_source') as delete:
+                MAIN.WatcherThread.delete_uploaded_file(worker, path, {
+                    'ok': True, 'uploaded': 1,
+                }, snapshot)
+                delete.assert_called_once_with(snapshot)
+                MAIN.WatcherThread.delete_uploaded_file(worker, path, {
+                    'ok': True, 'uploaded': 0,
+                }, snapshot)
+                delete.assert_called_once_with(snapshot)
 
     def test_replaced_source_remains_in_watcher_drain_after_upload(self) -> None:
         """Do not acknowledge a path replaced while its upload was in flight.
@@ -4024,6 +4253,18 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
 
 class WatcherActionTests(unittest.TestCase):
     """Keep the primary watcher action aligned with worker state."""
+
+    def test_preparing_watcher_rejects_duplicate_start_action(self) -> None:
+        """Keep repeated primary clicks from entering startup twice.
+
+        Returns:
+            None: No lifecycle check or second start runs during preparation.
+        """
+        app = mock.Mock()
+        app._watch_start_pending = True
+        MAIN.WatcherApp.toggle_watcher(app)
+        app.flights.session_state.assert_not_called()
+        app.start.assert_not_called()
 
     def test_contextual_watcher_finish_latches_a_departed_simulator(self) -> None:
         """Use flight Finish only when this capture observed a simulator.
@@ -4283,6 +4524,38 @@ class ScrollableFrameWheelTests(unittest.TestCase):
 class TrayUpdateIndicatorTests(unittest.TestCase):
     """Keep an available update visible and actionable on app and tray surfaces."""
 
+    def test_hidden_startup_restores_saved_maximize_only_after_user_open(self) -> None:
+        """Retain hidden startup and apply saved maximization on visible restore.
+
+        Returns:
+            None: A healthy tray startup stays withdrawn until restore is invoked.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        app.exiting = False
+        app.startup_waiting_for_tray = True
+        app.startup_tray_deadline = 0.0
+        app.window_hidden_to_tray = True
+        app._ui_layout_state = MAIN.ViewLayoutState(
+            1000, 700, 25, 40, "zoomed", 250,
+        )
+        app.tray_icon = types.SimpleNamespace(visible=True)
+        app.tray_thread = mock.Mock()
+        app.tray_thread.is_alive.return_value = True
+        app.write_log = mock.Mock()
+        app.recovery_offer_pending = False
+        app.root = mock.Mock()
+
+        MAIN.WatcherApp.complete_startup(app)
+        app.root.deiconify.assert_not_called()
+        self.assertFalse(app.startup_waiting_for_tray)
+
+        MAIN.WatcherApp.restore_from_tray(app)
+
+        app.root.deiconify.assert_called_once_with()
+        app.root.state.assert_called_once_with("zoomed")
+        app.root.lift.assert_called_once_with()
+        app.root.focus_force.assert_called_once_with()
+
     def test_macos_source_skips_background_pystray_startup(self) -> None:
         """Keep the macOS source window alive without entering AppKit on a worker.
 
@@ -4532,6 +4805,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.api_key_revoke_running = True
         app.exiting = False
         app.update_available_version = "0.4.1"
+        app._save_ui_layout_now = mock.Mock()
         app.check_updates_button = None
         app.update_banner = None
         app.tray_icon = None
@@ -4562,11 +4836,14 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.api_key_revoke_running = False
         app.exiting = False
         app.update_available_version = "0.4.1"
+        app._save_ui_layout_now = mock.Mock()
         app.preflight_worker = None
         app.worker = mock.Mock()
         app.worker.is_alive.return_value = True
         app.worker.stop_event.is_set.return_value = False
         app.worker.drain_only = False
+        app.worker.drain_event.is_set.return_value = False
+        app.worker.initial_captured = True
         app.worker.linked_target = None
         app.manual_worker = None
         app.ai_worker = None
@@ -4614,6 +4891,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         """
         app = object.__new__(MAIN.WatcherApp)
         app.exiting = False
+        app._save_ui_layout_now = mock.Mock()
         app.updates = mock.Mock()
         app.api_key_revoke_running = True
         app.flights = mock.Mock()
@@ -4657,6 +4935,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.updates.request_close.return_value = False
         app.api_key_revoke_running = False
         app.exiting = False
+        app._save_ui_layout_now = mock.Mock()
         app.update_available_version = "0.4.1"
         app.check_updates_button = None
         app.update_banner = None

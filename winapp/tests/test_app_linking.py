@@ -14,6 +14,7 @@ import base64
 import hashlib
 import http.client
 import json
+import os
 import queue
 import socket
 import sys
@@ -21,6 +22,7 @@ import threading
 import time
 import unittest
 from collections.abc import Iterable
+from dataclasses import replace as dataclass_replace
 from email.message import Message
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -48,8 +50,15 @@ TEST_WORKER_WAIT_SECONDS = 2.0
 # Purpose: Make the deadline regression complete promptly without real I/O.
 # Type: float. Units: seconds. Scope: one fake delayed HTTPS request.
 # Consumers: LinkingTransportTests. Rationale: 0.25 seconds distinguishes a
-# total deadline from a blocked worker while allowing worker scheduling.
+# total deadline from a blocked worker and bounds slot-admission regressions.
 TEST_REQUEST_DEADLINE_SECONDS = 0.25
+
+# Purpose: Prove held-slot admission waits without leaving the deadline bound.
+# Type: float. Units: seconds. Scope: one held transport-slot fixture.
+# Consumers: LinkingTransportTests admission deadline regression.
+# Rationale: 0.15s confirms most of the 0.25s budget was observed; the existing
+# two-second worker wait remains the scheduling ceiling.
+TEST_ADMISSION_WAIT_MIN_SECONDS = 0.15
 
 # Type: str. Units: Base32 characters. Scope: one synthetic browser handoff.
 # Consumers: push-response tests. Rationale: canonical 128-bit value models
@@ -57,6 +66,15 @@ TEST_REQUEST_DEADLINE_SECONDS = 0.25
 TEST_REQUEST_HANDLE = base64.b32encode(
     b'p' * linking.REQUEST_HANDLE_RANDOM_BYTES,
 ).rstrip(b'=').decode('ascii')
+
+# Purpose: Keep retained-cache quota vectors small while exceeding one entry.
+# Type: int. Units: bytes. Scope: focused gallery cache retention fixtures.
+# Consumers: NativeMediaSessionTests. Rationale: 64 bytes keeps each fixture
+# body valid while patched ordinary limits exercise eviction deterministically.
+TEST_PINNED_CACHE_BODY_BYTES = 64
+TEST_PINNED_CACHE_ENTRY_BYTES = (
+    gallery_media_cache._CACHE_HEADER.size + TEST_PINNED_CACHE_BODY_BYTES
+)
 
 
 def discovery_response(
@@ -1223,8 +1241,275 @@ class LinkingTransportTests(unittest.TestCase):
                     'app_linking_gallery_visibility', 'POST', b'{}', 'fixture',
                 )
 
-    def test_late_dns_does_not_start_connection_and_blocks_new_workers(self) -> None:
-        """Cancel a DNS-bound request without starting a late network request.
+    def test_transport_waits_for_worker_slot_released_by_prior_request(self) -> None:
+        """Admit a request when the outstanding worker finally releases its slot.
+
+        Returns:
+            None: The waiting caller starts once and leaves the semaphore available.
+        """
+        slots = linking._LINKING_TRANSPORT_SLOTS
+        self.assertTrue(slots.acquire(blocking=False))
+        waiting = threading.Event()
+        request_started = threading.Event()
+        outcome: list[str] = []
+        original_thread = threading.Thread
+
+        def acquire_wait(*, timeout: float) -> bool:
+            """Signal that the caller reached slot admission before waiting.
+
+            Args:
+                timeout (float): Remaining bounded transport deadline slice.
+
+            Returns:
+                bool: Result from the real process-wide bounded semaphore.
+            """
+            waiting.set()
+            return slots.acquire(timeout=timeout)
+
+        def request_once(
+            control: linking._LinkingTransportControl,
+        ) -> dict[str, linking.JsonValue]:
+            """Complete one synthetic request after successful admission.
+
+            Args:
+                control (_LinkingTransportControl): Admitted deadline owner.
+
+            Returns:
+                dict[str, linking.JsonValue]: Empty successful response object.
+            """
+            control.remaining()
+            request_started.set()
+            return {}
+
+        def call_transport() -> None:
+            """Record the waiting caller's safe completion state.
+
+            Returns:
+                None: Appends success or a fixed linking failure marker.
+            """
+            try:
+                linking._run_linking_transport(
+                    request_once, None, TEST_WORKER_WAIT_SECONDS,
+                    TEST_WORKER_WAIT_SECONDS,
+                )
+            except linking.LinkingError:
+                outcome.append('error')
+            else:
+                outcome.append('success')
+
+        gate = mock.Mock()
+        gate.acquire.side_effect = acquire_wait
+        gate.release.side_effect = slots.release
+        caller = original_thread(target=call_transport, daemon=True)
+        slots_held_by_fixture = True
+        try:
+            with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate):
+                caller.start()
+                self.assertTrue(waiting.wait(TEST_WORKER_WAIT_SECONDS))
+                slots.release()
+                slots_held_by_fixture = False
+                caller.join(TEST_WORKER_WAIT_SECONDS)
+                self.assertFalse(caller.is_alive())
+        finally:
+            if slots_held_by_fixture:
+                slots.release()
+
+        self.assertEqual(['success'], outcome)
+        self.assertTrue(request_started.is_set())
+        self.assertEqual(1, gate.release.call_count)
+        self.assertTrue(slots.acquire(timeout=TEST_WORKER_WAIT_SECONDS))
+        slots.release()
+
+    def test_cancel_while_waiting_does_not_create_worker_or_leak_slot(self) -> None:
+        """Cancel bounded admission without spawning transport work.
+
+        Returns:
+            None: Cancellation returns promptly and leaves the fixture-owned slot.
+        """
+        slots = linking._LINKING_TRANSPORT_SLOTS
+        self.assertTrue(slots.acquire(blocking=False))
+        slots_held_by_fixture = True
+        waiting = threading.Event()
+        cancelled = threading.Event()
+        outcome: list[str] = []
+        original_thread = threading.Thread
+
+        def acquire_wait(*, timeout: float) -> bool:
+            """Observe a wait while delegating to the held real semaphore.
+
+            Args:
+                timeout (float): Remaining deadline slice for this wait.
+
+            Returns:
+                bool: Whether the real process-wide slot was admitted.
+            """
+            waiting.set()
+            return slots.acquire(timeout=timeout)
+
+        def call_transport() -> None:
+            """Capture a fixed terminal marker for the waiting caller.
+
+            Returns:
+                None: Reports only whether the bounded call was refused.
+            """
+            try:
+                linking._run_linking_transport(
+                    lambda _control: {}, cancelled, TEST_WORKER_WAIT_SECONDS,
+                    TEST_WORKER_WAIT_SECONDS,
+                )
+            except linking.LinkingError:
+                outcome.append('cancelled')
+            else:
+                outcome.append('unexpected-success')
+
+        gate = mock.Mock()
+        gate.acquire.side_effect = acquire_wait
+        gate.release.side_effect = slots.release
+        thread_factory = mock.Mock()
+        caller = original_thread(target=call_transport, daemon=True)
+        try:
+            with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
+                    mock.patch.object(linking.threading, 'Thread', thread_factory):
+                original_thread.start(caller)
+                self.assertTrue(waiting.wait(TEST_WORKER_WAIT_SECONDS))
+                cancelled.set()
+                caller.join(TEST_WORKER_WAIT_SECONDS)
+                self.assertFalse(caller.is_alive())
+                fixture_slot_was_available = slots.acquire(blocking=False)
+                if fixture_slot_was_available:
+                    # Balance the probe, then avoid releasing the fixture's
+                    # already-released permit a second time in ``finally``.
+                    slots.release()
+                    slots_held_by_fixture = False
+                self.assertFalse(fixture_slot_was_available)
+        finally:
+            if slots_held_by_fixture:
+                slots.release()
+
+        self.assertEqual(['cancelled'], outcome)
+        thread_factory.assert_not_called()
+        gate.release.assert_not_called()
+        self.assertTrue(slots.acquire(timeout=TEST_WORKER_WAIT_SECONDS))
+        slots.release()
+
+    def test_transport_deadline_includes_held_slot_admission(self) -> None:
+        """Expire while a prior worker owns the only slot, before spawning.
+
+        Returns:
+            None: Admission consumes the total deadline and creates no worker.
+        """
+        slots = linking._LINKING_TRANSPORT_SLOTS
+        self.assertTrue(slots.acquire(blocking=False))
+        waiting = threading.Event()
+        original_thread = threading.Thread
+
+        def acquire_wait(*, timeout: float) -> bool:
+            """Signal bounded admission and delegate to the held semaphore.
+
+            Args:
+                timeout (float): Remaining total-request deadline slice.
+
+            Returns:
+                bool: Whether the fixture's real semaphore became available.
+            """
+            waiting.set()
+            return slots.acquire(timeout=timeout)
+
+        gate = mock.Mock()
+        gate.acquire.side_effect = acquire_wait
+        gate.release.side_effect = slots.release
+        thread_factory = mock.Mock()
+        started = time.monotonic()
+        try:
+            with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
+                    mock.patch.object(linking.threading, 'Thread', thread_factory):
+                with self.assertRaises(linking.LinkingError):
+                    linking._run_linking_transport(
+                        lambda _control: {}, None,
+                        TEST_REQUEST_DEADLINE_SECONDS,
+                        TEST_WORKER_WAIT_SECONDS,
+                    )
+        finally:
+            slots.release()
+
+        elapsed = time.monotonic() - started
+        self.assertTrue(waiting.is_set())
+        self.assertGreaterEqual(elapsed, TEST_ADMISSION_WAIT_MIN_SECONDS)
+        self.assertLess(elapsed, TEST_WORKER_WAIT_SECONDS)
+        thread_factory.assert_not_called()
+        gate.release.assert_not_called()
+
+    def test_cancel_racing_slot_acquire_releases_once_without_worker(self) -> None:
+        """Release a just-acquired slot exactly once when cancellation races it.
+
+        Returns:
+            None: The caller refuses before creating a transport worker.
+        """
+        slots = linking._LINKING_TRANSPORT_SLOTS
+        cancelled = threading.Event()
+        original_thread = threading.Thread
+
+        def acquire_then_cancel(*, timeout: float) -> bool:
+            """Acquire the actual slot and set cancellation before returning.
+
+            Args:
+                timeout (float): Remaining total-request deadline slice.
+
+            Returns:
+                bool: True after the actual semaphore grants its slot.
+            """
+            acquired = slots.acquire(timeout=timeout)
+            if acquired:
+                cancelled.set()
+            return acquired
+
+        gate = mock.Mock()
+        gate.acquire.side_effect = acquire_then_cancel
+        gate.release.side_effect = slots.release
+        thread_factory = mock.Mock()
+        with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
+                mock.patch.object(linking.threading, 'Thread', thread_factory):
+            with self.assertRaises(linking.LinkingError):
+                linking._run_linking_transport(
+                    lambda _control: {}, cancelled, TEST_WORKER_WAIT_SECONDS,
+                    TEST_WORKER_WAIT_SECONDS,
+                )
+
+        self.assertTrue(cancelled.is_set())
+        thread_factory.assert_not_called()
+        self.assertEqual(1, gate.release.call_count)
+        self.assertTrue(slots.acquire(timeout=TEST_WORKER_WAIT_SECONDS))
+        slots.release()
+
+    def test_transport_thread_start_failure_releases_admission_once(self) -> None:
+        """Preserve slot accounting when the native worker cannot start.
+
+        Returns:
+            None: Start refusal maps to LinkingError and releases the slot once.
+        """
+        slots = linking._LINKING_TRANSPORT_SLOTS
+        gate = mock.Mock()
+        gate.acquire.side_effect = slots.acquire
+        gate.release.side_effect = slots.release
+        failed_worker = mock.Mock()
+        failed_worker.start.side_effect = RuntimeError('fixture failure')
+        thread_factory = mock.Mock(return_value=failed_worker)
+        with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
+                mock.patch.object(linking.threading, 'Thread', thread_factory):
+            with self.assertRaises(linking.LinkingError):
+                linking._run_linking_transport(
+                    lambda _control: {}, None, TEST_WORKER_WAIT_SECONDS,
+                    TEST_WORKER_WAIT_SECONDS,
+                )
+
+        thread_factory.assert_called_once()
+        failed_worker.start.assert_called_once_with()
+        self.assertEqual(1, gate.release.call_count)
+        self.assertTrue(slots.acquire(timeout=TEST_WORKER_WAIT_SECONDS))
+        slots.release()
+
+    def test_late_dns_does_not_start_connection_and_bounds_new_workers(self) -> None:
+        """Cancel DNS work and bound a later caller waiting for its worker slot.
 
         Returns:
             None: Late DNS cannot connect and the outstanding slot stays held.
@@ -1280,11 +1565,43 @@ class LinkingTransportTests(unittest.TestCase):
             caller.join(TEST_WORKER_WAIT_SECONDS)
             self.assertFalse(caller.is_alive())
             self.assertEqual(['cancelled'], outcome)
-            with self.assertRaises(linking.LinkingError):
-                linking._request_json(
-                    'https://gallery.example', 'app_linking_push', 'POST',
-                    b'client_id=php-gallery-winapp', None,
+            worker_starts: list[str] = []
+            original_start = threading.Thread.start
+
+            def count_transport_start(thread: threading.Thread) -> None:
+                """Count a second linker worker without changing thread behavior.
+
+                Args:
+                    thread (threading.Thread): Worker candidate being started.
+
+                Returns:
+                    None: Starts the thread only when the transport admits it.
+                """
+                if thread.name == 'PHPGalleryLinkTransport':
+                    worker_starts.append(thread.name)
+                original_start(thread)
+
+            with mock.patch.object(
+                linking, 'LINKING_REQUEST_DEADLINE_SECONDS',
+                TEST_REQUEST_DEADLINE_SECONDS,
+            ), mock.patch.object(
+                linking.threading.Thread, 'start', count_transport_start,
+            ):
+                waiting_started = time.monotonic()
+                with self.assertRaises(linking.LinkingError):
+                    linking._request_json(
+                        'https://gallery.example', 'app_linking_push', 'POST',
+                        b'client_id=php-gallery-winapp', None,
+                    )
+                self.assertGreaterEqual(
+                    time.monotonic() - waiting_started,
+                    TEST_ADMISSION_WAIT_MIN_SECONDS,
                 )
+                self.assertLess(
+                    time.monotonic() - waiting_started,
+                    TEST_WORKER_WAIT_SECONDS,
+                )
+            self.assertEqual([], worker_starts)
             dns_release.set()
             self.assertTrue(linking._LINKING_TRANSPORT_SLOTS.acquire(
                 timeout=TEST_WORKER_WAIT_SECONDS,
@@ -1840,6 +2157,69 @@ class VisibilitySessionTests(unittest.TestCase):
 class NativeMediaSessionTests(unittest.TestCase):
     """Exercise native read scope and server-selected resource identities."""
 
+    def test_gallery_preference_and_local_preparation_use_exact_issuer(self) -> None:
+        """Persist a gallery pin and promote a current local byte on inspection.
+
+        Returns:
+            None: A listing-only link controls local retention without extra
+                grants, and another issuer's entry remains isolated.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+        )
+        body = b'current cached thumbnail'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        photo = linking.LinkedPhoto(
+            7, 'Photo', thumbnail_etag=etag,
+        )
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            key = cache.key(issuer, 4, 7, True)
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ):
+                self.assertTrue(session.set_gallery_pinned(4, True))
+                self.assertTrue(session.gallery_pinned(4))
+                self.assertTrue(session.prepare_cached_photo(4, photo, thumbnail=True))
+                self.assertFalse((Path(directory) / (key + '.bin')).exists())
+                self.assertTrue(session.set_gallery_pinned(4, False))
+                self.assertFalse(session.gallery_pinned(4))
+            self.assertIsNotNone(cache.read(key))
+
+    def test_no_store_photo_is_not_written_to_pinned_gallery(self) -> None:
+        """Keep a server no-store response out of the retained area.
+
+        Returns:
+            None: Playback-compatible bytes reach the caller while no persistent
+                object is retained, even after the gallery has been pinned.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+        )
+        body = b'no-store image bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                session, '_media_read',
+                return_value=(body, 'image/jpeg', etag, False),
+            ):
+                self.assertEqual(body, session.media_photo(4, 7, True)[0])
+            key = cache.key(issuer, 4, 7, True)
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertIsNone(cache.read(key, gallery_key=gallery_key))
+
     def test_photo_routes_use_listing_scope_but_presentation_stays_explicit(self) -> None:
         """Use listing access for photos while guarding presentation and music.
 
@@ -2119,6 +2499,65 @@ class NativeMediaSessionTests(unittest.TestCase):
             self.assertFalse(broken.write(key, body, 'image/jpeg', etag, now=stored_at))
             self.assertIsNone(broken.read(key, now=stored_at))
 
+    def test_private_preload_revalidates_and_needs_explicit_account_intent(self) -> None:
+        """Revalidate private cache entries online under current Admin metadata.
+
+        Returns:
+            None: A verified private entry is reusable only with the negotiated
+                protocol, current eligible descriptor and exact account marker;
+                each use still performs a conditional server request.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        gallery_id, photo_id, user_id = 4, 7, 42
+        body = b'private preload fixture bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+            admin_preload_supported=True,
+        )
+        session._bound_user_id = user_id
+        photo = linking.LinkedPhoto(
+            photo_id, 'Private', cache_eligible=False, preload_eligible=True,
+        )
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            key = cache.private_key(issuer, user_id, gallery_id, photo_id, False)
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+            ), mock.patch.object(
+                session, '_media_read',
+                return_value=(None, '', etag, True),
+            ) as remote:
+                self.assertTrue(session.set_gallery_preload_intent(gallery_id, True))
+                self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
+                self.assertTrue(session.has_cached_photo(gallery_id, photo))
+                self.assertTrue(session.prepare_cached_photo(gallery_id, photo))
+                self.assertEqual(
+                    (body, 'image/jpeg'),
+                    session.media_photo(
+                        gallery_id, photo_id, False,
+                        cache_eligible=False, preload_eligible=True,
+                    ),
+                )
+                remote.assert_called_once_with(
+                    gallery_id, 'photo', photo_id, None, etag,
+                    admin_preload=True,
+                )
+                no_intent = linking.LinkingSession(
+                    issuer, 'pgla_' + 'B' * 42 + 'A',
+                    time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+                    linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+                    admin_preload_supported=True,
+                )
+                no_intent._bound_user_id = user_id + 1
+                self.assertFalse(no_intent.has_cached_photo(gallery_id, photo))
+                self.assertFalse(no_intent.prepare_cached_photo(gallery_id, photo))
+                self.assertFalse(session.has_cached_photo(
+                    gallery_id, dataclass_replace(photo, preload_eligible=False),
+                ))
+
     def test_current_catalogue_proof_reuses_an_expired_thumbnail(self) -> None:
         """Read a matching old thumbnail before starting binary transport.
 
@@ -2184,6 +2623,248 @@ class NativeMediaSessionTests(unittest.TestCase):
             self.assertIsNone(cache.read(old))
             self.assertEqual(cache.read(track).mime, 'audio/wav')
             self.assertIsNotNone(cache.read(recent))
+
+    def test_pinned_gallery_isolated_from_ordinary_limits_and_restarts(self) -> None:
+        """Keep retained media outside ordinary quota and scan accounting.
+
+        Returns:
+            None: Multiple pinned renditions survive pressure and a new cache
+                owner, while ordinary storage retains only its configured item.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b'p' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory, mock.patch.multiple(
+            gallery_media_cache,
+            MEDIA_CACHE_MAX_ENTRIES=1,
+            MEDIA_CACHE_MAX_BYTES=TEST_PINNED_CACHE_ENTRY_BYTES,
+        ):
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            pinned_keys = [
+                cache.key(issuer, 4, image_id, thumbnail)
+                for image_id in (7, 8, 9)
+                for thumbnail in (True, False)
+            ]
+            for key in pinned_keys:
+                self.assertTrue(cache.write(
+                    key, body, 'image/jpeg', etag,
+                    gallery_key=gallery_key,
+                ))
+            ordinary_key = cache.key(issuer, 99, 1, True)
+            self.assertTrue(cache.write(ordinary_key, body, 'image/jpeg', etag))
+            self.assertEqual(1, len(cache._inventory()))
+
+            restarted = linking.GalleryMediaCache(Path(directory), len(body))
+            self.assertTrue(restarted.is_gallery_pinned(issuer, 4))
+            for key in pinned_keys:
+                self.assertIsNotNone(restarted.read(
+                    key, gallery_key=gallery_key,
+                ))
+            self.assertIsNotNone(restarted.read(ordinary_key))
+
+    def test_private_preload_intent_and_keyspace_are_account_bound(self) -> None:
+        """Keep explicit private bytes and intent isolated across accounts.
+
+        Returns:
+            None: Intent survives a cache restart only for its exact issuer,
+                verified account and gallery; pinned private bytes use the
+                existing retained directory without entering ordinary inventory.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        other_issuer = 'https://other.example/Galerie'
+        body = b'account-bound private bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            key = cache.private_key(issuer, 42, 4, 7, False)
+            self.assertNotEqual(key, cache.private_key(issuer, 43, 4, 7, False))
+            self.assertNotEqual(key, cache.private_key(issuer, 42, 5, 7, False))
+            self.assertNotEqual(key, cache.private_key(other_issuer, 42, 4, 7, False))
+            self.assertTrue(cache.set_private_preload_intent(issuer, 42, 4, True))
+            self.assertTrue(cache.has_private_preload_intent(issuer, 42, 4))
+            self.assertFalse(cache.has_private_preload_intent(issuer, 43, 4))
+            self.assertFalse(cache.has_private_preload_intent(issuer, 42, 5))
+            self.assertFalse(cache.has_private_preload_intent(other_issuer, 42, 4))
+
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertTrue(cache.write(
+                key, body, 'image/jpeg', etag, gallery_key=gallery_key,
+            ))
+            restarted = linking.GalleryMediaCache(Path(directory), 1024)
+            self.assertTrue(restarted.has_private_preload_intent(issuer, 42, 4))
+            self.assertEqual(
+                body, restarted.read(key, gallery_key=gallery_key).body,
+            )
+            self.assertEqual([], restarted._inventory())
+            self.assertTrue(restarted.set_private_preload_intent(
+                issuer, 42, 4, False,
+            ))
+            self.assertFalse(restarted.has_private_preload_intent(issuer, 42, 4))
+
+    def test_pin_promotes_legacy_hit_and_unpin_restores_ordinary_scope(self) -> None:
+        """Promote legacy flat entries and return retained files on unpin.
+
+        Returns:
+            None: The selected gallery moves out of flat accounting, then back;
+                another issuer's pinned directory remains untouched.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        other_issuer = 'https://other.example/Galerie'
+        body = b'q' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            key = cache.key(issuer, 4, 7, True)
+            other_key = cache.key(other_issuer, 4, 7, True)
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.set_gallery_pinned(other_issuer, 4, True))
+            self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
+            self.assertTrue(cache.write(
+                other_key, body, 'image/jpeg', etag,
+                gallery_key=cache.gallery_key(other_issuer, 4),
+            ))
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertIsNotNone(cache.read(key, gallery_key=gallery_key))
+            self.assertFalse((Path(directory) / (key + '.bin')).exists())
+            retained_path = (
+                Path(directory) / '.retained' / gallery_key / (key + '.bin')
+            )
+            self.assertTrue(retained_path.is_file())
+
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, False))
+            self.assertFalse(cache.is_gallery_pinned(issuer, 4))
+            self.assertTrue((Path(directory) / (key + '.bin')).is_file())
+            self.assertTrue(cache.is_gallery_pinned(other_issuer, 4))
+            self.assertIsNotNone(cache.read(
+                other_key,
+                gallery_key=cache.gallery_key(other_issuer, 4),
+            ))
+
+    def test_failed_pin_promotion_is_not_reported_as_retained(self) -> None:
+        """Refuse a local-retention proof when promotion cannot commit.
+
+        Returns:
+            None: A verified legacy flat body remains intact, but a failed
+                retained write cannot be returned as a pinned-cache hit.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b's' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            key = cache.key(issuer, 4, 7, True)
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.write(key, body, 'image/jpeg', etag))
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            with mock.patch.object(cache, '_write_locked', return_value=False):
+                self.assertIsNone(cache.read(key, gallery_key=gallery_key))
+            self.assertTrue((Path(directory) / (key + '.bin')).is_file())
+            retained_path = (
+                Path(directory) / '.retained' / gallery_key / (key + '.bin')
+            )
+            self.assertFalse(retained_path.exists())
+
+    def test_failed_unpin_keeps_marker_and_retained_original(self) -> None:
+        """Leave a pin intact when ordinary admission cannot finish.
+
+        Returns:
+            None: A failed quota-managed copy does not remove the preference or
+                any retained gallery object.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b'r' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            gallery_key = cache.gallery_key(issuer, 4)
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertTrue(cache.write(
+                key, body, 'image/jpeg', etag, gallery_key=gallery_key,
+            ))
+            with mock.patch.object(cache, '_write_locked', return_value=False):
+                self.assertFalse(cache.set_gallery_pinned(issuer, 4, False))
+            self.assertTrue(cache.is_gallery_pinned(issuer, 4))
+            self.assertIsNotNone(cache.read(key, gallery_key=gallery_key))
+
+    def test_retained_cleanup_failure_keeps_pin_marker(self) -> None:
+        """Keep the pin active when a retained file cannot be removed.
+
+        Returns:
+            None: A failed cleanup after ordinary copying returns false and
+                leaves the marker and the busy retained entry in place.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b't' * TEST_PINNED_CACHE_BODY_BYTES
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), len(body))
+            gallery_key = cache.gallery_key(issuer, 4)
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertTrue(cache.write(
+                key, body, 'image/jpeg', etag, gallery_key=gallery_key,
+            ))
+            retained_path = (
+                Path(directory) / '.retained' / gallery_key / (key + '.bin')
+            )
+            with mock.patch.object(
+                cache, '_unlink_if_matches', side_effect=[False],
+            ):
+                self.assertFalse(cache.set_gallery_pinned(issuer, 4, False))
+            self.assertTrue(cache.is_gallery_pinned(issuer, 4))
+            self.assertTrue(retained_path.is_file())
+
+    def test_gallery_pinning_rejects_unsafe_directory(self) -> None:
+        """Refuse retained paths whose hashed parent is not a real directory.
+
+        Returns:
+            None: An unexpected regular file at the retained root fails closed.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            retained_root = Path(directory) / '.retained'
+            retained_root.write_text('not a directory', encoding='utf-8')
+            self.assertFalse(cache.set_gallery_pinned(issuer, 4, True))
+            self.assertFalse(cache.is_gallery_pinned(issuer, 4))
+
+    def test_retained_scan_uses_direct_path_identity(self) -> None:
+        """Avoid zero-inode DirEntry metadata in retained cleanup snapshots.
+
+        Returns:
+            None: A synthetic Windows-style DirEntry inode of zero is ignored;
+                the direct no-follow path stat matches the actual cache object.
+        """
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(Path(directory), 1024)
+            gallery_key = cache.gallery_key('https://gallery.example', 4)
+            retained_directory = Path(directory) / '.retained' / gallery_key
+            retained_directory.mkdir(parents=True)
+            key = cache.key('https://gallery.example', 4, 7, True)
+            entry_path = retained_directory / (key + '.bin')
+            entry_path.write_bytes(b'fixture')
+            listed_entry = mock.Mock()
+            listed_entry.name = entry_path.name
+            listed_entry.path = str(entry_path)
+            listed_entry.stat.return_value = mock.Mock(st_ino=0)
+            listing = mock.MagicMock()
+            listing.__enter__.return_value = iter((listed_entry,))
+
+            with mock.patch.object(
+                gallery_media_cache.os, 'scandir', return_value=listing,
+            ):
+                retained = cache._retained_entries(retained_directory)
+
+            self.assertIsNotNone(retained)
+            self.assertEqual(1, len(retained))
+            self.assertTrue(os.path.samestat(
+                entry_path.lstat(), retained[0][1],
+            ))
+            listed_entry.stat.assert_not_called()
 
 
 class NativeMediaTransportTests(unittest.TestCase):
@@ -2283,6 +2964,111 @@ class NativeMediaTransportTests(unittest.TestCase):
             )
         self.assertEqual((None, '', etag, True), result)
         self.assertEqual(etag, connection.request.call_args.kwargs['headers']['If-None-Match'])
+
+    def test_admin_preload_requires_exact_confirmed_wire_lane(self) -> None:
+        """Bind private cache admission to the explicit Admin preload version.
+
+        Returns:
+            None: Exact 200 and authorized 304 responses cache; missing or
+                duplicated confirmation fails closed.
+        """
+        body = b'private admin preload bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        query = 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7'
+        headers = Message()
+        headers['Content-Type'] = 'image/jpeg'
+        headers['Content-Length'] = str(len(body))
+        headers['ETag'] = etag
+        headers['Cache-Control'] = 'private, max-age=60, must-revalidate'
+        headers['X-PHP-Gallery-Photo-Cache'] = '1'
+        headers['X-PHP-Gallery-Preload'] = 'admin-v1'
+        headers['Vary'] = (
+            'Authorization, X-PHP-Gallery-Photo-Cache, X-PHP-Gallery-Preload'
+        )
+        connection, _response = self._response(200, headers, body)
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            result = linking._native_media_read_once(
+                'https://gallery.example', query, 'opaque-test-bearer',
+                ('image/jpeg',), mock.Mock(), admin_preload=True,
+            )
+        self.assertEqual((body, 'image/jpeg', etag, True), result)
+        self.assertEqual(
+            'admin-v1', connection.request.call_args.kwargs['headers'][
+                'X-PHP-Gallery-Preload'
+            ],
+        )
+
+        headers = Message()
+        headers['ETag'] = etag
+        headers['Cache-Control'] = 'private, max-age=60, must-revalidate'
+        headers['X-PHP-Gallery-Photo-Cache'] = '1'
+        headers['X-PHP-Gallery-Preload'] = 'admin-v1'
+        headers['Vary'] = (
+            'Authorization, X-PHP-Gallery-Photo-Cache, X-PHP-Gallery-Preload'
+        )
+        connection, _response = self._response(304, headers)
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            result = linking._native_media_read_once(
+                'https://gallery.example', query, 'opaque-test-bearer',
+                ('image/jpeg',), mock.Mock(), etag, admin_preload=True,
+            )
+        self.assertEqual((None, '', etag, True), result)
+
+        for confirmation in (None, 'admin-v1, admin-v1'):
+            invalid = Message()
+            invalid['Content-Type'] = 'image/jpeg'
+            invalid['Content-Length'] = str(len(body))
+            invalid['ETag'] = etag
+            invalid['Cache-Control'] = 'private, max-age=60, must-revalidate'
+            invalid['X-PHP-Gallery-Photo-Cache'] = '1'
+            invalid['Vary'] = (
+                'Authorization, X-PHP-Gallery-Photo-Cache, '
+                'X-PHP-Gallery-Preload'
+            )
+            if confirmation is not None:
+                invalid['X-PHP-Gallery-Preload'] = confirmation
+            connection, _response = self._response(200, invalid, body)
+            with mock.patch.object(
+                linking, '_linking_connection', return_value=connection,
+            ), self.assertRaises(linking.LinkingError):
+                linking._native_media_read_once(
+                    'https://gallery.example', query, 'opaque-test-bearer',
+                    ('image/jpeg',), mock.Mock(), admin_preload=True,
+                )
+
+    def test_retry_after_is_single_bounded_decimal(self) -> None:
+        """Retain only one bounded decimal Retry-After from a no-store throttle.
+
+        Returns:
+            None: A valid delay is structured and safe; invalid or duplicate
+                values are discarded without exposing a server message.
+        """
+        query = 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7'
+        for values, expected in (
+            (('7',), 7), (('301',), None), (('7', '8'), None),
+            (('Sun, 06 Nov'), None),
+        ):
+            headers = Message()
+            headers['Content-Type'] = 'application/json'
+            headers['Cache-Control'] = 'no-store'
+            for value in values:
+                headers.add_header('Retry-After', value)
+            connection, _response = self._response(
+                429, headers, b'{\"error\":\"temporarily_unavailable\"}',
+            )
+            with mock.patch.object(
+                linking, '_linking_connection', return_value=connection,
+            ), self.assertRaises(linking.LinkingMediaThrottled) as raised:
+                linking._native_media_read_once(
+                    'https://gallery.example', query, 'opaque-test-bearer',
+                    ('image/jpeg',), mock.Mock(), admin_preload=True,
+                )
+            self.assertEqual(expected, raised.exception.retry_after_seconds)
+            self.assertNotIn('temporarily_unavailable', str(raised.exception))
 
     def test_legacy_photo_response_remains_uncached(self) -> None:
         """Keep older no-store image servers usable without disk persistence.
@@ -2508,6 +3294,108 @@ class NativeMediaTransportTests(unittest.TestCase):
 @unittest.skipIf(LinkingManager is None, 'Tkinter is unavailable')
 class LinkingDeliveryTests(unittest.TestCase):
     """Exercise worker-event delivery without opening a Tk window."""
+
+    def test_photos_gallery_editor_uses_current_site_and_browser_session(self) -> None:
+        """Open only a bounded listed gallery on the live Photos site.
+
+        Returns:
+            None: The fixed editor route preserves a local subdirectory issuer,
+                rejects stale sessions and invalid IDs, and exposes no token.
+        """
+        for issuer in (
+            'http://localhost:8888/Galerie',
+            'https://gallery.example/photos',
+        ):
+            with self.subTest(issuer=issuer):
+                session = mock.Mock(spec=linking.LinkingSession)
+                session.available.return_value = True
+                session.can_list_galleries.return_value = True
+                session.matches_issuer.return_value = True
+                manager = object.__new__(LinkingManager)
+                manager._shutting_down = False
+                manager._session = session
+                manager._session_issuer = issuer
+                manager._current_issuer = issuer
+                manager._session_user_id = 7
+                gallery = linking.LinkedGallery(42, None, 'Listed gallery')
+                with mock.patch(
+                    'uploader.app_linking_ui.webbrowser.open',
+                    return_value=True,
+                ) as open_browser:
+                    self.assertTrue(
+                        manager.open_photos_gallery_editor(session, gallery),
+                    )
+                open_browser.assert_called_once_with(
+                    issuer + '/index.php?page=admin_edit_gallery'
+                    '&id=42&open_panel=1',
+                )
+
+        for gallery_id in (0, True, linking.LINKING_GALLERY_ID_MAX + 1):
+            with self.subTest(gallery_id=gallery_id):
+                session = mock.Mock(spec=linking.LinkingSession)
+                session.available.return_value = True
+                session.can_list_galleries.return_value = True
+                session.matches_issuer.return_value = True
+                manager = object.__new__(LinkingManager)
+                manager._shutting_down = False
+                manager._session = session
+                manager._session_issuer = 'http://localhost/Galerie'
+                manager._current_issuer = manager._session_issuer
+                manager._session_user_id = 7
+                with mock.patch(
+                    'uploader.app_linking_ui.webbrowser.open',
+                ) as open_browser:
+                    self.assertFalse(manager.open_photos_gallery_editor(
+                        session,
+                        linking.LinkedGallery(gallery_id, None, 'Invalid'),
+                    ))
+                open_browser.assert_not_called()
+
+        session = mock.Mock(spec=linking.LinkingSession)
+        session.available.return_value = True
+        session.can_list_galleries.return_value = True
+        session.matches_issuer.return_value = True
+        manager = object.__new__(LinkingManager)
+        manager._shutting_down = False
+        manager._session = mock.Mock(spec=linking.LinkingSession)
+        manager._session_issuer = 'http://localhost/Galerie'
+        manager._current_issuer = manager._session_issuer
+        manager._session_user_id = 7
+        with mock.patch(
+            'uploader.app_linking_ui.webbrowser.open',
+        ) as open_browser:
+            self.assertFalse(manager.open_photos_gallery_editor(
+                session, linking.LinkedGallery(42, None, 'Stale'),
+            ))
+            open_browser.assert_not_called()
+
+    def test_photos_gallery_editor_reports_browser_failure(self) -> None:
+        """Treat an unavailable browser as a safe refusal.
+
+        Returns:
+            None: Both a false browser result and an exception remain a simple
+                false result without exposing URL or exception details.
+        """
+        session = mock.Mock(spec=linking.LinkingSession)
+        session.available.return_value = True
+        session.can_list_galleries.return_value = True
+        session.matches_issuer.return_value = True
+        manager = object.__new__(LinkingManager)
+        manager._shutting_down = False
+        manager._session = session
+        manager._session_issuer = 'http://localhost/Galerie'
+        manager._current_issuer = manager._session_issuer
+        manager._session_user_id = 7
+        gallery = linking.LinkedGallery(42, None, 'Listed gallery')
+        with mock.patch(
+            'uploader.app_linking_ui.webbrowser.open', return_value=False,
+        ):
+            self.assertFalse(manager.open_photos_gallery_editor(session, gallery))
+        with mock.patch(
+            'uploader.app_linking_ui.webbrowser.open',
+            side_effect=OSError('private browser error'),
+        ):
+            self.assertFalse(manager.open_photos_gallery_editor(session, gallery))
 
     def test_address_dialog_accepts_copied_addresses(self) -> None:
         """Exercise cancellation, correction and submission from the prompt.

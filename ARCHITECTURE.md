@@ -140,6 +140,14 @@ stores server-opted-in photo and audio bytes with content digests up to
 photo bytes after their 60-second fresh interval. Authorized playlist
 descriptors bind reused track bytes by SHA-256, size and MIME type. The
 native player consumes local files and prepares the next track for handoff.
+`gallery_preload.py` prepares direct-photo renditions off the Tk thread.
+Keep preloaded uses hashed retained-gallery directories outside ordinary LRU
+limits. Explicit Admin preload adds an issuer/account-bound private namespace
+and saved intent; private bytes always pass live conditional authorization
+before display from disk. The server retains ordinary no-store browsing and
+verifies the photo and complete gallery ancestry as non-NSFW for this separate
+opt-in.
+Bounded server retry delays publish cancelable progress without raising quotas.
 The workspace retains a bounded decoded thumbnail cache across album
 selections under the current authorized session. Viewport changes share one
 in-flight request per thumbnail. Contextual album and photo
@@ -154,6 +162,12 @@ deletion owner. The bulk runtime
 loads only for the authorized POST. A visible Admin album can check a small
 indexed revision and reconcile loaded photo descriptors with its thumbnail
 cache. Tree expansion is a local preference scoped to site and Admin account.
+The launcher stores bounded window geometry and the Photos divider width in
+separate atomic view state; hidden or restoring panes cannot replace a saved
+width with their temporary default. The shared theme selects an installed UI
+font and supersamples generated icons. The Windows display bootstrap respects
+existing DPI awareness and runs before Tk. Activity persistence batches history
+events on its own worker rather than blocking the Tk event drain.
 The contextual Watcher action
 verifies the gallery through the existing upload mode owner, then gives the
 capture a temporary key bound to its live link and physical gallery. The

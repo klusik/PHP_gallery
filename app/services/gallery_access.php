@@ -687,6 +687,64 @@ function image_nsfw_restricted(array $image, array $gallery): bool
 }
 
 /**
+ * Bound Admin preload verification to one complete direct gallery ancestry.
+ * Type: int. Units: ancestor rows. Scope: one private-preload eligibility check.
+ * Consumers: gallery_admin_media_preload_gallery_allowed.
+ * Rationale: 64 levels match the public ancestry boundary and stop cycles.
+ */
+const GALLERY_ADMIN_MEDIA_PRELOAD_ANCESTOR_MAX = 64;
+
+/**
+ * Confirm every current gallery ancestor is structurally valid and unrestricted.
+ *
+ * This checks only NSFW safety; it does not require public visibility, listing
+ * or ordinary visitor access. Unknown or missing schema refuses preload.
+ *
+ * @param int $galleryId Exact physical gallery authorized for Admin media.
+ * @return bool True only for a complete, cycle-free, non-NSFW ancestry.
+ */
+function gallery_admin_media_preload_gallery_allowed(int $galleryId): bool
+{
+    if ($galleryId <= 0
+        || !schema_inspection_is_available(nsfw_guard_schema_status())) {
+        return false;
+    }
+    $visited = [];
+    $currentId = $galleryId;
+    try {
+        while ($currentId > 0) {
+            if (isset($visited[$currentId])
+                || count($visited) >= GALLERY_ADMIN_MEDIA_PRELOAD_ANCESTOR_MAX) {
+                return false;
+            }
+            $visited[$currentId] = true;
+            $row = \Gallery\Models\gallery_model_find_by_id($currentId);
+            $rowId = is_array($row)
+                ? filter_var($row['id'] ?? null, FILTER_VALIDATE_INT) : false;
+            if ($row === null
+                || $rowId === false || $rowId !== $currentId
+                || !array_key_exists('parent_id', $row)
+                || !array_key_exists('nsfw_enabled', $row)
+                || !in_array($row['nsfw_enabled'], [0, '0'], true)) {
+                return false;
+            }
+            $parent = $row['parent_id'];
+            if ($parent === null) {
+                return true;
+            }
+            $parentId = filter_var($parent, FILTER_VALIDATE_INT);
+            if ($parentId === false || $parentId < 1) {
+                return false;
+            }
+            $currentId = $parentId;
+        }
+    } catch (\Throwable) {
+        return false;
+    }
+    return false;
+}
+
+/**
  * Return true when one public image may be exposed to the current visitor.
  *
  * @param array{visibility?:string|null,nsfw_enabled?:int|string|null} $image Image visibility and optional NSFW fields.

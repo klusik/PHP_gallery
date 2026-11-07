@@ -2134,13 +2134,37 @@ EDR-Display erscheinen, wenn PyObjC und die Tk-Fensteranbindung verfügbar
 sind. Andere Konfigurationen einschließlich Windows verwenden 8-Bit-SDR
 über Pillow/Tk.
 Ein gemeinsamer Cache pro Benutzer speichert freigegebene Fotos und Titel mit
-verifizierten Inhaltsprüfsummen. Bei mehr als 4\,096~Einträgen oder 1~GiB
-entfernt er die am längsten ungenutzten Daten. Ein passender Prüfwert aus
+verifizierten Inhaltsprüfsummen. Bei mehr als
+4\,096~Einträgen oder 1~GiB
+entfernt der normale Bereich die am längsten ungenutzten Daten. Ein passender Prüfwert aus
 dem aktuellen Albumkatalog ermöglicht die direkte Nutzung der Miniatur.
 Sonst gelten 60~Sekunden Frische und die autorisierte ETag-Prüfung.
 Die aktuell autorisierte Wiedergabeliste kann einen Titel anhand von SHA-256,
 Größe und Format wiederverwenden. Nur für Administratoren zugängliche Medien
-bleiben vom Festplattencache ausgeschlossen.
+bleiben standardmäßig vom Festplattencache ausgeschlossen.
+Cache-Symbole aktualisieren sich aus geladenen Metadaten: Wolke bedeutet
+online, Halbkreis teilweise, voller Kreis lokal und gepunkteter Kreis
+ungeprüft. Ein Teilkatalog beweist keine vollständige Abdeckung. Das Symbol
+am Albumtitel öffnet das Galeriemenü.
+\ui{Galerie vorladen} lädt direkte Fotos mit Miniaturen und Lightbox-Bildern
+im Hintergrund mit Fortschritt und Abbruch. Untergalerien bleiben getrennt.
+\ui{Vorgeladen behalten} bewahrt erfolgreich vorbereitete Dateien außerhalb
+normaler Bereinigung, Anzahl- und Größenlimits auch nach Neustarts auf.
+Deaktivieren stellt die normale Cache-Regel wieder her; überschüssige Daten
+können entfallen. Abbruch behält fertige Dateien und die Behalten-Einstellung,
+behauptet aber keine vollständige Abdeckung. Ein erneuter Versuch nach einem
+Serverlimit verwendet geprüfte lokale Daten weiter. No-store-Medien bleiben
+temporär; lokale Dateien umgehen weder Anmeldung noch Linkablauf. Ein Vorgang
+akzeptiert höchstens 100\,000 direkte Fotos.
+Ausdrückliches Vorladen mit einer Admin-Photos-Verknüpfung kann auf
+unterstützten Servern auch private Fotos und Entwürfe speichern. Foto,
+Galerie und sämtliche Vorfahren müssen nachweislich ohne NSFW-Beschränkung
+sein. Einstellung und private Dateien gehören zur Installation und zum
+verifizierten Konto. Vor jeder Anzeige prüft der Live-Server private Daten
+erneut, auch nach einem Neustart. Ältere Server und gewöhnliches geschütztes
+Browsing bleiben temporär. Eine serverseitige Wartezeit zeigt einen
+abbrechbaren Countdown; nach ausgeschöpften Versuchen bleiben fertige Dateien
+erhalten. Null gespeicherte Fotos zeigen einen sicheren Grund statt Teilerfolg.
 Die Diashow-Taste öffnet das Vollbild und wiederholt das gesamte Album im
 aktivierten Serverintervall oder standardmäßig alle fünf Sekunden. Dabei
 startet die freigegebene Begleitmusik. Die Musiksteuerung kann die Wiedergabe
@@ -2157,6 +2181,10 @@ ist. Die Hinzufügen-Schaltfläche im Baum erstellt eine Galerie auf der
 obersten Ebene. Die Schaltfläche am Albumtitel, das Galeriemenü und eine
 freie Stelle im Fotoraster bieten eine Untergalerie an. Mausrad und
 Zweifinger-Scrollen bewegen das Raster und ändern den Lightbox-Zoom.
+\ui{Galerie bearbeiten} öffnet den Webeditor der ausgewählten Galerie im
+rechten Panel des Systembrowsers. Dabei gilt dessen eigene Admin-Anmeldung;
+WinApp-Schlüssel werden nicht übertragen. Ältere Server öffnen den normalen
+ganzseitigen Editor.
 Der Baum merkt sich geöffnete und geschlossene Zweige je verknüpfter Website
 und Konto. Der runde Pfeil neben dem Albumtitel aktualisiert die Fotos.
 WinApp prüft den Index des sichtbaren Admin-Albums etwa alle 30~Sekunden
@@ -2176,7 +2204,17 @@ Album verdeckt. Bei erkanntem Flugsimulator
 steht SimBrief zur Verfügung. Beenden verarbeitet angenommene Bilder,
 speichert verfügbare Flugberichte und widerruft den temporären Schlüssel.
 Die Website bleibt verknüpft. Im Watcher erscheint die Vorbereitung oder
-der Grund, falls die Überwachung nicht starten kann. Ein
+der Grund, falls die Überwachung nicht starten kann. Beim Start zeigt eine
+Aktivitätsanzeige die Vorbereitungsphase. Neue Bilder erst nach REC erzeugen.
+Stop und Finish zeigen die Vorbereitung sofort vor der Warteschlange und
+den Berichten. Activity-Ereignisse werden in begrenzten Hintergrundbatches
+gespeichert. Beim normalen Beenden wird das Schreiben innerhalb des Zeitlimits
+versucht. Speicherfehler, Zeitablauf oder Absturz können gepufferte Einträge
+verlieren; Fehler werden protokolliert. Das rotierende Log wird sofort
+geschrieben. Die Zielauswahl prüft
+angenommene Importe im lokalen Uploadverlauf. Es gilt dieselbe Grenze von
+256~MiB wie bei Zustandsänderungen. Ein nicht prüfbarer Verlauf oder offene
+Arbeit für ein anderes Ziel blockiert den Wechsel weiterhin. Ein
 aktueller installierter Windows-Klicktest für die native Ansicht steht noch
 aus. Frühere Protokollnachweise decken diese UI-Version nicht ab.
 Die Dateisystem-Schreibsperre ist ein inaktiver Prototyp und schützt
@@ -2376,8 +2414,14 @@ Anfragen können enden. Die Prüfung schützt weder andere Prozesse noch die GUI
 Anfragen mit API-Schlüssel verweigern Weiterleitungen zu anderen Hosts,
 nicht erlaubten Ports oder von HTTPS zu HTTP; verwenden Sie die endgültige URL.
 Das tatsächliche Windows-Verhalten ist noch nicht qualifiziert.
-In diesem Entwicklungsstand ist das automatische Löschen überwachter Fotos
-und ursprünglicher ZIP-Dateien nicht verfügbar; die Quellen bleiben erhalten.
+Unter Windows ist das Löschen überwachter Quellen bei neuen Einstellungen
+standardmäßig aktiv; eine ausdrücklich gespeicherte Abschaltung bleibt erhalten.
+Der Schalter gilt für verknüpfte und API-Schlüssel-Aufnahmen. Nach bestätigtem
+Upload und lokaler Quittierung prüft ein natives Handle Identität und Bytes
+und löscht genau diese geöffnete Datei. Geänderte, umgeleitete, hartverknüpfte
+oder belegte Dateien bleiben mit einer Warnung erhalten. Inventartreffer und
+ungewisse Uploads erlauben keine Löschung. Andere Plattformen, manuelle Importe
+und Quell-ZIPs behalten ihre Quellen.
 Der API-Schlüsselwiderruf im Flugablauf ist vorübergehend nicht verfügbar.
 GUI-Modusschutz und Wiederherstellung nach Absturz sind noch nicht qualifiziert.
 
@@ -2521,6 +2565,27 @@ wird keine SimConnect-Verbindung geöffnet. Foto-Uploads laufen unabhängig
 weiter. Das Schließen der Einstellungen startet keinen Vorgang. Opake
 RGB-Grafiken sichern die Darstellung unter Windows Tk; ohne Pillow bleiben
 im Quellmodus native Bedienelemente zur Reparatur verfügbar.
+
+Windows bevorzugt die installierte Schrift Segoe UI Variable Text,
+ersatzweise Segoe UI oder die native Tk-Schrift. Gemeinsame Textstile
+beachten die Windows-Schriftglättung; Diagnoseanzeigen mit fester
+Zeichenbreite behalten ihre Schrift. Übliche Steuer-, Cache-, Pin- und
+Aufzeichnungssymbole verwenden in höherer Auflösung erzeugte, geglättete
+Grafiken. Ohne Pillow bleiben lesbare native Zeichen verfügbar. Die App
+lädt keine Schriften und ändert keine Systemeinstellungen. Vor dem ersten
+Fenster fordert ein nicht DPI-bewusster Windows-Prozess System-DPI-Bewusstsein
+an und bewahrt einen vorhandenen Manifestkontext. Eine automatische
+Layoutanpassung zwischen Monitoren wird nicht ergänzt. Starten Sie die App
+bei unterschiedlichen Skalierungen auf dem Zielmonitor neu.
+Das Hauptfenster merkt sich automatisch normale Größe, Position,
+Maximierungszustand und Breite des Fotobaums. Minimierung, Vollbild und
+Ausblenden im Infobereich überschreiben das letzte normale Rechteck nicht.
+Fenster und Trennleiste bleiben beim Wiederherstellen innerhalb der aktuellen
+Bildschirmgrenzen. Diese Ansichtsoptionen ändern weder Uploadkonfiguration
+noch Zugangsdaten.
+Ein Albumwechsel beendet die alte Ansicht. Die neue Anfrage wartet innerhalb
+ihrer ursprünglichen Frist auf den einzigen Übertragungsplatz, während der
+vorherige Netzwerkzugriff endet. Ein Abbruch beendet auch dieses Warten.
 
 Watcher zeigt den Ordnerpfad und \ui{Choose folder…}.
 Gespeicherte Pfade, Galerie-URL und Funktionsoptionen werden beim Neustart

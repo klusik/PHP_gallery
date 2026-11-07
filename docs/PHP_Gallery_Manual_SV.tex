@@ -1977,13 +1977,34 @@ HDR-bilder visas med AppKit på en EDR-skärm om PyObjC och Tk:s
 fönsteranslutning finns. Andra konfigurationer, inklusive Windows, visar
 8-bitars SDR med Pillow/Tk.
 En gemensam diskcache per användare lagrar godkända foton och spår med
-verifierade kontrollsummor. När den når 4\,096~poster eller 1~GiB tas de
+verifierade kontrollsummor. När den vanliga delen når 4\,096~poster eller
+1~GiB tas de
 minst nyligen använda posterna bort. Ett matchande kontrollvärde i den
 aktuella albumkatalogen gör att en miniatyr kan läsas direkt från disken.
 Annars gäller 60~sekunders färskhet och auktoriserad ETag-kontroll. Den
 aktuella auktoriserade spellistan kan återanvända ett spår med samma SHA-256,
 storlek och format. Medier som endast administratörer kan se sparas
-utanför diskcachen.
+utanför diskcachen som standard.
+Cacheikoner uppdateras från inlästa metadata: moln betyder online, halvcirkel
+delvis, fylld cirkel lokalt och prickad cirkel ej kontrollerat. En del av
+katalogen bevisar inte full täckning. Ikonen vid albumtiteln öppnar menyn.
+\ui{Förladda galleri} förbereder direkta foton, miniatyrer och lightboxbilder
+i~bakgrunden med förlopp och avbrytning. Undergallerier är separata mål.
+\ui{Behåll förladdat} behåller färdiga filer utanför vanlig rensning samt
+antal- och storleksgränser, även efter omstart. Avstängning återställer vanlig
+cachepolicy, som kan ta bort överskott. Avbrytning behåller färdiga filer och
+inställningen utan att hävda full täckning. Ett nytt försök efter servergränsen
+återanvänder verifierade lokala data. No-store-medier förblir tillfälliga;
+lokala filer kringgår inte inloggning eller utgången länk. En operation
+accepterar högst 100\,000 direkta foton.
+Uttrycklig förladdning med en Admin Photos-länk kan på servrar med stöd även
+spara privata foton och utkast. Fotot, galleriet och hela kedjan av föräldrar
+måste vara verifierat utan NSFW-begränsning. Inställningen och privata filer
+hör till installationen och det verifierade kontot. Före visning verifieras
+privata data alltid mot den aktiva servern, även efter omstart. Äldre servrar
+och vanlig skyddad bläddring förblir tillfälliga. Serverns väntetid visas med
+en avbrytbar nedräkning; färdiga filer behålls när försöken är slut.
+Noll sparade foton visar en säker orsak i stället för delvis framgång.
 Bildspelsknappen öppnar helskärm och går runt hela albumet med serverns
 aktiverade intervall eller fem sekunder som standard. Godkänd musik börjar
 spela när bildspelet startar. Musikreglagen spelar, pausar och byter spår.
@@ -1997,6 +2018,10 @@ visas i~trädet när täckningen är känd. Lägg till ett galleri på rotnivå
 med knappen i~trädet. Knappen bredvid albumtiteln, gallerimenyn och tomt
 utrymme mellan foton erbjuder ett undergalleri. Mushjulet och rullning med
 två fingrar rullar rutnätet och zoomar i~lightboxen.
+\ui{Redigera galleri} öppnar det valda galleriets webbredigerare i~systemets
+webbläsare med högerpanelen öppen. Webbläsarens egen administratörsinloggning
+används; inga WinApp-nycklar skickas. Äldre servrar öppnar sin vanliga
+helsidesredigerare.
 Trädet kommer ihåg öppna och stängda grenar per länkad webbplats och konto.
 Den runda pilen bredvid albumtiteln uppdaterar fotona. WinApp kontrollerar
 indexet för det synliga administratörsalbumet ungefär var 30:e sekund och
@@ -2014,6 +2039,17 @@ tillgängligt vid en upptäckt flygsimulator. Avslut skickar mottagna bilder,
 sparar tillgängliga flygrapporter och återkallar den tillfälliga nyckeln.
 Webbplatsen förblir länkad.
 Watcher visar förberedelsen eller orsaken om inspelningen inte kan starta.
+Vid start visar en aktivitetsindikator förberedelsens fas. Skapa en ny
+skärmbild först när REC visas. Stop och Finish visar förberedelsen direkt,
+före kön och eventuella rapporter.
+Activity-historiken sparas i~begränsade bakgrundsbatcher. Normal avslutning
+försöker skriva bufferten inom sin tidsgräns. Lagringsfel, tidsgräns eller
+krasch kan förlora buffrade rader; fel loggas och den roterande loggen skrivs
+direkt.
+När ett mål väljs kontrolleras mottagna importer i~den lokala
+uppladdningshistoriken. Samma gräns på 256~MiB gäller när tillståndet sparas.
+Historik som inte går att verifiera eller oavslutat arbete för ett annat mål
+blockerar fortfarande bytet.
 En aktuell installerad Windows-genomgång
 av den inbyggda visaren återstår. Tidigare protokollbevis täcker inte denna
 version av gränssnittet.
@@ -2196,8 +2232,14 @@ kontrolleras igen; en pågående begäran kan slutföras. Kontrollen skyddar int
 andra processer eller grafiska arbetare. Begäranden med API-nyckel avvisar
 omdirigering till annan värd, otillåten port eller från HTTPS till HTTP;
 ange vid behov den slutliga galleriadressen. Windows är ännu inte kvalificerat.
-I detta utvecklingsläge är automatisk borttagning av bevakade foton och
-ursprungliga ZIP-filer inte tillgänglig; källorna sparas för kontroll.
+I Windows är radering av bevakade källor aktiverad för nya inställningar;
+ett uttryckligen sparat av-val bevaras. Inställningen gäller länkade
+inspelningar och API-nycklar. Efter bekräftad uppladdning och lokal kvittens
+verifierar ett inbyggt handtag samma filidentitet och byte och raderar just
+den öppnade filen. Ändrade, omdirigerade, hårdlänkade eller upptagna filer
+behålls med en varning. Inventarieträffar och osäkra svar tillåter ingen
+radering. Andra plattformar, manuella importer och käll-ZIP-filer behåller
+sina källor.
 Återkallande av API-nyckel i flygflödet är tillfälligt otillgängligt.
 GUI-lägesskydd och återhämtning efter avbrott är ännu inte kvalificerade.
 
@@ -2337,6 +2379,25 @@ ingen SimConnect-anslutning. Bilduppladdning fortsätter oberoende.
 Att stänga inställningarna startar ingen åtgärd. Ogenomskinliga RGB-bilder
 ger säker Windows Tk-visning; utan Pillow finns fungerande inbyggda
 kontroller kvar i källäget för att reparera beroenden.
+
+Windows föredrar det installerade typsnittet Segoe UI Variable Text,
+med Segoe UI och Tk:s inbyggda typsnitt som reserv. Gemensamma textstilar
+respekterar Windows kantutjämning; diagnostik med fast teckenbredd behåller
+sitt typsnitt. Vanliga kontroll-, cache-, nål- och inspelningssymboler
+använder bilder som ritas i högre upplösning och skalas ned med utjämning.
+Utan Pillow finns läsbara inbyggda tecken kvar. Appen hämtar inga typsnitt
+och ändrar inga systeminställningar. Före det första fönstret begär en
+Windows-process utan DPI-medvetenhet systemets läge och bevarar ett befintligt
+manifestläge. Automatisk layoutanpassning mellan skärmar ingår inte.
+Starta om appen på målskärmen vid flytt mellan olika skalningar.
+Huvudfönstret minns automatiskt normal storlek, position, maximerat läge
+och fototrädets bredd. Minimering, helskärm och döljning i systemfältet
+skriver inte över den senaste normala geometrin. Fönster och avdelare hålls
+inom de aktuella skärmgränserna när de återställs. Dessa visningsval ändrar
+varken uppladdningskonfiguration eller autentiseringsuppgifter.
+Ett albumbyte avbryter den gamla vyn. Den nya begäran väntar inom sin
+ursprungliga tidsgräns på den enda överföringsplatsen medan tidigare
+nätverksarbete avslutas. Att avbryta den nya vyn avbryter även väntan.
 
 Watcher visar mappsökvägen och \ui{Choose folder…}. Sparade
 sökvägar, galleri-URL och funktionsval återställs efter omstart. Fyra synliga

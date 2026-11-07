@@ -67,6 +67,24 @@ review. A disposable HTTPS fixture processed two manual Import items and one
 Watcher item through the actual PHP/MySQL 8.0.44 upload pipeline; one stored
 upload reply was lost. Matching inventory did not confirm or resend it, and
 source files remained. This observation does not qualify activation.
+
+Windows Watcher has a separate confirmed-source deletion owner. New or missing
+settings enable deletion, while a saved explicit off choice remains off.
+Only a successful response for the current transfer followed by durable local
+acknowledgement can reach it. It compares the captured source identity and
+digest through a native handle that excludes writers and replacement, then
+deletes that same opened file. Failed, uncertain, inventory-only, restarted or
+replaced sources retain their existing recovery behavior. An unavailable or
+busy native handle retains the file and reports a warning. This policy applies
+to both linked and legacy Watcher uploads. Manual imports and source ZIPs are
+outside it.
+
+The native deletion owner currently supports Windows. Other platforms retain
+sources because a path-only unlink cannot provide the same opened-file deletion
+boundary. Keep that retention path until a platform-specific owner is qualified.
+Real-world prevalence of concurrent source replacement is unknown. Hosted
+fixtures cover same-file success and retention boundaries, and desktop evidence
+must identify the exact candidate and use disposable sources.
 Linked target activation and worker admission require a fixed local Windows
 drive or an owner-controlled local macOS volume and an unredirected profile.
 The macOS source launcher uses a private file and native workspace lock for
@@ -325,6 +343,42 @@ Contextual Watcher capture requires the verified temporary-key table. The
 ordinary linked and classic Watcher transports remain supported on older
 servers. Deployed metadata and contextual capture usage is unknown.
 
+Photos gallery editing delegates to the existing browser Admin editor owner.
+The native link carries only the exact installation and numeric gallery ID.
+Current web servers consume the optional `open_panel=1` GET hint after normal
+Admin authorization and open the existing drawer on the Galleries dashboard.
+Older servers ignore the hint and retain their ordinary full-page editor.
+Keep this credential-free handoff permanently while mixed web/client versions
+are supported; it grants no web Admin session or extra native linking scope.
+Deployed usage is unknown. Native URL/session fixtures and drawer navigation
+fixtures cover the handoff; actual browser login and panel rendering require
+separate desktop qualification.
+
+The native cache keeps its legacy flat object format and public-media admission.
+Explicit retained galleries use separate hashed directories in the same cache
+owner. They are excluded from ordinary LRU entry/byte limits and its flat scan
+budget. Unpinning applies normal quota policy; failed copy preparation retains
+the pinned originals. Pinning an unfinished preload preserves its preference
+and successfully prepared entries without claiming complete coverage. Retention
+never relaxes live-link checks or the default no-store/restricted-media rules.
+Local availability is checked from authorized descriptors; it is not offline
+authentication. Usage of retained galleries is unknown. Cache/worker fixtures
+own quota, restart, failure and cancellation regression; native UI acceptance
+is separate from hosted Python qualification.
+
+Explicit Admin preload extends the existing media owner with the additive
+`media:admin-preload-v1` capability, descriptor fields and a fixed binary opt-in
+header. It preserves older public validators and no-store browsing. Private
+entries and saved opt-ins use a separate issuer/verified-account namespace;
+private display always revalidates the live grant, exact target and current
+non-NSFW eligibility through the server. Complete non-NSFW ancestry and verified
+schema are required; missing rows, cycles, unknown flags and authorization
+changes fail closed. No migration or new linking scope is introduced. Older
+servers remain transient for restricted media permanently while mixed versions
+are supported. Usage is unknown. Server/client fixtures cover persistence,
+identity separation, revocation and refusal boundaries; real Windows private
+preload acceptance remains separate from hosted qualification.
+
 Explicit Admin Photos approval can upgrade the same previously saved rolling
 link. The native linking and vault owners compare the current binding and
 replace it only after identity verification. Saved public grants still open
@@ -523,6 +577,39 @@ edits to the same inode after the comparison. An error or interruption after
 truncation can leave partial bytes; decoding and re-encoding the entire JSON
 document can change formatting and numeric representation. It does not provide
 visibility-marker recovery.
+
+## WinApp native text and display scaling
+
+Desktop view preferences are independent of upload state. Geometry saves retain
+the last trusted Photos tree width while the pane is unmapped or restoring;
+the temporary widget default is not a user preference. The pane keeps its own
+validated width through delayed startup and remapping. Invalid display geometry
+falls back to current bounded placement without touching credentials or queues.
+
+Linking transport admission waits within the caller's original total deadline
+for the existing single worker slot. Cancellation and blocked DNS still retain
+that slot until the actual network worker ends; admission never creates a
+replacement worker behind a canceled caller. This permanent compatibility path
+prevents transient gallery-switch failures while retaining the existing network
+resource bound. Native Windows logs identified the formerly immediate busy
+refusal before any media request; delayed DNS/cancellation regressions cover the
+handoff and once-only cleanup.
+
+The shared theme selects an installed UI family rather than installing fonts.
+Windows prefers Segoe UI Variable Text, then Segoe UI; a native Tk family remains
+available on other platforms. Windows text retains its native GDI smoothing
+policy. Supersampled control/cache/recording artwork avoids emoji substitution;
+Pillow-free source launches retain usable glyph controls. The theme owns these
+permanent fallbacks because dependencies and installed fonts vary across source
+and packaged runtimes. Installed prevalence is unknown.
+
+The Windows display bootstrap requests system awareness only for an unaware
+process before creating Tk windows. An existing manifest/host context is never
+replaced. Native API refusal keeps the original toolkit path usable. System
+awareness deliberately matches Tk 8.6 startup scaling; automatic layout reflow
+between differently scaled monitors is not claimed. Native display/ClearType
+appearance, fractional scaling and monitor moves need manual qualification.
+No OS display or smoothing preferences are changed.
 
 ## WinApp update process exit
 

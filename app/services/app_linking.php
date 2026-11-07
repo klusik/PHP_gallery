@@ -295,6 +295,7 @@ function app_linking_discovery_capabilities(
             APP_LINKING_GALLERIES_SCOPE . APP_LINKING_ADMIN_MEDIA_SUFFIX,
         )) {
             $capabilities[] = 'media:admin';
+            $capabilities[] = 'media:admin-preload-v1';
             if (app_linking_admin_media_delete_ready() && app_linking_scope_allowed(
                 APP_LINKING_WINAPP_CLIENT_ID,
                 APP_LINKING_GALLERIES_SCOPE . APP_LINKING_ADMIN_MEDIA_SUFFIX

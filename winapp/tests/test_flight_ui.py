@@ -161,6 +161,7 @@ class FlightUITests(unittest.TestCase):
         ui.activity_bar = None
         ui.task_tree = None
         ui._animation_running = False
+        ui._preparing_progress = False
         ui.pending = Mock(return_value=[])
         ui.binding = Mock(return_value=connection_binding(
             "https://gallery.test/api", "test-key"
@@ -170,10 +171,42 @@ class FlightUITests(unittest.TestCase):
         ui.wait_for_workers = Mock()
         ui.submit_revoke = Mock()
         ui.show_progress = Mock()
+        ui._prepare_progress_view = Mock()
         ui.refresh_tasks = flight_ui.FlightUI.refresh_tasks.__get__(
             ui, flight_ui.FlightUI
         )
         return ui
+
+    def test_finish_preparation_is_painted_before_pending_history(self) -> None:
+        """Expose a populated busy phase before slow Finish preparation.
+
+        Returns:
+            None: The first history read observes the painted preparation view.
+        """
+        ui = self._ui(self._host())
+        ui.dialog = Mock()
+        ui.activity_bar = Mock()
+        ui.bar = Mock()
+        ui._prepare_progress_view = (
+            flight_ui.FlightUI._prepare_progress_view.__get__(ui)
+        )
+        ui.begin = Mock()
+
+        def inspect_pending() -> list[SessionPlan]:
+            """Require actual preparation feedback before returning no plans.
+
+            Returns:
+                list[SessionPlan]: Empty fixture queue after the UI is painted.
+            """
+            ui.phase_var.set.assert_called_with("phase_preparing")
+            ui.detail_var.set.assert_called_with("finish_preparing_detail")
+            ui.activity_bar.start.assert_called_once_with(flight_ui.PROGRESS_TICK_MS)
+            ui.dialog.update_idletasks.assert_called_once_with()
+            return []
+
+        ui.pending = Mock(side_effect=inspect_pending)
+        ui.finish_report()
+        ui.begin.assert_called_once_with(False, automatic=True)
 
     def test_abandon_dialog_uses_cached_game_or_flight_wording(self) -> None:
         """Pass contextual translated text through the real confirmation adapter.
@@ -789,7 +822,7 @@ class FlightUITests(unittest.TestCase):
         ui.pending.return_value = [plan]
         operation = SimpleNamespace(
             wants_revoke=False, local_reports=False, saved_upload=False,
-            abandonment=False, start=Mock(),
+            abandonment=False, start=Mock(), update=Mock(),
         )
         with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
             flight_ui.FlightUI.begin(ui, revoke=False)
@@ -833,7 +866,7 @@ class FlightUITests(unittest.TestCase):
             ui.pending.return_value = [plan]
             operation = SimpleNamespace(
                 wants_revoke=False, local_reports=False, saved_upload=False,
-                abandonment=False, start=Mock(),
+                abandonment=False, start=Mock(), update=Mock(),
             )
             with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
                 flight_ui.FlightUI.begin(ui, photos_only=True)
@@ -914,7 +947,8 @@ class FlightUITests(unittest.TestCase):
         host.preflight_worker = Mock()
         host.preflight_worker.is_alive.return_value = True
         operation = SimpleNamespace(wants_revoke=False, local_reports=False,
-                                    saved_upload=False, abandonment=False, start=Mock())
+                                    saved_upload=False, abandonment=False,
+                                    start=Mock(), update=Mock())
         with patch.object(
             flight_ui, "FinalizationWorker", return_value=operation
         ) as worker_factory:

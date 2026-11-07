@@ -176,6 +176,11 @@ columns and existing grants. Admin gallery inventory and photo descriptors
 read indexed image and gallery metadata. Photo visibility changes fence the
 live grant and current photo state before updating the existing visibility
 field. No additional gallery, photo or cache table is required.
+Explicit Admin preload also reuses those grants. It requires verified existing
+NSFW schema and non-NSFW flags for the photo, gallery and complete ancestry;
+unknown schema or incomplete ancestry refuses persistence. Its optional
+capability, response fields and account-bound local cache introduce no migration
+or additional server-side authorization scope.
 
 ## Gallery music storage
 

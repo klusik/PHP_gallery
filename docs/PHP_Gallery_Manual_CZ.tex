@@ -1917,12 +1917,33 @@ zobrazit přes AppKit na EDR displeji, pokud je dostupné PyObjC a~propojení
 okna Tk. Ostatní konfigurace včetně Windows zobrazují 8bitové SDR přes
 Pillow/Tk.
 Společná uživatelská disková cache ukládá schválené fotky a~skladby
-s~ověřenými otisky obsahu. Při překročení 4\,096~položek nebo 1~GiB
+s~ověřenými otisky obsahu. Běžná část při překročení 4\,096~položek nebo 1~GiB
 uvolní nejdéle nepoužívaná data. Pokud se shoduje ověřovací údaj z~aktuálního
 výpisu alba, aplikace náhled vezme rovnou z~disku. Bez něj platí čerstvost
 60~sekund a~ověření ETagem. Aktuální schválený playlist znovu použije skladbu
 se stejným SHA-256, velikostí a~formátem. Média dostupná pouze správcům se
-na disk neukládají.
+ve výchozím stavu na disk neukládají.
+Ikony cache se aktualizují automaticky z~načtených údajů: oblak znamená
+online, půlkruh částečné pokrytí, plný kruh místní data a~tečkovaný kruh
+neověřený stav. Část katalogu neprokazuje úplné pokrytí. Ikona v~záhlaví
+otevře nabídku galerie.
+\ui{Přednačíst galerii} připraví přímé fotky, náhledy i~snímky pro lightbox,
+na pozadí s~průběhem a~možností zrušení. Podgalerie jsou samostatné cíle.
+\ui{Uchovat přednačtenou} ponechá úspěšně připravená data mimo běžné čištění
+i~limity počtu a~velikosti, také po restartu. Vypnutí vrátí galerii pod běžná
+pravidla cache, která mohou přebytečná data uvolnit. Zrušení ponechá hotové
+soubory i~volbu uchování, ale neoznačí celou galerii za přednačtenou.
+Opakování po limitu serveru znovu využije ověřená místní data. Média
+s~\texttt{no-store} zůstávají dočasná; uložené soubory neobcházejí přihlášení
+ani platnost propojení. Jedna operace přijme nejvýše 100\,000~přímých fotek.
+Výslovné přednačtení s~Admin Photos propojením může na podporovaném serveru
+uložit i~soukromé a~rozpracované fotky. Snímek, galerie i~celá větev předků
+musí být ověřeně bez NSFW omezení. Volba i~soukromá data patří konkrétní
+instalaci a~ověřenému účtu. Před zobrazením se soukromá data vždy znovu
+ověří na živém serveru, také po restartu. Starší servery a~běžné prohlížení
+chráněných fotek zůstávají dočasné. Čekání podle limitu serveru ukazuje
+odpočet s~možností zrušení; po vyčerpání pokusů zůstávají hotové soubory.
+Nula uložených fotek zobrazí bezpečný důvod místo částečného úspěchu.
 Tlačítko prezentace otevře celou obrazovku a~prochází album ve smyčce podle
 povoleného intervalu serveru nebo po pěti sekundách. Současně spustí povolený
 doprovod. Ovládání hudbu spouští, pozastavuje a~přepíná mezi skladbami.
@@ -1936,6 +1957,9 @@ zobrazí po jeho zjištění. Galerii v~kořenu webu přidáte tlačítkem ve~st
 a~podgalerii tlačítkem vedle názvu alba. Podgalerii lze přidat také z~nabídky
 galerie nebo prázdného místa mezi fotkami. Kolečko i~posun dvěma prsty
 posouvají mřížku a~v~lightboxu mění přiblížení.
+\ui{Upravit galerii} otevře webový editor vybrané galerie v~pravém panelu
+systémového prohlížeče. Použije jeho vlastní přihlášení správce a~nepředá
+žádné klíče WinAppu. Starší server otevře běžnou celostránkovou editaci.
 Strom si pro každý propojený web a~účet pamatuje rozbalené a~sbalené větve.
 Fotky obnovíte zatočenou šipkou vedle názvu alba. WinApp přibližně každých
 30~sekund ověřuje index zobrazeného alba v~režimu správce a~použije
@@ -1954,6 +1978,16 @@ U~rozpoznaného
 simulátoru nabídne SimBrief. Ukončení odešle přijaté snímky, u~letu uloží
 dostupné reporty a~zneplatní klíč sledování. Propojení webu zůstane aktivní.
 Panel Watcheru zobrazí přípravu nebo důvod, proč se sledování nespustilo.
+Při spuštění ukazatel aktivity pojmenuje fázi přípravy. Nový snímek vytvořte
+až po zobrazení REC. Stop a~Finish ihned zobrazí přípravu před dokončením
+fronty a~případných reportů.
+Nedávné události Activity se ukládají v~omezených dávkách na pozadí. Běžné
+ukončení se pokusí zapsat je ve svém časovém limitu. Chyba úložiště, vypršení
+limitu nebo pád může poslední dávku ztratit; selhání se zaznamená do logu.
+Rotující log se zapisuje ihned.
+Výběr cíle kontroluje přijaté importy v~lokální historii nahrávání se stejným
+limitem 256~MiB jako při zápisu stavu. Neověřitelná historie nebo nedokončená
+práce pro jiný cíl změnu dál blokuje.
 Ověření v~nainstalované aplikaci ve Windows zatím chybí. Dřívější
 protokolové ověření proběhlo před touto změnou rozhraní.
 Souborová pojistka zápisů je neaktivní prototyp a~galerijní operace zatím
@@ -2123,8 +2157,13 @@ a~uploadu; již běžící požadavek může doběhnout. Nechrání ostatní pro
 grafické pracovní úlohy. Požadavky s~API klíčem odmítají přesměrování na jiný
 server, nepovolený port nebo z~HTTPS na HTTP; případně nastavte cílovou URL.
 Skutečné chování Windows zatím není kvalifikované.
-V~tomto rozpracovaném stavu není dostupné automatické mazání sledovaných
-fotografií ani zdrojových ZIPů; zdroje zůstávají k~ověření. Odvolání API klíče
+Ve Windows je mazání sledovaných zdrojů pro nová nastavení zapnuté; výslovně
+uložené vypnutí se zachová. Přepínač v~nastavení Watcheru platí pro linked
+i~API-key záznam. Po úspěšné odpovědi uploadu a~lokálním potvrzení nativní
+handle ověří identitu a~bajty původního souboru a~smaže tentýž otevřený zdroj.
+Změněné, přesměrované, hardlinkované či obsazené soubory zůstanou s~varováním.
+Shoda inventáře ani nejistý upload mazání nepovolí. Ostatní platformy, ruční
+importy a~zdrojové ZIPy zdroje zachovávají. Odvolání API klíče
 z~letového workflow je dočasně nedostupné. Ochrana režimu GUI a~obnova po pádu
 se stále dokončují a~nejsou kvalifikované.
 
@@ -2258,6 +2297,25 @@ nepřipojuje. Fotografie se nahrávají nezávisle. Zavření nastavení nezahaj
 žádnou operaci. Skleněný vzhled používá neprůhledné RGB obrázky kvůli
 spolehlivosti Windows Tk; zdrojový režim bez Pillow ponechává funkční
 nativní ovládání pro opravu závislostí.
+
+Windows přednostně používá nainstalované písmo Segoe UI Variable Text,
+případně Segoe UI nebo nativní písmo Tk. Společné textové styly respektují
+systémové vyhlazování; neproporcionální diagnostika zachovává své písmo.
+Běžné ovládací ikony, stav cache, připnutí a~záznam používají vyhlazené
+obrázky vytvořené ve vyšším rozlišení. Bez Pillow zůstávají čitelné nativní
+symboly. Aplikace nestahuje písma ani nemění systémové předvolby.
+Proces ve Windows si před vytvořením oken vyžádá systémovou podporu DPI;
+existující kontext z~manifestu zachová. Nepřidává tím automatické
+přeskupování mezi monitory. Při přesunu mezi monitory s~odlišným měřítkem
+spusťte aplikaci znovu na cílovém monitoru.
+Hlavní okno si automaticky pamatuje běžnou velikost, polohu, maximalizaci
+a~šířku stromu Fotek. Minimalizace, celá obrazovka ani skrytí do tray
+nepřepíší poslední běžné rozměry. Obnovené okno a~dělicí lišta zůstávají
+v~aktuálních mezích displeje. Tyto předvolby vzhledu nemění konfiguraci
+nahrávání ani přihlašovací údaje.
+Přechod mezi alby zruší staré zobrazení. Nový požadavek v~rámci původního
+časového limitu počká na jediný přenosový slot, pokud se předchozí přenos
+ještě ukončuje. Zrušení nového zobrazení ukončí i~toto čekání.
 
 Uložené cesty, URL galerie a~volby funkcí se při příštím spuštění obnoví.
 Jazyk rozhraní se vybírá čtyřmi přímo zobrazenými volbami. Posuvníky jsou

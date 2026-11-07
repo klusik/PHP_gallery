@@ -73,6 +73,7 @@ namespace {
     use function Gallery\Services\app_linking_gallery_search_page;
     use function Gallery\Services\app_linking_media_gallery;
     use function Gallery\Services\app_linking_media_page;
+    use function Gallery\Services\gallery_admin_media_preload_gallery_allowed;
     use function Gallery\Services\app_linking_scope_allowed;
     use function Gallery\Services\app_linking_upload_target;
     use function GalleryWorkflow\check;
@@ -107,6 +108,7 @@ namespace {
     $pdo = null;
     $userId = 0;
     $galleryId = 0;
+    $nsfwParentId = 0;
     $searchGalleries = [];
     $tagId = 0;
     try {
@@ -266,9 +268,43 @@ namespace {
         $expected = [
             'id' => $imageId, 'title' => $filename, 'visibility' => 'private',
             'nsfw' => true, 'size' => null, 'cache_eligible' => false,
+            'preload_eligible' => false,
         ];
         check(app_linking_media_page($mediaGallery, 0, false, true)['photos'] === [$expected],
             'The Admin catalogue must include the restricted photo without cache admission.');
+        check(gallery_admin_media_preload_gallery_allowed($galleryId),
+            'A private non-NSFW gallery remains eligible independently of its photo flag.');
+        $pdo->prepare('UPDATE images SET nsfw_enabled = 0 WHERE id = ?')->execute([$imageId]);
+        $preloadPage = app_linking_media_page($mediaGallery, 0, false, true);
+        check(($preloadPage['photos'][0]['preload_eligible'] ?? null) === true
+            && ($preloadPage['photos'][0]['cache_eligible'] ?? null) === false,
+            'A non-NSFW photo in a private gallery may preload without public admission.');
+        $parentFolder = $folder . '_nsfw_parent';
+        $parentInsert = $pdo->prepare(
+            'INSERT INTO galleries (folder_path, folder_path_hash, slug, title, '
+                . 'visibility, access_mode, access_listing, nsfw_enabled, '
+                . 'created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, '
+                . 'UTC_TIMESTAMP(), UTC_TIMESTAMP())',
+        );
+        $parentInsert->execute([
+            $parentFolder, hash('sha256', $parentFolder), $parentFolder,
+            'Restricted parent', 'private', 'normal', 'listed',
+        ]);
+        $nsfwParentId = (int) $pdo->lastInsertId();
+        $pdo->prepare('UPDATE galleries SET parent_id = ? WHERE id = ?')
+            ->execute([$nsfwParentId, $galleryId]);
+        $inheritedRestrictedPage = app_linking_media_page(
+            $mediaGallery, 0, false, true,
+        );
+        check(!gallery_admin_media_preload_gallery_allowed($galleryId)
+            && ($inheritedRestrictedPage['photos'][0]['preload_eligible'] ?? null) === false,
+            'An NSFW ancestor must exclude the complete private gallery from preload.');
+        $pdo->prepare('UPDATE galleries SET parent_id = NULL WHERE id = ?')
+            ->execute([$galleryId]);
+        $pdo->prepare('DELETE FROM galleries WHERE id = ?')
+            ->execute([$nsfwParentId]);
+        $nsfwParentId = 0;
+        $pdo->prepare('UPDATE images SET nsfw_enabled = 1 WHERE id = ?')->execute([$imageId]);
         try {
             app_linking_admin_media_change_photo_visibility(
                 $mediaIdentity, $mediaToken, $issuer, $galleryId, $imageId, 'private', 'public',
@@ -390,6 +426,14 @@ namespace {
             foreach ($searchGalleries as $slug => $id) {
                 $delete->execute([$id, $slug]);
             }
+        }
+        if ($pdo instanceof \PDO && $galleryId > 0) {
+            $pdo->prepare('UPDATE galleries SET parent_id = NULL WHERE id = ?')
+                ->execute([$galleryId]);
+        }
+        if ($pdo instanceof \PDO && $nsfwParentId > 0) {
+            $delete = $pdo->prepare('DELETE FROM galleries WHERE id = ?');
+            $delete->execute([$nsfwParentId]);
         }
         if ($pdo instanceof \PDO && $galleryId > 0) {
             $delete = $pdo->prepare('DELETE FROM galleries WHERE id = ? AND slug = ?');

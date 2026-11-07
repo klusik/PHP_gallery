@@ -1916,12 +1916,35 @@ On~macOS~15 or later, compatible HDR source data can use AppKit on~an~EDR
 display when PyObjC and~the~Tk window bridge are~available. Other configurations
 use the~8-bit Pillow/Tk SDR renderer, including Windows.
 One per-user disk cache stores opted-in photos and~tracks with verified
-content digests. It~evicts the~least recently accessed items above
+content digests. Its ordinary area evicts the~least recently accessed items above
 4,096~entries or~1~GiB. A~matching validator from the~current album catalogue
 reuses a~local thumbnail immediately. Photos without this proof use the~usual
 60-second freshness and~authorized ETag revalidation. The~current authorized
 playlist can reuse a~track by SHA-256, size and~format. Media available
-only to~administrators is~excluded from the~disk cache.
+only to~administrators uses transient storage by~default.
+Cache icons update automatically from loaded metadata: cloud means online,
+half-circle partial, filled circle local and~dotted circle unchecked.
+A~partial catalogue cannot prove full coverage. The~heading's cache icon
+opens the~gallery menu.
+\ui{Preload gallery} prepares direct photos, including thumbnails and~lightbox
+images, in~the~background with progress and~Cancel. Subgalleries are~separate
+targets. \ui{Keep preloaded} retains successfully prepared files outside
+ordinary cleanup, entry limits and~byte limits, including after restart.
+Disabling it~returns the~gallery to~ordinary cache policy, which may evict
+excess files. Cancel keeps prepared files and~the~retention preference without
+claiming full coverage. Existing verified bytes are~reused when retrying after
+a~server limit. No-store media remains transient; retained bytes grant
+no~offline access or~expired-link permission. One explicit preload accepts
+up~to~100,000 direct photos as~a bounded work operation.
+An~explicit Admin Photos preload can also retain private or~draft photos
+on~supporting servers. The~photo, gallery and~complete ancestry must
+be~verified as~non-NSFW. The~saved preference and~private files belong
+to~the~verified account and~installation. Later views revalidate private
+files through the~live server before display, including after restart.
+Older servers and~ordinary restricted browsing remain transient.
+A~server-directed retry delay shows a~cancelable countdown; exhausted
+retries retain completed files. Zero stored photos report a~safe reason
+instead of~partial success.
 The~presentation button opens fullscreen and~loops through the~album at~the
 server's enabled interval or~a five-second default. The~authorized soundtrack
 starts with the~presentation. The~music controls play, pause and~change tracks.
@@ -1936,6 +1959,9 @@ when coverage is~known. Use the~add icon in~the~tree toolbar for a~root
 gallery and~the~add icon beside the~album title for a~subgallery. You can
 also add a~subgallery from a~gallery menu or~blank photo space.
 The~wheel and~trackpad scroll the~grid and~zoom the~lightbox.
+\ui{Edit gallery} opens the~selected gallery's web Admin editor in~the~system
+browser's right-side panel. It uses the~browser's own Admin login and~sends
+no~WinApp credentials. Older servers open their normal full-page editor.
 The~tree restores expanded and~collapsed branches for each linked site and
 account. Use the~circular arrow beside the~album title to~refresh its photos.
 WinApp checks the~visible Admin album's index about every 30~seconds and
@@ -1955,6 +1981,16 @@ SimBrief is available for a~detected flight simulator. Finish
 drains screenshots, saves available flight reports for~a simulator session
 and~revokes the~capture key. The~website stays linked.
 The~Watcher panel reports preparation or~a reason it could not start.
+During startup, a~busy indicator names the~preparation phase. Wait for~REC
+before creating a~new screenshot. Stop and~Finish show preparation immediately
+before the~upload drain and~report phases.
+Recent Activity rows are saved in~bounded background batches. Normal exit
+attempts a~flush within its deadline. Storage failure, timeout or~a crash can
+lose buffered rows; failures are logged and~the~rotating log is written
+immediately.
+Destination selection checks accepted imports in~the~local upload history.
+It uses the~same 256~MiB history limit as~state updates. Unverifiable history
+or~unfinished work for~another destination still blocks the~change.
 The~updated native viewer needs a~current installed
 Windows click-through. Earlier protocol evidence predates this UI revision.
 The~filesystem writer fence is~an~inactive prototype and~does not~protect
@@ -2090,7 +2126,7 @@ history. Once the~session is~closed, \ui{Start Watcher} is~available again.
 a~folder
 dry run without uploads or~starting continuous watching. The~Watcher gear opens
 a~settings sheet for~folder choice, recursion, scan interval, file stability,
-simulator metadata, and~the~opt-in deletion setting. The~sheet requires stopping
+simulator metadata, and~the~saved deletion setting. The~sheet requires stopping
 the~watcher before
 edits. \ui{Choose folder…} saves the~folder from the~main Watcher view.
 \ui{Start Watcher} asks for~a~folder when one is~missing.
@@ -2117,6 +2153,23 @@ no~whole-window
 opacity and~adds no~runtime dependencies. Without Pillow, readable flat ttk
 surfaces remain, and~native controls and~source-mode operation, including
 \texttt{--once}, stay supported.
+Windows prefers the~installed Segoe UI Variable Text font, with Segoe UI
+and~the~native Tk font as~fallbacks. Shared text styles preserve Windows
+font smoothing; fixed-width diagnostics stay monospaced. Common control,
+cache, pin and~recording icons use supersampled artwork; without Pillow,
+readable native glyphs remain. The~app downloads no~fonts and~changes
+no~system preferences. Before creating windows, an~unaware Windows process
+requests system DPI awareness and~preserves an~existing manifest context.
+This does not~add per-monitor layout reflow. Restart on~the~destination
+display when moving between displays with different scaling.
+The~main window remembers its~normal size, position, maximized state and
+Photos tree width automatically. Minimizing, fullscreen and~tray hiding
+preserve the~last normal rectangle. Restoration keeps the~window and
+divider within current display bounds. These view preferences do~not
+change upload configuration or~credentials.
+Switching albums cancels the~old view. A~new request waits within its
+original deadline for~the~existing single transport slot while earlier
+network cleanup finishes; canceling the~new view also cancels that wait.
 Before its~scan, \texttt{--once} verifies the~saved upload mode with Windows
 Credential Manager. A~verified legacy or~unmigrated legacy profile remains
 eligible; linked, first-setup, unknown or~unavailable evidence returns a~nonzero
@@ -2126,8 +2179,14 @@ check does not~fence other processes or~protect graphical workers.
 API-key requests refuse redirects to~another host, an~unapproved port, or~from
 HTTPS to~HTTP. Use the~final gallery URL if a~server requires such a~redirect.
 Actual Windows behavior remains unqualified.
-In this development checkpoint, automatic deletion of watched photos and
-legacy source ZIPs is unavailable; sources are retained for review. Flight
+On Windows, watched-source deletion is enabled by~default for~new settings;
+an~explicit saved off choice is retained. The~Watcher settings switch controls
+both linked and~API-key captures. After a~successful upload response and~local
+acknowledgement, a~native handle verifies the~same file identity and~bytes
+before deleting that opened source. Changed, redirected, hardlinked or~busy
+files remain with a~warning. Inventory matches and~uncertain uploads do~not
+authorize deletion. Other platforms, manual imports and~source ZIPs retain
+their sources. Flight
 API-key revocation is temporarily unavailable. GUI mode protection and crash
 recovery are still being implemented and are not qualified.
 

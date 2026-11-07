@@ -165,6 +165,14 @@ function cms_app_linking_media(): void
         }
         $presentation = in_array($kind, ['presentation', 'track'], true);
         $adminMedia = !$presentation && app_linking_scope_allows_admin_media($identity['scope']);
+        $preloadHeader = $_SERVER['HTTP_X_PHP_GALLERY_PRELOAD'] ?? null;
+        $adminPreload = $preloadHeader === 'admin-v1';
+        if ($preloadHeader !== null
+            && (!$adminPreload || !$adminMedia
+                || !in_array($kind, ['photo', 'thumbnail'], true))) {
+            app_linking_json_error(400, 'invalid_request');
+            return;
+        }
         if (in_array($kind, ['info', 'gallery_info', 'photo_info', 'revision'], true) && !$adminMedia) {
             app_linking_json_error(404, 'target_unavailable');
             return;
@@ -226,13 +234,22 @@ function cms_app_linking_media(): void
             return;
         }
         $photo = app_linking_media_open_photo(
-            $gallery, $query['image_id'], $kind === 'thumbnail', $adminMedia, $publicGallery,
+            $gallery, $query['image_id'], $kind === 'thumbnail', $adminMedia,
+            $publicGallery, $adminPreload,
         );
-        if ($photo === null) {
+        if ($photo === null || ($adminPreload && $photo['etag'] === null)) {
+            if ($photo !== null) {
+                fclose($photo['stream']);
+                $photo = null;
+            }
             app_linking_json_error(404, 'target_unavailable');
             return;
         }
-        header('Vary: Authorization, X-PHP-Gallery-Photo-Cache', false);
+        header('Vary: Authorization, X-PHP-Gallery-Photo-Cache'
+            . ($adminPreload ? ', X-PHP-Gallery-Preload' : ''), false);
+        if ($adminPreload) {
+            header('X-PHP-Gallery-Preload: admin-v1');
+        }
         if ($photo['etag'] !== null
             && ($_SERVER['HTTP_X_PHP_GALLERY_PHOTO_CACHE'] ?? '') === '1') {
             header_remove('Pragma');

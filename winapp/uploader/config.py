@@ -34,6 +34,7 @@ DEFAULTS: Dict[str, Any] = {
     "staging_cleanup_age_hours": 24.0,
     "close_to_tray": True,
     "start_with_windows": True,
+    "delete_uploaded_files": True,
     "activity_history_limit": 500,
 }
 
@@ -99,6 +100,10 @@ def migrate_config_payload(data: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     # migration and every installer/application upgrade.
     result["start_with_windows"] = (
         result.get("start_with_windows", DEFAULTS["start_with_windows"]) is True
+    )
+    result["delete_uploaded_files"] = (
+        result.get("delete_uploaded_files", DEFAULTS["delete_uploaded_files"])
+        is True
     )
     result["activity_history_limit"] = _clamp_int(
         result.get("activity_history_limit"), DEFAULTS["activity_history_limit"], 50, 5000

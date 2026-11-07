@@ -385,7 +385,7 @@ function app_linking_media_gallery(
  * @param bool $nativeCatalogue Whether the native caller requested a wider page.
  * @param bool $adminMedia Whether this request passed the restricted media grant check.
  * @param bool $publicGallery Whether the Admin gallery separately passed public export.
- * @return array{gallery_id:int,parent_id:?int,photos:list<array{id:int,title:string,latitude?:float,longitude?:float,thumbnail_etag?:string,visibility?:string,nsfw?:bool,size?:?int,cache_eligible?:bool}>,next_after:?int}
+ * @return array{gallery_id:int,parent_id:?int,photos:list<array{id:int,title:string,latitude?:float,longitude?:float,thumbnail_etag?:string,preload_thumbnail_etag?:string,visibility?:string,nsfw?:bool,size?:?int,cache_eligible?:bool,preload_eligible?:bool}>,next_after:?int}
  *     Ordered authorized photo descriptors without paths or credentials.
  */
 function app_linking_media_page(
@@ -398,6 +398,8 @@ function app_linking_media_page(
     $pageSize = $nativeCatalogue ? APP_LINKING_MEDIA_CATALOGUE_SIZE
         : APP_LINKING_MEDIA_PAGE_SIZE;
     $galleryId = (int) $gallery['id'];
+    $preloadGalleryAllowed = $adminMedia
+        && gallery_admin_media_preload_gallery_allowed($galleryId);
     // The public map policy already fails closed for missing or unknown GPS schema.
     $includeGps = (!$adminMedia || $publicGallery) && gallery_allows_gps_maps($gallery);
     $rows = $adminMedia
@@ -406,26 +408,40 @@ function app_linking_media_page(
             $galleryId, $afterId, $pageSize + 1, $includeGps, $nativeCatalogue,
         );
     $page = array_slice($rows, 0, $pageSize);
-    $canProveThumbnails = $nativeCatalogue && (!$adminMedia || $publicGallery);
+    $canProveThumbnails = $nativeCatalogue;
     if ($canProveThumbnails) {
         // The existing thumbnail owner checks all competing source rows in
         // bounded batches and caches ownership for the exact paths below.
         thumbnail_source_identity_preload(array_values(array_filter(
             $page,
-            static fn(array $row): bool => app_linking_media_photo_is_public($row),
+            static fn(array $row): bool => app_linking_media_photo_is_public($row)
+                || ($preloadGalleryAllowed
+                    && in_array($row['nsfw_enabled'] ?? null, [0, '0'], true)),
         )));
     }
     $photos = [];
     foreach ($page as $row) {
         $photo = $adminMedia
-            ? app_linking_admin_media_photo_identity($row, $publicGallery)
+            ? app_linking_admin_media_photo_identity(
+                $row, $publicGallery, $preloadGalleryAllowed,
+            )
             : app_linking_media_photo_identity($row);
         $publicPhoto = app_linking_media_photo_is_public($row);
-        if ($canProveThumbnails && $publicPhoto) {
+        $preloadEligible = $adminMedia
+            && $preloadGalleryAllowed
+            && in_array($row['nsfw_enabled'] ?? null, [0, '0'], true);
+        if ($canProveThumbnails && ($publicPhoto || $preloadEligible)) {
             $etag = app_linking_media_catalogue_thumbnail_etag($row, $gallery);
             if ($etag !== null) {
-                $photo['thumbnail_etag'] = $etag;
+                if (!$adminMedia || ($publicGallery && $publicPhoto)) {
+                    $photo['thumbnail_etag'] = $etag;
+                } elseif ($preloadEligible) {
+                    $photo['preload_thumbnail_etag'] = $etag;
+                }
             }
+        }
+        if ($adminMedia) {
+            $photo['preload_eligible'] = $preloadEligible;
         }
         if ($includeGps && $publicPhoto && is_numeric($row['gps_lat'] ?? null)
             && is_numeric($row['gps_lng'] ?? null)) {
@@ -487,16 +503,22 @@ function app_linking_media_photo_identity(array $row): array
  * @param array{id:int|string,filename:string,visibility:string,nsfw_enabled:int|string,file_size:int|string|null}
  *     $row Authorized indexed photo.
  * @param bool $publicGallery Whether the current gallery passes public export.
- * @return array{id:int,title:string,visibility:string,nsfw:bool,size:?int,cache_eligible:bool}
+ * @param bool $preloadGalleryAllowed Whether complete current ancestry is NSFW-free.
+ * @return array{id:int,title:string,visibility:string,nsfw:bool,size:?int,cache_eligible:bool,preload_eligible:bool}
  *     Admin photo descriptor without a storage path.
  */
-function app_linking_admin_media_photo_identity(array $row, bool $publicGallery): array
+function app_linking_admin_media_photo_identity(
+    array $row, bool $publicGallery, bool $preloadGalleryAllowed,
+): array
 {
+    $preloadEligible = $preloadGalleryAllowed
+        && in_array($row['nsfw_enabled'] ?? null, [0, '0'], true);
     return app_linking_media_photo_identity($row) + [
         'visibility' => $row['visibility'],
         'nsfw' => (bool) $row['nsfw_enabled'],
         'size' => $row['file_size'] === null ? null : (int) $row['file_size'],
         'cache_eligible' => $publicGallery && app_linking_media_photo_is_public($row),
+        'preload_eligible' => $preloadEligible,
     ];
 }
 
@@ -510,7 +532,7 @@ function app_linking_admin_media_photo_identity(array $row, bool $publicGallery)
  * @param int $imageId Positive selected direct photo ID.
  * @param string $expectedVisibility Visibility observed by the caller.
  * @param string $visibility Explicit public, private, or draft target.
- * @return array{id:int,title:string,visibility:string,nsfw:bool,size:?int,cache_eligible:bool}|null
+ * @return array{id:int,title:string,visibility:string,nsfw:bool,size:?int,cache_eligible:bool,preload_eligible:bool}|null
  *     Confirmed fresh photo descriptor or null when the target changed before writing.
  * @throws RuntimeException When authority, persistence or confirmation is unavailable.
  */
@@ -561,6 +583,7 @@ function app_linking_admin_media_change_photo_visibility(
     );
     return app_linking_admin_media_photo_identity(
         $updated, gallery_public_export_policy($galleryId)['allowed'],
+        gallery_admin_media_preload_gallery_allowed($galleryId),
     );
 }
 
@@ -644,6 +667,7 @@ function app_linking_media_catalogue_thumbnail_etag(array $image, array $gallery
  * @param bool $thumbnail Prefer the smallest available configured thumbnail.
  * @param bool $adminMedia Whether restricted photos are authorized on this request.
  * @param bool $publicGallery Whether the Admin gallery independently passed public export.
+ * @param bool $adminPreload Whether this binary read explicitly opted into Admin preload.
  * @return array{stream:resource,size:int,mime:string,etag:?string}|null
  *     Open verified file and safe wire metadata, or null if unavailable.
  * @throws RuntimeException If the existing path owner cannot verify containment.
@@ -654,6 +678,7 @@ function app_linking_media_open_photo(
     bool $thumbnail,
     bool $adminMedia = false,
     bool $publicGallery = false,
+    bool $adminPreload = false,
 ): ?array {
     $image = image_model_find_by_id($imageId);
     if ($image === null || (int) $image['gallery_id'] !== (int) $gallery['id']
@@ -668,8 +693,11 @@ function app_linking_media_open_photo(
         // and format limits. This read never creates a derivative.
         $display = image_public_display_file($image, $gallery, false);
     }
-    $withValidator = !$adminMedia
-        || ($publicGallery && app_linking_media_photo_is_public($image));
+    $publicPhoto = $publicGallery && app_linking_media_photo_is_public($image);
+    $preloadPhoto = $adminMedia && $adminPreload
+        && gallery_admin_media_preload_gallery_allowed((int) $gallery['id'])
+        && in_array($image['nsfw_enabled'] ?? null, [0, '0'], true);
+    $withValidator = !$adminMedia || $publicPhoto || $preloadPhoto;
     $opened = $display === null ? null : app_linking_media_open_verified_photo_file(
         $display['path'], $display['mime'], APP_LINKING_MEDIA_MAX_BYTES, $withValidator,
     );

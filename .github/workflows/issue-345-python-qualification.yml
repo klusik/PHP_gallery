@@ -6,6 +6,7 @@
 # Responsibilities:
 #   - Check out the exact issue #345 feature commit on Linux and Windows.
 #   - Delegate all Python test discovery and result validation to scripts/audit.php.
+#   - Exercise browser handoff logic through the central Node regression owner.
 #   - Preserve per-test diagnostics and explicit platform-specific skips.
 #   - Smoke the existing Windows installer builder without a release.
 #   - Run the browser-free PHP regression owner on disposable MariaDB.
@@ -30,6 +31,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  node:
+    name: Browser handoff Node regression
+    runs-on: ubuntu-24.04
+    # Purpose: Bound the existing portable JavaScript diagnostic owner.
+    # Type: int. Units: minutes. Scope: the central Node diagnostic owner.
+    # Consumers: Actions job. Rationale: Ten minutes bounds portable fixtures.
+    timeout-minutes: 10
+    env:
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - name: Checkout exact candidate without retained credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Run the registered Node regression owner
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          php scripts/audit.php --suite=node-full
+
+      - name: Preserve Node diagnostics and explicit browser skips
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-345-node
+          path: cache/test-audit/**/*
+          if-no-files-found: warn
+          # Purpose: Keep diagnostic evidence available for scoped review.
+          # Type: int. Units: days. Scope: this Node artifact.
+          # Consumers: upload-artifact. Rationale: 7 matches sibling retention.
+          retention-days: 7
+
   winapp:
     name: WinApp Python regression (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

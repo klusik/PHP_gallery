@@ -11,6 +11,7 @@
 """Portable linked upload tests without real network or Windows APIs."""
 
 import hashlib
+import os
 import sys
 import tempfile
 import unittest
@@ -22,7 +23,8 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader.app_linking import LinkingError
 from uploader.linked_upload import (
-    LinkedMultipart, LinkedTargetLease, capture_linked_source, verify_linked_source,
+    LinkedMultipart, LinkedTargetLease, capture_linked_source,
+    delete_verified_linked_source, verify_linked_source,
 )
 
 
@@ -51,6 +53,74 @@ class LinkedUploadTests(unittest.TestCase):
             source.write_bytes(b'modified')
             with self.assertRaises(LinkingError):
                 verify_linked_source(snapshot)
+
+    @unittest.skipUnless(os.name == 'nt', 'Same-handle disposition is Windows-only.')
+    def test_acknowledged_source_is_deleted_through_its_verified_handle(self) -> None:
+        """Delete an unchanged single-link source by its verified Windows handle.
+
+        Returns:
+            None: The captured path is absent only after its bytes are rechecked.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source.jpg'
+            contents = b'confirmed upload source'
+            source.write_bytes(contents)
+            snapshot = capture_linked_source(
+                source, hashlib.sha256(contents).hexdigest(), len(contents),
+            )
+            delete_verified_linked_source(snapshot)
+            self.assertFalse(source.exists())
+
+    @unittest.skipUnless(os.name == 'nt', 'Same-handle disposition is Windows-only.')
+    def test_verified_handle_deletion_refuses_a_replacement(self) -> None:
+        """Keep replacement bytes after an earlier source was acknowledged.
+
+        Returns:
+            None: The held deletion handle rejects a changed file identity.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'source.jpg'
+            source.write_bytes(b'original source')
+            snapshot = capture_linked_source(
+                source, hashlib.sha256(b'original source').hexdigest(), 15,
+            )
+            replacement = root / 'replacement.jpg'
+            replacement.write_bytes(b'replacement bytes')
+            replacement.replace(source)
+            with self.assertRaises(LinkingError):
+                delete_verified_linked_source(snapshot)
+            self.assertEqual(b'replacement bytes', source.read_bytes())
+
+    @unittest.skipUnless(os.name == 'nt', 'Same-handle disposition is Windows-only.')
+    def test_verified_handle_deletion_retains_hardlinked_or_busy_source(self) -> None:
+        """Refuse ambiguous links and a conflicting open source on Windows.
+
+        Returns:
+            None: Both the original bytes and any alias remain available.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source.jpg'
+            contents = b'confirmed bytes must be retained'
+            source.write_bytes(contents)
+            snapshot = capture_linked_source(
+                source, hashlib.sha256(contents).hexdigest(), len(contents),
+            )
+            # A second hardlink violates the one-source-link deletion contract.
+            alias = Path(directory) / 'alias.jpg'
+            os.link(source, alias)
+            with self.assertRaises(LinkingError):
+                delete_verified_linked_source(snapshot)
+            self.assertEqual(contents, source.read_bytes())
+            self.assertEqual(contents, alias.read_bytes())
+            alias.unlink()
+
+            # A CRT read handle does not share DELETE access, so native delete
+            # admission must fail without affecting the acknowledged bytes.
+            with source.open('rb'):
+                with self.assertRaises(OSError):
+                    delete_verified_linked_source(snapshot)
+            self.assertEqual(contents, source.read_bytes())
 
     def test_multipart_is_one_shot_and_declares_exact_length(self) -> None:
         """Stream the original once with a matching multipart content length.

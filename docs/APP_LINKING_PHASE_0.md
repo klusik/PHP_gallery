@@ -1198,6 +1198,29 @@ The temporary key lives in memory during capture. Closing it leaves the
 browser link available to Photos. The feature uses the verified
 `app_linking_watch_keys` schema and existing upload capability.
 
+Before requesting a capture key, destination admission checks accepted import
+work under the existing local owner. The full `upload_state.json` snapshot
+uses the same 256 MiB ceiling for admission and read-modify-write. The previous
+16 MiB admission ceiling rejected a healthy Windows Watcher history before
+gallery verification even though the state writer could still process it.
+Admission still rejects unreadable or ambiguous evidence and protects pending
+work bound to another target. The separate import-binding ledger and linked
+target history keep their own bounds.
+
+Watcher startup exposes a preparation phase before reading the initial folder.
+The folder exclusion scan runs in the worker, and REC indicates that the initial
+boundary is ready. Stop and Finish present a populated activity view while
+preparing the existing drain workflow.
+
+On Windows, the Watcher deletion preference also applies to linked captures.
+A fresh successful transfer response and durable acknowledgement precede
+native same-handle source deletion. Captured identity, size and digest must
+match, and the handle excludes concurrent writers and replacement during the
+check. Failure retains the source with a warning. Neither inventory matches
+nor uncertain/restarted work independently authorize deletion. Manual import
+sources and ZIPs retain the existing policy. Other platforms keep their sources
+until an equivalent native owner is available.
+
 Photo metadata uses eight-item pages by default. WinApp can request up to 64 with
 `X-PHP-Gallery-Photo-Page: 64`; older servers ignore this header.
 Responses cap each binary at 16 MiB and use existing live
@@ -1247,11 +1270,33 @@ image and rendition. After 60 seconds, a matching authorized 304 refreshes
 validation metadata while retaining the bytes. An opt-in catalogue page can
 include the current strong ETag of an existing public thumbnail up to 128 KiB.
 The server computes proofs only for materialized thumbnails.
-WinApp can reuse the matching verified local bytes immediately. Admin-only
-media receives `no-store` and is excluded from persistent media reads and
-writes. On an older server that
+WinApp can reuse the matching verified local bytes immediately. Ordinary
+Admin-only media receives `no-store` and is excluded from persistent media
+reads and writes. On an older server that
 returns `no-store` to a conditional request, WinApp retries once without
 the validator and accepts only a validated 200 body.
+
+The additive `media:admin-preload-v1` discovery capability permits a separate,
+explicit Admin Photos preload without introducing a scope or schema change.
+Current descriptors carry strict `preload_eligible` and optionally
+`preload_thumbnail_etag`; the public `cache_eligible` and `thumbnail_etag`
+contract is unchanged. Eligibility requires a non-NSFW photo and a complete,
+cycle-free, non-NSFW gallery ancestry with verified NSFW schema. Missing or
+unknown ancestry/schema refuses persistence. Private binary requests use the
+fixed `X-PHP-Gallery-Preload: admin-v1` header alongside the existing photo-cache
+opt-in. After live grant, current Admin role and exact photo/gallery checks,
+the server confirms that header and a strong validator; conditional 304s pass
+the same authorization. Unrecognized preload headers fail closed.
+
+WinApp persists the explicit preload intent and private cache namespace under
+hashes of canonical issuer, server-verified account, gallery, image and rendition.
+Private bytes are always revalidated by the server before display, including
+after restart. Public entries retain their existing namespace and freshness.
+Retained galleries keep the existing pin policy; unpinned private data counts
+toward the ordinary cache quota. Neither local bytes nor a saved preference
+grant offline, expired-link, revoked-link or NSFW access. A bounded valid
+`Retry-After` delays explicit preload with cancelable progress; retry exhaustion
+retains completed entries and the existing server limits.
 
 The same cache holds track bytes under a digest of issuer, gallery, track ID
 and SHA-256. An authorized playlist advertises persistence with
@@ -2153,8 +2198,9 @@ below. No new security assertion may inherit those old results.
 - `state_store.load_upload_state_for_mutation()` refuses to overwrite existing
   malformed, redirected, changed, truncated or oversized shared state with an
   empty snapshot. Legacy non-admission reads keep their established parser.
-  Mutation reads have a separate bounded 256 MiB limit; the stricter 16 MiB
-  target-admission history limit is unchanged.
+  At this checkpoint, mutation reads had a separate 256 MiB limit and target
+  admission used 16 MiB. The current shared-history contract above supersedes
+  that mismatch.
 - `accepted_work_owner(config_dir)` acquires the stable in-place
   `accepted-work.lock` using native Windows byte-range locking or POSIX
   `flock`, within the process-local `_STATE_LOCK`. Every adopted RMW

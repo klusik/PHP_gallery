@@ -323,6 +323,7 @@ class FlightUI:
         self.activity_bar: ttk.Progressbar | None = None
         self.task_tree: ttk.Treeview | None = None
         self._animation_running = False
+        self._preparing_progress = False
         self._progress_local_mode = False
         self.phase_var = tk.StringVar(value="")
         self.detail_var = tk.StringVar(value="")
@@ -837,6 +838,7 @@ class FlightUI:
             self.show_progress()
             return
         languages = REPORT_LANGUAGES
+        self._prepare_progress_view()
         try:
             plans = self.pending()
             current = next((
@@ -852,6 +854,7 @@ class FlightUI:
                 plan.save()
             self.begin(False, automatic=True)
         except (OSError, ValueError) as exc:
+            self._dismiss_progress_preparation()
             messagebox.showerror(self.text("finish_pdf"), str(exc), parent=self.dialog_owner())
 
     def attach_loaded_dispatch(self, directory: Path) -> None:
@@ -1899,6 +1902,7 @@ class FlightUI:
                 self.operation.request_revoke()
             self.show_progress()
             return
+        self._prepare_progress_view()
         try:
             plans = self.pending()
             if linked and any(not plan.local_only for plan in plans):
@@ -1962,12 +1966,15 @@ class FlightUI:
                 if self.report_dialog is not None and self.report_dialog.winfo_exists():
                     self.report_dialog.withdraw()
             self.host.api_key_revoke_thread = self.operation
+            self.operation.update("draining")
             self.operation.start()
+            self._preparing_progress = False
             self._last_terminal = ""
             self.show_progress()
             self.host.refresh_connection_controls()
         except (OSError, ValueError, RuntimeError) as exc:
             self.host.api_key_revoke_running = False
+            self._dismiss_progress_preparation()
             messagebox.showerror(
                 self.text("flight_progress"),
                 str(exc),
@@ -2103,6 +2110,42 @@ class FlightUI:
         """
         return self.operation is not None and self.operation is self.automatic_operation
 
+    def _prepare_progress_view(self) -> None:
+        """Paint a populated busy view before loading accepted finalization work.
+
+        Returns:
+            None: Shows the preparation phase without implying measured progress.
+        """
+        if getattr(self, "_preparing_progress", False) is True:
+            return
+        self._preparing_progress = True
+        self.phase_var.set(self.text("phase_preparing"))
+        self.detail_var.set(self.text("finish_preparing_detail"))
+        self.time_var.set("")
+        self.show_progress()
+        if self.activity_bar is not None:
+            self.activity_bar.start(PROGRESS_TICK_MS)
+            self._animation_running = True
+        if self.bar is not None:
+            self.bar.pack_forget()
+        if self.dialog is not None:
+            # Paint the phase, body and activity before any local history read.
+            # update_idletasks excludes user input and cannot duplicate Finish.
+            self.dialog.update_idletasks()
+
+    def _dismiss_progress_preparation(self) -> None:
+        """Remove preparation feedback when admission fails before a worker starts.
+
+        Returns:
+            None: Stops the busy cue and leaves the existing error dialog in charge.
+        """
+        self._preparing_progress = False
+        if self.activity_bar is not None:
+            self.activity_bar.stop()
+            self._animation_running = False
+        if self.dialog is not None:
+            self.dialog.withdraw()
+
     def show_progress(self) -> None:
         """Open or restore the one shared nonmodal progress view.
 
@@ -2119,7 +2162,8 @@ class FlightUI:
             self.operation is not None and self.operation.abandonment is True
         )
         mode = "abandon" if abandoning else "upload" if saved_upload else local_mode
-        if self.operation is None:
+        preparing = getattr(self, "_preparing_progress", False) is True
+        if self.operation is None and not preparing:
             self.phase_var.set(self.text("review_pending_uploads"))
             try:
                 detail = ""
@@ -2135,6 +2179,13 @@ class FlightUI:
             except (OSError, ValueError) as exc:
                 self.detail_var.set(str(exc))
             self.time_var.set("")
+        elif self.operation is not None and not preparing:
+            progress = self.operation.snapshot()
+            self.phase_var.set(self.text(
+                "phase_preparing" if progress.phase == "idle"
+                else "phase_" + progress.phase,
+            ))
+            self.detail_var.set(progress.detail or self.text("finish_preparing_detail"))
         if self.dialog is not None and self.dialog.winfo_exists():
             if self._progress_local_mode == mode:
                 self.refresh_tasks()
@@ -2148,6 +2199,7 @@ class FlightUI:
         owner = self.dialog_owner()
         self.dialog = tk.Toplevel(owner)
         self.dialog.withdraw()
+        self.dialog.configure(background=self.host.root.cget("background"))
         self.dialog.title(self.text("flight_progress"))
         self.dialog.transient(self.host.root)
         frame = GlassCard(self.dialog, padding=(16, 12))
@@ -2215,6 +2267,8 @@ class FlightUI:
         self.dialog.bind("<Escape>", lambda _event: self.dialog.withdraw())
         place_dialog(self.dialog, owner)
         self.dialog.deiconify()
+        if preparing:
+            self.dialog.update_idletasks()
 
     def refresh_progress_actions(self) -> None:
         """Show only actions usable for the current progress or recovery state.
@@ -2230,7 +2284,9 @@ class FlightUI:
         running = phase not in {None, "completed", "error", "cancelled"}
         linked = self.host.linking_manager.linked_upload_mode_selected()
         choices: list[str] = []
-        if self.independent_operation():
+        if getattr(self, "_preparing_progress", False) is True:
+            choices = []
+        elif self.independent_operation():
             if running:
                 choices.append("cancel_upload" if operation.saved_upload else "cancel_pdf")
             elif phase != "completed":
@@ -2300,6 +2356,9 @@ class FlightUI:
         tree = self.task_tree
         operation = self.operation
         if tree is None or not tree.winfo_exists():
+            return
+        if getattr(self, "_preparing_progress", False) is True:
+            tree.pack_forget()
             return
         if operation is None or (
             not self.independent_operation()
@@ -2553,7 +2612,8 @@ class FlightUI:
         Returns:
             None: Schedules the next bounded Tk update while the app is open.
         """
-        operation = self.operation
+        operation = (None if getattr(self, "_preparing_progress", False) is True
+                     else self.operation)
         watcher = self.host.worker
         if (watcher is not None and not watcher.is_alive()
                 and self.recorder is not None and self.recorder.is_alive()):
@@ -2601,6 +2661,8 @@ class FlightUI:
                 )
             self.time_var.set(timing)
             if self.bar is not None and self.bar.winfo_exists():
+                if not self.bar.winfo_manager():
+                    self.bar.pack(fill="x", pady=(12, 8), before=self.activity_bar)
                 self.bar.configure(mode="determinate")
                 self.bar["value"] = (
                     progress.done * 100 / progress.total if progress.total else 0

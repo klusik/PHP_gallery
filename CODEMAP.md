@@ -610,6 +610,9 @@ tag controller through the pagination and description-layout services.
 | App Linking rolling expiry and refresh replay | `app/services/app_linking.php`, `app/services/app_linking_refresh.php`, `app/models/app_linking_refresh.php`, `tests/app_linking_database_test.php` |
 | Linked binary media rate limits | `app/controllers/app_linking/media.php`, `app/services/app_linking_rate_limits.php` |
 | WinApp Photos, local playback and media cache | `winapp/uploader/native_gallery_viewer.py`, `winapp/uploader/gallery_lightbox.py`, `winapp/uploader/gallery_media_cache.py` |
+| WinApp gallery preload, retained bytes and Admin private-media opt-in | `winapp/uploader/gallery_preload.py`, `winapp/uploader/gallery_media_cache.py`, `winapp/uploader/app_linking.py`; server media owner in `app/services/app_linking_media.php` and ancestry policy in `app/services/gallery_access.php` |
+| WinApp window/divider view state and background activity persistence | `winapp/gallery_watch_upload.pyw`, `winapp/uploader/photos_workspace.py`, `winapp/uploader/state_store.py` |
+| WinApp installed fonts, generated icons and Windows DPI bootstrap | `winapp/uploader/ui_theme.py`, `winapp/uploader/windows_display.py` |
 | WinApp macOS extended-range photo surface | `winapp/uploader/gallery_hdr_macos.py` |
 | Windows watcher installer | `winapp/install.bat`, `winapp/run_gallery_watcher.bat` |
 | Uploader release discovery and verified download | `winapp/uploader/self_update.py`, `winapp/tests/test_self_update.py` |

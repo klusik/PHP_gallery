@@ -25,7 +25,9 @@ from tkinter import messagebox, simpledialog, ttk
 from typing import Callable, NamedTuple
 from .app_linking import (
     GALLERIES_SCOPE, IDENTITY_SCOPE, READ_SCOPE, READ_UPLOAD_SCOPE, UPLOAD_SCOPE,
-    LINKING_GALLERY_QUERY_MAX_CHARS, LINKING_RECOVERY_MAX_FILE_BYTES,
+    LINKING_GALLERY_ID_MAX, LINKING_GALLERY_QUERY_MAX_CHARS,
+    LINKING_RECOVERY_MAX_FILE_BYTES,
+    ADMIN_PRELOAD_CAPABILITY,
     ADMIN_MEDIA_SCOPE_SUFFIX, ADMIN_PRESENTATION_SCOPE_SUFFIX,
     MEDIA_SCOPE_SUFFIX, PRESENTATION_SCOPE_SUFFIX, ROLLING_SCOPE_SUFFIX,
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage,
@@ -1346,6 +1348,40 @@ class LinkingManager:
                 or not session.matches_issuer(self._session_issuer)):
             return None
         return self._session_issuer, self._session_user_id
+
+    def open_photos_gallery_editor(
+        self, session: LinkingSession, gallery: LinkedGallery,
+    ) -> bool:
+        """Open the selected gallery editor using the browser's own session.
+
+        Args:
+            session (LinkingSession): Exact live Photos session captured by
+                the gallery context.
+            gallery (LinkedGallery): Exact server-listed gallery to edit.
+
+        Returns:
+            bool: True when the fixed same-site editor URL opens; False for a
+                stale session, invalid target or unavailable browser.
+        """
+        identity = self.photos_site_identity(session)
+        if identity is None:
+            return False
+        issuer, _account_id = identity
+        canonical_issuer = linking_issuer(issuer + '/index.php')
+        gallery_id = gallery.gallery_id
+        if (canonical_issuer != issuer
+                or not session.matches_issuer(canonical_issuer)
+                or type(gallery_id) is not int
+                or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX):
+            return False
+        url = (
+            f'{canonical_issuer}/index.php?page=admin_edit_gallery'
+            f'&id={gallery_id}&open_panel=1'
+        )
+        try:
+            return bool(webbrowser.open(url))
+        except Exception:  # noqa: BLE001
+            return False
 
     def open(self, parent: tk.Misc, address: str, *, manage: bool = False) -> None:
         """Open the gallery picker or the separate access management surface.
@@ -3191,15 +3227,20 @@ class LinkingManager:
                 required = ('rolling_access' if binding.scope.endswith(
                     ROLLING_SCOPE_SUFFIX,
                 ) else 'offline_access')
-                if required not in discover_linking_capabilities(binding.issuer, cancel):
+                capabilities = discover_linking_capabilities(binding.issuer, cancel)
+                if required not in capabilities:
                     self._events.put((owner, 'offline_unavailable', None))
                     return
                 access = rotate_saved_offline_access(store, path, binding, cancel)
                 session = LinkingSession(
                     access.issuer, access.token, access.expires_at, access.scope,
+                    admin_preload_supported=(
+                        ADMIN_PRELOAD_CAPABILITY in capabilities
+                    ),
                 )
-                identity = LinkedIdentity(access.account_id, access.username)
-                if identity.user_id != binding.account_id or cancel.is_set():
+                identity = session.identity()
+                if (identity.user_id != binding.account_id
+                        or identity.username != access.username or cancel.is_set()):
                     raise LinkingError('Offline identity is unavailable.')
                 enable_rolling_renewal(session, store, path, binding)
                 connected_session = session

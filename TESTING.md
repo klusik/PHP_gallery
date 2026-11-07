@@ -8262,6 +8262,32 @@ repaint after Close and Escape at normal and minimum widths. Include a loaded
 photo and a failed photo read so the underlying tree and tiles both redraw.
 Hover and focus a tile and an icon near a window edge. Verify that the themed
 tooltip stays readable inside the main window and disappears when navigating.
+Compare installed Segoe UI Variable Text and font fallback at normal and narrow
+window widths. Check accented gallery titles, settings inputs, menus and logs.
+Known icons must have smooth edges, preserve disabled/focus states and update
+when Play changes to Pause or the recording pulse changes color. In the tree,
+cache coverage, Keep preloaded and the recording marker must coexist without
+changing selection or expanded branches. Repeat source startup without Pillow.
+The display-bootstrap fixture preserves an already-aware manifest/host context,
+requests native startup resolution for an unaware Windows process and keeps
+native refusal/non-Windows launches usable. Real display scaling, different-DPI
+monitor moves and ClearType appearance remain manual coverage.
+Window-layout fixtures cover a separate view-state round trip, malformed and
+offscreen rectangles, preserved unrelated preference fields and the Photos
+divider. Resize and move the real window, adjust the tree width, quit the full
+process and relaunch; also check maximized startup and closing to the tray.
+Minimized, withdrawn and fullscreen rectangles must not replace the normal one.
+Delay Photos mapping beyond the window-save debounce: geometry may save, but
+the stored tree width must survive unchanged. Exercise a real sash press at
+index zero, drag/release, tab hide/show and a new workspace backed by the same
+preference. A temporary 210-pixel default must never replace a saved choice.
+Viewer failures log a fixed fetch/apply phase and safe exception class, never
+an exception message, media URL, gallery title, bearer or filesystem path.
+Transport admission regressions hold the only network slot behind an event,
+then verify successful handoff after release, bounded deadline/cancellation and
+no second transport thread or semaphore leak. A late DNS result still cannot
+start a connection or restore authority after cancellation. On actual Windows,
+switch between previously loaded albums and return without using Refresh.
 Verify a stale or revoked link cannot publish gallery results, and confirm
 that the logon `--startup` path still starts in the system tray.
 On macOS and Windows, approve a continuing listing link, quit WinApp and
@@ -8368,7 +8394,8 @@ track changes. Compare contextual panels at desktop and narrow widths,
 including an outside click, Escape, and macOS Control-click.
 Deliver both a legacy wheel notch and a packed Tk TouchpadScroll event over
 a thumbnail and in the photo overlay. Verify grid movement and zoom in both
-lightbox modes. Check that unknown cache coverage has no tree icon.
+lightbox modes. Check that unchecked cache coverage has a dotted-circle icon
+and changes automatically as authorized photos are loaded or preloaded.
 The native Tk fixture reclaims destroyed widget cycles on the Tk owner thread
 between tests so finalizers cannot consume the cover worker's readiness deadline.
 
@@ -8544,6 +8571,67 @@ proof of the original transaction or database registration, and `unknown`
 does not prove absence. These fixtures do not establish actual Windows, deployed
 HTTPS, concurrent external filesystem or power-loss behavior.
 
+The gallery-editor handoff fixtures bind the current Photos session and exact
+installation, validate numeric gallery IDs and keep credentials out of browser
+URLs. The browser drawer fixture covers subdirectory mounts, signed 64-bit
+IDs, malformed/repeated navigation hints and preservation of the dashboard URL.
+For desktop acceptance, invoke Edit gallery from the tree and a gallery card,
+confirm the exact gallery's existing right editor panel, check desktop/narrow
+layout and Escape, and verify an unauthenticated browser reaches normal Admin
+login. An older server may show its ordinary full-page editor.
+
+Gallery preload fixtures exercise ordered pagination, local-body reuse,
+eligibility/no-store handling, cancellation, throttling and a final cache check.
+Admin preload coverage must include a real persisted private-body round trip,
+the separate issuer/verified-account namespace and saved intent, conditional
+revalidation before private display, expired/revoked links, ordinary no-store
+browsing and old-server compatibility. Server cases retain the public validator
+contract and refuse malformed preload headers, NSFW photos, NSFW ancestors,
+missing ancestry, cycles and unverified schema. Retry-After coverage checks
+bounded delay, retry exhaustion and cancellation without raising server limits.
+Progress counts photos rather than their two stored renditions. A successful
+download attempt does not imply full coverage after ordinary LRU eviction.
+Cache fixtures pin one exact issuer/gallery across restart, pressure the
+ordinary item/byte quota, reject unsafe paths and preserve retained originals
+when an unpin copy fails. Retained files do not consume ordinary inventory work.
+The Windows identity regression models a directory-entry stat with inode zero;
+retained cleanup captures direct no-follow path identities and preserves the
+same-file comparison against opened handles.
+Native UI coverage must observe icons without opening Information, preload
+progress/cancel, persisted Keep preloaded, and returning an album to normal
+cache policy. Use an existing test gallery and avoid unrelated cache deletion.
+
+The WinApp destination-admission fixture exercises a complete local upload
+snapshot above the former 16 MiB read-only ceiling. Within the shared 256 MiB
+state envelope, an unfinished import retains its exact binding. The fixture
+admits that binding and refuses another one. This portable regression does not
+exercise the real Photos gesture, key issuance or the Watcher upload. For the
+Windows desktop check, use an approved Admin upload link and a disposable
+watched folder. Create a synthetic image after REC begins, confirm its exact
+gallery and checksum, finish the capture, then confirm queue drain, key closure
+and continued Photos access before selecting the next gallery.
+
+Watcher preparation fixtures cover immediate busy feedback, background initial
+folder capture and exclusion of preexisting screenshots. Exercise Stop and
+interruption during preparation before claiming that recovery cannot admit
+historical files. Finish progress must have a phase and activity indicator on
+its first visible frame, including before pending-plan refresh.
+
+Windows source-deletion coverage must compare the source captured before the
+send with the native opened file after acknowledgement. Verify successful
+same-file deletion, explicit-off retention, replacement/change, hardlink/reparse
+and native-open failure. An inventory skip or uncertain response must retain
+the source. Use synthetic files in an owned folder for a desktop upload and
+confirm both the server image and local disappearance. These checks do not
+qualify manual-import/ZIP deletion or source deletion on other platforms.
+
+The activity-writer fixture verifies ordering, bounded retained history,
+background execution and a final flush while preserving upload and job
+sections. Persistence failures produce a fixed message without source paths.
+Desktop startup and Finish checks should include a substantial existing state
+file, because repeated synchronous recent-event writes can otherwise hide the
+new progress feedback behind the Windows unresponsive-window state.
+
 The disposable HTTPS/MySQL protocol run created an unpublished child through
 the native journal, withheld a completed reply, recovered the original receipt
 with status after restart, and reissued the same key without a duplicate. The
@@ -8638,6 +8726,10 @@ ephemeral checkout and delegates PHP regression to the existing disposable
 MariaDB owner with browser tests explicitly disabled. On Windows it uses the
 repository installer builder with already installed build dependencies and
 checks the produced hash and size. The build outputs stay on the runner.
+Its Node job delegates the full registered JavaScript fixture set to
+`scripts/audit.php --suite=node-full`, including gallery-editor navigation.
+Browser-dependent fixtures are explicitly disabled there; actual Chromium
+qualification remains with its required FULL owner.
 These jobs prove only their exact-source diagnostics. They do not publish a
 release, qualify a prepared integration SHA, or replace the required FULL
 Chromium and installed GUI coverage.
