@@ -1,5 +1,389 @@
 # Patch notes
 
+## Version 1.0.0
+
+PHP Gallery and its uploader reached 1.0.0 with a connected desktop workflow
+for browsing, managing and capturing photos. This release introduced
+browser-approved account linking, an integrated Photos workspace, continuous
+presentations with gallery music, and controlled local caching and preload.
+It connected those tools to Watcher and strengthened upload recovery, source
+retention and everyday Windows usability while preserving gallery-scoped
+API-key uploads.
+
+### Highlights
+
+#### Browser-approved gallery connections
+
+- Added a dedicated Link gallery dialog that opened the verified installation
+  in the system browser, requested an administrator's explicit approval, and
+  returned the approved account and gallery list automatically. The new flow
+  removed manual pairing-code entry and kept linking separate from saved
+  upload URLs and API keys.
+  [#345](https://github.com/klusik/PHP_gallery/issues/345)
+- Added switching between live connections to different installations and a
+  history of up to 20 recent addresses. Each connection retained its exact
+  site and account; changing the browsing site did not redirect an active
+  upload destination.
+- Added gallery suggestions across titles, descriptions and tags, including
+  nested-gallery breadcrumbs, quoted phrases, Boolean search and limited
+  title typo tolerance. Basic listing and local title filtering remained
+  available without search permission or beyond the catalog search budget.
+- Added explicitly approved rolling links with 15-minute access tokens, a
+  renewable seven-day inactivity window and rotating credentials in Windows
+  Credential Manager or macOS Keychain.
+  Successful use or renewal extended the window, and saved links could resume
+  after restart. Definitive expiry or revocation returned the user to browser
+  approval; uncertain renewal results retained their recovery fence.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Added connected-application management for the approving administrator,
+  including grant details and server-side revocation. Local forgetting,
+  current-session unlinking and server revocation retained distinct effects.
+  Remote installations required verified HTTPS; direct localhost linking
+  preserved the exact local port and installation path.
+
+#### Photos in the main WinApp window
+
+- Added Photos as the normal startup workspace, with the server's gallery tree
+  beside a responsive photo grid. Direct subgalleries appeared as folder cards
+  with authorized covers, and expanded branches were remembered separately
+  for each site and administrator account.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Added continuous scrolling with viewport-driven thumbnails and bounded
+  adjacent-photo preparation. Manual navigation and timed slideshows wrapped
+  across the full album instead of stopping at internal page boundaries.
+- Added an inline lightbox and fullscreen presentation in the same window,
+  with keyboard navigation, wheel and trackpad zoom, panning and restored
+  focus on dismissal. Content fitting detected embedded black mattes for
+  display, while an original-frame toggle restored the complete image frame.
+  Source images were not modified.
+- Added local playback of permitted MP3/WAV gallery soundtracks on Windows and
+  macOS, with play/pause, track navigation and preparation of the next track.
+  Fullscreen slideshow launch used the gallery's authorized presentation
+  settings and soundtrack policy.
+- Added contextual Information cards for indexed gallery totals and photo
+  format, size, dimensions, capture settings and EXIF. Location actions were
+  shown only when the server's map policy permitted coordinates.
+- Added manual album refresh and periodic indexed-revision checks for visible
+  Admin albums. Refresh retained the scroll position and unchanged thumbnail
+  data; older servers kept manual refresh.
+
+#### Gallery management from Photos
+
+- Added an explicit Admin Photos approval upgrade for protected, hidden and
+  NSFW media. Existing public links kept their original permissions until the
+  administrator approved the additional access in the browser.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Added inline root-gallery and subgallery creation, plus contextual gallery
+  and photo visibility actions under their required permissions. Gallery
+  visibility changes used the current edit revision and refused stale or
+  scheduled-publication conflicts without replaying the write.
+- Added single-photo and multi-selection deletion with confirmation for each
+  batch of up to 64 photos. The live Admin Photos link delegated the permanent
+  deletion to the existing web Admin owner; an interrupted response required
+  album review rather than an automatic repeat.
+- Added Edit gallery handoff to the existing web Admin drawer in the system
+  browser. The browser retained its own Admin login, and the URL carried only
+  the installation and numeric gallery target. Older servers retained their
+  ordinary full-page editor.
+- Added retained creation intents and receipts for interrupted requests.
+  Explicit status checks, resumption with the original key, and closure of an
+  eligible unresolved request preserved its identity. A confirmed new gallery
+  could become an upload target only after fresh receipt, account and gallery
+  verification.
+  [#345](https://github.com/klusik/PHP_gallery/issues/345)
+
+#### Local cache, preload and retained galleries
+
+- Added a shared per-user cache for server-approved photo, thumbnail and audio
+  bytes, with content validation and ordinary limits of 4,096 entries or
+  1 GiB. A decoded thumbnail cache accelerated revisits during the current
+  session, and visible coverage indicators distinguished unchecked, online,
+  partial and fully cached albums.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Added cancellable Preload gallery work for a gallery's direct thumbnails and
+  lightbox renditions. Progress counted photos, reused verified local bytes,
+  and handled bounded server retry delays with a cancelable countdown.
+  Subgalleries remained separate preload targets.
+- Added Keep preloaded retention in separate hashed gallery storage outside
+  ordinary cache eviction and quotas. Completed entries and the retention
+  preference survived cancellation and restart; partial work did not claim
+  complete coverage. Disabling retention returned entries to ordinary cache
+  policy.
+- Added explicitly requested private or draft preload when the server offered
+  Admin preload support. Persistence required a verified non-NSFW photo and
+  complete non-NSFW gallery ancestry, with opt-ins and private entries bound
+  to the exact installation, account and gallery. Reading private cached bytes
+  still required live server authorization. Ordinary restricted browsing and
+  NSFW media remained transient; cached files did not confer offline access.
+
+#### Watcher, Import and recoverable capture
+
+- Added Use this gallery for Watcher from Photos. The action verified the exact
+  destination and issued a temporary capture key bound to the live grant and
+  gallery. Recording appeared in the navigation rail, gallery heading and
+  tree, including a marker on a collapsed parent branch. Completion drained
+  accepted screenshots, retained linked flight reports locally, and revoked
+  the temporary capture key while keeping the Photos connection.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Added browser-approved Watcher and Import target setup without requiring a
+  saved API key, including first-run profiles and macOS source launches.
+  Folder selection and Watcher preferences could be saved independently of
+  connection settings. Startup and finalization showed preparation activity
+  before measurable work was available.
+  [#345](https://github.com/klusik/PHP_gallery/issues/345)
+- Enabled Delete uploaded photos from this PC by default for a new or missing
+  Watcher setting, while preserving an explicitly saved off choice. Windows
+  deletion required a successful current upload, durable local acknowledgement
+  and native-handle verification of the same source and sent bytes. Changed,
+  replaced, linked, busy, duplicate or uncertain sources were retained.
+  Other platforms retained watched sources.
+- Retained manual-import originals, source ZIPs and extracted staging for
+  review, including after successful uploads. Disabled age-based staging
+  cleanup and automatic ZIP removal because age and visible job history could
+  not establish that recovery evidence was complete.
+- Added target-bound recovery across restart without silently falling back
+  to a saved API key. An uncertain linked upload kept its original source and
+  history. Explicit review could let other eligible files continue while the
+  same path or content remained blocked; a hash observation alone never
+  authorized a resend or deletion.
+  [#345](https://github.com/klusik/PHP_gallery/issues/345)
+- Changed ordinary Stop and Finish to retain the configured upload connection.
+  Linked reports stayed local, and native flight API-key revocation was
+  temporarily disabled; server-side key revocation remained available in
+  PHP Gallery Admin. The separate Photos capture flow revoked only its
+  temporary capture key after completion.
+
+#### Windows presentation and responsiveness
+
+- Improved native text with installed Segoe UI font selection and generated
+  supersampled control, cache and recording icons. Windows startup requested
+  system DPI awareness only when the process was unaware and preserved an
+  existing manifest or host display context.
+- Added automatic restoration of normal window geometry, maximized state and
+  the Photos divider. Restored values were clamped to the current display,
+  and minimizing, fullscreen or tray hiding did not replace the saved normal
+  rectangle.
+- Improved album switching by waiting within the existing network deadline
+  for the single transport slot. Cancellation retained ownership until the
+  actual worker ended. Moved recent Activity persistence to a bounded
+  background writer to avoid repeated history rewrites on the Tk event thread.
+
+### Technical Details
+
+#### Backend and authorization
+
+- Added the versioned `app_linking_discovery` route and the browser handoff,
+  consent, token, identity, grant-list and revocation endpoints in
+  `app/controllers/app_linking.php`. Added dedicated create, detail, media and
+  upload controllers under `app/controllers/app_linking/`, backed by linking
+  policy/services and persistence models.
+  [#345](https://github.com/klusik/PHP_gallery/issues/345)
+- Bound one-use PKCE exchange to the exact issuer, installation mount,
+  callback, account and approved scope. The short-lived browser handle granted
+  no authority and was removed from the visible address before normal login.
+  Session binding and approval required current ordinary-Admin identity,
+  same-origin checks and CSRF. Added bounded, generic errors and independent
+  request limits without exposing tokens, raw SQL or database exceptions.
+- Made discovery a passive GET/HEAD read that did not provision storage or
+  trigger visitor maintenance. Required `available` core schema and refused
+  confirmed `missing` or `unknown` prerequisites. Unready optional operations
+  were omitted individually; a disabled Upload Automation feature refused
+  native uploads. Grant revocation used narrower verified storage than
+  issuance, authentication and rate limiting.
+- Added hash-only access and refresh persistence, encrypted pushed-request
+  state, serialized refresh rotation and replay revocation. Existing grants
+  did not acquire new scopes. Rolling use renewed the seven-day family window;
+  legacy offline consent retained its 30-day absolute and seven-day idle
+  limits. A read already past authorization could still finish after a
+  concurrent revocation.
+- Reused the existing gallery-locked ingestion service for delegated uploads
+  while preserving the `pgu_` request/response contract. Required a fresh
+  scanner insertion receipt, current target registration and
+  `upload_evidence: fresh_insert_v1` before acknowledging linked uploads.
+  Positive recovery probes reported observed matching bytes, without proving
+  registration or absence. Ambiguous outcomes retained recovery evidence.
+- Added creation reservations before filesystem effects and committed the
+  gallery row with its operation receipt. Pending or malformed reservations
+  refused cooperating Admin create/import, move, copy, Trash and repair paths.
+  Confirmed absent reservation storage retained the pre-migration Admin path;
+  partial or unknown storage refused writes. Database rollback did not undo
+  filesystem effects, and unrelated writers remained outside these leases.
+- Added revision-bound visibility sidecar markers and
+  `scripts/inspect_gallery_visibility.php`. Default inspection was read-only;
+  explicit reconciliation required the exact current review fingerprint and
+  eligible sidecar evidence, without changing the database row or revision.
+  Creation correlation also extended
+  `scripts/reconcile_admin_operations.php`. Uncertain operations were not
+  automatically expired, stolen or retried.
+- Fixed password-protected public cards to withhold descriptions and embedded
+  description links until access was granted. Strengthened tag-sidecar repair
+  with root containment, opened-file identity and original-byte checks, and
+  refused multiply linked or unverifiable targets. Preserved configured
+  gallery roots reached through filesystem aliases while refusing escaping
+  or unresolved targets.
+  [#345](https://github.com/klusik/PHP_gallery/issues/345)
+- Preserved linking bearer headers through Apache FastCGI environments such
+  as MAMP. Restricted API-key-bearing redirects to the same host and approved
+  port/transport transitions, refusing cross-host redirects and HTTPS
+  downgrades before credentials could be forwarded.
+
+#### Database
+
+- Added
+  `database/migrations/202611040001_app_linking_identity.php` and
+  `database/migrations/202611040002_app_linking_push_requests.php` for grants,
+  hashed one-use codes, encrypted browser requests and bounded request
+  capacity. Added
+  `database/migrations/202611040003_app_linking_refresh.php` for refresh
+  families, hashed generations and one active generation per family, with
+  grant-removal cascades.
+  [#345](https://github.com/klusik/PHP_gallery/issues/345)
+- Added
+  `database/migrations/202611040004_app_linking_scope_capacity.php` to widen
+  the four request/code/grant/refresh-family scope columns from
+  `VARBINARY(64)` to `VARBINARY(255)` without rewriting approved permissions.
+  The migration preflighted every definition and supported replay after
+  partial DDL. Individual metadata-lock waits were capped at five seconds;
+  no automatic narrowing or total DDL deadline was introduced.
+- Added
+  `database/migrations/202611050001_linked_gallery_create_reservations.php`
+  with an exclusive active target hash and retained claim history. Added
+  `database/migrations/202611050002_app_linking_installation_key.php` to
+  provision one durable 256-bit installation key during install/update while
+  preserving existing explicit overrides and the original key on replay.
+- Added
+  `database/migrations/202611060001_app_linking_watch_keys.php` for one
+  hash-only temporary key per grant/gallery, with a 24-hour expiry and
+  cascading grant/gallery deletion. Inventory and upload rechecked both the
+  live grant and key; stale completion could not revoke a replacement key.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Extended exact schema inspection for column attributes, ordered indexes,
+  transactional engines and foreign keys. Short scopes accepted either
+  verified column width during migration; longer bundles required all four
+  widened columns. Older runtimes requiring exactly 64 bytes could refuse
+  the expanded schema. Media browsing, caching and preload reused existing
+  gallery/image storage rather than adding a photo-cache table.
+
+#### Frontend and desktop implementation
+
+- Added the Photos workspace, child-folder shelf, inline lightbox, shared
+  media cache and preload owners in `winapp/uploader/photos_workspace.py`,
+  `winapp/uploader/gallery_folders.py`,
+  `winapp/uploader/gallery_lightbox.py`,
+  `winapp/uploader/gallery_media_cache.py` and
+  `winapp/uploader/gallery_preload.py`. Kept gallery permissions, catalog and
+  presentation settings authoritative on the server.
+- Added optional 64-photo descriptor pages while preserving older eight-photo
+  pages. Kept binary media bounded to 16 MiB, using existing display
+  renditions for oversized details without generating files. Omitted GPS
+  safely when map policy was disabled or optional GPS schema was missing or
+  unknown. Separate photo limits and bounded `Retry-After` handling paused
+  speculative media work without raising server quotas.
+- Added account-bound private preload negotiation through
+  `media:admin-preload-v1`. Unknown NSFW schema, incomplete or cyclic ancestry,
+  authorization changes and ineligible media refused private persistence or
+  reuse. Existing public validators and transient `no-store` delivery remained
+  available to older clients and servers.
+- Added platform credential owners, verified configuration snapshots and
+  coordinated upload-mode admission. Config saves preserved unknown fields
+  and refused stale snapshots; malformed or unreadable configuration blocked
+  startup, while confirmed absence retained first-run defaults. Accepted
+  import jobs, target bindings and upload history shared cooperating
+  cross-process ownership and retained dispatched-work provenance.
+- Added the credential-free Admin editor deep link through
+  `public/assets/gallery-modules/admin-side-panel.js` and the existing editor
+  controller. Corrected discovery/import and metadata-organizer error progress
+  so a refusal or uncertain batch did not display false completion.
+- Added optional AppKit/Core Image HDR detail rendering on macOS 15 or later
+  with PyObjC, a compatible Tk window bridge and an EDR-capable display.
+  Pillow/Tk retained 8-bit SDR rendering elsewhere, including Windows, and
+  thumbnails remained SDR. Added the macOS-only bridge dependencies to
+  `winapp/requirements.txt`.
+- Tightened flight-PDF status and receipt validation around checksum and byte
+  length. Incomplete or potentially post-publication failures triggered
+  passive status reconciliation instead of multipart replay. Kept AI work
+  admitted until its in-flight heartbeat completed and retained pending work
+  when mode or credential evidence became unavailable.
+
+#### Tests and diagnostics
+
+- Added disposable linking database, security, gallery-detail, creation-owner,
+  post-mkdir failure and scanner-receipt fixtures. Expanded coverage for
+  one-use exchange, refresh expiry/replay, exact schema and partial migration,
+  visibility conflicts/recovery, creation reservations and existing writer
+  guards.
+  [#345](https://github.com/klusik/PHP_gallery/issues/345)
+- Added WinApp regressions for vault rotation, native Windows process and
+  profile ownership, mode publication/restart, cancellation, stale target
+  handoff, strict configuration and accepted-work ledgers. Covered uncertain
+  uploads, retained ZIP/staging sources and native-handle deletion refusal
+  when the source changed or could not be owned.
+- Expanded native Tk fixtures for continuous grid/lightbox navigation,
+  slideshow page boundaries, fullscreen/focus restoration, precise input,
+  matte detection, metadata panels and contextual Watcher.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Added cache retention, private preload authorization, preload
+  throttle/cancellation, window-layout, display-bootstrap and background
+  Activity-writer tests.
+- Extended browser/Node fixtures for Admin editor handoff and truthful import
+  progress, and added bounded privacy diagnostics to existing preview
+  assertions. Added a frozen legacy `pgu_` wire fixture and central registration
+  for database-mutating linking tests. Updated runtime dependency ownership
+  without increasing the module or duplication limits.
+- Added `.github/workflows/issue-345-python-qualification.yml` for exact-source
+  Windows/Ubuntu WinApp, Node, disposable MariaDB and installer diagnostics
+  through the existing central owners. Diagnostic results remained separate
+  from protected integration and installed-desktop acceptance; audible
+  playback required an output device unavailable on the hosted runner.
+
+#### Compatibility and documentation
+
+- Preserved API-key uploads for older galleries without discovery and older
+  clients using the existing upload API. New native operations required their
+  advertised capabilities and approved scopes; listing or cached content
+  never implied upload, management or offline authority. Installations relying
+  on newly refused credential redirects needed their final gallery URL.
+- Required verified, unredirected local profiles for linked uploads: a fixed
+  local Windows drive or an owner-controlled local macOS source profile.
+  Older uploaders sharing that profile had to be closed. Network filesystems,
+  unrelated filesystem writers and power-loss durability were outside these
+  cooperating ownership checks. Windows startup DPI awareness did not add
+  automatic layout reflow between differently scaled monitors.
+- Updated architecture, database, protocol, recovery, testing and WinApp
+  references together with all four English, Czech, German and Swedish TeX
+  manual sources. Documented mixed-version fallbacks and separate installed
+  desktop, audio-device and deployment verification limits.
+
+### User Impact
+
+#### For visitors
+
+- Kept password-protected gallery descriptions and their embedded links out
+  of locked public cards. Native public-photo access continued to follow the
+  server's gallery ancestry, sensitivity and map-disclosure policies.
+
+#### For administrators
+
+- Enabled browser-approved desktop browsing, contextual gallery management
+  and capture without copying a gallery API key into every new connection.
+  Browsing, upload destinations and web Admin login retained independent
+  ownership.
+- Made gallery presentation and repeat browsing faster through continuous
+  navigation, validated cache reuse and explicit preload. Retained galleries
+  used additional local disk space outside ordinary cache quotas, while
+  private cached media still depended on current server permission.
+- Made Windows Watcher source cleanup default-on for new or absent settings,
+  preserved saved opt-outs, and retained manual-import originals and ZIP
+  staging. Uncertain work stayed reviewable instead of being silently
+  resent, discarded or redirected to another gallery.
+
+#### For maintainers
+
+- Added explicit migrations and capability negotiation for the new native
+  workflows, with broader protocol, database, platform and recovery fixtures.
+  Preserved the existing upload API and documented the limits of cooperating
+  locks, partial filesystem/database work and mixed-version deployments.
+
 ## Version 0.150.6
 
 Added loading feedback and configurable motion to the Admin gallery workspace while preserving reduced-motion preferences and existing gallery state.
