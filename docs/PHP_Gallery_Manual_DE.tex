@@ -2179,7 +2179,11 @@ Die Website bleibt verknüpft. Im Watcher erscheint die Vorbereitung oder
 der Grund, falls die Überwachung nicht starten kann. Beim Start zeigt eine
 Aktivitätsanzeige die Vorbereitungsphase. Neue Bilder erst nach REC erzeugen.
 Stop und Finish zeigen die Vorbereitung sofort vor der Warteschlange und
-den Berichten. Die Zielauswahl prüft
+den Berichten. Activity-Ereignisse werden in begrenzten Hintergrundbatches
+gespeichert. Beim normalen Beenden wird das Schreiben innerhalb des Zeitlimits
+versucht. Speicherfehler, Zeitablauf oder Absturz können gepufferte Einträge
+verlieren; Fehler werden protokolliert. Das rotierende Log wird sofort
+geschrieben. Die Zielauswahl prüft
 angenommene Importe im lokalen Uploadverlauf. Es gilt dieselbe Grenze von
 256~MiB wie bei Zustandsänderungen. Ein nicht prüfbarer Verlauf oder offene
 Arbeit für ein anderes Ziel blockiert den Wechsel weiterhin. Ein

@@ -2017,6 +2017,10 @@ Watcher visar förberedelsen eller orsaken om inspelningen inte kan starta.
 Vid start visar en aktivitetsindikator förberedelsens fas. Skapa en ny
 skärmbild först när REC visas. Stop och Finish visar förberedelsen direkt,
 före kön och eventuella rapporter.
+Activity-historiken sparas i~begränsade bakgrundsbatcher. Normal avslutning
+försöker skriva bufferten inom sin tidsgräns. Lagringsfel, tidsgräns eller
+krasch kan förlora buffrade rader; fel loggas och den roterande loggen skrivs
+direkt.
 När ett mål väljs kontrolleras mottagna importer i~den lokala
 uppladdningshistoriken. Samma gräns på 256~MiB gäller när tillståndet sparas.
 Historik som inte går att verifiera eller oavslutat arbete för ett annat mål

@@ -8568,6 +8568,13 @@ the source. Use synthetic files in an owned folder for a desktop upload and
 confirm both the server image and local disappearance. These checks do not
 qualify manual-import/ZIP deletion or source deletion on other platforms.
 
+The activity-writer fixture verifies ordering, bounded retained history,
+background execution and a final flush while preserving upload and job
+sections. Persistence failures produce a fixed message without source paths.
+Desktop startup and Finish checks should include a substantial existing state
+file, because repeated synchronous recent-event writes can otherwise hide the
+new progress feedback behind the Windows unresponsive-window state.
+
 The disposable HTTPS/MySQL protocol run created an unpublished child through
 the native journal, withheld a completed reply, recovered the original receipt
 with status after restart, and reissued the same key without a duplicate. The

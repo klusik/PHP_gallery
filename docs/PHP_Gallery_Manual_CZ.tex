@@ -1957,6 +1957,10 @@ Panel Watcheru zobrazí přípravu nebo důvod, proč se sledování nespustilo.
 Při spuštění ukazatel aktivity pojmenuje fázi přípravy. Nový snímek vytvořte
 až po zobrazení REC. Stop a~Finish ihned zobrazí přípravu před dokončením
 fronty a~případných reportů.
+Nedávné události Activity se ukládají v~omezených dávkách na pozadí. Běžné
+ukončení se pokusí zapsat je ve svém časovém limitu. Chyba úložiště, vypršení
+limitu nebo pád může poslední dávku ztratit; selhání se zaznamená do logu.
+Rotující log se zapisuje ihned.
 Výběr cíle kontroluje přijaté importy v~lokální historii nahrávání se stejným
 limitem 256~MiB jako při zápisu stavu. Neověřitelná historie nebo nedokončená
 práce pro jiný cíl změnu dál blokuje.

@@ -20,6 +20,7 @@ Atomic state persistence and job/activity history for the Windows uploader.
 """
 
 import json
+import logging
 from contextlib import ExitStack, closing, contextmanager
 import math
 import os
@@ -29,8 +30,9 @@ import shutil
 import tempfile
 import threading
 import time
+from collections import deque
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, Iterator, List, NoReturn, Optional
+from typing import Any, BinaryIO, Deque, Dict, Iterator, List, NoReturn, Optional
 
 if os.name == "nt":
     import msvcrt
@@ -63,6 +65,13 @@ RECENT_GALLERY_ADDRESS_LIMIT = 20
 # Consumers: load_recent_gallery_addresses.
 # Rationale: 16 KiB fits twenty canonical 512-byte issuers and JSON framing.
 _RECENT_GALLERY_ADDRESS_MAX_BYTES = 16 * 1024
+
+# Purpose: Coalesce a Tk event drain's activity records into one disk write.
+# Type: float; Units: seconds; Scope: one pending ActivityWriter batch.
+# Consumers: ActivityWriter._run.
+# Rationale: 50 ms gives adjacent UI events time to join a batch without
+#   making recent activity visibly stale.
+ACTIVITY_WRITER_BATCH_WINDOW_SECONDS = 0.05
 
 
 class UploadStateTooLargeError(ValueError):
@@ -1057,28 +1066,46 @@ class JobStateStore:
                 )
 
     def append_event(self, event: ActivityEvent) -> None:
-        """Append one redacted-safe activity event with a bounded history.
+        """Append one event through the batched history writer owner.
 
         Args:
             event (ActivityEvent): Event record to append to recent history.
 
         Returns:
-            None: The bounded event history was atomically published.
+            None: The bounded event history was atomically published and read back.
 
         Raises:
             OSError: The state document could not be atomically written.
             RuntimeError: The saved event history failed read-back verification.
         """
+        self.append_events([event])
+
+    def append_events(self, event_batch: List[ActivityEvent]) -> None:
+        """Append an ordered batch while preserving the shared upload state.
+
+        Args:
+            event_batch (List[ActivityEvent]): Ordered recent events to append.
+
+        Returns:
+            None: The bounded event history is atomically published and verified.
+
+        Raises:
+            OSError: The state document could not be atomically written.
+            RuntimeError: The saved event history failed read-back verification.
+        """
+        if not event_batch:
+            return
         with accepted_work_owner(self.path.parent):
             data = self._load_for_write()
-            events = data.get("recent_events", [])
-            if not isinstance(events, list):
-                events = []
-            events.append(event.to_dict())
-            data["recent_events"] = events[-self.history_limit :]
+            history_rows = data.get("recent_events", [])
+            if not isinstance(history_rows, list):
+                history_rows = []
+            history_rows.extend(event.to_dict() for event in event_batch)
+            bounded_events = history_rows[-self.history_limit :]
+            data["recent_events"] = bounded_events
             atomic_write_json(self.path, data)
             if (load_upload_state_for_mutation(self.path)["recent_events"]
-                    != data["recent_events"]):
+                    != bounded_events):
                 raise RuntimeError("Saved activity history could not be verified.")
 
     def list_events(self) -> List[ActivityEvent]:
@@ -1086,3 +1113,91 @@ class JobStateStore:
         with _STATE_LOCK:
             rows = self._load().get("recent_events", [])
         return [ActivityEvent.from_dict(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+
+
+class ActivityWriter:
+    """Batch recent activity persistence away from the Tk event thread."""
+
+    def __init__(self, store: JobStateStore) -> None:
+        """Start one daemon writer for a bounded recent-activity queue.
+
+        Args:
+            store (JobStateStore): Existing owner of the shared upload-state file.
+
+        Returns:
+            None: Starts one memory-buffered worker without reading the profile.
+        """
+        self._store = store
+        self._condition = threading.Condition()
+        self._pending: Deque[ActivityEvent] = deque(maxlen=store.history_limit)
+        self._closing = False
+        self._write_failed = False
+        self._thread = threading.Thread(
+            target=self._run, name='GalleryActivityWriter', daemon=True,
+        )
+        self._thread.start()
+
+    def submit(self, event: ActivityEvent) -> bool:
+        """Queue one immutable activity snapshot without performing disk I/O.
+
+        Args:
+            event (ActivityEvent): Recent event to append to bounded history.
+
+        Returns:
+            bool: True when accepted; False after close has begun.
+        """
+        if not isinstance(event, ActivityEvent):
+            raise TypeError('Activity writer accepts ActivityEvent records only.')
+        snapshot = ActivityEvent.from_dict(event.to_dict())
+        with self._condition:
+            if self._closing:
+                return False
+            self._pending.append(snapshot)
+            self._condition.notify()
+            return True
+
+    def close(self, timeout: float) -> bool:
+        """Flush queued events and join the worker within the caller's deadline.
+
+        Args:
+            timeout (float): Maximum seconds to wait for the final write and join.
+
+        Returns:
+            bool: True only when the worker stopped without a storage failure.
+        """
+        deadline = time.monotonic() + max(0.0, timeout)
+        with self._condition:
+            self._closing = True
+            self._condition.notify_all()
+        self._thread.join(max(0.0, deadline - time.monotonic()))
+        return not self._thread.is_alive() and not self._write_failed
+
+    def _run(self) -> None:
+        """Persist ordered event batches without touching the UI thread.
+
+        Returns:
+            None: Writes each pending batch once and exits after a close flush.
+        """
+        while True:
+            with self._condition:
+                while not self._pending and not self._closing:
+                    self._condition.wait()
+                if not self._pending and self._closing:
+                    return
+                if not self._closing:
+                    deadline = (
+                        time.monotonic()
+                        + ACTIVITY_WRITER_BATCH_WINDOW_SECONDS
+                    )
+                    while not self._closing:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            break
+                        self._condition.wait(remaining)
+                batch = list(self._pending)
+                self._pending.clear()
+            try:
+                self._store.append_events(batch)
+            except Exception:  # noqa: BLE001
+                self._write_failed = True
+                logging.error('Could not persist recent activity history.')

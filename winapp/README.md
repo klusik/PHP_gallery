@@ -1549,6 +1549,14 @@ Stop and Finish open progress with a preparation message and activity before
 loading the pending work. Their subsequent phases describe upload drain and
 any reports. A busy indicator does not estimate a completion percentage.
 
+Recent Activity history is saved in bounded batches on one background writer.
+This avoids repeatedly rewriting a large shared history on the UI thread.
+Normal shutdown attempts to flush the buffer within its existing deadline.
+A storage failure, expired deadline, forced exit or crash can omit the last
+buffered Activity rows; a flush failure is logged and the rotating log is
+written immediately. Upload acknowledgements and pending-work records
+retain their existing synchronous ownership and durability checks.
+
 ## Sync UTC time while watching
 
 **Sync UTC time**, beside the Watch folder actions, is off by default. Selecting

@@ -1982,6 +1982,8 @@ class URLAndUploadStateTests(unittest.TestCase):
             watcher.config = MAIN.WatcherConfig(watched_folder=str(root))
             watcher.accepted_paths = {source}
             watcher.initial_paths = set()
+            watcher.initial_captured = True
+            watcher.events = MAIN.queue.Queue()
             watcher.drain_manifest = root / 'watch-drain.json'
             watcher.drain_only = True
             watcher.drain_requested_at = 0.0
@@ -3363,7 +3365,8 @@ class SimConnectActivityTests(unittest.TestCase):
         self.assertEqual("warning", event.level)
         self.assertEqual("Failure [REDACTED]", event.message)
         app.latest_activity_var.set.assert_called_once_with("Simconnect · Failure [REDACTED]")
-        app.job_store.append_event.assert_called_once_with(event)
+        app.activity_writer.submit.assert_called_once_with(event)
+        app.job_store.append_event.assert_not_called()
 
 
 class NavigationTests(unittest.TestCase):
@@ -3686,6 +3689,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
                 worker.stop_event.is_set.return_value = True
                 worker.initial_captured = True
                 worker.events = MAIN.queue.Queue()
+                worker.drain_only = False
                 worker.initial_paths = set()
                 worker.emit = mock.Mock()
                 worker.persist_drain = mock.Mock()

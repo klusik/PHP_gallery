@@ -822,7 +822,7 @@ class FlightUITests(unittest.TestCase):
         ui.pending.return_value = [plan]
         operation = SimpleNamespace(
             wants_revoke=False, local_reports=False, saved_upload=False,
-            abandonment=False, start=Mock(),
+            abandonment=False, start=Mock(), update=Mock(),
         )
         with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
             flight_ui.FlightUI.begin(ui, revoke=False)
@@ -866,7 +866,7 @@ class FlightUITests(unittest.TestCase):
             ui.pending.return_value = [plan]
             operation = SimpleNamespace(
                 wants_revoke=False, local_reports=False, saved_upload=False,
-                abandonment=False, start=Mock(),
+                abandonment=False, start=Mock(), update=Mock(),
             )
             with patch.object(flight_ui, 'FinalizationWorker', return_value=operation) as factory:
                 flight_ui.FlightUI.begin(ui, photos_only=True)
@@ -947,7 +947,8 @@ class FlightUITests(unittest.TestCase):
         host.preflight_worker = Mock()
         host.preflight_worker.is_alive.return_value = True
         operation = SimpleNamespace(wants_revoke=False, local_reports=False,
-                                    saved_upload=False, abandonment=False, start=Mock())
+                                    saved_upload=False, abandonment=False,
+                                    start=Mock(), update=Mock())
         with patch.object(
             flight_ui, "FinalizationWorker", return_value=operation
         ) as worker_factory:

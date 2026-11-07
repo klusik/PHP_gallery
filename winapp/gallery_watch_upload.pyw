@@ -166,6 +166,7 @@ from uploader.app_linking import LinkedGallery, LinkingSession
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
 from uploader.windows_file_identity import assert_local_windows_profile
 from uploader.state_store import (
+    ActivityWriter,
     JobStateStore,
     UploadStateTooLargeError,
     accepted_work_owner,
@@ -6777,6 +6778,7 @@ class WatcherApp:
         except OSError as exc:
             startup_error = str(exc)
         self.job_store = JobStateStore(STATE_PATH, self.config.activity_history_limit)
+        self.activity_writer = ActivityWriter(self.job_store)
         self.events: "queue.Queue[Any]" = queue.Queue()
         self.mode_owner = GuiModeOwner(
             self.config_store.mode_port(self.config),
@@ -10171,6 +10173,8 @@ class WatcherApp:
         Returns:
             None: Accepts startup once; REC waits for the initial folder boundary.
         """
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            return
         if (getattr(self, "_watch_start_pending", False) is True
                 and contextual_target is None):
             return
@@ -11157,6 +11161,9 @@ class WatcherApp:
                 self._sync_watcher_recording()
                 self.root.after(200, self.drain_events)
                 return
+        writer = getattr(self, "activity_writer", None)
+        if writer is not None and not writer.close(max(0.0, deadline - time.monotonic())):
+            logging.warning("Recent activity history did not finish flushing before exit.")
         self.set_update_available(None)
         self.stop_tray_icon()
         self.simulator_presence.stop()
@@ -11643,7 +11650,7 @@ class WatcherApp:
         )
 
     def record_activity(self, level: str, message: str, operation: str = "system", filename: str = "", job_id: str = "") -> None:
-        """Persist one bounded, credential-redacted activity event.
+        """Display a redacted event and enqueue its bounded history off Tk.
 
         Args:
             level (str): Event severity such as info, success, warning, or error.
@@ -11653,7 +11660,7 @@ class WatcherApp:
             job_id (str): Optional durable import job identifier.
 
         Returns:
-            None: Persists the event and refreshes visible activity summaries.
+            None: Refreshes visible summaries immediately and queues persistence.
         """
         secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
         # The queue marker has already selected the structured operation.
@@ -11674,9 +11681,10 @@ class WatcherApp:
         limit = max(50, int(getattr(self.config, "activity_history_limit", 500) or 500))
         self.activity_events = self.activity_events[-limit:]
         try:
-            self.job_store.append_event(event)
+            if not self.activity_writer.submit(event):
+                logging.warning("Recent activity history is closing; event remains in the log.")
         except Exception:  # noqa: BLE001
-            logging.exception("Could not persist uploader activity event.")
+            logging.error("Could not queue recent activity history.")
         self.refresh_activity_drawer()
 
     def refresh_activity_drawer(self) -> None:
