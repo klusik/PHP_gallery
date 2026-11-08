@@ -1,5 +1,150 @@
 # Patch notes
 
+## Version 1.0.2
+
+PHP Gallery and WinApp 1.0.2 improved recovery and troubleshooting in the
+Windows companion. Photos gained a clear way to continue after an earlier
+completed gallery creation, more explicit navigation for large trees and
+preload feedback tied to the selected album. Update and photo failures gained
+retained diagnostics, while Windows contextual panels gained native corner
+clipping with a readable fallback.
+
+### Highlights
+
+#### Recovery after an earlier gallery creation
+
+- Fixed a completed creation record in the local profile blocking the next
+  gallery. Photos displayed the earlier gallery and site, then required
+  **Continue** before acknowledging that exact local completion and sending
+  the current draft.
+- Kept the earlier gallery and upload destination unchanged, including when
+  the completed record belonged to another site. A matching site, account,
+  title and parent instead checked the existing result without sending a
+  second create request.
+- Added **Check again** for unconfirmed results. Status checks remained bound
+  to the original site, Admin account and saved operation; unknown results,
+  unreadable records and failed acknowledgements retained the saved work.
+
+#### Retained update and Photos diagnostics
+
+- Added automatic update records in `watcher.log` for release discovery,
+  installer transfer and verification, checkpoint handling, helper handoff
+  and cleanup. Records identified the failed stage, duration, HTTP status,
+  transport cause and known byte counts without requiring a debug switch.
+- Retained the last updater failure in **Copy diagnostics** after later
+  successful work. A cleanup failure preserved the original update error
+  instead of replacing the useful cause.
+- Distinguished Photos catalogue failures, thumbnail transfer failures and
+  image decoding failures in logs and copied diagnostics. Switching albums
+  retained the current session's failure history; changing the approved live
+  session cleared that Photos snapshot.
+
+#### Clearer Photos navigation and preload feedback
+
+- Replaced the ambiguous continuation **+** with a localized **Load more**
+  action in the tree toolbar. After the existing initial limit of 500
+  galleries, it continued from the saved cursor and kept loaded galleries.
+- Fixed preload progress and terminal results appearing under another album.
+  Switching away hid the previous album's status; returning restored its
+  retained result until it was dismissed or replaced.
+
+#### Rounded Windows contextual panels
+
+- Clipped Photos contextual cards to their actual rounded Windows boundary,
+  removing the dark outer corner blocks while following panel resizing and
+  preserving existing focus and dismissal behavior.
+- Added a flat, opaque themed fallback when native shaping was unavailable or
+  refused. Resize fallback cleared a previous native region before returning
+  to rectangular rendering.
+
+### Technical Details
+
+#### WinApp diagnostics and recovery
+
+- Added typed `UpdateDiagnostic` events in `winapp/uploader/self_update.py`
+  and queued them through `winapp/uploader/update_ui.py` before worker errors
+  reached the Tk status display. Fixed endpoint roles distinguished release
+  metadata, manifests and installer assets; bounded exception causes retained
+  DNS, TLS, timeout, connection and HTTP categories plus available numeric
+  platform or certificate codes.
+- Updated `winapp/uploader/native_gallery_viewer.py`,
+  `winapp/uploader/photos_workspace.py` and
+  `winapp/gallery_watch_upload.pyw` to retain bounded Photos summaries and
+  include both diagnostic owners in the existing copy action. Late results
+  from an older session were excluded, and diagnostic callback failures could
+  not replace the original photo operation's fallback.
+- Restricted the new diagnostic fields to safe labels, validated response
+  facts and owned source locations. They excluded credentials, signed URL
+  queries, response bodies, raw exception messages and private local paths;
+  gallery-create failure summaries also excluded titles and operation keys.
+- Added key-free `CreateJournalSnapshot` inspection in
+  `winapp/uploader/linked_create.py` under the existing profile lease. Status
+  checks compared the exact saved intent fingerprint. Updated
+  `winapp/uploader/app_linking_ui.py` and
+  `winapp/uploader/photos_workspace.py` to revalidate the live connection,
+  account and direct parent, and cancel a dismissed context's dispatch gate.
+
+#### Compatibility and presentation
+
+- Kept the existing create journal format, server ledger and authorization
+  requirements. Pending work from another site required reconnection to its
+  original site and account; a completed foreign record supplied no current
+  gallery or upload authority. The release added no database migration,
+  server protocol change or grant scope.
+- Updated opt-in contextual `GlassCard` clipping in
+  `winapp/uploader/ui_theme.py` with geometry deduplication and explicit GDI
+  handle ownership. Native APIs loaded from Windows system libraries;
+  ordinary cards retained their existing material and no new dependency was
+  introduced.
+- Added the creation-recovery actions and updated continuation labels in
+  English, Czech, German and Swedish. Updater trusted-host restrictions,
+  installer integrity checks and Watcher continuation rules remained intact.
+
+#### Tests and documentation
+
+- Expanded `winapp/tests/test_self_update.py`,
+  `winapp/tests/test_update_ui.py` and
+  `winapp/tests/test_watcher_continuation.py` for HTTP rejection, wrapped
+  transport causes, interrupted reads, integrity refusal, cancellation,
+  cleanup failures and retained copied diagnostics. Synthetic transports
+  exercised the worker-to-Tk boundary without running an installed upgrade.
+- Expanded `winapp/tests/test_native_gallery_viewer.py`,
+  `winapp/tests/test_linked_create.py` and
+  `winapp/tests/test_app_linking.py` for separate transfer/decode failures,
+  catalogue diagnostics, native Windows card regions and resizing, fallback
+  ownership, localized pagination and album-scoped preload results. Creation
+  fixtures covered explicit continuation of a foreign completion, duplicate
+  suppression, read-only rechecks, exact intent binding and dismissed cards.
+- Updated `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, `winapp/README.md`
+  and the English, Czech, German and Swedish manual sources with the recovery,
+  diagnostics, pagination and panel behavior.
+
+#### Verification limits
+
+- Added evidence for diagnosing blank thumbnails; the underlying production
+  transport or decoder failure remained unidentified, and this release did
+  not establish a production thumbnail-loading fix.
+- Kept installed 1.0.2 upgrade and live simulator continuity unverified by
+  these source fixtures. Full desktop, narrow-window and DPI visual acceptance
+  also remained separate from the automated Windows region checks.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery viewing behavior did not change.
+
+#### For administrators
+
+- Web Admin workflows did not change; these improvements applied to the
+  WinApp companion.
+- Made the next Photos gallery creation recoverable through an explicit
+  confirmation instead of manual removal of an earlier completed local record.
+- Made large gallery trees easier to continue browsing and kept preload
+  results attached to the album that produced them.
+- Made update and Photos failures easier to report through the ordinary log
+  and **Copy diagnostics**, with useful context retained after later activity.
+
 ## Version 1.0.1
 
 PHP Gallery and WinApp 1.0.1 repaired browser linking on hosted installations
