@@ -20,6 +20,7 @@ import tkinter as tk
 import unicodedata
 import webbrowser
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 from typing import Callable, NamedTuple
@@ -33,7 +34,8 @@ from .app_linking import (
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage,
     LinkedIdentity, LinkingAttempt, LinkingError, LinkingGrantRejected,
     LinkingHttpsError, LinkingRefreshRejected,
-    LinkingRevisionConflict, LinkingScheduledPublication, LinkingSession,
+    LinkingResponseError, LinkingRevisionConflict,
+    LinkingScheduledPublication, LinkingSession,
     LinkingUnavailable,
     PushedAuthorization,
     discover_linking_capabilities, linking_issuer,
@@ -115,6 +117,12 @@ LINKING_DIALOG_INITIAL_WIDTH = 560
 # Consumers: LinkingManager.open_address_dialog.
 # Rationale: 320 keeps messages readable in a compact window.
 LINKING_ADDRESS_STATUS_WRAP = 320
+
+# Purpose: Bound the fixed-field summary retained for one linking failure.
+# Type: int. Units: Unicode characters. Scope: copied linking diagnostics.
+# Consumers: LinkingManager._record_diagnostic. Rationale: 512 characters fit
+# all fixed metadata fields without retaining arbitrary response contents.
+LINKING_DIAGNOSTIC_MAX_CHARS = 512
 
 # Purpose: Keep address groups visible with space for the dialog actions.
 # Type: int. Units: rows. Scope: one gallery links dialog.
@@ -528,6 +536,7 @@ class LinkingManager:
         | None = None,
         upload_workspace_ready: Callable[[], bool] | None = None,
         saved_upload_identity: Callable[[], tuple[str, str] | None] | None = None,
+        diagnostic_callback: Callable[[str], None] | None = None,
     ) -> None:
         """Create an idle manager bound to the application's Tk thread.
 
@@ -557,6 +566,8 @@ class LinkingManager:
             saved_upload_identity (Callable[[], tuple[str, str] | None] | None):
                 Verified saved issuer and non-secret target binding for recovery
                 without a live session, or None if no saved target is available.
+            diagnostic_callback (Callable[[str], None] | None): Optional host
+                receiver for the latest fixed-field linking diagnostic summary.
 
         Returns:
             None: Initializes one app-wide linking owner.
@@ -569,6 +580,11 @@ class LinkingManager:
         self._recovery_review = recovery_review
         self._upload_workspace_ready = upload_workspace_ready
         self._saved_upload_identity = saved_upload_identity
+        self._diagnostic_callback = diagnostic_callback
+        self._diagnostics_snapshot = ''
+        self._latest_diagnostic = ''
+        self._last_failure_diagnostic = ''
+        self._last_failure_utc = ''
         self._saved_linked_selected = saved_linked_selected
         self._commit_linked_target = commit_linked_target
         self._commit_saved_api_key = commit_saved_api_key
@@ -600,7 +616,8 @@ class LinkingManager:
                   | tuple[object, LinkedGalleryPage | None]
                   | LinkedGalleryPage | LinkedGalleryDetail | LinkedGallery | CreateIntent
                   | BoundCreateReceipt | OfflineBinding | _PhotosUploadUpgrade
-                  | _PhotosWatchStart | Callable[[str], None] | None]
+                  | _PhotosWatchStart | LinkingResponseError | LinkingUnavailable
+                  | Callable[[str], None] | None]
         ] = queue.Queue()
         self._handoff: PushedAuthorization | None = None
         self._current_issuer = ''
@@ -624,6 +641,55 @@ class LinkingManager:
         self._recent_links = load_recent_gallery_addresses(self._recent_link_path)
         self._create_journal = GalleryCreateJournal(self._offline_path.parent)
         self._create_dispatch: CreateDispatch | None = None
+
+    def diagnostics_snapshot(self) -> str:
+        """Return latest and retained failure summaries for host diagnostics.
+
+        Returns:
+            str: Bounded fixed-field latest outcome and last failure with its
+                UTC timestamp, or empty before the first diagnostic outcome.
+        """
+        latest = getattr(self, '_latest_diagnostic', '')
+        failure = getattr(self, '_last_failure_diagnostic', '')
+        failed_at = getattr(self, '_last_failure_utc', '')
+        if not latest and not failure:
+            return ''
+        latest_text = latest or 'none'
+        failure_text = failure or 'none'
+        failed_at_text = failed_at or 'none'
+        return (
+            f'latest={latest_text}; last_failure={failure_text}; '
+            f'last_failure_utc={failed_at_text}'
+        )
+
+    def _record_diagnostic(self, summary: str, *, failure: bool) -> None:
+        """Publish one safe summary to the snapshot and optional host callback.
+
+        Args:
+            summary (str): Fixed local diagnostic string from a validated
+                response error, server-unavailable result or success.
+            failure (bool): Whether this outcome should replace the retained
+                last-failure fields.
+
+        Returns:
+            None: Updates bounded summaries and notifies the optional host.
+        """
+        if (not isinstance(summary, str)
+                or len(summary) > LINKING_DIAGNOSTIC_MAX_CHARS):
+            return
+        self._diagnostics_snapshot = summary
+        self._latest_diagnostic = summary
+        if failure:
+            self._last_failure_diagnostic = summary
+            self._last_failure_utc = datetime.now(timezone.utc).isoformat(
+                timespec='seconds',
+            )
+        callback = getattr(self, '_diagnostic_callback', None)
+        if callable(callback):
+            try:
+                callback(summary)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _text(self, key: str) -> str:
         """Translate one linking label using the current UI language.
@@ -915,7 +981,7 @@ class LinkingManager:
         min_width = LINKING_ADDRESS_STATUS_WRAP + LINKING_DIALOG_WRAP_INSET
 
         def submit() -> None:
-            """Use the explicit address after validating the installation URL.
+            """Default bare gallery hosts to HTTPS before strict validation.
 
             Returns:
                 None: Shows a correction, starts linking, or opens management.
@@ -929,6 +995,20 @@ class LinkingManager:
                 issuer = linking_issuer('https://' + value[len('http://'):])
                 if issuer:
                     address.set(issuer)
+            elif not issuer and value and not value.startswith('//'):
+                authority = value.split('/', 1)[0]
+                looks_like_host = (
+                    '.' in authority or ':' in authority
+                    or authority.startswith('[')
+                    or authority.lower() == 'localhost'
+                )
+                # Require a recognizable authority so `photos/2026` is not
+                # silently reinterpreted as a host and installation mount.
+                if (looks_like_host and '://' not in value
+                        and not any(character.isspace() for character in value)):
+                    issuer = linking_issuer('https://' + value)
+                    if issuer:
+                        address.set(issuer)
             if not issuer:
                 hint.configure(
                     textvariable='', text='Enter a valid gallery address.',
@@ -1329,6 +1409,69 @@ class LinkingManager:
                 or not session.available() or not session.can_list_galleries()):
             return None
         return session
+
+    def resume_upload_session(
+        self, issuer: str, account_id: int,
+    ) -> LinkingSession | None:
+        """Select an already restored exact account without requesting consent.
+
+        Args:
+            issuer (str): Trusted saved upload issuer from the mode owner.
+            account_id (int): Original verified Admin identity to preserve.
+
+        Returns:
+            LinkingSession | None: Existing live listing/upload approval for
+                the same site/account, or None while absent, expired or revoked.
+                This selection neither publishes upload mode nor opens a key.
+        """
+        if self._shutting_down:
+            return None
+        for site in self._live_links():
+            session = site.session
+            if (site.issuer == issuer and site.user_id == account_id
+                    and session.available() and session.can_list_galleries()
+                    and session.can_upload()):
+                if session is not self.photos_session():
+                    self._show_link(site)
+                return session
+        return None
+
+    def activate_verified_resume_target(
+        self, target: LinkedUploadTarget, binding: str, approved_scope: str,
+    ) -> bool:
+        """Publish a fresh server result only for the saved continuation target.
+
+        Args:
+            target (LinkedUploadTarget): Exact gallery/account freshly verified
+                by the continuation worker using the restored live grant.
+            binding (str): Original target fingerprint from the claimed update.
+            approved_scope (str): Exact original scope captured before updating.
+
+        Returns:
+            bool: True after the existing target guard and mode owner accept
+                this same saved target; False preserves the prior selection.
+        """
+        identity = getattr(self, '_saved_upload_identity', None)
+        commit = self._commit_linked_target
+        try:
+            saved = identity() if identity is not None else None
+            if (self._shutting_down or commit is None
+                    or saved != (target.issuer, binding)
+                    or target.binding() != binding
+                    or target.session is not self.photos_session()
+                    or target.issuer != self._session_issuer
+                    or target.user_id != self._session_user_id
+                    or not target.session.can_upload()
+                    or target.session.approved_scope() != approved_scope
+                    or self._target_refusal(binding) is not None):
+                return False
+            if not commit(target):
+                return False
+        except Exception:
+            return False
+        self._active_upload_target = target
+        self._notify_target_changed()
+        return True
 
     def photos_site_identity(
         self, session: LinkingSession,
@@ -2428,12 +2571,15 @@ class LinkingManager:
                 self._events.put((owner, 'connected', (connected_session, identity, issuer)))
                 session = None
                 self._queue_initial_gallery_page(owner, connected_session, cancel)
+            except LinkingResponseError as error:
+                if not cancel.is_set():
+                    self._events.put((owner, 'response_error', error))
             except LinkingHttpsError:
                 if not cancel.is_set():
                     self._events.put((owner, 'https_failed', None))
-            except LinkingUnavailable:
+            except LinkingUnavailable as error:
                 if not cancel.is_set():
-                    self._events.put((owner, 'unavailable', None))
+                    self._events.put((owner, 'unavailable', error))
             except Exception:  # noqa: BLE001
                 if not cancel.is_set():
                     self._events.put((owner, failure, None))
@@ -2802,6 +2948,10 @@ class LinkingManager:
             page = (self._fetch_picker_page(session, '', None, cancelled)
                     if session.can_search_galleries() is True
                     else session.gallery_page(None, cancelled=cancelled))
+        except LinkingResponseError as error:
+            if not cancelled.is_set():
+                self._events.put((owner, 'response_error', error))
+            return
         except Exception:  # noqa: BLE001
             if not cancelled.is_set():
                 self._events.put((owner, 'galleries_error', None))
@@ -2886,6 +3036,11 @@ class LinkingManager:
                 payload(message)
             elif kind == 'connected' and isinstance(payload, tuple):
                 session, identity, issuer = payload
+                self._record_diagnostic(
+                    'stage=linking; route=app_linking_identity; '
+                    'availability=true; reason=connected',
+                    failure=False,
+                )
                 self._show_link(_LinkedSite(issuer, session, identity.user_id))
                 self._dismiss_address_prompt()
                 if self._window is None:
@@ -2893,6 +3048,11 @@ class LinkingManager:
                 self._clear_handoff()
             elif kind == 'resumed' and isinstance(payload, tuple):
                 session, identity, issuer = payload
+                self._record_diagnostic(
+                    'stage=linking; route=app_linking_identity; '
+                    'availability=true; reason=connected',
+                    failure=False,
+                )
                 self._show_link(_LinkedSite(issuer, session, identity.user_id))
                 self._clear_handoff()
             elif kind == 'resume_error':
@@ -3123,6 +3283,31 @@ class LinkingManager:
                     'Could not load the current gallery list. Access may have '
                     'expired or been revoked; refresh after reconnecting.',
                 )
+            elif kind == 'response_error' and isinstance(
+                payload, LinkingResponseError,
+            ):
+                self._clear_handoff()
+                summary = payload.safe_summary
+                self._record_diagnostic(summary, failure=True)
+                if payload.reason == 'dns_failure':
+                    message = 'Could not resolve the gallery address (DNS).'
+                elif payload.reason == 'connect_failure':
+                    message = 'Could not connect to the gallery service.'
+                elif payload.reason == 'tls_failure':
+                    message = 'Could not establish secure HTTPS to the gallery.'
+                elif payload.reason == 'timeout':
+                    message = 'The gallery request timed out.'
+                elif (payload.status is not None
+                      and payload.content_kind == 'html'):
+                    message = (
+                        f'The gallery returned HTTP {payload.status} '
+                        'with an HTML response.'
+                    )
+                elif payload.status is not None:
+                    message = f'The gallery returned HTTP {payload.status}.'
+                else:
+                    message = 'The linking response could not be accepted.'
+                self._status.set(message)
             elif kind == 'denied':
                 self._clear_handoff()
                 self._status.set('The gallery did not approve this link.')
@@ -3140,6 +3325,24 @@ class LinkingManager:
                 'callback_failed', 'exchange_failed', 'save_failed',
             ):
                 self._clear_handoff()
+                if kind == 'unavailable':
+                    if isinstance(payload, LinkingUnavailable):
+                        self._record_diagnostic(
+                            payload.safe_summary, failure=True,
+                        )
+                    else:
+                        self._record_diagnostic(
+                            'stage=discovery; route=app_linking_discovery; '
+                            'availability=unknown; http=none; '
+                            'response_kind=other; reason=request_unavailable',
+                            failure=True,
+                        )
+                elif kind in ('request_failed', 'https_failed'):
+                    self._record_diagnostic(
+                        'stage=linking; route=app_linking_identity; http=none; '
+                        'response_kind=other; reason=transport_failure',
+                        failure=True,
+                    )
                 messages = {
                     'unavailable': (
                         'Browser linking is unavailable at this gallery address.'
@@ -3574,6 +3777,9 @@ class LinkingManager:
                 else:
                     page = session.gallery_page(after_id, cancelled=gallery_cancel)
                     self._events.put((owner, 'galleries', page))
+            except LinkingResponseError as error:
+                if not gallery_cancel.is_set():
+                    self._events.put((owner, 'response_error', error))
             except Exception:  # noqa: BLE001
                 self._events.put((owner, 'picker_page', (revision, None))
                                  if search else (owner, 'galleries_error', None))

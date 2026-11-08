@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -47,6 +48,25 @@ HANDSHAKE_POLL_SECONDS = 0.05
 # Type: int; Units: milliseconds; Scope: helper progress window.
 # Consumers: main poll. Rationale: 100 ms keeps installation feedback responsive.
 HELPER_POLL_MS = 100
+
+# Purpose: Bound compatibility inspection of old updater sessions at startup.
+# Type: int. Units: session directories. Scope: one old-client continuation.
+# Consumers: find_legacy_update_ticket. Rationale: 128 exceeds ordinary retained
+# updater history without allowing an unbounded startup directory scan.
+LEGACY_UPDATE_SESSION_LIMIT = 128
+# Preserve the old fixed-size ticket reader's bounded local metadata limit.
+# Type: int; Units: bytes; Scope: one update-ticket read.
+# Consumers: load_ticket. Rationale: tickets contain only fixed identity fields.
+UPDATE_TICKET_MAX_BYTES = 4096
+# Refuse marker files with any bytes beyond the old helper's exact sentinel.
+# Type: int; Units: bytes; Scope: one legacy ready/proceed marker read.
+# Consumers: _legacy_marker_is_fresh. Rationale: old helpers write one byte.
+LEGACY_UPDATE_MARKER_MAX_BYTES = 1
+# Identify Win32 reparse points in native stat metadata on Windows.
+# Type: int; Units: file-attribute bit; Scope: update-owned files and paths.
+# Consumers: reject_reparse_path, load_ticket, _legacy_marker_is_fresh.
+# Rationale: 0x400 is FILE_ATTRIBUTE_REPARSE_POINT from the Windows ABI.
+UPDATE_REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
 @dataclass(frozen=True)
@@ -81,19 +101,38 @@ class Backend(Protocol):
         """Read the installed PE resource."""
         ...
 
-    def restart(self, executable: str) -> None:
-        """Start the uploader using the original user token."""
+    def restart(self, executable: str, *, update_session: str) -> None:
+        """Start the original user's app with its exact update checkpoint nonce.
+
+        Args:
+            executable (str): Verified installed application path.
+            update_session (str): Non-secret helper session identifier.
+
+        Returns:
+            None: Starts only the verified installation under the original user.
+        """
         ...
 
 
 def reject_reparse_path(path: Path) -> None:
-    """Reject all symlinks, including broken links, and ancestor junctions."""
+    """Reject links and reparse points from one path through its ancestors.
+
+    Args:
+        path (Path): Candidate update file or directory to inspect.
+
+    Returns:
+        None: Accepts only a path whose existing components are not redirected.
+
+    Raises:
+        ValueError: A symlink or native reparse point occurs in the path chain.
+    """
     for candidate in (path, *path.parents):
         if candidate.is_symlink():
             raise ValueError("Update paths must not contain reparse points")
         if candidate.exists():
             info = candidate.lstat()
-            if getattr(info, "st_file_attributes", 0) & 0x400:
+            if (getattr(info, "st_file_attributes", 0)
+                    & UPDATE_REPARSE_POINT_ATTRIBUTE):
                 raise ValueError("Update paths must not contain reparse points")
 
 
@@ -162,18 +201,211 @@ def validate_ticket(ticket: UpdateTicket, ticket_path: Path) -> UpdateTicket:
 
 
 def load_ticket(path: Path) -> UpdateTicket:
-    """Read a strictly shaped, bounded local ticket without following reparse paths."""
+    """Read one stable, strictly shaped local ticket without following links.
+
+    Args:
+        path (Path): Private update session's ticket document.
+
+    Returns:
+        UpdateTicket: Exact validated seven-field local installer identity.
+
+    Raises:
+        ValueError: The document is malformed, redirected, replaced or oversized.
+        OSError: The ticket cannot be safely opened or inspected.
+    """
     reject_reparse_path(path)
+    before = path.lstat()
+    if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+            or path.is_symlink()
+            or (getattr(before, "st_file_attributes", 0)
+                & UPDATE_REPARSE_POINT_ATTRIBUTE)):
+        raise ValueError("Invalid ticket file identity")
     with path.open("rb") as source:
-        data = source.read(4097)
-    if len(data) > 4096:
-        raise ValueError("Invalid ticket size")
-    raw = json.loads(data.decode("utf-8"))
+        opened = os.fstat(source.fileno())
+        if not os.path.samestat(before, opened):
+            raise ValueError("Ticket changed before it was read")
+        data = source.read(UPDATE_TICKET_MAX_BYTES + 1)
+        after_open = os.fstat(source.fileno())
+    after = path.lstat()
+    if (len(data) > UPDATE_TICKET_MAX_BYTES
+            or len(data) != after_open.st_size
+            or not os.path.samestat(opened, after_open)
+            or not os.path.samestat(after_open, after)
+            or before.st_size != after.st_size
+            or before.st_mtime_ns != after.st_mtime_ns
+            or after.st_nlink != 1 or not stat.S_ISREG(after.st_mode)
+            or (getattr(after, "st_file_attributes", 0)
+                & UPDATE_REPARSE_POINT_ATTRIBUTE)):
+        raise ValueError("Ticket changed while being read")
+    raw = json.loads(
+        data.decode("utf-8"),
+        object_pairs_hook=_strict_ticket_object,
+        parse_constant=_reject_ticket_constant,
+    )
     required = {"session_id", "target_version", "expected_sha256", "expected_size",
                 "installer_path", "installed_executable", "schema"}
     if not isinstance(raw, dict) or set(raw) != required:
         raise ValueError("Invalid ticket fields")
     return validate_ticket(UpdateTicket(**raw), path)
+
+
+def _strict_ticket_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Reject duplicate JSON fields in the fixed updater ticket format.
+
+    Args:
+        pairs (list[tuple[str, object]]): Ordered key/value pairs from the
+            standard JSON decoder.
+
+    Returns:
+        dict[str, object]: Unique-key mapping accepted by the ticket schema.
+
+    Raises:
+        ValueError: A key appears more than once in the same object.
+    """
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate update ticket field")
+        result[key] = value
+    return result
+
+
+def _reject_ticket_constant(value: str) -> None:
+    """Reject non-standard JSON NaN and infinity values in updater tickets.
+
+    Args:
+        value (str): Non-finite token passed by the JSON decoder.
+
+    Returns:
+        None: This callback always raises instead of returning a value.
+
+    Raises:
+        ValueError: The token is not valid JSON.
+    """
+    raise ValueError("Invalid update ticket number")
+
+
+def _legacy_marker_is_fresh(
+    session: Path, name: str, ticket_mtime: float, now: float,
+    maximum_age: float,
+) -> bool:
+    """Verify one old-helper sentinel's content, age and file identity.
+
+    Args:
+        session (Path): Exact private old-helper session directory.
+        name (str): Fixed ``ready`` or ``proceed`` marker filename.
+        ticket_mtime (float): Validated old ticket modification time.
+        now (float): One captured current Unix time for this candidate.
+        maximum_age (float): Maximum marker age admitted by the continuation.
+
+    Returns:
+        bool: True only for a fresh, exact one-byte marker owned by this session.
+    """
+    if name not in ("ready", "proceed"):
+        return False
+    marker = session / name
+    try:
+        reject_reparse_path(marker)
+        before = marker.lstat()
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or marker.is_symlink()
+                or (getattr(before, "st_file_attributes", 0)
+                    & UPDATE_REPARSE_POINT_ATTRIBUTE)
+                or before.st_mtime < ticket_mtime
+                or not 0.0 <= now - before.st_mtime <= maximum_age):
+            return False
+        with marker.open("rb") as source:
+            opened = os.fstat(source.fileno())
+            if not os.path.samestat(before, opened):
+                return False
+            value = source.read(LEGACY_UPDATE_MARKER_MAX_BYTES + 1)
+            after_open = os.fstat(source.fileno())
+        after = marker.lstat()
+        return (
+            value == b"1"
+            and len(value) == before.st_size
+            and before.st_mtime_ns == after.st_mtime_ns
+            and os.path.samestat(opened, after_open)
+            and os.path.samestat(after_open, after)
+            and before.st_size == after.st_size
+            and after.st_nlink == 1 and stat.S_ISREG(after.st_mode)
+            and not (getattr(after, "st_file_attributes", 0)
+                     & UPDATE_REPARSE_POINT_ATTRIBUTE)
+        )
+    except (OSError, ValueError):
+        return False
+
+
+def find_legacy_update_ticket(
+    current_version: str, previous_version: str, maximum_age: float,
+) -> UpdateTicket | None:
+    """Recognize one verified old-helper update without assuming it succeeded.
+
+    Old helpers restart without a nonce. This read-only compatibility path
+    requires an actual installed version transition, the exact registered
+    executable, fresh ready/proceed markers and all original verified installer
+    bytes. A completed marker alone is insufficient because failures write it
+    too. The flight owner separately verifies active, unambiguous saved work.
+
+    Args:
+        current_version (str): Running application's canonical version.
+        previous_version (str): Installed version captured from old updater state.
+        maximum_age (float): Maximum permitted ticket age in seconds, supplied
+            by the flight continuation lifetime policy.
+
+    Returns:
+        UpdateTicket | None: One exact validated handoff, or None when absent,
+            ambiguous, expired, unsupported or not running installed Windows.
+    """
+    from uploader.self_update import _version
+
+    try:
+        if (_version(previous_version) >= _version(current_version)
+                or not 0.0 < maximum_age < float('inf')):
+            return None
+        executable = installed_identity()
+        if WindowsBackend().version(str(executable)) != current_version:
+            return None
+        root = updates_root()
+        reject_reparse_path(root)
+        matches: list[UpdateTicket] = []
+        for index, session in enumerate(root.iterdir()):
+            if index >= LEGACY_UPDATE_SESSION_LIMIT:
+                return None
+            if re.fullmatch(r'[0-9a-f]{32}', session.name) is None:
+                continue
+            path = session / 'ticket.json'
+            reject_reparse_path(path)
+            if not path.is_file():
+                continue
+            ticket_info = path.lstat()
+            if (not stat.S_ISREG(ticket_info.st_mode)
+                    or ticket_info.st_nlink != 1
+                    or path.is_symlink()
+                    or (getattr(ticket_info, "st_file_attributes", 0)
+                        & UPDATE_REPARSE_POINT_ATTRIBUTE)):
+                continue
+            now = time.time()
+            age = now - ticket_info.st_mtime
+            if not 0.0 <= age <= maximum_age:
+                continue
+            ticket = load_ticket(path)
+            if (ticket.target_version != current_version
+                    or os.path.normcase(ticket.installed_executable)
+                    != os.path.normcase(str(executable))):
+                continue
+            if not all(
+                _legacy_marker_is_fresh(
+                    session, name, ticket_info.st_mtime, now, maximum_age,
+                )
+                for name in ("ready", "proceed")
+            ):
+                continue
+            verify_ticket_installer(ticket)
+            matches.append(ticket)
+        return matches[0] if len(matches) == 1 else None
+    except (OSError, ValueError, RuntimeError):
+        return None
 
 
 def verify_ticket_installer(ticket: UpdateTicket) -> None:
@@ -439,9 +671,26 @@ class WindowsBackend:
             raise OSError("Unexpected installed executable version revision")
         return f"{values[2] >> 16}.{values[2] & 65535}.{values[3] >> 16}"
 
-    def restart(self, executable: str) -> None:
-        """Relaunch under this original, non-elevated helper's user context."""
-        subprocess.Popen([executable], cwd=str(Path(executable).parent))
+    def restart(self, executable: str, *, update_session: str) -> None:
+        """Relaunch under the original user with one exact continuation nonce.
+
+        Args:
+            executable (str): Verified registered application executable.
+            update_session (str): Non-secret 128-bit updater session identifier.
+
+        Returns:
+            None: Starts the same installed app without elevation.
+
+        Raises:
+            ValueError: The session identifier is malformed.
+            OSError: Windows cannot start the installed application.
+        """
+        if re.fullmatch(r'[0-9a-f]{32}', update_session) is None:
+            raise ValueError('Invalid update continuation session.')
+        subprocess.Popen(
+            [executable, '--after-update', update_session],
+            cwd=str(Path(executable).parent),
+        )
 
 
 @dataclass(frozen=True)
@@ -478,7 +727,9 @@ def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
         code = backend.install(ticket, progress)
     except InterruptedError:
         if Path(ticket.installed_executable).is_file():
-            backend.restart(ticket.installed_executable)
+            backend.restart(
+                ticket.installed_executable, update_session=ticket.session_id,
+            )
         raise
     if code == 3010:
         return UpdateOutcome(
@@ -488,7 +739,9 @@ def perform_update(ticket: UpdateTicket, backend: Backend, progress: Progress,
         raise RuntimeError(f"Setup exited with code {code}. The update was not verified.")
     if backend.version(ticket.installed_executable) != ticket.target_version:
         raise RuntimeError("Setup finished, but the installed version does not match. The update was not verified.")
-    backend.restart(ticket.installed_executable)
+    backend.restart(
+        ticket.installed_executable, update_session=ticket.session_id,
+    )
     return UpdateOutcome(f"Version {ticket.target_version} installed. Uploader restarted.", True)
 
 

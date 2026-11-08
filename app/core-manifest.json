@@ -1,11 +1,11 @@
 {
     "version": "1.0.0",
-    "generated_at": "2026-11-07T21:51:40+00:00",
+    "generated_at": "2026-11-08T01:13:52+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
         ".htaccess": "sha256:fc45f05fd94eada6e672e55e009d9620faed35c2943cce896f91e6277f9cd990",
-        "ARCHITECTURE.md": "sha256:9712ed1acff4a98d78c99d8016d70f65c5613f3398485407287d1adfb2de7ffd",
+        "ARCHITECTURE.md": "sha256:a6c01f6aa25448dabcde457bc17ba5cb26a0184c8879adaaa0f6cf26a010d5eb",
         "PATCH_NOTES.md": "sha256:2780b5d800c2adc1ab2075d71405cf389d87096d6b15a4d54b0d5385c0ae0194",
         "README.md": "sha256:3754fd008677a9d0ca0d6bb90c3c8e2931e587a564145fc65445005b58a5bf41",
         "app/.htaccess": "sha256:cce70f33421dfe50446174ff091977c2a967772eaa3a030b46a06d19c4ce7485",
@@ -92,7 +92,7 @@
         "app/controllers/admin_thumbnails.php": "sha256:6b510fc2b2aec43e3cc335855f5fec034381c84325f329d603886e1158764379",
         "app/controllers/admin_trash.php": "sha256:1fb5ebe1d73b72af971d86b8c5310921560fcd8be71ec771e14fbe431292417f",
         "app/controllers/admin_uploads.php": "sha256:b7e43aed507b6b113ff69090638ef29127acc95573347c4b18355fdcb9a72db8",
-        "app/controllers/app_linking.php": "sha256:db995d0f3721021b4c354746dbf9f23d707fc655beb5d144e3ed4d2ed72aaef8",
+        "app/controllers/app_linking.php": "sha256:f05de15122a255cfefb6db7ca6fdfc0180630bc9c5acab84d0bfa80dac177edc",
         "app/controllers/app_linking/create.php": "sha256:cd34686aa2a97b7bac6b71f3c3afd14136e8a18da60048af100459eb2aea78d3",
         "app/controllers/app_linking/detail.php": "sha256:21152372dc430957de6d429612ed62d68f6e5c4ef8d96c2652b57cbab235f9ae",
         "app/controllers/app_linking/media.php": "sha256:dc076ff666f4468e802581e12bef555ef3bd0e40901a7e172f5fc661373c598f",

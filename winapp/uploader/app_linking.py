@@ -39,6 +39,11 @@ from .gallery_media_cache import GalleryMediaCache, PHOTO_CACHE_FRESH_SECONDS
 
 
 CLIENT_ID = 'php-gallery-winapp'
+# Purpose: Identify the native client on every direct PHP Gallery request.
+# Type: str. Units: HTTP User-Agent product token. Scope: linking JSON and media.
+# Consumers: _request_json_once, _native_media_read_once. Rationale: Hosting
+# security filters require a truthful stable client identifier, not a release pin.
+LINKING_USER_AGENT = 'PHPGalleryUploader'
 CALLBACK_PATH = '/oauth2redirect/php-gallery'
 IDENTITY_SCOPE = 'link:identity'
 MEDIA_SCOPE_SUFFIX = ' media:read'
@@ -496,8 +501,100 @@ LINKING_MAX_TOKEN_LIFETIME_SECONDS = 86400
 LINKING_USERNAME_MAX_CHARS = 190
 
 
+_LinkingDiagnosticPhase = Literal['discovery', 'linking', 'media']
+_LinkingDiagnosticRoute = Literal[
+    'app_linking_discovery', 'app_linking_push', 'app_linking_token',
+    'app_linking_identity', 'app_linking_revoke', 'app_linking_galleries',
+    'app_linking_inventory', 'app_linking_upload', 'app_linking_gallery_detail',
+    'app_linking_gallery_create', 'app_linking_gallery_create_status',
+    'app_linking_gallery_create_abandon', 'app_linking_gallery_visibility',
+    'app_linking_photo_visibility', 'app_linking_media_delete',
+    'app_linking_media',
+]
+_LinkingDiagnosticContent = Literal['json', 'html', 'other']
+_LinkingAvailability = Literal['true', 'false', 'unknown']
+_LinkingUnavailableReason = Literal[
+    'server_unavailable', 'scope_unavailable', 'request_unavailable',
+]
+_LinkingDiagnosticReason = Literal[
+    'http_status', 'content_type', 'response_policy', 'response_size',
+    'invalid_json', 'invalid_shape', 'dns_failure', 'connect_failure',
+    'tls_failure', 'timeout', 'transport_failure', 'throttled',
+]
+
+
 class LinkingError(RuntimeError):
     """A linking attempt cannot continue without exposing protocol secrets."""
+
+
+class LinkingResponseError(LinkingError):
+    """Carry a bounded response diagnosis without retaining response contents.
+
+    Args:
+        phase (_LinkingDiagnosticPhase): Fixed linking operation phase.
+        route (_LinkingDiagnosticRoute): Fixed registered endpoint name.
+        status (int | None): HTTP status, or None if no response arrived.
+        content_kind (_LinkingDiagnosticContent): Coarse response media class.
+        reason (_LinkingDiagnosticReason): Fixed protocol refusal category.
+    """
+
+    def __init__(
+        self, phase: _LinkingDiagnosticPhase,
+        route: _LinkingDiagnosticRoute, status: int | None,
+        content_kind: _LinkingDiagnosticContent,
+        reason: _LinkingDiagnosticReason,
+    ) -> None:
+        """Store only validated diagnostic fields and a safe display string.
+
+        Args:
+            phase (_LinkingDiagnosticPhase): Fixed linking operation phase.
+            route (_LinkingDiagnosticRoute): Fixed registered endpoint name.
+            status (int | None): HTTP status, or None if no response arrived.
+            content_kind (_LinkingDiagnosticContent): Coarse response media class.
+            reason (_LinkingDiagnosticReason): Fixed protocol refusal category.
+
+        Returns:
+            None: Stores no response body, header value, URL or exception text.
+
+        Raises:
+            ValueError: One diagnostic field is outside its fixed allowlist.
+        """
+        if (phase not in ('discovery', 'linking', 'media')
+                or route not in (
+                    'app_linking_discovery', 'app_linking_push',
+                    'app_linking_token', 'app_linking_identity',
+                    'app_linking_revoke', 'app_linking_galleries',
+                    'app_linking_inventory', 'app_linking_upload',
+                    'app_linking_gallery_detail', 'app_linking_gallery_create',
+                    'app_linking_gallery_create_status',
+                    'app_linking_gallery_create_abandon',
+                    'app_linking_gallery_visibility',
+                    'app_linking_photo_visibility', 'app_linking_media_delete',
+                    'app_linking_media',
+                )
+                or (status is not None and (
+                    type(status) is not int or not 100 <= status <= 599
+                ))
+                or content_kind not in ('json', 'html', 'other')
+                or reason not in (
+                    'http_status', 'content_type', 'response_policy',
+                    'response_size', 'invalid_json', 'invalid_shape',
+                    'dns_failure', 'connect_failure', 'tls_failure', 'timeout',
+                    'transport_failure', 'throttled',
+                )
+                ):
+            raise ValueError('Invalid safe linking diagnostic.')
+        self.phase = phase
+        self.route = route
+        self.status = status
+        self.content_kind = content_kind
+        self.reason = reason
+        status_text = 'none' if status is None else str(status)
+        self.safe_summary = (
+            f'stage={phase}; route={route}; http={status_text}; '
+            f'response_kind={content_kind}; reason={reason}'
+        )
+        super().__init__(self.safe_summary)
 
 
 class LinkingHttpsError(LinkingError):
@@ -512,7 +609,7 @@ class LinkingRevisionUnsupported(LinkingError):
     """Report an older server that rejects the revision selector."""
 
 
-class LinkingMediaThrottled(LinkingError):
+class LinkingMediaThrottled(LinkingResponseError):
     """Report a validated media throttle and optional safe retry delay.
 
     Args:
@@ -529,11 +626,14 @@ class LinkingMediaThrottled(LinkingError):
         Returns:
             None: Stores the safe delay and fixed error message.
         """
+        super().__init__(
+            'media', 'app_linking_media', 429, 'json', 'throttled',
+        )
         if (retry_after_seconds is not None
                 and (type(retry_after_seconds) is not int
                      or not 1 <= retry_after_seconds <= MEDIA_RETRY_AFTER_MAX_SECONDS)):
             retry_after_seconds = None
-        super().__init__('Photo requests are limited. Try again shortly.')
+        self.args = ('Photo requests are limited. Try again shortly.',)
         self.retry_after_seconds = retry_after_seconds
 
 
@@ -547,6 +647,50 @@ class LinkingRefreshRejected(LinkingError):
 
 class LinkingUnavailable(LinkingError):
     """The selected installation does not advertise the requested linking flow."""
+
+    def __init__(
+        self, message: str = 'The linking request is unavailable.', *,
+        availability: _LinkingAvailability = 'unknown',
+        status: int | None = None,
+        content_kind: _LinkingDiagnosticContent = 'other',
+        reason: _LinkingUnavailableReason = 'request_unavailable',
+    ) -> None:
+        """Retain only fixed discovery facts for a safe diagnostic summary.
+
+        Args:
+            message (str): Fixed internal user-facing failure description.
+            availability (_LinkingAvailability): Validated
+                discovery availability, never inferred from a failed request.
+            status (int | None): Validated HTTP status when a response was read.
+            content_kind (_LinkingDiagnosticContent): Coarse response category.
+            reason (_LinkingUnavailableReason): Fixed internal refusal class.
+
+        Returns:
+            None: Stores the original fixed message and a safe summary only.
+
+        Raises:
+            ValueError: Diagnostic fields are outside their fixed allowlists.
+        """
+        reasons = {
+            'server_unavailable', 'scope_unavailable', 'request_unavailable',
+        }
+        if (availability not in ('true', 'false', 'unknown')
+                or reason not in reasons
+                or (status is not None
+                    and (type(status) is not int or not 100 <= status <= 599))
+                or content_kind not in ('json', 'html', 'other')):
+            raise ValueError('Invalid safe linking availability diagnostic.')
+        self.availability = availability
+        self.status = status
+        self.content_kind = content_kind
+        self.reason = reason
+        status_text = 'none' if status is None else str(status)
+        self.safe_summary = (
+            'stage=discovery; route=app_linking_discovery; '
+            f'availability={availability}; http={status_text}; '
+            f'response_kind={content_kind}; reason={reason}'
+        )
+        super().__init__(message)
 
 
 class LinkingScheduledPublication(LinkingError):
@@ -1633,13 +1777,19 @@ def _request_json(
             return _request_json_once(issuer, route, method, body, bearer, control)
         return _request_json_once(issuer, route, method, body, bearer, control, after_id)
 
-    return _run_linking_transport(request_once, cancelled, deadline_seconds, inactivity_seconds)
+    return _run_linking_transport(
+        request_once, cancelled, deadline_seconds, inactivity_seconds,
+        phase=('discovery' if route == 'app_linking_discovery' else 'linking'),
+        route=route,
+    )
 
 
 def _run_linking_transport(
     request_once: Callable[[_LinkingTransportControl], _TransportResult],
     cancelled: threading.Event | None, deadline_seconds: float,
-    inactivity_seconds: float,
+    inactivity_seconds: float, *,
+    phase: _LinkingDiagnosticPhase = 'linking',
+    route: _LinkingDiagnosticRoute = 'app_linking_discovery',
 ) -> _TransportResult:
     """Admit one request within its total deadline and bound blocked DNS.
 
@@ -1650,19 +1800,22 @@ def _run_linking_transport(
         deadline_seconds (float): Total request deadline in seconds, including
             admission wait for the single transport worker slot.
         inactivity_seconds (float): Maximum inactive socket time in seconds.
+        phase (_LinkingDiagnosticPhase): Fixed phase for safe diagnostics.
+        route (_LinkingDiagnosticRoute): Fixed endpoint for safe diagnostics.
 
     Returns:
         _TransportResult: Strict JSON object or bounded media bytes and MIME.
 
     Raises:
         LinkingError: Cancelled, expired or unsafe operation.
+        LinkingResponseError: A transport or protocol failure with safe metadata.
     """
     control = _LinkingTransportControl(
         time.monotonic() + deadline_seconds, cancelled, inactivity_seconds,
     )
     result: queue.Queue[
         _TransportResult | LinkingHttpsError | LinkingMediaUnavailable
-        | LinkingMediaThrottled | LinkingRevisionUnsupported
+        | LinkingResponseError | LinkingRevisionUnsupported
         | LinkingGrantRejected | LinkingRefreshRejected | None
     ] = queue.Queue(maxsize=1)
     slot_acquired = False
@@ -1700,14 +1853,38 @@ def _run_linking_transport(
             """
             outcome: (
                 _TransportResult | LinkingHttpsError | LinkingMediaUnavailable
-                | LinkingMediaThrottled | LinkingRevisionUnsupported
+                | LinkingResponseError | LinkingRevisionUnsupported
                 | LinkingGrantRejected | LinkingRefreshRejected | None
             )
             try:
                 control.remaining()
                 outcome = request_once(control)
+            except LinkingMediaThrottled as error:
+                outcome = LinkingMediaThrottled(
+                    error.retry_after_seconds,
+                )
+            except LinkingResponseError as error:
+                outcome = error
             except ssl.SSLError:
-                outcome = LinkingHttpsError('Secure HTTPS communication failed.')
+                outcome = LinkingResponseError(
+                    phase, route, None, 'other', 'tls_failure',
+                )
+            except socket.gaierror:
+                outcome = LinkingResponseError(
+                    phase, route, None, 'other', 'dns_failure',
+                )
+            except (socket.timeout, TimeoutError):
+                outcome = LinkingResponseError(
+                    phase, route, None, 'other', 'timeout',
+                )
+            except OSError:
+                outcome = LinkingResponseError(
+                    phase, route, None, 'other', 'connect_failure',
+                )
+            except http.client.HTTPException:
+                outcome = LinkingResponseError(
+                    phase, route, None, 'other', 'transport_failure',
+                )
             except LinkingRevisionUnsupported:
                 outcome = LinkingRevisionUnsupported(
                     'Gallery revision is unsupported.',
@@ -1715,10 +1892,6 @@ def _run_linking_transport(
             except LinkingMediaUnavailable:
                 outcome = LinkingMediaUnavailable(
                     'Photos are unavailable for this gallery.',
-                )
-            except LinkingMediaThrottled as error:
-                outcome = LinkingMediaThrottled(
-                    error.retry_after_seconds,
                 )
             except LinkingGrantRejected:
                 outcome = LinkingGrantRejected('The linking grant was rejected.')
@@ -1754,11 +1927,13 @@ def _run_linking_transport(
             control.remaining()
             if isinstance(data, LinkingHttpsError):
                 raise data
+            if isinstance(data, LinkingMediaThrottled):
+                raise data
+            if isinstance(data, LinkingResponseError):
+                raise data
             if isinstance(data, LinkingRevisionUnsupported):
                 raise data
             if isinstance(data, LinkingMediaUnavailable):
-                raise data
-            if isinstance(data, LinkingMediaThrottled):
                 raise data
             if isinstance(data, (LinkingGrantRejected, LinkingRefreshRejected)):
                 raise data
@@ -1769,6 +1944,27 @@ def _run_linking_transport(
         control.stop()
         if slot_acquired and not worker_started:
             release_slot_once()
+
+
+def _response_content_kind(
+    content_types: list[str],
+) -> _LinkingDiagnosticContent:
+    """Reduce Content-Type metadata to a non-sensitive diagnostic category.
+
+    Args:
+        content_types (list[str]): All Content-Type fields returned by HTTP.
+
+    Returns:
+        _LinkingDiagnosticContent: JSON, HTML or other without retaining a value.
+    """
+    if len(content_types) != 1:
+        return 'other'
+    media_type = content_types[0].split(';', 1)[0].strip().lower()
+    if media_type == 'application/json' or media_type.endswith('+json'):
+        return 'json'
+    if media_type in ('text/html', 'application/xhtml+xml'):
+        return 'html'
+    return 'other'
 
 
 def _request_json_once(
@@ -1827,7 +2023,10 @@ def _request_json_once(
         path += '&after=' + str(after_id)
     if gallery_id is not None and route == 'app_linking_gallery_detail':
         path += '&gallery_id=' + str(gallery_id)
-    headers = {'Accept': 'application/json'}
+    headers = {
+        'Accept': 'application/json',
+        'User-Agent': LINKING_USER_AGENT,
+    }
     if bearer is not None:
         headers['Authorization'] = 'Bearer ' + bearer
     if watch_key is not None:
@@ -1893,6 +2092,15 @@ def _request_json_once(
                             'The saved gallery approval expired or was revoked.',
                         )
             expected_status = 201 if route == 'app_linking_push' else 200
+            diagnostic_phase: _LinkingDiagnosticPhase = (
+                'discovery' if route == 'app_linking_discovery' else 'linking'
+            )
+            content_kind = _response_content_kind(content_types)
+            exact_json = (
+                len(content_types) == 1
+                and content_types[0].split(';', 1)[0].strip().lower()
+                == 'application/json'
+            )
             cache_directives = {
                 directive.strip().lower()
                 for header in response.headers.get_all('Cache-Control', [])
@@ -1901,13 +2109,22 @@ def _request_json_once(
             visibility_conflict = (route in ('app_linking_gallery_visibility',
                                              'app_linking_photo_visibility')
                                    and response.status == 409)
-            if ((response.status != expected_status and not visibility_conflict)
-                    or len(content_types) != 1
-                    or content_types[0].split(';', 1)[0].strip().lower()
-                    != 'application/json'
-                    or 'no-store' not in cache_directives
+            if response.status != expected_status and not visibility_conflict:
+                raise LinkingResponseError(
+                    diagnostic_phase, route, response.status, content_kind,
+                    'http_status',
+                )
+            if not exact_json:
+                raise LinkingResponseError(
+                    diagnostic_phase, route, response.status, content_kind,
+                    'content_type',
+                )
+            if ('no-store' not in cache_directives
                     or response.headers.get('Content-Encoding') is not None):
-                raise LinkingError('Linking response was not accepted.')
+                raise LinkingResponseError(
+                    diagnostic_phase, route, response.status, content_kind,
+                    'response_policy',
+                )
             # One extra byte distinguishes the exact configured size boundary.
             max_bytes = (LINKING_PICKER_RESPONSE_MAX_BYTES
                          if route == 'app_linking_galleries' and method == 'POST' else
@@ -1919,13 +2136,25 @@ def _request_json_once(
             payload = response.read(max_bytes + 1)
         control.remaining()
         if len(payload) > max_bytes:
-            raise LinkingError('Linking response was not accepted.')
-        data = json.loads(
-            payload.decode('utf-8'), object_pairs_hook=_unique_object,
-            parse_constant=_reject_nonfinite,
-        )
+            raise LinkingResponseError(
+                diagnostic_phase, route, response.status, content_kind,
+                'response_size',
+            )
+        try:
+            data = json.loads(
+                payload.decode('utf-8'), object_pairs_hook=_unique_object,
+                parse_constant=_reject_nonfinite,
+            )
+        except (UnicodeError, ValueError, RecursionError):
+            raise LinkingResponseError(
+                diagnostic_phase, route, response.status, content_kind,
+                'invalid_json',
+            ) from None
         if not isinstance(data, dict):
-            raise LinkingError('Linking response was not accepted.')
+            raise LinkingResponseError(
+                diagnostic_phase, route, response.status, content_kind,
+                'invalid_shape',
+            )
         if visibility_conflict:
             if (data != {'error': 'revision_conflict'}
                     and not (route == 'app_linking_gallery_visibility'
@@ -2041,6 +2270,29 @@ class LinkingAttempt:
                 cancelled=self._cancelled,
             )
             linking_data = discovery.get('app_linking')
+            discovery_available = (
+                linking_data.get('available')
+                if isinstance(linking_data, dict) else None
+            )
+            contract_valid = (
+                type(discovery.get('contract_version')) is int
+                and discovery.get('contract_version')
+                == LINKING_DISCOVERY_CONTRACT_VERSION
+            )
+            if contract_valid and discovery_available is False:
+                raise LinkingUnavailable(
+                    'The selected gallery does not offer browser linking.',
+                    availability='false', status=200, content_kind='json',
+                    reason='server_unavailable',
+                )
+            availability_diagnostic: _LinkingAvailability = (
+                'true' if contract_valid and discovery_available is True
+                else 'unknown'
+            )
+            diagnostic_status = 200 if contract_valid else None
+            diagnostic_content: _LinkingDiagnosticContent = (
+                'json' if contract_valid else 'other'
+            )
             capabilities = (
                 linking_data.get('capabilities', [])
                 if isinstance(linking_data, dict) else []
@@ -2060,7 +2312,17 @@ class LinkingAttempt:
                     prefer_rolling, prefer_presentation,
                 ) if prefer_admin_media or require_admin_media else None
                 if require_admin_media and admin_scope is None:
-                    raise LinkingUnavailable('Admin Photos are unavailable for this gallery.')
+                    raise LinkingUnavailable(
+                        'Admin Photos are unavailable for this gallery.',
+                        availability=availability_diagnostic,
+                        status=diagnostic_status,
+                        content_kind=diagnostic_content,
+                        reason=(
+                            'scope_unavailable'
+                            if availability_diagnostic == 'true'
+                            else 'request_unavailable'
+                        ),
+                    )
                 search_scope = self._scope + GALLERY_SEARCH_SUFFIX
                 if (admin_scope is None and search_scope in GALLERY_SEARCH_SCOPES
                         and _discovery_admits_linking(discovery, self._issuer, search_scope)):
@@ -2087,7 +2349,17 @@ class LinkingAttempt:
                       )):
                     self._scope = presentation_scope
                 if not _discovery_admits_linking(discovery, self._issuer, self._scope):
-                    raise LinkingUnavailable('Gallery does not support this linking request.')
+                    raise LinkingUnavailable(
+                        'Gallery does not support this linking request.',
+                        availability=availability_diagnostic,
+                        status=diagnostic_status,
+                        content_kind=diagnostic_content,
+                        reason=(
+                            'scope_unavailable'
+                            if availability_diagnostic == 'true'
+                            else 'request_unavailable'
+                        ),
+                    )
                 challenge = base64.urlsafe_b64encode(
                     hashlib.sha256(self._verifier.encode('ascii')).digest(),
                 ).rstrip(b'=').decode('ascii')
@@ -2780,7 +3052,9 @@ def _native_media_read_once(
     try:
         control.remaining()
         headers = {
-            'Accept': ', '.join(accepted), 'Authorization': 'Bearer ' + bearer,
+            'Accept': ', '.join(accepted),
+            'Authorization': 'Bearer ' + bearer,
+            'User-Agent': LINKING_USER_AGENT,
         }
         photo_request = any(mime in _NATIVE_IMAGE_TYPES for mime in accepted)
         track_request = any(mime in _NATIVE_AUDIO_TYPES for mime in accepted)
@@ -2807,6 +3081,7 @@ def _native_media_read_once(
         with connection.getresponse() as response:
             types = response.headers.get_all('Content-Type', [])
             media_type = types[0].split(';', 1)[0].strip().lower() if len(types) == 1 else ''
+            content_kind = _response_content_kind(types)
             cache_controls = response.headers.get_all('Cache-Control', [])
             vary_values = response.headers.get_all('Vary', [])
             vary_tokens = {
@@ -2829,15 +3104,26 @@ def _native_media_read_once(
                           for value in cache_controls
                           for part in value.split(',')}
             if response.headers.get('Content-Encoding') is not None:
-                raise LinkingError('Gallery media response was not accepted.')
+                raise LinkingResponseError(
+                    'media', 'app_linking_media', response.status,
+                    content_kind, 'response_policy',
+                )
             if response.status == 401:
+                if content_kind != 'json':
+                    raise LinkingResponseError(
+                        'media', 'app_linking_media', response.status,
+                        content_kind, 'http_status',
+                    )
                 payload = response.read(NATIVE_MEDIA_JSON_BYTES + 1)
                 if (len(types) == 1 and media_type == 'application/json'
                         and cache_controls == ['no-store']
                         and len(payload) <= NATIVE_MEDIA_JSON_BYTES
                         and _native_media_json(payload) == {'error': 'invalid_token'}):
                     raise LinkingGrantRejected('The linking grant was rejected.')
-                raise LinkingError('Gallery media response was not accepted.')
+                raise LinkingResponseError(
+                    'media', 'app_linking_media', response.status,
+                    content_kind, 'http_status',
+                )
             if response.status == 304:
                 etags = response.headers.get_all('ETag', [])
                 if (if_none_match is None or len(etags) != 1
@@ -2845,7 +3131,10 @@ def _native_media_read_once(
                         or not (cacheable or (
                             not admin_preload and 'no-store' in directives
                         ))):
-                    raise LinkingError('Gallery media validator was not accepted.')
+                    raise LinkingResponseError(
+                        'media', 'app_linking_media', response.status,
+                        content_kind, 'response_policy',
+                    )
                 control.remaining()
                 return None, '', etags[0], cacheable
             if response.status == 400 and '&kind=revision' in query:
@@ -2855,7 +3144,10 @@ def _native_media_read_once(
                         and len(payload) <= NATIVE_MEDIA_JSON_BYTES
                         and _native_media_json(payload) == {'error': 'invalid_request'}):
                     raise LinkingRevisionUnsupported('Gallery revision is unsupported.')
-                raise LinkingError('Gallery media response was not accepted.')
+                raise LinkingResponseError(
+                    'media', 'app_linking_media', response.status,
+                    content_kind, 'http_status',
+                )
             if response.status == 404 and catalogue_request:
                 payload = response.read(NATIVE_MEDIA_JSON_BYTES + 1)
                 if (len(types) == 1 and media_type == 'application/json'
@@ -2869,7 +3161,10 @@ def _native_media_read_once(
                         raise LinkingMediaUnavailable(
                             'Photos are unavailable for this gallery.',
                         )
-                raise LinkingError('Gallery media response was not accepted.')
+                raise LinkingResponseError(
+                    'media', 'app_linking_media', response.status,
+                    content_kind, 'http_status',
+                )
             if response.status == 429:
                 payload = response.read(NATIVE_MEDIA_JSON_BYTES + 1)
                 if (len(types) == 1 and media_type == 'application/json'
@@ -2892,9 +3187,20 @@ def _native_media_read_once(
                 raise LinkingError('Gallery media response was not accepted.')
             if (response.status != 200 or media_type not in accepted
                     or not (cacheable or 'no-store' in directives)):
-                raise LinkingError('Gallery media response was not accepted.')
+                reason = (
+                    'http_status' if response.status != 200
+                    else 'content_type' if media_type not in accepted
+                    else 'response_policy'
+                )
+                raise LinkingResponseError(
+                    'media', 'app_linking_media', response.status,
+                    content_kind, reason,
+                )
             if admin_preload and not cacheable and 'no-store' not in directives:
-                raise LinkingError('Gallery preload response was not accepted.')
+                raise LinkingResponseError(
+                    'media', 'app_linking_media', response.status,
+                    content_kind, 'response_policy',
+                )
             if media_type == 'application/json':
                 max_bytes = (
                     NATIVE_MEDIA_CATALOGUE_BYTES if catalogue_request else NATIVE_MEDIA_JSON_BYTES
@@ -3444,6 +3750,7 @@ class LinkingSession:
                             admin_preload=admin_preload,
                         ), cancel, LINKING_REQUEST_DEADLINE_SECONDS,
                         LINKING_SOCKET_TIMEOUT_SECONDS,
+                        phase='media', route='app_linking_media',
                     )
                     with self._lock:
                         if (cancel.is_set() or self._closed

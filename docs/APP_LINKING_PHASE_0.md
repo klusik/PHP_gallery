@@ -811,6 +811,16 @@ must match that address. HTTPS can use direct transport or the existing
 trusted proxy policy. Literal `http://localhost` requires direct loopback on
 both endpoints and rejects forwarded requests. Discovery reads readiness without provisioning anything.
 
+The public request path, including its exact case and configured mount,
+confirms the installation address. An internal rewrite's `SCRIPT_NAME` can
+identify a private hosting directory and is not used as the public issuer.
+Both supported front-controller entrypoints (`index.php` and
+`public/index.php`) remain valid at that exact mount. Linking start, login
+return and consent form paths are generated from the verified issuer.
+Owner-only grant inspection can still use the safe current public request
+path when issuance configuration is unavailable; it never learns authority
+from that path or relaxes account, CSRF, transport or ownership checks.
+
 Keep nonempty legacy `app_linking.issuer` and `app_linking_secret` overrides
 for installations already using them. They take precedence independently and
 malformed overrides fail closed. Independent keys for state encryption,

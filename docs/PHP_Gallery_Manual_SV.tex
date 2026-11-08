@@ -1848,7 +1848,10 @@ Behåll originalfilen och återställ en giltig säkerhetskopia; en saknad fil g
 fortfarande startvärden. Windows reparse-punkter och beständighet vid strömavbrott
 är ännu inte kvalificerade.
 Klicka på \ui{Link gallery} i huvudfönstret. Klistra in galleriets adress
-från webbläsaren och bekräfta med \ui{Link gallery}. På samma dator kan
+från webbläsaren och bekräfta med \ui{Link gallery}.
+Värdnamn och installationssökväg kan också anges utan protokoll.
+Vid bekräftelse lägger WinApp till \texttt{https://} och visar den
+normaliserade adressen innan galleriet kontrolleras. På samma dator kan
 galleriet använda en HTTP-adress på \texttt{localhost}. Fjärrinstallationer
 använder verifierad HTTPS.
 Dialogrutan visar förloppet i väntan på godkännande. Om anslutningen
@@ -1858,6 +1861,15 @@ Logga in som administratör i webbläsaren och klicka på \ui{Godkänn}.
 visar den länkade webbplatsens adress och läser in den första gallerisidan
 automatiskt.
 \ui{Avbryt} avslår begäran.
+
+Kopiera WinApp-diagnostiken om anslutningen misslyckas. En separat post för
+webbläsarlänkningen behåller det senaste felet, begärans fas, HTTP-status
+och svarstyp, inklusive identifierade verifieringssidor från webbhotellet.
+Den skiljer en blockerad begäran från ett galleri som anger att länkningen
+inte är tillgänglig. Inloggningsuppgifter och råa svarsinnehåll tas inte med.
+Använd webbplatsens publika URL med dess publika underkatalog när det behövs.
+Interna hostingkataloger hör inte till länkadressen. Servrar med intern
+sökvägsomskrivning behöver PHP Gallery~1.0.1 för att verifiera den publika sökvägen.
 
 De tre punkterna bredvid \ui{Unlink gallery} öppnar länklistan.
 Under \ui{Länkade nu} byter du webbplats med det aktuella godkännandet.
@@ -2349,13 +2361,20 @@ installationsprogram i flera CMS-utgåvor accepteras. Galleriets
 inloggningsuppgifter skickas aldrig till GitHub.
 
 \ui{Update} hämtar och verifierar installationsprogrammet med förlopp och
-möjlighet att avbryta hämtningen. När den externa hjälpprocessen har bekräftat
-beredskap avslutar programmet sina egna arbetsbarnprocesser och omedelbart hela
-uppladdarprocessen. Det väntar inte på trådar och erbjuder inte att ligga kvar
-i systemfältet. Misslyckad hjälpförberedelse lämnar programmet öppet.
-Redan sparade inställningar, inloggningsuppgifter och uppgiftscheckpoints finns
-kvar; osparade inställningar och ännu inte skrivet arbete sparas inte vid detta
-omedelbara avslut. Hjälparen kontrollerar installationsprogrammet igen, väntar
+möjlighet att avbryta hämtningen. En aktiv Watcher slutför den aktuella
+bekräftade bildöverföringen, sparar kön och skriver den ursprungliga
+inspelningen före hjälparstart. Olöst arbete skjuter upp installationen efter
+120~sekunder; spelidentifieringen blockerar den inte. Slutför först en manuell
+import, AI-uppgift eller rapport. Ett hjälparfel lämnar appen öppen.
+Efter uppdateringen fortsätter samma session, mapp, mål och ursprungliga
+filgräns. Bilder som skapas under installationen förblir möjliga att ladda upp.
+Telemetrin behåller sin identitet och markerar avbrottet. Stop eller Avsluta
+avbryter fortsättningen. Länkad inspelning kräver samma konto, galleri och
+behörighetsomfattning. Äldre versioner utan sparad köravsikt erbjuder
+\ui{Resume Watcher} för verifierat öppet arbete; valet är uttryckligt.
+Abandon eller en ny API-nyckel behövs inte för fortsättning. Sparade
+inställningar och inloggningsuppgifter behålls; osparade fält sparas inte.
+Hjälparen kontrollerar installationsprogrammet igen, väntar
 på att den installerade appen avslutas, begär Windows UAC, installerar och
 verifierar den nya versionen och startar uppladdaren som ursprunglig användare.
 Installationsförloppet är synligt. Automatisk återställning saknas.

@@ -2,6 +2,31 @@
 
 ## Identity linking and legacy uploads
 
+WinApp direct linking JSON and media requests use a truthful stable
+`PHPGalleryUploader` User-Agent. A deployed HTTPS verification page was observed
+to reject the same public discovery request without this header while admitting
+it with the client identifier. This is a general HTTP interoperability repair;
+there are no provider-specific exceptions, browser impersonation, relaxed TLS,
+redirect, cache, response-type or authorization checks. The client retains
+separate safe HTTP/transport and server-unavailable diagnostics. Discovery can
+still refuse linking when installation readiness is unavailable; a successful
+classic API upload does not establish browser-linking readiness.
+
+The Link gallery address prompt accepts a host and installation path without
+a scheme, defaulting only that user input to HTTPS before normal validation.
+Explicit direct localhost HTTP remains supported. Protocol and stored-issuer
+validators still require their existing explicit canonical URLs.
+
+The configured linking issuer is confirmed against the raw public request
+path, rather than a hosting rewrite's internal `SCRIPT_NAME`. Exact origin,
+mount spelling, HTTPS/direct-localhost policy and the legacy explicit issuer's
+precedence remain enforced. The direct `public/index.php` entrypoint remains
+supported at that same mount. Browser start, consent and login return paths
+use the verified public issuer. Owner-only grant inspection retains its
+permanent safe-public-request fallback when issuance settings are invalid;
+it does not acquire linking authority or change grant ownership. Real deployed
+upgrade prevalence and rewritten-hosting end-to-end approval remain unknown.
+
 Browser-approved linking remains experimental and unqualified. M1 implements
 version-1 readiness discovery and a browser handoff that reuses hashed
 request/PKCE storage without a schema migration. The handle is short-lived and
@@ -614,15 +639,23 @@ No OS display or smoothing preferences are changed.
 ## WinApp update process exit
 
 The updater permanently retains verified downloads, installed-path validation,
-helper readiness and post-install version verification. Once the helper is
-ready, the common application close owner terminates app-owned multiprocessing
-children and exits the whole uploader without waiting for individual threads.
-Persisted checkpoints remain recoverable; unsaved/unflushed work is not promised
-to survive. Ordinary Exit retains its graceful behavior. Older installed
-clients with a worker-drain deadlock require manual installation after closing
-the old app. User-reported evidence identified the always-running GamePresence
-observer as a blocker; hosted controller/shutdown tests cover immediate handoff
-and helper failure. Installed Windows acceptance remains a separate check.
+helper readiness and post-install version verification. Active Watcher work now
+pauses between acknowledged photo operations and flushes the original recorder
+before helper launch. A bounded 120-second wait postpones an unresolved update;
+the game-presence observer remains independent. The profile-bound one-use
+checkpoint preserves target, exact scope, session and the original file
+boundary. A worker admission barrier prevents upload before durable checkpoint
+consumption. Stop/Quit, different targets, changed scopes, invalid evidence and
+uncertain uploads never gain automatic continuation authority.
+
+Old helpers did not record running intent or pass a nonce. Their permanent
+compatibility path validates the actual installed version transition, original
+installer bytes and fresh helper markers, then offers explicit **Resume
+Watcher** only for an unambiguous API session without an interrupted accepted
+upload. Those old records cannot establish automatic resume consent. Existing
+credentials and files are retained; Abandon is not the continuation path.
+Installed upgrade acceptance and rollback/power-loss behavior remain separate
+from hosted controller, recorder, queue and helper fixtures.
 
 ## Consistency evidence and imported disk names
 

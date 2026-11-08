@@ -16,15 +16,19 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+from uploader.app_linking import UPLOAD_SCOPE
 
 from uploader.flight_jobs import (
     FlightPreferences,
     ImportBindings,
     SessionPlan,
     WorkspaceLease,
+    WatcherContinuation,
+    WATCHER_CONTINUATION_LIFETIME_SECONDS,
     connection_binding,
     pending_sessions,
     saved_flights,
@@ -465,6 +469,103 @@ class FlightJobsTests(unittest.TestCase):
                 first.release()
             second = WorkspaceLease(root)
             second.release()
+
+    def test_watcher_continuation_save_load_and_strict_payload(self) -> None:
+        """Round-trip one bounded update continuation under its workspace lease.
+
+        Returns:
+            None: Exact non-secret fields survive, while duplicate keys,
+                non-finite timestamps, wrong profiles and missing nonces fail.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lease = WorkspaceLease(root)
+            try:
+                record = WatcherContinuation(
+                    session_id="c" * 32,
+                    binding="a" * 64,
+                    profile_hash=WatcherContinuation.profile_digest(root),
+                    source_version="1.0.0",
+                    target_version="1.0.1",
+                    update_session="d" * 32,
+                    mode="linked",
+                    contextual=True,
+                    approved_scope=UPLOAD_SCOPE,
+                    created=time.time(),
+                    phase="prepared",
+                )
+                record.save(lease)
+                self.assertEqual(record, WatcherContinuation.load(lease))
+                with patch(
+                    "uploader.flight_jobs.time.time",
+                    return_value=(record.created
+                                  + WATCHER_CONTINUATION_LIFETIME_SECONDS + 1.0),
+                ), self.assertRaises(ValueError):
+                    WatcherContinuation.load(lease)
+
+                payload = record.payload()
+                with self.assertRaises(ValueError):
+                    WatcherContinuation.from_payload(
+                        {**payload, "profile_hash": "b" * 64}, root,
+                    )
+                with self.assertRaises(ValueError):
+                    WatcherContinuation.from_payload(
+                        {**payload, "update_session": ""}, root,
+                    )
+                for field, invalid in (
+                    ("binding", "not-a-digest"),
+                    ("source_version", "v1.0.0"),
+                    ("target_version", "1.0"),
+                    ("mode", "unknown"),
+                    ("legacy_source_pid", True),
+                ):
+                    with self.subTest(field=field), self.assertRaises(ValueError):
+                        WatcherContinuation.from_payload(
+                            {**payload, field: invalid}, root,
+                        )
+
+                path = root / "watcher-continuation.json"
+                serialized = json.dumps(payload, separators=(",", ":"))
+                path.write_text(
+                    serialized[:-1] + ',"phase":"cancelled"}',
+                    encoding="utf-8",
+                )
+                with self.assertRaises(ValueError):
+                    WatcherContinuation.load(lease)
+
+                path.write_text(
+                    serialized.replace('"created":' + str(record.created),
+                                       '"created":NaN'),
+                    encoding="utf-8",
+                )
+                with self.assertRaises(ValueError):
+                    WatcherContinuation.load(lease)
+            finally:
+                lease.release()
+
+    def test_watcher_continuation_refuses_reparse_checkpoint(self) -> None:
+        """Do not follow a checkpoint redirected outside the owned workspace.
+
+        Returns:
+            None: A symlinked continuation document is rejected without reading
+                its external target.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root.parent / (root.name + "-outside.json")
+            outside.write_text("{}", encoding="utf-8")
+            self.addCleanup(lambda: outside.unlink(missing_ok=True))
+            lease = WorkspaceLease(root)
+            try:
+                path = root / "watcher-continuation.json"
+                try:
+                    path.symlink_to(outside)
+                except (OSError, NotImplementedError):
+                    self.skipTest("The current account cannot create a checkpoint symlink")
+                with self.assertRaises(ValueError):
+                    WatcherContinuation.load(lease)
+            finally:
+                lease.release()
 
     def test_workspace_lease_excludes_an_independent_python_process(self) -> None:
         """Verify native workspace-byte exclusion across independent PIDs.

@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest import mock
@@ -27,13 +28,23 @@ class FakeBackend:
     """Record privilege-boundary actions without any Windows API calls."""
     def __init__(self, running: bool = False, code: int = 0, version: str = "1.2.3",
                  cancelled: bool = False) -> None:
-        """Configure deterministic running-process and installer results."""
+        """Configure deterministic running-process and installer results.
+
+        Args:
+            running (bool): Whether the exact target is currently active.
+            code (int): Synthetic setup exit code.
+            version (str): Version reported for the installed executable.
+            cancelled (bool): Whether setup should simulate UAC cancellation.
+
+        Returns:
+            None: Stores the fixture outcomes for later helper calls.
+        """
         self.running = running
         self.code = code
         self.installed_version = version
         self.cancelled = cancelled
         self.installs = 0
-        self.restarts: list[str] = []
+        self.restarts: list[tuple[str, str]] = []
 
     def target_running(self, executable: str) -> bool:
         """Return a controlled exact-target shutdown observation."""
@@ -51,9 +62,17 @@ class FakeBackend:
         """Return the simulated installed executable's resource version."""
         return self.installed_version
 
-    def restart(self, executable: str) -> None:
-        """Record original-user restarts for later assertions."""
-        self.restarts.append(executable)
+    def restart(self, executable: str, *, update_session: str) -> None:
+        """Record nonce-bound original-user restarts for later assertions.
+
+        Args:
+            executable (str): Verified installed executable path.
+            update_session (str): Non-secret update continuation nonce.
+
+        Returns:
+            None: Adds the exact restart request to the fixture history.
+        """
+        self.restarts.append((executable, update_session))
 
 
 class UpdateHelperTests(unittest.TestCase):
@@ -132,6 +151,124 @@ class UpdateHelperTests(unittest.TestCase):
                 helper.reject_reparse_path(self.root / "broken-link")
         exists.assert_not_called()
 
+    def _write_legacy_session(self, session_id: str) -> Path:
+        """Create the exact seven-field ticket written by the old helper.
+
+        Args:
+            session_id (str): Canonical fixture session directory identity.
+
+        Returns:
+            Path: Old-format session directory with a verified setup file.
+        """
+        session = helper.updates_root() / session_id
+        session.mkdir(parents=True, exist_ok=True)
+        setup = session / "setup.exe"
+        setup.write_bytes(b"verified legacy setup")
+        raw = {
+            "session_id": session_id,
+            "target_version": "1.2.3",
+            "expected_sha256": hashlib.sha256(setup.read_bytes()).hexdigest(),
+            "expected_size": setup.stat().st_size,
+            "installer_path": str(setup.resolve()),
+            "installed_executable": str(self.installed.resolve()),
+            "schema": 1,
+        }
+        (session / "ticket.json").write_text(json.dumps(raw), encoding="utf-8")
+        (session / "ready").write_text("1", encoding="ascii")
+        (session / "proceed").write_text("1", encoding="ascii")
+        return session
+
+    def test_legacy_update_requires_one_fresh_verified_handoff(self) -> None:
+        """Admit one old helper only after version and marker evidence agree.
+
+        Returns:
+            None: Exact legacy ticket shape is accepted; marker-only,
+                tampered, stale, ambiguous and source-mode candidates fail closed.
+        """
+        first = self._write_legacy_session("a" * 32)
+        with mock.patch.object(helper, "installed_identity", return_value=self.installed.resolve()), \
+                mock.patch.object(helper.WindowsBackend, "__init__", return_value=None), \
+                mock.patch.object(helper.WindowsBackend, "version", return_value="1.2.3"):
+            accepted = helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0)
+            self.assertIsNotNone(accepted)
+            self.assertEqual("a" * 32, accepted.session_id)
+
+            ticket_path = first / "ticket.json"
+            valid_text = ticket_path.read_text(encoding="utf-8")
+            ticket_path.write_text(
+                valid_text[:-1] + ',"schema":1}', encoding="utf-8",
+            )
+            self.assertIsNone(
+                helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0),
+            )
+            first = self._write_legacy_session("a" * 32)
+
+            second = self._write_legacy_session("b" * 32)
+            (second / "ready").unlink()
+            (second / "proceed").unlink()
+            (second / "completed").write_text("1", encoding="ascii")
+            first_ticket = first / "ticket.json"
+            first_ticket.unlink()
+            self.assertIsNone(
+                helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0),
+            )
+            (second / "ticket.json").unlink()
+            first = self._write_legacy_session("a" * 32)
+
+            (first / "ready").write_text("1tampered", encoding="ascii")
+            self.assertIsNone(
+                helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0),
+            )
+            (first / "ready").write_text("1", encoding="ascii")
+            old_marker_time = time.time() - 7200.0
+            os.utime(first / "ready", (old_marker_time, old_marker_time))
+            self.assertIsNone(
+                helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0),
+            )
+            (first / "ready").write_text("1", encoding="ascii")
+            stale = first / "ticket.json"
+            old_time = time.time() - 7200.0
+            os.utime(stale, (old_time, old_time))
+            self.assertIsNone(
+                helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0),
+            )
+            os.utime(stale, None)
+            (first / "ready").write_text("1", encoding="ascii")
+            (first / "proceed").write_text("1", encoding="ascii")
+
+            third = self._write_legacy_session("c" * 32)
+            self.assertTrue((third / "proceed").is_file())
+            self.assertIsNone(
+                helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0),
+            )
+
+        with mock.patch.object(helper, "installed_identity", side_effect=RuntimeError("source mode")):
+            self.assertIsNone(
+                helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0),
+            )
+
+    def test_legacy_update_rejects_a_reparse_ready_marker(self) -> None:
+        """A marker redirected outside its old-helper session proves nothing.
+
+        Returns:
+            None: Symlink markers are refused before ticket candidate admission.
+        """
+        session = self._write_legacy_session("f" * 32)
+        marker = session / "ready"
+        marker.unlink()
+        external = self.root / "external-ready"
+        external.write_text("1", encoding="ascii")
+        try:
+            marker.symlink_to(external)
+        except (OSError, NotImplementedError):
+            self.skipTest("The current account cannot create a marker symlink")
+        with mock.patch.object(helper, "installed_identity", return_value=self.installed.resolve()), \
+                mock.patch.object(helper.WindowsBackend, "__init__", return_value=None), \
+                mock.patch.object(helper.WindowsBackend, "version", return_value="1.2.3"):
+            self.assertIsNone(
+                helper.find_legacy_update_ticket("1.2.3", "1.2.2", 3600.0),
+            )
+
     @unittest.skipUnless(sys.platform == "win32" and os.environ.get("PHP_GALLERY_NATIVE_UPDATE_SMOKE") == "1",
                          "Read-only native smoke requires a completed installer build")
     def test_native_windows_version_and_absent_target_process(self) -> None:
@@ -150,11 +287,26 @@ class UpdateHelperTests(unittest.TestCase):
         self.assertFalse(backend.target_running(str(self.root / "PHPGalleryUploader.exe")))
 
     def test_ticket_reader_requires_schema_and_rejects_additional_keys(self) -> None:
-        """Only the versioned local ticket shape may reach the privileged boundary."""
+        """Only the versioned local ticket shape may reach the privileged boundary.
+
+        Returns:
+            None: Accepts the exact schema and refuses malformed ticket fields.
+        """
         path = self.session / "ticket.json"
         raw = asdict(self.ticket)
         path.write_text(json.dumps(raw), encoding="utf-8")
         self.assertEqual(self.ticket, helper.load_ticket(path))
+        encoded = json.dumps(raw, separators=(",", ":"))
+        path.write_text(encoded[:-1] + ',"schema":1}', encoding="utf-8")
+        with self.assertRaises(ValueError):
+            helper.load_ticket(path)
+        path.write_text(
+            encoded.replace('"expected_size":' + str(raw["expected_size"]),
+                            '"expected_size":NaN'),
+            encoding="utf-8",
+        )
+        with self.assertRaises(ValueError):
+            helper.load_ticket(path)
         for changed in ({**raw, "schema": True}, {**raw, "web_path": "anything"},
                         {key: value for key, value in raw.items() if key != "schema"}):
             path.write_text(json.dumps(changed), encoding="utf-8")
@@ -213,14 +365,38 @@ class UpdateHelperTests(unittest.TestCase):
         result = helper.perform_update(self.ticket, backend, mock.Mock())
         self.assertIn("installed", result.message)
         self.assertTrue(result.verified)
-        self.assertEqual([str(self.installed)], backend.restarts)
+        self.assertEqual([(str(self.installed), self.ticket.session_id)], backend.restarts)
 
     def test_uac_cancellation_reopens_old_application_under_original_user(self) -> None:
-        """Cancellation preserves usability without claiming an update or rollback."""
+        """Cancellation preserves usability without claiming an update or rollback.
+
+        Returns:
+            None: Relaunches the same executable with its validated session nonce.
+        """
         backend = FakeBackend(cancelled=True)
         with self.assertRaises(InterruptedError):
             helper.perform_update(self.ticket, backend, mock.Mock())
-        self.assertEqual([str(self.installed)], backend.restarts)
+        self.assertEqual([(str(self.installed), self.ticket.session_id)], backend.restarts)
+
+    def test_windows_restart_passes_only_the_validated_update_nonce(self) -> None:
+        """Relaunch uses the helper nonce without adding privilege elevation.
+
+        Returns:
+            None: The exact installed executable receives the update argument;
+                malformed nonces never reach process creation.
+        """
+        backend = object.__new__(helper.WindowsBackend)
+        nonce = "e" * 32
+        with mock.patch.object(helper.subprocess, "Popen") as popen:
+            backend.restart(str(self.installed), update_session=nonce)
+            popen.assert_called_once_with(
+                [str(self.installed), "--after-update", nonce],
+                cwd=str(self.installed.parent),
+            )
+            popen.reset_mock()
+            with self.assertRaises(ValueError):
+                backend.restart(str(self.installed), update_session="not-a-nonce")
+        popen.assert_not_called()
 
     def test_restart_required_and_unknown_codes_are_honest(self) -> None:
         """Restart-required results never prematurely relaunch the uploader.

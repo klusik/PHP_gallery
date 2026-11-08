@@ -1797,6 +1797,9 @@ still starts with first-run defaults. Windows reparse points and~power-loss
 durability have not~yet been qualified.
 Click \ui{Link gallery} in~the~main window. Paste the~gallery address from
 your browser into the~dialog and~confirm with \ui{Link gallery}.
+You can also enter a~host and~installation path without a~scheme.
+On~confirmation, WinApp adds \texttt{https://} and~shows the~normalized
+address before checking the~gallery.
 An~HTTP address on \texttt{localhost} can link to~a~gallery on~the~same
 computer. Remote installations use verified HTTPS.
 The~dialog shows progress while waiting for~approval. If~the~connection
@@ -1805,6 +1808,15 @@ Sign in~as an~administrator in~the~browser and~click \ui{Approve}.
 Return to~WinApp when the~browser shows \ui{Approval received}. WinApp
 shows the~linked site's address and~loads the~first gallery page
 automatically. \ui{Cancel} declines the~request.
+
+If~linking fails, copy the~WinApp diagnostics. The~separate browser-linking
+entry retains the~last failure, request phase, HTTP status and~response type,
+including recognized hosting verification pages. It~distinguishes a~blocked
+request from a~gallery reporting linking unavailable. Credentials and~raw
+response bodies are~excluded.
+Use the~public website URL, including its~public subdirectory when needed.
+Internal hosting directories do~not~belong in~the~link address. Servers with
+internal path rewriting need PHP Gallery~1.0.1 for~public-mount verification.
 
 Use the~ellipsis beside \ui{Unlink gallery} to~open the~links chooser.
 Select an~entry under \ui{Linked now} to~switch using its current approval.
@@ -2289,12 +2301,20 @@ data refuses the~update; identical installers in~several CMS releases
 are~accepted. Gallery credentials are~never sent to~GitHub.
 
 Choose \ui{Update} to~download with progress and~optional cancellation and
-verify the~installer. Once the~external helper acknowledges readiness,
-the~application terminates its~own child workers and~exits the~whole uploader
-process immediately. It~does not~wait for~background threads or~ask to~remain
-in~the~tray. Helper preparation failure leaves the~application open.
-Already persisted settings, credentials and~job checkpoints remain available;
-unsaved settings and~unflushed work are~not~saved by~this immediate exit.
+verify the~installer. An~active Watcher finishes the~current acknowledged
+photo operation, saves its~queue and~flushes the~original recording before
+the~helper starts. Unresolved work postpones installation after 120~seconds;
+the~game-presence observer does~not~block it. Finish a~manual import, AI task
+or~report finalization first. Helper failure keeps the~application open.
+After update, the~same session, folder, target and~original file boundary
+continue. Screenshots created during installation remain eligible. Telemetry
+keeps its~original identity and~records a~gap. Explicit Stop or~Quit cancels
+continuation. Linked capture requires the~same account, gallery and~scope.
+Older versions without saved running intent can~offer \ui{Resume Watcher}
+for~verified unfinished work; they do~not~resume it~without that explicit
+choice. Abandon and~a~replacement key are~not~required for~continuation.
+Persisted settings and~credentials remain available; unsaved Settings fields
+are~not~saved by~an~update.
 The~helper rechecks the~installer, waits for~the~installed executable to~exit,
 requests Windows UAC approval, installs and~verifies the~new version, then
 restarts the~uploader as~the~original user. Installation progress remains visible.
