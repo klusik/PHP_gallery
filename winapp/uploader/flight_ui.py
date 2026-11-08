@@ -316,6 +316,7 @@ class FlightUI:
         self.report_group_files: dict[str, list[str]] = {}
         self.report_file_sort_keys: dict[str, ReportFileDetails] = {}
         self.report_button: ttk.Button | None = None
+        self.record_button: ttk.Checkbutton | None = None
         self.progress_actions: ttk.Frame | None = None
         self.progress_buttons: dict[str, ttk.Button] = {}
         self.progress_detail_label: ttk.Label | None = None
@@ -364,6 +365,40 @@ class FlightUI:
                 wording whenever no flight context is detected.
         """
         return self.host.simulator_presence.text(key, self.ui_language.get())
+
+    def capture_text(self, key: str) -> str:
+        """Choose neutral capture wording outside a detected flight context.
+
+        Args:
+            key (str): Capture control or progress title translation key.
+
+        Returns:
+            str: Flight-specific wording for flight contexts and neutral
+                activity wording otherwise; saved report names are untouched.
+        """
+        if not self.host.simulator_presence.flight_detected:
+            key = {
+                "record_flight": "record_session",
+                "flight_progress": "session_progress",
+                "flight_settings": "session_settings",
+            }.get(key, key)
+        return self.text(key)
+
+    def refresh_contextual_labels(self) -> None:
+        """Refresh visible capture labels after cached game detection changes.
+
+        Returns:
+            None: Recording preferences and worker state are not modified.
+        """
+        if self.record_button is not None:
+            self.record_button.configure(
+                text=self.capture_text("record_flight"),
+            )
+        if self.dialog is not None and self.dialog.winfo_exists():
+            title = self.capture_text("flight_progress")
+            self.dialog.title(title)
+            if self.task_tree is not None:
+                self.task_tree.heading("#0", text=title)
 
     def dialog_owner(self) -> tk.Misc:
         """Find the invoking window so related dialogs stay together.
@@ -713,12 +748,14 @@ class FlightUI:
         """
         frame = ttk.Frame(parent, style="Card.TFrame")
         frame.grid(row=7, column=0, sticky="ew", pady=(4, 0))
-        ttk.Checkbutton(
-            frame, text=self.text("record_flight"), variable=self.record_var,
+        self.record_button = ttk.Checkbutton(
+            frame, text=self.capture_text("record_flight"), variable=self.record_var,
             command=self.save_preferences,
-        ).grid(row=0, column=0, sticky="w")
+        )
+        self.record_button.grid(row=0, column=0, sticky="w")
         icon_button(
-            frame, "settings", self.open_settings, self.text("flight_settings"),
+            frame, "settings", self.open_settings,
+            self.capture_text("flight_settings"),
         ).grid(row=0, column=1, padx=(6, 0))
         frame.columnconfigure(2, weight=1)
         ttk.Label(
@@ -743,14 +780,15 @@ class FlightUI:
         dialog = tk.Toplevel(owner)
         dialog.withdraw()
         self.settings_dialog = dialog
-        dialog.title(self.text("flight_settings"))
+        dialog.title(self.capture_text("flight_settings"))
         dialog.transient(self.host.root)
         dialog.configure(background="#131B26")
         dialog.resizable(False, False)
         panel = GlassCard(dialog, padding=(24, 20))
         panel.pack(fill="both", expand=True, padx=12, pady=12)
         ttk.Label(
-            panel, text=self.text("flight_settings"), style="Section.TLabel",
+            panel, text=self.capture_text("flight_settings"),
+            style="Section.TLabel",
         ).grid(row=0, column=0, sticky="w")
         icon_button(
             panel, "close", dialog.destroy, self.text("hide"),
@@ -783,7 +821,7 @@ class FlightUI:
         actions = ttk.Frame(panel, style="Card.TFrame")
         actions.grid(row=6, column=0, columnspan=2, sticky="w", pady=(20, 0))
         icon_button(
-            actions, "≡", self.show_progress, self.text("flight_progress"),
+            actions, "≡", self.show_progress, self.capture_text("flight_progress"),
         ).pack(side="left")
         icon_button(
             actions, "↗", self.open_reports, self.text("open_reports"),
@@ -1540,7 +1578,7 @@ class FlightUI:
         except (OSError, ValueError) as exc:
             self.restore_preferences()
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )
@@ -1946,14 +1984,14 @@ class FlightUI:
         linked = self.host.linking_manager.linked_upload_mode_selected()
         if revoke:
             messagebox.showinfo(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 self.text("revoke_temporarily_unavailable"),
                 parent=self.dialog_owner(),
             )
             return
         if self.load_error:
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 self.load_error,
                 parent=self.dialog_owner(),
             )
@@ -2065,7 +2103,7 @@ class FlightUI:
             self.host.api_key_revoke_running = False
             self._dismiss_progress_preparation()
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )
@@ -2289,7 +2327,7 @@ class FlightUI:
         self.dialog = tk.Toplevel(owner)
         self.dialog.withdraw()
         self.dialog.configure(background=self.host.root.cget("background"))
-        self.dialog.title(self.text("flight_progress"))
+        self.dialog.title(self.capture_text("flight_progress"))
         self.dialog.transient(self.host.root)
         frame = GlassCard(self.dialog, padding=(16, 12))
         frame.pack(fill="both", expand=True, padx=8, pady=8)
@@ -2305,7 +2343,7 @@ class FlightUI:
         self.task_tree = ttk.Treeview(
             frame, columns=("state",), show="tree headings", height=6
         )
-        self.task_tree.heading("#0", text=self.text("flight_progress"))
+        self.task_tree.heading("#0", text=self.capture_text("flight_progress"))
         self.task_tree.heading("state", text=self.text("phase_idle"))
         self.task_tree.column("#0", width=250)
         self.task_tree.column("state", width=230)
@@ -2474,7 +2512,7 @@ class FlightUI:
         else:
             for plan in operation.plans:
                 if not plan.reports_enabled and operation.local_reports is not True:
-                    rows.append((plan.session_id, self.text("record_flight"),
+                    rows.append((plan.session_id, self.capture_text("record_flight"),
                                  self.text("phase_completed" if plan.completed else "phase_draining")))
                     continue
                 current = progress.render_session == plan.session_id
@@ -2522,7 +2560,7 @@ class FlightUI:
         revoke = self.pending_revoke_intent()
         if revoke:
             messagebox.showinfo(
-                self.text('flight_progress'),
+                self.capture_text('flight_progress'),
                 self.text('revoke_temporarily_unavailable'),
                 parent=self.dialog_owner(),
             )
@@ -2546,7 +2584,7 @@ class FlightUI:
                 self.begin(revoke)
         except (OSError, ValueError) as exc:
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )
@@ -2614,7 +2652,7 @@ class FlightUI:
         except (OSError, ValueError, RuntimeError) as exc:
             self.host.api_key_revoke_running = False
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )

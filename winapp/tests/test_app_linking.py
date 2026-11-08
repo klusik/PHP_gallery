@@ -36,7 +36,12 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader import app_linking as linking
 from uploader import gallery_media_cache, offline_linking
-from uploader.diagnostics import format_safe_photos_failure
+from uploader.diagnostics import (
+    PhotosDecodeError, PhotosDecodeFacts,
+    SAFE_PHOTOS_DECODE_BODY_MAX_BYTES, SAFE_PHOTOS_DECODE_PIXEL_MAX,
+    format_safe_photos_decode_facts, format_safe_photos_failure,
+    format_safe_photos_shortcut, is_safe_photos_observation,
+)
 from uploader.flight_report_translations import tr
 from uploader.linked_create import (
     BoundCreateReceipt, CreateIntent, GalleryCreateJournal,
@@ -77,6 +82,20 @@ TEST_REQUEST_HANDLE = base64.b32encode(
 TEST_PINNED_CACHE_BODY_BYTES = 64
 TEST_PINNED_CACHE_ENTRY_BYTES = (
     gallery_media_cache._CACHE_HEADER.size + TEST_PINNED_CACHE_BODY_BYTES
+)
+
+# Purpose: Force an aggregate unpin overflow without allocating large bodies.
+# Type: int. Units: entries. Scope: one thumbnail-pool unpin fixture.
+# Consumers: NativeMediaSessionTests.test_unpin_capacity_preflight_keeps_all_retained_sources.
+# Rationale: One slot proves both targets must coexist before any source is removed.
+TEST_THUMBNAIL_UNPIN_MAX_ENTRIES = 1
+
+# Purpose: Exercise rejection immediately above the optional tree wire limit.
+# Type: int. Units: response bytes. Scope: one complete-tree HTTP fixture.
+# Consumers: LinkingTransportTests.test_gallery_tree_wire_route_uses_its_own_response_bound.
+# Rationale: One extra byte proves the response cap is enforced strictly.
+TEST_GALLERY_TREE_OVER_LIMIT_BYTES = (
+    linking.LINKING_GALLERY_TREE_RESPONSE_MAX_BYTES + 1
 )
 
 
@@ -827,6 +846,271 @@ class LinkingTransportTests(unittest.TestCase):
             with self.assertRaises(linking.LinkingError):
                 identity_only.gallery_page()
             request_json.assert_not_called()
+
+    def test_gallery_tree_requires_exact_complete_or_matching_unchanged_envelope(self) -> None:
+        """Accept only exact ordered tree-v1 rows and matching reuse proof.
+
+        Returns:
+            None: Unknown fields, coercible types and changed revisions fail closed.
+        """
+        revision = 'a' * 64
+        complete: dict[str, linking.JsonValue] = {
+            'version': 1,
+            'revision': revision,
+            'unchanged': False,
+            'galleries': [
+                {'id': 2, 'parent_id': 1, 'title': 'Child'},
+                {'id': 9, 'parent_id': None, 'title': 'Root'},
+            ],
+        }
+        tree = linking._linked_gallery_tree(complete, None)
+        self.assertEqual((2, 9), tuple(row.gallery_id for row in tree.galleries))
+        self.assertEqual(revision, tree.revision)
+        self.assertFalse(tree.unchanged)
+        unchanged: dict[str, linking.JsonValue] = {
+            'version': 1, 'revision': revision, 'unchanged': True,
+        }
+        self.assertTrue(linking._linked_gallery_tree(unchanged, revision).unchanged)
+        invalid = (
+            ({**complete, 'extra': True}, None),
+            ({**complete, 'version': True}, None),
+            ({**complete, 'revision': 'G' * 64}, None),
+            ({**complete, 'galleries': list(reversed(complete['galleries']))}, None),
+            ({**complete, 'galleries': [
+                {'id': 2, 'parent_id': None, 'title': 'First'},
+                {'id': 2, 'parent_id': None, 'title': 'Duplicate'},
+            ]}, None),
+            ({**complete, 'galleries': [
+                {'id': 2, 'parent_id': True, 'title': 'Bad parent'},
+            ]}, None),
+            ({**complete, 'galleries': [
+                {'id': 2, 'parent_id': None, 'title': 42},
+            ]}, None),
+            ({**complete, 'galleries': [
+                {'id': 2, 'parent_id': None, 'title': '\ud800'},
+            ]}, None),
+            ({**unchanged, 'galleries': []}, revision),
+            (unchanged, None),
+            ({**unchanged, 'revision': 'b' * 64}, revision),
+            ({**complete, 'galleries': [
+                {'id': True, 'parent_id': None, 'title': 'Bad'},
+            ]}, None),
+        )
+        for payload, requested in invalid:
+            with self.subTest(payload=payload):
+                with self.assertRaises(linking.LinkingError):
+                    linking._linked_gallery_tree(payload, requested)
+        bounded_rows: list[linking.JsonValue] = [
+            {'id': gallery_id, 'parent_id': None, 'title': 'Row'}
+            for gallery_id in range(
+                1, linking.LINKING_GALLERY_TREE_MAX_ROWS + 1,
+            )
+        ]
+        bounded = {**complete, 'galleries': bounded_rows}
+        self.assertEqual(
+            linking.LINKING_GALLERY_TREE_MAX_ROWS,
+            len(linking._linked_gallery_tree(bounded, None).galleries),
+        )
+        over_limit = {
+            **complete,
+            'galleries': bounded_rows + [
+                {'id': linking.LINKING_GALLERY_TREE_MAX_ROWS + 1,
+                 'parent_id': None, 'title': 'One too many'},
+            ],
+        }
+        with self.assertRaises(linking.LinkingError):
+            linking._linked_gallery_tree(over_limit, None)
+
+    def test_gallery_tree_is_capability_gated_and_falls_back_safely(self) -> None:
+        """Use tree-v1 only when advertised and preserve terminal refusals.
+
+        Returns:
+            None: Old-server and malformed replies fall back; auth, cancel and
+                rate-limit results remain visible to the existing caller.
+        """
+        token = linking.TOKEN_PREFIX + base64.urlsafe_b64encode(
+            b't' * linking.ATTEMPT_RANDOM_BYTES,
+        ).rstrip(b'=').decode('ascii')
+        issuer = 'https://gallery.example/Galerie'
+        revision = 'c' * 64
+        response: dict[str, linking.JsonValue] = {
+            'version': 1, 'revision': revision, 'unchanged': False,
+            'galleries': [{'id': 3, 'parent_id': None, 'title': 'Fresh'}],
+        }
+        session = linking.LinkingSession(
+            issuer, token, time.monotonic() + 120,
+            linking.GALLERIES_SCOPE, gallery_tree_supported=True,
+        )
+        self.addCleanup(session.close)
+        with mock.patch.object(linking, '_request_json', return_value=response) as request:
+            tree = session.gallery_tree(revision)
+        self.assertIsNotNone(tree)
+        self.assertEqual(3, tree.galleries[0].gallery_id)
+        self.assertEqual('app_linking_gallery_tree', request.call_args.args[1])
+        self.assertEqual('GET', request.call_args.args[2])
+        self.assertEqual(revision, request.call_args.kwargs['tree_revision'])
+        with mock.patch.object(
+            linking, '_request_json',
+            return_value={
+                'version': 1, 'revision': revision, 'unchanged': True,
+            },
+        ):
+            unchanged = session.gallery_tree(revision)
+        self.assertIsNotNone(unchanged)
+        self.assertTrue(unchanged.unchanged)
+        with mock.patch.object(
+            linking, '_request_json',
+            return_value={
+                'version': 1, 'revision': 'e' * 64, 'unchanged': True,
+            },
+        ):
+            self.assertIsNone(session.gallery_tree(revision))
+
+        cancelled = threading.Event()
+        cancelled.set()
+        with mock.patch.object(linking, '_request_json') as request:
+            with self.assertRaises(linking.LinkingError):
+                session.gallery_tree(cancelled=cancelled)
+            request.assert_not_called()
+
+        unsupported = linking.LinkingSession(
+            issuer, token, time.monotonic() + 120, linking.GALLERIES_SCOPE,
+        )
+        self.addCleanup(unsupported.close)
+        with mock.patch.object(linking, '_request_json') as request:
+            self.assertIsNone(unsupported.gallery_tree())
+            request.assert_not_called()
+
+        for error in (
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 400, 'html', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 503, 'json', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 201, 'json', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 302, 'html', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 410, 'json', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 422, 'json', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', None, 'other',
+                'connect_failure',
+            ),
+        ):
+            with self.subTest(error=type(error).__name__), mock.patch.object(
+                linking, '_request_json', side_effect=error,
+            ):
+                self.assertIsNone(session.gallery_tree())
+        malformed: dict[str, linking.JsonValue] = {
+            'version': 1, 'revision': revision, 'unchanged': False,
+            'galleries': [{'id': '3', 'parent_id': None, 'title': 'Bad ID'}],
+        }
+        with mock.patch.object(
+            linking, '_request_json', return_value=malformed,
+        ):
+            self.assertIsNone(session.gallery_tree())
+        for error in (
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 401, 'json', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 403, 'json', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 429, 'json', 'http_status',
+            ),
+            linking.LinkingResponseError(
+                'linking', 'app_linking_gallery_tree', 503, 'json', 'throttled',
+            ),
+            linking.LinkingMediaThrottled(),
+            linking.LinkingError('Linking request expired or was cancelled.'),
+        ):
+            with self.subTest(error=type(error).__name__), mock.patch.object(
+                linking, '_request_json', side_effect=error,
+            ):
+                with self.assertRaises(type(error)):
+                    session.gallery_tree()
+
+    def test_gallery_tree_wire_route_uses_its_own_response_bound(self) -> None:
+        """Map tree-v1 to the existing route without changing page limits.
+
+        Returns:
+            None: Revision query and the tree-only response size cap are exact.
+        """
+        token = linking.TOKEN_PREFIX + base64.urlsafe_b64encode(
+            b't' * linking.ATTEMPT_RANDOM_BYTES,
+        ).rstrip(b'=').decode('ascii')
+        headers = Message()
+        headers.add_header('Content-Type', 'application/json')
+        headers.add_header('Cache-Control', 'no-store')
+        response = mock.Mock()
+        response.status = 200
+        response.headers = headers
+        response.read.return_value = b'{}'
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=False)
+        connection = mock.Mock()
+        connection.getresponse.return_value = response
+        control = linking._LinkingTransportControl(
+            time.monotonic() + 60, None,
+        )
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            linking._request_json_once(
+                'https://gallery.example/Galerie',
+                'app_linking_gallery_tree', 'GET', None, token, control,
+                tree_revision='d' * 64,
+            )
+        sent_path = connection.request.call_args.args[1]
+        self.assertEqual(
+            '/Galerie/index.php?page=app_linking_galleries&tree=1&revision='
+            + 'd' * 64,
+            sent_path,
+        )
+        self.assertEqual(
+            linking.LINKING_GALLERY_TREE_RESPONSE_MAX_BYTES + 1,
+            response.read.call_args.args[0],
+        )
+        control.stop()
+        page_control = linking._LinkingTransportControl(
+            time.monotonic() + 60, None,
+        )
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            linking._request_json_once(
+                'https://gallery.example/Galerie',
+                'app_linking_galleries', 'GET', None, token, page_control,
+            )
+        self.assertEqual(
+            linking.LINKING_GALLERIES_RESPONSE_MAX_BYTES + 1,
+            response.read.call_args.args[0],
+        )
+        page_control.stop()
+        response.read.return_value = b'x' * TEST_GALLERY_TREE_OVER_LIMIT_BYTES
+        rejected_control = linking._LinkingTransportControl(
+            time.monotonic() + 60, None,
+        )
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            with self.assertRaises(linking.LinkingResponseError) as raised:
+                linking._request_json_once(
+                    'https://gallery.example/Galerie',
+                    'app_linking_gallery_tree', 'GET', None, token,
+                    rejected_control,
+                )
+        self.assertEqual('response_size', raised.exception.reason)
+        rejected_control.stop()
 
     def test_gallery_picker_uses_approved_search_and_ranked_rows(self) -> None:
         """Use an exact approved grant for form search and validate its hierarchy.
@@ -2270,6 +2554,293 @@ class NativeMediaSessionTests(unittest.TestCase):
             gallery_key = cache.gallery_key(issuer, 4)
             self.assertIsNone(cache.read(key, gallery_key=gallery_key))
 
+    def test_rejected_conditional_304_refreshes_without_cached_bytes(self) -> None:
+        """Refresh one refused conditional image read without stale fallback.
+
+        Returns:
+            None: A valid unconditional response replaces stale cache content
+                after exactly one safe-policy refusal.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        stale_body = b'stale image bytes'
+        stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
+        current_body = b'fresh image bytes'
+        current_etag = '"' + hashlib.sha256(current_body).hexdigest() + '"'
+        refusal = linking.LinkingResponseError(
+            'media', 'app_linking_media', 304, 'other', 'response_policy',
+            media_policy_facts=linking.MediaPolicyFacts(
+                'multiple', 'missing', True, True, None, True, False, False,
+                'not_requested', False, False,
+            ),
+        )
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.write(
+                key, stale_body, 'image/jpeg', stale_etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                cache, 'is_fresh', return_value=False,
+            ), mock.patch.object(
+                session, '_media_read',
+                side_effect=(
+                    refusal,
+                    (current_body, 'image/jpeg', current_etag, True),
+                ),
+            ) as read, self.assertLogs(linking.__name__, level='INFO') as logs:
+                self.assertEqual(
+                    (current_body, 'image/jpeg'),
+                    session.media_photo(4, 7, True),
+                )
+            self.assertEqual(
+                [
+                    mock.call(4, 'thumbnail', 7, None, stale_etag),
+                    mock.call(4, 'thumbnail', 7, None),
+                ],
+                read.call_args_list,
+            )
+            self.assertEqual(1, len(logs.output))
+            self.assertIn('one unconditional refresh', logs.output[0])
+            self.assertNotIn('gallery.example', logs.output[0])
+            self.assertNotIn('pgla_', logs.output[0])
+            cached = cache.read(key)
+            self.assertIsNotNone(cached)
+            self.assertEqual(current_body, cached.body)
+
+    def test_rejected_conditional_304_does_not_retry_unconditional_failure(self) -> None:
+        """Propagate a failed unconditional refresh without using stale bytes.
+
+        Returns:
+            None: Repeated 304 refusal stops after one unconditional read.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        stale_body = b'stale image bytes'
+        stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
+        facts = linking.MediaPolicyFacts(
+            'multiple', 'missing', True, True, None, True, False, False,
+            'not_requested', False, False,
+        )
+        refused = linking.LinkingResponseError(
+            'media', 'app_linking_media', 304, 'other', 'response_policy',
+            media_policy_facts=facts,
+        )
+        repeated = linking.LinkingResponseError(
+            'media', 'app_linking_media', 304, 'other', 'response_policy',
+            media_policy_facts=facts,
+        )
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.write(
+                key, stale_body, 'image/jpeg', stale_etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                cache, 'is_fresh', return_value=False,
+            ), mock.patch.object(
+                session, '_media_read', side_effect=(refused, repeated),
+            ) as read:
+                with self.assertRaises(linking.LinkingResponseError) as raised:
+                    session.media_photo(4, 7, True)
+            self.assertIs(repeated, raised.exception)
+            self.assertEqual(2, read.call_count)
+            self.assertEqual(
+                mock.call(4, 'thumbnail', 7, None), read.call_args,
+            )
+
+    def test_no_store_conditional_304_uses_one_unconditional_read(self) -> None:
+        """Keep the legacy no-store 304 fallback bounded to one fresh read.
+
+        Returns:
+            None: A no-store conditional response receives one unconditional
+                transfer and does not write the resulting bytes to disk.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        stale_body = b'stale image bytes'
+        stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
+        current_body = b'no-store current image bytes'
+        current_etag = '"' + hashlib.sha256(current_body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.write(
+                key, stale_body, 'image/jpeg', stale_etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                cache, 'is_fresh', return_value=False,
+            ), mock.patch.object(
+                session, '_media_read', side_effect=(
+                    (None, '', stale_etag, False),
+                    (current_body, 'image/jpeg', current_etag, False),
+                ),
+            ) as read:
+                self.assertEqual(
+                    (current_body, 'image/jpeg'),
+                    session.media_photo(4, 7, True),
+                )
+            self.assertEqual(2, read.call_count)
+            self.assertEqual(mock.call(4, 'thumbnail', 7, None), read.call_args)
+
+    def test_conditional_304_retry_requires_exact_unencoded_refusal(self) -> None:
+        """Retry only the exact safe 304 refusal without content encoding.
+
+        Returns:
+            None: Encoding, authorization, throttling and other status failures
+                never issue an unconditional follow-up read.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        facts = linking.MediaPolicyFacts(
+            'multiple', 'missing', True, True, None, True, False, False,
+            'not_requested', False, True,
+        )
+        failures: tuple[linking.LinkingError, ...] = (
+            linking.LinkingResponseError(
+                'media', 'app_linking_media', 304, 'other', 'response_policy',
+                media_policy_facts=facts,
+            ),
+            linking.LinkingResponseError(
+                'media', 'app_linking_media', 304, 'other', 'response_policy',
+            ),
+            linking.LinkingResponseError(
+                'media', 'app_linking_media', 401, 'json', 'http_status',
+            ),
+            linking.LinkingMediaThrottled(),
+            linking.LinkingResponseError(
+                'media', 'app_linking_media', 503, 'other', 'http_status',
+            ),
+            linking.LinkingError('Transport failed.'),
+        )
+        for index, failure in enumerate(failures):
+            with self.subTest(failure_type=type(failure).__name__, index=index):
+                session = linking.LinkingSession(
+                    issuer, 'pgla_' + 'A' * 43,
+                    time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+                    linking.GALLERIES_SCOPE,
+                )
+                stale_body = b'stale image bytes'
+                stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
+                with TemporaryDirectory() as directory:
+                    cache = linking.GalleryMediaCache(
+                        Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+                    )
+                    key = cache.key(issuer, 4, 7, True)
+                    self.assertTrue(cache.write(
+                        key, stale_body, 'image/jpeg', stale_etag,
+                    ))
+                    with mock.patch.object(
+                        linking.GalleryMediaCache, 'for_current_user',
+                        return_value=cache,
+                    ), mock.patch.object(
+                        cache, 'is_fresh', return_value=False,
+                    ), mock.patch.object(
+                        session, '_media_read', side_effect=failure,
+                    ) as read:
+                        with self.assertRaises(type(failure)):
+                            session.media_photo(4, 7, True)
+                    self.assertEqual(1, read.call_count)
+
+        cancelled = threading.Event()
+        cancelled.set()
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        with mock.patch.object(session, '_media_read') as read:
+            with self.assertRaises(linking.LinkingError):
+                session.media_photo(4, 7, True, cancelled)
+        read.assert_not_called()
+
+        cancelled.clear()
+        refusal = linking.LinkingResponseError(
+            'media', 'app_linking_media', 304, 'other', 'response_policy',
+            media_policy_facts=linking.MediaPolicyFacts(
+                'multiple', 'missing', True, True, None, True, False, False,
+                'not_requested', False, False,
+            ),
+        )
+
+        def cancel_after_refusal(
+            gallery_id: int, kind: str,
+            selector: int | str | None,
+            request_cancelled: threading.Event | None,
+            if_none_match: str | None = None,
+            *, admin_preload: bool = False,
+        ) -> linking._NativeMediaResponse:
+            """Set cancellation before returning the conditional refusal.
+
+            Args:
+                gallery_id (int): Requested gallery passed to the read owner.
+                kind (str): Fixed media kind passed to the read owner.
+                selector (int | str | None): Requested photo selector.
+                request_cancelled (threading.Event | None): Captured action token.
+                if_none_match (str | None): Conditional validator supplied by cache.
+                admin_preload (bool): Whether the explicit preload lane was requested.
+
+            Returns:
+                linking._NativeMediaResponse: Unreachable because the fixture
+                    raises the refused response.
+
+            Raises:
+                linking.LinkingResponseError: Preserves the conditional policy
+                    refusal after setting the action cancellation event.
+            """
+            del gallery_id, kind, selector, request_cancelled
+            del if_none_match, admin_preload
+            cancelled.set()
+            raise refusal
+
+        stale_body = b'stale image bytes'
+        stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.write(
+                key, stale_body, 'image/jpeg', stale_etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                cache, 'is_fresh', return_value=False,
+            ), mock.patch.object(
+                session, '_media_read', side_effect=cancel_after_refusal,
+            ) as read:
+                with self.assertRaises(linking.LinkingResponseError):
+                    session.media_photo(4, 7, True, cancelled)
+            self.assertEqual(1, read.call_count)
+
     def test_photo_routes_use_listing_scope_but_presentation_stays_explicit(self) -> None:
         """Use listing access for photos while guarding presentation and music.
 
@@ -2674,6 +3245,272 @@ class NativeMediaSessionTests(unittest.TestCase):
             self.assertEqual(cache.read(track).mime, 'audio/wav')
             self.assertIsNotNone(cache.read(recent))
 
+    def test_thumbnail_cache_pool_is_independent_from_detail_and_audio(self) -> None:
+        """Keep ordinary thumbnail quota and files separate from other media.
+
+        Returns:
+            None: Detail/audio pressure only evicts the main pool, and thumbnail
+                pressure uses its own byte and entry limits.
+        """
+        issuer = 'https://gallery.example'
+        body = b'thumbnail-pool-fixture'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory, mock.patch.multiple(
+            gallery_media_cache,
+            MEDIA_CACHE_MAX_ENTRIES=1,
+            MEDIA_CACHE_MAX_BYTES=TEST_PINNED_CACHE_ENTRY_BYTES,
+            MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES=1,
+            MEDIA_THUMBNAIL_CACHE_MAX_BYTES=TEST_PINNED_CACHE_ENTRY_BYTES,
+        ):
+            detail_cache = linking.GalleryMediaCache(Path(directory), 1024)
+            thumbnail_cache = linking.GalleryMediaCache(
+                Path(directory), 1024, thumbnails=True,
+            )
+            thumbnail_key = thumbnail_cache.key(issuer, 4, 7, True)
+            detail_key = detail_cache.key(issuer, 4, 7, False)
+            track_key = detail_cache.track_key(issuer, 4, 'a' * 32, etag[1:-1])
+            self.assertTrue(thumbnail_cache.write(
+                thumbnail_key, body, 'image/jpeg', etag,
+            ))
+            self.assertTrue(detail_cache.write(
+                detail_key, body, 'image/jpeg', etag,
+            ))
+            self.assertTrue(detail_cache.write(
+                track_key, body, 'audio/wav', etag,
+            ))
+            self.assertIsNotNone(thumbnail_cache.read(thumbnail_key))
+            self.assertIsNone(detail_cache.read(detail_key))
+            self.assertEqual('audio/wav', detail_cache.read(track_key).mime)
+            self.assertEqual(1, len(thumbnail_cache._inventory()))
+            self.assertEqual(1, len(detail_cache._inventory()))
+            self.assertTrue((Path(directory) / 'thumbnails' / (thumbnail_key + '.bin')).is_file())
+            self.assertFalse((Path(directory) / 'thumbnails' / (detail_key + '.bin')).exists())
+            self.assertFalse((Path(directory) / 'thumbnails' / (track_key + '.bin')).exists())
+            cached = thumbnail_cache.read(thumbnail_key, now=101)
+            thumbnail_path = Path(directory) / 'thumbnails' / (thumbnail_key + '.bin')
+            original_identity = thumbnail_path.stat()
+            thumbnail_cache.revalidate(thumbnail_key, cached, now=200)
+            self.assertTrue(os.path.samestat(
+                original_identity, thumbnail_path.stat(),
+            ))
+
+    def test_thumbnail_cache_migrates_exact_legacy_entries(self) -> None:
+        """Move verified flat and pinned legacy thumbnails into their own pool.
+
+        Returns:
+            None: Only the exact thumbnail identity authorizes moving a legacy
+                flat or pre-pool retained entry into the thumbnail namespace.
+        """
+        issuer = 'https://gallery.example'
+        self.assertNotEqual(
+            linking.GalleryMediaCache.key(issuer, 4, 7, True),
+            linking.GalleryMediaCache.private_key(issuer, 42, 4, 7, True),
+        )
+        body = b'legacy-thumbnail-fixture'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            legacy_cache = linking.GalleryMediaCache(Path(directory), 1024)
+            thumbnail_cache = linking.GalleryMediaCache(
+                Path(directory), 1024, thumbnails=True,
+            )
+            gallery_key = legacy_cache.gallery_key(issuer, 4)
+            key = legacy_cache.key(issuer, 4, 7, True)
+            self.assertTrue(legacy_cache.write(key, body, 'image/jpeg', etag))
+            migrated = thumbnail_cache.read(key, gallery_key=gallery_key)
+            self.assertEqual(body, migrated.body)
+            self.assertFalse((Path(directory) / (key + '.bin')).exists())
+            self.assertTrue((Path(directory) / 'thumbnails' / (key + '.bin')).is_file())
+
+            self.assertTrue(legacy_cache.set_gallery_pinned(issuer, 4, True))
+            # A distinct historical timestamp detects migration that wrongly
+            # refreshes stale content instead of preserving its validation age.
+            stored_at = 100
+            self.assertTrue(legacy_cache.write(
+                key, body, 'image/jpeg', etag, now=stored_at,
+                gallery_key=gallery_key,
+            ))
+            prefixed = (
+                Path(directory) / '.retained' / gallery_key / ('t-' + key + '.bin')
+            )
+            legacy_retained = Path(directory) / '.retained' / gallery_key / (key + '.bin')
+            self.assertTrue(legacy_retained.is_file())
+            original_mtime = legacy_retained.stat().st_mtime_ns
+            migrated = thumbnail_cache.read(key, gallery_key=gallery_key)
+            self.assertEqual(body, migrated.body)
+            self.assertEqual(stored_at, migrated.stored_at)
+            self.assertFalse(legacy_retained.exists())
+            self.assertTrue(prefixed.is_file())
+            self.assertEqual(original_mtime, prefixed.stat().st_mtime_ns)
+            self.assertTrue(legacy_cache.set_gallery_pinned(issuer, 4, False))
+            self.assertFalse(legacy_cache.is_gallery_pinned(issuer, 4))
+            self.assertFalse(prefixed.exists())
+            self.assertEqual(
+                body, thumbnail_cache.read(key, gallery_key=gallery_key).body,
+            )
+            self.assertFalse((Path(directory) / (key + '.bin')).exists())
+
+    def test_only_authorized_thumbnail_responses_use_thumbnail_pool(self) -> None:
+        """Route admitted thumbnails to their pool without changing admission.
+
+        Returns:
+            None: A public eligible thumbnail persists only below the child
+                pool; a descriptor denied cache admission causes no cache write.
+        """
+        issuer = 'https://gallery.example'
+        body = b'eligible-thumbnail-response'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        photo_id, gallery_id = 7, 4
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), 1024, thumbnails=True,
+            )
+            photo = linking.LinkedPhoto(
+                photo_id, 'Eligible', cache_eligible=True,
+            )
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ) as factory, mock.patch.object(
+                session, '_media_read',
+                return_value=(body, 'image/jpeg', etag, True),
+            ) as remote:
+                self.assertEqual(
+                    (body, 'image/jpeg'),
+                    session.media_photo(
+                        gallery_id, photo_id, True, cache_eligible=True,
+                    ),
+                )
+                factory.assert_called_once_with(
+                    linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
+                )
+                key = cache.key(issuer, gallery_id, photo_id, True)
+                self.assertTrue((Path(directory) / 'thumbnails' / (key + '.bin')).is_file())
+                self.assertFalse((Path(directory) / (key + '.bin')).exists())
+                self.assertEqual(1, remote.call_count)
+
+                factory.reset_mock()
+                self.assertTrue(session.has_cached_photo(
+                    gallery_id, photo, thumbnail=True,
+                ))
+                factory.assert_called_once_with(
+                    linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
+                )
+                factory.reset_mock()
+                self.assertTrue(session.prepare_cached_photo(
+                    gallery_id, photo, thumbnail=True,
+                ))
+                factory.assert_called_once_with(
+                    linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
+                )
+
+                factory.reset_mock()
+                remote.reset_mock()
+                self.assertEqual(
+                    (body, 'image/jpeg'),
+                    session.media_photo(
+                        gallery_id, photo_id, True, cache_eligible=False,
+                    ),
+                )
+                factory.assert_not_called()
+                remote.assert_called_once()
+
+    def test_thumbnail_pool_rejects_reparse_child(self) -> None:
+        """Refuse thumbnail cache entries when its child directory is linked.
+
+        Returns:
+            None: An unsafe child link is treated as a miss and cannot receive
+                a cache write outside the canonical media-cache directory.
+        """
+        body = b'linked-thumbnail-child'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory, TemporaryDirectory() as target:
+            cache = linking.GalleryMediaCache(
+                Path(directory), 1024, thumbnails=True,
+            )
+            legacy = linking.GalleryMediaCache(Path(directory), 1024)
+            key = cache.key('https://gallery.example', 4, 7, True)
+            self.assertTrue(legacy.write(key, body, 'image/jpeg', etag))
+            child = Path(directory) / 'thumbnails'
+            try:
+                child.symlink_to(Path(target), target_is_directory=True)
+            except OSError as error:
+                self.skipTest('Directory symlinks are unavailable: ' + str(error))
+            self.assertFalse(cache.write(key, body, 'image/jpeg', etag))
+            self.assertIsNone(cache.read(key))
+            self.assertFalse(cache.contains(key, etag))
+            self.assertEqual([], list(Path(target).iterdir()))
+
+    def test_unpin_routes_new_thumbnail_and_detail_retention_separately(self) -> None:
+        """Restore prefixed thumbnails and ordinary detail bytes to own pools.
+
+        Returns:
+            None: A pinned gallery stores both renditions under one marker, then
+                unpin returns each verified object to its independent pool.
+        """
+        issuer = 'https://gallery.example'
+        body = b'pinned-rendition-fixture'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            detail = linking.GalleryMediaCache(Path(directory), 1024)
+            thumbnails = linking.GalleryMediaCache(
+                Path(directory), 1024, thumbnails=True,
+            )
+            gallery_key = detail.gallery_key(issuer, 4)
+            thumb_key = thumbnails.key(issuer, 4, 7, True)
+            detail_key = detail.key(issuer, 4, 7, False)
+            self.assertTrue(detail.set_gallery_pinned(issuer, 4, True))
+            self.assertTrue(thumbnails.write(
+                thumb_key, body, 'image/jpeg', etag, gallery_key=gallery_key,
+            ))
+            self.assertTrue(detail.write(
+                detail_key, body, 'image/jpeg', etag, gallery_key=gallery_key,
+            ))
+            retained = Path(directory) / '.retained' / gallery_key
+            self.assertTrue((retained / ('t-' + thumb_key + '.bin')).is_file())
+            self.assertTrue((retained / (detail_key + '.bin')).is_file())
+            self.assertTrue(detail.set_gallery_pinned(issuer, 4, False))
+            self.assertTrue((Path(directory) / 'thumbnails' / (thumb_key + '.bin')).is_file())
+            self.assertTrue((Path(directory) / (detail_key + '.bin')).is_file())
+            self.assertEqual(body, thumbnails.read(thumb_key).body)
+            self.assertEqual(body, detail.read(detail_key).body)
+
+    def test_unpin_capacity_preflight_keeps_all_retained_sources(self) -> None:
+        """Refuse unpin when all thumbnail targets cannot coexist in quota.
+
+        Returns:
+            None: A one-entry thumbnail quota cannot accept two retained target
+                keys; neither retained source nor the gallery marker is removed.
+        """
+        issuer = 'https://gallery.example'
+        body = b'capacity-target-fixture'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory, mock.patch.object(
+            gallery_media_cache, 'MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES',
+            TEST_THUMBNAIL_UNPIN_MAX_ENTRIES,
+        ):
+            detail = linking.GalleryMediaCache(Path(directory), 1024)
+            thumbnails = linking.GalleryMediaCache(
+                Path(directory), 1024, thumbnails=True,
+            )
+            gallery_key = detail.gallery_key(issuer, 4)
+            keys = [thumbnails.key(issuer, 4, image_id, True) for image_id in (7, 8)]
+            self.assertTrue(detail.set_gallery_pinned(issuer, 4, True))
+            for key in keys:
+                self.assertTrue(thumbnails.write(
+                    key, body, 'image/jpeg', etag, gallery_key=gallery_key,
+                ))
+            retained_dir = Path(directory) / '.retained' / gallery_key
+            retained_paths = [retained_dir / ('t-' + key + '.bin') for key in keys]
+            self.assertFalse(detail.set_gallery_pinned(issuer, 4, False))
+            self.assertTrue(detail.is_gallery_pinned(issuer, 4))
+            self.assertTrue(all(path.is_file() for path in retained_paths))
+            self.assertEqual([], list((Path(directory) / 'thumbnails').glob('*.bin')))
+
     def test_pinned_gallery_isolated_from_ordinary_limits_and_restarts(self) -> None:
         """Keep retained media outside ordinary quota and scan accounting.
 
@@ -2835,7 +3672,9 @@ class NativeMediaSessionTests(unittest.TestCase):
             self.assertTrue(cache.write(
                 key, body, 'image/jpeg', etag, gallery_key=gallery_key,
             ))
-            with mock.patch.object(cache, '_write_locked', return_value=False):
+            with mock.patch.object(
+                linking.GalleryMediaCache, '_write_locked', return_value=False,
+            ):
                 self.assertFalse(cache.set_gallery_pinned(issuer, 4, False))
             self.assertTrue(cache.is_gallery_pinned(issuer, 4))
             self.assertIsNotNone(cache.read(key, gallery_key=gallery_key))
@@ -6003,6 +6842,91 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._target_refusal.assert_not_called()
         self.assertIn('temporarily unavailable',
                       manager._gallery_status.set.call_args.args[0])
+
+
+class PhotosDiagnosticFactsTests(unittest.TestCase):
+    """Keep detailed decode and shortcut observations finite and secret-free."""
+
+    def test_decode_refusal_reports_dimensions_and_both_byte_counts(self) -> None:
+        """Retain the refused value and its limit without copying error text.
+
+        Returns:
+            None: Source dimensions and an over-limit body remain diagnosable.
+        """
+        # 8000 by 6000 represents the camera class rejected by the old guard.
+        facts = PhotosDecodeFacts(
+            'pixel-check', 'pixel-limit', 'JPEG',
+            (8000, 6000), (8000, 6000), 4096,
+            SAFE_PHOTOS_DECODE_PIXEL_MAX, (2048, 1536),
+        )
+        error = PhotosDecodeError(facts)
+        error.args = ('token=fixture-secret C:\\private\\photo.jpg',)
+        failure = format_safe_photos_failure('media-decode', 'detail', error)
+        self.assertIn('reason=pixel-limit', failure)
+        self.assertIn('source=8000x6000', failure)
+        self.assertIn('max_pixels=36000000', failure)
+        self.assertNotIn('fixture-secret', failure)
+        self.assertNotIn('private', failure)
+        rejected = dataclass_replace(
+            facts, stage='source-open', reason='body-limit',
+            body_bytes=SAFE_PHOTOS_DECODE_BODY_MAX_BYTES + 1,
+        )
+        summary = format_safe_photos_decode_facts(rejected)
+        self.assertIsNotNone(summary)
+        self.assertIn('body_bytes=16777217 max_bytes=16777216', summary)
+        self.assertTrue(is_safe_photos_observation(summary))
+
+    def test_mutated_decoder_fields_cannot_escape_the_safe_formatter(self) -> None:
+        """Refuse malformed or mutated facts without replacing the real failure.
+
+        Returns:
+            None: Wrong primitive shapes and free text produce no facts output.
+        """
+        facts = PhotosDecodeFacts(
+            'pixel-check', 'pixel-limit', 'PNG', (8000, 6000),
+            (8000, 6000), 4096, SAFE_PHOTOS_DECODE_PIXEL_MAX, (2048, 1536),
+        )
+        for field, value in (
+            ('stage', ['token=fixture-secret']),
+            ('reason', {'token': 'fixture-secret'}),
+            ('image_format', []),
+            ('source_size', (True, 6000)),
+            ('decoded_size', (float('inf'), 6000)),
+            ('body_bytes', 'fixture-secret'),
+            ('pixel_limit', SAFE_PHOTOS_DECODE_PIXEL_MAX + 1),
+            ('output_size', (2048, -1)),
+        ):
+            with self.subTest(field=field):
+                invalid = dataclass_replace(facts, **{field: value})
+                self.assertIsNone(format_safe_photos_decode_facts(invalid))
+                summary = format_safe_photos_failure(
+                    'media-decode', 'detail', PhotosDecodeError(invalid),
+                )
+                self.assertIn('error_type=PhotosDecodeError', summary)
+                self.assertNotIn('fixture-secret', summary)
+
+    def test_shortcut_observations_never_record_arbitrary_typing(self) -> None:
+        """Keep only the explicit F/F11 command and finite event-state facts.
+
+        Returns:
+            None: Ordinary keys, malformed states and text payloads are refused.
+        """
+        # Windows Tk reports enabled NumLock as Mod1, independently of typing.
+        summary = format_safe_photos_shortcut(
+            'f', 0x0008, 'canvas', True, False, True, 'toggled',
+        )
+        self.assertIsNotNone(summary)
+        self.assertTrue(is_safe_photos_observation(summary))
+        self.assertFalse(is_safe_photos_observation(summary + ' token=secret'))
+        self.assertIsNone(format_safe_photos_shortcut(
+            'password', 0, 'text-entry', True, False, False, 'text-input',
+        ))
+        self.assertIsNone(format_safe_photos_shortcut(
+            [], 0, 'canvas', True, False, True, 'toggled',
+        ))
+        self.assertIsNone(format_safe_photos_shortcut(
+            'F11', True, 'canvas', True, False, True, 'toggled',
+        ))
 
 
 if __name__ == '__main__':

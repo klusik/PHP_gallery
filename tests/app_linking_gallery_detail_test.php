@@ -70,6 +70,7 @@ namespace {
     use function Gallery\Services\app_linking_authenticate;
     use function Gallery\Services\app_linking_gallery_detail;
     use function Gallery\Services\app_linking_gallery_page;
+    use function Gallery\Services\app_linking_gallery_tree;
     use function Gallery\Services\app_linking_gallery_search_page;
     use function Gallery\Services\app_linking_media_gallery;
     use function Gallery\Services\app_linking_media_page;
@@ -187,8 +188,27 @@ namespace {
         $page = app_linking_gallery_page($readToken, $issuer, $galleryId - 1);
         check(is_array($page) && ($page['galleries'][0]['id'] ?? null) === $galleryId,
             'A read scope must retain its explicitly included listing permission.');
+        $tree = app_linking_gallery_tree($readToken, $issuer);
+        check(is_array($tree) && $tree['unchanged'] === false
+            && $tree['version'] === 1
+            && preg_match('/\A[a-f0-9]{64}\z/D', $tree['revision']) === 1,
+            'A live grant must read the optional complete catalogue through SQL.');
+        $ownedRows = array_values(array_filter(
+            $tree['galleries'],
+            static fn(array $row): bool => $row['id'] === $galleryId,
+        ));
+        check($ownedRows === [[
+            'id' => $galleryId, 'parent_id' => null,
+            'title' => 'Stored private gallery',
+        ]], 'The complete SQL tree must expose identity without stored paths.');
+        check(app_linking_gallery_tree(
+            $readToken, 'https://other.example', $tree['revision'],
+        ) === null, 'A saved revision must never bypass the SQL issuer binding.');
         check(app_link_model_revoke($userId, $readGrant, null)
-            && app_linking_gallery_detail($readToken, $issuer, $galleryId) === null,
+            && app_linking_gallery_detail($readToken, $issuer, $galleryId) === null
+            && app_linking_gallery_tree(
+                $readToken, $issuer, $tree['revision'],
+            ) === null,
             'Revocation must immediately deny stored gallery details.');
 
         $mediaScope = \Gallery\Services\APP_LINKING_GALLERIES_SCOPE

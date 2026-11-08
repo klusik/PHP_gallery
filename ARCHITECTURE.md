@@ -31,6 +31,17 @@ and matches literal gallery metadata inside its existing authorized SQL model.
 Hosted preparation regenerates the plan and manifest; the runtime checks that
 the prepared plan covers every registered route before processing requests.
 
+The optional `galleries:tree-v1` capability extends the existing
+`app_linking_galleries` GET route with exclusive `tree=1` and an optional
+64-character `revision`. It uses the existing controller, listing service and
+authorized gallery model, without a new runtime owner, consent scope or schema.
+A single bounded SELECT reads a consistent ordered catalogue; a final live
+grant/account/scope check precedes revision comparison. Complete trees are
+limited to 10,000 rows and 4 MiB of encoded JSON. Larger or unavailable trees
+return a generic refusal and leave ordinary pagination available. A matching
+revision produces a small no-store unchanged envelope; it saves transfer and
+client updates, not the server's current authorization/catalogue read.
+
 WinApp's main **Link gallery** action accepts a pasted address in its own
 dialog. The linking workspace keeps that address in memory independently of
 the API-key upload endpoint. Remote addresses use verified HTTPS. The literal
@@ -117,8 +128,20 @@ limits. Presentation reads expose up to 32 visible MP3/WAV tracks for local
 WinMM or macOS playback. Both paths reuse the current schema.
 
 The normal WinApp launch selects Photos in the main window. Its workspace
-loads the live link's gallery hierarchy from server pages and opens a gallery
-in the adjacent responsive grid automatically. The left tree selects a photo
+mounts optional last-complete metadata through `gallery_catalogue_cache.py`
+before refreshing the live link's hierarchy. That persistence owner validates
+bounded IDs/parent IDs/titles/revision, isolates verified issuer/account/scope,
+uses user-scoped Windows DPAPI or private POSIX files, and publishes complete
+snapshots atomically. Photos performs file reads and serialized writes on
+workers. Cached rows confer no authorization: media always uses its current
+server owner, while new upload/create actions require fresh gallery rows.
+An advertised `galleries:tree-v1` enables a complete JSON/revision read;
+unsupported or invalid optional data retains the snapshot and falls back to
+existing paged reads. Authentication/cancellation/throttling stop instead.
+Only a complete current result prunes old rows and replaces the saved snapshot.
+Short Tk batches apply changed rows without rebuilding unchanged widgets.
+The account's last explicitly selected gallery opens in the adjacent grid,
+falling back to the initial-gallery policy. The left tree selects a photo
 gallery independently of the upload target chosen in Watcher or Import.
 WinApp restores an approved rolling link from macOS Keychain or Windows
 Credential Manager by rotating the refresh credential and verifying the same
@@ -139,8 +162,10 @@ listings in memory and uses the current link grant. Internal cursor pages
 append to a continuously scrolling grid. The viewport drives thumbnail
 requests. Manual navigation and the slideshow use the same looping album
 order and prepare adjacent details in bounded memory. A per-user cache
-stores server-opted-in photo and audio bytes with content digests up to
-4,096 entries or 1 GiB. An authorized matching ETag revalidates the stored
+stores server-opted-in bytes with content digests: ordinary thumbnails have
+their own 16,384-entry/256-MiB pool, independent of the 4,096-entry/1-GiB
+detail/audio pool. The same lock and explicit gallery retention span both pools.
+An authorized matching ETag revalidates the stored
 photo bytes after their 60-second fresh interval. Authorized playlist
 descriptors bind reused track bytes by SHA-256, size and MIME type. The
 native player consumes local files and prepares the next track for handoff.

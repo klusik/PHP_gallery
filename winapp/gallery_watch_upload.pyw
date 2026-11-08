@@ -71,6 +71,27 @@ from typing import (
 )
 from urllib import error, parse, request
 
+# Purpose: Bound the amount of queued Tk work handled in one event-loop turn.
+# Type: int; Units: worker events per batch; Scope: one Watcher event drain;
+# Consumers: WatcherApp._drain_event_batch; Rationale: process FIFO events
+# cooperatively without allowing sustained worker output to monopolize Tk.
+WATCHER_EVENT_BATCH_LIMIT = 64
+# Purpose: Bound cooperative event draining between complete worker events.
+# Type: float; Units: milliseconds per batch; Scope: one Watcher event drain;
+# Consumers: WatcherApp._drain_event_batch; Rationale: return control to Tk
+# promptly while never interrupting an individual domain handler.
+WATCHER_EVENT_BATCH_BUDGET_MS = 8.0
+# Purpose: Give a budget-limited event queue prompt, non-spinning continuation.
+# Type: int; Units: milliseconds; Scope: continuation after a bounded batch;
+# Consumers: WatcherApp.drain_events; Rationale: preserve responsiveness
+# without scheduling a zero-delay callback loop.
+WATCHER_EVENT_CONTINUATION_MS = 16
+# Purpose: Preserve the ordinary worker-event poll cadence when a batch drains.
+# Type: int; Units: milliseconds; Scope: idle event queue polling;
+# Consumers: WatcherApp.drain_events; Rationale: retain the existing 200 ms
+# idle cadence while using a shorter delay only after an exhausted batch.
+WATCHER_EVENT_IDLE_POLL_MS = 200
+
 # Dispatch helper/version modes before application configuration or logging.
 if __name__ == "__main__":
     multiprocessing.freeze_support()
@@ -167,7 +188,10 @@ from uploader.flight_jobs import (
 )
 from uploader.flight_report_translations import tr
 from uploader.photos_workspace import PHOTOS_TREE_WIDTH, PhotosWorkspace
-from uploader.app_linking import LinkedGallery, LinkingSession
+from uploader.app_linking import (
+    LINKING_GALLERY_ID_MAX, LinkedGallery, LinkingError, LinkingSession,
+)
+from uploader.gallery_catalogue_cache import GalleryCatalogueCache
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
 from uploader.flight_recorder import FlightRecorder
 from uploader.windows_file_identity import assert_local_windows_profile
@@ -7364,6 +7388,9 @@ class WatcherApp:
         self.connection_test_running = False
         self.api_key_revoke_running = False
         self.api_key_revoke_thread: Optional[threading.Thread] = None
+        self._verified_legacy_gallery: Optional[
+            Tuple[object, str, str, str]
+        ] = None
         self.manual_paths: List[Path] = []
         self.manual_folder: Optional[Path] = None
         self.manual_zip: Optional[Path] = None
@@ -7382,6 +7409,15 @@ class WatcherApp:
         self.recovery_offer_pending = start_minimized
         self.instance: Optional[WindowsInstance] = None
         self.exiting = False
+        self._drain_after_id: Optional[str] = None
+        self._drain_running = False
+        self._activity_render_after_id: Optional[str] = None
+        self._event_drain_last_count = 0
+        self._event_drain_total_count = 0
+        self._event_drain_yield_count = 0
+        self._event_drain_last_ms = 0.0
+        self._event_drain_max_ms = 0.0
+        self._activity_drawer_flush_count = 0
         self.activity_events: List[ActivityEvent] = self.job_store.list_events()
         self.media_capabilities = detect_suffix_capabilities(SUPPORTED_SUFFIXES, Image)
 
@@ -7392,6 +7428,12 @@ class WatcherApp:
         self.watched_folder_var.trace_add("write", self.update_watch_folder_display)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
         self.api_key_var = tk.StringVar(value=self.config.api_key)
+        self.gallery_url_var.trace_add(
+            "write", self._invalidate_verified_legacy_gallery,
+        )
+        self.api_key_var.trace_add(
+            "write", self._invalidate_verified_legacy_gallery,
+        )
         self.api_key_visible_var = tk.BooleanVar(value=False)
         self.api_key_status_var = tk.StringVar(value="API key configured" if self.config.api_key.strip() else "API key not configured")
         self.revoke_blocker_var = tk.StringVar(value="")
@@ -7504,7 +7546,7 @@ class WatcherApp:
         self.root.protocol("WM_DELETE_WINDOW", self.request_window_close)
         self.root.bind("<Unmap>", self.handle_window_unmap, add="+")
         self.root.bind("<Configure>", self._schedule_ui_layout_save, add="+")
-        self.root.after(200, self.drain_events)
+        self._schedule_event_drain(WATCHER_EVENT_IDLE_POLL_MS)
         if start_minimized:
             self.root.after(ACTIVATION_POLL_MS, self.complete_startup)
         else:
@@ -8567,6 +8609,9 @@ class WatcherApp:
             simbrief_action=self.flights.toggle_simbrief,
             load_tree_state=self.load_photos_tree_state,
             save_tree_state=self.save_photos_tree_state,
+            load_selected_gallery=self.load_photos_selected_gallery,
+            save_selected_gallery=self.save_photos_selected_gallery,
+            catalogue_cache=self.photos_catalogue_cache,
             load_tree_width=lambda: preferred_tree_width,
             save_tree_width=self.save_photos_tree_width,
             diagnostic_callback=lambda message: self.events.put(
@@ -8604,6 +8649,32 @@ class WatcherApp:
             f"{issuer}\0{user_id}".encode("utf-8"),
         ).hexdigest()
         return CONFIG_DIR / "photos-tree" / f"{key}.json"
+
+    def photos_catalogue_cache(
+        self, session: LinkingSession,
+    ) -> GalleryCatalogueCache | None:
+        """Create the optional catalogue cache for the live approved identity.
+
+        Args:
+            session (LinkingSession): Exact current Photos session.
+
+        Returns:
+            GalleryCatalogueCache | None: Issuer/account/scope-bound cache, or
+                None when the manager cannot verify the current account.
+        """
+        identity_reader = getattr(
+            self.linking_manager, "photos_site_identity", None,
+        )
+        identity = identity_reader(session) if identity_reader is not None else None
+        if identity is None:
+            return None
+        issuer, account_id = identity
+        try:
+            return GalleryCatalogueCache.for_current_user(
+                issuer, account_id, session.approved_scope(),
+            )
+        except (OSError, TypeError, ValueError, LinkingError):
+            return None
 
     def _schedule_ui_layout_save(self, event: "tk.Event") -> None:
         """Debounce visible main-window geometry updates on the Tk owner.
@@ -8728,7 +8799,7 @@ class WatcherApp:
             return {}
         try:
             payload = read_document(path)
-            if (payload.get("version") != 1
+            if (payload.get("version") not in (1, 2)
                     or not isinstance(payload.get("open"), dict)):
                 return {}
             state: Dict[int, bool] = {}
@@ -8769,9 +8840,87 @@ class WatcherApp:
         if len(bounded) > PHOTOS_TREE_STATE_MAX_GALLERIES:
             return
         try:
-            atomic_write_json(path, {"version": 1, "open": bounded})
+            previous = read_document(path)
+        except (OSError, ValueError, TypeError):
+            previous = {}
+        selected_id = previous.get("selected_gallery_id")
+        if (type(selected_id) is not int or not 0 < selected_id <= LINKING_GALLERY_ID_MAX):
+            selected_id = None
+        try:
+            atomic_write_json(path, {
+                "version": 2,
+                "open": bounded,
+                "selected_gallery_id": selected_id,
+            })
         except (OSError, ValueError):
             logging.debug("Photos tree preferences could not be saved.")
+
+    def load_photos_selected_gallery(
+        self, session: LinkingSession,
+    ) -> int | None:
+        """Load one positive saved gallery preference for the exact account.
+
+        Args:
+            session (LinkingSession): Exact current Photos session.
+
+        Returns:
+            int | None: Saved gallery ID from preference version 2, if valid.
+        """
+        path = self._photos_tree_state_path(session)
+        if path is None:
+            return None
+        try:
+            payload = read_document(path)
+            selected_id = payload.get("selected_gallery_id")
+            if (payload.get("version") != 2 or type(selected_id) is not int
+                    or not 0 < selected_id <= LINKING_GALLERY_ID_MAX):
+                return None
+            return selected_id
+        except (OSError, ValueError, TypeError):
+            return None
+
+    def save_photos_selected_gallery(
+        self, session: LinkingSession, gallery_id: int,
+    ) -> None:
+        """Persist an explicit selection while preserving expansion settings.
+
+        Args:
+            session (LinkingSession): Exact current Photos session.
+            gallery_id (int): Positive selected gallery ID from a fresh row.
+
+        Returns:
+            None: Updates only the version-2 preference for the verified account.
+        """
+        if (type(gallery_id) is not int
+                or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX):
+            return
+        path = self._photos_tree_state_path(session)
+        if path is None:
+            return
+        open_state: dict[str, bool] = {}
+        try:
+            previous = read_document(path)
+            rows = previous.get("open")
+            if (previous.get("version") in (1, 2) and isinstance(rows, dict)):
+                for raw_id, opened in rows.items():
+                    if len(open_state) >= PHOTOS_TREE_STATE_MAX_GALLERIES:
+                        break
+                    if (not isinstance(raw_id, str) or not raw_id.isdecimal()
+                            or type(opened) is not bool):
+                        continue
+                    parsed_id = int(raw_id)
+                    if 0 < parsed_id <= LINKING_GALLERY_ID_MAX:
+                        open_state[str(parsed_id)] = opened
+        except (OSError, ValueError, TypeError):
+            pass
+        try:
+            atomic_write_json(path, {
+                "version": 2,
+                "open": open_state,
+                "selected_gallery_id": gallery_id,
+            })
+        except (OSError, ValueError):
+            logging.debug("Photos tree selection could not be saved.")
 
     def open_photos(self) -> None:
         """Open the existing connection flow for the Photos workspace.
@@ -8928,6 +9077,7 @@ class WatcherApp:
             "Check existing files without uploading or changing saved state",
         ).pack(side="left", padx=(8, 0))
         utc = ttk.Frame(card, style="Card.TFrame")
+        self.watcher_utc_row = utc
         utc.grid(row=5, column=0, sticky="w", pady=(6, 0))
         ttk.Checkbutton(
             utc,
@@ -10364,6 +10514,7 @@ class WatcherApp:
             )
         target = self.linking_manager.selected_upload_target()
         if target is not None:
+            self._verified_legacy_gallery = None
             self.connection_status_var.set('Ready for uploads')
             self.connection_detail_var.set(
                 'Choose a folder in Watcher or add files in Import.',
@@ -10371,16 +10522,69 @@ class WatcherApp:
             self.gallery_label_var.set('Target gallery: ' + target.title)
             self.gallery_title_var.set(target.title)
         elif self.linking_manager.linked_upload_mode_selected():
+            self._verified_legacy_gallery = None
             self.connection_status_var.set('Reconnect to upload')
             self.connection_detail_var.set('The selected upload gallery needs a new link.')
             self.gallery_label_var.set('Target gallery: unknown')
             self.gallery_title_var.set('')
         else:
-            self.connection_status_var.set('Not tested')
-            self.connection_detail_var.set('Saved API-key connection selected.')
+            if self._restore_verified_legacy_gallery():
+                self.connection_status_var.set('Connected')
+                self.connection_detail_var.set(
+                    'Authenticated endpoint available: '
+                    + normalize_upload_url(self.config.gallery_url),
+                )
+            else:
+                self.connection_status_var.set('Not tested')
+                self.connection_detail_var.set(
+                    'Saved API-key connection selected.',
+                )
+        self.refresh_connection_controls()
+
+    def _restore_verified_legacy_gallery(self) -> bool:
+        """Show legacy metadata only for a response verified against this binding.
+
+        Returns:
+            bool: True when its exact normalized URL/key binding remains valid.
+        """
+        verified = self._verified_legacy_gallery
+        current_url = normalize_upload_url(self.config.gallery_url)
+        current_key = self.config.api_key.strip()
+        binding = connection_binding(current_url, current_key)
+        if (verified is None or self.api_key_revoke_running
+                or not current_url or not current_key
+                or verified[1] != binding
+                or normalize_upload_url(self.gallery_url_var.get()) != current_url
+                or self.api_key_var.get().strip() != current_key):
+            self._verified_legacy_gallery = None
             self.gallery_label_var.set('Target gallery: unknown')
             self.gallery_title_var.set('')
-        self.refresh_connection_controls()
+            return False
+        self.gallery_label_var.set('Target gallery: ' + verified[2])
+        self.gallery_title_var.set(verified[3])
+        return True
+
+    def _invalidate_verified_legacy_gallery(
+        self, *_trace_args: str,
+    ) -> None:
+        """Clear verified legacy metadata as soon as connection fields differ.
+
+        Args:
+            *_trace_args (str): Tk variable-trace name, index and operation.
+
+        Returns:
+            None: Linked target labels remain owned by the selected target.
+        """
+        if self._verified_legacy_gallery is None:
+            return
+        if (normalize_upload_url(self.gallery_url_var.get())
+                != normalize_upload_url(self.config.gallery_url)
+                or self.api_key_var.get().strip() != self.config.api_key.strip()):
+            self._verified_legacy_gallery = None
+            if (self.linking_manager.selected_upload_target() is None
+                    and not self.linking_manager.linked_upload_mode_selected()):
+                self.gallery_label_var.set('Target gallery: unknown')
+                self.gallery_title_var.set('')
 
     def probe_linked_uncertain_upload(
         self, target: LinkedUploadTarget, size: int,
@@ -11754,7 +11958,27 @@ class WatcherApp:
             )
         else:
             self.utc_sync.stop()
-        self.utc_sync_status_var.set(self.utc_sync.status())
+        self.refresh_contextual_watcher_copy()
+
+    def refresh_contextual_watcher_copy(self) -> None:
+        """Hide simulator-only controls outside a detected flight context.
+
+        Returns:
+            None: The UTC preference remains saved while its row and pending
+                simulator status are hidden for ordinary games.
+        """
+        flight_detected = self.simulator_presence.flight_detected
+        self.flights.refresh_contextual_labels()
+        if flight_detected:
+            self.watcher_utc_row.grid()
+        else:
+            self.watcher_utc_row.grid_remove()
+        status = self.utc_sync.status()
+        if (not flight_detected
+                and status.startswith("UTC sync awaiting simulator:")):
+            status = ""
+        if self.utc_sync_status_var.get() != status:
+            self.utc_sync_status_var.set(status)
 
     def start_manual_upload(self) -> None:
         """
@@ -12366,6 +12590,7 @@ class WatcherApp:
         cleared_config = self._save_owned_config(cleared_config)
         self.config = cleared_config
         self.api_key_var.set("")
+        self._verified_legacy_gallery = None
         self.connection_status_var.set("Not configured")
         self.gallery_label_var.set("Target gallery: unknown")
         self.gallery_title_var.set("")
@@ -12395,6 +12620,9 @@ class WatcherApp:
         if not normalize_upload_url(self.config.gallery_url) or not self.config.api_key:
             messagebox.showwarning("Revoke API key", "A saved connection is required.")
             return
+        self._verified_legacy_gallery = None
+        self.gallery_label_var.set("Target gallery: unknown")
+        self.gallery_title_var.set("")
         self.flights.begin(True)
 
     def prepare_update_checkpoint(self, target_version: str) -> None:
@@ -12691,6 +12919,7 @@ class WatcherApp:
             return
         self._discard_update_resume_intent()
         self.exiting = True
+        self._cancel_event_ui_callbacks()
         self._set_watcher_recording(False)
         self.write_log("Application shutdown requested. Stopping background work safely.", "system")
 
@@ -12746,7 +12975,8 @@ class WatcherApp:
                 self.exiting = False
                 self.hide_to_tray()
                 self._sync_watcher_recording()
-                self.root.after(200, self.drain_events)
+                self._schedule_activity_drawer_refresh()
+                self._schedule_event_drain(WATCHER_EVENT_IDLE_POLL_MS)
                 return
         writer = getattr(self, "activity_writer", None)
         if writer is not None and not writer.close(max(0.0, deadline - time.monotonic())):
@@ -12755,6 +12985,7 @@ class WatcherApp:
         self.stop_tray_icon()
         self.simulator_presence.stop()
         self.linking_manager.close()
+        self._cancel_event_ui_callbacks()
         self.root.destroy()
 
     def open_config_folder(self) -> None:
@@ -13247,7 +13478,8 @@ class WatcherApp:
             job_id (str): Optional durable import job identifier.
 
         Returns:
-            None: Refreshes visible summaries immediately and queues persistence.
+            None: Updates the footer, retained history, and persistence queue
+                immediately, then coalesces the Activity drawer render.
         """
         secret = self.api_key_var.get().strip() if hasattr(self, "api_key_var") else ""
         # The queue marker has already selected the structured operation.
@@ -13272,12 +13504,82 @@ class WatcherApp:
                 logging.warning("Recent activity history is closing; event remains in the log.")
         except Exception:  # noqa: BLE001
             logging.error("Could not queue recent activity history.")
-        self.refresh_activity_drawer()
+        self._schedule_activity_drawer_refresh()
+
+    def _schedule_activity_drawer_refresh(self) -> None:
+        """Coalesce drawer rendering while activity state and persistence stay current.
+
+        Returns:
+            None: Schedules one idle render of the latest retained activity.
+        """
+        if self.exiting or not hasattr(self, "activity_drawer"):
+            return
+        if self._activity_render_after_id is not None:
+            return
+        callback_id: Optional[str] = None
+
+        def flush() -> None:
+            """Dispatch the drawer refresh with its captured timer identity.
+
+            Returns:
+                None: Delegates identity validation to the owning method.
+            """
+            self._flush_activity_drawer_refresh(callback_id)
+
+        callback_id = self.root.after_idle(flush)
+        self._activity_render_after_id = callback_id
+
+    def _flush_activity_drawer_refresh(
+        self, callback_id: Optional[str],
+    ) -> None:
+        """Render the latest activity rows once after queued events settle.
+
+        Args:
+            callback_id (Optional[str]): Identity captured by the scheduled
+                idle callback so a stale callback cannot clear a replacement.
+
+        Returns:
+            None: Clears the owned callback and refreshes the current filter.
+        """
+        if callback_id != self._activity_render_after_id:
+            return
+        self._activity_render_after_id = None
+        if not self.exiting:
+            self.refresh_activity_drawer()
+
+    def _cancel_event_ui_callbacks(self) -> None:
+        """Cancel owned event and activity callbacks before Tk shutdown.
+
+        Returns:
+            None: Clears both callback IDs after best-effort cancellation.
+        """
+        for attribute in ("_drain_after_id", "_activity_render_after_id"):
+            callback_id = getattr(self, attribute, None)
+            if callback_id is None:
+                continue
+            try:
+                self.root.after_cancel(callback_id)
+            except tk.TclError:
+                pass
+            setattr(self, attribute, None)
 
     def refresh_activity_drawer(self) -> None:
-        """Render recent structured events using the selected operator filter."""
+        """Render retained events with the current filter and cancel stale work.
+
+        Returns:
+            None: Cancels a pending coalesced render, updates the visible rows,
+                and increments the drawer-render observation count.
+        """
+        callback_id = self._activity_render_after_id
+        self._activity_render_after_id = None
+        if callback_id is not None:
+            try:
+                self.root.after_cancel(callback_id)
+            except tk.TclError:
+                pass
         if not hasattr(self, "activity_drawer"):
             return
+        self._activity_drawer_flush_count += 1
         for iid in self.activity_drawer.get_children():
             self.activity_drawer.delete(iid)
         selected = self.activity_filter_var.get().strip().lower() or "all"
@@ -13350,6 +13652,10 @@ class WatcherApp:
                 f"Runtime: {'installed' if getattr(sys, 'frozen', False) else 'source'}",
                 f"Executable: {Path(sys.executable).name}",
                 f"Tk: {self.root.tk.call('info', 'patchlevel')}",
+                "Pillow: " + (
+                    str(getattr(Image, '__version__', 'installed'))
+                    if Image is not None else 'unavailable'
+                ),
                 f"OS: {os.name}",
                 f"Gallery URL: {self.gallery_url_var.get().strip()}",
                 f"API key: {self.api_key_var.get().strip()}",
@@ -13366,6 +13672,13 @@ class WatcherApp:
                 f"Import: {self.import_activity_var.get()} | {job_summary}",
                 f"AI: {self.ai_activity_var.get()}",
                 f"Media capabilities: {capability_summary}",
+                "Event-loop observations: "
+                f"last_batch_events={self._event_drain_last_count} "
+                f"total_events={self._event_drain_total_count} "
+                f"budget_yields={self._event_drain_yield_count} "
+                f"last_batch_ms={self._event_drain_last_ms:.2f} "
+                f"max_batch_ms={self._event_drain_max_ms:.2f} "
+                f"activity_drawer_flushes={self._activity_drawer_flush_count}",
                 f"Config path: {CONFIG_PATH}",
                 f"State path: {STATE_PATH}",
                 f"Log path: {LOG_PATH}",
@@ -13425,21 +13738,114 @@ class WatcherApp:
             except Exception:  # noqa: BLE001
                 logging.debug("Could not refresh tray tooltip.", exc_info=True)
 
-    def drain_events(self) -> None:
-        """
-        Move tuple and structured worker events into Tkinter and durable activity history.
+    def _schedule_event_drain(self, delay_ms: int) -> None:
+        """Schedule the single owned event-pump callback when active.
+
+        Args:
+            delay_ms (int): Delay before the next event batch, in milliseconds.
 
         Returns:
-            None: Refreshes activity/UTC status, acknowledges local flight
-                abandonment and schedules the next drain.
+            None: Stores one callback ID or leaves scheduling to the active pump.
         """
-        if self.exiting:
+        if (self.exiting or self._drain_running
+                or self._drain_after_id is not None):
             return
+        callback_id: Optional[str] = None
+
+        def drain() -> None:
+            """Dispatch the pump with its captured timer identity.
+
+            Returns:
+                None: Delegates identity validation to the owning method.
+            """
+            self._run_scheduled_event_drain(callback_id)
+
+        callback_id = self.root.after(delay_ms, drain)
+        self._drain_after_id = callback_id
+
+    def _run_scheduled_event_drain(
+        self, callback_id: Optional[str],
+    ) -> None:
+        """Release the timer slot and run the next bounded FIFO batch.
+
+        Args:
+            callback_id (Optional[str]): Identity captured by the scheduled
+                timer so a stale callback cannot clear a replacement.
+
+        Returns:
+            None: Clears the fired callback ID before dispatching events.
+        """
+        if callback_id != self._drain_after_id:
+            return
+        self._drain_after_id = None
+        self.drain_events()
+
+    def drain_events(self) -> None:
+        """
+        Run one cooperative batch of worker events and schedule its continuation.
+
+        Returns:
+            None: Preserves FIFO event handling and schedules one later batch.
+        """
+        if self.exiting or self._drain_running:
+            return
+        callback_id = self._drain_after_id
+        self._drain_after_id = None
+        if callback_id is not None:
+            try:
+                self.root.after_cancel(callback_id)
+            except tk.TclError:
+                pass
+        self._drain_running = True
+        budget_exhausted = False
+        batch_started = time.perf_counter()
+        try:
+            budget_exhausted = self._drain_event_batch()
+            if not self.exiting:
+                self.refresh_contextual_watcher_copy()
+                self.refresh_activity_monitor_state()
+                self.refresh_revoke_button_state()
+        finally:
+            elapsed_ms = (time.perf_counter() - batch_started) * 1000.0
+            self._event_drain_last_ms = elapsed_ms
+            self._event_drain_max_ms = max(
+                self._event_drain_max_ms, elapsed_ms,
+            )
+            if budget_exhausted:
+                self._event_drain_yield_count += 1
+            self._drain_running = False
+            if not self.exiting:
+                delay_ms = (
+                    WATCHER_EVENT_CONTINUATION_MS
+                    if budget_exhausted else WATCHER_EVENT_IDLE_POLL_MS
+                )
+                self._schedule_event_drain(delay_ms)
+
+    def _drain_event_batch(self) -> bool:
+        """Apply complete queued events until the cooperative batch budget ends.
+
+        Returns:
+            bool: True when the event count or time budget ended the batch;
+                False when the queue was observed empty or shutdown began
+                between complete events.
+        """
+        batch_started = time.perf_counter()
+        processed_events = 0
+        self._event_drain_last_count = 0
         while True:
+            if self.exiting:
+                return False
+            elapsed_ms = (time.perf_counter() - batch_started) * 1000.0
+            if (processed_events >= WATCHER_EVENT_BATCH_LIMIT
+                    or elapsed_ms >= WATCHER_EVENT_BATCH_BUDGET_MS):
+                return True
             try:
                 event = self.events.get_nowait()
             except queue.Empty:
                 break
+            processed_events += 1
+            self._event_drain_last_count += 1
+            self._event_drain_total_count += 1
 
             if isinstance(event, dict):
                 kind = str(event.get("kind", "") or "")
@@ -13607,7 +14013,12 @@ class WatcherApp:
                     if (generation is None
                             or generation is not self.config._snapshot_token
                             or (not payload.get('linked_binding') and (
-                                normalize_upload_url(self.gallery_url_var.get())
+                                self.linking_manager.linked_upload_mode_selected()
+                                or self.linking_manager.selected_upload_target()
+                                is not None
+                                or normalize_upload_url(
+                                    self.gallery_url_var.get(),
+                                )
                                 != normalize_upload_url(self.config.gallery_url)
                                 or self.api_key_var.get().strip() != self.config.api_key.strip()
                             ))):
@@ -13645,6 +14056,25 @@ class WatcherApp:
                                     self.write_log("Connection succeeded, but saving the working API route failed: " + str(exc), "warning")
                             self.write_log("Connection test succeeded for gallery " + label + ".", "success")
                             self.record_activity("success", "Connection test succeeded for gallery " + label + ".", "system")
+                        if (not payload.get('linked_binding')
+                                and not self.api_key_revoke_running):
+                            saved_url = normalize_upload_url(
+                                self.config.gallery_url,
+                            )
+                            saved_key = self.config.api_key.strip()
+                            if (saved_url and saved_key
+                                    and normalize_upload_url(
+                                        self.gallery_url_var.get(),
+                                    ) == saved_url
+                                    and self.api_key_var.get().strip() == saved_key):
+                                self._verified_legacy_gallery = (
+                                    self.config._snapshot_token,
+                                    connection_binding(saved_url, saved_key),
+                                    label,
+                                    str(payload.get('gallery_title', '') or '').strip(),
+                                )
+                            else:
+                                self._verified_legacy_gallery = None
                     elif kind == "connection_warning":
                         self.connection_status_var.set("Connection warning")
                         self.connection_detail_var.set(str(payload.get("message", "Remote preflight unavailable") or "Remote preflight unavailable"))
@@ -13682,6 +14112,7 @@ class WatcherApp:
                     self.api_key_revoke_running = False
                     self.api_key_revoke_thread = None
                     self.api_key_var.set("")
+                    self._verified_legacy_gallery = None
                     cleared_config = replace(self.config, api_key="")
                     cleanup_error = ""
                     try:
@@ -13824,10 +14255,7 @@ class WatcherApp:
                 if self.semantic_ai_install_button is not None:
                     self.semantic_ai_install_button.configure(state="normal")
 
-        self.utc_sync_status_var.set(self.utc_sync.status())
-        self.refresh_activity_monitor_state()
-        self.refresh_revoke_button_state()
-        self.root.after(200, self.drain_events)
+        return False
 
     def configure_log_tags(self) -> None:
         """Configure readable semantic log colors on the dark diagnostics panel.

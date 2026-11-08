@@ -1845,8 +1845,27 @@ och erbjuder ett manuellt nytt försök; vanlig bläddring kräver inte \ui{Visa
 Kontextpaneler behåller stängning med tangentbord och klick
 utanför panelen. Windows klipper deras rundade kontur utan mörka yttre hörn.
 Om inbyggd formgivning saknas förblir en platt ogenomskinlig temapanel användbar.
+Laddningsstatus och en liten utjämnad snurrande ring visas ovanför trädet under
+inledande och fortsatta läsningar. De stoppas vid slutförande, fel eller
+frånkoppling utan att uppskatta en procentandel.
+Nyare servrar kan~erbjuda ett~valfritt fullständigt JSON-träd med~revision.
+De~kontrollerar aktuella kontobehörigheter igen före trädet eller ett~svar om
+oförändrat innehåll. Det~befintliga sid-API:t finns kvar för~äldre servrar,
+otillgängliga data och~träd som~överstiger gränsen för~ett komplett svar.
+Klienten visar först den senast fullständigt sparade strukturen och öppnar
+kontots senast uttryckligen valda galleri. Det valfria trädet begärs bara när
+stöd annonseras; ogiltiga eller ej stödda svar behåller det sparade trädet och
+använder sid-API:t, även med webb~1.0.3. Endast en fullständig lyckad uppdatering
+tar bort saknade rader och ersätter den sparade kopian. Korta UI-steg uppdaterar
+ändrade rader. Windows skyddar titlar med användarbundet DPAPI; osäker eller
+skadad lagring räknas som en cachemiss. Media kräver fortfarande aktuell
+serverbehörighet och nya uppladdnings-/skapandeåtgärder ett färskt bekräftat
+galleri. Dessa metadata ger inte fotoåtkomst offline.
 
-Watcher-skärmen visar gallerimålet. API-nyckelkontrollen öppnar en kompakt
+Watcher-skärmen visar gallerimålet. En verifierad titel i API-läge behålls
+när samma sparade anslutning uppdateras; nyckel- eller lägesbyte gör den
+ogiltig. Val av fotoalbum ersätter inte uppladdningsmålets titel.
+API-nyckelkontrollen öppnar en kompakt
 dialog med maskerad nyckel och \ui{Save \& Test}; den finns kvar i sidhuvudet
 på alla skärmar. Osparade
 ändringar ersätter inte den sparade nyckeln. Appens sidhuvud har även
@@ -1973,8 +1992,20 @@ Presentationslistor innehåller högst 32 synliga MP3/WAV-spår. Om den minsta
 miniatyrbilden saknas kan servern använda en annan befintlig version eller
 den offentliga visningsfilen inom gränsen. Fotopanelen och lightboxen delar
 huvudfönstret.
-Det responsiva rutnätet rullar kontinuerligt och laddar synliga miniatyrbilder.
-Klicka på en bild eller fokusera den och tryck Enter för att öppna lightboxen.
+Ett ofullständigt HTTP~304-svar leder till högst en ny auktoriserad läsning;
+det avvisade svaret ger aldrig tillgång till gamla bilddata.
+Det responsiva rutnätet rullar kontinuerligt och begär bara synliga miniatyrbilder,
+utan separata detaljbilder. Den uttryckliga åtgärden \ui{Förladda galleri}
+hämtar både miniatyrbilder och lightbox-versioner.
+Ett~klick väljer ett~foto och~visar metadata i~den justerbara högra panelen.
+Dubbelklick eller Enter öppnar lightboxen. Pilar navigerar rutnätet;
+mellanslag markerar eller avmarkerar. Control-klick (Command-klick på~macOS)
+växlar enskilda markeringar; Shift-klick eller Shift-pil väljer ett~förankrat
+intervall inom gränsen på~64~foton. Control-pil (Command-pil på~macOS) flyttar
+fokus utan att~rensa markeringen. Bara valda foton får~en lätt rundad kontur.
+Filnamn visas i~en kompakt kontrasterande tooltip. Panel och~kontextinformation
+delar behörighetskontrollerade metadata, formatering och~en kort begränsad
+sessionscache.
 Vänster och höger går runt hela albumet. Stäng lightboxen
 eller tryck Escape för att återställa trädet och rutnätet även vid bildfel.
 Miniatyrerna beskär upptäckta svarta fält och visar hela den återstående scenen
@@ -1988,7 +2019,9 @@ du dra bilden. F eller F11 växlar helskärm. När pekaren rör sig visas reglag
 en kort stund.
 När tillåtna koordinater finns
 öppnar en fäst platsmarkör \ui{Öppna i OpenStreetMap} i~systemets webbläsare.
-Föregående och nästa detaljbild förbereds i begränsat minne.
+Föregående och nästa detaljbild förbereds i begränsat minne bara när lightboxen
+är öppen. Stängning tömmer förhämtningskön; en pågående begränsad begäran får
+slutföras.
 \ui{Anpassa efter innehåll} beskär upptäckta svarta fält i fönstret och i
 helskärm. \ui{Visa originalbild} återställer hela ramen. Bilden behåller sina
 proportioner. Under storleksändring visas en löpande förhandsbild som förfinas
@@ -1996,10 +2029,23 @@ när fönstrets storlek har stabiliserats. Från macOS~15 kan kompatibla
 HDR-bilder visas med AppKit på en EDR-skärm om PyObjC och Tk:s
 fönsteranslutning finns. Andra konfigurationer, inklusive Windows, visar
 8-bitars SDR med Pillow/Tk.
+Windows helskärmskommandon fungerar även med NumLock, CapsLock och ScrollLock
+eller utan numeriskt tangentbord. Control/Alt-kombinationer och textinmatning
+behåller sitt beteende. Stora JPEG/MPO-bilder använder ett mindre avkodningsraster
+före RGB-allokering med samma gräns på 36~miljoner pixlar och samma visningsgräns.
+Om detaljbilden fortfarande överstiger gränsen kan en auktoriserad miniatyr
+ge en begränsad förhandsbild, även med äldre webbversioner. Behörighetsfel,
+avbrott, hastighetsbegränsning och skadade data använder inte denna reservväg.
+Kopierad diagnostik innehåller säkra orsaker, mått och gränser samt ett separat
+begränsat F/F11-spår.
 En gemensam diskcache per användare lagrar godkända foton och spår med
-verifierade kontrollsummor. När den vanliga delen når 4\,096~poster eller
-1~GiB tas de
-minst nyligen använda posterna bort. Ett matchande kontrollvärde i den
+verifierade kontrollsummor. Vanliga miniatyrbilder har~en egen del~med
+256~MiB och~16\,384~poster. Stora foton och~ljud behåller 1~GiB och~4\,096~poster.
+Varje del~rensar bara sina minst nyligen använda poster; stora foton tränger
+inte undan miniatyrbilder. Galleriers bevarande och~privata förladdningsval
+delas fortfarande. När~bevarande stängs av~kontrolleras först plats för~alla
+målkopior. Äldre miniatyrbilder flyttas efter exakt variantidentitet utan
+förnyad färskhet. Ett~matchande kontrollvärde i~den
 aktuella albumkatalogen gör att en miniatyr kan läsas direkt från disken.
 Annars gäller 60~sekunders färskhet och auktoriserad ETag-kontroll. Den
 aktuella auktoriserade spellistan kan återanvända ett spår med samma SHA-256,
@@ -2331,6 +2377,16 @@ slutkontroll. Slutposten innehåller antal behandlade, lagrade och överhoppade
 bilder. Ett pågående preload behåller feluppgifter vid albumbyte inom samma
 godkända anslutning. Avvisade mediesvar visar begränsade cachebeslut utan råa
 huvuden eller lättnader i behörighet och lokal lagring.
+Likvärdiga upprepade eller uppdelade cachedirektiv stöds med samma
+behörighetsmarkörer och privat omvalidering. Ytterligare längre åldersvärden
+utökar inte den lokala gränsen på 60 sekunder; oförenliga regler tillåter
+ingen lagring och no-store-visning förblir tillfällig.
+Arbetarhändelser behåller FIFO-ordningen. GUI:t lämnar kontroll mellan hela
+händelser efter högst 64 meddelanden eller åtta millisekunders arbete och
+fortsätter efter 16~ms; en tom kö behåller intervallet 200~ms. En långsam
+hanterare kan överskrida denna kooperativa budget. Historik och lagring sker
+direkt, medan tabellritning samordnas. Kopierad diagnostik visar antal och
+tider för omgångar för manuell mätning, utan löften om skärmens svarstid.
 
 \subsection{Simulatorposition i Windows}
 
@@ -2528,6 +2584,11 @@ allmän text. Bakgrundskontrollen sker var tredje sekund, även före bevakning
 och utan inspelning/UTC-synkronisering. SimConnect öppnas/stängs utan telemetri
 eller simulatorändring; processnamn stannar lokalt. Åtgärder, rapporter och
 nyckelhantering förblir oförändrade.
+Prepar3D och X-Plane väljer också flygtexter genom exakta processnamn.
+Utanför flygkontext används neutrala sessionstexter för aktuell inspelning
+och förlopp. Watchers UTC-kontroller döljs men den sparade inställningen
+behålls; flygdetektering återställer dem. Historiska flygrapporter behåller
+sin faktiska identitet och egna spelfraser finns kvar.
 I vilande API-nyckelläge visas Börja med eller utan sparad nyckel och utan
 ett spel igång. Knappen öppnar anslutningsinställningarna direkt; en länk
 enbart för fotovisning döljer den inte. Länkat uppladdningsläge erbjuder

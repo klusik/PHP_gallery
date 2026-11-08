@@ -2,7 +2,7 @@
 
 The Watcher and Import Begin/Finish controls retain their original connection,
 stop, report and key-revocation actions. Only their text changes. The existing
-saved key determines Begin versus Finish; game detection never changes
+capture lifecycle determines Begin versus Finish; game detection never changes
 credentials, starts watching, records a flight or authorizes an operation.
 
 ## Detection order and account rights
@@ -24,8 +24,9 @@ and [same-account token access](https://learn.microsoft.com/en-us/windows/win32/
 Standard accounts can inspect ordinary processes they own. An anti-cheat or
 other process ACL can still deny identity access; detection remains optional.
 
-An unambiguous Microsoft Flight Simulator process also selects flight wording
-when SimConnect fails. Other games use general game wording unless a reviewed
+Unambiguous Microsoft Flight Simulator, FSX, Prepar3D and X-Plane processes also
+select flight wording when SimConnect fails. Other games use general game
+wording unless a reviewed
 custom phrase exists. Multiple games or an executable shared by different games
 keep the general wording. Multiple processes assigned to one explicit family,
 such as the Mass Effect trilogy, share that family's phrases. Andromeda is not
@@ -38,6 +39,11 @@ their original grid positions; hiding never unloads a saved plan. Watcher,
 Import and progress use **Abandon game…** outside a flight context, with matching
 confirmation, phase and completion text in all four languages. These actions
 retain the existing local abandonment/key cleanup and leave the game running.
+Current recording controls and progress use neutral session wording outside a
+flight context. Flight detection restores simulator wording and the Watcher
+UTC controls; hiding those controls preserves the saved UTC preference and
+does not change worker admission. Historical flight reports retain their
+actual flight-specific identity. Custom Begin/Finish phrases remain optional.
 
 The observer waits three seconds between probes, including while the window is
 in the tray or watching/recording/UTC sync are off. The existing Tk refresh loop

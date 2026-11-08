@@ -1991,8 +1991,28 @@ per Tastatur und Außenklick bei.
 Windows beschneidet ihre abgerundete Kontur ohne dunkle äußere Eckblöcke.
 Ist native Formgebung nicht verfügbar, bleibt ein flaches undurchsichtiges
 Panel im aktuellen Design benutzbar.
+Ladestatus und ein kleiner geglätteter Drehring stehen über dem Baum. Sie zeigen
+anfängliche und fortgesetzte Abfragen an und enden bei Abschluss, Fehler oder
+Trennung, ohne einen Prozentwert zu schätzen.
+Neuere Server können einen optionalen vollständigen JSON-Baum mit Revision
+anbieten. Vor~dem Baum oder einer Unverändert-Antwort prüfen sie~die aktuellen
+Kontoberechtigungen erneut. Die~bisherige Seiten-API bleibt für~ältere Server,
+nicht verfügbare Daten und~zu große vollständige Antworten erhalten.
+Der Client zeigt zuerst die zuletzt vollständig gespeicherte Struktur und
+öffnet die letzte ausdrücklich gewählte Galerie dieses Kontos. Der optionale
+Baum wird nur bei angekündigter Unterstützung abgefragt; ungültige oder nicht
+unterstützte Antworten behalten den gespeicherten Baum und verwenden das
+Seiten-API, auch mit Web~1.0.3. Erst ein vollständiger erfolgreicher Abruf
+entfernt fehlende Zeilen und ersetzt den gespeicherten Stand. Kurze UI-Schritte
+aktualisieren geänderte Zeilen. Windows schützt Titel mit benutzergebundenem
+DPAPI; unsichere oder beschädigte Dateien gelten als Cache-Fehlschlag. Medien
+benötigen weiterhin aktuelle Serverfreigabe, neue Upload-/Erstellaktionen eine
+frisch bestätigte Galerie. Die Metadaten gewähren keinen Offline-Fotozugriff.
 
-Der Watcher-Bildschirm zeigt die Zielgalerie. Die obere API-Schlüsselsteuerung
+Der Watcher-Bildschirm zeigt die Zielgalerie. Ein geprüfter Titel im API-Modus
+bleibt bei Aktualisierungen derselben gespeicherten Verbindung erhalten;
+Schlüssel- oder Moduswechsel machen ihn ungültig. Die Fotoauswahl ersetzt
+nicht den Uploadtitel. Die obere API-Schlüsselsteuerung
 öffnet einen kompakten Dialog mit maskiertem Schlüssel und \ui{Save \& Test};
 diese Steuerung bleibt
 in der Kopfzeile auf allen Bildschirmen verfügbar. Ungespeicherte Änderungen
@@ -2132,13 +2152,26 @@ auf älteren Servern. Für Dateien gilt die Grenze von 16~MiB. Die Präsentation
 zu 32 sichtbare MP3/WAV-Titel. Fehlt die kleinste Miniatur, kann der Server
 eine andere vorhandene Variante oder die öffentliche Anzeigedatei innerhalb
 des Limits liefern. Fotobereich und Lightbox bleiben im Hauptfenster.
+Eine unvollständige HTTP~304-Antwort löst höchstens eine neue autorisierte
+Abfrage aus; die abgelehnte Antwort erlaubt keine veralteten Bilddaten.
 Vorschaubilder schneiden erkannte schwarze Balken ab und zeigen die ganze
 verbleibende Szene im eigenen Seitenverhältnis. Für Fotos und Vorschaubilder gilt ein
 separates Limit von 600 Anfragen je IP und 3\,600 insgesamt in fünf Minuten.
 Bei HTTP~429 zeigt Photos die Begrenzung an und pausiert das Vorabladen
 bis zur Auswahl von \ui{Retry}.
-Das responsive Raster scrollt durchgehend und lädt sichtbare Vorschaubilder. Klicken Sie ein
-Bild an oder fokussieren Sie es und drücken Sie Enter, um die Lightbox zu öffnen.
+Das responsive Raster scrollt durchgehend und fordert nur sichtbare
+Vorschaubilder an, ohne separate Detailbilder zu laden. Die ausdrückliche Aktion
+\ui{Galerie vorladen} lädt Vorschaubilder und Lightbox-Varianten. Ein~Klick wählt
+ein~Foto und~zeigt seine Metadaten im~anpassbaren rechten Bereich.
+Doppelklick oder Enter öffnet die~Lightbox. Pfeile bewegen die~Auswahl;
+die~Leertaste schaltet ein~Foto um. Control-Klick (Command-Klick unter macOS)
+schaltet einzelne Auswahlen um; Shift-Klick oder Shift-Pfeil wählt einen
+verankerten Bereich innerhalb des~Limits von~64~Fotos.
+Control-Pfeil (Command-Pfeil unter macOS) bewegt den~Fokus ohne Auswahlverlust.
+Nur~ausgewählte Fotos erhalten einen leicht gerundeten Umriss. Dateinamen
+erscheinen in~einem kompakten kontrastierenden Tooltip. Bereich und~Kontextinfo
+teilen berechtigungsgeprüfte Metadaten, Formatierung und~einen kurzen
+begrenzten Sitzungscache.
 Links und Rechts durchlaufen das ganze Album in einer Schleife. Schließen oder Escape stellt Baum und Raster
 auch nach einem Bildfehler wieder her. Beim Start aus dem Quellcode muss
 Pillow im verwendeten Python-Interpreter installiert sein.
@@ -2148,8 +2181,10 @@ Ziehen verschiebt das Bild. F oder F11 schalten Vollbild um. Eine
 Zeigerbewegung blendet die Steuerung kurz ein.
 Wenn erlaubte Koordinaten vorhanden sind, öffnet
 eine angeheftete Standortmarke \ui{In OpenStreetMap öffnen} im Systembrowser.
-Das vorherige und nächste Detailbild werden im begrenzten Arbeitsspeicher
-vorbereitet. \ui{An Inhalt anpassen} beschneidet erkannte schwarze Balken
+Das vorherige und nächste Detailbild werden nur bei geöffneter Lightbox im
+begrenzten Arbeitsspeicher vorbereitet. Schließen leert die Vorlade-Warteschlange;
+eine bereits laufende begrenzte Anfrage darf enden.
+\ui{An Inhalt anpassen} beschneidet erkannte schwarze Balken
 im Fenster und im Vollbild. \ui{Originalbild anzeigen} stellt den ganzen
 Rahmen wieder her. Das Bild behält sein Seitenverhältnis. Beim Ändern der
 Fenstergröße aktualisiert die Bildansicht eine Vorschau und verfeinert sie
@@ -2157,10 +2192,23 @@ anschließend. Ab macOS~15 können geeignete HDR-Dateien über AppKit auf einem
 EDR-Display erscheinen, wenn PyObjC und die Tk-Fensteranbindung verfügbar
 sind. Andere Konfigurationen einschließlich Windows verwenden 8-Bit-SDR
 über Pillow/Tk.
+Windows-Vollbildkürzel funktionieren auch mit NumLock, CapsLock und ScrollLock
+oder ohne Ziffernblock. Control/Alt-Kombinationen und Texteingabe bleiben
+erhalten. Große JPEG/MPO-Details verwenden vor der RGB-Zuweisung ein verkleinertes
+Dekoderraster bei demselben Limit von 36~Millionen Pixeln und derselben
+Anzeigegrenze. Überschreitet ein Detail weiterhin das Limit, kann eine
+autorisierte Miniatur eine begrenzte Vorschau liefern, auch mit älteren
+Webversionen. Berechtigungsfehler, Abbruch, Drosselung und beschädigte Daten
+nutzen diesen Ersatz nicht. Kopierte Diagnostik enthält sichere Gründe,
+Abmessungen und Grenzen sowie eine getrennte begrenzte F/F11-Spur.
 Ein gemeinsamer Cache pro Benutzer speichert freigegebene Fotos und Titel mit
-verifizierten Inhaltsprüfsummen. Bei mehr als
-4\,096~Einträgen oder 1~GiB
-entfernt der normale Bereich die am längsten ungenutzten Daten. Ein passender Prüfwert aus
+verifizierten Inhaltsprüfsummen. Normale Vorschaubilder haben einen eigenen
+Bereich mit~256~MiB und~16\,384~Einträgen. Große Fotos und~Audio behalten
+1~GiB und~4\,096~Einträge. Jeder Bereich entfernt nur~seine ältesten Zugriffe;
+große Fotos verdrängen keine Vorschaubilder. Galerie-Aufbewahrung und~private
+Vorladeoptionen bleiben gemeinsam. Beim Aufheben der~Aufbewahrung wird zuerst
+Platz für~alle Zielkopien geprüft. Alte Vorschaubilder werden anhand ihrer
+exakten Variantenidentität ohne erneuerte Frische übernommen. Ein~passender Prüfwert aus
 dem aktuellen Albumkatalog ermöglicht die direkte Nutzung der Miniatur.
 Sonst gelten 60~Sekunden Frische und die autorisierte ETag-Prüfung.
 Die aktuell autorisierte Wiedergabeliste kann einen Titel anhand von SHA-256,
@@ -2518,6 +2566,17 @@ und Abschlussprüfung. Der Abschluss nennt bearbeitete, gespeicherte und
 Preloads innerhalb derselben genehmigten Verbindung erhalten. Abgelehnte
 Medienantworten zeigen begrenzte Cache-Header-Entscheidungen ohne rohe Header
 oder gelockerte Berechtigungen und lokale Speicherregeln.
+Gleichwertige wiederholte oder aufgeteilte Cache-Direktiven werden mit denselben
+Autorisierungsmarkern und privater Neuvalidierung unterstützt. Zusätzliche
+längere Alterswerte erweitern die lokale Grenze von 60 Sekunden nicht;
+unvereinbare Regeln erlauben keine Speicherung und no-store bleibt flüchtig.
+Worker-Ereignisse behalten ihre FIFO-Reihenfolge. Die GUI gibt zwischen
+vollständigen Ereignissen nach höchstens 64 Nachrichten oder acht Millisekunden
+Arbeit ab und setzt nach 16~ms fort; eine leere Warteschlange behält 200~ms.
+Ein langsamer Handler kann dieses kooperative Budget überschreiten. Verlauf
+und Speicherung bleiben unmittelbar, Tabellen werden gebündelt neu gezeichnet.
+Kopierte Diagnosen nennen Anzahlen und Laufzeiten der Batches zur manuellen
+Messung, ohne Bildschirmreaktionszeiten zu garantieren.
 
 \subsection{Simulatorposition unter Windows}
 
@@ -2732,6 +2791,12 @@ SimConnect wird nur geöffnet/geschlossen, ohne Telemetrie oder
 Simulatoränderung;
 Prozessnamen bleiben lokal. Aktionen, Berichte und Schlüssel bleiben
 unverändert.
+Prepar3D und X-Plane wählen ebenfalls Flugtexte anhand exakter Prozessnamen.
+Außerhalb eines Flugkontexts verwenden aktuelle Aufzeichnung und Fortschritt
+neutrale Sitzungstexte. Die UTC-Steuerung im Watcher wird ausgeblendet,
+behält aber die gespeicherte Einstellung; Flugerkennung stellt sie wieder her.
+Historische Flugberichte behalten ihre tatsächliche Identität und eigene
+Spieltexte bleiben erhalten.
 Im ruhenden API-Schlüsselmodus bleibt Beginnen mit oder ohne gespeicherten
 Schlüssel und ohne laufendes Spiel sichtbar und öffnet direkt den
 Verbindungseditor. Eine reine Fotoverbindung blendet es nicht aus. Der

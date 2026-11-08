@@ -850,6 +850,109 @@ Load more click. Controlled timer fixtures verify pacing, session/destruction
 fences and error-to-manual-retry behavior; switching A to B and back
 scopes each gallery's preload status. These assertions complement manual
 rendering checks; they do not establish every DPI or desktop composition.
+Manual acceptance for catalogue activity must check its placement above the
+tree, smooth ring beside the localized text and animation during initial and
+paced reads, stopping at a terminal result. Clear, restart, disconnect and
+destroy during animation; stale timers must not update the replacement state.
+The text must remain usable when icon rendering is unavailable. Verify the
+saved upload title across refreshes, clearing after a
+credential/mode change, generic capture wording, simulator controls and custom
+game phrases without modifying recording/UTC preferences. Confirm this visible
+behavior before expanding the corresponding widget regression expectations.
+Media transport coverage must include equivalent repeated/split/reordered
+cache headers on 200 and 304 responses, preserving exact marker and Vary
+refusals. Additional longer ages must retain the local 60-second cap; shorter,
+malformed, missing or conflicting directives must not authorize storage.
+Retain legacy no-store display and private audio revalidation assertions.
+Conditional-photo recovery fixtures exercise a rejected 304 with a missing
+cache marker followed by a fresh authorized response. They must never return
+the stale body, retry a failed unconditional request, exceed the shared
+no-store retry budget, or retry encoding, authorization, throttling, unrelated
+transport failures or cancellation. Retain the original strict 304 header
+admission tests; recovery does not authorize the rejected cache response.
+GUI performance acceptance must preserve mixed tuple/control event order across
+bounded drain turns and confirm that each event completes before yielding.
+Use controlled clocks for budget boundaries rather than machine-speed timing
+assertions. Verify one scheduled dispatcher through reentrance, exit and a
+deferred close, and one recent-activity redraw for an event burst. Filtering
+must show current history without losing footer or writer submissions. Numeric
+diagnostic counters are observations, not an installed latency benchmark.
+For thumbnail-first browsing, record rendition requests: grid navigation must
+request thumbnails without detail or adjacent-photo reads. Opening a photo
+permits its detail and bounded neighbors; closing it must prevent further
+speculative reads, including a delayed page-edge completion. An in-flight
+bounded read may complete without reopening the lightbox. Explicit preload
+must still fetch both rendition types. Direct RGB thumbnail preparation must
+retain existing source byte/pixel limits, matte crop, aspect ratio and maximum
+dimensions. Verify foreground detail/page requests and active music retain
+priority, while a changing viewport cannot indefinitely defer revision checks.
+These are acceptance requirements, not claims of installed performance results.
+
+Photos selection acceptance must distinguish single-click metadata selection
+from double-click/Enter detail reads. Verify Control/Command toggling, anchored
+Shift ranges including the unchanged selection limit, arrows, focus-only
+Control/Command arrows, Space toggling and focus return after lightbox close.
+Selection must not resize tiles or show an additional dotted focus rectangle.
+Inspect one photo, then open its context information: groups, formatting and
+GPS restrictions must match without duplicating the metadata implementation.
+Change photos rapidly, close/switch galleries and expire the metadata cache;
+stale replies must not repaint the current pane. Check f/F/F11 exactly once
+with focus on image and toolbar, preserving text fields and command modifiers.
+Check tooltip contrast, wrapping and viewport clamping at narrow widths.
+Fullscreen regressions must also supply real Windows NumLock/ScrollLock state
+bits, combinations with CapsLock/Shift and state zero for a keyboard without a
+numeric keypad. Real and generated Alt/Control states remain unhandled, and
+text entry retains the typed letter. Separate shortcut observations must be
+bounded and copied without replacing the retained media failure; keys outside
+F/F11 and text/widget paths must never appear.
+Decode fixtures exercise an oversized JPEG reduced before RGB conversion,
+unchanged byte/pixel caps, an unsafe or ineffective draft, and a non-JPEG that
+must not allocate its oversized raster. Typed facts expose numeric policy
+reasons after revalidation, including corrupted diagnostic fields. Only a
+pixel-budget refusal may request one authorized thumbnail preview; auth,
+throttling, cancellation and corrupt bytes must not cause it. Apply the same
+reader to selected and adjacent details and retain late-selection fencing.
+
+`app_linking_gallery_tree_test.php` exercises the real complete-tree service
+with controlled model/schema boundaries: complete/unchanged/empty results,
+creation/rename/move/deletion revision changes, account/scope/issuer isolation,
+post-read revocation, and independent row/encoded-byte refusal. It does not
+prove HTTP or SQL behavior. The existing gallery-detail database fixture also
+reads the complete private identity through the actual model and refuses a
+foreign issuer and revoked grant. The central PHP audit discovers the new
+fixture through its existing `*_test.php` glob. Manual protocol qualification
+must check no-store headers, exclusive query modes, missing capability,
+unsupported/invalid/oversized/unavailable optional replies and the original
+paged fallback against an unchanged older web. Never report partial trees as
+complete or remove missing cached rows before a successful final page.
+
+The WinApp tree protocol fixtures reject invalid versions, duplicate/unordered
+IDs, bad parents/titles/revisions and unsolicited unchanged replies. Missing
+capability must send no tree request. Unsupported/invalid/oversized/unavailable
+tree data must use the original pages; grant/authentication failure,
+cancellation and HTTP 429 must stop without fallback. Workspace fixtures cover
+cached-first display, saved selection versus explicit user choice, fresh-only
+preference writes, unchanged difference-only updates, bounded mounting and
+generation/session cancellation. Failed intermediate pages preserve the saved
+complete tree; final-page success prunes only absent IDs.
+`test_gallery_catalogue_cache.py` exercises real snapshot round trips,
+issuer/account/scope isolation, corrupt and redirected storage refusal,
+cancellation/size/shape bounds and failed atomic publication retaining the
+previous snapshot. Windows runs exercise user-scoped DPAPI rather than a
+mock encryption marker. These fixtures do not prove installed responsiveness.
+Manual old-web acceptance uses the unchanged online 1.0.3 endpoint. Verify new
+tree-v1 replies on localhost separately, without deploying this web source.
+
+The media-cache fixtures separate thumbnail pressure from detail/audio
+pressure and verify quota accounting, typed retention, current public/private
+admission and exact-key legacy migration. The pinned-legacy case must preserve
+the original validation time, produce a typed thumbnail entry and subsequently
+unpin into the thumbnail pool. Unsafe child directories must reject reads,
+presence checks and writes. Revalidation must stamp the actual file identity
+read. Unpin fixtures must retain all originals when the whole target set cannot
+fit at once and prevent one copied target from evicting an earlier target.
+Physical symlink qualification can report a specific platform privilege skip;
+that is not equivalent to passing a real redirected-path test.
 
 The isolated linking security fixture keeps `SCRIPT_NAME` independent of
 `REQUEST_URI` and verifies root and subdirectory public mounts through internal

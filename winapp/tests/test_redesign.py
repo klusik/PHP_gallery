@@ -99,6 +99,29 @@ def load_main_module():
 MAIN = load_main_module()
 
 
+def initialize_event_pump_fixture(app: MAIN.WatcherApp) -> None:
+    """Give a constructor-bypassed host the real bounded event dispatcher.
+
+    Args:
+        app (MAIN.WatcherApp): Watcher host or mock used for one event test.
+
+    Returns:
+        None: Pump state is initialized and batch dispatch resolves to production.
+    """
+    app._drain_running = False
+    app._drain_after_id = None
+    app._event_drain_last_count = 0
+    app._event_drain_total_count = 0
+    app._event_drain_yield_count = 0
+    app._event_drain_last_ms = 0.0
+    app._event_drain_max_ms = 0.0
+    app._activity_drawer_flush_count = 0
+    app._drain_event_batch = MAIN.WatcherApp._drain_event_batch.__get__(
+        app, MAIN.WatcherApp,
+    )
+    app.refresh_contextual_watcher_copy = mock.Mock()
+
+
 class UiLayoutPreferenceTests(unittest.TestCase):
     """Keep desktop geometry preferences bounded and separate from uploads."""
 
@@ -229,6 +252,82 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                 MAIN.ViewLayoutState(1150, 770, 80, 90, "normal", 330),
                 MAIN._read_ui_layout(path, (0, 0, 1600, 900), (840, 500)),
             )
+
+
+class PhotosCatalogueHostTests(unittest.TestCase):
+    """Keep host-owned Photos cache and selection callbacks connected."""
+
+    def test_photos_workspace_receives_account_bound_catalogue_owners(self) -> None:
+        """Pass the host persistence owners without bypassing identity checks.
+
+        Returns:
+            None: Workspace callbacks stay bound to WatcherApp and the cache
+                factory receives only verified account and approved scope data.
+        """
+        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app._ui_layout_state = MAIN.ViewLayoutState(
+            1100, 760, 20, 30, 'normal', 210,
+        )
+        address = mock.Mock()
+        address.trace_add.return_value = 'photos-address-trace'
+        app.linking_manager = types.SimpleNamespace(
+            photos_session=mock.Mock(),
+            linked_address=address,
+            photos_site_identity=mock.Mock(
+                return_value=('https://gallery.example/Galerie', 7),
+            ),
+        )
+        app.flights = types.SimpleNamespace(
+            ui_language=mock.Mock(get=mock.Mock(return_value='en')),
+            toggle_simbrief=mock.Mock(),
+        )
+        app.events = mock.Mock()
+        app.open_photos = mock.Mock()
+        app.manage_gallery_link = mock.Mock()
+        app.open_gallery_watcher = mock.Mock()
+        app.simbrief_available = mock.Mock(return_value=False)
+        app.load_photos_tree_state = mock.Mock(return_value={})
+        app.save_photos_tree_state = mock.Mock()
+        app.load_photos_selected_gallery = (
+            MAIN.WatcherApp.load_photos_selected_gallery.__get__(
+                app, MAIN.WatcherApp,
+            )
+        )
+        app.save_photos_selected_gallery = (
+            MAIN.WatcherApp.save_photos_selected_gallery.__get__(
+                app, MAIN.WatcherApp,
+            )
+        )
+        app.photos_catalogue_cache = MAIN.WatcherApp.photos_catalogue_cache.__get__(
+            app, MAIN.WatcherApp,
+        )
+        app.load_photos_tree_width = mock.Mock(return_value=210)
+        app.save_photos_tree_width = mock.Mock()
+        app._sync_watcher_recording = mock.Mock()
+        parent = mock.Mock()
+        workspace = mock.Mock()
+        with mock.patch.object(
+            MAIN, 'PhotosWorkspace', return_value=workspace,
+        ) as build:
+            MAIN.WatcherApp.build_photos_tab(app, parent)
+
+        kwargs = build.call_args.kwargs
+        self.assertIs(app, kwargs['load_selected_gallery'].__self__)
+        self.assertIs(app, kwargs['save_selected_gallery'].__self__)
+        cache_factory = kwargs['catalogue_cache']
+        cache = mock.Mock()
+        session = mock.Mock()
+        session.approved_scope.return_value = 'galleries'
+        with mock.patch.object(
+            MAIN.GalleryCatalogueCache, 'for_current_user',
+            return_value=cache,
+        ) as create_cache:
+            self.assertIs(cache, cache_factory(session))
+        create_cache.assert_called_once_with(
+            'https://gallery.example/Galerie', 7, 'galleries',
+        )
+        workspace.grid.assert_called_once_with(row=0, column=0, sticky='nsew')
+        app._sync_watcher_recording.assert_called_once_with()
 
 
 class PhotoPresentationPolicyTests(unittest.TestCase):
@@ -427,7 +526,9 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         label.winfo_reqheight.return_value = 30
 
         with (
-            mock.patch.object(ui_theme.ttk, "Label", return_value=label),
+            mock.patch.object(
+                ui_theme.ttk, "Label", return_value=label,
+            ) as build_label,
             mock.patch.object(ui_theme.tk, "Toplevel") as transient_window,
         ):
             ui_theme.attach_inline_tooltip(widget, "Open photo", surface)
@@ -441,8 +542,45 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
             show()
 
         transient_window.assert_not_called()
+        self.assertEqual(
+            "Inline.Tooltip.TLabel",
+            build_label.call_args.kwargs["style"],
+        )
+        self.assertEqual(
+            min(
+                ui_theme._HELP_TEXT_WRAP,
+                max(1, 500 - 2 * ui_theme._INLINE_TOOLTIP_GAP),
+            ),
+            label.configure.call_args.kwargs["wraplength"],
+        )
         label.place.assert_called_once_with(x=36, y=70, width=100)
         label.lift.assert_called_once_with()
+
+        style = mock.Mock()
+        style.theme_names.return_value = []
+        style.element_names.return_value = []
+        root = mock.Mock()
+        root.winfo_fpixels.return_value = ui_theme._BASE_UI_DPI
+        with (
+            mock.patch.object(ui_theme.ttk, "Style", return_value=style),
+            mock.patch.object(
+                ui_theme, "_select_ui_font_family", return_value="Segoe UI",
+            ),
+            mock.patch.object(ui_theme, "_install_glossy_elements"),
+        ):
+            ui_theme.configure_theme(root)
+        tooltip_style = next(
+            call for call in style.configure.call_args_list
+            if call.args == ("Inline.Tooltip.TLabel",)
+        )
+        self.assertEqual(ui_theme._PALETTE["surface_alt"],
+                         tooltip_style.kwargs["background"])
+        self.assertEqual(ui_theme._PALETTE["line"],
+                         tooltip_style.kwargs["bordercolor"])
+        self.assertEqual("solid", tooltip_style.kwargs["relief"])
+        self.assertEqual(1, tooltip_style.kwargs["borderwidth"])
+        self.assertEqual(ui_theme._INLINE_TOOLTIP_PADDING,
+                         tooltip_style.kwargs["padding"])
 
     def test_icon_button_accepts_scoped_photo_style_and_tooltip_surface(self) -> None:
         """Route Photos icon controls through the themed in-window help path.
@@ -3510,7 +3648,12 @@ class SimConnectActivityTests(unittest.TestCase):
     """Keep queue routing separate from visible and persisted activity text."""
 
     def test_simconnect_event_routes_before_visible_marker_removal(self) -> None:
-        """Keep the SimConnect operation and severity while cleaning its UI text."""
+        """Keep operation and severity while removing the visible marker.
+
+        Returns:
+            None: Both queued events reach the logger and activity history with
+                their original operation and classified severity.
+        """
         app = mock.Mock()
         app.exiting = False
         app.events = MAIN.queue.Queue()
@@ -3519,6 +3662,7 @@ class SimConnectActivityTests(unittest.TestCase):
         app.manual_worker = None
         app.current_job = None
         app.classify_log_level.side_effect = ["warning", "success"]
+        initialize_event_pump_fixture(app)
 
         MAIN.WatcherApp.drain_events(app)
 
@@ -3656,6 +3800,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.events = MAIN.queue.Queue()
         app.events.put({"kind": "flight_abandoned",
                         "payload": {"binding": "captured-binding"}})
+        initialize_event_pump_fixture(app)
         MAIN.WatcherApp.drain_events(app)
         app.flights.forgotten.assert_called_once_with("captured-binding")
         app.flights.revoked.assert_not_called()
@@ -4120,6 +4265,9 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.config = types.SimpleNamespace(gallery_url=saved_url, api_key=api_key,
                                            _snapshot_token=generation)
         app.config_store = mock.Mock()
+        app.linking_manager = mock.Mock()
+        app.linking_manager.linked_upload_mode_selected.return_value = False
+        app.linking_manager.selected_upload_target.return_value = None
         app.gallery_label_var = mock.Mock()
         app.gallery_title_var = mock.Mock()
         app.connection_status_var = mock.Mock()
@@ -4136,6 +4284,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.utc_sync.status.return_value = "Idle"
         app.utc_sync_status_var = mock.Mock()
         app.root = mock.Mock()
+        initialize_event_pump_fixture(app)
 
         MAIN.WatcherApp.drain_events(app)
 
@@ -4170,6 +4319,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.utc_sync = mock.Mock()
         app.utc_sync_status_var = mock.Mock()
         app.root = mock.Mock()
+        initialize_event_pump_fixture(app)
         MAIN.WatcherApp.drain_events(app)
         app.gallery_label_var.set.assert_not_called()
         app.gallery_title_var.set.assert_not_called()
@@ -4208,6 +4358,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             app.utc_sync = mock.Mock()
             app.utc_sync_status_var = mock.Mock()
             app.root = mock.Mock()
+            initialize_event_pump_fixture(app)
             MAIN.WatcherApp.drain_events(app)
             self.assertIsNone(app._preflight_approved)
             self.assertIsNone(app.manual_plan)
@@ -4944,6 +5095,7 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app._watcher_recording_pulse = True
         app._watcher_recording_target = None
         app.stop_tray_icon = mock.Mock()
+        initialize_event_pump_fixture(app)
 
         with mock.patch.object(MAIN, "messagebox") as dialogs:
             dialogs.askyesno.return_value = True

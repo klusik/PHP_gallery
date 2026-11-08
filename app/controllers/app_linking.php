@@ -35,6 +35,7 @@ use function Gallery\Services\app_linking_discovery_capabilities;
 use function Gallery\Services\app_linking_canonical_256bit_value_valid;
 use function Gallery\Services\app_linking_exchange_code;
 use function Gallery\Services\app_linking_gallery_page;
+use function Gallery\Services\app_linking_gallery_tree;
 use function Gallery\Services\app_linking_gallery_search_page;
 use function Gallery\Services\app_linking_issue_code;
 use function Gallery\Services\app_link_push_claim_request;
@@ -962,29 +963,39 @@ function cms_app_linking_consent(): void
 /**
  * Return a bounded list or search page for an explicitly scoped grant.
  *
- * @return void Sends a no-store JSON page or a generic refusal.
+ * @return void Sends a no-store JSON page, optional complete/unchanged tree
+ *     envelope, or generic refusal without exposing a partial complete tree.
  */
 function cms_app_linking_galleries(): void
 {
+    $treeRequest = false;
     try {
         $issuer = app_linking_configured_issuer();
         $query = (string) ($_SERVER['QUERY_STRING'] ?? '');
         $method = request_method();
-        if ($issuer === null || preg_match(
+        $pagedRequest = preg_match(
             '/\Apage=app_linking_galleries(?:&after=([1-9][0-9]{0,18}))?\z/D',
             $query,
             $matches,
-        ) !== 1) {
+        ) === 1;
+        $treeRequest = preg_match(
+            '/\Apage=app_linking_galleries&tree=1'
+                . '(?:&revision=([a-f0-9]{64}))?\z/D',
+            $query,
+            $treeMatches,
+        ) === 1;
+        if ($issuer === null || (!$pagedRequest && !$treeRequest)) {
             app_linking_json_error(400, 'invalid_request');
             return;
         }
-        if (!in_array($method, ['GET', 'POST'], true)) {
-            header('Allow: GET, POST');
+        $allowedMethods = $treeRequest ? ['GET'] : ['GET', 'POST'];
+        if (!in_array($method, $allowedMethods, true)) {
+            header('Allow: ' . implode(', ', $allowedMethods));
             app_linking_json_error(405, 'invalid_request');
             return;
         }
         $searchQuery = null;
-        $cursor = $matches[1] ?? '';
+        $cursor = $pagedRequest ? ($matches[1] ?? '') : '';
         if ($method === 'POST') {
             $form = $cursor === '' ? app_linking_form_fields(['query', 'after']) : null;
             if ($form === null || preg_match('//u', $form['query']) !== 1
@@ -1020,9 +1031,15 @@ function cms_app_linking_galleries(): void
             app_linking_json_error(403, 'insufficient_scope');
             return;
         }
-        $page = $searchQuery === null
-            ? app_linking_gallery_page($token, $issuer, $afterId)
-            : app_linking_gallery_search_page($identity, $token, $issuer, $searchQuery, $afterId);
+        $page = $treeRequest
+            ? app_linking_gallery_tree(
+                $token, $issuer, $treeMatches[1] ?? null,
+            )
+            : ($searchQuery === null
+                ? app_linking_gallery_page($token, $issuer, $afterId)
+                : app_linking_gallery_search_page(
+                    $identity, $token, $issuer, $searchQuery, $afterId,
+                ));
         if ($page === null) {
             app_linking_json_error(401, 'invalid_token');
             return;
@@ -1031,6 +1048,10 @@ function cms_app_linking_galleries(): void
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($page, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
     } catch (\OverflowException) {
+        if ($treeRequest) {
+            app_linking_json_error(503, 'temporarily_unavailable');
+            return;
+        }
         app_linking_security_headers();
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['galleries' => [], 'next_after' => null, 'limited' => true]);

@@ -42,18 +42,26 @@ from .app_linking import (
     LinkedTrack,
     LinkingMediaThrottled,
     LinkingMediaUnavailable,
+    LinkingError,
     LinkingResponseError,
     LinkingRevisionUnsupported,
     LinkingSession,
 )
 from .flight_report_translations import tr
-from .diagnostics import format_safe_photos_failure
+from .diagnostics import (
+    PhotosDecodeError,
+    PhotosDecodeFacts,
+    format_safe_photos_decode_facts,
+    format_safe_photos_failure,
+    format_safe_photos_shortcut,
+    is_safe_photos_observation,
+)
 from .gallery_lightbox import (
     LIGHTBOX_ZOOM_STEP,
     PhotoLightbox,
     detect_black_matte_crop,
 )
-from .ui_theme import _attach_tooltip, icon_button
+from .ui_theme import GALLERY_TILE_BORDER_INSET, _attach_tooltip, icon_button
 from .tk_scroll_input import vertical_scroll_delta
 
 try:
@@ -172,8 +180,11 @@ MEDIA_GRID_GUTTER = 12
 # Purpose: Keep row geometry steady as viewport thumbnails are released.
 # Type: int. Units: pixels. Scope: one photo row in the scrollable album.
 # Consumers: _NativeGalleryViewer._accept_page, _on_grid_resize.
-# Rationale: 160 px fits a 144 px image, four px of button padding and gutters.
-MEDIA_GRID_ROW_MINIMUM_HEIGHT = MEDIA_THUMBNAIL_SIZE[1] + MEDIA_GRID_GUTTER + 4
+# Rationale: The image, shared tile rim and gutters must fit without clipping.
+MEDIA_GRID_ROW_MINIMUM_HEIGHT = (
+    MEDIA_THUMBNAIL_SIZE[1] + MEDIA_GRID_GUTTER
+    + 2 * GALLERY_TILE_BORDER_INSET
+)
 
 # Purpose: Bound the compact contextual presentation-track selector width.
 # Type: int. Units: pixels. Scope: one open music chooser.
@@ -181,10 +192,11 @@ MEDIA_GRID_ROW_MINIMUM_HEIGHT = MEDIA_THUMBNAIL_SIZE[1] + MEDIA_GRID_GUTTER + 4
 # Rationale: 290 px fits a readable track label on desktop and shrinks to view.
 MEDIA_MUSIC_PANEL_WIDTH = 290
 
-# Purpose: Reject pathological decoded images before allocating a full bitmap.
+# Purpose: Bound decoded image rasters before allocating an RGB bitmap.
 # Type: int. Units: pixels. Scope: one original or thumbnail response.
-# Consumers: _NativeGalleryViewer._prepare_image.
-# Rationale: 36 megapixels bounds decoded RGB memory while supporting cameras.
+# Consumers: _prepare_image, _prepare_thumbnail and _prepare_detail.
+# Rationale: 36 megapixels bounds RGB memory. Details may first reduce JPEG/MPO
+# decoder dimensions with draft; other rasters must already fit this bound.
 MEDIA_IMAGE_MAX_PIXELS = 36_000_000
 
 # Purpose: Keep detail data warm for seamless nearby keyboard navigation.
@@ -210,6 +222,26 @@ MEDIA_DETAIL_CACHE_MAX_BYTES = NATIVE_MEDIA_MAX_BYTES * 6
 # Consumers: _NativeGalleryViewer._queue_adjacent_prefetch.
 # Rationale: One next and one previous image improve arrows without scanning.
 MEDIA_DETAIL_PREFETCH_LIMIT = 2
+
+# Purpose: Bound initial visible-thumbnail priority before a background revision probe.
+# Type: int. Units: thumbnail reads. Scope: one viewer before its first revision check.
+# Consumers: _NativeGalleryViewer._dispatch_pending_work.
+# Rationale: Eight reads bound the initial batch while revision still gets a turn.
+MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT = 8
+
+# Purpose: Ignore Windows fullscreen shortcuts modified by Control or Alt.
+# Type: int. Units: Tk event-state bits. Scope: Windows fullscreen shortcut.
+# Consumers: _NativeGalleryViewer._on_fullscreen.
+# Rationale: WinMod2 and ALT_MASK map Alt; Mod1 NumLock, Lock and Mod3
+# ScrollLock are state indicators and must not block the F key.
+MEDIA_FULLSCREEN_WINDOWS_COMMAND_MODIFIERS = 0x0004 | 0x0010 | 0x20000
+
+# Purpose: Preserve command shortcuts on non-Windows Tk backends.
+# Type: int. Units: Tk event-state bits. Scope: non-Windows fullscreen shortcut.
+# Consumers: _NativeGalleryViewer._on_fullscreen.
+# Rationale: Control, Mod1 (Alt/Command) and Mod4 are command modifiers;
+# Shift, CapsLock and other lock indicators remain usable.
+MEDIA_FULLSCREEN_COMMAND_MODIFIERS = 0x0004 | 0x0008 | 0x0040
 
 # Purpose: Provide the established medium slideshow pace without server settings.
 # Type: int. Units: seconds. Scope: one manually started slideshow.
@@ -267,10 +299,11 @@ _WorkerPayload: TypeAlias = (
     | tuple[int, bytes | None]
     | tuple[int, bytes]
     | tuple[int, int, bytes]
-    | tuple[int, int, 'Image.Image', 'Image.Image', bytes]
+    | tuple[int, int, 'Image.Image', 'Image.Image', bytes | None]
+    | tuple[int, int, None, None, None, str]
     | tuple[int, int, None, None, None]
     | tuple[int, 'Image.Image | None']
-    | tuple[int, 'Image.Image', bytes]
+    | tuple[int, 'Image.Image', bytes | None]
     | bytes
     | None
 )
@@ -315,6 +348,32 @@ def _log_safe_media_failure(
     return summary
 
 
+def _log_safe_photos_observation(
+    summary: str | None,
+    observation_callback: Callable[[str], None] | None,
+) -> None:
+    """Log and retain one allowlisted non-failure Photos observation.
+
+    Args:
+        summary (str | None): Prevalidated bounded observation, if available.
+        observation_callback (Callable[[str], None] | None): Optional
+            thread-safe owner for copied support observations.
+
+    Returns:
+        None: Callback failure cannot affect viewer input or image decoding.
+    """
+    if summary is None or not is_safe_photos_observation(summary):
+        return
+    logging.getLogger(__name__).info("Photos observation %s", summary)
+    if observation_callback is not None:
+        try:
+            observation_callback(summary)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Photos observation retention callback failed.",
+            )
+
+
 class _NativeGalleryViewer:
     """Own one embedded gallery view, worker and temporary playback file.
 
@@ -330,8 +389,12 @@ class _NativeGalleryViewer:
             thumbnail cache shared by album selections.
         context_menu (Callable[[LinkedPhoto | None, tk.Event], str | None] | None):
             Optional owner for photo or empty-grid context actions.
+        photo_selected (Callable[[LinkedPhoto], None] | None):
+            Optional Tk-thread receiver for the focused photo descriptor.
         diagnostic_callback (Callable[[str], None] | None): Optional thread-safe
             receiver for already-sanitized Photos failure summaries.
+        observation_callback (Callable[[str], None] | None): Optional
+            receiver for allowlisted non-failure Photos observations.
     """
 
     def __init__(
@@ -345,6 +408,8 @@ class _NativeGalleryViewer:
         thumbnail_memory: GalleryThumbnailMemory | None = None,
         context_menu: Callable[[LinkedPhoto | None, tk.Event], str | None] | None = None,
         diagnostic_callback: Callable[[str], None] | None = None,
+        photo_selected: Callable[[LinkedPhoto], None] | None = None,
+        observation_callback: Callable[[str], None] | None = None,
     ) -> None:
         """Create the embedded view and start its first bounded page load.
 
@@ -362,6 +427,10 @@ class _NativeGalleryViewer:
                 Handler for a photo or empty-grid context, or None to omit it.
             diagnostic_callback (Callable[[str], None] | None): Optional
                 thread-safe receiver for sanitized failure facts.
+            photo_selected (Callable[[LinkedPhoto], None] | None): Optional
+                Tk-thread receiver for a selected photo descriptor.
+            observation_callback (Callable[[str], None] | None): Optional
+                receiver for bounded, non-failure observation summaries.
 
         Returns:
             None: The viewer owns the returned child frame until it is destroyed.
@@ -375,6 +444,8 @@ class _NativeGalleryViewer:
         self._thumbnail_memory = thumbnail_memory or GalleryThumbnailMemory()
         self._context_menu = context_menu
         self._diagnostic_callback = diagnostic_callback
+        self._on_photo_selected = photo_selected
+        self._observation_callback = observation_callback
         self.on_photos_changed: Callable[[], None] | None = None
         self.on_cache_changed: Callable[
             [tuple[LinkedPhoto, ...], bool], None
@@ -404,11 +475,13 @@ class _NativeGalleryViewer:
         self._refresh_revision: str | None = None
         self._revision_supported = True
         self._revision_initial_attempted = False
+        self._initial_thumbnail_priority_count = 0
         self._revision_timer: str | None = None
         self._refresh_pending = False
         self._refresh_manual_pending = False
         self._refresh_foreground = False
         self._selected_photo_ids: set[int] = set()
+        self._selection_anchor_index: int | None = None
         self._reconciling = False
         self._photos: tuple[LinkedPhoto, ...] = ()
         self._loading_more = False
@@ -456,6 +529,9 @@ class _NativeGalleryViewer:
         self._visible_thumbnail_indices: set[int] = set()
         self._grid_columns = 1
         self._lightbox: PhotoLightbox | None = None
+        self._lightbox_key_tag = 'GalleryLightboxKeys' + str(id(self))
+        self._lightbox_key_bindings: list[tuple[str, str]] = []
+        self._lightbox_key_widgets: list[tk.Misc] = []
         self._select_first_after_page = False
         self._preview_result_pending = preview_result is not None
         self._folder_shelf_visible = False
@@ -533,42 +609,35 @@ class _NativeGalleryViewer:
         focus = style.lookup('Primary.TButton', 'background') or '#08AED0'
         style.configure(
             'LinkedPhoto.TButton', background=surface, foreground=ink,
-            borderwidth=0, padding=2, relief='flat', focuscolor=focus,
+            borderwidth=2, padding=0, relief='flat', focuscolor=focus,
         )
         style.configure(
             'LinkedPhotoSelected.TButton', background=surface, foreground=ink,
             bordercolor=focus, lightcolor=focus, darkcolor=focus,
-            borderwidth=3, padding=1, relief='solid', focuscolor=focus,
-        )
-        style.layout(
-            'LinkedPhotoSelected.TButton',
-            [('Button.border', {
-                'sticky': 'nswe',
-                'children': [('Button.padding', {
-                    'sticky': 'nswe',
-                    'children': [('Button.focus', {
-                        'sticky': 'nswe',
-                        'children': [('Button.label', {'sticky': 'nswe'})],
-                    })],
-                })],
-            })],
+            borderwidth=2, padding=0, relief='solid', focuscolor=focus,
         )
         style.configure(
             'LinkedPhotoPlaceholder.TButton',
-            background=surface, foreground=ink, borderwidth=0, padding=2,
+            background=surface, foreground=ink, borderwidth=2, padding=0,
             relief='flat', focuscolor=focus,
             font=('Segoe UI Symbol', MEDIA_THUMBNAIL_PLACEHOLDER_FONT_SIZE),
         )
-        style.layout(
-            'LinkedPhoto.TButton',
-            [('Button.padding', {
-                'sticky': 'nswe',
-                'children': [('Button.focus', {
-                    'sticky': 'nswe',
-                    'children': [('Button.label', {'sticky': 'nswe'})],
-                })],
-            })],
+        tile_element = (
+            'Gallery.tile' if 'Gallery.tile' in style.element_names()
+            else 'Button.border'
         )
+        tile_layout = [(tile_element, {
+            'sticky': 'nswe',
+            'children': [('Button.padding', {
+                'sticky': 'nswe',
+                'children': [('Button.label', {'sticky': 'nswe'})],
+            })],
+        })]
+        for tile_style in (
+            'LinkedPhoto.TButton', 'LinkedPhotoSelected.TButton',
+            'LinkedPhotoPlaceholder.TButton',
+        ):
+            style.layout(tile_style, tile_layout)
         style.map(
             'LinkedPhoto.TButton',
             background=[('pressed', surface), ('active', surface)],
@@ -577,7 +646,10 @@ class _NativeGalleryViewer:
         style.map(
             'LinkedPhotoSelected.TButton',
             background=[('pressed', surface), ('active', surface)],
-            bordercolor=[('focus', focus), ('pressed', focus), ('active', focus)],
+            bordercolor=[
+                ('selected', focus), ('focus', focus),
+                ('pressed', focus), ('active', focus),
+            ],
             foreground=[('disabled', ink)],
         )
         right = ttk.Frame(body, style='Card.TFrame')
@@ -649,6 +721,7 @@ class _NativeGalleryViewer:
             ('<Right>', self._on_right),
             ('<F11>', self._on_fullscreen),
             ('<f>', self._on_fullscreen),
+            ('<F>', self._on_fullscreen),
             ('<plus>', self._on_zoom_in),
             ('<equal>', self._on_zoom_in),
             ('<minus>', self._on_zoom_out),
@@ -691,21 +764,63 @@ class _NativeGalleryViewer:
         return None
 
     def _on_fullscreen(self, _event: tk.Event) -> str | None:
-        """Toggle main-window fullscreen while the detail overlay is active.
+        """Toggle fullscreen for plain F or F11 while the detail is active.
 
         Args:
-            _event (tk.Event): Main-window F or F11 key event.
+            _event (tk.Event): F, shifted F or F11 event with modifier state.
 
         Returns:
-            str | None: Tk break marker when this viewer consumes the key.
+            str | None: Tk break marker for an unmodified fullscreen action;
+                text-entry widgets and command combinations retain their keys.
         """
-        if self._lightbox is not None and self._lightbox.visible:
-            if (_event.keysym.lower() == 'f'
-                    and (_event.state & 0x000D)):
-                return None
-            self._lightbox._toggle_fullscreen()
-            return 'break'
-        return None
+        lightbox = self._lightbox
+        visible = lightbox is not None and lightbox.visible
+        fullscreen_before = bool(
+            lightbox is not None and lightbox._fullscreen,
+        )
+        widget = getattr(_event, 'widget', None)
+        text_input = isinstance(widget, (
+            tk.Entry, ttk.Entry, tk.Text, ttk.Combobox,
+            tk.Spinbox, ttk.Spinbox,
+        ))
+        widget_category = (
+            'text-entry' if text_input else
+            'canvas' if isinstance(widget, tk.Canvas) else
+            'control' if isinstance(widget, tk.Misc) else 'other'
+        )
+        state = getattr(_event, 'state', 0)
+        if type(state) is not int:
+            state = 0
+        key = getattr(_event, 'keysym', '')
+        if type(key) is not str:
+            key = ''
+        reason = 'inactive'
+        result: str | None = None
+        if visible and not text_input:
+            modifiers = (
+                MEDIA_FULLSCREEN_WINDOWS_COMMAND_MODIFIERS
+                if sys.platform == 'win32'
+                else MEDIA_FULLSCREEN_COMMAND_MODIFIERS
+            )
+            if sys.platform == 'darwin':
+                modifiers |= 0x0010
+            if state & modifiers:
+                reason = 'command-modifier'
+            else:
+                assert lightbox is not None
+                lightbox._toggle_fullscreen()
+                reason = 'toggled'
+                result = 'break'
+        elif text_input:
+            reason = 'text-input'
+        summary = format_safe_photos_shortcut(
+            key, state, widget_category, visible, fullscreen_before,
+            bool(lightbox is not None and lightbox._fullscreen), reason,
+        )
+        _log_safe_photos_observation(
+            summary, self._observation_callback,
+        )
+        return result
 
     def _on_zoom_in(self, _event: tk.Event) -> str | None:
         """Increase zoom with a plus or equals key.
@@ -851,7 +966,7 @@ class _NativeGalleryViewer:
                         self._show_thumbnail(index, cached, remember=False)
                 if index not in self._thumbnail_loaded and index not in self._thumbnail_pending:
                     self._thumbnail_pending.append(index)
-            self._load_next_thumbnail()
+            self._dispatch_pending_work()
             bounds = self.grid_canvas.bbox('all')
             scrollable = bool(
                 bounds is not None
@@ -879,8 +994,9 @@ class _NativeGalleryViewer:
             None: Tiles use all available width with even gutters.
         """
         self.grid_canvas.itemconfigure(self.grid_window, width=event.width)
-        columns = max(1, (event.width + MEDIA_GRID_GUTTER)
-                      // (MEDIA_THUMBNAIL_SIZE[0] + MEDIA_GRID_GUTTER))
+        columns = max(1, event.width
+                      // (MEDIA_THUMBNAIL_SIZE[0] + MEDIA_GRID_GUTTER
+                          + 2 * GALLERY_TILE_BORDER_INSET))
         if columns == self._grid_columns:
             return
         for column in range(getattr(self, '_grid_columns', 1)):
@@ -1015,8 +1131,155 @@ class _NativeGalleryViewer:
                 return False
             self._selected_photo_ids.add(image_id)
             selected = True
+        self._selection_anchor_index = index
+        self._focus_tile(index)
         self._render_photo_selection((index,))
+        if self._on_photo_selected is not None:
+            self._on_photo_selected(self._photos[index])
         return selected
+
+    def select_photo(self, index: int) -> bool:
+        """Focus one loaded photo and notify its metadata inspector.
+
+        Args:
+            index (int): Zero-based index in the current loaded gallery page.
+
+        Returns:
+            bool: True when a current photo became the single selection.
+        """
+        if self._closed or not 0 <= index < len(self._photos):
+            return False
+        previous = set(self._selected_photo_ids)
+        photo = self._photos[index]
+        self._selected_photo_ids = {photo.image_id}
+        self._selection_anchor_index = index
+        self._focus_tile(index)
+        changed = tuple(
+            position for position, item in enumerate(self._photos)
+            if item.image_id in previous or item.image_id == photo.image_id
+        )
+        self._render_photo_selection(changed)
+        if self._on_photo_selected is not None:
+            self._on_photo_selected(photo)
+        return True
+
+    def select_photo_range(self, index: int) -> bool:
+        """Select an anchored contiguous loaded range within the delete limit.
+
+        Args:
+            index (int): Zero-based target tile in the current page.
+
+        Returns:
+            bool: True when the complete anchored range was admitted.
+        """
+        if self._closed or not 0 <= index < len(self._photos):
+            return False
+        anchor = self._selection_anchor_index
+        if anchor is None or not 0 <= anchor < len(self._photos):
+            return self.select_photo(index)
+        start, end = sorted((anchor, index))
+        if end - start + 1 > NATIVE_MEDIA_DELETE_BATCH_MAX:
+            self.status.pack(anchor='w', pady=(4, 8))
+            self.status.configure(
+                text=self._text('linking_media_selection_limit').format(
+                    limit=NATIVE_MEDIA_DELETE_BATCH_MAX,
+                ),
+            )
+            return False
+        previous = set(self._selected_photo_ids)
+        selected = {photo.image_id for photo in self._photos[start:end + 1]}
+        self._selected_photo_ids = selected
+        self._focus_tile(index)
+        changed_ids = previous | selected
+        self._render_photo_selection(tuple(
+            position for position, photo in enumerate(self._photos)
+            if photo.image_id in changed_ids
+        ))
+        photo = self._photos[index]
+        if self._on_photo_selected is not None:
+            self._on_photo_selected(photo)
+        return True
+
+    def _focus_tile(self, index: int) -> None:
+        """Focus and scroll the target grid tile into the visible viewport.
+
+        Args:
+            index (int): Zero-based loaded tile to receive keyboard focus.
+
+        Returns:
+            None: The current grid owns both focus and scroll position.
+        """
+        if not 0 <= index < len(self._tile_buttons):
+            return
+        tile = self._tile_buttons[index]
+        tile.focus_set()
+        tile_y = tile.winfo_y()
+        canvas_y = self.grid_canvas.canvasy(0)
+        viewport = self.grid_canvas.winfo_height()
+        if tile_y < canvas_y:
+            self.grid_canvas.yview_moveto(
+                max(0.0, tile_y / max(1, self.grid_frame.winfo_height())),
+            )
+        elif tile_y + tile.winfo_height() > canvas_y + viewport:
+            bottom = tile_y + tile.winfo_height() - viewport
+            self.grid_canvas.yview_moveto(
+                max(0.0, bottom / max(1, self.grid_frame.winfo_height())),
+            )
+
+    def _tile_key(self, index: int, event: tk.Event) -> str | None:
+        """Handle local tile navigation and explicit open/toggle commands.
+
+        Args:
+            index (int): Tile index that currently owns keyboard focus.
+            event (tk.Event): Key event from the focused tile only.
+
+        Returns:
+            str | None: Tk break marker for handled tile navigation keys.
+        """
+        if not 0 <= index < len(self._photos):
+            return None
+        key = event.keysym
+        if key in ('Return', 'KP_Enter'):
+            self._open_grid_photo(index)
+            return 'break'
+        if key == 'space':
+            self.toggle_photo_selection(self._photos[index].image_id)
+            return 'break'
+        delta = {
+            'Left': -1, 'Right': 1,
+            'Up': -max(1, self._grid_columns),
+            'Down': max(1, self._grid_columns),
+        }.get(key)
+        if delta is None:
+            return None
+        target = max(0, min(len(self._photos) - 1, index + delta))
+        # Tk ShiftMask extends the anchor; Control (or macOS Command) moves
+        # focus without discarding the existing multi-selection.
+        command_mask = 0x0008 if sys.platform == 'darwin' else 0x0004
+        if event.state & 0x0001:
+            self.select_photo_range(target)
+        elif event.state & command_mask:
+            self._focus_tile(target)
+            if self._on_photo_selected is not None:
+                self._on_photo_selected(self._photos[target])
+        else:
+            self.select_photo(target)
+        return 'break'
+
+    def _open_grid_photo(self, index: int) -> None:
+        """Open a grid photo only after ensuring its selection is current.
+
+        Args:
+            index (int): Zero-based tile that the user explicitly opened.
+
+        Returns:
+            None: The existing foreground detail path owns full-size bytes.
+        """
+        if not 0 <= index < len(self._photos):
+            return
+        if self._photos[index].image_id not in self._selected_photo_ids:
+            self.select_photo(index)
+        self._select_photo(index)
 
     def clear_photo_selection(self, image_ids: tuple[int, ...]) -> None:
         """Clear only the IDs consumed by one confirmed deletion operation.
@@ -1029,6 +1292,10 @@ class _NativeGalleryViewer:
         """
         targets = set(image_ids)
         self._selected_photo_ids.difference_update(targets)
+        if (self._selection_anchor_index is not None
+                and self._selection_anchor_index < len(self._photos)
+                and self._photos[self._selection_anchor_index].image_id in targets):
+            self._selection_anchor_index = None
         self._render_photo_selection(tuple(
             index for index, photo in enumerate(self._photos)
             if photo.image_id in targets
@@ -1037,7 +1304,7 @@ class _NativeGalleryViewer:
     def _render_photo_selection(
         self, indexes: tuple[int, ...] | None = None,
     ) -> None:
-        """Apply a distinct compact border to selected tile indexes.
+        """Apply one rounded primary outline without a separate focus ring.
 
         Args:
             indexes (tuple[int, ...] | None): Changed tile indexes, or all tiles.
@@ -1054,6 +1321,7 @@ class _NativeGalleryViewer:
                 continue
             tile = self._tile_buttons[index]
             selected = photo.image_id in self._selected_photo_ids
+            tile.state(['selected'] if selected else ['!selected'])
             tile.configure(style=(
                 'LinkedPhotoSelected.TButton' if selected else
                 'LinkedPhoto.TButton' if self._photo_images[index] is not None else
@@ -1246,9 +1514,13 @@ class _NativeGalleryViewer:
             except LinkingRevisionUnsupported:
                 if not self._cancelled.is_set():
                     self._events.put((generation, kind + '_unsupported', error_payload))
-            except LinkingMediaUnavailable:
+            except LinkingMediaUnavailable as exc:
                 if self._cancelled.is_set():
                     return
+                _log_safe_media_failure(
+                    'media-fetch', kind, exc,
+                    diagnostic_callback=self._diagnostic_callback,
+                )
                 self._events.put((generation, kind + '_unavailable', error_payload))
             except LinkingMediaThrottled:
                 if self._cancelled.is_set():
@@ -1260,13 +1532,27 @@ class _NativeGalleryViewer:
                 phase = (
                     "page-fetch"
                     if kind in ("page", "more", "slide_more")
+                    else "media-decode"
+                    if isinstance(exc, PhotosDecodeError)
                     else "media-fetch"
                 )
                 _log_safe_media_failure(
                     phase, kind, exc,
                     diagnostic_callback=self._diagnostic_callback,
                 )
-                self._events.put((generation, kind + '_error', error_payload))
+                failure_payload = error_payload
+                if (kind == 'detail'
+                        and isinstance(exc, PhotosDecodeError)
+                        and isinstance(error_payload, tuple)
+                        and len(error_payload) == 5):
+                    decode_reason = (
+                        exc.facts.reason
+                        if exc.facts.reason in (
+                            'decode-failed', 'pixel-limit', 'body-limit',
+                        ) else 'decode-failed'
+                    )
+                    failure_payload = (*error_payload, decode_reason)
+                self._events.put((generation, kind + '_error', failure_payload))
 
         self._worker = threading.Thread(
             target=run,
@@ -1299,7 +1585,9 @@ class _NativeGalleryViewer:
         if self._closed:
             return
         if (self._revision_supported and self.session.can_read_admin_media()
-                and self.frame.winfo_viewable() and self._lightbox is None
+                and self.frame.winfo_viewable()
+                and not (self._lightbox is not None
+                         and self._lightbox.visible)
                 and self._worker is None):
             self._launch(
                 'revision', lambda: self.session.media_revision(
@@ -1380,6 +1668,12 @@ class _NativeGalleryViewer:
         if (tuple(map(comparable, photos)) == tuple(map(comparable, self._photos))
                 and pages[-1].next_after == self._next_after):
             return
+        anchor_id = (
+            self._photos[self._selection_anchor_index].image_id
+            if self._selection_anchor_index is not None
+            and 0 <= self._selection_anchor_index < len(self._photos)
+            else None
+        )
         scroll = self.grid_canvas.yview()[0]
         retained = {
             photo.image_id: (comparable(photo), self._photo_images[index])
@@ -1406,6 +1700,10 @@ class _NativeGalleryViewer:
                 self._accept_page(page, self._presentation)
         finally:
             self._reconciling = False
+        self._selection_anchor_index = next((
+            index for index, photo in enumerate(self._photos)
+            if photo.image_id == anchor_id
+        ), None)
         for index, photo in enumerate(self._photos):
             old = retained.get(photo.image_id)
             if old is not None and old[0] == comparable(photo):
@@ -1564,6 +1862,7 @@ class _NativeGalleryViewer:
         if self._page_request_mode == 'initial':
             if not getattr(self, '_reconciling', False):
                 self._selected_photo_ids.clear()
+                self._selection_anchor_index = None
             self._photos = ()
         self._page_request_mode = 'next'
         old_count = len(self._photos)
@@ -1598,7 +1897,7 @@ class _NativeGalleryViewer:
                 image='',
                 compound='top',
                 style='LinkedPhotoPlaceholder.TButton',
-                command=lambda selected=index: self._select_photo(selected),
+                command=lambda selected=index: self.select_photo(selected),
                 takefocus=True,
             )
             row = index // max(1, getattr(self, '_grid_columns', 1))
@@ -1618,13 +1917,40 @@ class _NativeGalleryViewer:
             tile.bind('<Button-4>', self._on_grid_wheel, add='+')
             tile.bind('<Button-5>', self._on_grid_wheel, add='+')
             tile.bind(
-                '<Return>',
+                '<Button-1>',
                 lambda _event, selected=index: (
-                    self._select_photo(selected), 'break',
+                    self.select_photo(selected), 'break',
                 )[1],
             )
+            tile.bind(
+                '<Double-Button-1>',
+                lambda _event, selected=index: (
+                    self._open_grid_photo(selected), 'break',
+                )[1],
+            )
+            tile.bind(
+                '<Shift-Button-1>',
+                lambda _event, selected=index: (
+                    self.select_photo_range(selected), 'break',
+                )[1],
+            )
+            tile.bind(
+                '<Return>',
+                lambda _event, selected=index: (
+                    self._open_grid_photo(selected), 'break',
+                )[1],
+            )
+            for sequence in (
+                '<Left>', '<Right>', '<Up>', '<Down>', '<space>', '<KP_Enter>',
+            ):
+                tile.bind(
+                    sequence,
+                    lambda event, selected=index: self._tile_key(
+                        selected, event,
+                    ),
+                )
             context_sequences = ('<Button-3>', '<Button-2>')
-            if sys.platform != 'win32':
+            if sys.platform == 'darwin':
                 context_sequences += ('<Control-Button-1>',)
             for sequence in context_sequences:
                 tile.bind(
@@ -1634,7 +1960,7 @@ class _NativeGalleryViewer:
                     ),
                     add='+',
                 )
-            if sys.platform == 'win32':
+            if sys.platform != 'darwin':
                 tile.bind(
                     '<Control-Button-1>',
                     lambda _event, selected=index: (
@@ -1696,6 +2022,9 @@ class _NativeGalleryViewer:
             self._select_photo(len(self._photos) - 1)
         elif self._wrap_after_metadata and self._next_after is not None:
             self._load_more()
+        if (self._prefetch_edge_direction
+                and (self._lightbox is None or not self._lightbox.visible)):
+            self._prefetch_edge_direction = 0
         if self._prefetch_edge_direction == 1 and photos:
             first_new = self._photos[old_count]
             if self._cached_detail(first_new.image_id) is None:
@@ -1763,17 +2092,38 @@ class _NativeGalleryViewer:
         self.status.pack(anchor='w', pady=(4, 8))
 
     def _prepare_thumbnail(self, body: bytes) -> 'Image.Image':
-        """Decode, orient and bound one thumbnail for safe Tk transfer.
+        """Decode and bound one thumbnail directly to its owned RGB raster.
 
         Args:
             body (bytes): Complete authorized image response.
+
         Returns:
-            Image.Image: Independent RGB raster bounded by thumbnail dimensions.
+            Image.Image: Independent RGB raster at the thumbnail pixel bound.
+
+        Raises:
+            ValueError: Pillow is unavailable, body is oversized, or source
+                dimensions exceed the decoded-image policy.
         """
-        normalized = self._prepare_image(body, MEDIA_THUMBNAIL_SIZE)
-        with Image.open(io.BytesIO(normalized)) as source:
-            source.load()
-            return source.convert('RGB')
+        if Image is None or len(body) > NATIVE_MEDIA_MAX_BYTES:
+            raise ValueError('Image support unavailable or response too large')
+        image: 'Image.Image | None' = None
+        try:
+            with Image.open(io.BytesIO(body)) as source:
+                if source.width * source.height > MEDIA_IMAGE_MAX_PIXELS:
+                    raise ValueError('Image dimensions exceed policy')
+                image = source.convert('RGB')
+            crop = detect_black_matte_crop(image)
+            if crop != (0, 0, image.width, image.height):
+                cropped = image.crop(crop)
+                image.close()
+                image = cropped
+            image.thumbnail(MEDIA_THUMBNAIL_SIZE, Image.Resampling.LANCZOS)
+            result = image
+            image = None
+            return result
+        finally:
+            if image is not None:
+                image.close()
 
     def _load_thumbnails(
         self,
@@ -1843,8 +2193,7 @@ class _NativeGalleryViewer:
                 or self._thumbnail_cancelled.is_set() or self._closed
                 or self._worker is not None
                 or self._pending_detail_index is not None
-                or self._pending_page_request is not None
-                or self._pending_prefetch_ids):
+                or self._pending_page_request is not None):
             return
         # Keep the in-flight index queued until it resolves. Configure events
         # can otherwise enqueue the same visible tile again during a download.
@@ -1904,16 +2253,88 @@ class _NativeGalleryViewer:
             Image.Image: RGB image sized for the native lightbox and zoom.
 
         Raises:
-            ValueError: Pillow is unavailable or source dimensions exceed policy.
+            PhotosDecodeError: Body or raster cannot be safely reduced within
+                the existing decoded-pixel and detail-size limits.
         """
+        source_size = (0, 0)
+        decoded_size = (0, 0)
+        image_format = 'OTHER'
+        stage = 'source-open'
         if Image is None or len(body) > NATIVE_MEDIA_MAX_BYTES:
-            raise ValueError('Image support unavailable or response too large')
-        with Image.open(io.BytesIO(body)) as source:
-            if source.width * source.height > MEDIA_IMAGE_MAX_PIXELS:
-                raise ValueError('Image dimensions exceed policy')
-            image = source.convert('RGB')
-        image.thumbnail(MEDIA_IMAGE_MAX_SIZE)
-        return image
+            reason = 'body-limit' if len(body) > NATIVE_MEDIA_MAX_BYTES else 'decode-failed'
+            raise PhotosDecodeError(PhotosDecodeFacts(
+                stage, reason, image_format, source_size, decoded_size,
+                len(body), MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
+            ))
+        image: 'Image.Image | None' = None
+        try:
+            with Image.open(io.BytesIO(body)) as source:
+                source_size = source.size
+                pillow_format = source.format
+                image_format = (
+                    pillow_format if pillow_format in (
+                        'JPEG', 'MPO', 'PNG', 'WEBP', 'GIF', 'TIFF', 'BMP',
+                    ) else 'OTHER'
+                )
+                decoded_size = source.size
+                source_pixels = source.width * source.height
+                if source_pixels > MEDIA_IMAGE_MAX_PIXELS:
+                    if image_format not in ('JPEG', 'MPO'):
+                        raise PhotosDecodeError(PhotosDecodeFacts(
+                            'pixel-check', 'pixel-limit', image_format,
+                            source_size, decoded_size, len(body),
+                            MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
+                        ))
+                    stage = 'draft'
+                    try:
+                        source.draft('RGB', MEDIA_IMAGE_MAX_SIZE)
+                    except Exception:
+                        raise PhotosDecodeError(PhotosDecodeFacts(
+                            stage, 'decode-failed', image_format, source_size,
+                            decoded_size, len(body), MEDIA_IMAGE_MAX_PIXELS,
+                            MEDIA_IMAGE_MAX_SIZE,
+                        )) from None
+                    decoded_size = source.size
+                    if source.width * source.height > MEDIA_IMAGE_MAX_PIXELS:
+                        raise PhotosDecodeError(PhotosDecodeFacts(
+                            'pixel-check', 'pixel-limit', image_format,
+                            source_size, decoded_size, len(body),
+                            MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
+                        ))
+                    _log_safe_photos_observation(
+                        format_safe_photos_decode_facts(PhotosDecodeFacts(
+                            'draft', 'reduced', image_format, source_size,
+                            decoded_size, len(body), MEDIA_IMAGE_MAX_PIXELS,
+                            MEDIA_IMAGE_MAX_SIZE,
+                        )),
+                        self._observation_callback,
+                    )
+                stage = 'source-convert'
+                decoded_size = source.size
+                try:
+                    image = source.convert('RGB')
+                except Exception:
+                    raise PhotosDecodeError(PhotosDecodeFacts(
+                        stage, 'decode-failed', image_format, source_size,
+                        decoded_size, len(body), MEDIA_IMAGE_MAX_PIXELS,
+                        MEDIA_IMAGE_MAX_SIZE,
+                    )) from None
+            stage = 'resize'
+            image.thumbnail(MEDIA_IMAGE_MAX_SIZE)
+            result = image
+            image = None
+            return result
+        except PhotosDecodeError:
+            raise
+        except Exception:
+            raise PhotosDecodeError(PhotosDecodeFacts(
+                stage, 'decode-failed', image_format, source_size,
+                decoded_size, len(body), MEDIA_IMAGE_MAX_PIXELS,
+                MEDIA_IMAGE_MAX_SIZE,
+            )) from None
+        finally:
+            if image is not None:
+                image.close()
 
     def _poll_queue(self) -> None:
         """Apply queued worker results on Tk's owning thread.
@@ -1936,12 +2357,15 @@ class _NativeGalleryViewer:
                 break
             if generation != self._generation or self._closed:
                 continue
-            if (kind == 'detail_error' and isinstance(result, tuple)
+            if (kind in ('detail_error', 'detail_unavailable')
+                    and isinstance(result, tuple)
                     and result[0] != self._detail_serial):
                 kind = 'detail_stale'
             try:
                 if kind == 'revision':
-                    if self.frame.winfo_viewable() and self._lightbox is None:
+                    if (self.frame.winfo_viewable()
+                            and not (self._lightbox is not None
+                                     and self._lightbox.visible)):
                         if self._revision is None or self._revision != result:
                             if (self._revision is not None
                                     and self.on_photos_changed is not None):
@@ -1987,8 +2411,10 @@ class _NativeGalleryViewer:
                     self._show_detail(*result)
                 elif kind == 'prefetch':
                     image_id, data, encoded = result
-                    if data is not None:
+                    if data is not None and encoded is not None:
                         self._remember_detail(image_id, data, encoded)
+                    elif data is not None:
+                        data.close()
                 elif kind.startswith('audio_track'):
                     self._accept_audio_track(*result)
                 elif kind == 'prefetch_error':
@@ -2029,6 +2455,15 @@ class _NativeGalleryViewer:
                     self._retry_kind = 'page'
                     if self._page_request_mode == 'initial':
                         self._notify_preview_result(False)
+                elif kind == 'detail_unavailable':
+                    self.status.pack(anchor='w', pady=(4, 8))
+                    self.status.configure(
+                        text=self._text('linking_media_gallery_unavailable'),
+                    )
+                    self._show_detail(*result)
+                    self.retry_button.configure(state='normal')
+                    self.retry_button.pack(side='left', padx=(8, 0))
+                    self._retry_kind = 'detail'
                 elif kind.endswith('_error'):
                     self.status.pack(anchor='w', pady=(4, 8))
                     self.status.configure(text=self._text('linking_media_error'))
@@ -2078,10 +2513,12 @@ class _NativeGalleryViewer:
         self._schedule_queue_poll()
 
     def _dispatch_pending_work(self) -> None:
-        """Start the highest-priority queued foreground or adjacent operation.
+        """Dispatch foreground work, bounded tiles and visible speculation.
 
         Returns:
-            None: Foreground detail and page work precede speculation and tiles.
+            None: Detail and page requests lead; audio stays ahead of tiles,
+                which get a bounded initial turn before revision and precede
+                visible-lightbox-only adjacent detail speculation.
         """
         if self._closed or self._worker is not None:
             return
@@ -2094,17 +2531,41 @@ class _NativeGalleryViewer:
             self._load_detail(pending)
             return
         if self._pending_page_request is not None:
-            after_id, automatic = self._pending_page_request
-            self._pending_page_request = None
-            self._start_page_after(
-                after_id,
-                automatic=automatic,
-            )
+            if (self._prefetch_edge_direction
+                    and (self._lightbox is None
+                         or not self._lightbox.visible)):
+                self._pending_page_request = None
+                self._prefetch_edge_direction = 0
+            else:
+                after_id, automatic = self._pending_page_request
+                self._pending_page_request = None
+                self._start_page_after(
+                    after_id,
+                    automatic=automatic,
+                )
+                return
+        if self._dispatch_audio_prefetch():
             return
-        if (not self._revision_initial_attempted and self._revision_supported
-                and self.session.can_read_admin_media()
-                and self.frame.winfo_viewable() and self._lightbox is None
-                and self._photos):
+        revision_due = (
+            not self._revision_initial_attempted
+            and self._revision_supported
+            and self.session.can_read_admin_media()
+            and self.frame.winfo_viewable()
+            and not (self._lightbox is not None and self._lightbox.visible)
+            and bool(self._photos)
+        )
+        if (self._thumbnail_pending and not self._media_throttled
+                and (not revision_due
+                     or self._initial_thumbnail_priority_count
+                     < MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT)):
+            previous_worker = self._worker
+            self._thumbnail_cancelled.clear()
+            self._load_next_thumbnail()
+            if self._worker is not None and self._worker is not previous_worker:
+                if revision_due:
+                    self._initial_thumbnail_priority_count += 1
+                return
+        if revision_due:
             self._revision_initial_attempted = True
             self._launch(
                 'revision', lambda: self.session.media_revision(
@@ -2112,16 +2573,17 @@ class _NativeGalleryViewer:
                 ),
             )
             return
-        if self._dispatch_audio_prefetch():
-            return
         if self._media_throttled:
             return
-        if self._pending_prefetch_ids:
-            if self._load_next_prefetch():
-                return
         if self._thumbnail_pending:
             self._thumbnail_cancelled.clear()
             self._load_next_thumbnail()
+            if self._worker is not None:
+                return
+        if self._pending_prefetch_ids and (
+                self._lightbox is not None and self._lightbox.visible):
+            if self._load_next_prefetch():
+                return
 
     def _image_memory_size(self, image: 'Image.Image') -> int:
         """Estimate the RGB storage retained by one prepared detail image.
@@ -2239,8 +2701,11 @@ class _NativeGalleryViewer:
             None: At most two adjacent details, including page edges, are queued.
         """
         self._pending_prefetch_ids.clear()
-        if (self._closed or self._pending_detail_index is not None
+        if (self._closed or self._lightbox is None
+                or not self._lightbox.visible
+                or self._pending_detail_index is not None
                 or self._pending_page_request is not None):
+            self._prefetch_edge_direction = 0
             return
         directions = (self._prefetch_direction,)
         if not self._slideshow_running:
@@ -2275,6 +2740,11 @@ class _NativeGalleryViewer:
         Returns:
             bool: True when one prefetch worker started; false when none remain.
         """
+        if (self._closed or self._lightbox is None
+                or not self._lightbox.visible):
+            self._pending_prefetch_ids.clear()
+            self._prefetch_edge_direction = 0
+            return False
         while self._pending_prefetch_ids:
             image_id = self._pending_prefetch_ids.pop(0)
             if self._cached_detail(image_id) is not None:
@@ -2286,31 +2756,15 @@ class _NativeGalleryViewer:
             if photo is None:
                 continue
 
-            def operation() -> tuple[int, 'Image.Image', bytes]:
+            def operation() -> tuple[int, 'Image.Image', bytes | None]:
                 """Read and prepare the adjacent image on the worker thread.
 
                 Returns:
-                    tuple[int, Image.Image, bytes]: ID, prepared RGB and source.
+                    tuple[int, Image.Image, bytes | None]: ID, prepared RGB and
+                        original bytes, or None when only a safe preview exists.
                 """
-                body, _mime = self.session.media_photo(
-                    self.gallery.gallery_id,
-                    photo.image_id,
-                    thumbnail=False,
-                    cancelled=self._cancelled,
-                    cache_eligible=getattr(photo, 'cache_eligible', None),
-                    thumbnail_etag=getattr(photo, 'thumbnail_etag', None),
-                    thumbnail_verified_at=getattr(
-                        photo, 'thumbnail_verified_at', None,
-                    ),
-                    preload_eligible=getattr(photo, 'preload_eligible', None),
-                    preload_thumbnail_etag=getattr(
-                        photo, 'preload_thumbnail_etag', None,
-                    ),
-                    preload_verified_at=getattr(
-                        photo, 'preload_verified_at', None,
-                    ),
-                )
-                return photo.image_id, self._prepare_detail(body), body
+                image, body = self._read_prepared_detail(photo)
+                return photo.image_id, image, body
 
             return self._launch(
                 'prefetch', operation,
@@ -2321,7 +2775,7 @@ class _NativeGalleryViewer:
     def _show_thumbnail(
         self, index: int, data: 'Image.Image | None', *, remember: bool = True,
     ) -> None:
-        """Attach one completed thumbnail and continue the serial queue.
+        """Attach one completed thumbnail on Tk's owning thread.
 
         Args:
             index (int): Zero-based photo index represented by the result.
@@ -2330,7 +2784,7 @@ class _NativeGalleryViewer:
                 entry without extending its validation time.
 
         Returns:
-            None: The grid retains a bounded Tk image and loads the next tile.
+            None: The grid retains a bounded Tk image or neutral placeholder.
         """
         if index in self._thumbnail_pending:
             self._thumbnail_pending.remove(index)
@@ -2341,7 +2795,6 @@ class _NativeGalleryViewer:
         if index not in self._visible_thumbnail_indices:
             if data is not None:
                 data.close()
-            self._load_next_thumbnail()
             return
         if data is not None and ImageTk is not None:
             try:
@@ -2370,7 +2823,6 @@ class _NativeGalleryViewer:
                 )
         self._thumbnail_loaded.add(index)
         self._render_photo_selection((index,))
-        self._load_next_thumbnail()
 
     def _cached_thumbnail(self, photo: LinkedPhoto) -> 'Image.Image | None':
         """Return a retained raster owned by this session's thumbnail LRU.
@@ -2455,6 +2907,91 @@ class _NativeGalleryViewer:
         self._select_first_after_page = False
         self._load_detail(index)
 
+    def _read_photo_body(
+        self, photo: LinkedPhoto, *, thumbnail: bool,
+    ) -> tuple[bytes, str]:
+        """Read one exact photo rendition through the existing session gates.
+
+        Args:
+            photo (LinkedPhoto): Current gallery descriptor and cache metadata.
+            thumbnail (bool): Whether to request the server's bounded preview.
+
+        Returns:
+            tuple[bytes, str]: Authorized body and validated media type.
+        """
+        return self.session.media_photo(
+            self.gallery.gallery_id,
+            photo.image_id,
+            thumbnail=thumbnail,
+            cancelled=self._cancelled,
+            cache_eligible=getattr(photo, 'cache_eligible', None),
+            thumbnail_etag=getattr(photo, 'thumbnail_etag', None),
+            thumbnail_verified_at=getattr(
+                photo, 'thumbnail_verified_at', None,
+            ),
+            preload_eligible=getattr(photo, 'preload_eligible', None),
+            preload_thumbnail_etag=getattr(
+                photo, 'preload_thumbnail_etag', None,
+            ),
+            preload_verified_at=getattr(
+                photo, 'preload_verified_at', None,
+            ),
+        )
+
+    def _read_prepared_detail(
+        self, photo: LinkedPhoto,
+    ) -> tuple['Image.Image', bytes | None]:
+        """Read and decode a selected detail, using one safe preview fallback.
+
+        Args:
+            photo (LinkedPhoto): Exact photo selected or prefetched in this view.
+
+        Returns:
+            tuple[Image.Image, bytes | None]: Bounded image plus original bytes;
+                preview fallback returns None so it is never cached as a detail.
+
+        Raises:
+            PhotosDecodeError: The original and any permitted preview cannot be
+                reduced inside the existing decoder limits.
+            LinkingError: Existing authorization, transport or cancellation gates fail.
+        """
+        body, _mime = self._read_photo_body(photo, thumbnail=False)
+        try:
+            return self._prepare_detail(body), body
+        except PhotosDecodeError as error:
+            facts = error.facts
+            if (facts.reason != 'pixel-limit'
+                    or self._cancelled.is_set()):
+                raise
+        _log_safe_photos_observation(
+            format_safe_photos_decode_facts(facts),
+            self._observation_callback,
+        )
+        try:
+            preview_body, _preview_mime = self._read_photo_body(
+                photo, thumbnail=True,
+            )
+            preview = self._prepare_detail(preview_body)
+        except Exception:
+            _log_safe_photos_observation(
+                format_safe_photos_decode_facts(PhotosDecodeFacts(
+                    'thumbnail-fallback', 'preview-fallback',
+                    facts.image_format, facts.source_size, (0, 0), len(body),
+                    MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
+                )),
+                self._observation_callback,
+            )
+            raise
+        _log_safe_photos_observation(
+            format_safe_photos_decode_facts(PhotosDecodeFacts(
+                'thumbnail-fallback', 'preview-fallback',
+                facts.image_format, facts.source_size, preview.size,
+                len(body), MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
+            )),
+            self._observation_callback,
+        )
+        return preview, None
+
     def _load_detail(self, index: int) -> bool:
         """Request a selected original and queue its constrained rendering.
 
@@ -2484,6 +3021,7 @@ class _NativeGalleryViewer:
             can_next=(index + 1 < len(self._photos)
                       or self._next_after is not None or bool(self._photos)),
         )
+        self._bind_lightbox_shortcuts(self._lightbox._overlay)
         self.retry_button.configure(state='disabled')
         cached = self._cached_detail(photo.image_id)
         if cached is not None:
@@ -2498,31 +3036,15 @@ class _NativeGalleryViewer:
             return True
 
         def operation() -> tuple[
-            int, int, 'Image.Image', 'Image.Image', bytes,
+            int, int, 'Image.Image', 'Image.Image', bytes | None,
         ]:
-            """Fetch and normalize the selected original image.
+            """Fetch and normalize the selected image or safe preview.
 
             Returns:
-                tuple[int, int, Image.Image, Image.Image, bytes]: Selection,
-                    photo ID, display and cached rasters, and source body.
+                tuple[int, int, Image.Image, Image.Image, bytes | None]:
+                    Selection, photo ID, display/cache rasters and original body.
             """
-            body, _mime = self.session.media_photo(
-                self.gallery.gallery_id,
-                photo.image_id,
-                thumbnail=False,
-                cancelled=self._cancelled,
-                cache_eligible=getattr(photo, 'cache_eligible', None),
-                thumbnail_etag=getattr(photo, 'thumbnail_etag', None),
-                thumbnail_verified_at=getattr(
-                    photo, 'thumbnail_verified_at', None,
-                ),
-                preload_eligible=getattr(photo, 'preload_eligible', None),
-                preload_thumbnail_etag=getattr(
-                    photo, 'preload_thumbnail_etag', None,
-                ),
-                preload_verified_at=getattr(photo, 'preload_verified_at', None),
-            )
-            image = self._prepare_detail(body)
+            image, body = self._read_prepared_detail(photo)
             return detail_serial, photo.image_id, image, image.copy(), body
 
         return self._launch(
@@ -2558,8 +3080,69 @@ class _NativeGalleryViewer:
                     self._text('linking_media_next'),
                 ),
             )
+            self._bind_lightbox_shortcuts(self._lightbox._overlay)
             self._refresh_audio_button()
         return self._lightbox
+
+    def _bind_lightbox_shortcuts(self, overlay: tk.Misc) -> None:
+        """Route fullscreen keys through one tag on active overlay descendants.
+
+        Args:
+            overlay (tk.Misc): Existing overlay tree owned by PhotoLightbox.
+
+        Returns:
+            None: One local bindtag handles shortcuts before default button logic.
+        """
+        retained_widgets: list[tk.Misc] = []
+        for widget in self._lightbox_key_widgets:
+            try:
+                if widget.winfo_exists():
+                    retained_widgets.append(widget)
+            except tk.TclError:
+                pass
+        self._lightbox_key_widgets = retained_widgets
+        pending = [overlay]
+        while pending:
+            widget = pending.pop()
+            try:
+                tags = widget.bindtags()
+                if self._lightbox_key_tag not in tags:
+                    widget.bindtags((self._lightbox_key_tag, *tags))
+                    self._lightbox_key_widgets.append(widget)
+                pending.extend(widget.winfo_children())
+            except tk.TclError:
+                continue
+        if not self._lightbox_key_bindings:
+            for sequence in ('<KeyPress-f>', '<KeyPress-F>', '<KeyPress-F11>'):
+                binding = self.window.bind_class(
+                    self._lightbox_key_tag, sequence,
+                    self._on_fullscreen, add='+',
+                )
+                if binding is not None:
+                    self._lightbox_key_bindings.append((sequence, binding))
+
+    def _unbind_lightbox_shortcuts(self) -> None:
+        """Remove this viewer's lightbox bindtag from its retained widgets.
+
+        Returns:
+            None: No fullscreen callback or bindtag outlives its viewer.
+        """
+        for sequence, binding in self._lightbox_key_bindings:
+            try:
+                self.window.unbind_class(self._lightbox_key_tag, sequence)
+                self.window.deletecommand(binding)
+            except tk.TclError:
+                pass
+        self._lightbox_key_bindings.clear()
+        for widget in self._lightbox_key_widgets:
+            try:
+                widget.bindtags(tuple(
+                    tag for tag in widget.bindtags()
+                    if tag != self._lightbox_key_tag
+                ))
+            except tk.TclError:
+                pass
+        self._lightbox_key_widgets.clear()
 
     def _show_detail(
         self,
@@ -2568,6 +3151,7 @@ class _NativeGalleryViewer:
         display_image: 'Image.Image | None',
         cached_image: 'Image.Image | None',
         encoded: bytes | None,
+        decode_reason: str | None = None,
     ) -> None:
         """Render one normalized detail image on Tk's owning thread.
 
@@ -2579,6 +3163,7 @@ class _NativeGalleryViewer:
             cached_image (Image.Image | None): Independent prepared copy retained
                 only when the worker response is fresh and usable.
             encoded (bytes | None): Complete source body retained for HDR rendering.
+            decode_reason (str | None): Fixed decoder outcome for a refused source.
 
         Returns:
             None: The lightbox owns the rendered image reference.
@@ -2596,7 +3181,13 @@ class _NativeGalleryViewer:
             if display_image is not None:
                 display_image.close()
             if self._lightbox is not None:
-                self._lightbox.show_error(self._text('linking_media_image_error'))
+                error_key = (
+                    'linking_media_decode_error'
+                    if decode_reason in (
+                        'decode-failed', 'pixel-limit', 'body-limit',
+                    ) else 'linking_media_image_error'
+                )
+                self._lightbox.show_error(self._text(error_key))
             if self._slideshow_running:
                 if len(self._photos) > 1:
                     self._schedule_slide()
@@ -2672,6 +3263,8 @@ class _NativeGalleryViewer:
         self._detail_serial += 1
         self._pending_detail_index = None
         self._pending_prefetch_ids.clear()
+        if self._prefetch_edge_direction:
+            self._pending_page_request = None
         self._select_first_after_page = False
         self._wrap_after_metadata = 0
         self._prefetch_edge_direction = 0
@@ -3308,6 +3901,7 @@ class _NativeGalleryViewer:
         self._stop_audio()
         self._close_music_panel()
         if self._lightbox is not None:
+            self._unbind_lightbox_shortcuts()
             self._lightbox.dismiss()
             self._lightbox.close()
         self._photos = ()
@@ -3379,6 +3973,8 @@ def mount_native_gallery_view(
     thumbnail_memory: GalleryThumbnailMemory | None = None,
     context_menu: Callable[[LinkedPhoto | None, tk.Event], str | None] | None = None,
     diagnostic_callback: Callable[[str], None] | None = None,
+    photo_selected: Callable[[LinkedPhoto], None] | None = None,
+    observation_callback: Callable[[str], None] | None = None,
 ) -> ttk.Frame:
     """Mount an inline, bounded gallery reader for a selected gallery.
 
@@ -3396,6 +3992,10 @@ def mount_native_gallery_view(
             Optional owner for photo or empty-grid context actions.
         diagnostic_callback (Callable[[str], None] | None): Optional thread-safe
             receiver for sanitized failure facts, or None to omit retention.
+        photo_selected (Callable[[LinkedPhoto], None] | None): Optional
+            Tk-thread receiver for the focused photo descriptor.
+        observation_callback (Callable[[str], None] | None): Optional thread-safe
+            receiver for allowlisted non-failure observations.
 
     Returns:
         ttk.Frame: Child view whose destruction releases worker and UI resources.
@@ -3410,5 +4010,7 @@ def mount_native_gallery_view(
         thumbnail_memory=thumbnail_memory,
         context_menu=context_menu,
         diagnostic_callback=diagnostic_callback,
+        photo_selected=photo_selected,
+        observation_callback=observation_callback,
     )
     return viewer.frame

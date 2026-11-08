@@ -1261,6 +1261,12 @@ the cache because they cannot change table, column, or index availability.
 
 ### Phase 9 security/authentication schema capabilities
 
+The optional complete native catalogue uses the existing grant/user/gallery
+schema and the same authorized model query as paged listing. It adds no
+migration, persistent revision counter or table. Its revision is computed from
+the current ordered identity projection and verified issuer/account/scope;
+current authority is checked again before an unchanged response is returned.
+
 The experimental browser-approved native client stores consented grants and
 hashed access credentials in `app_link_grants`. An explicitly approved offline
 scope additionally creates one `app_link_refresh_families` row per grant and

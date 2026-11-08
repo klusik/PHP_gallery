@@ -20,6 +20,7 @@ import hmac
 import http.client
 import ipaddress
 import json
+import logging
 import math
 import queue
 import re
@@ -393,6 +394,10 @@ LINKING_RESPONSE_MAX_BYTES = 8192
 # Consumers: _request_json_once. Rationale: 196608 bytes fits 50 titles of up
 # to 255 characters even when each supplementary character uses JSON escapes.
 LINKING_GALLERIES_RESPONSE_MAX_BYTES = 196608
+# Purpose: Bound one optional complete gallery-tree response independently.
+# Type: int. Units: response bytes. Scope: one tree-v1 JSON request only.
+# Consumers: _request_json_once. Rationale: Match the server's four-MiB cap.
+LINKING_GALLERY_TREE_RESPONSE_MAX_BYTES = 4 * 1024 * 1024
 
 # Purpose: Bound ranked choices with their authorized parent titles.
 # Type: int. Units: bytes. Scope: a native picker POST response.
@@ -449,12 +454,18 @@ LINKING_RECOVERY_MAX_FILE_BYTES = 67108864
 # Consumers: LinkingSession.gallery_page. Rationale: 50 matches the server
 # page limit and keeps memory and widget size independent of catalog size.
 LINKING_GALLERY_PAGE_MAX = 50
+# Purpose: Bound the optional complete tree before constructing client rows.
+# Type: int. Units: gallery rows. Scope: one complete tree-v1 response.
+# Consumers: _linked_gallery_tree. Rationale: Match the server's 10,000-row cap.
+LINKING_GALLERY_TREE_MAX_ROWS = 10_000
 
 # Purpose: Bound gallery identifiers to the server's signed PHP integer range.
 # Type: int. Units: database identifier. Scope: gallery and pagination IDs.
 # Consumers: LinkingSession.gallery_page, _request_json.
 # Rationale: 9223372036854775807 is the largest 64-bit signed PHP integer.
 LINKING_GALLERY_ID_MAX = 9223372036854775807
+GALLERY_TREE_CAPABILITY = 'galleries:tree-v1'
+_GALLERY_TREE_REVISION_PATTERN = re.compile(r'[a-f0-9]{64}')
 
 # Purpose: Bound an unsigned gallery editor revision without losing precision.
 # Type: int. Units: revision counter. Scope: one validated gallery detail.
@@ -505,6 +516,7 @@ _LinkingDiagnosticPhase = Literal['discovery', 'linking', 'media']
 _LinkingDiagnosticRoute = Literal[
     'app_linking_discovery', 'app_linking_push', 'app_linking_token',
     'app_linking_identity', 'app_linking_revoke', 'app_linking_galleries',
+    'app_linking_gallery_tree',
     'app_linking_inventory', 'app_linking_upload', 'app_linking_gallery_detail',
     'app_linking_gallery_create', 'app_linking_gallery_create_status',
     'app_linking_gallery_create_abandon', 'app_linking_gallery_visibility',
@@ -646,6 +658,7 @@ class LinkingResponseError(LinkingError):
                     'app_linking_discovery', 'app_linking_push',
                     'app_linking_token', 'app_linking_identity',
                     'app_linking_revoke', 'app_linking_galleries',
+                    'app_linking_gallery_tree',
                     'app_linking_inventory', 'app_linking_upload',
                     'app_linking_gallery_detail', 'app_linking_gallery_create',
                     'app_linking_gallery_create_status',
@@ -1780,6 +1793,7 @@ def _request_json(
     route: Literal[
         'app_linking_discovery', 'app_linking_push', 'app_linking_token',
         'app_linking_identity', 'app_linking_revoke', 'app_linking_galleries',
+        'app_linking_gallery_tree',
         'app_linking_inventory', 'app_linking_upload', 'app_linking_gallery_detail',
         'app_linking_gallery_create', 'app_linking_gallery_create_status',
         'app_linking_gallery_create_abandon',
@@ -1795,6 +1809,7 @@ def _request_json(
     content_length: int | None = None,
     gallery_id: int | None = None,
     watch_key: str | None = None,
+    tree_revision: str | None = None,
 ) -> dict[str, JsonValue]:
     """Bound one HTTPS request, including DNS, and validate its JSON.
 
@@ -1812,6 +1827,7 @@ def _request_json(
         content_length (int | None): Exact multipart body length in bytes.
         gallery_id (int | None): Positive selected ID for gallery detail.
         watch_key (str | None): Supplemental key for a linked Watcher request.
+        tree_revision (str | None): Exact optional tree-v1 SHA-256 revision.
 
     Returns:
         dict[str, JsonValue]: Strict, unique-key decoded JSON object.
@@ -1841,6 +1857,14 @@ def _request_json(
                 or gallery_id is not None or after_id is not None))
             or (route == 'app_linking_galleries' and method == 'POST' and (
                 not isinstance(body, bytes) or after_id is not None or bearer is None))
+            or (route == 'app_linking_gallery_tree' and (
+                method != 'GET' or body is not None or after_id is not None
+                or gallery_id is not None or bearer is None or watch_key is not None
+                or (tree_revision is not None and (
+                    not isinstance(tree_revision, str)
+                    or _GALLERY_TREE_REVISION_PATTERN.fullmatch(tree_revision) is None
+                ))))
+            or (route != 'app_linking_gallery_tree' and tree_revision is not None)
             or (after_id is not None
             and (route != 'app_linking_galleries' or type(after_id) is not int
                  or after_id <= 0 or after_id > LINKING_GALLERY_ID_MAX))
@@ -1874,6 +1898,11 @@ def _request_json(
         Returns:
             dict[str, JsonValue]: The route's strict JSON response object.
         """
+        if route == 'app_linking_gallery_tree':
+            return _request_json_once(
+                issuer, route, method, body, bearer, control,
+                tree_revision=tree_revision,
+            )
         if watch_key is not None:
             return _request_json_once(
                 issuer, route, method, body, bearer, control,
@@ -2088,6 +2117,7 @@ def _request_json_once(
     route: Literal[
         'app_linking_discovery', 'app_linking_push', 'app_linking_token',
         'app_linking_identity', 'app_linking_revoke', 'app_linking_galleries',
+        'app_linking_gallery_tree',
         'app_linking_inventory', 'app_linking_upload', 'app_linking_gallery_detail',
         'app_linking_gallery_create', 'app_linking_gallery_create_status',
         'app_linking_gallery_create_abandon',
@@ -2103,6 +2133,7 @@ def _request_json_once(
     content_length: int | None = None,
     gallery_id: int | None = None,
     watch_key: str | None = None,
+    tree_revision: str | None = None,
 ) -> dict[str, JsonValue]:
     """Execute one non-redirecting request on the bounded worker.
 
@@ -2120,6 +2151,7 @@ def _request_json_once(
         content_length (int | None): Exact multipart body size in bytes.
         gallery_id (int | None): Positive selected ID for gallery detail.
         watch_key (str | None): Validated temporary Watcher key, if applicable.
+        tree_revision (str | None): Validated optional complete-tree revision.
 
     Returns:
         dict[str, JsonValue]: Strict JSON object returned by the selected route.
@@ -2131,10 +2163,21 @@ def _request_json_once(
         http.client.HTTPException: The server sent an invalid HTTP response.
     """
     parsed = urlsplit(issuer)
-    wire_route = 'app_linking_media' if route in (
+    wire_route = 'app_linking_galleries' if route == 'app_linking_gallery_tree' else (
+        'app_linking_media' if route in (
         'app_linking_photo_visibility', 'app_linking_media_delete',
-    ) else route
+        ) else route
+    )
     path = parsed.path + '/index.php?page=' + wire_route
+    if route == 'app_linking_gallery_tree':
+        if (method != 'GET' or body is not None or after_id is not None
+                or (tree_revision is not None and (
+                    _GALLERY_TREE_REVISION_PATTERN.fullmatch(tree_revision) is None
+                ))):
+            raise LinkingError('Invalid trusted issuer.')
+        path += '&tree=1'
+        if tree_revision is not None:
+            path += '&revision=' + tree_revision
     if after_id is not None:
         path += '&after=' + str(after_id)
     if gallery_id is not None and route == 'app_linking_gallery_detail':
@@ -2242,7 +2285,9 @@ def _request_json_once(
                     'response_policy',
                 )
             # One extra byte distinguishes the exact configured size boundary.
-            max_bytes = (LINKING_PICKER_RESPONSE_MAX_BYTES
+            max_bytes = (LINKING_GALLERY_TREE_RESPONSE_MAX_BYTES
+                         if route == 'app_linking_gallery_tree' else
+                         LINKING_PICKER_RESPONSE_MAX_BYTES
                          if route == 'app_linking_galleries' and method == 'POST' else
                          LINKING_GALLERIES_RESPONSE_MAX_BYTES
                          if route == 'app_linking_galleries' else
@@ -2315,6 +2360,7 @@ class LinkingAttempt:
         self._issuer = issuer
         self._scope = scope
         self._admin_preload_supported = False
+        self._gallery_tree_supported = False
         self._state = secrets.token_urlsafe(ATTEMPT_RANDOM_BYTES)
         self._verifier = secrets.token_urlsafe(ATTEMPT_RANDOM_BYTES)
         self._code = ''
@@ -2412,6 +2458,10 @@ class LinkingAttempt:
             capabilities = (
                 linking_data.get('capabilities', [])
                 if isinstance(linking_data, dict) else []
+            )
+            self._gallery_tree_supported = (
+                isinstance(capabilities, list)
+                and GALLERY_TREE_CAPABILITY in capabilities
             )
             self._admin_preload_supported = (
                 isinstance(capabilities, list)
@@ -2725,6 +2775,7 @@ class LinkingAttempt:
             session = LinkingSession(
                 parameters.issuer, token, started + lifetime, parameters.scope,
                 admin_preload_supported=self._admin_preload_supported,
+                gallery_tree_supported=self._gallery_tree_supported,
             )
             return session, refresh, refresh_lifetime
 
@@ -2889,6 +2940,80 @@ def _linked_gallery_page(
             or len(galleries) != LINKING_GALLERY_PAGE_MAX or next_after != previous)):
         raise LinkingError('Gallery response was not accepted.')
     return LinkedGalleryPage(tuple(galleries), next_after)
+
+
+@dataclass(frozen=True)
+class LinkedGalleryTree:
+    """Hold one validated complete gallery tree and its server revision.
+
+    Args:
+        galleries (tuple[LinkedGallery, ...]): Complete ID-ordered rows, empty
+            for an empty catalogue or an unchanged response backed by a matching
+            local snapshot.
+        revision (str): Lowercase SHA-256 revision from the server.
+        unchanged (bool): Whether the server confirmed the requested revision.
+    """
+
+    galleries: tuple[LinkedGallery, ...]
+    revision: str
+    unchanged: bool = False
+
+
+def _linked_gallery_tree(
+    data: dict[str, JsonValue], requested_revision: str | None,
+) -> LinkedGalleryTree:
+    """Validate a complete tree-v1 envelope without coercing any member.
+
+    Args:
+        data (dict[str, JsonValue]): Strict JSON envelope from the optional route.
+        requested_revision (str | None): Exact revision sent with the request.
+
+    Returns:
+        LinkedGalleryTree: Complete validated rows or matching unchanged proof.
+
+    Raises:
+        LinkingError: The envelope, revision, rows or ordering is invalid.
+    """
+    revision = data.get('revision')
+    unchanged = data.get('unchanged')
+    if (type(data.get('version')) is not int or data.get('version') != 1
+            or not isinstance(revision, str)
+            or _GALLERY_TREE_REVISION_PATTERN.fullmatch(revision) is None
+            or type(unchanged) is not bool):
+        raise LinkingError('Gallery tree response was not accepted.')
+    if unchanged:
+        if (set(data) != {'version', 'revision', 'unchanged'}
+                or requested_revision is None
+                or revision != requested_revision):
+            raise LinkingError('Gallery tree response was not accepted.')
+        return LinkedGalleryTree((), revision, True)
+    rows = data.get('galleries')
+    if (set(data) != {'version', 'revision', 'unchanged', 'galleries'}
+            or not isinstance(rows, list)
+            or len(rows) > LINKING_GALLERY_TREE_MAX_ROWS):
+        raise LinkingError('Gallery tree response was not accepted.')
+    galleries: list[LinkedGallery] = []
+    previous = 0
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {'id', 'parent_id', 'title'}:
+            raise LinkingError('Gallery tree response was not accepted.')
+        gallery_id, parent_id, title = (
+            row['id'], row['parent_id'], row['title'],
+        )
+        if (type(gallery_id) is not int
+                or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX
+                or gallery_id <= previous
+                or (parent_id is not None and (
+                    type(parent_id) is not int
+                    or not 0 < parent_id <= LINKING_GALLERY_ID_MAX
+                ))
+                or not isinstance(title, str)
+                or len(title) > LINKING_GALLERY_TITLE_MAX_CHARS
+                or any(0xd800 <= ord(char) <= 0xdfff for char in title)):
+            raise LinkingError('Gallery tree response was not accepted.')
+        galleries.append(LinkedGallery(gallery_id, parent_id, title))
+        previous = gallery_id
+    return LinkedGalleryTree(tuple(galleries), revision)
 
 
 @dataclass(frozen=True)
@@ -3235,6 +3360,66 @@ def _native_media_policy_facts(
     )
 
 
+def _private_media_cache_control_matches(
+    values: list[str], *, photo_request: bool, track_request: bool,
+) -> bool:
+    """Match equivalent forms of the negotiated private cache policy.
+
+    Args:
+        values (list[str]): All Cache-Control field values from one response.
+        photo_request (bool): Whether the request is for photo bytes.
+        track_request (bool): Whether the request is for audio bytes.
+
+    Returns:
+        bool: True only for the complete private policy with allowed repeats.
+
+    Photo directives may be split, reordered or repeated equivalently. For
+    repeated max-age fields RFC 9111 permits use of the first origin value.
+    Admission still requires an explicit 60-second value and every value to
+    meet the existing 60-second local freshness cap. Audio accepts only equivalent
+    `private, no-cache` directives.
+    """
+    flags: set[str] = set()
+    ages: list[str] = []
+    for header in values:
+        if not isinstance(header, str) or not header:
+            return False
+        for field in header.split(','):
+            directive = field.strip()
+            if not directive:
+                return False
+            name, separator, parameter = directive.partition('=')
+            name = name.strip().lower()
+            parameter = parameter.strip()
+            if name in ('private', 'must-revalidate', 'no-cache'):
+                if separator:
+                    return False
+                flags.add(name)
+                continue
+            if name != 'max-age' or not separator or not photo_request:
+                return False
+            if re.fullmatch(r'[0-9]+', parameter) is None:
+                return False
+            ages.append(parameter.lstrip('0') or '0')
+
+    if photo_request and not track_request:
+        required = {'private', 'must-revalidate'}
+        minimum_age = str(PHOTO_CACHE_FRESH_SECONDS)
+        return (
+            flags == required
+            and bool(ages)
+            and minimum_age in ages
+            and all(
+                len(age) > len(minimum_age)
+                or (len(age) == len(minimum_age) and age >= minimum_age)
+                for age in ages
+            )
+        )
+    if track_request and not photo_request:
+        return flags == {'private', 'no-cache'} and not ages
+    return False
+
+
 def _native_media_read_once(
     issuer: str, query: str, bearer: str, accepted: tuple[str, ...],
     control: _LinkingTransportControl, if_none_match: str | None = None,
@@ -3278,7 +3463,9 @@ def _native_media_read_once(
         cache_policy = ''
         if photo_request:
             cache_header = 'X-PHP-Gallery-Photo-Cache'
-            cache_policy = f'private, max-age={PHOTO_CACHE_FRESH_SECONDS}, must-revalidate'
+            cache_policy = (
+                f'private, max-age={PHOTO_CACHE_FRESH_SECONDS}, must-revalidate'
+            )
         elif track_request:
             cache_header = 'X-PHP-Gallery-Track-Cache'
             cache_policy = 'private, no-cache'
@@ -3306,8 +3493,11 @@ def _native_media_read_once(
             cacheable = bool(
                 cache_header is not None
                 and response.headers.get_all(cache_header, []) == ['1']
-                and len(cache_controls) == 1
-                and cache_controls[0].strip().lower() == cache_policy
+                and _private_media_cache_control_matches(
+                    cache_controls,
+                    photo_request=photo_request,
+                    track_request=track_request,
+                )
                 and '*' not in vary_tokens
                 and {'authorization', cache_header.lower()}.issubset(vary_tokens)
                 and (not admin_preload or (
@@ -3503,6 +3693,7 @@ class LinkingSession:
     def __init__(
         self, issuer: str, token: str, expires_at: float,
         scope: str = IDENTITY_SCOPE, *, admin_preload_supported: bool = False,
+        gallery_tree_supported: bool = False,
     ) -> None:
         """Create a transient session from a validated token response.
 
@@ -3513,6 +3704,8 @@ class LinkingSession:
             scope (str): Exact approved transient or offline scope bundle.
             admin_preload_supported (bool): Whether discovery advertised the
                 explicit versioned private media protocol.
+            gallery_tree_supported (bool): Whether discovery advertised the
+                optional complete catalogue tree protocol.
 
         Returns:
             None: Owns one token solely for the life of this object.
@@ -3525,6 +3718,7 @@ class LinkingSession:
                 or not _canonical_256bit(token[len(TOKEN_PREFIX):])
                 or scope_base(scope) is None
                 or type(admin_preload_supported) is not bool
+                or type(gallery_tree_supported) is not bool
                 or not math.isfinite(expires_at)
                 or expires_at <= time.monotonic()):
             raise LinkingError('Invalid linking session.')
@@ -3537,6 +3731,7 @@ class LinkingSession:
         self._issuer = issuer
         self._scope = scope
         self._admin_preload_supported = admin_preload_supported
+        self._gallery_tree_supported = gallery_tree_supported
         self._token = token
         self._expires_at = expires_at
         self._busy = False
@@ -3614,7 +3809,8 @@ class LinkingSession:
         self,
         route: Literal[
             'app_linking_identity', 'app_linking_revoke',
-            'app_linking_galleries', 'app_linking_inventory',
+            'app_linking_galleries', 'app_linking_gallery_tree',
+            'app_linking_inventory',
             'app_linking_upload', 'app_linking_gallery_detail',
             'app_linking_gallery_create', 'app_linking_gallery_create_status',
             'app_linking_gallery_create_abandon',
@@ -3628,6 +3824,7 @@ class LinkingSession:
         gallery_cancel: threading.Event | None = None,
         gallery_id: int | None = None,
         watch_key: str | None = None,
+        tree_revision: str | None = None,
     ) -> dict[str, JsonValue]:
         """Serialize one authenticated operation without retrying it.
 
@@ -3641,6 +3838,7 @@ class LinkingSession:
                 for a listing, detail read or create request, if applicable.
             gallery_id (int | None): Exact selected gallery ID for detail or deletion.
             watch_key (str | None): Supplemental key for capture traffic only.
+            tree_revision (str | None): Optional exact tree-v1 revision.
 
         Returns:
             dict[str, JsonValue]: Strict decoded server response object.
@@ -3648,7 +3846,10 @@ class LinkingSession:
         Raises:
             LinkingError: Closed, busy, expired identity, cancelled or failure.
         """
-        if route in ('app_linking_galleries', 'app_linking_gallery_detail') and gallery_cancel is None:
+        if route in (
+            'app_linking_galleries', 'app_linking_gallery_tree',
+            'app_linking_gallery_detail',
+        ) and gallery_cancel is None:
             gallery_cancel = threading.Event()
         if gallery_cancel is not None:
             with self._lock:
@@ -3661,7 +3862,7 @@ class LinkingSession:
                     self._renew_if_expired(gallery_cancel)
                 return self._request_owned(
                     route, after_id, body, multipart_boundary, content_length,
-                    gallery_cancel, gallery_id, watch_key,
+                    gallery_cancel, gallery_id, watch_key, tree_revision,
                 )
             finally:
                 self._request_gate.release()
@@ -3675,7 +3876,7 @@ class LinkingSession:
         body: bytes | Iterable[bytes] | None,
         multipart_boundary: str | None, content_length: int | None,
         gallery_cancel: threading.Event | None, gallery_id: int | None,
-        watch_key: str | None,
+        watch_key: str | None, tree_revision: str | None,
     ) -> dict[str, JsonValue]:
         """Perform one authenticated operation while holding session admission.
 
@@ -3689,6 +3890,7 @@ class LinkingSession:
                 signal, independent of an active upload.
             gallery_id (int | None): Selected gallery ID for detail or deletion.
             watch_key (str | None): Supplemental key for capture traffic only.
+            tree_revision (str | None): Optional exact complete-tree revision.
 
         Returns:
             dict[str, JsonValue]: Strict decoded server response object.
@@ -3702,7 +3904,7 @@ class LinkingSession:
                     or (route != 'app_linking_revoke'
                         and time.monotonic() >= self._expires_at)):
                 raise LinkingError('Linking session is unavailable.')
-            if (route == 'app_linking_galleries'
+            if (route in ('app_linking_galleries', 'app_linking_gallery_tree')
                     and scope_base(self._scope) not in (GALLERIES_SCOPE, UPLOAD_SCOPE)):
                 raise LinkingError('Gallery listing was not approved.')
             if (route == 'app_linking_galleries' and body is not None
@@ -3746,6 +3948,13 @@ class LinkingSession:
                     multipart_boundary=multipart_boundary,
                     content_length=content_length,
                     **watch_options,
+                )
+            elif route == 'app_linking_gallery_tree':
+                data = _request_json(
+                    self._issuer, route, 'GET', None, token,
+                    cancelled=(gallery_cancel if gallery_cancel is not None
+                               else self._cancelled),
+                    tree_revision=tree_revision,
                 )
             elif route == 'app_linking_galleries' and body is not None:
                 data = _request_json(
@@ -3815,7 +4024,11 @@ class LinkingSession:
                 for pending in self._pending_gallery_cancels:
                     pending.set()
             if self._busy and (not gallery_only
-                               or self._active_route in ('app_linking_galleries', 'app_linking_gallery_detail')):
+                               or self._active_route in (
+                                   'app_linking_galleries',
+                                   'app_linking_gallery_tree',
+                                   'app_linking_gallery_detail',
+                               )):
                 self._cancelled.set()
 
     def can_read_media(self) -> bool:
@@ -4236,7 +4449,9 @@ class LinkingSession:
                     and not private_mode)):
             return False
         try:
-            cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+            cache = GalleryMediaCache.for_current_user(
+                NATIVE_MEDIA_MAX_BYTES, thumbnails=thumbnail,
+            )
             key = (cache.private_key(
                 self._issuer, self._verified_user_id(), gallery_id,
                 photo.image_id, thumbnail,
@@ -4367,7 +4582,9 @@ class LinkingSession:
                     and not private_mode)):
             return False
         try:
-            cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+            cache = GalleryMediaCache.for_current_user(
+                NATIVE_MEDIA_MAX_BYTES, thumbnails=thumbnail,
+            )
             key = (cache.private_key(
                 self._issuer, self._verified_user_id(), gallery_id,
                 photo.image_id, thumbnail,
@@ -4395,7 +4612,7 @@ class LinkingSession:
         preload_thumbnail_etag: str | None = None,
         preload_verified_at: float | None = None,
     ) -> tuple[bytes, str]:
-        """Read one current allowed image or its existing thumbnail.
+        """Read one allowed image, retrying only an exact refused 304 safely.
 
         Args:
             gallery_id (int): Selected gallery ID to which the image must belong.
@@ -4413,10 +4630,13 @@ class LinkingSession:
             preload_verified_at (float | None): Monotonic time of that proof.
 
         Returns:
-            tuple[bytes, str]: Validated raster media bytes and media type.
+            tuple[bytes, str]: Validated current raster bytes and media type,
+                never bytes from a rejected not-modified response.
 
         Raises:
             LinkingError: The image, permission, file or transport is unavailable.
+            LinkingResponseError: A refused conditional read is not eligible
+                for the one unconditional refresh or that refresh also fails.
         """
         if type(thumbnail) is not bool:
             raise LinkingError('Invalid gallery photo rendition.')
@@ -4439,7 +4659,9 @@ class LinkingSession:
         entry = None
         try:
             if cache_allowed:
-                cache = GalleryMediaCache.for_current_user(NATIVE_MEDIA_MAX_BYTES)
+                cache = GalleryMediaCache.for_current_user(
+                    NATIVE_MEDIA_MAX_BYTES, thumbnails=thumbnail,
+                )
                 key = (cache.private_key(
                     self._issuer, self._verified_user_id(), gallery_id,
                     image_id, thumbnail,
@@ -4474,20 +4696,47 @@ class LinkingSession:
 
         kind: _NativeMediaKind = 'thumbnail' if thumbnail else 'photo'
         preload_options = {'admin_preload': True} if private_mode else {}
-        response = self._media_read(
-            gallery_id, kind, image_id, cancelled,
-            entry.etag if entry is not None else None,
-            **preload_options,
-        )
+        # Share one unconditional read budget with the legacy no-store 304 lane.
+        unconditional_requested = False
+        try:
+            response = self._media_read(
+                gallery_id, kind, image_id, cancelled,
+                entry.etag if entry is not None else None,
+                **preload_options,
+            )
+        except LinkingResponseError as error:
+            facts = error.media_policy_facts
+            if not (
+                entry is not None and entry.etag is not None
+                and error.phase == 'media'
+                and error.route == 'app_linking_media'
+                and error.status == 304
+                and error.reason == 'response_policy'
+                and type(facts) is MediaPolicyFacts
+                and not facts.encoding_present
+            ):
+                raise
+            if cancelled is not None and cancelled.is_set():
+                raise
+            logging.getLogger(__name__).info(
+                'Conditional media 304 was refused by response policy; '
+                'requesting one unconditional refresh.',
+            )
+            unconditional_requested = True
+            response = self._media_read(
+                gallery_id, kind, image_id, cancelled,
+                **preload_options,
+            )
         body, mime, etag, cacheable = response
         if body is None:
-            if entry is None:
+            if entry is None or unconditional_requested:
                 raise LinkingError('Gallery photo revalidation was not accepted.')
             if cacheable and etag == entry.etag:
                 body, mime = entry.body, entry.mime
             else:
                 # Older servers may answer a conditional read with no-store.
                 # Fetch once without the validator to keep those servers usable.
+                unconditional_requested = True
                 body, mime, etag, cacheable = self._media_read(
                     gallery_id, kind, image_id, cancelled,
                     **preload_options,
@@ -5122,6 +5371,67 @@ class LinkingSession:
         if not self.available():
             raise LinkingError('Linking session is unavailable.')
         return page
+
+    def supports_gallery_tree(self) -> bool:
+        """Check whether discovery negotiated the optional full-tree route.
+
+        Returns:
+            bool: True only for a live session with the exact tree-v1 capability.
+        """
+        with self._lock:
+            return (not self._closed and self._gallery_tree_supported
+                    and bool(self._token)
+                    and (self._renew is not None
+                         or time.monotonic() < self._expires_at))
+
+    def gallery_tree(
+        self, revision: str | None = None,
+        cancelled: threading.Event | None = None,
+    ) -> LinkedGalleryTree | None:
+        """Read the optional complete tree or return None for safe fallback.
+
+        Args:
+            revision (str | None): Validated cached server revision, if any.
+            cancelled (threading.Event | None): Workspace-owned cancellation.
+
+        Returns:
+            LinkedGalleryTree | None: Complete tree, unchanged confirmation, or
+                None when the optional endpoint is unsupported/unavailable.
+
+        Raises:
+            LinkingError: The current grant, scope, session or cancellation failed.
+        """
+        if (not self.available()
+                or (cancelled is not None and cancelled.is_set())):
+            raise LinkingError('Linking session is unavailable.')
+        if not self.supports_gallery_tree():
+            return None
+        if (revision is not None
+                and (not isinstance(revision, str)
+                     or _GALLERY_TREE_REVISION_PATTERN.fullmatch(revision) is None)):
+            return None
+        try:
+            data = self._request(
+                'app_linking_gallery_tree', gallery_cancel=cancelled,
+                tree_revision=revision,
+            )
+        except LinkingResponseError as error:
+            if error.status in (401, 403, 429) or error.reason == 'throttled':
+                raise
+            logging.getLogger(__name__).info(
+                '[photos] catalogue tree fallback; %s', error.safe_summary,
+            )
+            return None
+        try:
+            tree = _linked_gallery_tree(data, revision)
+        except LinkingError:
+            logging.getLogger(__name__).info(
+                '[photos] catalogue tree fallback; reason=invalid_shape',
+            )
+            return None
+        if not self.available():
+            raise LinkingError('Linking session is unavailable.')
+        return tree
 
     def gallery_picker_page(
         self, query: str, after_id: int | None = None,

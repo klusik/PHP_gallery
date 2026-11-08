@@ -60,6 +60,33 @@ const APP_LINKING_ACCESS_TTL_SECONDS = 900;
 const APP_LINKING_GALLERY_PAGE_SIZE = 50;
 
 /**
+ * Bound the optional complete native catalogue to one authorized SQL read.
+ * Type: int. Units: gallery rows. Scope: one tree-v1 response.
+ * Consumers: app_linking_gallery_tree.
+ * Rationale: 10,000 matches the companion's bounded tree preferences; one
+ * lookahead row detects larger sites and preserves the paged fallback.
+ */
+const APP_LINKING_GALLERY_TREE_MAX_ROWS = 10000;
+
+/**
+ * Bound the complete encoded tree before it can become an HTTP response.
+ * Type: int. Units: bytes. Scope: one tree-v1 JSON response.
+ * Consumers: app_linking_gallery_tree.
+ * Rationale: Four MiB accommodates ordinary catalogues without unbounded
+ * transfer or client allocation; oversized trees use the existing pages.
+ */
+const APP_LINKING_GALLERY_TREE_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Identify the optional complete catalogue envelope independently of releases.
+ * Type: int. Units: protocol version. Scope: tree-v1 payload and revision.
+ * Consumers: app_linking_gallery_tree.
+ * Rationale: Version one keeps older paged clients and future tree formats
+ * distinct without changing consent, scopes or the linking protocol version.
+ */
+const APP_LINKING_GALLERY_TREE_VERSION = 1;
+
+/**
  * Bound the exact configured issuer to its persisted schema capacity.
  * Type: int. Units: bytes. Scope: one linking issuer including its mount.
  * Consumers: app_linking_issuer_valid.
@@ -259,6 +286,7 @@ function app_linking_discovery_capabilities(
         }
     }
     if (in_array('galleries:list', $capabilities, true)) {
+        $capabilities[] = 'galleries:tree-v1';
         try {
             if (schema_inspection_is_available(
                 app_linking_gallery_search_schema_status(),
@@ -631,6 +659,90 @@ function app_linking_gallery_page(
     } catch (Throwable) {
         throw new RuntimeException('App linking is unavailable.');
     }
+}
+
+/**
+ * Read one complete, bounded catalogue using current native-list authority.
+ *
+ * A single authorized model SELECT produces the ordered snapshot. Revision
+ * comparison follows a fresh authority check, so a prior cached tree cannot
+ * make a revoked or differently scoped grant appear unchanged. The digest
+ * includes issuer, account and exact scope, but never a bearer credential.
+ *
+ * @param string $token Raw bearer presented over the trusted issuer transport.
+ * @param string $issuer Exact configured installation issuer and mount.
+ * @param string|null $knownRevision Prior lowercase SHA-256 revision from the
+ *     same verified account/scope cache, or null to request a complete tree.
+ * @return array{version:int,revision:string,unchanged:bool,galleries?:list<array{id:int,parent_id:?int,title:string}>}|null
+ *     A complete or unchanged envelope, or null for invalid current authority
+ *     or an invalid revision. No partial tree is returned as complete.
+ * @throws \OverflowException When row or encoded-byte bounds require paging.
+ * @throws RuntimeException When required schema, mapping or storage fails.
+ * @throws \JsonException When stored titles cannot be encoded as valid JSON.
+ */
+function app_linking_gallery_tree(
+    string $token,
+    string $issuer,
+    ?string $knownRevision = null,
+): ?array {
+    if ($knownRevision !== null
+        && preg_match('/\A[a-f0-9]{64}\z/D', $knownRevision) !== 1) {
+        return null;
+    }
+    $identity = app_linking_authenticate($token, $issuer);
+    if ($identity === null
+        || !app_linking_scope_allows_gallery_listing($identity['scope'])) {
+        return null;
+    }
+    app_linking_require_schema(app_linking_gallery_listing_schema_status());
+    $hash = app_linking_access_token_hash($token);
+    if ($hash === null) {
+        return null;
+    }
+    $rows = gallery_model_linked_client_page(
+        $identity['grant_id'], $identity['user_id'], $hash, $issuer,
+        $identity['scope'], 0, APP_LINKING_GALLERY_TREE_MAX_ROWS + 1,
+    );
+    if ($rows === null) {
+        return null;
+    }
+    if (count($rows) > APP_LINKING_GALLERY_TREE_MAX_ROWS) {
+        throw new \OverflowException('Gallery tree requires paged loading.');
+    }
+    $galleries = [];
+    foreach ($rows as $row) {
+        $galleries[] = app_linking_gallery_identity($row);
+    }
+    $revision = hash('sha256', json_encode([
+        'version' => APP_LINKING_GALLERY_TREE_VERSION,
+        'issuer' => $issuer,
+        'account' => $identity['user_id'],
+        'scope' => $identity['scope'],
+        'galleries' => $galleries,
+    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+    $result = [
+        'version' => APP_LINKING_GALLERY_TREE_VERSION,
+        'revision' => $revision,
+        'unchanged' => false,
+        'galleries' => $galleries,
+    ];
+    if (strlen(json_encode(
+        $result, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
+    )) > APP_LINKING_GALLERY_TREE_MAX_BYTES) {
+        throw new \OverflowException('Gallery tree requires paged loading.');
+    }
+    $current = app_linking_authenticate($token, $issuer);
+    if ($current === null
+        || $current['grant_id'] !== $identity['grant_id']
+        || $current['user_id'] !== $identity['user_id']
+        || $current['scope'] !== $identity['scope']) {
+        return null;
+    }
+    if ($knownRevision !== null && hash_equals($revision, $knownRevision)) {
+        unset($result['galleries']);
+        $result['unchanged'] = true;
+    }
+    return $result;
 }
 
 /**

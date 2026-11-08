@@ -30,6 +30,7 @@ from .app_linking import (
     LINKING_GALLERY_ID_MAX, LINKING_GALLERY_QUERY_MAX_CHARS,
     LINKING_RECOVERY_MAX_FILE_BYTES,
     ADMIN_PRELOAD_CAPABILITY,
+    GALLERY_TREE_CAPABILITY,
     ADMIN_MEDIA_SCOPE_SUFFIX, ADMIN_PRESENTATION_SCOPE_SUFFIX,
     MEDIA_SCOPE_SUFFIX, PRESENTATION_SCOPE_SUFFIX, ROLLING_SCOPE_SUFFIX,
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage,
@@ -870,9 +871,20 @@ class LinkingManager:
                         (canonical, approve_if_absent),
                     ))
                     return
+                try:
+                    capabilities = discover_linking_capabilities(
+                        canonical, cancel,
+                    )
+                except Exception:
+                    if cancel.is_set():
+                        raise
+                    capabilities = frozenset()
                 session = LinkingSession(
                     canonical, grant.token, time.monotonic() + remaining,
                     grant.scope,
+                    gallery_tree_supported=(
+                        GALLERY_TREE_CAPABILITY in capabilities
+                    ),
                 )
                 identity = session.identity()
                 if identity.user_id != grant.account_id:
@@ -3577,6 +3589,9 @@ class LinkingManager:
                     access.issuer, access.token, access.expires_at, access.scope,
                     admin_preload_supported=(
                         ADMIN_PRELOAD_CAPABILITY in capabilities
+                    ),
+                    gallery_tree_supported=(
+                        GALLERY_TREE_CAPABILITY in capabilities
                     ),
                 )
                 identity = session.identity()

@@ -1107,7 +1107,7 @@ function gallery_model_picker_rows(bool $secondaryTitleSort = false): array
 }
 
 /**
- * Read a bounded administrator-authorized native client gallery page.
+ * Read a bounded administrator-authorized native client catalogue slice.
  *
  * The exact active grant and current Admin role are rechecked in the same
  * query that reads rows. The search projection adds the internal path for
@@ -1120,7 +1120,8 @@ function gallery_model_picker_rows(bool $secondaryTitleSort = false): array
  * @param string $issuer Exact trusted gallery issuer.
  * @param string $scope Exact consented gallery-list scope bundle.
  * @param int $afterId Exclusive gallery ID cursor, or zero for the first page.
- * @param int $limit Positive page size including one lookahead row.
+ * @param int $limit Positive slice size including one lookahead row. The
+ *     calling service owns the ordinary-page or complete-tree work bound.
  * @param array{terms:list<string>,translated:bool,media_typed:bool}|null $search
  *     Optional picker projection with bounded terms, verified translation
  *     storage and the known tag media discriminator.

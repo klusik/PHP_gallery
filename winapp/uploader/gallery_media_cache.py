@@ -34,23 +34,43 @@ else:
 # opt-in freshness contract and keeps repeated thumbnail reads responsive.
 PHOTO_CACHE_FRESH_SECONDS = 60
 
-# Purpose: Bound the total persisted media bytes for this application profile.
-# Type: int. Units: bytes. Scope: one user's shared photo and audio cache.
+# Purpose: Bound the main full-photo, detail-photo and audio cache.
+# Type: int. Units: bytes. Scope: one user's shared non-thumbnail media pool.
 # Consumers: GalleryMediaCache._make_room. Rationale: 1 GiB accommodates
-# browsed thumbnails, detail renditions, and playback without unbounded growth.
+# full/detail renditions and playback without unbounded growth.
 MEDIA_CACHE_MAX_BYTES = 1024 * 1024 * 1024
 
-# Purpose: Bound the number of files even with small thumbnails.
-# Type: int. Units: cache entries. Scope: one user's shared media cache.
+# Purpose: Bound main-pool files even when media bodies are small.
+# Type: int. Units: cache entries. Scope: one user's non-thumbnail media pool.
 # Consumers: GalleryMediaCache._make_room. Rationale: 4096 keeps directory
 # work bounded while covering several large browsed galleries.
 MEDIA_CACHE_MAX_ENTRIES = 4096
 
-# Purpose: Bound one cleanup scan even after interrupted or manual file copies.
-# Type: int. Units: directory entries. Scope: one cache maintenance pass.
+# Purpose: Bound one main-pool scan after interrupted or manual file copies.
+# Type: int. Units: directory entries. Scope: one non-thumbnail cache pass.
 # Consumers: GalleryMediaCache._inventory. Rationale: Twice the retained count
 # allows room for interrupted writes without permitting unbounded traversal.
 MEDIA_CACHE_SCAN_MAX_ENTRIES = MEDIA_CACHE_MAX_ENTRIES * 2
+
+# Purpose: Bound ordinary thumbnail bytes independently from full media/audio.
+# Type: int. Units: bytes. Scope: one user's persistent thumbnail pool.
+# Consumers: GalleryMediaCache._make_room.
+# Rationale: 256 MiB retains broad grids without competing with originals.
+MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 256 * 1024 * 1024
+
+# Purpose: Bound the number of ordinary thumbnail files in the separate pool.
+# Type: int. Units: cache entries. Scope: one user's thumbnail cache.
+# Consumers: GalleryMediaCache._make_room.
+# Rationale: 16384 entries hold many galleries while keeping scans finite.
+MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES = 16384
+
+# Purpose: Bound one thumbnail-pool eviction scan after interrupted writes.
+# Type: int. Units: directory entries. Scope: one thumbnail maintenance pass.
+# Consumers: GalleryMediaCache._inventory.
+# Rationale: Twice the pool quota tolerates stale writes without unbounded walks.
+MEDIA_THUMBNAIL_CACHE_SCAN_MAX_ENTRIES = (
+    MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES * 2
+)
 
 # Purpose: Bound an explicit unpin conversion for one retained gallery.
 # Type: int. Units: directory entries. Scope: one requested gallery only.
@@ -82,6 +102,7 @@ _CACHE_TEMP_PREFIX = '.media-'
 _RETAINED_DIRECTORY = '.retained'
 _PIN_MARKER = '.pinned'
 _PIN_MARKER_CONTENT = b'1'
+_THUMBNAIL_RETAINED_PREFIX = 't-'
 
 
 @dataclass(frozen=True)
@@ -93,23 +114,30 @@ class PhotoCacheEntry:
     etag: str
     stored_at: int
     file_info: os.stat_result
+    path: Path
 
 
 class GalleryMediaCache:
     """Manage ordinary quotas and explicit per-gallery media retention."""
 
-    def __init__(self, directory: Path, max_body_bytes: int) -> None:
+    def __init__(
+        self, directory: Path, max_body_bytes: int, *,
+        thumbnails: bool = False,
+    ) -> None:
         """Create a cache rooted in the current user's private application data.
 
         Args:
             directory (Path): Per-user cache directory.
             max_body_bytes (int): Largest accepted media body in bytes.
+            thumbnails (bool): Route ordinary objects to the independently
+                bounded thumbnail child pool while sharing canonical lock/pins.
 
         Returns:
             None: Stores only local cache configuration.
         """
         self._directory = directory
         self._max_body_bytes = max_body_bytes
+        self._thumbnail_pool = thumbnails
 
     @staticmethod
     def key(
@@ -369,18 +397,24 @@ class GalleryMediaCache:
         return hashlib.sha256(material.encode('utf-8')).hexdigest()
 
     @classmethod
-    def for_current_user(cls, max_body_bytes: int) -> 'GalleryMediaCache':
-        """Resolve the application's per-user cache directory.
+    def for_current_user(
+        cls, max_body_bytes: int, *, thumbnails: bool = False,
+    ) -> 'GalleryMediaCache':
+        """Resolve the shared per-user cache and choose one ordinary pool.
 
         Args:
             max_body_bytes (int): Largest accepted media body in bytes.
+            thumbnails (bool): Use the separate thumbnail-only ordinary quota.
 
         Returns:
             GalleryMediaCache: Cache that degrades to misses when unavailable.
         """
         root = (os.environ.get('LOCALAPPDATA') or os.environ.get('XDG_CACHE_HOME')
                 or str(Path.home() / '.cache'))
-        return cls(Path(root) / 'PHPGalleryUploader' / 'photo-cache', max_body_bytes)
+        return cls(
+            Path(root) / 'PHPGalleryUploader' / 'photo-cache',
+            max_body_bytes, thumbnails=thumbnails,
+        )
 
     def read(
         self, key: str, now: int | None = None, *,
@@ -404,27 +438,47 @@ class GalleryMediaCache:
             with _CACHE_WRITE_LOCK:
                 if self._path_is_reparse(self._directory):
                     return None
+                if self._thumbnail_pool and self._thumbnail_pool_is_unsafe():
+                    return None
                 pinned = (gallery_key is not None
                           and self._gallery_is_pinned(gallery_key))
-                retained_path = (
-                    self._retained_entry_path(gallery_key, key)
-                    if pinned and gallery_key is not None else None
-                )
-                if retained_path is not None:
-                    entry = self._read_entry_path(retained_path, now)
-                    if entry is not None:
+                candidates: list[tuple[Path, bool]] = []
+                if pinned and gallery_key is not None:
+                    retained_path = self._retained_entry_path(gallery_key, key)
+                    if retained_path is not None:
+                        candidates.append((retained_path, False))
+                    if self._thumbnail_pool:
+                        legacy_retained = self._legacy_retained_entry_path(
+                            gallery_key, key,
+                        )
+                        if legacy_retained is not None:
+                            candidates.append((legacy_retained, True))
+                candidates.append((self._entry_path(key), False))
+                if self._thumbnail_pool:
+                    candidates.append((self._ordinary_entry_path(key), True))
+                for path, legacy in candidates:
+                    entry = self._read_entry_path(path, now)
+                    if entry is None:
+                        continue
+                    is_retained = (
+                        path.parent.parent
+                        == self._directory / _RETAINED_DIRECTORY
+                    )
+                    if pinned and gallery_key is not None and not is_retained:
+                        promoted = self._promote_flat_entry(
+                            key, gallery_key, path, entry,
+                        )
+                        return promoted
+                    if pinned and gallery_key is not None:
                         self._remove_matching_flat_duplicate(
                             key, gallery_key, entry,
                         )
-                        return entry
-                path = self._entry_path(key)
-                entry = self._read_entry_path(path, now)
-                if (entry is not None and pinned
-                        and gallery_key is not None):
-                    return self._promote_flat_entry(
-                        key, gallery_key, path, entry,
-                    )
-                return entry
+                    if legacy:
+                        return self._migrate_legacy_entry(
+                            key, gallery_key, path, entry,
+                        ) or entry
+                    return entry
+                return None
         except (OSError, ValueError, struct.error):
             return None
 
@@ -439,6 +493,7 @@ class GalleryMediaCache:
             etag (str | None): Expected strong quoted SHA-256, if known.
             gallery_key (str | None): Exact hashed gallery identity, or None
                 for legacy flat-cache behavior.
+
         Returns:
             bool: True for a regular bounded cache file with valid metadata.
         """
@@ -451,35 +506,24 @@ class GalleryMediaCache:
             with _CACHE_WRITE_LOCK:
                 if self._path_is_reparse(self._directory):
                     return False
-                path = self._entry_path(key)
+                if self._thumbnail_pool and self._thumbnail_pool_is_unsafe():
+                    return False
+                paths: list[Path] = []
                 if (gallery_key is not None
                         and self._gallery_is_pinned(gallery_key)):
                     retained = self._retained_entry_path(gallery_key, key)
                     if retained is not None:
-                        try:
-                            retained.lstat()
-                            path = retained
-                        except OSError:
-                            pass
-                info = path.lstat()
-                if (not stat.S_ISREG(info.st_mode)
-                        or not _CACHE_HEADER.size < info.st_size
-                        <= _CACHE_HEADER.size + self._max_body_bytes):
-                    return False
-                with path.open('rb') as stream:
-                    opened = os.fstat(stream.fileno())
-                    if not os.path.samestat(info, opened):
-                        return False
-                    header = stream.read(_CACHE_HEADER.size)
-                if len(header) != _CACHE_HEADER.size:
-                    return False
-                magic, _written_at, mime_code, digest = _CACHE_HEADER.unpack(header)
-                if magic != _CACHE_MAGIC or mime_code not in _CODE_TO_MIME:
-                    return False
-                decoded_digest = digest.decode('ascii')
-                if re.fullmatch(r'[a-f0-9]{64}', decoded_digest) is None:
-                    return False
-                return etag is None or etag == '"' + decoded_digest + '"'
+                        paths.append(retained)
+                    if self._thumbnail_pool:
+                        legacy_retained = self._legacy_retained_entry_path(
+                            gallery_key, key,
+                        )
+                        if legacy_retained is not None:
+                            paths.append(legacy_retained)
+                paths.append(self._entry_path(key))
+                if self._thumbnail_pool:
+                    paths.append(self._ordinary_entry_path(key))
+                return any(self._contains_path(path, etag) for path in paths)
         except (OSError, ValueError, struct.error, UnicodeDecodeError):
             return False
 
@@ -504,14 +548,24 @@ class GalleryMediaCache:
             return
         try:
             with _CACHE_WRITE_LOCK:
-                path = self._entry_path(key)
-                if (gallery_key is not None
-                        and self._gallery_is_pinned(gallery_key)):
+                path = entry.path
+                allowed_paths = {self._entry_path(key), self._ordinary_entry_path(key)}
+                if gallery_key is not None:
                     retained = self._retained_entry_path(gallery_key, key)
-                    if retained is None:
-                        return
-                    path = retained
+                    legacy_retained = self._legacy_retained_entry_path(
+                        gallery_key, key,
+                    )
+                    if retained is not None:
+                        allowed_paths.add(retained)
+                    if legacy_retained is not None:
+                        allowed_paths.add(legacy_retained)
+                if path not in allowed_paths:
+                    return
+                if (self._thumbnail_pool and self._thumbnail_pool_is_unsafe()):
+                    return
                 if self._path_is_reparse(self._directory):
+                    return
+                if not self._safe_entry_parent(path):
                     return
                 info = path.lstat()
                 if not stat.S_ISREG(info.st_mode) or not os.path.samestat(info, entry.file_info):
@@ -608,7 +662,9 @@ class GalleryMediaCache:
 
     def _write_locked(
         self, key: str, body: bytes, mime: str, etag: str,
-        now: int | None, gallery_key: str | None = None,
+        now: int | None, gallery_key: str | None = None, *,
+        pool_thumbnail: bool | None = None,
+        protected_keys: frozenset[str] = frozenset(),
     ) -> bool:
         """Atomically replace an ordinary or gallery-retained cache object.
 
@@ -620,23 +676,40 @@ class GalleryMediaCache:
             now (int | None): Current Unix seconds, or None to read the clock.
             gallery_key (str | None): Exact pinned gallery directory, or None
                 to apply ordinary cache quotas.
+            pool_thumbnail (bool | None): Explicit destination pool for a
+                retained conversion, or None to use this instance's pool.
+            protected_keys (frozenset[str]): Pool keys which eviction must keep.
 
         Returns:
             bool: True when the complete cache object was committed.
         """
         current = int(time.time()) if now is None else now
+        thumbnail_pool = (
+            self._thumbnail_pool if pool_thumbnail is None else pool_thumbnail
+        )
+        if gallery_key is None and thumbnail_pool:
+            try:
+                self._ensure_pool_directory(True)
+            except OSError:
+                return False
         header = _CACHE_HEADER.pack(
             _CACHE_MAGIC, current, _MIME_TO_CODE[mime], etag[1:-1].encode('ascii'),
         )
         if gallery_key is None:
-            if not self._make_room(key, len(header) + len(body)):
+            if not self._make_room(
+                key, len(header) + len(body),
+                pool_thumbnail=thumbnail_pool,
+                protected_keys=protected_keys,
+            ):
                 return False
-            destination = self._entry_path(key)
+            destination = self._pool_entry_path(key, thumbnail_pool)
         else:
             directory = self._gallery_directory(gallery_key, create=True)
             if directory is None or not self._gallery_is_pinned(gallery_key):
                 return False
-            destination = self._retained_entry_path(gallery_key, key)
+            destination = self._retained_entry_path(
+                gallery_key, key, thumbnails=thumbnail_pool,
+            )
             if destination is None:
                 return False
         descriptor, temporary = tempfile.mkstemp(
@@ -848,12 +921,17 @@ class GalleryMediaCache:
         except OSError:
             return False
 
-    def _retained_entry_path(self, gallery_key: str, key: str) -> Path | None:
+    def _retained_entry_path(
+        self, gallery_key: str, key: str, *,
+        thumbnails: bool | None = None,
+    ) -> Path | None:
         """Resolve one hash-only object path inside an existing safe directory.
 
         Args:
             gallery_key (str): Lowercase SHA-256 gallery directory key.
             key (str): Lowercase SHA-256 media object key.
+            thumbnails (bool | None): Select new thumbnail-prefixed retention,
+                or use this cache instance's pool when omitted.
 
         Returns:
             Path | None: Exact path or None for invalid identity or unsafe parent.
@@ -861,7 +939,27 @@ class GalleryMediaCache:
         if _CACHE_KEY_PATTERN.fullmatch(key) is None:
             return None
         directory = self._gallery_directory(gallery_key)
-        return None if directory is None else directory / (key + '.bin')
+        thumbnail_pool = (
+            self._thumbnail_pool if thumbnails is None else thumbnails
+        )
+        prefix = _THUMBNAIL_RETAINED_PREFIX if thumbnail_pool else ''
+        return None if directory is None else directory / (prefix + key + '.bin')
+
+    def _legacy_retained_entry_path(
+        self, gallery_key: str, key: str,
+    ) -> Path | None:
+        """Resolve one pre-pool retained filename for an exact thumbnail key.
+
+        Args:
+            gallery_key (str): Exact lowercase hashed gallery directory.
+            key (str): Exact lowercase key already classified as a thumbnail.
+
+        Returns:
+            Path | None: Safe legacy unprefixed path or None when unavailable.
+        """
+        return self._retained_entry_path(
+            gallery_key, key, thumbnails=False,
+        )
 
     def _read_entry_path(
         self, path: Path, now: int | None,
@@ -901,8 +999,116 @@ class GalleryMediaCache:
                 self._stamp(path, stream.fileno(), opened, current)
             return PhotoCacheEntry(
                 body, mime, '"' + digest.decode('ascii') + '"',
-                int(opened.st_mtime), opened,
+                int(opened.st_mtime), opened, path,
             )
+        except (OSError, ValueError, struct.error):
+            return None
+
+    def _contains_path(self, path: Path, etag: str | None) -> bool:
+        """Check one exact cache path using no-follow metadata and header bytes.
+
+        Args:
+            path (Path): Candidate cache path already derived from a hash key.
+            etag (str | None): Optional expected strong content validator.
+
+        Returns:
+            bool: True when the stable regular file has valid bounded metadata.
+        """
+        try:
+            if not self._safe_entry_parent(path):
+                return False
+            info = path.lstat()
+            if (not stat.S_ISREG(info.st_mode)
+                    or not _CACHE_HEADER.size < info.st_size
+                    <= _CACHE_HEADER.size + self._max_body_bytes):
+                return False
+            with path.open('rb') as stream:
+                opened = os.fstat(stream.fileno())
+                if not os.path.samestat(info, opened):
+                    return False
+                header = stream.read(_CACHE_HEADER.size)
+            if len(header) != _CACHE_HEADER.size:
+                return False
+            magic, _written_at, mime_code, digest = _CACHE_HEADER.unpack(header)
+            if magic != _CACHE_MAGIC or mime_code not in _CODE_TO_MIME:
+                return False
+            decoded_digest = digest.decode('ascii')
+            if re.fullmatch(r'[a-f0-9]{64}', decoded_digest) is None:
+                return False
+            return etag is None or etag == '"' + decoded_digest + '"'
+        except (OSError, ValueError, struct.error, UnicodeDecodeError):
+            return False
+
+    def _migrate_legacy_entry(
+        self, key: str, gallery_key: str | None, source: Path,
+        entry: PhotoCacheEntry,
+    ) -> PhotoCacheEntry | None:
+        """Copy one exact legacy thumbnail into its typed destination safely.
+
+        Args:
+            key (str): Exact lowercase photo rendition key.
+            gallery_key (str | None): Current hashed gallery, when available.
+            source (Path): Exact legacy flat or retained file that was verified.
+            entry (PhotoCacheEntry): Verified source body and descriptor identity.
+
+        Returns:
+            PhotoCacheEntry | None: Verified migrated entry, or None if migration
+                could not complete; callers keep using the verified source entry.
+        """
+        try:
+            lock_path = self._directory / '.media-lock'
+            if self._path_is_reparse(lock_path):
+                return None
+            with lock_path.open('a+b') as lock:
+                if os.name == 'nt':
+                    lock.seek(0)
+                    msvcrt.locking(
+                        lock.fileno(), msvcrt.LK_NBLCK, _CACHE_LOCK_SPAN,
+                    )
+                else:
+                    fcntl.flock(
+                        lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB,
+                    )
+                current = self._read_entry_path(source, entry.stored_at)
+                if (current is None
+                        or not os.path.samestat(current.file_info, entry.file_info)
+                        or current.file_info.st_size != entry.file_info.st_size
+                        or current.file_info.st_mtime_ns != entry.file_info.st_mtime_ns
+                        or current.stored_at != entry.stored_at
+                        or current.etag != entry.etag or current.mime != entry.mime
+                        or current.body != entry.body):
+                    return None
+                pinned = (gallery_key is not None
+                          and self._gallery_is_pinned(gallery_key))
+                if pinned and gallery_key is not None:
+                    destination_path = self._retained_entry_path(
+                        gallery_key, key, thumbnails=True,
+                    )
+                    if destination_path is None:
+                        return None
+                    destination_gallery = gallery_key
+                else:
+                    destination_path = self._entry_path(key)
+                    destination_gallery = None
+                if destination_path == source:
+                    return current
+                if not self._write_locked(
+                    key, current.body, current.mime, current.etag,
+                    current.stored_at, destination_gallery,
+                    pool_thumbnail=True,
+                ):
+                    return None
+                migrated = self._read_entry_path(destination_path, current.stored_at)
+                if (migrated is None or migrated.etag != current.etag
+                        or migrated.body != current.body):
+                    return None
+                source_info = source.lstat()
+                if (not os.path.samestat(source_info, current.file_info)
+                        or source_info.st_size != current.file_info.st_size
+                        or source_info.st_mtime_ns != current.file_info.st_mtime_ns
+                        or not self._unlink_if_matches(source, current.file_info)):
+                    return None
+                return migrated
         except (OSError, ValueError, struct.error):
             return None
 
@@ -913,7 +1119,8 @@ class GalleryMediaCache:
             path (Path): Exact file path to inspect without following ancestors.
 
         Returns:
-            bool: True only for the cache root or one verified retained gallery.
+            bool: True only for the root, selected thumbnail child, or a
+                verified retained gallery.
         """
         try:
             if self._path_is_reparse(self._directory):
@@ -921,6 +1128,10 @@ class GalleryMediaCache:
             parent = path.parent
             if parent == self._directory:
                 return True
+            thumbnail_directory = self._thumbnail_directory()
+            if parent == thumbnail_directory and self._thumbnail_pool:
+                return (thumbnail_directory is not None
+                        and self._safe_thumbnail_directory())
             retained_root = self._directory / _RETAINED_DIRECTORY
             if parent.parent != retained_root:
                 return False
@@ -986,6 +1197,8 @@ class GalleryMediaCache:
                     current = self._read_entry_path(flat_path, entry.stored_at)
                     if (current is None
                             or not os.path.samestat(current.file_info, entry.file_info)
+                            or current.file_info.st_size != entry.file_info.st_size
+                            or current.file_info.st_mtime_ns != entry.file_info.st_mtime_ns
                             or current.etag != entry.etag):
                         return None
                     if not self._write_locked(
@@ -1001,13 +1214,7 @@ class GalleryMediaCache:
                     )
                     if retained is None:
                         return None
-                    try:
-                        flat_info = flat_path.lstat()
-                        if (os.path.samestat(flat_info, current.file_info)
-                                and flat_info.st_size == current.file_info.st_size):
-                            if not self._unlink(flat_path):
-                                return None
-                    except OSError:
+                    if not self._unlink_if_matches(flat_path, current.file_info):
                         return None
                     return retained
         except (OSError, ValueError, struct.error):
@@ -1045,10 +1252,11 @@ class GalleryMediaCache:
                         if not self._unlink_if_matches(item_path, info):
                             return None
                         continue
-                    match = item.name.endswith('.bin') and (
-                        _CACHE_KEY_PATTERN.fullmatch(item.name[:-4]) is not None
-                    )
-                    if not match:
+                    filename = item.name[:-4] if item.name.endswith('.bin') else ''
+                    key = filename
+                    if filename.startswith(_THUMBNAIL_RETAINED_PREFIX):
+                        key = filename[len(_THUMBNAIL_RETAINED_PREFIX):]
+                    if _CACHE_KEY_PATTERN.fullmatch(key) is None:
                         continue
                     # Windows DirEntry.stat can omit the inode. A direct
                     # no-follow stat supplies the identity checked against fstat.
@@ -1093,7 +1301,8 @@ class GalleryMediaCache:
                         return
                     flat_path = self._entry_path(key)
                     flat = self._read_entry_path(flat_path, retained.stored_at)
-                    if flat is None or flat.etag != retained.etag:
+                    if (flat is None or flat.etag != retained.etag
+                            or flat.mime != retained.mime):
                         return
                     self._unlink_if_matches(flat_path, flat.file_info)
         except (OSError, ValueError, struct.error):
@@ -1102,70 +1311,179 @@ class GalleryMediaCache:
     def _copy_retained_to_ordinary(
         self, retained: list[tuple[Path, os.stat_result]],
     ) -> bool:
-        """Copy one retained gallery to quota-managed storage transactionally.
+        """Copy retained objects only after both pools can hold every target.
 
         Args:
             retained (list[tuple[Path, os.stat_result]]): Exact gallery entries
                 and no-follow identities captured by the bounded scan.
 
         Returns:
-            bool: True when all objects are available in ordinary storage.
-                Failed partial copies are removed while retained originals remain.
+            bool: True when every target is verified together. Failure leaves
+                retained originals available for a later unpin attempt.
         """
-        prepared: list[
-            tuple[Path, str, os.stat_result, str, str, int, bool]
-        ] = []
+        prepared: list[tuple[
+            Path, str, os.stat_result, bool, str, str, int, bool,
+        ]] = []
+        pools: dict[bool, tuple[GalleryMediaCache, set[str], int, int]] = {}
         for path, expected in retained:
-            key = path.name[:-4]
+            filename = path.name[:-4]
+            thumbnail_pool = filename.startswith(_THUMBNAIL_RETAINED_PREFIX)
+            key = (filename[len(_THUMBNAIL_RETAINED_PREFIX):]
+                   if thumbnail_pool else filename)
+            if _CACHE_KEY_PATTERN.fullmatch(key) is None:
+                return False
             entry = self._read_entry_path(path, None)
             if (entry is None or not os.path.samestat(entry.file_info, expected)):
                 return False
-            ordinary = self._read_entry_path(self._entry_path(key), None)
-            if ordinary is not None and ordinary.etag != entry.etag:
+            pool_cache = GalleryMediaCache(
+                self._directory, self._max_body_bytes,
+                thumbnails=thumbnail_pool,
+            )
+            destination = pool_cache._pool_entry_path(key, thumbnail_pool)
+            ordinary = pool_cache._read_entry_path(destination, None)
+            if (ordinary is not None and (ordinary.etag != entry.etag
+                    or ordinary.mime != entry.mime
+                    or ordinary.body != entry.body)):
                 return False
+            existing = ordinary is not None
+            pool_cache, pool_keys, pool_bytes, pool_count = pools.get(
+                thumbnail_pool, (pool_cache, set(), 0, 0),
+            )
+            pool_keys.add(key)
+            pool_bytes += _CACHE_HEADER.size + len(entry.body)
+            pool_count += 1
+            pools[thumbnail_pool] = (
+                pool_cache, pool_keys, pool_bytes, pool_count,
+            )
             prepared.append((
-                path, key, expected, entry.etag, entry.mime, entry.stored_at,
-                ordinary is not None,
+                path, key, expected, thumbnail_pool, entry.etag, entry.mime,
+                entry.stored_at, existing,
             ))
-        copied: list[tuple[Path, os.stat_result]] = []
-        for path, key, expected, etag, mime, stored_at, already_present in prepared:
-            if already_present:
-                continue
-            entry = self._read_entry_path(path, stored_at)
-            if (entry is None or not os.path.samestat(entry.file_info, expected)
-                    or entry.etag != etag):
-                for copied_path, copied_info in copied:
-                    self._unlink_if_matches(copied_path, copied_info)
+        eviction_plan: list[
+            tuple[GalleryMediaCache, Path, os.stat_result]
+        ] = []
+        for thumbnail_pool, (pool_cache, keys, required_bytes, required_count) in pools.items():
+            victims = pool_cache._plan_pool_capacity(
+                keys, required_bytes, required_count, thumbnail_pool,
+            )
+            if victims is None:
                 return False
-            if not self._write_locked(
-                key, entry.body, mime, etag, stored_at,
-            ):
-                for copied_path, copied_info in copied:
-                    self._unlink_if_matches(copied_path, copied_info)
-                return False
-            destination = self._entry_path(key)
-            try:
-                copied.append((destination, destination.lstat()))
-            except OSError:
-                for copied_path, copied_info in copied:
-                    self._unlink_if_matches(copied_path, copied_info)
-                return False
-        return True
+            eviction_plan.extend(
+                (pool_cache, path, info) for path, info in victims
+            )
+        if not all(
+            pool_cache._unlink_if_matches(path, info)
+            for pool_cache, path, info in eviction_plan
+        ):
+            return False
+        created: list[tuple[GalleryMediaCache, Path, os.stat_result]] = []
+        try:
+            for (path, key, expected, thumbnail_pool, etag, mime, stored_at,
+                 already_present) in prepared:
+                pool_cache = pools[thumbnail_pool][0]
+                destination = pool_cache._pool_entry_path(key, thumbnail_pool)
+                if already_present:
+                    continue
+                current = self._read_entry_path(path, stored_at)
+                if (current is None
+                        or not os.path.samestat(current.file_info, expected)
+                        or current.file_info.st_size != expected.st_size
+                        or current.file_info.st_mtime_ns != expected.st_mtime_ns
+                        or current.etag != etag or current.mime != mime):
+                    raise OSError('Retained cache entry changed during unpin.')
+                keys = frozenset(pools[thumbnail_pool][1])
+                if not pool_cache._write_locked(
+                    key, current.body, mime, etag, stored_at,
+                    pool_thumbnail=thumbnail_pool, protected_keys=keys,
+                ):
+                    raise OSError('Ordinary cache quota rejected retained data.')
+                created.append((pool_cache, destination, destination.lstat()))
+            for (path, key, expected, thumbnail_pool, etag, _mime, _stored_at,
+                 _already_present) in prepared:
+                pool_cache = pools[thumbnail_pool][0]
+                destination = pool_cache._pool_entry_path(key, thumbnail_pool)
+                verified = pool_cache._read_entry_path(destination, None)
+                source_now = self._read_entry_path(path, None)
+                if (verified is None or verified.etag != etag
+                        or verified.mime != _mime
+                        or source_now is None or source_now.etag != etag
+                        or source_now.mime != _mime
+                        or not os.path.samestat(source_now.file_info, expected)):
+                    raise OSError('Unpin destination verification failed.')
+            return True
+        except (OSError, ValueError, struct.error):
+            for pool_cache, copied_path, copied_info in created:
+                pool_cache._unlink_if_matches(copied_path, copied_info)
+            return False
 
-    @staticmethod
-    def _unlink_if_matches(path: Path, expected: os.stat_result) -> bool:
+    def _plan_pool_capacity(
+        self, protected_keys: set[str], required_bytes: int,
+        required_count: int, thumbnail_pool: bool,
+    ) -> list[tuple[Path, os.stat_result]] | None:
+        """Plan safe LRU evictions for all targets without changing the pool.
+
+        Args:
+            protected_keys (set[str]): All unpin targets in this ordinary pool.
+            required_bytes (int): Encoded bytes for the complete target set.
+            required_count (int): Entry count for the complete target set.
+            thumbnail_pool (bool): Pool whose independent quota is checked.
+
+        Returns:
+            list[tuple[Path, os.stat_result]] | None: Exact LRU victims, or None
+                when the quota cannot hold the complete unpin target set.
+        """
+        try:
+            self._ensure_pool_directory(thumbnail_pool)
+            max_bytes = (MEDIA_THUMBNAIL_CACHE_MAX_BYTES if thumbnail_pool
+                         else MEDIA_CACHE_MAX_BYTES)
+            max_entries = (MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES if thumbnail_pool
+                           else MEDIA_CACHE_MAX_ENTRIES)
+            entries = self._inventory(thumbnail_pool)
+            protected_paths = {
+                self._pool_entry_path(key, thumbnail_pool)
+                for key in protected_keys
+            }
+            eligible = [entry for entry in entries if entry[0] not in protected_paths]
+            eligible.sort(key=lambda item: item[2])
+            total = sum(size for _path, size, _atime in eligible)
+            count = len(eligible)
+            victims: list[tuple[Path, os.stat_result]] = []
+            for path, size, _atime in eligible:
+                if (total + required_bytes <= max_bytes
+                        and count + required_count <= max_entries):
+                    break
+                info = path.lstat()
+                if not stat.S_ISREG(info.st_mode):
+                    return None
+                victims.append((path, info))
+                total -= size
+                count -= 1
+            if (total + required_bytes > max_bytes
+                    or count + required_count > max_entries):
+                return None
+            return victims
+        except (OSError, ValueError):
+            return None
+
+    def _unlink_if_matches(
+        self, path: Path, expected: os.stat_result,
+    ) -> bool:
         """Remove a copied cache file only while its identity is unchanged.
 
         Args:
-            path (Path): Exact hash-only ordinary cache file.
+            path (Path): Exact cache object below the checked cache root.
             expected (os.stat_result): Identity observed after the owned copy.
 
         Returns:
             bool: True when the exact copy was removed or already absent.
         """
         try:
+            if not self._safe_entry_parent(path):
+                return False
             current = path.lstat()
-            if not os.path.samestat(current, expected):
+            if (not os.path.samestat(current, expected)
+                    or current.st_size != expected.st_size
+                    or current.st_mtime_ns != expected.st_mtime_ns):
                 return False
             return GalleryMediaCache._unlink(path)
         except OSError:
@@ -1193,11 +1511,57 @@ class GalleryMediaCache:
             key (str): Lowercase SHA-256 cache identity.
 
         Returns:
-            Path: Cache data path below the configured directory.
+            Path: Cache data path in this instance's ordinary pool.
+        """
+        if _CACHE_KEY_PATTERN.fullmatch(key) is None:
+            raise ValueError('Invalid gallery photo cache key.')
+        return self._storage_directory() / (key + '.bin')
+
+    def _pool_entry_path(self, key: str, thumbnails: bool) -> Path:
+        """Return one hashed ordinary filename in an explicitly selected pool.
+
+        Args:
+            key (str): Lowercase SHA-256 cache identity.
+            thumbnails (bool): Select the independent thumbnail child pool.
+
+        Returns:
+            Path: Exact validated path under the selected ordinary pool.
+        """
+        if _CACHE_KEY_PATTERN.fullmatch(key) is None:
+            raise ValueError('Invalid gallery photo cache key.')
+        directory = self._directory / 'thumbnails' if thumbnails else self._directory
+        return directory / (key + '.bin')
+
+    def _ordinary_entry_path(self, key: str) -> Path:
+        """Return one validated legacy/main-pool filename below the root.
+
+        Args:
+            key (str): Lowercase SHA-256 cache identity.
+
+        Returns:
+            Path: Exact flat path retained by the pre-pool cache layout.
         """
         if _CACHE_KEY_PATTERN.fullmatch(key) is None:
             raise ValueError('Invalid gallery photo cache key.')
         return self._directory / (key + '.bin')
+
+    def _thumbnail_directory(self) -> Path | None:
+        """Return the fixed child thumbnail pool path below the canonical root.
+
+        Returns:
+            Path | None: Child directory path, or None for the main pool.
+        """
+        if not self._thumbnail_pool:
+            return None
+        return self._directory / 'thumbnails'
+
+    def _storage_directory(self) -> Path:
+        """Return the active ordinary pool while retaining canonical lock root.
+
+        Returns:
+            Path: Root for this instance's flat, quota-managed entries.
+        """
+        return self._thumbnail_directory() or self._directory
 
     def _ensure_directory(self) -> None:
         """Create and verify the leaf cache directory without following it.
@@ -1208,9 +1572,71 @@ class GalleryMediaCache:
         self._directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         if self._path_is_reparse(self._directory) or not self._directory.is_dir():
             raise OSError('Gallery photo cache directory is unsafe.')
+        thumbnail_directory = self._thumbnail_directory()
+        if thumbnail_directory is not None:
+            if not thumbnail_directory.exists():
+                thumbnail_directory.mkdir(mode=0o700)
+            if (self._path_is_reparse(thumbnail_directory)
+                    or not thumbnail_directory.is_dir()):
+                raise OSError('Gallery thumbnail cache directory is unsafe.')
 
-    def _inventory(self) -> list[tuple[Path, int, float]]:
+    def _safe_thumbnail_directory(self) -> bool:
+        """Validate the child thumbnail pool without traversing a reparse point.
+
+        Returns:
+            bool: True only for the expected regular child directory.
+        """
+        thumbnail_directory = self._directory / 'thumbnails'
+        try:
+            info = thumbnail_directory.lstat()
+            return (stat.S_ISDIR(info.st_mode)
+                    and not self._path_is_reparse(thumbnail_directory))
+        except OSError:
+            return False
+
+    def _thumbnail_pool_is_unsafe(self) -> bool:
+        """Detect an existing thumbnail child that must block legacy fallback.
+
+        Returns:
+            bool: True when the child exists but is not a real safe directory.
+        """
+        child = self._directory / 'thumbnails'
+        try:
+            info = child.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        return (not stat.S_ISDIR(info.st_mode)
+                or self._path_is_reparse(child))
+
+    def _ensure_pool_directory(self, thumbnails: bool) -> None:
+        """Create and validate the canonical root and selected ordinary pool.
+
+        Args:
+            thumbnails (bool): Create the thumbnail child when True.
+
+        Returns:
+            None: Raises when either required directory is unsafe.
+        """
+        self._directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self._path_is_reparse(self._directory) or not self._directory.is_dir():
+            raise OSError('Gallery photo cache directory is unsafe.')
+        if not thumbnails:
+            return
+        child = self._directory / 'thumbnails'
+        if not child.exists():
+            child.mkdir(mode=0o700)
+        if self._path_is_reparse(child) or not child.is_dir():
+            raise OSError('Gallery thumbnail cache directory is unsafe.')
+
+    def _inventory(
+        self, pool_thumbnail: bool | None = None,
+    ) -> list[tuple[Path, int, float]]:
         """List only bounded regular cache files for eviction.
+
+        Args:
+            pool_thumbnail (bool | None): Scan a specific pool or this instance.
 
         Returns:
             list[tuple[Path, int, float]]: Path, byte size and access time.
@@ -1218,10 +1644,20 @@ class GalleryMediaCache:
         Raises:
             OSError: Directory traversal is unavailable or exceeds its work cap.
         """
-        entries = []
-        with os.scandir(self._directory) as directory:
+        thumbnail_pool = (
+            self._thumbnail_pool if pool_thumbnail is None else pool_thumbnail
+        )
+        directory_path = self._directory / 'thumbnails' if thumbnail_pool else self._directory
+        if thumbnail_pool and not self._safe_thumbnail_directory():
+            raise OSError('Gallery thumbnail cache directory is unsafe.')
+        scan_limit = (
+            MEDIA_THUMBNAIL_CACHE_SCAN_MAX_ENTRIES if thumbnail_pool
+            else MEDIA_CACHE_SCAN_MAX_ENTRIES
+        )
+        entries: list[tuple[Path, int, float]] = []
+        with os.scandir(directory_path) as directory:
             for index, item in enumerate(directory):
-                if index >= MEDIA_CACHE_SCAN_MAX_ENTRIES:
+                if index >= scan_limit:
                     raise OSError('Gallery photo cache scan limit reached.')
                 if not item.is_file(follow_symlinks=False):
                     continue
@@ -1236,32 +1672,55 @@ class GalleryMediaCache:
                 entries.append((Path(item.path), info.st_size, info.st_atime))
         return entries
 
-    def _make_room(self, key: str, new_size: int) -> bool:
+    def _make_room(
+        self, key: str, new_size: int, *,
+        pool_thumbnail: bool | None = None,
+        protected_keys: frozenset[str] = frozenset(),
+    ) -> bool:
         """Evict least recently accessed files before one atomic write.
 
         Args:
             key (str): Entry being replaced or added.
             new_size (int): Complete encoded file size in bytes.
+            pool_thumbnail (bool | None): Pool to enforce, or this instance's.
+            protected_keys (frozenset[str]): Hash keys excluded from eviction.
 
         Returns:
             bool: True when entry and byte limits admit the replacement.
         """
-        entries = self._inventory()
-        target = self._entry_path(key)
+        thumbnail_pool = (
+            self._thumbnail_pool if pool_thumbnail is None else pool_thumbnail
+        )
+        max_bytes = (
+            MEDIA_THUMBNAIL_CACHE_MAX_BYTES if thumbnail_pool
+            else MEDIA_CACHE_MAX_BYTES
+        )
+        max_entries = (
+            MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES if thumbnail_pool
+            else MEDIA_CACHE_MAX_ENTRIES
+        )
+        entries = self._inventory(thumbnail_pool)
+        target = self._pool_entry_path(key, thumbnail_pool)
+        protected_paths = {
+            self._pool_entry_path(protected, thumbnail_pool)
+            for protected in protected_keys
+        }
         entries = [entry for entry in entries if entry[0] != target]
         entries.sort(key=lambda entry: entry[2])
         total = sum(entry[1] for entry in entries)
         count = len(entries)
         for path, size, _accessed_at in entries:
             over_limit = (
-                total + new_size > MEDIA_CACHE_MAX_BYTES
-                or count + 1 > MEDIA_CACHE_MAX_ENTRIES
+                total + new_size > max_bytes
+                or count + 1 > max_entries
             )
+            if path in protected_paths:
+                continue
             if over_limit and self._unlink(path):
                 total -= size
                 count -= 1
-        return (total + new_size <= MEDIA_CACHE_MAX_BYTES
-                and count + 1 <= MEDIA_CACHE_MAX_ENTRIES)
+        return (total + new_size <= max_bytes
+                and count + 1 <= max_entries)
 
     @staticmethod
     def _unlink(path: Path) -> bool:

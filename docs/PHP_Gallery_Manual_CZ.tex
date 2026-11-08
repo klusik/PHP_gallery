@@ -1785,11 +1785,31 @@ Velké stromy nejprve načtou nejvýše 500 galerií a~poté pokračují automat
 od~uložené pozice, jednou stránkou každých pět sekund. Načtené galerie lze
 procházet, zatímco stav signalizuje pokračující načítání. Chyba postup zastaví
 a~nabídne ruční opakování; běžné procházení nevyžaduje \ui{Načíst další}.
+Stav načítání a~malý vyhlazený rotující kroužek jsou nad stromem.
+Pokrývají úvodní čtení
+i~postupné pokračování a~skončí při dokončení, chybě nebo odpojení,
+bez odhadovaného procenta.
+Novější server může nabídnout úplný JSON strom s~revizí. Před vrácením stromu
+nebo zprávy beze změny znovu ověří aktuální oprávnění účtu. Původní
+stránkované API zůstává pro~starší web, nedostupná data a~stromy přesahující
+limit úplné odpovědi.
+Klient nejprve zobrazí poslední úplnou uloženou strukturu a~obnoví poslední
+výslovně vybranou galerii daného účtu. Volitelný strom vyžádá jen při oznámené
+podpoře; neplatná či nepodporovaná odpověď ponechá uložený strom a~použije
+stránkované API, včetně webu~1.0.3. Chybějící řádky odstraní a~kopii nahradí
+jen úplná úspěšná obnova. Krátké dávky rozhraní aktualizují změněné řádky.
+Windows chrání uložené názvy uživatelským DPAPI; nebezpečné úložiště či
+poškozený soubor znamená chybějící cache. Média stále vyžadují aktuální
+ověření serverem a~nové nahrávání či tvorba galerie čerstvé potvrzení cíle.
+Tato metadata neudělují přístup k~fotografiím offline.
 Kontextové panely zachovávají zavření klávesnicí a~kliknutím mimo panel.
 Windows ořízne jejich zaoblený obrys bez tmavých vnějších rohů; pokud nativní
 tvarování není dostupné, zůstává použitelný plochý neprůhledný panel motivu.
 
-Obrazovka Watcher zobrazuje cílovou galerii. Horní ovládání API klíče otevře
+Obrazovka Watcher zobrazuje cílovou galerii. Ověřený název v~API režimu
+zachová obnovení stejného uloženého připojení; změna klíče nebo režimu jej
+zneplatní. Výběr alba ve~Fotkách nenahradí název upload cíle.
+Horní ovládání API klíče otevře
 kompaktní dialog se skrytým klíčem a~volbou
 \ui{Save \& Test}; toto ovládání zůstává v~záhlaví dostupné na každé
 obrazovce. Neuložené změny nenahradí uložený klíč. Hlavička aplikace
@@ -1911,8 +1931,19 @@ nebo osm na starším serveru. Soubor má limit 16~MiB. Výpis hudby zahrnuje ne
 skladeb MP3/WAV. Pokud nejmenší miniatura chybí, server může použít jinou
 existující variantu nebo veřejný zobrazovací obrázek v~daném limitu.
 Panel fotek i~lightbox jsou součástí hlavního okna WinApp.
-Responzivní mřížka plynule posouvá přehled a~načítá viditelné náhledy.
-Kliknutím nebo stiskem Enter na~zaměřené fotografii otevřete lightbox.
+Neúplná odpověď HTTP~304 vyvolá nejvýše jedno nové autorizované čtení;
+odmítnutá odpověď sama neopravňuje zobrazit stará data obrázku.
+Responzivní mřížka plynule posouvá přehled a~žádá jen viditelné náhledy,
+bez samostatného načítání velkých fotografií. Výslovná volba
+\ui{Přednačíst galerii} stáhne náhledy i~varianty pro lightbox.
+Kliknutím fotku vyberete a~zobrazíte její metadata v~nastavitelném pravém panelu.
+Dvojklik nebo Enter otevře lightbox. Šipky procházejí mřížku; mezerník vybírá
+a~odvybírá. Control-click (Command-click na~macOS) přepíná jednotlivé výběry;
+Shift-click nebo Shift-šipka vybere rozsah od~kotvy v~rámci limitu 64~fotek.
+Control-šipka (Command-šipka na~macOS) přesune zaměření bez zrušení výběru.
+Jen vybrané fotky mají mírně zaoblený obrys. Název souboru ukáže kompaktní
+kontrastní tooltip. Panel a~kontextové informace sdílejí autorizovaná metadata,
+formátování a~krátkou omezenou cache aktuálního propojení.
 Šipkami vlevo a~vpravo procházíte celé album ve smyčce.
 Zavření lightboxu nebo klávesa Escape obnoví strom a~mřížku
 i~po chybě obrázku. Náhledy oříznou rozpoznané černé pruhy a~zobrazí celou scénu
@@ -1927,7 +1958,8 @@ posunete. F nebo F11 přepne celou obrazovku. Pohyb ukazatele na chvíli zobraz�
 ovládání.
 Pokud jsou povoleny souřadnice, připnutá značka polohy nabídne
 \ui{Otevřít v~OpenStreetMap} v~systémovém prohlížeči. Předchozí a~další
-fotka se připraví předem do omezené paměti.
+fotka se připraví předem do omezené paměti pouze při otevřeném lightboxu.
+Zavření vyprázdní frontu přednačítání; již běžící omezený přenos může doběhnout.
 \ui{Přizpůsobit podle obsahu} ořízne rozpoznané černé pruhy v~okně i~na celé
 obrazovce. \ui{Zobrazit původní snímek} vrátí celý rám snímku. Fotka si zachová
 poměr stran. Při změně velikosti okna se průběžně vykresluje náhled a~po
@@ -1935,9 +1967,22 @@ ustálení se zobrazí v~plné kvalitě. Od macOS~15 lze kompatibilní HDR sním
 zobrazit přes AppKit na EDR displeji, pokud je dostupné PyObjC a~propojení
 okna Tk. Ostatní konfigurace včetně Windows zobrazují 8bitové SDR přes
 Pillow/Tk.
+Ve Windows funguje F/F11 se~zapnutým NumLockem, CapsLockem i~ScrollLockem
+a~na klávesnici bez numerického bloku. Kombinace s~Control/Alt a~psaní do polí
+si zachovávají chování. Velké JPEG/MPO se dekódují do menšího rastru před
+alokací RGB při stejném limitu 36~milionů pixelů a~omezení zobrazení.
+Pokud detail limit stále překročí, může jeden schválený náhled poskytnout
+omezenou předlohu i~na starším webu. Odmítnuté oprávnění, zrušení, omezení
+četnosti a~poškozená data tento postup nepoužijí. Kopie diagnostiky obsahuje
+bezpečný důvod, rozměry a~limity i~samostatnou omezenou stopu F/F11.
 Společná uživatelská disková cache ukládá schválené fotky a~skladby
-s~ověřenými otisky obsahu. Běžná část při překročení 4\,096~položek nebo 1~GiB
-uvolní nejdéle nepoužívaná data. Pokud se shoduje ověřovací údaj z~aktuálního
+s~ověřenými otisky obsahu. Běžné náhledy mají samostatnou část s~limitem
+256~MiB a~16\,384~položek. Velké fotky a~hudba mají vlastní část s~limitem
+1~GiB a~4\,096~položek. Každá uvolňuje jen svá nejdéle nepoužívaná data;
+velké fotky nevytlačují náhledy. Uchování galerií a~volby soukromého přednačtení
+zůstávají společné. Vypnutí uchování nejprve ověří kapacitu všech cílových kopií.
+Starší náhledy se~převedou podle přesné identity varianty bez obnovení stáří.
+Pokud se~shoduje ověřovací údaj z~aktuálního
 výpisu alba, aplikace náhled vezme rovnou z~disku. Bez něj platí čerstvost
 60~sekund a~ověření ETagem. Aktuální schválený playlist znovu použije skladbu
 se stejným SHA-256, velikostí a~formátem. Média dostupná pouze správcům se
@@ -2250,6 +2295,16 @@ a~přeskočených snímků. Běžící preload zachová diagnostiku při změně
 v~rámci stejného schváleného propojení. Odmítnutá odpověď uvádí omezené údaje
 o~podmínkách cache hlaviček bez jejich syrového obsahu a~bez uvolnění
 oprávnění či pravidel místního ukládání.
+Ekvivalentní opakované nebo rozdělené direktivy cache jsou podporované při
+zachování autorizačních značek a~soukromého ověřování. Další delší stáří
+neprodlouží místní limit 60 sekund; neslučitelná pravidla ukládání nepovolí
+a~prohlížení s~no-store zůstává dočasné.
+Události pracovníků zachovávají pořadí FIFO. GUI předá řízení mezi dokončenými
+událostmi po~nejvýše 64 zprávách nebo osmi milisekundách práce a~pokračuje
+za~16~ms; prázdná fronta zachová interval 200~ms. Jedna pomalá událost může
+tento kooperativní rozpočet překročit. Historie a~ukládání aktivity zůstávají
+okamžité, ale překreslení tabulky se~slučují. Kopírovaná diagnostika uvádí počty
+a~trvání dávek pro ruční měření, nikoli zaručenou odezvu obrazovky.
 
 \subsection{Poloha simulátoru ve Windows}
 
@@ -2442,6 +2497,11 @@ popisky. Kontrola probíhá každé tři sekundy i~před sledováním nebo při 
 záznamu a~UTC. SimConnect pouze otevře a~zavře, bez telemetrie a~změn
 simulátoru;
 procesy zůstávají místní.
+Prepar3D a~X-Plane rovněž vyberou letecké popisky podle přesných názvů procesů.
+Mimo let používají ovládání aktuálního záznamu a~průběh neutrální popisky
+relace. Ovládání UTC ve~Watcheru se~skryje, ale uložená volba zůstane;
+detekce letu je~obnoví. Historické letové zprávy zachovají skutečnou identitu
+a~vlastní hlášky pro konkrétní hry zůstávají.
 V~klidovém režimu API klíče zůstává Zahájit viditelné s~uloženým klíčem
 i~bez něj a~bez spuštěné hry. Přímo otevře nastavení připojení; samotné
 propojení pro prohlížení Fotek je~neskryje. Režim propojeného uploadu nabízí

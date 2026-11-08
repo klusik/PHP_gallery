@@ -404,6 +404,20 @@ authentication. Usage of retained galleries is unknown. Cache/worker fixtures
 own quota, restart, failure and cancellation regression; native UI acceptance
 is separate from hosted Python qualification.
 
+Ordinary thumbnail bytes now have a separate child pool and independent
+256-MiB/16,384-entry quota; full/detail media and audio retain the main
+1-GiB/4,096-entry pool. The canonical process/file lock and gallery pin/private
+preload markers remain shared. New retained thumbnail filenames carry a fixed
+rendition prefix; legacy unprefixed files are classified only when an exact
+authorized thumbnail key is known. Lazy migration retains body, digest and
+validation age. Contains/read/revalidate preserve path and no-follow checks.
+Unpin capacity planning reserves every destination across both pools and
+verifies them together before retained cleanup, so later copies cannot evict
+earlier copies from the same conversion. Copy failure retains originals;
+cleanup failure keeps the existing marker and remaining retained files for
+recovery. Disk layout compatibility remains supported while prior caches exist;
+usage is unknown and no older cache file is guessed from its opaque hash.
+
 Preload diagnostics now share the pure Photos formatter with the native viewer.
 Listing, local-cache, transfer and verification failures retain safe source and
 response facts, and terminal events retain the actual counts. Background
@@ -413,8 +427,31 @@ diagnostic callback failure cannot change the operation's outcome. Cache-policy
 refusals expose only finite header decisions and bounded numeric metadata;
 raw headers remain excluded. This diagnostic extension preserves the existing
 wire protocol, cache admission, authorization and on-disk format. Current
-production response-header mismatch still requires observed runtime facts;
-diagnostic coverage alone does not qualify a media-loading repair.
+production diagnostics identified repeated Cache-Control fields before image
+decoding; their exact values and installed-client acceptance still require a
+manual observation.
+
+Native media accepts equivalent Cache-Control directives across repeated or
+split fields, with exact cache markers, authorization and Vary checks retained.
+Photos still require private, must-revalidate and an explicit 60-second age.
+Additional ages cannot be shorter than 60 seconds, and never extend the local
+60-second freshness cap. Unknown or conflicting directives do not grant disk
+storage; existing no-store responses remain transient. Audio normalizes only
+its equivalent private/no-cache policy. This permanent interoperability path
+supports heterogeneous HTTP response formatting rather than a hosting vendor.
+It follows the first-origin-age option with a stricter local cap described in
+[RFC 9111](https://www.rfc-editor.org/rfc/rfc9111.html#section-4.2.1).
+Production source diagnostics subsequently identified conditional HTTP 304
+responses without the required cache marker. The transport still rejects those
+responses. When a saved entry caused the conditional read, the media owner may
+make one unconditional authorized read, sharing the existing legacy no-store
+retry budget. It never accepts the rejected response as authority for cached
+bytes. The new response passes the unchanged complete validation; encoding,
+authorization, throttling, other failures and cancellation do not enter this
+recovery path. This is permanent interoperability support for incomplete
+conditional responses, not a server-specific exception. Focused session
+regressions cover the retry budget and refusal boundaries; installed recovery
+remains subject to manual verification.
 
 The Photos gallery catalogue retains its initial ten-page burst, then continues
 one page every five seconds through the same cursor and single worker. This
@@ -422,7 +459,106 @@ client pacing keeps the initial tree responsive while leaving server request
 headroom. No server limit or protocol changes. Session changes and destruction
 cancel scheduled work; errors stop automatic continuation until explicit retry.
 Catalogue fixtures own those timer and identity boundaries. Live production
-catalogue size and traffic are unknown.
+catalogue size and traffic are unknown. The client first mounts an optional
+last-complete local snapshot, bound to verified issuer, account and exact
+approved scope. Windows uses user-scoped DPAPI and refuses redirected/nonlocal
+profile storage; POSIX uses private owned files. Integrity failure, corruption
+or unavailable storage is a miss. One background reader and a serialized
+latest-pending writer keep this optional I/O outside Tk. Only complete results
+replace the atomic snapshot; partial/failing pages never prune cached-only rows.
+Cached and complete-tree UI updates yield in short batches and retain unchanged
+rows. The account-scoped last explicit gallery preference reuses existing
+versioned tree preferences; version 1 expansion states remain supported.
+Cached navigation still performs independent live media authorization; new
+upload and create actions require fresh gallery confirmation. Cached metadata
+never grants media, upload or mutation access.
+An additive `galleries:tree-v1` server capability exposes a bounded complete
+tree and an account/scope-bound revision on the existing listing route.
+Current authority is rechecked before an unchanged envelope can omit rows.
+There is no new consent scope, schema or persisted server revision. Missing,
+oversized or unavailable optional trees leave the original page contract
+available; a cached tree never grants remote access. The separate complete-tree
+fixture controls external storage boundaries, while the existing gallery-detail
+database fixture exercises the real authorized query and revocation. HTTP and
+installed-client behavior require separate verification. The client negotiates
+the exact capability before requesting the optional tree. Missing capability
+or unsupported, malformed, oversized, unavailable or transport-failed tree data
+falls back to the existing page reader over the prior snapshot. Authentication,
+grant rejection, cancellation and rate limits never enter this fallback.
+An unchanged reply is accepted only against the exact locally retained revision.
+Safe fallback diagnostics retain the bounded operation/status/reason without
+titles, URLs or tokens. This old-server path is permanent mixed-version support;
+deployed adoption and current installed performance are unknown.
+The catalogue activity label and smooth spinning ring appear above the tree and
+share the existing initial/read/continuation lifecycle. They do not estimate
+completion and stop on completion, failure, disconnection or destruction.
+
+Ordinary Photos grid reads request thumbnail renditions only. Selected detail
+and adjacent-photo reads belong to the open lightbox; explicit gallery preload
+retains its independent thumbnail/detail path. Closing the lightbox prevents
+new adjacent reads and clears queued speculation. An already running bounded
+read may finish, with stale display results still fenced by selection identity.
+The server's existing missing-thumbnail rendition fallback remains supported.
+Direct thumbnail preparation preserves byte/pixel bounds, matte cropping and
+LANCZOS sizing without an intermediate PNG encode/decode round trip. The
+session request gate, authorization, cancellation and cache admission remain
+unchanged. A bounded initial thumbnail burst precedes the optional background
+revision probe; explicit photo/page requests and active audio retain priority.
+Continuous viewport changes cannot indefinitely postpone this initial probe.
+No additional thread pool or process is introduced. Installed loading latency
+remains unmeasured.
+
+Legacy Watcher identity is retained only for a verified saved upload binding;
+same-mode refresh does not erase the title. Credential and upload-mode changes
+invalidate it, and Photos navigation cannot provide an upload identity. A
+server title can be displayed without an available folder hierarchy. Neutral
+current-session copy follows cached game detection while actual historical
+flight artifacts keep their identity. Hiding simulator-only controls retains
+saved recording/UTC preferences and does not alter worker admission.
+
+Single-click Photos selection and the persistent information pane remain
+presentation over the existing metadata owner. Context information uses the
+same request helper, permission-filtered groups and value formatter. A bounded
+same-session LRU has a one-minute lifetime and is invalidated after relevant
+refreshes and mutations. One inspector worker retains only the latest pending
+selection; late session/gallery/selection results cannot repaint current data.
+Grid selection never requests the full photo. Double-click/Enter retains the
+existing lightbox owner; local fullscreen bindings support both letter cases
+while preserving text input and command shortcuts. Selection/range limits and
+server mutation authorization remain unchanged.
+
+Windows fullscreen shortcuts interpret the native Tk state independently of
+X11: NumLock is Mod1 and ScrollLock is Mod3, while Alt has a separate logical
+mask. Lock flags and a keyboard without a numeric keypad remain supported;
+Control/Alt combinations and text entry remain reserved. A bounded, separate
+shortcut trace exposes only fixed keys, state/focus categories and the handling
+outcome. This platform mapping is permanent support, not a Tk upgrade
+requirement. The actual user confirmed NumLock enabled on Tk 8.6.15; previous
+generated events without lock bits did not cover that rejection.
+
+The existing 36-million-pixel RGB allocation guard rejected camera originals
+even when their encoded responses fit the media byte limit. JPEG/MPO detail
+decoding now requests a reduced decoder raster before RGB allocation and
+checks the same pixel budget on that raster. Other formats never gain an
+unbounded full decode. A pixel-budget refusal alone may request one currently
+authorized thumbnail preview through the existing media owner; no new server
+capability is needed. Auth/cancellation/throttling/corrupt-content failures
+retain their original refusal. Transfer limits, decompression-bomb protection,
+render/cache bounds and selection fences remain. Typed decode facts retain
+format, dimensions, byte count, stage and reason without exception text or
+paths. Current production photo dimensions and affected usage are unknown
+beyond the reported guard failure; manual qualification remains separate.
+
+The Tk event dispatcher yields between complete FIFO handlers after a bounded
+message count or cooperative elapsed-time budget. It never merges or discards
+domain events, upload acknowledgements, revocation or target-generation checks.
+One long handler can still exceed the budget. Recent-activity table redraws
+share one pending callback while redaction, in-memory history and writer
+submission retain their original order. Filter changes render current data;
+shutdown cancels pending presentation work and deferred closure resumes one
+dispatcher. No additional thread, process, wire protocol or persistence format
+is introduced. Numeric diagnostics support later measurements; actual installed
+latency and improvement remain unmeasured until manual qualification.
 
 Explicit Admin preload extends the existing media owner with the additive
 `media:admin-preload-v1` capability, descriptor fields and a fixed binary opt-in
@@ -507,9 +643,11 @@ response. Before using disk, WinApp fetches the current permitted playlist,
 requires its explicit `track_cache: true` capability, and checks that the track still
 matches its verified SHA-256, byte size and MIME type. Older playlist responses
 without the capability use online track delivery even after a downgrade.
-The shared cache holds up to 4,096 entries and 1 GiB. It evicts least recently
-accessed entries as space is needed and retains no credentials or playlist
-metadata. WinApp's media transport owns the older no-store and
+The main detail/audio cache holds up to 4,096 entries and 1 GiB. The independent
+ordinary thumbnail pool holds 16,384 entries and 256 MiB, so main-pool pressure
+does not evict thumbnails. Each pool evicts its own least recently accessed
+entries and retains no credentials or playlist metadata. WinApp's media
+transport owns the older no-store and
 eight-photo behavior while mixed versions are supported. Deployment usage is
 unknown.
 

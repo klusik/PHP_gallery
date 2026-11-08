@@ -643,6 +643,35 @@ paths or mutation authority. Each page rechecks the active bearer, issuer,
 grant, scope and current role in the same database read. A previously issued
 identity-only grant gains no listing access.
 
+An optional `galleries:tree-v1` discovery capability uses that same authority
+on GET `app_linking_galleries&tree=1`, with an optional lowercase SHA-256
+`revision` query value. It is exclusive of the page cursor and search POST.
+The exact complete envelope is
+`{version:1,revision,unchanged:false,galleries:[{id,parent_id,title}]}`;
+the exact unchanged envelope is `{version:1,revision,unchanged:true}`.
+Both are private no-store JSON. One authorized SQL statement reads at most
+10,001 rows, including lookahead; a complete tree permits at most 10,000 rows
+and 4 MiB of encoded response. Overflow returns 503
+`temporarily_unavailable`, never a truncated complete result. The digest
+includes version, issuer, verified account, exact approved scope and ordered
+identities; it is not a grant. Current grant/account/scope is checked again
+before either reply. Revision comparison saves transfer, not the current
+server-side catalogue read. The full-tree byte bound applies even when a
+known revision could otherwise produce a small unchanged reply. Missing
+capability, unsupported mode or unavailable optional data leaves the original
+50-row listing protocol available without a new scope or migration.
+The client requests this mode only after negotiating its exact capability.
+A local last-complete snapshot provides display/navigation metadata while
+fresh data loads; IDs do not authorize media or mutations. The snapshot is
+bound to verified issuer, account and exact scope, validated and protected
+with user-scoped Windows DPAPI or private POSIX ownership. Complete writes are
+serialized and atomic off Tk. Invalid optional replies retain that snapshot
+and fall back to ordinary pages; only a complete fresh result can remove old
+rows. Authentication failure, cancellation and throttling stop the request.
+An unchanged response must match the exact saved revision. Existing version-1
+tree expansion preferences remain readable; version 2 also stores the last
+explicit freshly confirmed gallery selection for that account.
+
 When discovery offers `galleries:search`, the basic native link requests the
 search bundle with or without upload access. If discovery also advertises
 `rolling_access`, the bundle includes the rolling suffix. The same consent

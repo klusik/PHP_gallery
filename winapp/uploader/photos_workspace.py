@@ -12,22 +12,30 @@
 # License: MIT License (see LICENSE file in repository)
 """Main-window gallery hierarchy and embedded photo workspace."""
 
-from collections import deque
+from collections import OrderedDict, deque
+from dataclasses import dataclass
 import logging
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 from typing import Callable, TypeAlias
 
 from .app_linking import (
     LINKING_CREATE_TITLE_MAX_BYTES,
+    LINKING_GALLERY_ID_MAX,
     NATIVE_MEDIA_DELETE_BATCH_MAX,
-    LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage, LinkedMediaDetails,
+    LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage, LinkedGalleryTree,
+    LinkedMediaDetails,
     LinkedMediaGalleryInfo, LinkedPhoto, LinkingSession,
     LinkingMediaThrottled,
 )
 from .app_linking_ui import LinkingManager
+from .gallery_catalogue_cache import (
+    GalleryCatalogueCache, GalleryCatalogueSnapshot,
+)
+from .diagnostics import is_safe_photos_observation
 from .flight_report_translations import tr
 from .gallery_folders import GalleryFolderShelf
 from .gallery_preload import GalleryPreloadWorker, PreloadProgress
@@ -76,6 +84,30 @@ PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT = 10
 # Rationale: One five-second interval limits steady requests without a user tap.
 PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS = 5_000
 
+# Purpose: Advance the catalogue spinner without continuous widget redraws.
+# Type: int. Units: milliseconds. Scope: indeterminate catalogue indicator.
+# Consumers: PhotosWorkspace._schedule_catalogue_spinner.
+# Rationale: 80 ms is smooth using pre-rendered artwork with no Pillow frame work.
+PHOTOS_CATALOGUE_PROGRESS_INTERVAL_MS = 80
+
+# Purpose: Bound retained pre-rendered catalogue spinner frames.
+# Type: int. Units: images. Scope: one PhotosWorkspace indicator.
+# Consumers: PhotosWorkspace._build_widgets.
+# Rationale: Twelve evenly spaced frames make motion smooth with tiny retained art.
+PHOTOS_CATALOGUE_SPINNER_FRAME_COUNT = 12
+
+# Purpose: Keep mounting an encrypted complete catalogue responsive on Tk.
+# Type: int. Units: gallery rows per UI callback. Scope: cached-tree display.
+# Consumers: PhotosWorkspace._mount_cached_catalogue_batch.
+# Rationale: 64 rows bounds each UI slice while keeping large trees useful.
+PHOTOS_CATALOGUE_CACHE_BATCH_SIZE = 64
+
+# Purpose: Yield between cached-tree UI batches without a zero-delay loop.
+# Type: int. Units: milliseconds. Scope: cached-tree display callbacks.
+# Consumers: PhotosWorkspace._schedule_cached_catalogue_batch.
+# Rationale: 16 ms yields one frame to other workspace events.
+PHOTOS_CATALOGUE_CACHE_BATCH_DELAY_MS = 16
+
 # Purpose: Bound metadata-only cache checks for large galleries.
 # Type: int. Units: pages. Scope: one gallery info action.
 # Consumers: PhotosWorkspace._gallery_info.
@@ -93,6 +125,50 @@ PHOTOS_INFO_CARD_MAX_HEIGHT = 480
 # Consumers: PhotosWorkspace._render_info_card.
 # Rationale: 420 px fits two wrapped label/value lines at narrow widths.
 PHOTOS_INFO_CARD_MAX_WIDTH = 420
+
+# Purpose: Retain recent authorized media-info responses for quick revisit.
+# Type: int. Units: photo metadata rows. Scope: one live LinkingSession.
+# Consumers: PhotosWorkspace._photo_info and _inspect_photo.
+# Rationale: 32 entries cover nearby browsing without retaining a catalogue.
+PHOTOS_INFO_CACHE_ENTRY_LIMIT = 32
+
+# Purpose: Revalidate photo metadata after a short same-session reuse interval.
+# Type: float. Units: monotonic seconds. Scope: one metadata LRU entry.
+# Consumers: PhotosWorkspace._cached_photo_info.
+# Rationale: One minute matches media freshness without retaining changed
+# descriptions, access information or location indefinitely.
+PHOTOS_INFO_CACHE_FRESH_SECONDS = 60.0
+
+# Purpose: Keep inspector labels readable after the pane is collapsed.
+# Type: int. Units: pixels. Scope: minimum width of the optional info pane.
+# Consumers: PhotosWorkspace._show_photo_inspector_pane.
+# Rationale: 128 px leaves space for a short label and one scrollbar.
+PHOTOS_INFO_PANE_MIN_WIDTH = 128
+
+# Purpose: Keep one safe metadata-inspector column compact and adjustable.
+# Type: int. Units: pixels. Scope: optional right Photos pane.
+# Consumers: PhotosWorkspace._build_widgets.
+# Rationale: 250 px fits common localized labels and remains collapsible.
+PHOTOS_INFO_PANE_WIDTH = 250
+
+# Purpose: Keep a thumbnail column usable when the inspector first opens.
+# Type: int. Units: pixels. Scope: initial grid/inspector width allocation.
+# Consumers: PhotosWorkspace._show_photo_inspector_pane.
+# Rationale: 180 px fits the existing 144 px image and surrounding grid padding;
+# exceptionally narrow layouts share the available space instead.
+PHOTOS_INFO_GRID_RESERVE_WIDTH = 180
+
+# Purpose: Keep inspector titles clear of the scrollbar and pane edge.
+# Type: int. Units: pixels. Scope: heading and summary wrap width.
+# Consumers: PhotosWorkspace._resize_photo_inspector_viewport.
+# Rationale: 16 px preserves the surrounding compact frame padding.
+PHOTOS_INFO_PANE_HEADER_INSET = 16
+
+# Purpose: Keep wrapped metadata rows clear of their pane boundaries.
+# Type: int. Units: pixels. Scope: inspector field label wrap width.
+# Consumers: PhotosWorkspace._resize_photo_inspector_viewport.
+# Rationale: 24 px leaves inner frame padding on both sides.
+PHOTOS_INFO_PANE_ROW_INSET = 24
 
 # Purpose: Move Photos heading controls below the title in a narrow pane.
 # Type: int. Units: pixels. Scope: the selected-gallery heading.
@@ -136,16 +212,74 @@ PHOTOS_DIAGNOSTIC_RECENT_LIMIT = 12
 # Rationale: Formatter facts are short; reject any accidental oversized payload.
 PHOTOS_DIAGNOSTIC_MAX_CHARS = 512
 
-_GalleryResult: TypeAlias = tuple[int, LinkedGalleryPage | None]
+# Purpose: Keep a small successful-observation trail separate from failures.
+# Type: int. Units: observations. Scope: one live Photos session.
+# Consumers: PhotosWorkspace._photo_observation_recent.
+# Rationale: Shortcut and decoder notes aid support without replacing failures.
+PHOTOS_OBSERVATION_RECENT_LIMIT = 8
+
+@dataclass(frozen=True)
+class _CatalogueCacheResult:
+    """Deliver optional account-bound cache data to the Tk owner.
+
+    Args:
+        generation (int): Workspace generation that began the cache read.
+        snapshot (GalleryCatalogueSnapshot | None): Complete validated local
+            display metadata, or None when storage was unavailable or empty.
+    """
+
+    generation: int
+    snapshot: GalleryCatalogueSnapshot | None
+
+
+@dataclass(frozen=True)
+class _CatalogueTreeResult:
+    """Deliver a validated fresh tree-v1 response to the Tk owner.
+
+    Args:
+        generation (int): Workspace generation that began the request.
+        tree (LinkedGalleryTree): Complete rows or matching unchanged proof.
+    """
+
+    generation: int
+    tree: LinkedGalleryTree
+
+
+@dataclass(frozen=True)
+class _CataloguePageResult:
+    """Deliver one validated legacy gallery page to the Tk owner.
+
+    Args:
+        generation (int): Workspace generation that began the request.
+        page (LinkedGalleryPage | None): Fresh page or safe failure marker.
+    """
+
+    generation: int
+    page: LinkedGalleryPage | None
+
+
+_GalleryResult: TypeAlias = (
+    _CatalogueCacheResult | _CatalogueTreeResult | _CataloguePageResult
+)
+_CatalogueWriteRequest: TypeAlias = tuple[
+    GalleryCatalogueCache, GalleryCatalogueSnapshot,
+    threading.Event, int, LinkingSession,
+]
+_CatalogueCacheFactory: TypeAlias = Callable[
+    [LinkingSession], GalleryCatalogueCache | None,
+]
 _InfoRow: TypeAlias = tuple[str, str | int | float | bool | None]
 _InfoGroup: TypeAlias = tuple[str, list[_InfoRow]]
+_PhotoInfoResult: TypeAlias = tuple[
+    int, LinkingSession, int, LinkedPhoto, LinkedMediaDetails | None,
+]
 # Each row contains state, complete-photo count, observed-photo count,
 # catalogue completeness and the locally persisted pin (None if unavailable).
 _CacheRow: TypeAlias = tuple[str | None, int, int, bool, bool | None]
 
 
 class PhotosWorkspace(ttk.Frame):
-    """Own one linked gallery tree and one embedded gallery viewer.
+    """Own a linked gallery tree, media viewer and photo information pane.
 
     Args:
         parent (tk.Misc): Main-window page that owns the workspace.
@@ -165,6 +299,12 @@ class PhotosWorkspace(ttk.Frame):
             Load saved expansion states for the current site and account.
         save_tree_state (Callable[[LinkingSession, dict[int, bool]], None] | None):
             Persist expansion states for the current site and account.
+        load_selected_gallery (Callable[[LinkingSession], int | None] | None):
+            Load the saved explicit gallery ID for the current account.
+        save_selected_gallery (Callable[[LinkingSession, int], None] | None):
+            Save an explicit selection that came from a fresh server row.
+        catalogue_cache (_CatalogueCacheFactory | None): Create the account-and-
+            scope-bound complete-tree cache, or omit optional local persistence.
         load_tree_width (Callable[[], int | None] | None):
             Load the per-profile Photos tree sash position.
         save_tree_width (Callable[[int], None] | None):
@@ -186,11 +326,14 @@ class PhotosWorkspace(ttk.Frame):
         simbrief_action: Callable[[], None] | None = None,
         load_tree_state: Callable[[LinkingSession], dict[int, bool]] | None = None,
         save_tree_state: Callable[[LinkingSession, dict[int, bool]], None] | None = None,
+        load_selected_gallery: Callable[[LinkingSession], int | None] | None = None,
+        save_selected_gallery: Callable[[LinkingSession, int], None] | None = None,
+        catalogue_cache: _CatalogueCacheFactory | None = None,
         load_tree_width: Callable[[], int | None] | None = None,
         save_tree_width: Callable[[int], None] | None = None,
         diagnostic_callback: Callable[[str], None] | None = None,
     ) -> None:
-        """Create the two-pane workspace and request its current session.
+        """Create the gallery, viewer and optional metadata panes.
 
         Args:
             parent (tk.Misc): Main-window page that owns the workspace.
@@ -211,6 +354,13 @@ class PhotosWorkspace(ttk.Frame):
                 Load per-gallery expansion states for this site and account.
             save_tree_state (Callable[[LinkingSession, dict[int, bool]], None] | None):
                 Save per-gallery expansion states for this site and account.
+            load_selected_gallery (Callable[[LinkingSession], int | None] | None):
+                Optional account-scoped preferred gallery reader.
+            save_selected_gallery (Callable[[LinkingSession, int], None] | None):
+                Optional account-scoped explicit-selection writer.
+            catalogue_cache (_CatalogueCacheFactory | None): Optional verified
+                identity cache factory; file access
+                occurs only on background workers.
             load_tree_width (Callable[[], int | None] | None):
                 Optional per-profile Photos tree sash position.
             save_tree_width (Callable[[int], None] | None):
@@ -233,6 +383,9 @@ class PhotosWorkspace(ttk.Frame):
         self._simbrief_action = simbrief_action
         self._load_tree_state = load_tree_state
         self._save_tree_state = save_tree_state
+        self._load_selected_gallery = load_selected_gallery
+        self._save_selected_gallery = save_selected_gallery
+        self._catalogue_cache_factory = catalogue_cache
         self._load_tree_width = load_tree_width
         self._save_tree_width = save_tree_width
         self._diagnostic_callback = diagnostic_callback
@@ -282,6 +435,17 @@ class PhotosWorkspace(ttk.Frame):
             tuple[int | None, Callable[[], None]]
         ] = queue.Queue()
         self._context_busy = False
+        self._photo_info_cache: OrderedDict[
+            tuple[int, int, int], tuple[float, LinkedMediaDetails]
+        ] = OrderedDict()
+        self._inspector_generation = 0
+        self._inspector_cancel: threading.Event | None = None
+        self._inspector_worker: threading.Thread | None = None
+        self._inspector_pending: tuple[
+            LinkingSession, int, LinkedPhoto, int,
+        ] | None = None
+        self._inspector_results: queue.Queue[_PhotoInfoResult] = queue.Queue()
+        self._photo_inspector_visible = False
         self._probe_cancel: threading.Event | None = None
         self._create_receipt: BoundCreateReceipt | None = None
         self._create_dispatch: CreateDispatch | None = None
@@ -291,16 +455,37 @@ class PhotosWorkspace(ttk.Frame):
         self._photo_diagnostic_recent: deque[str] = deque(
             maxlen=PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
         )
+        self._photo_observation_recent: deque[str] = deque(
+            maxlen=PHOTOS_OBSERVATION_RECENT_LIMIT,
+        )
         self._cancel = threading.Event()
         self._generation = 0
         self._worker: threading.Thread | None = None
         self._events: queue.Queue[_GalleryResult] = queue.Queue()
+        self._catalogue_cache_snapshot: GalleryCatalogueSnapshot | None = None
+        self._catalogue_cache: GalleryCatalogueCache | None = None
+        self._catalogue_cache_ids: set[int] = set()
+        self._fresh_catalogue_ids: set[int] = set()
+        self._cached_mount_rows: tuple[LinkedGallery, ...] = ()
+        self._cached_mount_index = 0
+        self._cached_mount_after: str | None = None
+        self._complete_catalogue_tree: LinkedGalleryTree | None = None
+        self._preferred_gallery_id: int | None = None
+        self._user_selected_gallery = False
+        self._selection_saved = False
+        self._catalogue_cache_writer_lock = threading.Lock()
+        self._catalogue_cache_writer: threading.Thread | None = None
+        self._catalogue_cache_pending: _CatalogueWriteRequest | None = None
         self._poll_id: str | None = None
         self._catalogue_after: str | None = None
+        self._catalogue_spinner_after_id: str | None = None
+        self._catalogue_spinner_frames: tuple[ThemeImage, ...] = ()
+        self._catalogue_spinner_index = 0
         self._pending_cursor: int | None = None
         self._has_pending_page = False
         self._next_after: int | None = None
         self._pages_this_pass = 0
+        self._catalogue_loading = False
         self._galleries: dict[int, LinkedGallery] = {}
         self._children_by_parent: dict[int, set[int]] = {}
         self._selected_gallery_id: int | None = None
@@ -364,7 +549,7 @@ class PhotosWorkspace(ttk.Frame):
         return tr(self._language(), "photos_workspace_" + key)
 
     def _build_widgets(self) -> None:
-        """Create the connection action, hierarchy pane and viewer host.
+        """Create the connection action, hierarchy, viewer and inspector panes.
 
         Returns:
             None: Installs the workspace widgets in the main window.
@@ -387,11 +572,73 @@ class PhotosWorkspace(ttk.Frame):
         self.panes.grid(row=0, column=0, sticky="nsew")
         self.tree_pane = ttk.Frame(self.panes, style="Card.TFrame", padding=8)
         self.viewer_pane = ttk.Frame(self.panes, style="Card.TFrame", padding=8)
+        self.info_pane = ttk.Frame(self.panes, style="Card.TFrame", padding=8)
         self.panes.add(self.tree_pane, weight=0)
         self.panes.add(self.viewer_pane, weight=1)
+        self.info_pane.configure(width=PHOTOS_INFO_PANE_WIDTH)
+        self.info_pane.grid_propagate(False)
+        self.info_pane.rowconfigure(2, weight=1)
+        self.info_pane.columnconfigure(0, weight=1)
+        self._photo_inspector_heading = ttk.Label(
+            self.info_pane, text=self._text("photo_info"),
+            style="Section.TLabel",
+            wraplength=(
+                PHOTOS_INFO_PANE_WIDTH - PHOTOS_INFO_PANE_HEADER_INSET
+            ),
+        )
+        self._photo_inspector_heading.grid(
+            row=0, column=0, sticky="ew", pady=(0, 4),
+        )
+        self._photo_inspector_summary = ttk.Label(
+            self.info_pane, text=self._text("select_photo_hint"),
+            style="Muted.TLabel",
+            wraplength=(
+                PHOTOS_INFO_PANE_WIDTH - PHOTOS_INFO_PANE_HEADER_INSET
+            ),
+            justify="left",
+        )
+        self._photo_inspector_summary.grid(
+            row=1, column=0, sticky="ew", pady=(0, 6),
+        )
+        inspector_body = ttk.Frame(self.info_pane, style="Card.TFrame")
+        inspector_body.grid(row=2, column=0, sticky="nsew")
+        inspector_body.rowconfigure(0, weight=1)
+        inspector_body.columnconfigure(0, weight=1)
+        self._photo_inspector_canvas = tk.Canvas(
+            inspector_body, highlightthickness=0, borderwidth=0,
+            background=ttk.Style(self).lookup(
+                "Card.TFrame", "background",
+            ) or _PALETTE["card_surface"],
+        )
+        self._photo_inspector_scrollbar = ttk.Scrollbar(
+            inspector_body, orient="vertical",
+            command=self._photo_inspector_canvas.yview,
+        )
+        self._photo_inspector_canvas.configure(
+            yscrollcommand=self._photo_inspector_scrollbar.set,
+        )
+        self._bind_photo_inspector_scroll(self._photo_inspector_canvas)
+        self._photo_inspector_canvas.grid(row=0, column=0, sticky="nsew")
+        self._photo_inspector_scrollbar.grid(row=0, column=1, sticky="ns")
+        self._photo_inspector_content = ttk.Frame(
+            self._photo_inspector_canvas, style="Card.TFrame", padding=(2, 1),
+        )
+        self._photo_inspector_window = (
+            self._photo_inspector_canvas.create_window(
+                (0, 0), window=self._photo_inspector_content,
+                anchor="nw",
+            )
+        )
+        self._photo_inspector_content.bind(
+            "<Configure>", self._resize_photo_inspector_content, add="+",
+        )
+        self._bind_photo_inspector_scroll(self._photo_inspector_content)
+        self._photo_inspector_canvas.bind(
+            "<Configure>", self._resize_photo_inspector_viewport, add="+",
+        )
         self.tree_pane.configure(width=PHOTOS_TREE_WIDTH)
         self.tree_pane.grid_propagate(False)
-        self.tree_pane.rowconfigure(1, weight=1)
+        self.tree_pane.rowconfigure(2, weight=1)
         self.tree_pane.columnconfigure(0, weight=1)
         controls = ttk.Frame(self.tree_pane, style="Card.TFrame")
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 6))
@@ -430,19 +677,55 @@ class PhotosWorkspace(ttk.Frame):
         )
         self.retry_button.pack(side="right")
         self.retry_button.pack_forget()
+        self._catalogue_status = ttk.Frame(
+            self.tree_pane, style="Card.TFrame",
+        )
+        self._catalogue_status.grid(
+            row=1, column=0, columnspan=2, sticky="ew", pady=(0, 4),
+        )
+        self._catalogue_status.columnconfigure(1, weight=1)
+        spinner_frames = tuple(
+            image for frame_index in range(
+                PHOTOS_CATALOGUE_SPINNER_FRAME_COUNT,
+            )
+            if (image := create_smooth_icon(
+                self._catalogue_status,
+                "loading_spinner",
+                (16, 16),
+                angle=(360 * frame_index)
+                // PHOTOS_CATALOGUE_SPINNER_FRAME_COUNT,
+                tone="primary",
+            )) is not None
+        )
+        self._catalogue_spinner_frames = spinner_frames
+        self._catalogue_spinner_index = 0
+        self._catalogue_spinner_label = ttk.Label(
+            self._catalogue_status,
+            image=spinner_frames[0] if spinner_frames else "",
+            style="Card.TLabel",
+        )
+        self._catalogue_spinner_label.grid(
+            row=0, column=0, sticky="w", padx=(0, 6),
+        )
+        self._catalogue_spinner_label.grid_remove()
+        self.tree_status = ttk.Label(
+            self._catalogue_status, text="", style="Muted.TLabel",
+            wraplength=PHOTOS_TREE_WIDTH - 48,
+        )
+        self.tree_status.grid(row=0, column=1, sticky="w")
         self.tree = ttk.Treeview(
             self.tree_pane,
             show="tree",
             selectmode="browse",
             takefocus=True,
         )
-        self.tree.grid(row=1, column=0, sticky="nsew")
+        self.tree.grid(row=2, column=0, sticky="nsew")
         tree_scroll = ttk.Scrollbar(
             self.tree_pane,
             orient="vertical",
             command=self.tree.yview,
         )
-        tree_scroll.grid(row=1, column=1, sticky="ns")
+        tree_scroll.grid(row=2, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=tree_scroll.set)
         self.tree.bind("<<TreeviewSelect>>", self._on_gallery_selected)
         self.tree.bind("<<TreeviewOpen>>", self._on_tree_expansion, add="+")
@@ -450,11 +733,6 @@ class PhotosWorkspace(ttk.Frame):
 
         for sequence in ("<Button-3>", "<Button-2>", "<Control-Button-1>"):
             self.tree.bind(sequence, self._tree_context)
-        self.tree_status = ttk.Label(
-            self.tree_pane, text="", style="Muted.TLabel",
-            wraplength=PHOTOS_TREE_WIDTH,
-        )
-        self.tree_status.grid(row=2, column=0, sticky="w", pady=(6, 0))
         self._gallery_heading = ttk.Frame(self.viewer_pane, style="Card.TFrame")
         self._gallery_heading.pack(fill="x", padx=8, pady=(4, 6))
         self._gallery_heading.columnconfigure(0, weight=1)
@@ -695,6 +973,9 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             None: Only the corresponding tree row is updated when needed.
         """
+        self._invalidate_photo_info(gallery_id)
+        if gallery_id == self._selected_gallery_id:
+            self._clear_photo_inspector()
         if gallery_id in self._cache_state:
             del self._cache_state[gallery_id]
             self._cache_counts.pop(gallery_id, None)
@@ -707,6 +988,9 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             None: The viewer preserves the current page, selection and cache.
         """
+        if self._selected_gallery_id is not None:
+            self._invalidate_photo_info(self._selected_gallery_id)
+            self._clear_photo_inspector()
         if self._viewer is not None:
             controller = getattr(self._viewer, '_gallery_viewer_controller', None)
             if controller is not None:
@@ -751,6 +1035,9 @@ class PhotosWorkspace(ttk.Frame):
         """
         if self._session is None:
             return
+        if (gallery_id is not None
+                and gallery_id not in self._fresh_catalogue_ids):
+            return
         event = self._context_event(widget)
         card = self._open_context(event)
         if self._session.can_create_gallery() and self._manager is not None:
@@ -794,6 +1081,9 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             None: The action uses the existing create journal after consent.
         """
+        if (parent_id is not None
+                and parent_id not in self._fresh_catalogue_ids):
+            return
         if self._manager is not None and session.can_create_gallery():
             label = self._text("create_root" if parent_id is None else "create_child")
             self._context_action(
@@ -843,10 +1133,26 @@ class PhotosWorkspace(ttk.Frame):
             self._load_tree_state(session)
             if session is not None and self._load_tree_state is not None else {}
         )
+        try:
+            preferred_gallery = (
+                self._load_selected_gallery(session)
+                if session is not None and self._load_selected_gallery is not None
+                else None
+            )
+        except (OSError, TypeError, ValueError):
+            preferred_gallery = None
+        self._preferred_gallery_id = (
+            preferred_gallery if type(preferred_gallery) is int
+            and 0 < preferred_gallery <= LINKING_GALLERY_ID_MAX else None
+        )
+        self._user_selected_gallery = False
+        self._selection_saved = False
         self._cache_state.clear()
         self._gallery_pins.clear()
         self._cache_counts.clear()
         self._cache_pending.clear()
+        self._photo_info_cache.clear()
+        self._clear_photo_inspector()
         if self._preload_worker is not None:
             self._preload_worker.stop()
         self._preload_strip.grid_remove()
@@ -857,6 +1163,12 @@ class PhotosWorkspace(ttk.Frame):
         self._cancel.set()
         self._cancel = threading.Event()
         self._clear_catalogue()
+        self._catalogue_cache = None
+        if session is not None and self._catalogue_cache_factory is not None:
+            try:
+                self._catalogue_cache = self._catalogue_cache_factory(session)
+            except (OSError, TypeError, ValueError):
+                self._catalogue_cache = None
         self._thumbnail_memory.clear()
         self._thumbnail_memory = GalleryThumbnailMemory()
         self._pages_this_pass = 0
@@ -869,8 +1181,8 @@ class PhotosWorkspace(ttk.Frame):
             return
         self.connect_view.grid_remove()
         self.panes.grid()
+        self._set_catalogue_loading(True)
         self.viewer_status.configure(text=self._text("loading"))
-        self.tree_status.configure(text=self._text("loading"))
         self._request_page(None)
 
     def _clear_catalogue(self) -> None:
@@ -880,6 +1192,8 @@ class PhotosWorkspace(ttk.Frame):
             None: Old site data and image references are released immediately.
         """
         self._cancel_catalogue_continuation()
+        self._cancel_cached_catalogue_mount()
+        self._clear_photo_inspector()
         if self._viewer is not None:
             self._viewer.destroy()
             self._viewer = None
@@ -892,24 +1206,149 @@ class PhotosWorkspace(ttk.Frame):
         self._recording_rows.clear()
         self._sync_subgalleries()
         self._next_after = None
+        self._catalogue_cache_snapshot = None
+        self._catalogue_cache_ids.clear()
+        self._fresh_catalogue_ids.clear()
+        self._cached_mount_rows = ()
+        self._cached_mount_index = 0
+        self._complete_catalogue_tree = None
         self._implicit_pending = False
         self._implicit_attempted.clear()
         self._initial_attempt_count = 0
         self._catalogue_paused_for_preview = False
         self.tree.delete(*self.tree.get_children())
         self.tree_status.configure(text="")
+        self._set_catalogue_loading(False)
         self.viewer_status.configure(text=self._text("select_gallery"))
         self.viewer_status.pack(fill="x", padx=8, pady=8)
 
-    def _clear_photo_diagnostics(self) -> None:
-        """Forget retained failure facts when the live session changes.
+    def _set_catalogue_loading(self, loading: bool) -> None:
+        """Show localized catalogue status and animate the optional spinner.
+
+        Args:
+            loading (bool): Whether this session has an unfinished catalogue.
 
         Returns:
-            None: No prior-session diagnostic remains in the copied snapshot.
+            None: Catalogue status and spinner timer share one loading state.
+        """
+        if not loading:
+            self._cancel_catalogue_spinner()
+        if self._destroyed:
+            self._catalogue_loading = loading
+            return
+        if self._catalogue_loading == loading:
+            return
+        self._catalogue_loading = loading
+        self.tree_status.configure(
+            text=self._text("loading") if loading else "",
+        )
+        if loading and self._catalogue_spinner_frames:
+            self._catalogue_spinner_label.configure(
+                image=self._catalogue_spinner_frames[
+                    self._catalogue_spinner_index
+                ],
+            )
+            self._catalogue_spinner_label.grid()
+            self._schedule_catalogue_spinner()
+        else:
+            self._catalogue_spinner_label.grid_remove()
+
+    def _schedule_catalogue_spinner(self) -> None:
+        """Schedule one identity-fenced step for the pre-rendered spinner.
+
+        Returns:
+            None: At most one active spinner callback is owned by this workspace.
+        """
+        if (self._destroyed or not self._catalogue_loading
+                or not self._catalogue_spinner_frames
+                or self._catalogue_spinner_after_id is not None):
+            return
+        after_id: str | None = None
+
+        def advance() -> None:
+            """Advance only the spinner timer that is still current.
+
+            Returns:
+                None: Delegates identity and lifecycle checks to the owner.
+            """
+            self._advance_catalogue_spinner(after_id)
+
+        after_id = self.after(
+            PHOTOS_CATALOGUE_PROGRESS_INTERVAL_MS, advance,
+        )
+        self._catalogue_spinner_after_id = after_id
+
+    def _advance_catalogue_spinner(self, after_id: str | None) -> None:
+        """Display the next retained frame and schedule one later frame.
+
+        Args:
+            after_id (str | None): Identity captured by the current Tk timer.
+
+        Returns:
+            None: Stale callbacks do not clear or update replacement animations.
+        """
+        if (after_id is None
+                or after_id != self._catalogue_spinner_after_id):
+            return
+        self._catalogue_spinner_after_id = None
+        if (self._destroyed or not self._catalogue_loading
+                or not self._catalogue_spinner_frames):
+            return
+        self._catalogue_spinner_index = (
+            self._catalogue_spinner_index + 1
+        ) % len(self._catalogue_spinner_frames)
+        self._catalogue_spinner_label.configure(
+            image=self._catalogue_spinner_frames[
+                self._catalogue_spinner_index
+            ],
+        )
+        self._schedule_catalogue_spinner()
+
+    def _cancel_catalogue_spinner(self) -> None:
+        """Cancel the single scheduled catalogue-spinner frame callback.
+
+        Returns:
+            None: Clears its identity before best-effort Tk cancellation.
+        """
+        after_id = self._catalogue_spinner_after_id
+        self._catalogue_spinner_after_id = None
+        if after_id is None:
+            return
+        try:
+            self.after_cancel(after_id)
+        except tk.TclError:
+            pass
+
+    def _clear_photo_diagnostics(self) -> None:
+        """Forget failures and observations when the live session changes.
+
+        Returns:
+            None: No prior-session trace remains in the copied snapshot.
         """
         with self._photo_diagnostic_lock:
             self._photo_diagnostic_latest = None
             self._photo_diagnostic_recent.clear()
+            self._photo_observation_recent.clear()
+
+    def _record_photo_observation(
+        self, generation: int, summary: str,
+    ) -> None:
+        """Retain a safe non-failure Photos trace for current-session copying.
+
+        Args:
+            generation (int): Viewer/session generation that produced the trace.
+            summary (str): Allowlisted shortcut or image-decoder observation.
+
+        Returns:
+            None: Observations stay separate from Latest failure and stale
+                generations cannot enter the copied support snapshot.
+        """
+        if not is_safe_photos_observation(summary):
+            return
+        with self._photo_diagnostic_lock:
+            if generation != self._generation:
+                return
+            self._photo_observation_recent.append(summary)
 
     def _record_preload_diagnostic(
         self, session: LinkingSession, summary: str,
@@ -978,22 +1417,30 @@ class PhotosWorkspace(ttk.Frame):
             )
 
     def diagnostics_snapshot(self) -> str:
-        """Return current-session Photos failures without gallery content.
+        """Return safe current-session Photos failures and observations.
 
         Returns:
-            str: Latest safe failure and bounded recent failures, or a fixed
-                message when no failure has been recorded for this session.
+            str: Latest safe failure, bounded failure history and allowlisted
+                observations, or a fixed message when no failure is recorded.
         """
         with self._photo_diagnostic_lock:
             latest = self._photo_diagnostic_latest
             recent = tuple(self._photo_diagnostic_recent)
+            observations = tuple(self._photo_observation_recent)
         if latest is None:
-            return 'No Photos failure recorded for the current session.'
-        return '\n'.join((
-            'Latest failure: ' + latest,
-            'Recent failures:',
-            *('  ' + entry for entry in recent),
-        ))
+            lines = ['No Photos failure recorded for the current session.']
+        else:
+            lines = [
+                'Latest failure: ' + latest,
+                'Recent failures:',
+                *('  ' + entry for entry in recent),
+            ]
+        if observations:
+            lines.extend((
+                'Recent observations:',
+                *('  ' + entry for entry in observations),
+            ))
+        return '\n'.join(lines)
 
     def _request_page(self, after_id: int | None) -> None:
         """Queue one server catalogue page on the current session.
@@ -1014,13 +1461,51 @@ class PhotosWorkspace(ttk.Frame):
         session = self._session
         generation = self._generation
         cancel = self._cancel
+        catalogue_cache = self._catalogue_cache
 
         def fetch() -> None:
-            """Read one validated catalogue page and queue its result.
+            """Load optional display cache, then one fresh tree or page.
 
             Returns:
-                None: Worker output is consumed only by the Tk polling owner.
+                None: Every result is generation-fenced by the Tk polling owner.
             """
+            cached: GalleryCatalogueSnapshot | None = None
+            if catalogue_cache is not None and after_id is None:
+                cached = catalogue_cache.load(cancel)
+                if not cancel.is_set():
+                    self._events.put(_CatalogueCacheResult(generation, cached))
+            if cancel.is_set():
+                return
+            tree_reader = getattr(session, 'gallery_tree', None)
+            tree_support = getattr(session, 'supports_gallery_tree', None)
+            if (after_id is None and tree_reader is not None
+                    and tree_support is not None and tree_support()):
+                try:
+                    tree = tree_reader(
+                        cached.revision if cached is not None else None,
+                        cancelled=cancel,
+                    )
+                except Exception as exc:
+                    if (not cancel.is_set()
+                            and not isinstance(exc, LinkingMediaThrottled)):
+                        _log_safe_media_failure(
+                            'page-fetch', 'catalogue', exc,
+                            diagnostic_callback=lambda summary: (
+                                self._record_photo_diagnostic(
+                                    generation, summary,
+                                )
+                            ),
+                        )
+                    if not cancel.is_set():
+                        self._events.put(
+                            _CataloguePageResult(generation, None),
+                        )
+                    return
+                if cancel.is_set():
+                    return
+                if tree is not None:
+                    self._events.put(_CatalogueTreeResult(generation, tree))
+                    return
             try:
                 page = session.gallery_page(after_id, cancelled=cancel)
             except Exception as exc:
@@ -1034,7 +1519,7 @@ class PhotosWorkspace(ttk.Frame):
                     )
                 page = None
             if not cancel.is_set():
-                self._events.put((generation, page))
+                self._events.put(_CataloguePageResult(generation, page))
 
         self._worker = threading.Thread(
             target=fetch,
@@ -1070,13 +1555,22 @@ class PhotosWorkspace(ttk.Frame):
             if ((generation is None or generation == self._generation)
                     and self._session_provider() is self._session):
                 completion()
+        self._apply_photo_info_results()
         while True:
             try:
-                generation, page = self._events.get_nowait()
+                result = self._events.get_nowait()
             except queue.Empty:
                 break
-            if generation == self._generation and self._session is not None:
-                self._accept_page(page)
+            if (result.generation == self._generation
+                    and self._session is not None
+                    and self._session_provider() is self._session
+                    and not self._cancel.is_set()):
+                if isinstance(result, _CatalogueCacheResult):
+                    self._accept_cached_catalogue(result.snapshot)
+                elif isinstance(result, _CatalogueTreeResult):
+                    self._accept_complete_catalogue(result.tree)
+                else:
+                    self._accept_page(result.page)
         if self._worker is not None and not self._worker.is_alive():
             if not self._events.empty():
                 self._schedule_poll()
@@ -1089,9 +1583,386 @@ class PhotosWorkspace(ttk.Frame):
             self._request_page(cursor)
         if (self._worker is not None or self._has_pending_page or self._context_busy
                 or self._cache_worker is not None or self._cache_pending
+                or self._inspector_worker is not None
+                or self._inspector_pending is not None
                 or (self._preload_worker is not None
                     and self._preload_worker.is_alive())):
             self._schedule_poll()
+
+    def _accept_cached_catalogue(
+        self, snapshot: GalleryCatalogueSnapshot | None,
+    ) -> None:
+        """Queue bounded display of a prior complete tree without authority.
+
+        Args:
+            snapshot (GalleryCatalogueSnapshot | None): Integrity-checked
+                account-and-scope-bound cached metadata, or a cache miss.
+
+        Returns:
+            None: Cached rows remain display-only until fresh reads confirm them.
+        """
+        if snapshot is None or self._destroyed:
+            return
+        self._catalogue_cache_snapshot = snapshot
+        self._catalogue_cache_ids = {
+            gallery.gallery_id for gallery in snapshot.galleries
+        }
+        self._cached_mount_rows = snapshot.galleries
+        self._cached_mount_index = 0
+        self._mount_cached_catalogue_batch()
+
+    def _mount_cached_catalogue_batch(self) -> None:
+        """Mount one bounded batch of cached or freshly confirmed tree rows.
+
+        Returns:
+            None: Fresh rows win over cache and remaining rows yield to Tk.
+        """
+        self._cached_mount_after = None
+        if self._complete_catalogue_tree is not None:
+            self._mount_complete_catalogue_batch()
+            return
+        if (self._destroyed or self._catalogue_cache_snapshot is None
+                or self._cached_mount_index >= len(self._cached_mount_rows)):
+            return
+        stop = min(
+            len(self._cached_mount_rows),
+            self._cached_mount_index + PHOTOS_CATALOGUE_CACHE_BATCH_SIZE,
+        )
+        changed: list[int] = []
+        while self._cached_mount_index < stop:
+            gallery = self._cached_mount_rows[self._cached_mount_index]
+            self._cached_mount_index += 1
+            gallery_id = gallery.gallery_id
+            if gallery_id in self._fresh_catalogue_ids:
+                continue
+            self._galleries[gallery_id] = gallery
+            changed.append(gallery_id)
+            if gallery.parent_id is not None:
+                self._children_by_parent.setdefault(
+                    gallery.parent_id, set(),
+                ).add(gallery_id)
+        if changed:
+            self._render_tree(changed)
+            for gallery_id in changed:
+                self._cache_pending.setdefault(gallery_id, (None, False))
+            self._start_cache_probe()
+            self._sync_subgalleries()
+            preferred_id = self._preferred_gallery_id
+            if (self._selected_gallery_id is None
+                    and not self._user_selected_gallery
+                    and preferred_id in changed):
+                preferred = self._galleries.get(preferred_id)
+                if preferred is not None:
+                    self._select_gallery(preferred, restore=True)
+        if self._cached_mount_index < len(self._cached_mount_rows):
+            self._schedule_cached_catalogue_batch()
+
+    def _schedule_cached_catalogue_batch(self) -> None:
+        """Schedule the next cached or complete row slice on one owned timer.
+
+        Returns:
+            None: A single delayed callback advances the cached display.
+        """
+        if self._destroyed or self._cached_mount_after is not None:
+            return
+        after_id: str | None = None
+        generation = self._generation
+        session = self._session
+        cancel = self._cancel
+
+        def mount() -> None:
+            """Advance only the cached batch callback still owned here.
+
+            Returns:
+                None: Replaced or cancelled callbacks cannot advance the tree.
+            """
+            if (after_id is None or self._cached_mount_after != after_id
+                    or self._generation != generation
+                    or self._session is not session
+                    or self._session_provider() is not session
+                    or self._cancel is not cancel or cancel.is_set()):
+                return
+            self._mount_cached_catalogue_batch()
+
+        after_id = self.after(
+            PHOTOS_CATALOGUE_CACHE_BATCH_DELAY_MS, mount,
+        )
+        self._cached_mount_after = after_id
+
+    def _cancel_cached_catalogue_mount(self) -> None:
+        """Cancel a pending cached-row batch and release its remaining rows.
+
+        Returns:
+            None: Late callbacks fail their identity check after cancellation.
+        """
+        after_id = self._cached_mount_after
+        self._cached_mount_after = None
+        if after_id is None:
+            return
+        try:
+            self.after_cancel(after_id)
+        except tk.TclError:
+            pass
+
+    def _accept_complete_catalogue(self, tree: LinkedGalleryTree) -> None:
+        """Stage a fresh full tree for bounded, difference-only UI updates.
+
+        Args:
+            tree (LinkedGalleryTree): Validated complete tree-v1 response.
+
+        Returns:
+            None: Cached display survives until the complete tree is mounted.
+        """
+        cached = self._catalogue_cache_snapshot
+        if tree.unchanged:
+            if (cached is None or cached.revision != tree.revision):
+                self._request_page(None)
+                return
+            galleries = cached.galleries
+        else:
+            galleries = tree.galleries
+        self._cancel_cached_catalogue_mount()
+        self.retry_button.pack_forget()
+        self._catalogue_cache_ids.update(self._galleries)
+        self._fresh_catalogue_ids.clear()
+        self._complete_catalogue_tree = tree
+        self._cached_mount_rows = galleries
+        self._cached_mount_index = 0
+        self._set_catalogue_loading(True)
+        self._mount_complete_catalogue_batch()
+
+    def _mount_complete_catalogue_batch(self) -> None:
+        """Confirm a bounded full-tree slice and render only changed rows.
+
+        Returns:
+            None: Unchanged mounted rows keep their widgets, expansion and focus.
+        """
+        tree = self._complete_catalogue_tree
+        if tree is None or self._destroyed or self._cancel.is_set():
+            return
+        stop = min(
+            len(self._cached_mount_rows),
+            self._cached_mount_index + PHOTOS_CATALOGUE_CACHE_BATCH_SIZE,
+        )
+        changed: list[int] = []
+        confirmed: list[int] = []
+        while self._cached_mount_index < stop:
+            gallery = self._cached_mount_rows[self._cached_mount_index]
+            self._cached_mount_index += 1
+            gallery_id = gallery.gallery_id
+            prior = self._galleries.get(gallery_id)
+            if (prior is not None and prior.parent_id is not None
+                    and prior.parent_id != gallery.parent_id):
+                children = self._children_by_parent.get(prior.parent_id)
+                if children is not None:
+                    children.discard(gallery_id)
+            self._galleries[gallery_id] = gallery
+            self._fresh_catalogue_ids.add(gallery_id)
+            confirmed.append(gallery_id)
+            if gallery.parent_id is not None:
+                self._children_by_parent.setdefault(
+                    gallery.parent_id, set(),
+                ).add(gallery_id)
+            if prior != gallery or not self.tree.exists(str(gallery_id)):
+                changed.append(gallery_id)
+        self._persist_selected_gallery_if_fresh(confirmed)
+        if changed:
+            self._render_tree(changed)
+            for gallery_id in changed:
+                self._cache_pending.setdefault(gallery_id, (None, False))
+            self._start_cache_probe()
+            self._sync_subgalleries()
+        if self._selected_gallery_id in self._fresh_catalogue_ids:
+            self.add_child_button.configure(state="normal")
+        if self._cached_mount_index < len(self._cached_mount_rows):
+            self._restore_or_choose_gallery(complete=False)
+            self._schedule_cached_catalogue_batch()
+            return
+        self._complete_catalogue_tree = None
+        self._prune_cached_catalogue_rows()
+        self._discard_unconfirmed_selection()
+        self._pages_this_pass = 1
+        self._next_after = None
+        self._has_pending_page = False
+        self._pending_cursor = None
+        self._set_catalogue_loading(False)
+        self._catalogue_cache_snapshot = GalleryCatalogueSnapshot(
+            self._cached_mount_rows, tree.revision,
+        )
+        if not self._cached_mount_rows:
+            self.tree_status.configure(text=self._text("empty"))
+            self.viewer_status.configure(text=self._text("empty"))
+        else:
+            self.tree_status.configure(text="")
+        self._restore_or_choose_gallery(complete=True)
+        if not tree.unchanged:
+            self._queue_catalogue_snapshot_save(
+                self._catalogue_cache_snapshot,
+            )
+
+    def _persist_selected_gallery_if_fresh(
+        self, fresh_ids: tuple[int, ...] | list[int],
+    ) -> None:
+        """Save a user choice only after its ID appears in a fresh response.
+
+        Args:
+            fresh_ids (tuple[int, ...] | list[int]): IDs confirmed by the
+                current full tree or one validated current page.
+
+        Returns:
+            None: Cached-only selections never become persisted preferences.
+        """
+        selected_id = self._selected_gallery_id
+        session = self._session
+        if (not self._user_selected_gallery or self._selection_saved
+                or selected_id is None or selected_id not in fresh_ids
+                or selected_id not in self._fresh_catalogue_ids
+                or session is None or self._save_selected_gallery is None):
+            return
+        try:
+            self._save_selected_gallery(session, selected_id)
+        except (OSError, TypeError, ValueError):
+            logging.debug("Photos selection preference could not be saved.")
+            return
+        self._selection_saved = True
+
+    def _restore_or_choose_gallery(self, *, complete: bool) -> None:
+        """Restore a fresh saved row or choose the established default.
+
+        Args:
+            complete (bool): Whether all current server rows are known.
+
+        Returns:
+            None: User selection wins; absent saved IDs fall back only at finish.
+        """
+        if self._user_selected_gallery or self._selected_gallery_id is not None:
+            return
+        preferred_id = self._preferred_gallery_id
+        if (preferred_id is not None
+                and preferred_id in self._fresh_catalogue_ids):
+            preferred = self._galleries.get(preferred_id)
+            if preferred is not None:
+                self._select_gallery(preferred, restore=True)
+                return
+        if preferred_id is not None and complete:
+            self._preferred_gallery_id = None
+        if self._preferred_gallery_id is None and self._fresh_catalogue_ids:
+            self._implicit_pending = True
+            self._ensure_initial_gallery()
+
+    def _prune_cached_catalogue_rows(self) -> None:
+        """Remove cached-only IDs after a successful complete page pass.
+
+        Returns:
+            None: Failed or partial page sequences retain the prior complete tree.
+        """
+        stale_ids = self._catalogue_cache_ids - self._fresh_catalogue_ids
+        for fresh_id in self._fresh_catalogue_ids:
+            item_id = str(fresh_id)
+            if not self.tree.exists(item_id):
+                continue
+            parent_id = self.tree.parent(item_id)
+            if parent_id and int(parent_id) in stale_ids:
+                self.tree.move(
+                    item_id, "", self._ordered_index("", fresh_id),
+                )
+        for stale_id in stale_ids:
+            item_id = str(stale_id)
+            if self.tree.exists(item_id):
+                self.tree.delete(item_id)
+            self._galleries.pop(stale_id, None)
+        if stale_ids:
+            self._children_by_parent = {}
+            for gallery in self._galleries.values():
+                if gallery.parent_id is not None:
+                    self._children_by_parent.setdefault(
+                        gallery.parent_id, set(),
+                    ).add(gallery.gallery_id)
+            self._sync_subgalleries()
+
+    def _discard_unconfirmed_selection(self) -> None:
+        """Release a cached-only selection after a complete fresh catalogue.
+
+        Returns:
+            None: A stale viewer cannot outlive confirmation of its gallery ID.
+        """
+        selected_id = self._selected_gallery_id
+        if (selected_id is None or selected_id in self._fresh_catalogue_ids):
+            return
+        if self._viewer is not None:
+            self._viewer.destroy()
+            self._viewer = None
+        self._clear_photo_inspector()
+        self._selected_gallery_id = None
+        self._user_selected_gallery = False
+        self._selection_saved = False
+        self.add_child_button.configure(state="disabled")
+        self._gallery_title.set("")
+        self.viewer_status.configure(text=self._text("select_gallery"))
+        self.viewer_status.pack(fill="x", padx=8, pady=8)
+        self.tree.selection_remove(*self.tree.selection())
+
+    def _queue_catalogue_snapshot_save(
+        self, snapshot: GalleryCatalogueSnapshot,
+    ) -> None:
+        """Serialize the latest complete snapshot through one worker slot.
+
+        Args:
+            snapshot (GalleryCatalogueSnapshot): Complete fresh display tree.
+
+        Returns:
+            None: At most one writer runs and one newest snapshot waits behind it.
+        """
+        cache = self._catalogue_cache
+        session = self._session
+        if (cache is None or session is None or self._destroyed
+                or self._cancel.is_set()):
+            return
+        request = (cache, snapshot, self._cancel, self._generation, session)
+        with self._catalogue_cache_writer_lock:
+            writer = self._catalogue_cache_writer
+            if writer is not None and writer.is_alive():
+                self._catalogue_cache_pending = request
+                return
+            self._catalogue_cache_pending = None
+            writer = threading.Thread(
+                target=self._write_catalogue_snapshots,
+                args=(request,),
+                name="photos-catalogue-cache",
+                daemon=True,
+            )
+            self._catalogue_cache_writer = writer
+            try:
+                writer.start()
+            except RuntimeError:
+                self._catalogue_cache_writer = None
+
+    def _write_catalogue_snapshots(
+        self, request: _CatalogueWriteRequest,
+    ) -> None:
+        """Write complete snapshots serially, retaining only the newest wait.
+
+        Args:
+            request (_CatalogueWriteRequest): Cache, immutable complete snapshot,
+                cancellation event, captured workspace generation and exact
+                session identity.
+
+        Returns:
+            None: Obsolete snapshots are skipped before local publication.
+        """
+        current: _CatalogueWriteRequest | None = request
+        while current is not None:
+            cache, snapshot, cancel, generation, session = current
+            if (not self._destroyed and not cancel.is_set()
+                    and self._generation == generation
+                    and self._session is session
+                    and self._session_provider() is session):
+                cache.save(snapshot, cancel)
+            with self._catalogue_cache_writer_lock:
+                current = self._catalogue_cache_pending
+                self._catalogue_cache_pending = None
+                if current is None:
+                    self._catalogue_cache_writer = None
 
     def _accept_page(self, page: LinkedGalleryPage | None) -> None:
         """Add one page and request its continuation when present.
@@ -1104,39 +1975,66 @@ class PhotosWorkspace(ttk.Frame):
         """
         if page is None:
             self._cancel_catalogue_continuation()
+            self._set_catalogue_loading(False)
             self.tree_status.configure(text=self._text("error"))
             self.viewer_status.configure(text=self._text("error"))
             self.retry_button.pack(side="right")
             return
         self.retry_button.pack_forget()
         page_gallery_ids: list[int] = []
+        changed_ids: list[int] = []
         for gallery in page.galleries:
+            prior = self._galleries.get(gallery.gallery_id)
+            if (prior is not None and prior.parent_id is not None
+                    and prior.parent_id != gallery.parent_id):
+                prior_children = self._children_by_parent.get(prior.parent_id)
+                if prior_children is not None:
+                    prior_children.discard(gallery.gallery_id)
             self._galleries[gallery.gallery_id] = gallery
             page_gallery_ids.append(gallery.gallery_id)
+            if (prior != gallery
+                    or not self.tree.exists(str(gallery.gallery_id))):
+                changed_ids.append(gallery.gallery_id)
+            self._fresh_catalogue_ids.add(gallery.gallery_id)
             if gallery.parent_id is not None:
                 self._children_by_parent.setdefault(
                     gallery.parent_id, set(),
                 ).add(gallery.gallery_id)
-        self._render_tree(page_gallery_ids)
-        for gallery_id in page_gallery_ids:
+        self._persist_selected_gallery_if_fresh(page_gallery_ids)
+        if changed_ids:
+            self._render_tree(changed_ids)
+        if self._selected_gallery_id in self._fresh_catalogue_ids:
+            self.add_child_button.configure(state="normal")
+        for gallery_id in changed_ids:
             self._cache_pending.setdefault(gallery_id, (None, False))
         self._start_cache_probe()
         self._sync_subgalleries()
         self._pages_this_pass += 1
         self._next_after = page.next_after
-        if self._selected_gallery_id is None and self._galleries:
-            self._implicit_pending = True
-            self._ensure_initial_gallery()
         if page.next_after is not None:
-            self.tree_status.configure(text=self._text("loading"))
+            self._restore_or_choose_gallery(complete=False)
+            self._set_catalogue_loading(True)
             if not self._catalogue_paused_for_preview:
                 self._continue_catalogue()
         else:
+            self._cancel_cached_catalogue_mount()
+            self._prune_cached_catalogue_rows()
+            self._discard_unconfirmed_selection()
+            self._restore_or_choose_gallery(complete=True)
+            self._set_catalogue_loading(False)
             if not self._galleries:
                 self.tree_status.configure(text=self._text("empty"))
                 self.viewer_status.configure(text=self._text("empty"))
             else:
                 self.tree_status.configure(text="")
+            complete_snapshot = GalleryCatalogueSnapshot(
+                tuple(sorted(
+                    self._galleries.values(),
+                    key=lambda gallery: gallery.gallery_id,
+                )),
+            )
+            self._catalogue_cache_snapshot = complete_snapshot
+            self._queue_catalogue_snapshot_save(complete_snapshot)
 
     def _first_gallery(self) -> LinkedGallery | None:
         """Choose an untried leaf gallery, falling back to an orphan row.
@@ -1144,7 +2042,11 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             LinkedGallery | None: Lowest-ID leaf, then any untried row.
         """
-        ordered = sorted(self._galleries.values(), key=lambda item: item.gallery_id)
+        ordered = sorted(
+            (gallery for gallery_id, gallery in self._galleries.items()
+             if gallery_id in self._fresh_catalogue_ids),
+            key=lambda item: item.gallery_id,
+        )
         parents = {gallery.parent_id for gallery in ordered}
         for gallery in ordered:
             if (gallery.gallery_id not in parents
@@ -1282,7 +2184,8 @@ class PhotosWorkspace(ttk.Frame):
         parent_id = gallery.parent_id
         parent_item = (
             str(parent_id)
-            if parent_id is not None and self.tree.exists(str(parent_id))
+            if (parent_id is not None and parent_id in self._galleries
+                and self.tree.exists(str(parent_id)))
             else ""
         )
         ancestor = parent_item
@@ -1313,7 +2216,7 @@ class PhotosWorkspace(ttk.Frame):
         if self._pages_this_pass >= PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT:
             if self._catalogue_after is not None:
                 return
-            self.tree_status.configure(text=self._text("loading"))
+            self._set_catalogue_loading(True)
             session = self._session
             generation = self._generation
             cancel = self._cancel
@@ -1564,7 +2467,7 @@ class PhotosWorkspace(ttk.Frame):
             return
         self._cancel_catalogue_continuation()
         self.retry_button.pack_forget()
-        self.tree_status.configure(text=self._text("loading"))
+        self._set_catalogue_loading(True)
         self._request_page(self._next_after)
 
     def _on_gallery_selected(self, _event: tk.Event) -> None:
@@ -1589,12 +2492,16 @@ class PhotosWorkspace(ttk.Frame):
 
     def _select_gallery(
         self, gallery: LinkedGallery, *, implicit: bool = False,
+        restore: bool = False,
     ) -> None:
         """Mount one exact gallery descriptor against the active session.
 
         Args:
-            gallery (LinkedGallery): Current server gallery row selected in tree.
+            gallery (LinkedGallery): Fresh or saved display descriptor selected
+                in the tree; media performs its own current authorization.
             implicit (bool): Whether this is an automatic first-preview attempt.
+            restore (bool): Whether this restores a saved preference, without
+                treating cached metadata as confirmation or a new user choice.
 
         Returns:
             None: The previous bounded viewer is replaced; its safe failure
@@ -1604,7 +2511,14 @@ class PhotosWorkspace(ttk.Frame):
         if session is None:
             return
         self._selected_gallery_id = gallery.gallery_id
-        self.add_child_button.configure(state="normal")
+        if not implicit and not restore:
+            self._user_selected_gallery = True
+            self._selection_saved = False
+            self._persist_selected_gallery_if_fresh((gallery.gallery_id,))
+        self.add_child_button.configure(
+            state=("normal" if gallery.gallery_id in self._fresh_catalogue_ids
+                   else "disabled"),
+        )
         title = ''.join(char if char.isprintable() else ' ' for char in gallery.title)
         self._gallery_title.set(title.strip() or self._text("untitled"))
         self._update_recording_rows()
@@ -1621,6 +2535,7 @@ class PhotosWorkspace(ttk.Frame):
         if self._viewer is not None:
             self._viewer.destroy()
             self._viewer = None
+        self._clear_photo_inspector()
         self.viewer_status.pack_forget()
         try:
             self._viewer = mount_native_gallery_view(
@@ -1635,6 +2550,12 @@ class PhotosWorkspace(ttk.Frame):
                 ),
                 diagnostic_callback=lambda summary: (
                     self._record_photo_diagnostic(
+                        diagnostic_generation, summary,
+                    )
+                ),
+                photo_selected=self._inspect_photo,
+                observation_callback=lambda summary: (
+                    self._record_photo_observation(
                         diagnostic_generation, summary,
                     )
                 ),
@@ -1664,12 +2585,19 @@ class PhotosWorkspace(ttk.Frame):
             self._show_preload_progress(self._preload_last)
 
     def _sync_subgalleries(self) -> None:
-        """Project the selected gallery's direct children into its folder strip.
+        """Refresh the selected title and project its direct child folder strip.
 
         Returns:
             None: The default-on switch controls only the folder cards.
         """
         parent_id = self._selected_gallery_id
+        selected = self._galleries.get(parent_id) if parent_id is not None else None
+        if selected is not None:
+            title = ''.join(
+                char if char.isprintable() else ' ' for char in selected.title
+            ).strip() or self._text("untitled")
+            if self._gallery_title.get() != title:
+                self._gallery_title.set(title)
         children = tuple(
             self._galleries[child_id]
             for child_id in sorted(self._children_by_parent.get(parent_id, ()))
@@ -2110,6 +3038,7 @@ class PhotosWorkspace(ttk.Frame):
                 if (self._session is not session
                         or self._session_provider() is not session):
                     return
+                self._invalidate_photo_info(gallery_id, deleted)
                 self._thumbnail_memory.remove_photos(gallery_id, deleted)
                 controller = getattr(
                     self._viewer, '_gallery_viewer_controller', None,
@@ -2349,6 +3278,7 @@ class PhotosWorkspace(ttk.Frame):
         session = self._session
         gallery_id = self._selected_gallery_id
         if (session is None or gallery_id is None
+                or gallery_id not in self._fresh_catalogue_ids
                 or self._session_provider() is not session):
             return None
         gallery = self._galleries.get(gallery_id)
@@ -2425,6 +3355,7 @@ class PhotosWorkspace(ttk.Frame):
         """
         self._dismiss_context()
         if (self._start_watcher is not None and self._session is session
+                and gallery.gallery_id in self._fresh_catalogue_ids
                 and self._session_provider() is session and session.can_upload()):
             self._start_watcher(session, gallery)
 
@@ -2468,7 +3399,7 @@ class PhotosWorkspace(ttk.Frame):
             self._place_context(card)
 
     def _photo_info(self, card: GlassCard, photo: LinkedPhoto) -> None:
-        """Fetch and show the selected photo's authorized metadata on demand.
+        """Show authorized photo metadata, reusing the bounded session cache.
 
         Args:
             card (GlassCard): Photo context surface.
@@ -2481,8 +3412,16 @@ class PhotosWorkspace(ttk.Frame):
         gallery_id = self._selected_gallery_id
         if session is None or gallery_id is None:
             return
+        cached = self._cached_photo_info(session, gallery_id, photo.image_id)
+        if cached is not None:
+            self._show_details(
+                card, self._text("photo_info"), cached,
+                session=session, fallback=False,
+            )
+            return
         cancel = threading.Event()
         self._probe_cancel = cancel
+        diagnostic_generation = self._generation
 
         def read() -> Callable[[], None]:
             """Fetch server metadata or build a local descriptor fallback.
@@ -2490,25 +3429,17 @@ class PhotosWorkspace(ttk.Frame):
             Returns:
                 Callable[[], None]: Tk callback rendering validated photo data.
             """
-            details: LinkedMediaDetails | None = None
-            method = getattr(session, "media_photo_info", None)
-            if callable(method):
-                try:
-                    details = method(
-                        gallery_id, photo.image_id, cancelled=cancel,
-                    )
-                except Exception:
-                    details = None
+            details = self._read_photo_info(
+                session, gallery_id, photo, cancel, diagnostic_generation,
+            )
             fields = details or {
                 "title": photo.title,
                 "size": photo.size,
                 "visibility": photo.visibility,
                 "nsfw": photo.nsfw,
             }
-            return lambda: self._show_details(
-                card, self._text("photo_info"), fields,
-                session=session,
-                fallback=details is None,
+            return lambda: self._show_context_photo_info(
+                card, session, gallery_id, photo, fields, details,
             )
 
         self._run_context(
@@ -2520,6 +3451,458 @@ class PhotosWorkspace(ttk.Frame):
                 }, session=session, fallback=True,
             ),
         )
+
+    def _read_photo_info(
+        self, session: LinkingSession, gallery_id: int, photo: LinkedPhoto,
+        cancel: threading.Event, diagnostic_generation: int,
+    ) -> LinkedMediaDetails | None:
+        """Read metadata once through the shared authorized transport owner.
+
+        Args:
+            session (LinkingSession): Captured session for this worker.
+            gallery_id (int): Exact gallery owning the descriptor.
+            photo (LinkedPhoto): Exact photo whose metadata is requested.
+            cancel (threading.Event): Consumer-owned cancellation signal.
+            diagnostic_generation (int): Captured workspace session generation.
+
+        Returns:
+            LinkedMediaDetails | None: Validated scalar server fields, or None
+                for an older unsupported server, cancellation or safe failure.
+        """
+        method = getattr(session, "media_photo_info", None)
+        if not callable(method) or cancel.is_set():
+            return None
+        try:
+            return method(gallery_id, photo.image_id, cancelled=cancel)
+        except Exception as error:
+            if not cancel.is_set():
+                _log_safe_media_failure(
+                    "media-fetch", "photo_info", error,
+                    diagnostic_callback=lambda summary: (
+                        self._record_photo_diagnostic(
+                            diagnostic_generation, summary,
+                        )
+                    ),
+                )
+            return None
+
+    def _show_context_photo_info(
+        self, card: GlassCard, session: LinkingSession, gallery_id: int,
+        photo: LinkedPhoto, fields: LinkedMediaDetails,
+        details: LinkedMediaDetails | None,
+    ) -> None:
+        """Cache validated context metadata and render its existing card view.
+
+        Args:
+            card (GlassCard): Context surface that initiated the information read.
+            session (LinkingSession): Captured authorization scope.
+            gallery_id (int): Exact gallery owning the photo.
+            photo (LinkedPhoto): Exact selected photo descriptor.
+            fields (LinkedMediaDetails): Validated response or safe local fallback.
+            details (LinkedMediaDetails | None): Server response when available.
+
+        Returns:
+            None: Cache and widget work occur together on the Tk thread.
+        """
+        if (card is not self._context_card or session is not self._session
+                or self._session_provider() is not session
+                or self._selected_gallery_id != gallery_id):
+            return
+        if details is not None:
+            self._remember_photo_info(
+                session, gallery_id, photo.image_id, details,
+            )
+        self._show_details(
+            card, self._text("photo_info"), fields,
+            session=session, fallback=details is None,
+        )
+
+    def _inspect_photo(self, photo: LinkedPhoto) -> None:
+        """Show a selected photo's safe summary and coalesce its metadata read.
+
+        Args:
+            photo (LinkedPhoto): Exact descriptor selected in the current viewer.
+
+        Returns:
+            None: At most one metadata worker runs with only the latest pending
+                photo retained for the active session and gallery.
+        """
+        session = self._session
+        gallery_id = self._selected_gallery_id
+        if session is None or gallery_id is None:
+            self._clear_photo_inspector()
+            return
+        self._inspector_generation += 1
+        generation = self._inspector_generation
+        if self._inspector_cancel is not None:
+            self._inspector_cancel.set()
+        self._inspector_pending = None
+        self._inspector_summary(photo, self._text("working"))
+        cached = self._cached_photo_info(session, gallery_id, photo.image_id)
+        if cached is not None:
+            self._render_photo_inspector(
+                photo, cached, session=session, fallback=False,
+            )
+            return
+        self._inspector_pending = (session, gallery_id, photo, generation)
+        self._start_photo_info_worker()
+
+    def _inspector_summary(self, photo: LinkedPhoto, status: str) -> None:
+        """Render the immediate safe title, size and metadata-read status.
+
+        Args:
+            photo (LinkedPhoto): Current selected gallery descriptor.
+            status (str): Localized status shown below the safe descriptor.
+
+        Returns:
+            None: No media bytes or worker result are required for this summary.
+        """
+        self._show_photo_inspector_pane()
+        title = " ".join(
+            "".join(char if char.isprintable() else " " for char in photo.title)
+            .split()
+        )
+        self._photo_inspector_heading.configure(
+            text=title or self._text("photo_info"),
+        )
+        self._photo_inspector_summary.configure(
+            text=(self._text("field_size") + ": "
+                  + (self._format_bytes(photo.size)
+                     if type(photo.size) is int
+                     else self._text("unknown"))
+                  + ("\n" + status if status else "")),
+        )
+        for child in self._photo_inspector_content.winfo_children():
+            child.destroy()
+
+    def _start_photo_info_worker(self) -> None:
+        """Start the latest queued metadata request when the single slot is free.
+
+        Returns:
+            None: One daemon reader publishes a result for Tk-thread fencing.
+        """
+        if (self._destroyed or self._inspector_worker is not None
+                or self._inspector_pending is None):
+            return
+        session, gallery_id, photo, generation = self._inspector_pending
+        self._inspector_pending = None
+        cancel = threading.Event()
+        self._inspector_cancel = cancel
+        diagnostic_generation = self._generation
+
+        def read() -> None:
+            """Fetch one authorized metadata response without touching Tk.
+
+            Returns:
+                None: The exact descriptor and optional response reach the Tk queue.
+            """
+            details = self._read_photo_info(
+                session, gallery_id, photo, cancel, diagnostic_generation,
+            )
+            self._inspector_results.put((
+                generation, session, gallery_id, photo, details,
+            ))
+
+        self._inspector_worker = threading.Thread(
+            target=read, name="photos-inspector", daemon=True,
+        )
+        try:
+            self._inspector_worker.start()
+        except RuntimeError:
+            self._inspector_worker = None
+            self._inspector_cancel = None
+            self._render_photo_inspector(
+                photo, None, session=session, fallback=True,
+            )
+            return
+        self._schedule_poll()
+
+    def _apply_photo_info_results(self) -> None:
+        """Apply current metadata results and release the single reader slot.
+
+        Returns:
+            None: Stale selections are discarded and only the latest pending
+                descriptor can start the next request.
+        """
+        while True:
+            try:
+                generation, session, gallery_id, photo, details = (
+                    self._inspector_results.get_nowait()
+                )
+            except queue.Empty:
+                break
+            if self._inspector_cancel is not None:
+                self._inspector_cancel = None
+            current_request = (
+                generation == self._inspector_generation
+                and gallery_id == self._selected_gallery_id
+            )
+            if (session is self._session
+                    and self._session_provider() is session):
+                if details is not None and current_request:
+                    self._remember_photo_info(
+                        session, gallery_id, photo.image_id, details,
+                    )
+                if current_request:
+                    self._render_photo_inspector(
+                        photo, details, session=session,
+                        fallback=details is None,
+                    )
+        if (self._inspector_worker is not None
+                and not self._inspector_worker.is_alive()):
+            self._inspector_worker = None
+            self._inspector_cancel = None
+        self._start_photo_info_worker()
+
+    def _cached_photo_info(
+        self, session: LinkingSession, gallery_id: int, image_id: int,
+    ) -> LinkedMediaDetails | None:
+        """Return and promote one entry in the current session's metadata LRU.
+
+        Args:
+            session (LinkingSession): Exact live authorization scope.
+            gallery_id (int): Exact gallery owning the photo.
+            image_id (int): Exact photo identifier.
+
+        Returns:
+            LinkedMediaDetails | None: A fresh shallow response copy for the
+                exact live session, or no currently authorized cached row.
+        """
+        if (session is not self._session
+                or self._session_provider() is not session
+                or not session.can_read_media()):
+            return None
+        key = (id(session), gallery_id, image_id)
+        cached = self._photo_info_cache.get(key)
+        if cached is None:
+            return None
+        verified_at, details = cached
+        age = time.monotonic() - verified_at
+        if not 0 <= age < PHOTOS_INFO_CACHE_FRESH_SECONDS:
+            self._photo_info_cache.pop(key, None)
+            return None
+        self._photo_info_cache.move_to_end(key)
+        return dict(details)
+
+    def _remember_photo_info(
+        self, session: LinkingSession, gallery_id: int, image_id: int,
+        details: LinkedMediaDetails,
+    ) -> None:
+        """Retain a shallow copy of validated metadata within the session LRU.
+
+        Args:
+            session (LinkingSession): Exact session that authorized the read.
+            gallery_id (int): Exact gallery owning the photo.
+            image_id (int): Exact photo identifier.
+            details (LinkedMediaDetails): Validated scalar server metadata.
+
+        Returns:
+            None: Current results receive a bounded freshness time; stale
+                sessions cannot populate the LRU.
+        """
+        if (session is not self._session
+                or self._session_provider() is not session
+                or not session.can_read_media()):
+            return
+        key = (id(session), gallery_id, image_id)
+        self._photo_info_cache[key] = (time.monotonic(), dict(details))
+        self._photo_info_cache.move_to_end(key)
+        while len(self._photo_info_cache) > PHOTOS_INFO_CACHE_ENTRY_LIMIT:
+            self._photo_info_cache.popitem(last=False)
+
+    def _clear_photo_inspector(self) -> None:
+        """Cancel pending metadata work and clear the visible inspector.
+
+        Returns:
+            None: A late read cannot repaint a replaced gallery or session.
+        """
+        self._inspector_generation += 1
+        if self._inspector_cancel is not None:
+            self._inspector_cancel.set()
+            self._inspector_cancel = None
+        self._inspector_pending = None
+        self._photo_inspector_heading.configure(text=self._text("photo_info"))
+        self._photo_inspector_summary.configure(
+            text=self._text("select_photo_hint"),
+        )
+        for child in self._photo_inspector_content.winfo_children():
+            child.destroy()
+        if self._photo_inspector_visible:
+            self.panes.forget(self.info_pane)
+            self._photo_inspector_visible = False
+
+    def _show_photo_inspector_pane(self) -> None:
+        """Show the optional metadata pane after a tile becomes selected.
+
+        Returns:
+            None: The grid keeps its full width until photo details are requested.
+        """
+        if self._photo_inspector_visible or self._destroyed:
+            return
+        available = self.panes.winfo_width() - self.tree_pane.winfo_width()
+        # Share narrow remaining space rather than imposing an unsupported
+        # Tk panedwindow "minsize" option or covering the photo grid.
+        preferred = min(PHOTOS_INFO_PANE_WIDTH, max(
+            PHOTOS_INFO_PANE_MIN_WIDTH,
+            available - PHOTOS_INFO_GRID_RESERVE_WIDTH,
+        ))
+        width = min(preferred, max(1, available // 2))
+        self.info_pane.configure(width=width)
+        self.panes.add(self.info_pane, weight=0)
+        self._photo_inspector_visible = True
+
+    def _render_photo_inspector(
+        self, photo: LinkedPhoto, fields: LinkedMediaDetails | None, *,
+        session: LinkingSession, fallback: bool,
+    ) -> None:
+        """Render shared authorized metadata groups in the right-side pane.
+
+        Args:
+            photo (LinkedPhoto): Descriptor for the captured selected photo.
+            fields (LinkedMediaDetails | None): Server response, if available.
+            session (LinkingSession): Authorization scope captured for the read.
+            fallback (bool): Whether to show the local-descriptor note.
+
+        Returns:
+            None: Only groups allowed by the current session are displayed.
+        """
+        if session is not self._session:
+            return
+        current = fields or {
+            "title": photo.title,
+            "size": photo.size,
+            "visibility": photo.visibility,
+            "nsfw": photo.nsfw,
+        }
+        self._inspector_summary(
+            photo,
+            self._text("details_fallback") if fallback
+            else self._text("photo_info_ready"),
+        )
+        groups = self._photo_info_groups(current, session)
+        for heading, rows in groups:
+            rows = [(key, value) for key, value in rows if value is not None]
+            if not rows:
+                continue
+            ttk.Label(
+                self._photo_inspector_content,
+                text=self._text(heading.removeprefix("photos_workspace_")),
+                style="Muted.TLabel",
+            ).pack(anchor="w", pady=(6, 1))
+            self._bind_photo_inspector_scroll(
+                self._photo_inspector_content.winfo_children()[-1],
+            )
+            for key, value in rows:
+                text = self._text(key.removeprefix("photos_workspace_"))
+                rendered = self._format_detail_value(key, value)
+                ttk.Label(
+                    self._photo_inspector_content,
+                    text=text + ": " + rendered,
+                    style="Card.TLabel",
+                    wraplength=(
+                        PHOTOS_INFO_PANE_WIDTH - PHOTOS_INFO_PANE_ROW_INSET
+                    ),
+                    justify="left",
+                ).pack(fill="x", anchor="w")
+                self._bind_photo_inspector_scroll(
+                    self._photo_inspector_content.winfo_children()[-1],
+                )
+        self._photo_inspector_content.update_idletasks()
+        self._photo_inspector_canvas.configure(
+            scrollregion=self._photo_inspector_canvas.bbox("all"),
+        )
+
+    def _resize_photo_inspector_content(self, _event: tk.Event) -> None:
+        """Keep the inspector scrollregion aligned with its current rows.
+
+        Args:
+            _event (tk.Event): Content-frame geometry notification.
+
+        Returns:
+            None: The scrollbar follows the complete grouped metadata content.
+        """
+        self._photo_inspector_canvas.configure(
+            scrollregion=self._photo_inspector_canvas.bbox("all"),
+        )
+
+    def _bind_photo_inspector_scroll(self, widget: tk.Misc) -> None:
+        """Route wheel input from inspector labels to its metadata viewport.
+
+        Args:
+            widget (tk.Misc): Inspector content widget beneath the pointer.
+
+        Returns:
+            None: Wheel and touchpad motion scroll only the information pane.
+        """
+        widget.bind(
+            "<MouseWheel>", self._scroll_photo_inspector, add="+",
+        )
+        widget.bind("<Button-4>", self._scroll_photo_inspector, add="+")
+        widget.bind("<Button-5>", self._scroll_photo_inspector, add="+")
+        try:
+            widget.bind(
+                "<TouchpadScroll>",
+                lambda event: self._scroll_photo_inspector(
+                    event, precise=True,
+                ),
+                add="+",
+            )
+        except tk.TclError:
+            pass
+
+    def _scroll_photo_inspector(
+        self, event: tk.Event, *, precise: bool = False,
+    ) -> None:
+        """Scroll the metadata pane using platform-adjusted wheel deltas.
+
+        Args:
+            event (tk.Event): Native mouse wheel or touchpad event.
+            precise (bool): Whether the event contains pixel-level delta data.
+
+        Returns:
+            None: The inspector canvas alone consumes the scroll distance.
+        """
+        delta = vertical_scroll_delta(self, event, precise=precise)
+        if precise:
+            bounds = self._photo_inspector_canvas.bbox("all")
+            if bounds is not None:
+                height = bounds[3] - bounds[1]
+                if height > 0 and delta:
+                    self._photo_inspector_canvas.yview_moveto(max(
+                        0.0, min(
+                            1.0,
+                            self._photo_inspector_canvas.yview()[0]
+                            - delta / height,
+                        ),
+                    ))
+        elif delta:
+            self._photo_inspector_canvas.yview_scroll(
+                -1 if delta > 0 else 1, "units",
+            )
+
+    def _resize_photo_inspector_viewport(self, event: tk.Event) -> None:
+        """Match the wrapped inspector content to the visible canvas width.
+
+        Args:
+            event (tk.Event): Canvas width after pane resizing.
+
+        Returns:
+            None: Labels wrap to fit the current pane width.
+        """
+        self._photo_inspector_canvas.itemconfigure(
+            self._photo_inspector_window, width=event.width,
+        )
+        self._photo_inspector_heading.configure(
+            wraplength=max(1, event.width - PHOTOS_INFO_PANE_HEADER_INSET),
+        )
+        self._photo_inspector_summary.configure(
+            wraplength=max(1, event.width - PHOTOS_INFO_PANE_HEADER_INSET),
+        )
+        for child in self._photo_inspector_content.winfo_children():
+            if isinstance(child, ttk.Label):
+                child.configure(wraplength=max(
+                    1, event.width - PHOTOS_INFO_PANE_ROW_INSET,
+                ))
 
     def _open_cache_context(self) -> None:
         """Open the selected gallery's existing anchored action panel.
@@ -3106,6 +4489,24 @@ class PhotosWorkspace(ttk.Frame):
             return
         if self._probe_cancel is not None:
             self._probe_cancel = None
+        groups = self._photo_info_groups(fields, session)
+        self._render_info_card(
+            card, title, groups,
+            suffix=(self._text("details_fallback") if fallback else ""),
+        )
+
+    def _photo_info_groups(
+        self, fields: LinkedMediaDetails, session: LinkingSession,
+    ) -> list[_InfoGroup]:
+        """Prepare the same authorized metadata groups for both Photos views.
+
+        Args:
+            fields (LinkedMediaDetails): Bounded scalar metadata response.
+            session (LinkingSession): Scope controlling sensitive location rows.
+
+        Returns:
+            list[_InfoGroup]: Ordered localized group keys and typed field rows.
+        """
         file_rows: list[_InfoRow] = []
         description_rows: list[_InfoRow] = []
         date_rows: list[_InfoRow] = []
@@ -3149,11 +4550,7 @@ class PhotosWorkspace(ttk.Frame):
         if session.can_read_admin_media():
             groups.append(("photos_workspace_group_location", location_rows))
         groups.append(("photos_workspace_group_access", access_rows))
-        self._render_info_card(
-            card, title, groups,
-            suffix=(self._text("details_fallback")
-                    if fallback else ""),
-        )
+        return groups
 
     def _thumbnail_settings(
         self, fields: LinkedMediaDetails,
@@ -4256,8 +5653,17 @@ class PhotosWorkspace(ttk.Frame):
         self._destroyed = True
         self._dismiss_context(restore=False)
         self._cancel_catalogue_continuation()
+        self._cancel_cached_catalogue_mount()
+        self._set_catalogue_loading(False)
         self._generation += 1
+        self._inspector_generation += 1
+        if self._inspector_cancel is not None:
+            self._inspector_cancel.set()
+            self._inspector_cancel = None
+        self._inspector_pending = None
         self._cancel.set()
+        with self._catalogue_cache_writer_lock:
+            self._catalogue_cache_pending = None
         if self._preload_worker is not None:
             self._preload_worker.stop()
         if self._cache_after is not None:
@@ -4280,3 +5686,24 @@ class PhotosWorkspace(ttk.Frame):
             self._viewer = None
         self._galleries.clear()
         self._thumbnail_memory.clear()
+
+    def _invalidate_photo_info(
+        self, gallery_id: int, image_ids: tuple[int, ...] | None = None,
+    ) -> None:
+        """Remove stale metadata after a confirmed mutation or gallery refresh.
+
+        Args:
+            gallery_id (int): Exact gallery whose metadata may have changed.
+            image_ids (tuple[int, ...] | None): Exact changed photo IDs, or None
+                to invalidate every cached photo in that gallery.
+
+        Returns:
+            None: Unrelated current-session metadata remains reusable.
+        """
+        targets = set(image_ids) if image_ids is not None else None
+        for key in tuple(self._photo_info_cache):
+            _session_id, cached_gallery, image_id = key
+            if cached_gallery == gallery_id and (
+                targets is None or image_id in targets
+            ):
+                self._photo_info_cache.pop(key, None)

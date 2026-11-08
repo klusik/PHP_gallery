@@ -6,7 +6,21 @@
       "id": "microsoft-flight-simulator",
       "name": "Microsoft Flight Simulator",
       "activity": "flight",
-      "executables": ["flightsimulator.exe", "flightsimulator2024.exe", "fsx.exe"]
+      "executables": [
+        "flightsimulator.exe", "flightsimulator2024.exe", "fsx.exe"
+      ]
+    },
+    {
+      "id": "prepar3d",
+      "name": "Prepar3D",
+      "activity": "flight",
+      "executables": ["prepar3d.exe"]
+    },
+    {
+      "id": "x-plane",
+      "name": "X-Plane",
+      "activity": "flight",
+      "executables": ["x-plane.exe"]
     },
     {
       "id": "cyberpunk-2077",
