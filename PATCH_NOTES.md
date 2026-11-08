@@ -1,5 +1,162 @@
 # Patch notes
 
+## Version 1.0.1
+
+PHP Gallery and WinApp 1.0.1 repaired browser linking on hosted installations
+and added checkpoint-based Watcher continuation during updates. The release
+corrected public-address handling through internal hosting rewrites, identified
+native HTTP requests consistently, and made connection failures easier to
+diagnose. It also preserved the original capture session and file boundary
+when a verified update continuation was available.
+
+### Highlights
+
+#### More reliable browser linking
+
+- Fixed the web server's installation-address check to use the public request
+  path instead of an internal hosting script directory. Browser approval,
+  consent forms and login returns stayed on the configured public site and
+  mount, including root and subdirectory installations.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Added the truthful, stable `PHPGalleryUploader` User-Agent to direct linking
+  JSON and media requests. This addressed hosting filters that rejected
+  unidentified requests while preserving verified HTTPS, redirect refusal,
+  response validation and existing authorization checks.
+- Added HTTPS inference for a recognizable host and optional installation
+  path entered without a scheme in Link gallery. The dialog displayed the
+  normalized address before checking it. Explicit direct localhost HTTP
+  remained supported; stored issuers and protocol URLs retained strict
+  canonical validation.
+
+#### Connection diagnostics that survived later activity
+
+- Distinguished HTTP rejection and HTML responses from a gallery explicitly
+  reporting browser linking unavailable. Added fixed categories for DNS,
+  connection, TLS and timeout failures instead of collapsing them into one
+  generic linking error. Successful classic API upload did not imply that
+  browser linking was ready.
+- Retained the latest linking outcome and the last failure with its UTC time
+  in copied diagnostics, even after later upload or simulator activity.
+  Added Browser linking and Update continuation entries plus installed/source
+  runtime, executable basename and Tk version. New failure summaries used
+  bounded fields and excluded response bodies, raw headers, credentials,
+  callback codes, request handles and raw exception messages.
+
+#### Checkpointed Watcher updates
+
+- Changed update handoff to let the current photo operation finish its
+  acknowledgement and source handling before pausing new dispatch. The queue
+  and original recorder were saved before helper launch. A 120-second settling
+  budget postponed installation when accepted work remained unresolved; the
+  game-presence observer did not block the checkpoint.
+  [#346](https://github.com/klusik/PHP_gallery/issues/346)
+- Added continuation of the same session, folder, target and original startup
+  exclusions. Screenshots created during the update remained eligible rather
+  than becoming historical files in a fresh initial scan. Recorder restoration
+  retained the session identity and appended to validated sample history with
+  an explicit update gap.
+- Bound continuation to the original profile, versions and one-use helper
+  nonce. The first resumed upload waited for durable checkpoint consumption
+  by the GUI. Explicit Stop or Quit cancelled continuation; changed targets,
+  invalid evidence and uncertain uploads retained their recovery path.
+- Required linked continuation to restore the same issuer, account, gallery
+  and exact approved scope without falling back to a saved API key. Contextual
+  Watcher access was closed before handoff and recreated only through the
+  existing approved grant. Missing or revoked access left the original files
+  available with a specific recovery reason.
+
+### Technical Details
+
+#### Backend
+
+- Updated `app/controllers/app_linking.php` to confirm the configured issuer
+  against raw `REQUEST_URI`, accepting the exact mount's `index.php` and
+  `public/index.php` entrypoints. Foreign, encoded, case-changed, path-info and
+  ambiguous paths remained refused. Host, scheme, port, trusted-proxy and
+  direct-loopback requirements retained their existing authority.
+- Added `app_linking_public_route_path()` for public start, consent, login and
+  connected-application URLs. Owner-only grant inspection kept a safe public
+  path fallback when issuance settings were unavailable, without gaining
+  linking authority or relaxing account, CSRF or grant-ownership checks.
+  The release introduced no database migration or new grant scope.
+
+#### WinApp and updater
+
+- Added typed, allowlisted response diagnostics in
+  `winapp/uploader/app_linking.py` and retained outcome/failure snapshots in
+  `winapp/uploader/app_linking_ui.py`. Updated Watcher error reporting with
+  safe phase, exception-class and source-location context rather than raw
+  exception text or private filesystem paths.
+- Added `WatcherContinuation` in `winapp/uploader/flight_jobs.py`, with a
+  16 KiB metadata limit and a 24-hour lifetime for unconsumed intent. The
+  credential-free checkpoint used verified workspace ownership, strict field
+  validation and checked publication/readback. Resume refused redirected,
+  changed, malformed or conflicting queue and recording history.
+- Added same-session restoration in `winapp/uploader/flight_recorder.py` and
+  `winapp/uploader/flight_ui.py`. Existing recording preferences were retained,
+  and the saved history was checked before subsequent samples could append.
+  No samples were invented for the update interruption.
+- Updated `winapp/uploader/update_ui.py` and
+  `winapp/uploader/update_helper.py` to prepare, bind and acknowledge the
+  checkpoint before application exit, then pass the validated restart nonce
+  as `--after-update`. Active manual imports, AI work and report finalization
+  postponed update preparation. Helper failure kept the app open and requested
+  verified continuation of its paused capture.
+- Tightened updater-ticket reads against duplicate fields, nonstandard JSON,
+  oversized data, reparse paths and file replacement. The older-helper bridge
+  required one fresh handoff, an actual installed-version transition, the exact
+  registered executable and verified original installer bytes; a completion
+  marker alone did not establish successful installation.
+
+#### Tests and documentation
+
+- Expanded `tests/app_linking_security_test.php` for rewritten public mounts,
+  direct entrypoints, public login/consent paths and owner-inspection fallback.
+  Extended WinApp transport/UI fixtures for the client identifier, HTTP/HTML
+  rejection, safe failure categories, retained diagnostics and address input.
+- Added `winapp/tests/test_watcher_continuation.py` and extended recorder,
+  queue, flight UI and updater fixtures. Covered acknowledgement-before-pause,
+  original exclusions, outage-created files, append-only sample restoration,
+  nonce/profile/scope mismatch, Stop/Quit, helper failure and the barrier before
+  first resumed dispatch. Added refusal cases for failed checkpoint consumption,
+  redirected history and ambiguous old-helper evidence.
+- Updated architecture, linking, compatibility, testing and WinApp references
+  together with the English, Czech, German and Swedish TeX manual sources.
+
+#### Upgrade compatibility and verification limits
+
+- Kept the first upgrade from WinApp 1.0.0 distinct from the new checkpoint
+  protocol: its running helper had not saved active intent or a restart nonce,
+  so it could not authorize automatic continuation. After a verified installed
+  transition, one unambiguous unfinished API-key session without an interrupted
+  accepted upload could receive an explicit Resume Watcher offer. Stopped,
+  finished or unverifiable work did not acquire automatic resume authority.
+  Eligible continuation did not require Abandon or a replacement API key.
+- Documented the complementary upgrade fixes: WinApp supplied the native HTTP
+  identifier, while rewritten-host installations needed PHP Gallery 1.0.1's
+  public-mount correction. A client-only update could not repair an older
+  server's issuer-path check.
+- Kept installed WinApp 1.0.0-to-1.0.1 upgrade acceptance separate from the
+  completed controlled Windows source restart/upload check, which used the
+  same version. Live simulator telemetry continuity through an installed
+  upgrade and power-loss recovery remained unverified. Saved settings and
+  credentials were retained; unsaved Settings fields were not update state.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery viewing behavior did not change.
+
+#### For administrators
+
+- Made linking work with the public website address on rewritten hosting and
+  provided actionable, retained diagnostics when a request or server readiness
+  check failed.
+- Enabled eligible Watcher updates to continue the original capture without
+  resetting its photo boundary or replacing credentials. Older 1.0.0 helper
+  sessions retained the explicit compatibility decision described above.
+
 ## Version 1.0.0
 
 PHP Gallery and its uploader reached 1.0.0 with a connected desktop workflow
