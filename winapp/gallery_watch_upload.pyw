@@ -130,6 +130,7 @@ from uploader.linked_upload import (
     capture_linked_source,
     delete_verified_linked_source,
     linked_target_binding,
+    verify_linked_upload_target,
     verify_linked_source,
 )
 from uploader.windows_startup import (
@@ -159,11 +160,16 @@ from uploader.models import (
 from uploader.simconnect_location import SimCameraLocation, SimConnectCameraClient, SimulatorInfo
 from uploader.simconnect_time import UtcSyncManager
 from uploader.game_presence import GamePresence
-from uploader.flight_jobs import connection_binding, read_document
+from uploader.flight_jobs import (
+    SessionPlan, WatcherContinuation,
+    WATCHER_CONTINUATION_LIFETIME_SECONDS,
+    connection_binding, read_document,
+)
 from uploader.flight_report_translations import tr
 from uploader.photos_workspace import PHOTOS_TREE_WIDTH, PhotosWorkspace
 from uploader.app_linking import LinkedGallery, LinkingSession
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
+from uploader.flight_recorder import FlightRecorder
 from uploader.windows_file_identity import assert_local_windows_profile
 from uploader.windows_display import prepare_windows_display
 from uploader.state_store import (
@@ -231,6 +237,27 @@ STAGING_ROOT = CONFIG_DIR / "staging"
 APP_DIR = Path(__file__).resolve().parent
 APP_VERSION = (APP_DIR / "VERSION").read_text(encoding="utf-8").strip()
 REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
+# Purpose: Finish a current ACK and flush accepted work before helper launch.
+# Type: float. Units: seconds. Scope: one in-app update checkpoint.
+# Consumers: WatcherApp.wait_for_update_checkpoint. Rationale: 120 seconds
+# covers ordinary uploads; a slower unresolved transfer postpones installation
+# rather than letting setup terminate its writer.
+UPDATE_CHECKPOINT_TIMEOUT_SECONDS = 120.0
+# Purpose: Observe asynchronous continuation readiness without blocking Tk.
+# Type: int. Units: milliseconds. Scope: startup and cancelled update recovery.
+# Consumers: WatcherApp._continue_update_resume. Rationale: 250 ms provides
+# responsive phase feedback without adding another network worker.
+UPDATE_CONTINUATION_POLL_MS = 250
+# Purpose: Bound waiting for an already approved saved link after restart.
+# Type: float. Units: seconds. Scope: one automatic Watcher continuation.
+# Consumers: WatcherApp._continue_update_resume. Rationale: 60 seconds allows
+# the existing bounded renewal/identity requests; missing authority stays paused.
+UPDATE_CONTINUATION_LINK_SECONDS = 60.0
+# Purpose: Bound exception class names in safe continuation diagnostics.
+# Type: int. Units: characters. Scope: Watcher resume exception summaries.
+# Consumers: WatcherApp._continue_update_resume. Rationale: 64 characters are
+# enough for locally authored class names while excluding arbitrary payloads.
+UPDATE_RESUME_EXCEPTION_CLASS_MAX_CHARS = 64
 ASSETS_DIR = APP_DIR / "assets"
 TRAY_ICON_PNG_PATH = ASSETS_DIR / "tray-icon.png"
 TRAY_ICON_ICO_PATH = ASSETS_DIR / "tray-icon.ico"
@@ -4745,6 +4772,24 @@ class AIAnalysisWorkerThread(threading.Thread):
         self.emit("warning", f"AI metadata worker failed for {filename}: {message}")
 
 
+# Poll the separate update-pause signal without changing Stop's cutoff fence.
+# Type: float. Units: seconds. Scope: one watcher scan-interval wait.
+# Consumers: WatcherThread._run_owned. Rationale: bounded responsiveness while
+# keeping update pause independent from drain_event and stop_event.
+WATCHER_UPDATE_PAUSE_POLL_SECONDS = 0.1
+# Require the host to durably consume a one-use update checkpoint before a
+# resumed watcher may begin its first scan or dispatch.
+# Type: float; Units: seconds; Scope: one prepared Watcher continuation.
+# Consumers: WatcherThread._run_owned. Rationale: 15 seconds covers ordinary
+# Tk event handling while bounding a lost host acknowledgement.
+WATCHER_CONTINUATION_ADMISSION_TIMEOUT_SECONDS = 15.0
+# Structural Win32 FILE_ATTRIBUTE_REPARSE_POINT mask used by path checks.
+# Type: int. Units: attribute bitmask. Scope: update continuation paths.
+# Consumers: WatcherThread._validate_continuation_path. Rationale: older Python
+# builds do not expose the stat module constant, so retain the documented ABI bit.
+WATCHER_REPARSE_POINT_ATTRIBUTE = getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x0400)
+
+
 class WatcherThread(threading.Thread):
     """
     Background worker that scans, uploads, and reports status events.
@@ -4794,6 +4839,7 @@ class WatcherThread(threading.Thread):
         self._watch_recursive_override = watch_recursive_override
         self.events = events
         self.stop_event = threading.Event()
+        self.update_pause_event = threading.Event()
         self._linked_lease = (LinkedTargetLease(CONFIG_DIR, linked_target.binding())
                               if linked_target is not None else None)
         # New legacy work never reads or rewrites the old unbound history.
@@ -4815,6 +4861,8 @@ class WatcherThread(threading.Thread):
         self.drain_requested_at = 0.0
         self.drain_started_monotonic = 0.0
         self.drain_error = ""
+        self._continuation_gate: threading.Event | None = None
+        self._diagnostic_phase = 'startup'
         self.simconnect_client = SimConnectCameraClient(config.simconnect_dll_path, event_sink=self.emit)
         # Publish a complete snapshot by assignment; the UI never probes SimConnect.
         self.simconnect_diagnostics = self.simconnect_client.diagnostics_snapshot()
@@ -4825,10 +4873,113 @@ class WatcherThread(threading.Thread):
         Returns:
             None: Stops observation without acknowledging unfinished files.
         """
-        self.stop_event.set()
+        with self._admission_lock:
+            self.stop_event.set()
+
+    def request_update_pause(self) -> None:
+        """Finish the current photo operation and pause before another path.
+
+        Returns:
+            None: Requests a resumable pause without setting Stop cutoff,
+                freezing the queue or interrupting an in-flight acknowledgement.
+        """
+        pause_event = getattr(self, 'update_pause_event', None)
+        if pause_event is not None:
+            lock = getattr(self, '_admission_lock', None)
+            if lock is None:
+                pause_event.set()
+            else:
+                with lock:
+                    pause_event.set()
+
+    def admit_continuation(self) -> bool:
+        """Release a resumed watcher only after its nonce is durably consumed.
+
+        Returns:
+            bool: True when a continuation gate opened; False when Stop,
+                drain or update pause already prevents safe admission. An
+                ordinary watcher without a gate is admitted unchanged.
+        """
+        gate = getattr(self, '_continuation_gate', None)
+        if gate is None:
+            return True
+        with self._admission_lock:
+            if gate.is_set():
+                return True
+            if (self.stop_event.is_set() or self.drain_event.is_set()
+                    or self._update_pause_requested()):
+                return False
+            gate.set()
+        return True
+
+    def _update_pause_requested(self) -> bool:
+        """Read the independent update pause without changing Stop state.
+
+        Returns:
+            bool: True when the worker must leave its current scan boundary.
+                Missing state is treated as unpaused for older isolated fixtures.
+        """
+        pause_event = getattr(self, 'update_pause_event', None)
+        return pause_event is not None and pause_event.is_set()
+
+    @staticmethod
+    def _validate_continuation_path(
+        value: str, folder: Path, recursive: bool,
+    ) -> Path:
+        """Validate one persisted path against the original scan boundary.
+
+        Args:
+            value (str): Absolute path recorded by the original watcher.
+            folder (Path): Exact original watched folder.
+            recursive (bool): Original recursion setting.
+
+        Returns:
+            Path: Original lexical path after proving it resolves within scope.
+
+        Raises:
+            ValueError: The path is relative, redirected, nested out of scope
+                or cannot be verified through its existing components.
+        """
+        candidate = Path(value)
+        try:
+            if not candidate.is_absolute():
+                raise ValueError("Continuation path is not absolute.")
+            root = folder.resolve(strict=True)
+            if (folder.is_symlink()
+                    or not folder.is_dir()
+                    or getattr(folder.lstat(), 'st_file_attributes', 0)
+                    & WATCHER_REPARSE_POINT_ATTRIBUTE):
+                raise ValueError("Continuation folder is redirected.")
+            resolved = candidate.resolve(strict=False)
+            if (resolved == root or not resolved.is_relative_to(root)
+                    or (not recursive and resolved.parent != root)):
+                raise ValueError("Continuation path escaped its original folder.")
+            # Resolve containment canonically, but walk the persisted lexical
+            # spelling. Windows may expand an 8.3 ancestor in `resolve()`.
+            lexical_root = Path(os.path.abspath(folder))
+            cursor = Path(os.path.abspath(candidate))
+            if cursor != lexical_root and lexical_root not in cursor.parents:
+                raise ValueError("Continuation path escaped its original folder.")
+            while True:
+                try:
+                    info = cursor.lstat()
+                except FileNotFoundError:
+                    pass
+                else:
+                    if (stat.S_ISLNK(info.st_mode)
+                            or getattr(info, 'st_file_attributes', 0)
+                            & WATCHER_REPARSE_POINT_ATTRIBUTE):
+                        raise ValueError("Continuation path is redirected.")
+                if cursor == lexical_root:
+                    break
+                cursor = cursor.parent
+            return candidate
+        except (OSError, RuntimeError):
+            raise ValueError("Continuation path could not be verified.") from None
 
     def configure_drain(
-        self, directory: Path, initial: Iterable[Path] | None, resume: bool = False
+        self, directory: Path, initial: Iterable[Path] | None,
+        resume: bool = False, *, continuation: bool = False,
     ) -> None:
         """Persist photograph admission before starting the watcher thread.
 
@@ -4837,13 +4988,64 @@ class WatcherThread(threading.Thread):
             initial (Iterable[Path] | None): Captured startup exclusions, or
                 None to capture the initial folder on the worker before REC.
             resume (bool): Restore only a previously frozen accepted file set.
+            continuation (bool): Restore an exact unfinished update continuation
+                while retaining its unfrozen original admission boundary.
 
         Returns:
             None: Binds a durable queue without scanning historical files.
 
         Raises:
-            ValueError: A resumed path escapes the original watched folder.
+            ValueError: Resume state, folder, recursion or source paths do not
+                match the original captured boundary.
         """
+        if continuation and not resume:
+            raise ValueError('Update continuation requires an existing drain manifest.')
+        continuation_row: Dict[str, Any] | None = None
+        if continuation:
+            manifest = directory / "watch-drain.json"
+            continuation_row = read_document(manifest)
+            captured_folder = (
+                getattr(self, '_watch_folder_override', None)
+                or Path(self.config.watched_folder)
+            )
+            recursive_override = getattr(self, '_watch_recursive_override', None)
+            captured_recursive = (
+                self.config.watch_recursive
+                if recursive_override is None else recursive_override
+            )
+            stored_folder = continuation_row.get('folder')
+            # Windows Path equality normalizes slash spelling but keeps this
+            # exact lexical boundary; canonical containment and reparse checks
+            # below remain independent and unchanged.
+            same_folder = (
+                isinstance(stored_folder, str)
+                and Path(stored_folder) == Path(captured_folder)
+            )
+            cutoff = continuation_row.get('cutoff')
+            initial_values = continuation_row.get('initial')
+            pending_values = continuation_row.get('pending')
+            if (type(continuation_row.get('schema_version')) is not int
+                    or continuation_row.get('schema_version') != 1
+                    or not same_folder
+                    or type(captured_recursive) is not bool
+                    or continuation_row.get('recursive') is not captured_recursive
+                    or continuation_row.get('initial_captured') is not True
+                    or continuation_row.get('frozen') is not False
+                    or type(cutoff) not in (int, float) or cutoff != 0
+                    or continuation_row.get('error') != ''):
+                raise ValueError('Update continuation no longer matches its original boundary.')
+            if (not isinstance(initial_values, list)
+                    or any(not isinstance(value, str) for value in initial_values)
+                    or not isinstance(pending_values, list)
+                    or any(not isinstance(value, str) for value in pending_values)
+                    or len(set(initial_values)) != len(initial_values)
+                    or len(set(pending_values)) != len(pending_values)
+                    or set(initial_values).intersection(pending_values)):
+                raise ValueError('Update continuation path history needs review.')
+            for value in (*initial_values, *pending_values):
+                self._validate_continuation_path(
+                    value, captured_folder, captured_recursive,
+                )
         if self.linked_target is not None:
             if self._linked_lease is None:
                 raise ValueError('Linked upload lease is unavailable.')
@@ -4861,9 +5063,11 @@ class WatcherThread(threading.Thread):
                 raise
         self.drain_manifest = directory / "watch-drain.json"
         self.initial_paths = set(initial) if initial is not None else set()
-        self.initial_captured = initial is not None
+        self.initial_captured = initial is not None or continuation
+        self._continuation_gate = threading.Event() if continuation else None
         if resume:
-            row = read_document(self.drain_manifest)
+            row = (continuation_row if continuation_row is not None
+                   else read_document(self.drain_manifest))
             if row.get("initial_captured", True) is not True:
                 raise ValueError("Watcher startup did not finish; no photos were accepted.")
             paths = row.get("pending")
@@ -4884,12 +5088,17 @@ class WatcherThread(threading.Thread):
             ):
                 raise ValueError("Initial photograph boundary is malformed.")
             self.initial_paths = {Path(value) for value in initial_values}
-            self.drain_only = row.get("frozen") is True
-            self.drain_event.set()
-            self.drain_requested_at = float(
-                row.get("cutoff") or row.get("checkpoint") or time.time()
-            )
-            self.drain_started_monotonic = time.monotonic()
+            self.drain_only = False if continuation else row.get("frozen") is True
+            if continuation:
+                self.drain_event.clear()
+                self.drain_requested_at = 0.0
+                self.drain_started_monotonic = 0.0
+            else:
+                self.drain_event.set()
+                self.drain_requested_at = float(
+                    row.get("cutoff") or row.get("checkpoint") or time.time()
+                )
+                self.drain_started_monotonic = time.monotonic()
         self.persist_drain()
 
     def persist_drain(self) -> None:
@@ -4988,15 +5197,64 @@ class WatcherThread(threading.Thread):
                 self.persist_drain()
             finally:
                 self.emit('error', self.drain_error)
+        except Exception as exc:  # noqa: BLE001
+            self.drain_error = self._unexpected_error_summary(exc)
+            self.stop_event.set()
+            try:
+                self.persist_drain()
+            except Exception:  # noqa: BLE001
+                self.drain_error += ' Recovery state could not be persisted.'
+            finally:
+                self.emit('error', self.drain_error)
         finally:
-            if gui_work is not None:
-                gui_work.close()
-            if self._linked_lease is not None:
-                self._linked_lease.release()
+            try:
+                if gui_work is not None:
+                    gui_work.close()
+            finally:
+                try:
+                    if self._linked_lease is not None:
+                        self._linked_lease.release()
+                finally:
+                    self.events.put({
+                        "kind": "watcher_start_finished",
+                        "payload": {"worker": self},
+                    })
 
-            self.events.put({
-                "kind": "watcher_start_finished", "payload": {"worker": self},
-            })
+    def _unexpected_error_summary(self, error: BaseException) -> str:
+        """Describe an unexpected worker error without its sensitive message.
+
+        Args:
+            error (BaseException): Exception caught at the watcher owner boundary.
+
+        Returns:
+            str: Fixed phase, safe class name and last local source location.
+        """
+        phase = getattr(self, '_diagnostic_phase', 'worker')
+        if phase not in {
+            'startup', 'initial_scan', 'scan', 'candidate', 'inventory',
+            'upload', 'acknowledgement', 'worker',
+        }:
+            phase = 'worker'
+        error_type = type(error).__name__
+        if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,63}', error_type) is None:
+            error_type = 'Exception'
+        source = 'unknown'
+        current = error.__traceback__
+        while current is not None:
+            code = current.tb_frame.f_code
+            if (Path(code.co_filename).name == 'gallery_watch_upload.pyw'
+                    and current.tb_frame.f_locals.get('self') is self):
+                function = code.co_name
+                if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,63}', function):
+                    source = (
+                        f'gallery_watch_upload.pyw:WatcherThread.{function}:'
+                        f'{current.tb_lineno}'
+                    )
+            current = current.tb_next
+        return (
+            f'Watcher failed phase={phase} error_type={error_type} '
+            f'source={source}; pending photographs are retained.'
+        )
 
     def _run_owned(self) -> None:
         """Observe new photographs, then drain a frozen recoverable queue.
@@ -5006,6 +5264,7 @@ class WatcherThread(threading.Thread):
         """
         folder = (getattr(self, '_watch_folder_override', None)
                   or Path(self.config.watched_folder))
+        self._diagnostic_phase = 'startup'
         recursive_override = getattr(self, '_watch_recursive_override', None)
         recursive = (self.config.watch_recursive if recursive_override is None
                      else recursive_override)
@@ -5022,7 +5281,11 @@ class WatcherThread(threading.Thread):
             self.emit("error", self.drain_error)
             return
         if not self.initial_captured:
+            if self._update_pause_requested():
+                self.persist_drain()
+                return
             try:
+                self._diagnostic_phase = 'initial_scan'
                 existing = set(iter_candidate_files(folder, recursive))
                 with self._admission_lock:
                     self.initial_paths = existing
@@ -5043,6 +5306,38 @@ class WatcherThread(threading.Thread):
                 "kind": "watcher_start_ready",
                 "payload": {"worker": self, "ignored": len(self.initial_paths)},
             })
+        gate = getattr(self, '_continuation_gate', None)
+        if gate is not None:
+            self._diagnostic_phase = 'continuation_admission'
+            deadline = (
+                time.monotonic()
+                + WATCHER_CONTINUATION_ADMISSION_TIMEOUT_SECONDS
+            )
+            while not gate.is_set():
+                if (self.stop_event.is_set() or self.drain_event.is_set()
+                        or self._update_pause_requested()):
+                    self.persist_drain()
+                    return
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    with self._admission_lock:
+                        if gate.is_set():
+                            continue
+                        self.drain_error = (
+                            'Update resume confirmation timed out; pending '
+                            'photographs are retained.'
+                        )
+                        self.stop_event.set()
+                    self.persist_drain()
+                    self.emit('error', self.drain_error)
+                    return
+                gate.wait(min(
+                    remaining, WATCHER_UPDATE_PAUSE_POLL_SECONDS,
+                ))
+            if (self.stop_event.is_set() or self.drain_event.is_set()
+                    or self._update_pause_requested()):
+                self.persist_drain()
+                return
         self.emit("info", f"Watching {folder}")
         self.emit("info", f"Upload endpoint: {upload_url}")
         self.emit(
@@ -5064,7 +5359,8 @@ class WatcherThread(threading.Thread):
             "info",
             f"Ignoring {len(self.initial_paths)} existing image file(s).",
         )
-        while not self.stop_event.is_set():
+        while (not self.stop_event.is_set()
+               and not self._update_pause_requested()):
             if (self.linked_target is not None
                     and not self.linked_target.session.can_upload()):
                 self.drain_error = "Gallery access expired. Reconnect to resume uploads."
@@ -5085,6 +5381,7 @@ class WatcherThread(threading.Thread):
                 with self._admission_lock:
                     self.drain_only = True
                     self.persist_drain()
+            self._diagnostic_phase = 'scan'
             self.scan_once(folder, upload_url)
             self.events.put({
                 "kind": "watch_scan", "payload": {"timestamp": time.time()}
@@ -5101,7 +5398,17 @@ class WatcherThread(threading.Thread):
                     )
                     self.emit("error", self.drain_error)
                     break
-            self.stop_event.wait(max(0.2, self.config.scan_interval_seconds))
+            deadline = time.monotonic() + max(
+                0.2, self.config.scan_interval_seconds,
+            )
+            while (not self.stop_event.is_set()
+                   and not self._update_pause_requested()):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                self.stop_event.wait(min(
+                    remaining, WATCHER_UPDATE_PAUSE_POLL_SECONDS,
+                ))
         self.persist_drain()
         self.emit("info", "Watcher stopped; pending photographs are retained.")
 
@@ -5132,6 +5439,8 @@ class WatcherThread(threading.Thread):
         if not hasattr(self, '_legacy_failed_paths'):
             self._legacy_failed_paths = {}
         with self._admission_lock:
+            if self._update_pause_requested():
+                return
             for path in candidates:
                 if path in self.initial_paths:
                     continue
@@ -5145,8 +5454,9 @@ class WatcherThread(threading.Thread):
             self.accepted_paths.update(admitted)
             self.persist_drain()
         for path in admitted:
-            if self.stop_event.is_set():
+            if self.stop_event.is_set() or self._update_pause_requested():
                 return
+            self._diagnostic_phase = 'candidate'
 
             # Files already present when the worker started are intentionally
             # ignored. The watched folder can contain historical images without
@@ -5200,6 +5510,7 @@ class WatcherThread(threading.Thread):
             # The old global local history has no gallery binding; never use it
             # to skip a source on a newly selected gallery.
             candidate = inventory_candidate(path, file_hash, size)
+            self._diagnostic_phase = 'inventory'
             inventory_ready = self.remote_inventory.refresh(
                 upload_url, self.config.api_key.strip(), [candidate],
                 force=True,
@@ -5235,9 +5546,12 @@ class WatcherThread(threading.Thread):
                         (path, file_hash), (0, 0.0),
                     )[1]):
                 continue
+            if self._update_pause_requested():
+                return
 
             legacy_send_started = False
             try:
+                self._diagnostic_phase = 'upload'
                 self.emit("info", f"Uploading {path.name}")
                 metadata_fields = self.sim_camera_metadata_fields(path)
                 if self.linked_target is not None:
@@ -5256,6 +5570,7 @@ class WatcherThread(threading.Thread):
                 current_work = getattr(self, '_once_work', None)
                 if current_work is not None:
                     current_work.checkpoint()
+                self._diagnostic_phase = 'acknowledgement'
                 # A path can be replaced while the immutable request is in flight.
                 # Keep the drain pending if the current file cannot be verified.
                 try:
@@ -6936,6 +7251,7 @@ class WatcherApp:
     def __init__(
         self, *, config_store: Optional[ConfigStore] = None,
         start_minimized: bool = False,
+        after_update: Optional[str] = None,
     ) -> None:
         """
         Initialize the Tkinter application and load saved configuration.
@@ -6945,6 +7261,8 @@ class WatcherApp:
                 None uses the standard per-user profile.
             start_minimized (bool): Withdraw before painting and start in the
                 tray; restore the window if a usable tray cannot be created.
+            after_update (Optional[str]): Exact non-secret helper nonce for an
+                explicitly prepared continuation, or None for ordinary startup.
         Raises:
             RuntimeError: Raised when Tkinter is not available.
 
@@ -6969,6 +7287,12 @@ class WatcherApp:
             recovery_review=self.review_linked_uncertainty,
             upload_workspace_ready=self.linked_workspace_ready,
             saved_upload_identity=self.saved_linked_upload_identity,
+            diagnostic_callback=lambda message: self.events.put(
+                (
+                    "info" if message.endswith("reason=connected") else "warning",
+                    "[linking] " + message,
+                ),
+            ),
         )
         if start_minimized:
             self.root.withdraw()
@@ -7015,6 +7339,22 @@ class WatcherApp:
             lambda: self.config.simconnect_dll_path, CONFIG_DIR
         )
         self.worker: Optional[WatcherThread] = None
+        self._after_update_nonce = after_update
+        self._gui_mode_ready = False
+        self._update_resume_attempted = False
+        self._update_resume_status = 'No update continuation requested.'
+        self._update_checkpoint_ready = False
+        self._update_continuation: Optional[WatcherContinuation] = None
+        self._resume_continuation: Optional[WatcherContinuation] = None
+        self._update_checkpoint_workers = ()
+        self._update_context_target: Optional[LinkedUploadTarget] = None
+        self._update_context_key_closed = False
+        self._update_resume_context_target: Optional[LinkedUploadTarget] = None
+        self._update_resume_context_key_closing = False
+        self._update_resume_context_key_worker: Optional[threading.Thread] = None
+        self._update_resume_preparing = False
+        self._discard_update_resume_intent()
+        self._resume_retry_available = False
         self.manual_worker: Optional[ManualUploadThread] = None
         self.preflight_worker: Optional[ImportPreflightThread] = None
         self.ai_worker: Optional[AIAnalysisWorkerThread] = None
@@ -7616,7 +7956,8 @@ class WatcherApp:
         if state == "working":
             self.flights.show_progress()
         elif state in ("pending", "blocked"):
-            self.flights.show_recovery()
+            if not self._retry_update_continuation():
+                self.flights.show_recovery()
         elif state == "active":
             self.stop()
         else:
@@ -7651,6 +7992,9 @@ class WatcherApp:
             "blocked": self.flights.text("review_pending_uploads"),
             "idle": "▶  Start Watcher",
         }
+        if (state in ('pending', 'blocked')
+                and getattr(self, '_resume_retry_available', False)):
+            labels[state] = '▶  Resume Watcher'
         self.watcher_action_button.configure(text=labels[state])
         indicator = getattr(self, "watcher_capture_label", None)
         if indicator is not None:
@@ -10170,9 +10514,642 @@ class WatcherApp:
             self.mode_owner.initialize()
         except ModeCoordinatorError:
             self.events.put(('warning', 'Upload mode needs verification before API-key work.'))
+            self.events.put({
+                'kind': 'gui_mode_initialized', 'payload': {'verified': False},
+            })
         else:
             if self.saved_linked_upload_identity() is not None:
                 self.events.put({"kind": "saved_linked_mode_ready"})
+            self.events.put({
+                'kind': 'gui_mode_initialized', 'payload': {'verified': True},
+            })
+
+    def _inspect_update_continuation(self) -> None:
+        """Inspect one prepared restart off Tk after mode initialization.
+
+        Returns:
+            None: Queues a profile-bound continuation or a fixed safe reason;
+                an ordinary startup never resumes a stopped capture.
+        """
+        if self._update_resume_attempted or not self._gui_mode_ready:
+            return
+        self._update_resume_attempted = True
+        requested = self._after_update_nonce
+
+        def inspect() -> None:
+            """Verify saved intent without touching Tk or uploading media.
+
+            Returns:
+                None: Queues only validated checkpoint metadata or a safe failure.
+            """
+            try:
+                automatic = requested is not None
+                lease = self.flights.lease
+                if lease is None:
+                    raise ValueError('The flight workspace is unavailable.')
+                saved = WatcherContinuation.load(lease)
+                if saved is not None:
+                    if (requested is None or saved.update_session != requested
+                            or saved.phase not in ('prepared', 'claimed')
+                            or APP_VERSION not in (
+                                saved.source_version, saved.target_version,
+                            )):
+                        if requested is not None:
+                            raise ValueError('No matching update continuation.')
+                        return
+                elif requested is not None:
+                    raise ValueError('The update continuation is missing.')
+                else:
+                    # Older helpers cannot pass a nonce. Admit only an actual,
+                    # verified installed-version transition plus an active API
+                    # session with no potentially interrupted accepted upload.
+                    from uploader.update_helper import find_legacy_update_ticket
+
+                    ticket = find_legacy_update_ticket(
+                        APP_VERSION, self.updates.previous_version,
+                        WATCHER_CONTINUATION_LIFETIME_SECONDS,
+                    )
+                    if ticket is None or self.mode_owner.view().state != 'legacy':
+                        return
+                    binding = connection_binding(
+                        normalize_upload_url(self.config.gallery_url),
+                        self.config.api_key,
+                    )
+                    pending = self.flights.pending(binding=binding)
+                    if len(pending) != 1:
+                        return
+                    plan = pending[0]
+                    queue_row = read_document(plan.directory / 'watch-drain.json')
+                    telemetry = read_document(plan.directory / 'session.json')
+                    if (plan.local_only or plan.completed or plan.abandoned
+                            or queue_row.get('initial_captured', True) is not True
+                            or queue_row.get('frozen') is not False
+                            or queue_row.get('cutoff') != 0
+                            or queue_row.get('error')
+                            or telemetry.get('recording_ended') is not False):
+                        return
+                    if queue_row.get('pending') != []:
+                        raise ValueError('Old-client accepted uploads need review.')
+                    saved = WatcherContinuation(
+                        plan.session_id, binding,
+                        WatcherContinuation.profile_digest(self.flights.directory),
+                        self.updates.previous_version, APP_VERSION,
+                        ticket.session_id, 'legacy', False, time.time(), 'prepared',
+                    )
+                    saved.save(lease)
+                self.events.put({
+                    'kind': 'watcher_resume_available',
+                    'payload': {'continuation': saved, 'automatic': automatic},
+                })
+            except (OSError, ValueError, RuntimeError):
+                self.events.put({
+                    'kind': 'watcher_resume_failed',
+                    'payload': {'reason': 'saved_update_state_unverified'},
+                })
+
+        threading.Thread(
+            target=inspect, name='PHPGalleryUpdateResumeInspect', daemon=True,
+        ).start()
+
+    def _continue_update_resume(self) -> None:
+        """Wait for owned writers and fresh linked authority without blocking Tk.
+
+        Returns:
+            None: Prepares one exact capture or retains an actionable safe reason.
+        """
+        record = self._resume_continuation
+        if record is None or self.exiting or self._update_resume_preparing:
+            return
+        if any(worker is not None and worker.is_alive()
+               for worker in self._update_checkpoint_workers):
+            if time.monotonic() >= self._update_resume_deadline:
+                self._update_resume_failed('prior_workers_still_running')
+                return
+            self.root.after(UPDATE_CONTINUATION_POLL_MS, self._continue_update_resume)
+            return
+        try:
+            view = self.mode_owner.view()
+            if record.mode == 'legacy':
+                if (view.state != 'legacy' or record.binding != connection_binding(
+                    normalize_upload_url(self.config.gallery_url), self.config.api_key,
+                )):
+                    raise ValueError('The saved API target changed.')
+                self._prepare_update_resume(None)
+                return
+            target_record = view.record
+            if (target_record is None or target_record.mode != 'linked'
+                    or target_record.scope != record.approved_scope
+                    or linked_target_binding(
+                        target_record.issuer, target_record.account_id,
+                        target_record.gallery_id,
+                    ) != record.binding):
+                raise ValueError('The linked gallery target changed.')
+            session = self.linking_manager.resume_upload_session(
+                target_record.issuer, target_record.account_id,
+            )
+            if session is None:
+                if time.monotonic() >= self._update_resume_deadline:
+                    self._update_resume_failed('saved_gallery_access_unavailable')
+                    return
+                self.status_var.set('Restoring the approved Watcher connection…')
+                self.root.after(
+                    UPDATE_CONTINUATION_POLL_MS, self._continue_update_resume,
+                )
+                return
+            if session.approved_scope() != record.approved_scope:
+                raise ValueError('The original linked scope changed.')
+            self._update_resume_preparing = True
+
+            def verify_target() -> None:
+                """Reverify the original gallery using the approved live account.
+
+                Returns:
+                    None: Queues the exact target or a fixed authorization failure.
+                """
+                try:
+                    target = verify_linked_upload_target(
+                        session, target_record.issuer, target_record.account_id,
+                        record.approved_scope, target_record.gallery_id,
+                    )
+                    self.events.put({
+                        'kind': 'watcher_resume_target', 'payload': {'target': target},
+                    })
+                except Exception as error:
+                    error_type = type(error).__name__
+                    if (not error_type.isidentifier()
+                            or len(error_type) > UPDATE_RESUME_EXCEPTION_CLASS_MAX_CHARS):
+                        error_type = 'Exception'
+                    self.events.put((
+                        'warning',
+                        'Watcher resume verification failed; '
+                        'operation=verify_linked_upload_target '
+                        f'error_type={error_type}.',
+                    ))
+                    self.events.put({
+                        'kind': 'watcher_resume_failed',
+                        'payload': {'reason': 'saved_gallery_access_unverified'},
+                    })
+
+            threading.Thread(
+                target=verify_target, name='PHPGalleryUpdateResumeTarget', daemon=True,
+            ).start()
+        except (OSError, ValueError, RuntimeError):
+            self._update_resume_failed('saved_target_changed')
+
+    def _update_resume_failed(self, reason: str) -> None:
+        """Leave unfinished work recoverable with a fixed non-secret diagnosis.
+
+        Args:
+            reason (str): Locally authored continuation failure identifier.
+
+        Returns:
+            None: Retains credentials and queue while showing the next action.
+        """
+        # The identifier is diagnostic data, never server text or an exception.
+        if re.fullmatch(r'[a-z_]+', reason) is None:
+            reason = 'continuation_unverified'
+        self._close_update_resume_context_key()
+        self._update_resume_status = 'stage=resume; reason=' + reason
+        self._update_resume_preparing = False
+        self._resume_continuation = None
+        messages = {
+            'prior_workers_still_running':
+                'Previous work is still finishing. Wait, then resume Watcher.',
+            'saved_gallery_access_unavailable':
+                'Reconnect the original gallery, then resume Watcher.',
+            'saved_gallery_access_unverified':
+                'The original gallery access could not be verified. Reconnect it.',
+            'saved_watcher_access_unavailable':
+                'Temporary Watcher access is unavailable. Reconnect the original gallery.',
+            'saved_target_changed':
+                'The original upload target changed. Select it before resuming.',
+            'session_claim_unverified':
+                'The saved session could not be verified. Review pending uploads.',
+            'saved_session_needs_review':
+                'Saved screenshot or flight data needs review. Copy diagnostics.',
+            'saved_update_state_unverified':
+                'The saved update state could not be verified. Review pending uploads.',
+            'continuation_worker_stopped':
+                'Watcher stopped before resume was confirmed. Review pending uploads before trying again.',
+            'saved_watcher_key_close_pending':
+                'Previous Watcher access is still being closed. Wait for confirmation, then resume Watcher.',
+        }
+        message = messages.get(
+            reason, 'Watcher could not resume. Copy diagnostics; saved work is retained.',
+        )
+        self._set_watch_start_activity(False, message)
+        self.write_log('[watcher-resume] ' + self._update_resume_status, 'warning')
+
+    def _close_update_resume_context_key(self) -> None:
+        """Revoke the exact staged contextual key after a failed resume.
+
+        Returns:
+            None: Retains ownership until a close result arrives; the key is
+                never published as an active Watcher target on this path.
+        """
+        target = getattr(self, '_update_resume_context_target', None)
+        if (not isinstance(target, LinkedUploadTarget)
+                or target.watch_key is None
+                or getattr(self, '_update_resume_context_key_closing', False)):
+            return
+        self._update_resume_context_key_closing = True
+
+        def revoke() -> None:
+            """Close one staged key off Tk and report only its outcome.
+
+            Returns:
+                None: Queues the target identity and a boolean close result.
+            """
+            try:
+                target.session.close_watch_key(target.gallery_id, target.watch_key)
+                closed = True
+            except Exception:  # noqa: BLE001
+                closed = False
+            self.events.put({
+                'kind': 'update_resume_context_key_closed',
+                'payload': {'target': target, 'closed': closed},
+            })
+
+        try:
+            worker = threading.Thread(
+                target=revoke, name='PHPGalleryResumeKeyClose', daemon=True,
+            )
+            self._update_resume_context_key_worker = worker
+            worker.start()
+        except RuntimeError:
+            self._update_resume_context_key_closing = False
+            self._update_resume_context_key_worker = None
+
+    def _finish_update_resume_context_key_close(
+        self, target: LinkedUploadTarget, closed: bool,
+    ) -> None:
+        """Release local ownership only after the exact remote close result.
+
+        Args:
+            target (LinkedUploadTarget): Staged key owner from the worker event.
+            closed (bool): True only after the server confirmed key closure.
+
+        Returns:
+            None: Detaches the matching temporary selection on success, or
+                retains it for a later close retry after failure.
+        """
+        if target is not getattr(self, '_update_resume_context_target', None):
+            return
+        self._update_resume_context_key_closing = False
+        self._update_resume_context_key_worker = None
+        if closed:
+            self._update_resume_context_target = None
+            self.linking_manager.detach_photos_watcher_target(target)
+            if (getattr(self, '_resume_retry_available', False)
+                    and getattr(self, '_resume_continuation', None) is not None):
+                self.refresh_watcher_action()
+        else:
+            self.status_var.set(
+                'Watcher access could not be closed. Review the saved session.',
+            )
+
+    def _retry_update_continuation(self) -> bool:
+        """Retry only an explicitly offered exact update continuation.
+
+        Returns:
+            bool: True when the visible Resume Watcher action starts its owned
+                retry; False leaves the ordinary passive recovery action intact.
+        """
+        if not getattr(self, '_resume_retry_available', False):
+            return False
+        try:
+            lease = self.flights.lease
+            record = WatcherContinuation.load(lease) if lease is not None else None
+            if (record is None or record.phase not in ('prepared', 'claimed')
+                    or APP_VERSION not in (record.source_version, record.target_version)):
+                return False
+        except (OSError, ValueError, RuntimeError):
+            return False
+        self._resume_continuation = record
+        self._update_resume_deadline = time.monotonic() + UPDATE_CONTINUATION_LINK_SECONDS
+        self._continue_update_resume()
+        return True
+
+    def _prepare_update_resume(
+        self, target: Optional[LinkedUploadTarget],
+    ) -> bool:
+        """Claim and prepare the same queue and telemetry off the Tk thread.
+
+        Args:
+            target (Optional[LinkedUploadTarget]): Reverified original linked
+                target, including a fresh Watcher key when required, or None
+                for the unchanged saved API-key connection.
+
+        Returns:
+            bool: True once this owner accepts responsibility for preparation.
+        """
+        record = self._resume_continuation
+        lease = self.flights.lease
+        staged_target = getattr(self, '_update_resume_context_target', None)
+        if (record is not None and record.contextual
+                and isinstance(staged_target, LinkedUploadTarget)):
+            # Never replace a key whose remote close has not been confirmed.
+            self._close_update_resume_context_key()
+            self.status_var.set(
+                'Closing previous Watcher access. Try again after it finishes.',
+            )
+            return False
+        if (record is None or lease is None or self.exiting
+                or self.worker is not None and self.worker.is_alive()):
+            return False
+        try:
+            lease.verify()
+            current = WatcherContinuation.load(lease)
+            if (current is None or current.session_id != record.session_id
+                    or current.binding != record.binding
+                    or current.profile_hash != record.profile_hash
+                    or current.source_version != record.source_version
+                    or current.target_version != record.target_version
+                    or (current.update_session
+                        and current.update_session != record.update_session)
+                    or current.mode != record.mode
+                    or current.contextual != record.contextual
+                    or current.created != record.created
+                    or current.phase not in ('preparing', 'prepared', 'claimed')):
+                raise ValueError('The update continuation changed.')
+            if record.binding != self.flights.binding():
+                raise ValueError('The continuation target changed.')
+            if record.mode == 'linked':
+                mode_record = self.mode_owner.view().record
+                if (mode_record is None
+                        or mode_record.scope != record.approved_scope
+                        or target is None
+                        or target.session.approved_scope() != record.approved_scope):
+                    raise ValueError('The original linked scope changed.')
+            plan = SessionPlan.load(self.flights.directory / record.session_id)
+            if (plan.binding != record.binding or plan.completed or plan.abandoned
+                    or plan.local_only != (record.mode == 'linked')
+                    or (target is not None and target.binding() != record.binding)
+                    or record.contextual and (
+                        target is None or target.watch_key is None
+                    )):
+                raise ValueError('The accepted session could not be verified.')
+            claimed = replace(record, phase='claimed')
+            claimed.save(lease)
+            self._resume_continuation = claimed
+            config = capture_worker_config(self.config)
+            port = self.config_store.mode_port(config)
+        except (OSError, ValueError, RuntimeError):
+            self._update_resume_failed('session_claim_unverified')
+            return False
+        self._update_resume_preparing = True
+        self._set_watch_start_activity(True, 'Reading the saved Watcher session…')
+
+        if record.contextual:
+            # The LinkingManager callback returns True to transfer this exact
+            # key. Record that ownership before any asynchronous preparation.
+            self._update_resume_context_target = target
+            self._update_resume_context_key_closing = False
+
+        def prepare() -> None:
+            """Restore immutable history while leaving the GUI responsive.
+
+            Returns:
+                None: Queues idle verified workers or a safe retained-work error.
+            """
+            worker = None
+            operation = 'read_watch_drain'
+            try:
+                row = read_document(plan.directory / 'watch-drain.json')
+                folder, recursive = row.get('folder'), row.get('recursive')
+                if not isinstance(folder, str) or not isinstance(recursive, bool):
+                    raise ValueError('The original folder could not be verified.')
+                operation = 'create_watcher'
+                worker = WatcherThread(
+                    config, self.events, target,
+                    gui_admission=(self.mode_owner, port),
+                    watch_folder_override=Path(folder),
+                    watch_recursive_override=recursive,
+                )
+                operation = 'restore_watch_drain'
+                worker.configure_drain(
+                    plan.directory, (), resume=True, continuation=True,
+                )
+                identity = (
+                    target.issuer + ' #' + str(target.gallery_id)
+                    if target is not None else normalize_upload_url(config.gallery_url)
+                )
+                operation = 'restore_flight_recorder'
+                recorder = FlightRecorder.from_session(
+                    plan.directory, identity, config.simconnect_dll_path,
+                    lambda level, message: self.events.put((level, message)),
+                )
+                self.events.put({
+                    'kind': 'watcher_resume_prepared',
+                    'payload': {
+                        'continuation': claimed, 'worker': worker,
+                        'recorder': recorder, 'target': target,
+                    },
+                })
+            except Exception as error:
+                if worker is not None and worker._linked_lease is not None:
+                    worker._linked_lease.release()
+                error_type = type(error).__name__
+                if (not error_type.isidentifier()
+                        or len(error_type) > UPDATE_RESUME_EXCEPTION_CLASS_MAX_CHARS):
+                    error_type = 'Exception'
+                self.events.put((
+                    'warning',
+                    'Watcher resume preparation failed; '
+                    'stage=resume_prepare operation='
+                    f'{operation} error_type={error_type}.',
+                ))
+                self.events.put({
+                    'kind': 'watcher_resume_failed',
+                    'payload': {'reason': 'saved_session_needs_review'},
+                })
+
+        try:
+            threading.Thread(
+                target=prepare, name='PHPGalleryUpdateResumePrepare', daemon=True,
+            ).start()
+        except RuntimeError:
+            self._update_resume_preparing = False
+            if record.contextual:
+                self._update_resume_context_target = None
+            self._update_resume_failed('saved_session_needs_review')
+            return False
+        return True
+
+    def _accept_update_resume_target(self, target: LinkedUploadTarget) -> None:
+        """Activate only the freshly verified original linked destination.
+
+        Args:
+            target (LinkedUploadTarget): Existing authority reverified off Tk.
+
+        Returns:
+            None: Requests fresh contextual access or prepares ordinary linked
+                capture; an unavailable authority leaves the queue retained.
+        """
+        record = self._resume_continuation
+        self._update_resume_preparing = False
+        if record is None or record.binding != target.binding() or self.exiting:
+            return
+        if target.session.approved_scope() != record.approved_scope:
+            self._update_resume_failed('saved_scope_changed')
+            return
+        if record.contextual:
+            if isinstance(
+                getattr(self, '_update_resume_context_target', None),
+                LinkedUploadTarget,
+            ):
+                self._close_update_resume_context_key()
+                self._resume_retry_available = True
+                self._update_resume_status = (
+                    'stage=resume; reason=saved_watcher_key_close_pending'
+                )
+                self.status_var.set(
+                    'Previous Watcher access is still being closed. Wait for '
+                    'confirmation, then resume Watcher.',
+                )
+                self.refresh_watcher_action()
+                return
+            # The existing Watcher owner independently rechecks this ID, account
+            # and scope. Ancestry is irrelevant to its exact-target verification.
+            gallery = LinkedGallery(target.gallery_id, None, target.title)
+            self.linking_manager.start_photos_watcher(
+                target.session, gallery, self._prepare_update_resume,
+                lambda _message: self._update_resume_failed(
+                    'saved_watcher_access_unavailable',
+                ),
+            )
+            return
+        if not self.linking_manager.activate_verified_resume_target(
+            target, record.binding, record.approved_scope,
+        ):
+            self._update_resume_failed('saved_gallery_mode_unverified')
+            return
+        self._prepare_update_resume(target)
+
+    def _start_prepared_update_resume(
+        self, record: WatcherContinuation, worker: WatcherThread,
+        recorder: FlightRecorder, target: Optional[LinkedUploadTarget],
+    ) -> None:
+        """Adopt prepared idle workers after rechecking the exact continuation.
+
+        Args:
+            record (WatcherContinuation): Exact claimed update checkpoint.
+            worker (WatcherThread): Prepared idle queue owner.
+            recorder (FlightRecorder): Prepared idle recorder for the same plan.
+            target (Optional[LinkedUploadTarget]): Fresh original linked
+                authority, or None for the original saved API key.
+
+        Returns:
+            None: Starts the same plan or releases prepared ownership on failure.
+        """
+        valid = record == self._resume_continuation and not self.exiting
+        if not valid:
+            if worker._linked_lease is not None:
+                worker._linked_lease.release()
+            self._close_update_resume_context_key()
+            return
+        try:
+            lease = self.flights.lease
+            if lease is None or WatcherContinuation.load(lease) != record:
+                raise ValueError('The claimed continuation changed.')
+            if self.flights.binding() != record.binding:
+                raise ValueError('The continuation target changed.')
+            plan = SessionPlan.load(self.flights.directory / record.session_id)
+            self.worker = worker
+            self.flights.resume_session(plan, recorder=recorder)
+            self.watched_folder_var.set(str(worker._watch_folder_override))
+            self.watch_recursive_var.set(bool(worker._watch_recursive_override))
+            worker.start()
+            self.refresh_utc_sync()
+            self.watcher_activity_var.set('Watch: resuming')
+            self._update_resume_status = 'stage=resume; reason=waiting_for_worker'
+            self.refresh_connection_controls()
+        except Exception:
+            self.flights.stop()
+            worker.stop()
+            if not worker.is_alive() and worker._linked_lease is not None:
+                worker._linked_lease.release()
+            self._update_resume_failed('prepared_session_changed')
+
+    def _complete_update_resume(self) -> bool:
+        """Consume the one-use checkpoint only when its worker reaches REC.
+
+        Returns:
+            bool: True for ordinary startup or a durably consumed continuation;
+                False pauses an accepted worker whose checkpoint cannot be saved.
+        """
+        record = self._resume_continuation
+        if record is None:
+            return True
+        lease = self.flights.lease
+        if (self.worker is None or self.worker.stop_event.is_set()
+                or self.worker.drain_event.is_set()
+                or self.worker._update_pause_requested()):
+            if self.worker is not None:
+                self.worker.request_update_pause()
+            self.flights.stop()
+            reason = (
+                'saved_session_needs_review'
+                if self.worker is not None and self.worker.drain_error
+                else 'continuation_worker_stopped'
+            )
+            self._update_resume_failed(reason)
+            return False
+        if record.contextual and (
+            self._update_resume_context_target is None
+            or self.worker.linked_target is not self._update_resume_context_target
+            or self._update_resume_context_key_closing
+        ):
+            self.worker.request_update_pause()
+            self.flights.stop()
+            self._update_resume_failed('saved_watcher_access_unavailable')
+            return False
+        consumed = replace(record, phase='consumed')
+        try:
+            if lease is None or WatcherContinuation.load(lease) != record:
+                raise ValueError('The continuation checkpoint changed.')
+            consumed.save(lease)
+        except (OSError, ValueError, RuntimeError):
+            if self.worker is not None:
+                self.worker.request_update_pause()
+            self.flights.stop()
+            self._update_resume_failed('continuation_consumption_unverified')
+            return False
+        if self.worker is None or not self.worker.admit_continuation():
+            # The worker's gate has not opened, so restore the exact claimed
+            # checkpoint. This makes a Stop or timeout during the durable save
+            # retryable without risking a duplicate dispatch.
+            try:
+                current = WatcherContinuation.load(lease)
+                if current != consumed:
+                    raise ValueError('The consumed checkpoint changed.')
+                record.save(lease)
+            except (OSError, ValueError, RuntimeError):
+                self.flights.stop()
+                self._update_resume_failed('continuation_consumption_unverified')
+                return False
+            self.flights.stop()
+            reason = (
+                'saved_session_needs_review'
+                if self.worker is not None and self.worker.drain_error
+                else 'continuation_worker_stopped'
+            )
+            self._update_resume_failed(reason)
+            return False
+        self._resume_continuation = None
+        if record.contextual:
+            self._contextual_watch_target = self._update_resume_context_target
+            plan = getattr(self.flights, 'plan', None)
+            self._contextual_watch_is_flight = bool(
+                plan is not None and plan.reports_enabled
+            )
+            self._update_resume_context_target = None
+            self._update_resume_context_key_closing = False
+        self._update_resume_preparing = False
+        self._resume_retry_available = False
+        self._update_resume_status = 'stage=resume; reason=watcher_running'
+        self.write_log('Watcher resumed after update using its original session.', 'success')
+        return True
 
     def _save_owned_config(self, config: WatcherConfig, *,
                            first_setup: bool = False) -> WatcherConfig:
@@ -10653,6 +11630,7 @@ class WatcherApp:
         Returns:
             None: Routes ordinary and contextual captures through shared drain.
         """
+        self._resume_retry_available = False
         self._set_watcher_recording(False)
         if not isinstance(getattr(self, "_contextual_watch_target", None), LinkedUploadTarget):
             self.flights.begin(False)
@@ -11420,22 +12398,272 @@ class WatcherApp:
             return
         self.flights.begin(True)
 
+    def prepare_update_checkpoint(self, target_version: str) -> None:
+        """Capture active Watcher intent before requesting a non-destructive pause.
+
+        Args:
+            target_version (str): Verified installer version selected for update.
+
+        Returns:
+            None: Requests a pause after the current upload acknowledgement;
+                a stopped Watcher never acquires new continuation consent.
+
+        Raises:
+            RuntimeError: Another accepted operation must finish first.
+            ValueError: The active session or mode cannot be verified.
+            OSError: A durable checkpoint cannot be prepared.
+        """
+        if (self.flights.busy() or self.api_key_revoke_running
+                or any(worker is not None and worker.is_alive() for worker in (
+                    self.manual_worker, self.ai_worker,
+                ))):
+            raise RuntimeError('Finish the current accepted operation before updating.')
+        self._update_checkpoint_ready = False
+        self._update_continuation = None
+        self._update_context_target = None
+        self._update_context_key_closed = False
+        worker = self.worker
+        if worker is not None and worker.is_alive():
+            plan = self.flights.plan
+            lease = self.flights.lease
+            if (plan is None or lease is None or worker.drain_event.is_set()
+                    or worker.stop_event.is_set() or worker.drain_error
+                    or not worker.initial_captured):
+                raise ValueError('The current Watcher must finish preparation or recovery first.')
+            lease.verify()
+            current = self.flights.pending()
+            if (len(current) != 1 or current[0].directory != plan.directory
+                    or current[0].binding != plan.binding):
+                raise ValueError('The current Watcher session could not be verified.')
+            mode = self.mode_owner.view()
+            kind = 'linked' if worker.linked_target is not None else 'legacy'
+            if ((kind == 'legacy' and mode.state != 'legacy')
+                    or (kind == 'linked' and mode.state != 'linked_active')):
+                raise ValueError('The current Watcher mode could not be verified.')
+            contextual = bool(worker.linked_target is not None
+                              and worker.linked_target.watch_key is not None)
+            record = WatcherContinuation(
+                plan.session_id, plan.binding,
+                WatcherContinuation.profile_digest(self.flights.directory),
+                APP_VERSION, target_version, '', kind, contextual,
+                time.time(), 'preparing',
+                approved_scope=mode.record.scope if kind == 'linked' and mode.record else '',
+            )
+            record.save(lease)
+            self._update_continuation = record
+            self._update_context_target = worker.linked_target if contextual else None
+            worker.request_update_pause()
+            self._set_watcher_recording(False)
+            self.status_var.set('Finishing the current upload before updating…')
+        self.flights.stop()
+        self.utc_sync.stop()
+        if self.preflight_worker is not None and self.preflight_worker.is_alive():
+            self.preflight_worker.stop()
+        self._update_checkpoint_workers = (
+            self.worker, self.flights, self.utc_sync, self.preflight_worker,
+        )
+        self._update_resume_status = 'stage=checkpoint; reason=waiting_for_acknowledged_work'
+
+    def wait_for_update_checkpoint(self) -> None:
+        """Wait off Tk for all captured writers before allowing installation.
+
+        Returns:
+            None: Releases workers and confirms durable exact-session state.
+
+        Raises:
+            TimeoutError: A current request or native worker has not settled.
+            ValueError: A queue, target or credential remains unresolved.
+            OSError: Accepted state cannot be verified on disk.
+        """
+        deadline = time.monotonic() + UPDATE_CHECKPOINT_TIMEOUT_SECONDS
+        for worker in self._update_checkpoint_workers:
+            if worker is not None and worker.is_alive():
+                worker.join(timeout=max(0.0, deadline - time.monotonic()))
+        if any(worker is not None and worker.is_alive()
+               for worker in self._update_checkpoint_workers):
+            self._update_resume_status = 'stage=checkpoint; reason=workers_still_running'
+            raise TimeoutError('Current work is still finishing; update postponed.')
+        record = self._update_continuation
+        if record is not None:
+            lease = self.flights.lease
+            if lease is None:
+                raise ValueError('The Watcher workspace owner is unavailable.')
+            lease.verify()
+            plan = SessionPlan.load(self.flights.directory / record.session_id)
+            row = read_document(plan.directory / 'watch-drain.json')
+            if (plan.completed or plan.abandoned or plan.binding != record.binding
+                    or row.get('frozen') is not False or row.get('cutoff') != 0
+                    or row.get('error') or self.worker is None
+                    or self.worker.drain_error):
+                self._update_resume_status = 'stage=checkpoint; reason=queue_needs_review'
+                raise ValueError('The Watcher queue needs review before updating.')
+            if (self.worker.linked_target is not None
+                    and self.worker.state.has_unresolved_upload()):
+                self._update_resume_status = 'stage=checkpoint; reason=upload_unconfirmed'
+                raise ValueError('An upload is unconfirmed; update postponed.')
+            target = self._update_context_target
+            if target is not None and target.watch_key is not None:
+                try:
+                    target.session.close_watch_key(target.gallery_id, target.watch_key)
+                except Exception:
+                    self._update_resume_status = 'stage=checkpoint; reason=watch_access_unconfirmed'
+                    raise ValueError('Temporary Watcher access could not be closed.') from None
+                self._update_context_key_closed = True
+            # Reobserve the final persisted queue only after its writer ended.
+            record.save(lease)
+        self._update_checkpoint_ready = True
+        self._update_resume_status = 'stage=checkpoint; reason=saved'
+
+    def bind_update_checkpoint(self, ticket: Path) -> None:
+        """Bind safe paused work to the exact independently staged helper.
+
+        Args:
+            ticket (Path): Private ticket created and validated by the helper owner.
+
+        Returns:
+            None: Publishes the nonce before the helper's proceed marker.
+
+        Raises:
+            ValueError: The checkpoint, helper or selected version changed.
+            OSError: The verified checkpoint cannot be persisted.
+        """
+        from uploader.update_helper import load_ticket
+
+        if not self._update_checkpoint_ready:
+            raise ValueError('The update checkpoint is not ready.')
+        selected = load_ticket(ticket)
+        record = self._update_continuation
+        if record is not None:
+            lease = self.flights.lease
+            if lease is None or selected.target_version != record.target_version:
+                raise ValueError('The update checkpoint target changed.')
+            record = replace(
+                record, update_session=selected.session_id, phase='prepared',
+            )
+            record.save(lease)
+            self._update_continuation = record
+        self._update_resume_status = 'stage=checkpoint; reason=handoff_bound'
+
+    def cancel_update_checkpoint(self) -> None:
+        """Retain credentials and resume the same paused work after handoff failure.
+
+        Returns:
+            None: Schedules a verified continuation after its writers settle;
+                unresolved work keeps an actionable reason instead of abandonment.
+        """
+        record = getattr(self, '_update_continuation', None)
+        if record is None:
+            return
+        if not record.update_session:
+            # This is a local cancellation before helper creation; the nonce
+            # identifies only this owned continuation, never authentication.
+            record = replace(record, update_session=os.urandom(16).hex())
+        self._resume_continuation = record
+        self._update_resume_deadline = (
+            time.monotonic() + UPDATE_CHECKPOINT_TIMEOUT_SECONDS
+        )
+        self._update_resume_status = 'stage=resume; reason=handoff_cancelled'
+        self._continue_update_resume()
+
+    def _discard_update_resume_intent(self) -> None:
+        """Persist an explicit Stop/Quit without deleting unfinished work.
+
+        Returns:
+            None: Cancels only automatic continuation; photos, telemetry,
+                credentials and accepted finalization remain with their owners.
+        """
+        owned = (
+            getattr(self, '_resume_continuation', None)
+            or getattr(self, '_update_continuation', None)
+        )
+        offered_retry = getattr(self, '_resume_retry_available', False) is True
+        self._resume_continuation = None
+        self._resume_retry_available = False
+        self._close_update_resume_context_key()
+        if owned is None and not offered_retry:
+            return
+        try:
+            lease = self.flights.lease
+            if lease is None:
+                return
+            current = WatcherContinuation.load(lease)
+            if (current is None
+                    or current.phase not in ('preparing', 'prepared', 'claimed')):
+                return
+            if owned is not None:
+                matches_owner = (
+                    current.session_id == owned.session_id
+                    and current.binding == owned.binding
+                    and (not owned.update_session
+                         or current.update_session == owned.update_session)
+                )
+            else:
+                requested_nonce = getattr(self, '_after_update_nonce', None)
+                if requested_nonce is not None and current.update_session != requested_nonce:
+                    return
+                if (APP_VERSION not in (
+                        current.source_version, current.target_version,
+                )):
+                    return
+                mode_view = self.mode_owner.view()
+                if current.mode == 'legacy':
+                    expected_binding = connection_binding(
+                        normalize_upload_url(self.config.gallery_url),
+                        self.config.api_key,
+                    )
+                    matches_owner = (
+                        mode_view.state == 'legacy'
+                        and current.binding == expected_binding
+                    )
+                elif current.mode == 'linked':
+                    mode_record = mode_view.record
+                    matches_owner = (
+                        mode_view.state == 'linked_active'
+                        and mode_record is not None
+                        and mode_record.mode == 'linked'
+                        and mode_record.scope == current.approved_scope
+                        and linked_target_binding(
+                            mode_record.issuer, mode_record.account_id,
+                            mode_record.gallery_id,
+                        ) == current.binding
+                    )
+                else:
+                    matches_owner = False
+            if matches_owner:
+                replace(
+                    current, phase='cancelled',
+                    update_session=current.update_session or os.urandom(16).hex(),
+                ).save(lease)
+        except (OSError, ValueError, RuntimeError):
+            self.write_log(
+                '[watcher-resume] stage=stop; reason=checkpoint_cancel_unverified',
+                'warning',
+            )
+
     def close(self, *, for_update: bool = False) -> None:
         """Coordinate shutdown while preserving update and import state.
 
         Args:
-            for_update (bool): Immediately terminate this app and its child
-                processes after the external update helper acknowledges readiness.
+            for_update (bool): Terminate after a durable checkpoint, released
+                upload writers and the external helper's readiness acknowledgement.
         Returns:
             None: Retains the update indicator when shutdown is deferred or
                 canceled, and clears it only before confirmed app teardown.
                 Confirmed teardown also stops the simulator-presence observer
                 and forgets any in-memory linked identity.
-                Update shutdown exits the process without waiting for threads;
-                only already persisted job state is available after restart.
+                Update shutdown requires the pre-handoff checkpoint; its existing
+                immediate exit happens only after accepted writers have settled.
         """
         self._save_ui_layout_now()
         if for_update:
+            if (getattr(self, '_update_checkpoint_ready', False) is not True
+                    or any(worker is not None and worker.is_alive()
+                           for worker in self._update_checkpoint_workers)):
+                self.write_log(
+                    'Update shutdown refused: accepted work has not checkpointed.',
+                    'error',
+                )
+                return
             self.exiting = True
             try:
                 # Children belong to this app; the standalone update helper is
@@ -11462,6 +12690,7 @@ class WatcherApp:
             return
         if self.exiting:
             return
+        self._discard_update_resume_intent()
         self.exiting = True
         self._set_watcher_recording(False)
         self.write_log("Application shutdown requested. Stopping background work safely.", "system")
@@ -11480,6 +12709,7 @@ class WatcherApp:
         for worker in (
             self.flights, self.utc_sync, self.preflight_worker, self.worker,
             self.manual_worker, self.ai_worker, self.api_key_revoke_thread,
+            getattr(self, '_update_resume_context_key_worker', None),
         ):
             if worker is None or not worker.is_alive():
                 continue
@@ -11498,6 +12728,9 @@ class WatcherApp:
                 ("import", self.manual_worker),
                 ("AI", self.ai_worker),
                 ("API-key revocation", self.api_key_revoke_thread),
+                ("Watcher key closure", getattr(
+                    self, '_update_resume_context_key_worker', None,
+                )),
             )
             if worker is not None and worker.is_alive()
         ]
@@ -12074,7 +13307,7 @@ class WatcherApp:
             self.activity_drawer.insert("", "end", iid=f"event-{index}-{int(event.timestamp * 1000)}", values=(stamp, event.level, filename, event.operation, event.message))
 
     def copy_diagnostics(self) -> None:
-        """Copy redacted diagnostics including UTC and saved flight progress.
+        """Copy redacted linking, runtime, UTC and saved flight diagnostics.
 
         Returns:
             None: Copies support text to the clipboard and records the action.
@@ -12100,10 +13333,18 @@ class WatcherApp:
                 f"App: {APP_DISPLAY_NAME}",
                 f"App version: {APP_VERSION}",
                 f"Python: {sys.version.split()[0]}",
+                f"Runtime: {'installed' if getattr(sys, 'frozen', False) else 'source'}",
+                f"Executable: {Path(sys.executable).name}",
+                f"Tk: {self.root.tk.call('info', 'patchlevel')}",
                 f"OS: {os.name}",
                 f"Gallery URL: {self.gallery_url_var.get().strip()}",
                 f"API key: {self.api_key_var.get().strip()}",
                 f"Connection: {self.connection_status_var.get()} | {self.connection_detail_var.get()}",
+                "Browser linking: " + (
+                    self.linking_manager.diagnostics_snapshot()
+                    or "No linking outcome recorded yet."
+                ),
+                f"Update continuation: {self._update_resume_status}",
                 f"Watcher: {self.watcher_activity_var.get()}",
                 f"UTC synchronization: {self.utc_sync.status()}",
                 f"Import: {self.import_activity_var.get()} | {job_summary}",
@@ -12187,6 +13428,54 @@ class WatcherApp:
             if isinstance(event, dict):
                 kind = str(event.get("kind", "") or "")
                 payload = event.get("payload", {}) if isinstance(event.get("payload", {}), dict) else {}
+                if kind == 'gui_mode_initialized':
+                    self._gui_mode_ready = payload.get('verified') is True
+                    if self._gui_mode_ready:
+                        self._inspect_update_continuation()
+                    else:
+                        self._update_resume_status = 'stage=resume; reason=mode_unverified'
+                    continue
+                if kind == 'watcher_resume_available':
+                    record = payload.get('continuation')
+                    if isinstance(record, WatcherContinuation):
+                        self._resume_continuation = record
+                        self._resume_retry_available = True
+                        self._update_resume_deadline = (
+                            time.monotonic() + UPDATE_CONTINUATION_LINK_SECONDS
+                        )
+                        self._update_resume_status = 'stage=resume; reason=verifying_saved_target'
+                        if payload.get('automatic') is True:
+                            self._continue_update_resume()
+                        else:
+                            # Old versions never persisted whether a pending
+                            # session was active at update time. Offer explicit
+                            # continuation without inventing startup consent.
+                            self._update_resume_status = 'stage=resume; reason=legacy_confirmation_required'
+                            self.status_var.set(
+                                'An older version left unfinished Watcher work. '
+                                'Resume Watcher continues the original session.',
+                            )
+                            self.refresh_watcher_action()
+                    continue
+                if kind == 'watcher_resume_failed':
+                    self._update_resume_failed(str(payload.get('reason', 'continuation_unverified')))
+                    continue
+                if kind == 'watcher_resume_target':
+                    target = payload.get('target')
+                    if isinstance(target, LinkedUploadTarget):
+                        self._accept_update_resume_target(target)
+                    continue
+                if kind == 'watcher_resume_prepared':
+                    record, worker, recorder, target = (
+                        payload.get('continuation'), payload.get('worker'),
+                        payload.get('recorder'), payload.get('target'),
+                    )
+                    if (isinstance(record, WatcherContinuation)
+                            and isinstance(worker, WatcherThread)
+                            and isinstance(recorder, FlightRecorder)
+                            and (target is None or isinstance(target, LinkedUploadTarget))):
+                        self._start_prepared_update_resume(record, worker, recorder, target)
+                    continue
                 if kind in ("watcher_start_ready", "watcher_start_finished"):
                     if payload.get("worker") is not self.worker:
                         continue
@@ -12198,10 +13487,20 @@ class WatcherApp:
                         if (self.worker.is_alive()
                                 and not self.worker.stop_event.is_set()
                                 and not self.worker.drain_event.is_set()):
+                            if not self._complete_update_resume():
+                                continue
                             self.status_var.set("Running")
                             self.watcher_activity_var.set("Watch: running")
                             self._set_watcher_recording(True, self.worker.linked_target)
                             self.write_log("Watcher started.", "success")
+                    elif (getattr(self, '_resume_continuation', None) is not None
+                            and getattr(self, '_update_resume_preparing', False)):
+                        reason = (
+                            'saved_session_needs_review'
+                            if self.worker.drain_error
+                            else 'continuation_worker_stopped'
+                        )
+                        self._update_resume_failed(reason)
                     elif (self.worker.drain_error
                             or not self.worker.initial_captured
                             or getattr(self, "_watch_start_pending", False) is True):
@@ -12353,6 +13652,12 @@ class WatcherApp:
                         else:
                             self.status_var.set("Watcher access could not be closed. Retry.")
                         self.refresh_watcher_action()
+                elif kind == 'update_resume_context_key_closed':
+                    target = payload.get('target')
+                    if isinstance(target, LinkedUploadTarget):
+                        self._finish_update_resume_context_key_close(
+                            target, payload.get('closed') is True,
+                        )
                 elif kind == "saved_linked_mode_ready":
                     self.linked_target_changed()
                 elif kind == "linking_resume_startup":
@@ -12677,8 +13982,9 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
             name.
 
     Returns:
-        argparse.Namespace: once/startup/configure_startup boolean mode flags
-            and config string path; modes are mutually exclusive.
+        argparse.Namespace: once/startup/configure_startup boolean mode flags,
+            optional after_update nonce and config string path; operating modes
+            are mutually exclusive.
     """
     parser = argparse.ArgumentParser(description="Watch a folder and upload new images to PHP Gallery.")
     modes = parser.add_mutually_exclusive_group()
@@ -12691,8 +13997,13 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         "--configure-startup", action="store_true",
         help="Apply the saved per-user Windows startup preference without a UI.",
     )
+    modes.add_argument('--after-update', metavar='SESSION', help=argparse.SUPPRESS)
     parser.add_argument("--config", default=str(CONFIG_PATH), help="Path to a config JSON file.")
-    return parser.parse_args(argv)
+    result = parser.parse_args(argv)
+    if (result.after_update is not None
+            and re.fullmatch(r'[0-9a-f]{32}', result.after_update) is None):
+        parser.error('Invalid update restart identity.')
+    return result
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -12729,7 +14040,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.startup and not config.start_with_windows:
             synchronize_startup(False)
             return 0
-        app = WatcherApp(config_store=store, start_minimized=args.startup)
+        if args.after_update is None:
+            app = WatcherApp(config_store=store, start_minimized=args.startup)
+        else:
+            app = WatcherApp(
+                config_store=store, start_minimized=False,
+                after_update=args.after_update,
+            )
         app.instance = instance
         app.root.after(ACTIVATION_POLL_MS, app.poll_instance_activation)
         app.run()

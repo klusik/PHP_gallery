@@ -67,6 +67,44 @@ class UpdateApplication(Protocol):
         """
         ...
 
+    def prepare_update_checkpoint(self, target_version: str) -> None:
+        """Pause new dispatch without interrupting a returning upload.
+
+        Args:
+            target_version (str): Verified installer version selected by the user.
+
+        Returns:
+            None: Captures existing work and requests a safe pause on Tk.
+        """
+        ...
+
+    def wait_for_update_checkpoint(self) -> None:
+        """Wait off Tk for acknowledged work and durable continuation state.
+
+        Returns:
+            None: Existing workers released ownership and state is durable.
+        """
+        ...
+
+    def bind_update_checkpoint(self, ticket: Path) -> None:
+        """Bind the saved continuation to the helper that owns this update.
+
+        Args:
+            ticket (Path): Already validated private helper ticket.
+
+        Returns:
+            None: Publishes the helper nonce before installation can proceed.
+        """
+        ...
+
+    def cancel_update_checkpoint(self) -> None:
+        """Resume the same safe paused capture after a handoff failure.
+
+        Returns:
+            None: Restores work or leaves its concrete recovery reason visible.
+        """
+        ...
+
 
 UPDATE_CHECK_INTERVAL_SECONDS = 3600
 # Purpose: Bound how many persisted state bytes are read before cache validation.
@@ -163,6 +201,11 @@ class UpdateController:
         self.worker: Optional[threading.Thread] = None
         local = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
         self.state_path = local / "PHPGalleryUploader" / "updates" / "state.json"
+        try:
+            previous = read_update_state(self.state_path).get('version', '')
+            self.previous_version = previous if isinstance(previous, str) else ''
+        except (OSError, ValueError, TypeError):
+            self.previous_version = ''
         self.root.after(200, self.poll)
         self.cached_offer_loaded = False
         self.root.after(1500, self.automatic_check)
@@ -470,10 +513,11 @@ class UpdateController:
         self.run_worker(work)
 
     def install(self) -> None:
-        """Hand off the installer without waiting for application workers.
+        """Prepare accepted work before handing off the verified installer.
 
         Returns:
-            None: Prepares the helper or opens a source-mode installer.
+            None: Starts the bounded checkpoint/helper handoff, postpones
+                unsafe work, or opens a source-mode installer manually.
         """
         if self.busy or self.installer is None or self.asset is None or self.gate.active:
             return
@@ -486,13 +530,38 @@ class UpdateController:
             return
         self.gate.begin()
         self.action.configure(state="disabled")
-        self.set_status("Preparing the external update helper...")
+        try:
+            self.app.prepare_update_checkpoint(self.asset.version)
+        except (OSError, ValueError, RuntimeError):
+            self.gate.cancel()
+            try:
+                # The app hook may have durably prepared a continuation before
+                # a later checkpoint step refused; always request its recovery.
+                self.app.cancel_update_checkpoint()
+            except (OSError, ValueError, RuntimeError):
+                self.app.write_log(
+                    "Update continuation cancellation needs review.", "warning",
+                )
+            self.set_status(
+                "Update postponed: current work could not be safely checkpointed. "
+                "The application remains open; see diagnostics.",
+            )
+            self.action.configure(state="normal")
+            return
+        self.set_status("Finishing current uploads and saving Watcher state…")
         self.run_worker(self.handoff)
 
     def handoff(self) -> None:
-        """Require the external helper's readiness acknowledgment before app exit."""
+        """Checkpoint accepted work before the helper may install or exit.
+
+        Returns:
+            None: Queues helper readiness only after a durable exact-session
+                checkpoint and its helper binding; errors retain the app.
+        """
         from uploader.update_helper import prepare_helper, launch_helper
+        self.app.wait_for_update_checkpoint()
         ticket = prepare_helper(self.installer, self.asset.version, self.asset.sha256, self.asset.size)
+        self.app.bind_update_checkpoint(ticket)
         launch_helper(ticket)
         if self.installer is not None:
             from uploader.self_update import retire_download_session
@@ -562,6 +631,7 @@ class UpdateController:
                 self.cancel_button.configure(state="disabled")
             elif kind == "error":
                 self.gate.cancel()
+                self.app.cancel_update_checkpoint()
                 self.set_status("Update stopped: " + value)
                 if self.window is not None:
                     self.action.configure(

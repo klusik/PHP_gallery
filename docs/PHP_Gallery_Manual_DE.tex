@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.0.0}
-\newcommand{\manualdate}{7.~November~2026}
+\newcommand{\version}{1.0.1}
+\newcommand{\manualdate}{8.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1996,7 +1996,10 @@ gültige Sicherung wieder her; eine fehlende Datei nutzt weiter die
 Erststartvorgaben. Windows-Reparse-Punkte und Ausfallsicherheit bei Stromverlust
 sind noch nicht qualifiziert.
 Klicken Sie im Hauptfenster auf \ui{Link gallery}. Fügen Sie die Galerieadresse
-aus dem Browser ein und bestätigen Sie mit \ui{Link gallery}. Auf demselben
+aus dem Browser ein und bestätigen Sie mit \ui{Link gallery}.
+Host und Installationspfad können Sie auch ohne Protokoll eingeben.
+Beim Bestätigen ergänzt WinApp \texttt{https://} und zeigt die normalisierte
+Adresse vor der Prüfung der Galerie. Auf demselben
 Computer kann die Galerie eine HTTP-Adresse auf \texttt{localhost} verwenden.
 Entfernte Installationen verwenden geprüftes HTTPS.
 Der Dialog zeigt den Fortschritt bis zur Genehmigung.
@@ -2005,6 +2008,17 @@ neuen Versuch. Melden Sie sich im Browser als Administrator an und klicken
 Sie auf \ui{Genehmigen}. Kehren Sie bei \ui{Approval received} zu WinApp
 zurück. WinApp zeigt die Adresse der verbundenen Website und lädt die erste
 Galerieseite automatisch. Mit \ui{Abbrechen} lehnen Sie die Anfrage ab.
+
+Kopieren Sie bei einem Verbindungsfehler die WinApp-Diagnose. Der eigene
+Eintrag für die Browserverbindung behält den letzten Fehler, die
+Anfragephase, den HTTP-Status und den Antworttyp einschließlich erkannter
+Hosting-Prüfseiten. Er unterscheidet eine blockierte Anfrage von einer
+Galerie, die die Verbindung als nicht verfügbar meldet. Zugangsdaten und
+unverarbeitete Antwortinhalte werden nicht übernommen.
+Verwenden Sie die öffentliche Website-URL mit ihrem öffentlichen Unterpfad,
+falls erforderlich. Interne Hosting-Verzeichnisse gehören nicht in die
+Verbindungsadresse. Bei internen Pfadumschreibungen prüft PHP Gallery~1.0.1
+den öffentlichen Installationspfad.
 
 Die drei Punkte neben \ui{Unlink gallery} öffnen die Verbindungsübersicht.
 Unter \ui{Aktiv verbunden} wechseln Sie mit der bestehenden Genehmigung.
@@ -2533,13 +2547,22 @@ identische Installer in mehreren CMS-Releases werden akzeptiert.
 Galerie-Zugangsdaten werden nie an GitHub gesendet.
 
 \ui{Update} lädt den Installer mit Fortschritt und Abbruchmöglichkeit herunter
-und prüft ihn. Sobald der externe Hilfsprozess seine Bereitschaft bestätigt,
-beendet die Anwendung ihre eigenen Arbeitskindprozesse und sofort den gesamten
-Uploader-Prozess. Sie wartet nicht auf Threads und bietet keinen Verbleib im
-Tray an. Scheitert die Vorbereitung des Helfers, bleibt die Anwendung offen.
-Bereits gespeicherte Einstellungen, Zugangsdaten und Aufgabencheckpoints
-bleiben erhalten; ungespeicherte Einstellungen und noch nicht geschriebene
-Arbeit werden beim sofortigen Beenden nicht gespeichert. Der Helfer prüft den
+und prüft ihn. Ein aktiver Watcher beendet den aktuellen bestätigten
+Fototransfer, speichert seine Warteschlange und schreibt die ursprüngliche
+Aufzeichnung vor dem Helferstart. Ungeklärte Arbeit verschiebt die Installation
+nach 120~Sekunden; die Spielerkennung blockiert sie nicht. Beenden Sie einen
+manuellen Import, eine KI-Aufgabe oder Berichtserstellung zuerst. Bei einem
+Helferfehler bleibt die Anwendung offen. Nach dem Update werden dieselbe
+Sitzung, derselbe Ordner, dasselbe Ziel und die ursprüngliche Dateigrenze
+fortgesetzt. Während der Installation erstellte Bilder bleiben zulässig.
+Telemetrie behält ihre Identität und markiert die Unterbrechung. Stop oder
+Beenden verwirft die Fortsetzung. Verknüpfte Aufnahmen benötigen dasselbe
+Konto, dieselbe Galerie und denselben Berechtigungsumfang. Ältere Versionen
+ohne gespeicherte Laufabsicht bieten für geprüfte offene Arbeit
+\ui{Resume Watcher}; diese Auswahl bleibt ausdrücklich. Abandon oder ein neuer
+API-Schlüssel sind dafür nicht nötig. Gespeicherte Einstellungen und
+Zugangsdaten bleiben erhalten; ungespeicherte Felder werden nicht übernommen.
+Der Helfer prüft den
 Installer erneut, wartet auf das Ende der installierten Anwendung, fordert
 Windows-UAC-Zustimmung an, installiert und prüft die neue Version und startet
 den Uploader als ursprünglicher Benutzer. Installationsfortschritt bleibt

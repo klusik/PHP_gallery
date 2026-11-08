@@ -683,6 +683,80 @@ class FlightUITests(unittest.TestCase):
                         ["pause", "start"],
                     )
 
+    def test_verified_resume_reuses_single_pending_plan_and_saved_preferences(self) -> None:
+        """Resume one caller-authorized session without replacing its plan.
+
+        Returns:
+            None: The same directory, plan bytes and binding survive; disabled
+                recording pauses the existing recorder before it starts.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            host = self._host()
+            ui = self._ui(host)
+            ui.directory = Path(temporary)
+            ui.lease = Mock()
+            ui.is_alive = Mock(return_value=False)
+            ui.preferences = FlightPreferences(recording=False)
+            ui.binding.return_value = "b" * 64
+            directory = ui.directory / ("a" * 32)
+            directory.mkdir()
+            plan = SessionPlan(
+                directory, "b" * 64, ("en", "cs"), True,
+                local_only=False,
+            )
+            plan.save()
+            before = (directory / "completion.json").read_bytes()
+            ui.pending.return_value = [plan]
+            ui.refresh_dispatch_status = Mock()
+            recorder = Mock()
+            recorder.directory = directory
+            dispatch = Mock()
+            with patch.object(
+                flight_ui.FlightRecorder, "from_session", return_value=recorder,
+            ) as restore, patch.object(
+                flight_ui, "load_dispatch", return_value=dispatch,
+            ):
+                result = flight_ui.FlightUI.resume_session(ui, plan)
+
+            self.assertEqual(directory, result)
+            self.assertEqual(plan, SessionPlan.load(directory))
+            self.assertEqual(before, (directory / "completion.json").read_bytes())
+            ui.lease.verify.assert_called()
+            restore.assert_called_once()
+            dispatch_loader = restore.call_args.args[0]
+            self.assertEqual(directory, dispatch_loader)
+            recorder.pause.assert_called_once_with()
+            recorder.start.assert_called_once_with()
+            self.assertIs(ui.active_dispatch, dispatch)
+            self.assertEqual(directory, ui.active_dispatch_directory)
+
+    def test_resume_refuses_multiple_pending_sessions_without_starting_recorder(self) -> None:
+        """Reject ambiguous continuation instead of picking an old session.
+
+        Returns:
+            None: A caller-selected plan is insufficient when the current
+                binding has more than one unfinished candidate.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            host = self._host()
+            ui = self._ui(host)
+            ui.directory = Path(temporary)
+            ui.lease = Mock()
+            ui.is_alive = Mock(return_value=False)
+            directory = ui.directory / ("a" * 32)
+            other_directory = ui.directory / ("c" * 32)
+            directory.mkdir()
+            other_directory.mkdir()
+            plan = SessionPlan(directory, "b" * 64, ("en",), False)
+            other = SessionPlan(other_directory, "b" * 64, ("en",), False)
+            plan.save()
+            other.save()
+            ui.pending.return_value = [plan, other]
+            with patch.object(flight_ui.FlightRecorder, "from_session") as restore:
+                with self.assertRaisesRegex(ValueError, "no longer matches"):
+                    flight_ui.FlightUI.resume_session(ui, plan)
+            restore.assert_not_called()
+
     def test_recording_switch_pauses_and_resumes_without_stopping_photos(self) -> None:
         """Apply saved recording choices to the active shared flight session.
 

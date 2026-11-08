@@ -30,9 +30,9 @@ if str(WINAPP_DIR) not in sys.path:
 from uploader.flight_workflow import FinalizationWorker
 
 # Purpose: Bound completion of the synthetic initial-folder worker.
-# Type: float. Units: seconds. Scope: startup exclusion regression only.
-# Consumers: test_interrupted_initial_scan_never_admits_historical_photos.
-# Rationale: Three seconds expose a deadlock without hanging hosted discovery.
+# Type: float. Units: seconds. Scope: bounded watcher lifecycle regressions.
+# Consumers: startup exclusion and update continuation worker tests.
+# Rationale: Three seconds expose a stuck worker without hanging discovery.
 PREPARATION_WAIT_SECONDS = 3.0
 
 
@@ -97,6 +97,7 @@ class WatchDrainTests(unittest.TestCase):
         watcher._linked_lease = None
         watcher.events = queue.Queue()
         watcher.stop_event = threading.Event()
+        watcher.update_pause_event = threading.Event()
         watcher.state = self.main.UploadState(workspace / "upload-state.json")
         watcher.stability = mock.Mock()
         watcher.stability.stable.return_value = True
@@ -113,6 +114,7 @@ class WatchDrainTests(unittest.TestCase):
         watcher.drain_manifest = None
         watcher.drain_requested_at = 0.0
         watcher.drain_error = ""
+        watcher._diagnostic_phase = "startup"
         watcher.simconnect_client = mock.Mock()
         watcher.simconnect_client.dll_resolution_message.return_value = (
             "Fixture SimConnect.dll unavailable"
@@ -123,6 +125,263 @@ class WatchDrainTests(unittest.TestCase):
             return_value={"uploaded": 1, "scanned": 1}
         )
         return watcher
+
+    def test_update_continuation_keeps_original_exclusions_without_stop_cutoff(self) -> None:
+        """Scan only new downtime arrivals under the original unfrozen boundary.
+
+        Returns:
+            None: Historical files remain excluded and the new file is ACKed
+                without setting drain_event, freezing or inventing a cutoff.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'watch'
+            workspace = root / 'session'
+            folder.mkdir()
+            workspace.mkdir()
+            old_photo = folder / 'already-present.jpg'
+            old_photo.write_bytes(b'historical screenshot')
+            first = self.make_watcher(folder, workspace)
+            first.configure_drain(workspace, {old_photo})
+            new_photo = folder / 'arrived-during-update.jpg'
+            new_photo.write_bytes(b'new screenshot')
+
+            resumed = self.make_watcher(folder, workspace)
+            resumed.configure_drain(
+                workspace, None, resume=True, continuation=True,
+            )
+            self.assertTrue(resumed.initial_captured)
+            manifest = self.main.read_document(workspace / "watch-drain.json")
+            self.assertIs(manifest["initial_captured"], True)
+            # Model the host's durable consumed-marker acknowledgement before
+            # letting this continuation worker pass its admission gate.
+            self.assertTrue(resumed.admit_continuation())
+            self.assertFalse(resumed.drain_event.is_set())
+            self.assertFalse(resumed.drain_only)
+            self.assertEqual(0.0, resumed.drain_requested_at)
+            resumed.upload_watched_file.side_effect = (
+                lambda *_args: (
+                    resumed.request_update_pause()
+                    or {"uploaded": 1, "scanned": 1}
+                )
+            )
+
+            worker = threading.Thread(
+                target=resumed._run_owned,
+                name="watch-continuation-regression",
+                daemon=True,
+            )
+            worker.start()
+            worker.join(PREPARATION_WAIT_SECONDS)
+            if worker.is_alive():
+                resumed.request_update_pause()
+                resumed.stop_event.set()
+                worker.join(PREPARATION_WAIT_SECONDS)
+            self.assertFalse(
+                worker.is_alive(),
+                "Continuation worker exceeded its bounded test wait.",
+            )
+
+            resumed.upload_watched_file.assert_called_once()
+            self.assertEqual(new_photo, resumed.upload_watched_file.call_args.args[1])
+            self.assertTrue(old_photo.exists())
+            self.assertFalse(new_photo in resumed.accepted_paths)
+            row = self.main.read_document(workspace / 'watch-drain.json')
+            self.assertEqual([str(old_photo)], row['initial'])
+            self.assertEqual([], row['pending'])
+            self.assertIs(row['frozen'], False)
+            self.assertEqual(0.0, row['cutoff'])
+            self.assertIs(resumed.drain_event.is_set(), False)
+
+    def test_update_pause_waits_for_ack_then_blocks_next_photo_dispatch(self) -> None:
+        """Let the active acknowledgement finish but admit no following upload.
+
+        Returns:
+            None: The first accepted photo is acknowledged and the second stays
+                durable pending without a Stop cutoff or frozen drain.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'watch'
+            workspace = root / 'session'
+            folder.mkdir()
+            workspace.mkdir()
+            first = folder / '01-current.jpg'
+            second = folder / '02-next.jpg'
+            first.write_bytes(b'current upload')
+            second.write_bytes(b'next upload')
+            watcher = self.make_watcher(folder, workspace)
+            watcher.configure_drain(workspace, set())
+
+            def upload_and_pause(
+                _url: str, path: Path, _metadata: dict[str, str],
+                _digest: str, _size: int,
+            ) -> dict[str, int]:
+                """Request update pause during the first in-flight transfer.
+
+                Args:
+                    _url (str): Fixture upload endpoint.
+                    path (Path): Current accepted source photo.
+                    _metadata (dict[str, str]): Simulated capture metadata.
+                    _digest (str): Captured fixture digest.
+                    _size (int): Captured fixture byte size.
+
+                Returns:
+                    dict[str, int]: Confirmed fixture upload acknowledgement.
+                """
+                if path == first:
+                    watcher.request_update_pause()
+                return {"uploaded": 1, "scanned": 1}
+
+            watcher.upload_watched_file.side_effect = upload_and_pause
+            watcher._run_owned()
+
+            watcher.upload_watched_file.assert_called_once()
+            self.assertEqual(first, watcher.upload_watched_file.call_args.args[1])
+            self.assertNotIn(first, watcher.accepted_paths)
+            self.assertIn(second, watcher.accepted_paths)
+            self.assertFalse(watcher.stop_event.is_set())
+            self.assertFalse(watcher.drain_event.is_set())
+            row = self.main.read_document(workspace / 'watch-drain.json')
+            self.assertEqual([str(second)], row['pending'])
+            self.assertIs(row['frozen'], False)
+            self.assertEqual(0.0, row['cutoff'])
+
+    def test_update_continuation_rejects_changed_or_frozen_boundary(self) -> None:
+        """Require the exact original folder, recursion and open cutoff state.
+
+        Returns:
+            None: Frozen, cut off, redirected-folder, changed-recursion and
+                escaped-path manifests are refused before scan or upload.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'watch'
+            workspace = root / 'session'
+            folder.mkdir()
+            workspace.mkdir()
+            old_photo = folder / 'existing.jpg'
+            old_photo.write_bytes(b'historical')
+            first = self.make_watcher(folder, workspace)
+            first.configure_drain(workspace, {old_photo})
+            manifest = workspace / 'watch-drain.json'
+            baseline = self.main.read_document(manifest)
+            outside = root / 'outside.jpg'
+            mutations = (
+                ('frozen', True),
+                ('cutoff', 123.0),
+                ('folder', str(root)),
+                ('recursive', True),
+                ('initial', [str(outside)]),
+            )
+            for field, replacement in mutations:
+                with self.subTest(field=field):
+                    row = dict(baseline)
+                    row[field] = replacement
+                    self.main.atomic_write_json(manifest, row)
+                    resumed = self.make_watcher(folder, workspace)
+                    with self.assertRaises(ValueError):
+                        resumed.configure_drain(
+                            workspace, None, resume=True, continuation=True,
+                        )
+                    resumed.upload_watched_file.assert_not_called()
+            self.main.atomic_write_json(manifest, baseline)
+
+    def test_unexpected_worker_error_reports_source_without_exception_text(self) -> None:
+        """Keep an unexpected failure actionable without retaining secrets.
+
+        Returns:
+            None: Durable recovery state and UI event contain phase, class and
+                local source location but omit the exception's secret message.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'watch'
+            folder.mkdir()
+            watcher = self.make_watcher(folder, root)
+            watcher._diagnostic_phase = 'inventory'
+            secret = 'token=fixture-secret C:\\private\\photo.jpg'
+            watcher._run_owned = mock.Mock(
+                side_effect=ValueError(secret),
+            )
+            with mock.patch.object(MAIN.logging, 'error') as log_error:
+                MAIN.WatcherThread.run(watcher)
+
+            diagnostic = watcher.drain_error
+            self.assertIn('phase=inventory', diagnostic)
+            self.assertIn('error_type=ValueError', diagnostic)
+            self.assertIn('source=gallery_watch_upload.pyw:WatcherThread.run:', diagnostic)
+            self.assertNotIn(secret, diagnostic)
+            self.assertNotIn('fixture-secret', diagnostic)
+            self.assertNotIn('photo.jpg', diagnostic)
+            event = watcher.events.get_nowait()
+            self.assertEqual('error', event[0])
+            self.assertEqual(diagnostic, event[1])
+            self.assertIn(diagnostic, log_error.call_args.args[0])
+            finished = watcher.events.get_nowait()
+            self.assertEqual('watcher_start_finished', finished['kind'])
+
+    def test_update_continuation_refuses_symlinked_history_path(self) -> None:
+        """Reject a symlink even when its destination stays inside the folder.
+
+        Returns:
+            None: Continuation refuses redirected path identity before work.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'watch'
+            workspace = root / 'session'
+            folder.mkdir()
+            workspace.mkdir()
+            target = folder / 'target.jpg'
+            target.write_bytes(b'photo')
+            link = folder / 'linked.jpg'
+            try:
+                link.symlink_to(target)
+            except OSError:
+                self.skipTest('Symlink creation is unavailable on this runner.')
+            first = self.make_watcher(folder, workspace)
+            first.configure_drain(workspace, {target})
+            manifest = workspace / 'watch-drain.json'
+            row = self.main.read_document(manifest)
+            row['initial'] = [str(link)]
+            self.main.atomic_write_json(manifest, row)
+            resumed = self.make_watcher(folder, workspace)
+
+            with self.assertRaises(ValueError):
+                resumed.configure_drain(
+                    workspace, None, resume=True, continuation=True,
+                )
+            resumed.upload_watched_file.assert_not_called()
+
+    def test_update_continuation_retains_linked_target_history_gate(self) -> None:
+        """Do not let an unfrozen continuation bypass target-owned history.
+
+        Returns:
+            None: A different destination without preexisting linked state is
+                refused and its acquired destination lease is released.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / 'watch'
+            workspace = root / 'session'
+            folder.mkdir()
+            workspace.mkdir()
+            first = self.make_watcher(folder, workspace)
+            first.configure_drain(workspace, set())
+            target = mock.Mock()
+            target.binding.return_value = 'b' * 64
+            resumed = self.make_watcher(folder, workspace)
+            resumed.linked_target = target
+            resumed._linked_lease = mock.Mock()
+            state = mock.Mock(preexisting=False)
+            with mock.patch.object(MAIN, 'LinkedUploadState', return_value=state):
+                with self.assertRaisesRegex(ValueError, 'history is missing'):
+                    resumed.configure_drain(
+                        workspace, None, resume=True, continuation=True,
+                    )
+            resumed._linked_lease.acquire.assert_called_once_with()
+            resumed._linked_lease.release.assert_called_once_with()
 
     def test_interrupted_initial_scan_never_admits_historical_photos(self) -> None:
         """Keep startup exclusions safe when Stop arrives during folder reading.

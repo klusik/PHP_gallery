@@ -65,8 +65,8 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.0.0}
-\newcommand{\manualdate}{7.~listopadu~2026}
+\newcommand{\version}{1.0.1}
+\newcommand{\manualdate}{8.~listopadu~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1794,6 +1794,8 @@ nadále spustí výchozí nastavení. Body reparse ve Windows a~trvanlivost při
 výpadku napájení zatím nejsou ověřeny.
 V~hlavním okně klikněte na \ui{Link gallery}. Do dialogu vložte adresu
 galerie z~prohlížeče a~potvrďte ji tlačítkem \ui{Link gallery}.
+Doménu a~cestu instalace lze zadat i~bez protokolu. Při potvrzení WinApp
+doplní \texttt{https://} a~před ověřením galerie zobrazí upravenou adresu.
 Na stejném počítači funguje i~HTTP adresa na \texttt{localhost}.
 Vzdálené instalace používají ověřené HTTPS. Dialog ukazuje
 průběh až do schválení. Pokud spojení selže, zobrazí chybu a~umožní další
@@ -1801,6 +1803,15 @@ pokus. V~prohlížeči se přihlaste jako správce a~klikněte na \ui{Schválit}
 Po zobrazení \ui{Approval received} se vraťte do WinApp. Aplikace zobrazí
 adresu propojeného webu a~sama načte první stránku seznamu galerií.
 \ui{Zrušit} žádost odmítne.
+
+Při selhání propojení zkopírujte diagnostiku WinAppu. Samostatná položka
+propojení uchová poslední chybu, fázi požadavku, HTTP stav a~typ odpovědi
+včetně rozpoznané ověřovací stránky hostingu. Rozlišuje zablokovaný požadavek
+od galerie, která oznámila nedostupné propojení. Přístupové údaje a~syrová
+těla odpovědí výpis neobsahuje.
+Použijte veřejnou URL webu, případně s~jeho veřejným podadresářem.
+Interní složky hostingu do adresy propojení nepatří. Servery s~interním
+přepisem cest potřebují PHP Gallery~1.0.1 pro ověření veřejné cesty.
 
 Tři tečky vedle \ui{Unlink gallery} otevřou přehled propojení.
 V~části \ui{Aktivní propojení} lze přepnout na jiný web s~platným
@@ -2268,11 +2279,19 @@ aktualizaci odmítnou; shodné instalátory ve více vydáních CMS jsou přijí
 Přihlašovací údaje galerie se na GitHub neposílají.
 
 Volba \ui{Update} stáhne a~ověří instalátor s~průběhem a~možností zrušit stahování.
-Po potvrzení připravenosti externího pomocníka aplikace ukončí vlastní pracovní
-podprocesy a~okamžitě celý proces nahrávače. Nečeká na dokončení vláken ani
-nenabízí ponechání v~tray. Selhání přípravy pomocníka ponechá aplikaci otevřenou.
-Již uložená nastavení, přihlašovací údaje a~checkpointy úloh zůstávají dostupné;
-neuložená nastavení a~dosud nezapsaná práce se při okamžitém ukončení neukládají.
+Aktivní Watcher dokončí právě nahrávaný snímek včetně potvrzení, uloží frontu
+a~zapíše původní záznam před spuštěním pomocníka. Nevyřešená práce po
+120~sekundách instalaci odloží; sledování přítomnosti hry ji neblokuje.
+Ruční import, AI úlohu nebo dokončování reportu nejprve dokončete.
+Selhání přípravy pomocníka ponechá aplikaci otevřenou. Po aktualizaci pokračuje
+stejná relace, složka, cíl a~původní hranice souborů; snímky vytvořené během
+instalace zůstávají způsobilé k~nahrání. Telemetrie zachová identitu a~označí
+mezeru. Výslovné Stop nebo ukončení aplikace pokračování zruší. Propojený
+Watcher vyžaduje stejný účet, galerii a~rozsah oprávnění.
+Starší verze bez uloženého záměru běhu mohou nabídnout \ui{Resume Watcher}
+pro ověřenou neukončenou práci; obnovení vyžaduje tento výslovný výběr.
+Pokračování nevyžaduje Abandon ani nový API klíč. Uložená nastavení a~přístupové
+údaje zůstávají; neuložená pole Nastavení se aktualizací neukládají.
 Pomocník znovu ověří instalátor, počká na ukončení instalovaného programu,
 vyžádá Windows UAC, nainstaluje a~ověří novou verzi a~spustí nahrávač pod
 původním uživatelem. Průběh instalace zůstává viditelný. Automatický rollback

@@ -34,6 +34,10 @@ the prepared plan covers every registered route before processing requests.
 WinApp's main **Link gallery** action accepts a pasted address in its own
 dialog. The linking workspace keeps that address in memory independently of
 the API-key upload endpoint. Remote addresses use verified HTTPS. The literal
+public request path confirms the configured issuer and exact mount; internal
+`SCRIPT_NAME` rewrites do not define that public address. The linking controller
+generates its start/login/consent routes from the verified public issuer and
+keeps owner-only grant inspection independent of issuance readiness. The literal
 `http://localhost` issuer permits temporary and rolling access when both endpoints of
 the PHP request are loopback and the configured authority and mount match.
 WinApp connects only to loopback for that issuer and refuses redirects. The
@@ -522,7 +526,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.0.0';
+const CMS_VERSION = '1.0.1';
 ```
 
 Update-related code uses:

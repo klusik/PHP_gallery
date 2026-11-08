@@ -10,6 +10,8 @@
 # License: MIT License (see LICENSE file in repository)
 """Background frame-sampled flight recording with durable JSONL checkpoints."""
 import json
+import os
+import stat
 from collections import deque
 import logging
 import math
@@ -29,9 +31,11 @@ from uploader.flight_data import (
     PHASE_DESCENT_MAXIMUM_MPS,
     FlightAnalysis,
     FlightSample,
+    _sample,
     analyze_session,
 )
 from uploader.simconnect_flight import SimConnectFlightClient
+from uploader.windows_file_identity import FILE_ATTRIBUTE_REPARSE_POINT
 
 # Initial wait after a disconnected simulator or open failure.
 # Type: float. Units: seconds. Scope: consecutive connection failures.
@@ -107,6 +111,11 @@ MAX_GLOBAL_RAW_SESSION_BYTES = 2147483648
 # Type: int. Units: bytes. Scope: one session directory.
 # Consumers: FlightRecorder._write_sample. Rationale: hard bound on disk usage.
 MAX_SESSION_BYTES = 268435456
+# Refuse oversized or unbounded resume metadata before decoding it.
+# Type: int. Units: bytes. Scope: one resumed session.json document.
+# Consumers: FlightRecorder.from_session. Rationale: metadata is tiny and the
+# cap keeps local recovery independent of attacker-controlled file allocation.
+FLIGHT_RESUME_METADATA_MAX_BYTES = 1024 * 1024
 # Bound in-memory warning evidence.
 # Type: int. Units: messages. Scope: one recording session.
 # Consumers: FlightRecorder._checkpoint and run.
@@ -118,6 +127,21 @@ MAX_SESSION_WARNINGS = 100
 # Rationale: never read a concurrently appended JSONL file.
 FLIGHT_FINALIZE_WAIT_SECONDS = 15.0
 EARTH_RADIUS_NM = 3440.065
+
+
+def _canonical_session_id(value: str) -> bool:
+    """Recognize the exact lower-case UUID hex identity used for sessions.
+
+    Args:
+        value (str): Persisted directory name or explicit resumed identity.
+
+    Returns:
+        bool: True only when the value is the canonical UUID `.hex` form.
+    """
+    try:
+        return uuid.UUID(value).hex == value
+    except ValueError:
+        return False
 
 
 class _FlightPersistencePolicy:
@@ -246,6 +270,8 @@ class FlightRecorder(threading.Thread):
         gallery_identity: str,
         dll_path: str,
         emit: Callable[[str, str], None],
+        *,
+        _session_id: str | None = None,
     ) -> None:
         """Create an idle durable recorder for one gallery identity.
 
@@ -254,6 +280,8 @@ class FlightRecorder(threading.Thread):
             gallery_identity (str): Non-secret stable gallery label.
             dll_path (str): Optional explicit SimConnect.dll path.
             emit (Callable[[str, str], None]): Thread-safe level/message sink.
+            _session_id (str | None): Internal validated session ID for a
+                resumed session; None creates a new session ID.
 
         Returns:
             None: Initializes but does not start the worker.
@@ -262,7 +290,10 @@ class FlightRecorder(threading.Thread):
         self.gallery_identity = gallery_identity
         self.dll_path = dll_path
         self.emit = emit
-        self.session_id = uuid.uuid4().hex
+        if (_session_id is not None
+                and not _canonical_session_id(_session_id)):
+            raise ValueError("Flight session identity is invalid.")
+        self.session_id = _session_id or uuid.uuid4().hex
         self.directory = Path(directory) / self.session_id
         self.stop_event = threading.Event()
         self.pause_event = threading.Event()
@@ -283,11 +314,207 @@ class FlightRecorder(threading.Thread):
         self._latest_sample_received: float | None = None
         self._last_simulator_elapsed: float | None = None
         self._last_utc: datetime | None = None
+        self._elapsed_offset = 0.0
         self._checkpoint_lock = threading.Lock()
         self._pending_discontinuity: str | None = None
         self._activity_candidate: str | None = None
         self._activity_candidate_count = 0
         self._activity_phase: str | None = None
+
+    @classmethod
+    def from_session(
+        cls, session_directory: Path, gallery_identity: str, dll_path: str,
+        emit: Callable[[str, str], None],
+    ) -> "FlightRecorder":
+        """Restore one incomplete recorder without creating a new identity.
+
+        Args:
+            session_directory (Path): Existing owned session folder containing
+                session.json and optional samples.jsonl.
+            gallery_identity (str): Exact non-secret label expected for the
+                original gallery or upload endpoint.
+            dll_path (str): Optional explicit SimConnect.dll path for resuming.
+            emit (Callable[[str, str], None]): Thread-safe level/message sink.
+
+        Returns:
+            FlightRecorder: Idle recorder continuing the same UUID and sample
+                sequence, ready for the caller to start after plan admission.
+
+        Raises:
+            ValueError: Metadata, identity, paths or sample history is unsafe.
+            OSError: A required session file cannot be inspected safely.
+        """
+        directory = Path(session_directory)
+        try:
+            directory_info = directory.lstat()
+            if (not stat.S_ISDIR(directory_info.st_mode)
+                    or stat.S_ISLNK(directory_info.st_mode)
+                    or (getattr(directory_info, "st_file_attributes", 0)
+                        & FILE_ATTRIBUTE_REPARSE_POINT)):
+                raise ValueError("Flight session path is redirected.")
+            if not _canonical_session_id(directory.name):
+                raise ValueError("Flight session identity is invalid.")
+            metadata_path = directory / "session.json"
+            metadata_info = metadata_path.lstat()
+            if (not stat.S_ISREG(metadata_info.st_mode)
+                    or stat.S_ISLNK(metadata_info.st_mode)
+                    or (getattr(metadata_info, "st_file_attributes", 0)
+                        & FILE_ATTRIBUTE_REPARSE_POINT)
+                    or metadata_info.st_size > FLIGHT_RESUME_METADATA_MAX_BYTES):
+                raise ValueError("Flight session metadata needs review.")
+            with metadata_path.open("rb") as stream:
+                opened_metadata_info = os.fstat(stream.fileno())
+                if not os.path.samestat(metadata_info, opened_metadata_info):
+                    raise ValueError("Flight session metadata changed during recovery.")
+                metadata_bytes = stream.read(FLIGHT_RESUME_METADATA_MAX_BYTES + 1)
+                final_metadata_info = os.fstat(stream.fileno())
+            named_metadata_info = metadata_path.lstat()
+            if (len(metadata_bytes) != metadata_info.st_size
+                    or not os.path.samestat(opened_metadata_info, final_metadata_info)
+                    or not os.path.samestat(final_metadata_info, named_metadata_info)
+                    or metadata_info.st_mtime_ns != final_metadata_info.st_mtime_ns):
+                raise ValueError("Flight session metadata changed during recovery.")
+            metadata = json.loads(metadata_bytes.decode("utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError, RecursionError):
+            raise ValueError("Flight session metadata needs review.") from None
+        if not isinstance(metadata, dict):
+            raise ValueError("Flight session metadata needs review.")
+        started_utc = metadata.get("started_utc")
+        try:
+            started_time = datetime.fromisoformat(started_utc)
+        except (TypeError, ValueError):
+            raise ValueError("Flight session start time needs review.") from None
+        if (type(metadata.get("schema_version")) is not int
+                or metadata.get("schema_version") != 1
+                or metadata.get("session_id") != directory.name
+                or metadata.get("gallery_identity") != gallery_identity
+                or type(metadata.get("sample_count")) is not int
+                or metadata.get("sample_count") < 0
+                or not isinstance(metadata.get("recording_ended"), bool)
+                or started_time.utcoffset() is None):
+            raise ValueError("Flight session identity needs review.")
+
+        simulator = metadata.get("simulator")
+        simulator_build = metadata.get("simulator_build")
+        aircraft = metadata.get("aircraft")
+        warnings = metadata.get("warnings")
+        capture_mode = metadata.get("capture_mode", "normal")
+        detail_samples = metadata.get("detail_samples", 0)
+        detail_gap = metadata.get("detail_max_gap_seconds", 0.0)
+        try:
+            detail_gap_value = float(detail_gap)
+        except (OverflowError, TypeError, ValueError):
+            raise ValueError("Flight session details need review.") from None
+        if (not isinstance(simulator, str)
+                or simulator_build is not None
+                and not isinstance(simulator_build, str)
+                or aircraft is not None and not isinstance(aircraft, str)
+                or not isinstance(warnings, list)
+                or any(not isinstance(value, str) for value in warnings)
+                or capture_mode not in (
+                    "normal", "approach", "final approach", "rollout",
+                )
+                or type(detail_samples) is not int or detail_samples < 0
+                or isinstance(detail_gap, bool)
+                or not isinstance(detail_gap, (int, float))
+                or not math.isfinite(detail_gap_value) or detail_gap_value < 0):
+            raise ValueError("Flight session details need review.")
+
+        sample_path = directory / "samples.jsonl"
+        sample_count = 0
+        checkpoint_sample_count = metadata["sample_count"]
+        last_sample: FlightSample | None = None
+        if sample_path.exists() or sample_path.is_symlink():
+            try:
+                sample_info = sample_path.lstat()
+                if (not stat.S_ISREG(sample_info.st_mode)
+                        or stat.S_ISLNK(sample_info.st_mode)
+                        or (getattr(sample_info, "st_file_attributes", 0)
+                            & FILE_ATTRIBUTE_REPARSE_POINT)
+                        or sample_info.st_size > MAX_SESSION_BYTES):
+                    raise ValueError("Flight sample history needs review.")
+                with sample_path.open("rb") as stream:
+                    opened_info = os.fstat(stream.fileno())
+                    if not os.path.samestat(sample_info, opened_info):
+                        raise ValueError("Flight sample history changed during recovery.")
+                    final_byte = b""
+                    while True:
+                        line = stream.readline()
+                        if not line:
+                            break
+                        final_byte = line[-1:]
+                        if final_byte != b"\n":
+                            raise ValueError("Flight sample history is incomplete.")
+                        try:
+                            envelope = json.loads(line.decode("utf-8"))
+                        except (UnicodeError, json.JSONDecodeError, RecursionError):
+                            raise ValueError("Flight sample history needs review.") from None
+                        row = envelope.get("sample") if isinstance(envelope, dict) else None
+                        if (not isinstance(envelope, dict)
+                                or envelope.get("type") != "sample"
+                                or not isinstance(row, dict)):
+                            raise ValueError("Flight sample history needs review.")
+                        try:
+                            sample = _sample(row)
+                        except (OverflowError, TypeError, ValueError):
+                            raise ValueError(
+                                "Flight sample history needs review."
+                            ) from None
+                        if sample is None:
+                            raise ValueError("Flight sample history needs review.")
+                        try:
+                            recorded = datetime.fromisoformat(sample.recorded_utc)
+                        except ValueError:
+                            raise ValueError("Flight sample time needs review.") from None
+                        if recorded.utcoffset() is None:
+                            raise ValueError("Flight sample time needs review.")
+                        sample_count += 1
+                        last_sample = sample
+                    after_info = os.fstat(stream.fileno())
+                    named_after = sample_path.lstat()
+                    if (not os.path.samestat(sample_info, after_info)
+                            or not os.path.samestat(after_info, named_after)
+                            or sample_info.st_size != after_info.st_size
+                            or sample_info.st_mtime_ns != after_info.st_mtime_ns):
+                        raise ValueError("Flight sample history changed during recovery.")
+            except OSError:
+                raise ValueError("Flight sample history needs review.") from None
+        try:
+            final_directory_info = directory.lstat()
+        except OSError:
+            raise ValueError("Flight session path changed during recovery.") from None
+        if (not os.path.samestat(directory_info, final_directory_info)
+                or stat.S_ISLNK(final_directory_info.st_mode)
+                or (getattr(final_directory_info, "st_file_attributes", 0)
+                    & FILE_ATTRIBUTE_REPARSE_POINT)):
+            raise ValueError("Flight session path changed during recovery.")
+        if (sample_count < checkpoint_sample_count
+                or detail_samples > sample_count):
+            raise ValueError("Flight sample history conflicts with its checkpoint.")
+        recorder = cls(
+            directory.parent, gallery_identity, dll_path, emit,
+            _session_id=directory.name,
+        )
+        recorder.simulator = simulator
+        recorder.simulator_build = simulator_build
+        recorder.aircraft = aircraft
+        recorder.started_utc = started_utc
+        recorder.warnings = warnings[-MAX_SESSION_WARNINGS:]
+        recorder._sample_count = sample_count
+        recorder._capture_mode = capture_mode
+        recorder._detail_sample_count = detail_samples
+        recorder._detail_max_gap_seconds = detail_gap_value
+        recorder._last_sample = last_sample
+        if last_sample is not None:
+            recorder._last_simulator_elapsed = last_sample.simulator_elapsed_seconds
+            recorder._last_utc = datetime.fromisoformat(last_sample.recorded_utc)
+            utc_gap = max(
+                0.0,
+                (datetime.now(timezone.utc) - recorder._last_utc).total_seconds(),
+            )
+            recorder._elapsed_offset = last_sample.session_elapsed_seconds + utc_gap
+            recorder._pending_discontinuity = "application resumed after update"
+        return recorder
 
     def stop(self) -> None:
         """Request graceful stop and wake the cadence wait.
@@ -314,7 +541,8 @@ class FlightRecorder(threading.Thread):
         """
         if self.pause_event.is_set():
             self.pause_event.clear()
-            self._pending_discontinuity = "recorder resumed after pause"
+            if self._pending_discontinuity is None:
+                self._pending_discontinuity = "recorder resumed after pause"
 
     def diagnostics_snapshot(self) -> dict[str, str | int | float | bool | None]:
         """Read current recorder progress without querying the simulator.
@@ -373,7 +601,7 @@ class FlightRecorder(threading.Thread):
             None: A same-directory temporary file is atomically renamed.
         """
         elapsed = (
-            time.monotonic() - self.started_monotonic
+            self._elapsed_offset + time.monotonic() - self.started_monotonic
             if self.started_monotonic is not None else 0.0
         )
         payload = {
@@ -413,12 +641,12 @@ class FlightRecorder(threading.Thread):
         Returns:
             str | None: Break reason or None when continuity is plausible.
         """
-        if sample.discontinuity_before:
-            return sample.discontinuity_before
         if self._pending_discontinuity:
             reason = self._pending_discontinuity
             self._pending_discontinuity = None
             return reason
+        if sample.discontinuity_before:
+            return sample.discontinuity_before
         if previous is None:
             return None
         gap = sample.session_elapsed_seconds - previous.session_elapsed_seconds
@@ -646,7 +874,9 @@ class FlightRecorder(threading.Thread):
                         )
                         self._latest_sample_received = time.monotonic()
                         sample.session_elapsed_seconds = max(
-                            0.0, time.monotonic() - self.started_monotonic
+                            self._elapsed_offset
+                            + time.monotonic() - self.started_monotonic,
+                            self._elapsed_offset,
                         )
                         self.simulator = identity.get("simulator") or self.simulator
                         self.simulator_build = (

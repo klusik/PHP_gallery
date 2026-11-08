@@ -1728,6 +1728,95 @@ class FlightUI:
         self.refresh_dispatch_status()
         return directory
 
+    def resume_session(
+        self, plan: SessionPlan, *, recorder: FlightRecorder | None = None,
+    ) -> Path:
+        """Continue the sole caller-authorized incomplete flight session.
+
+        The caller must have claimed a valid one-use update-continuation
+        envelope. This method independently verifies workspace ownership and
+        the current exact binding; it is not a general old-session start path.
+
+        Args:
+            plan (SessionPlan): Session directory selected by the verified
+                continuation owner. Its disk plan is reloaded before use.
+            recorder (FlightRecorder | None): Optional idle recorder already
+                restored off the Tk thread; None performs repair-path restore
+                synchronously for explicit nonstartup callers.
+
+        Returns:
+            Path: Existing session directory whose recorder has been started.
+
+        Raises:
+            ValueError: The envelope target is stale, ambiguous or unsafe, or
+                the session cannot be restored without creating new work.
+            RuntimeError: The exclusive workspace lease is unavailable.
+        """
+        if (self.load_error or self.lease is None
+                or self.busy() or self.is_alive()
+                or self.dispatch_loading
+                or any(worker.is_alive() for worker in self.resume_workers)
+                or self.host.api_key_revoke_running):
+            raise ValueError("Flight session continuation is unavailable.")
+        self.lease.verify()
+        current_binding = self.binding()
+        pending = self.pending(binding=current_binding)
+        if (len(pending) != 1 or pending[0].directory != plan.directory
+                or plan.directory.parent.resolve() != self.directory.resolve()):
+            raise ValueError("Flight session continuation no longer matches.")
+        restored_plan = SessionPlan.load(plan.directory)
+        if (restored_plan.directory != pending[0].directory
+                or restored_plan.binding != current_binding
+                or restored_plan.completed or restored_plan.abandoned):
+            raise ValueError("Flight session continuation needs review.")
+        self.lease.verify()
+        linked = self.host.linking_manager.linked_upload_mode_selected()
+        target = self.host.linking_manager.selected_upload_target() if linked else None
+        if linked and target is None:
+            raise ValueError(self.text("linked_target_unavailable"))
+        if target is not None:
+            target_binding = target.binding()
+            if (target_binding != current_binding
+                    or target_binding != self.host.linking_manager.linked_upload_binding()):
+                raise ValueError(self.text("linked_target_unavailable"))
+            gallery_identity = target.issuer + " #" + str(target.gallery_id)
+        else:
+            if restored_plan.local_only:
+                raise ValueError(self.text("linked_target_unavailable"))
+            gallery_identity = self.normalize(self.host.config.gallery_url)
+        if recorder is None:
+            recorder = FlightRecorder.from_session(
+                restored_plan.directory, gallery_identity,
+                self.host.config.simconnect_dll_path,
+                lambda level, message: self.host.events.put((level, message)),
+            )
+        elif (not isinstance(recorder, FlightRecorder)
+              or recorder.directory != restored_plan.directory
+              or recorder.session_id != restored_plan.session_id
+              or recorder.gallery_identity != gallery_identity
+              or recorder.ident is not None or recorder.is_alive()
+              or recorder.stop_event.is_set()):
+            raise ValueError("Prepared flight recorder does not match this continuation.")
+        if not self.preferences.recording:
+            recorder.pause()
+        dispatch = load_dispatch(restored_plan.directory)
+        self.lease.verify()
+        self.plan = restored_plan
+        self.recorder = recorder
+        self.active_dispatch = dispatch
+        self.active_dispatch_directory = restored_plan.directory
+        try:
+            recorder.start()
+        except RuntimeError:
+            self.plan = None
+            self.recorder = None
+            self.active_dispatch = None
+            self.active_dispatch_directory = None
+            raise ValueError("Flight recorder could not resume safely.") from None
+        self._recovery_state = None
+        self.refresh_dispatch_status()
+        return restored_plan.directory
+
     def busy(self) -> bool:
         """Report lifecycle admission independently of live-thread existence.
 

@@ -44,7 +44,11 @@ class UpdateControllerTests(unittest.TestCase):
         controller.root.winfo_height = Mock(return_value=600)
         controller.app = SimpleNamespace(root=controller.root, exiting=False,
                                          stop_tray_icon=Mock(), write_log=Mock(),
-                                         set_update_available=Mock(), close=Mock())
+                                         set_update_available=Mock(), close=Mock(),
+                                         prepare_update_checkpoint=Mock(),
+                                         wait_for_update_checkpoint=Mock(),
+                                         bind_update_checkpoint=Mock(),
+                                         cancel_update_checkpoint=Mock())
         controller.version = '1.0.0'
         controller.gate = InstallGate()
         controller.events = queue.Queue()
@@ -106,6 +110,28 @@ class UpdateControllerTests(unittest.TestCase):
         controller.app.config_store.save.assert_not_called()
         controller.app.close.assert_not_called()
         self.assertTrue(controller.gate.active)
+
+    def test_checkpoint_prepare_failure_requests_continuation_cancellation(self) -> None:
+        """Recover a continuation if synchronous checkpointing fails midway.
+
+        Returns:
+            None: Admission reopens, the app remains visible and no helper or
+                whole-process shutdown is requested.
+        """
+        controller = self.controller()
+        controller.run_worker = Mock()
+        controller.app.prepare_update_checkpoint.side_effect = RuntimeError(
+            "checkpoint refused after partial preparation",
+        )
+        with patch(
+            "uploader.update_helper.installed_identity",
+            return_value=Path("PHPGalleryUploader.exe"),
+        ):
+            controller.install()
+        self.assertFalse(controller.gate.active)
+        controller.app.cancel_update_checkpoint.assert_called_once_with()
+        controller.run_worker.assert_not_called()
+        controller.app.close.assert_not_called()
 
     def test_failed_handshake_leaves_app_open_and_reopens_gate(self) -> None:
         """Keep the application usable when helper preparation fails.
@@ -584,6 +610,79 @@ class UpdateControllerTests(unittest.TestCase):
                 controller.handoff()
         self.assertTrue(controller.events.empty())
         controller.root.destroy.assert_not_called()
+
+    def test_checkpoint_precedes_helper_and_close_follows_acknowledged_launch(self) -> None:
+        """Order checkpoint, nonce binding and helper readiness before shutdown.
+
+        Returns:
+            None: The original app remains open until the complete ordered
+                checkpoint and helper handoff has succeeded.
+        """
+        controller = self.controller()
+        order: list[str] = []
+        controller.app.wait_for_update_checkpoint.side_effect = (
+            lambda: order.append("checkpoint")
+        )
+        controller.app.bind_update_checkpoint.side_effect = (
+            lambda _ticket: order.append("bind")
+        )
+        controller.app.close.side_effect = lambda *, for_update=False: order.append("close")
+
+        def prepare(
+            _installer: Path, _version: str, _sha256: str, _size: int,
+        ) -> Path:
+            """Record helper staging after durable Watcher checkpointing.
+
+            Args:
+                _installer (Path): Verified temporary installer path.
+                _version (str): Selected release version.
+                _sha256 (str): Expected installer content digest.
+                _size (int): Expected installer byte count.
+
+            Returns:
+                Path: Fixture ticket passed to the nonce-binding callback.
+            """
+            order.append("prepare")
+            return Path("ticket.json")
+
+        def launch(_ticket: Path) -> None:
+            """Record helper readiness after checkpoint nonce binding.
+
+            Args:
+                _ticket (Path): Prepared helper ticket path.
+
+            Returns:
+                None: Records successful readiness for the ordering assertion.
+            """
+            order.append("launch")
+
+        with patch("uploader.update_helper.prepare_helper", side_effect=prepare), \
+                patch("uploader.update_helper.launch_helper", side_effect=launch), \
+                patch("uploader.self_update.retire_download_session"):
+            controller.handoff()
+            controller.poll()
+        self.assertEqual(
+            ["checkpoint", "prepare", "bind", "launch", "close"], order,
+        )
+
+    def test_checkpoint_wait_failure_never_prepares_or_launches_helper(self) -> None:
+        """An unsafe or timed-out checkpoint leaves app and installer untouched.
+
+        Returns:
+            None: The helper is not prepared and no shutdown event is published.
+        """
+        for failure in (ValueError("unsafe checkpoint"), TimeoutError("still busy")):
+            with self.subTest(failure=type(failure).__name__):
+                controller = self.controller()
+                controller.app.wait_for_update_checkpoint.side_effect = failure
+                with patch("uploader.update_helper.prepare_helper") as prepare, \
+                        patch("uploader.update_helper.launch_helper") as launch:
+                    with self.assertRaises(type(failure)):
+                        controller.handoff()
+                prepare.assert_not_called()
+                launch.assert_not_called()
+                self.assertTrue(controller.events.empty())
+                controller.app.close.assert_not_called()
 
     def test_launcher_admission_guards_preserve_method_docstrings(self) -> None:
         """Every work-entry handler refuses new work during installation drain."""

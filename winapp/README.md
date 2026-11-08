@@ -652,19 +652,37 @@ without digest metadata may therefore require a manual installer download.
 
 The nonmodal notice offers **Update** and **Later**. Update downloads with
 actual byte progress and **Cancel download**, verifies the installer, and
-prepares the external helper. Only after helper readiness does the application
-terminate its own multiprocessing children and exit the entire uploader
-process, including all background threads. There is no worker enumeration,
-drain deadline or keep-running prompt in this update path. A helper preparation
-failure leaves the application open.
+prepares a safe Watcher checkpoint before launching the external helper.
+The Watcher stops dispatching new files after the current upload response and
+its acknowledgement/source handling finish. The recorder flushes the same
+session. A 120-second checkpoint budget postpones installation if accepted work
+cannot settle; the always-running game-presence observer is not a blocker.
+Finish an active manual import, AI operation or finalization before updating.
+Helper preparation failure leaves the app open and schedules safe continuation.
 
-Update shutdown does not save unsaved Settings fields or finish pending work.
-Already persisted settings, credentials, import checkpoints and flight artifacts
-remain under `%APPDATA%\PHPGalleryUploader` for existing recovery workflows;
-unflushed work is not promised to survive immediate exit. Older installed
-clients stuck waiting for background work require a manual installer launch
-after fully closing the old uploader; a downloaded installer cannot change the
-code already running in that client.
+The private `flights/watcher-continuation.json` contains the exact session,
+profile and target fingerprints, original linked scope, versions and one-use
+helper nonce, never credentials. After installation the same queue, initial
+file boundary, recording identity, preferences and telemetry are restored.
+Screenshots created during installation remain eligible. Telemetry appends to
+the original history with an explicit gap. The first resumed photo dispatch
+waits until Tk durably consumes the checkpoint; a rejected checkpoint cannot
+send a photograph. Explicit Stop or Quit cancels continuation.
+
+Linked continuation requires the same restored account, issuer, gallery and
+exact scope; it never falls back to the saved API key. A contextual Watcher key
+is closed before handoff and recreated only under the existing approved grant.
+Missing/revoked access keeps the original files and shows a specific reason.
+An older helper that never saved active intent cannot prove whether old
+unfinished work was running. A verified old-version update can offer **Resume
+Watcher** for an unambiguous API session with no interrupted accepted upload;
+that first compatibility continuation is explicit and does not require Abandon
+or a replacement API key. Stopped/finished sessions remain stopped.
+
+Update shutdown does not save unsaved Settings fields. Persisted settings,
+credentials, import checkpoints and flight artifacts remain in the original
+profile. Only after the checkpoint and helper readiness does the existing
+close owner terminate child processes and exit the uploader.
 
 For the installed standalone EXE, a copied external helper acknowledges
 readiness
@@ -699,14 +717,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 0.12.0)
+## Windows installer (next version: 1.0.1)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **0.12.0**; this source version
+Gallery CMS release. The current source targets **1.0.1**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/0.12.0/`. Existing version outputs and other version folders remain
+`winapp/dist/1.0.1/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -934,6 +952,9 @@ Click **Link gallery** in the main window. Choose a recent address or paste
 the gallery address from your browser and confirm **Link gallery**. The
 dialog shows progress while the app checks the gallery and waits for browser
 approval.
+You can also type a host and optional installation path without a scheme,
+such as `gallery.example/Galerie`. On confirmation, WinApp assumes `https://`
+and shows the normalized address in the field before checking the gallery.
 Sign in as an administrator if prompted, then choose **Approve** or **Cancel**
 on the consent page. **Approval received** means you can return to WinApp.
 The app verifies the loopback response and exchanges the
@@ -1261,6 +1282,24 @@ Linking requests have a 12-second total deadline; an unresponsive system DNS
 resolver may still occupy the single transport slot until it returns. Uploads
 have a separate size-based deadline. A partially sent request has an uncertain
 outcome and is never automatically retried.
+
+All direct linking and media requests identify this client with a truthful
+`PHPGalleryUploader` User-Agent. Hosting protection can reject a request without
+that header before PHP Gallery receives it. The link dialog, ordinary log and
+copied diagnostics distinguish a rejected HTTP response from a server that
+explicitly reports linking unavailable. The last linking failure remains in
+the diagnostic snapshot even when later upload or simulator events arrive.
+Diagnostics contain fixed stage/reason identifiers, HTTP status and a
+JSON/HTML/other response classification without hosting-specific exceptions or
+copying response bodies or raw headers. Credentials, callback codes,
+request handles and raw exception text are excluded.
+
+Use the public website address for linking, including its public subdirectory
+when applicable. Internal hosting directories are not part of that address.
+On servers with internal path rewriting, PHP Gallery 1.0.1 validates the public
+request path against its configured website URL and keeps browser approval
+and login returns on that same public mount. Earlier servers can report
+linking unavailable in that environment even when classic API upload works.
 
 The separate Windows HTTPS remembrance option uses the legacy offline scope
 when offered. That approval expires after 30 days or seven days of inactivity,

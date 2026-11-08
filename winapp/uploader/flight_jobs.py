@@ -15,10 +15,11 @@ import json
 import os
 import re
 import stat
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import IO
+from typing import IO, Literal
 
 if os.name == "nt":
     import msvcrt
@@ -65,6 +66,17 @@ REPORT_FLIGHT_NUMBER_CHARS = 16
 # Refuse oversized accepted-import evidence instead of inferring an empty queue.
 # Type: int; Units: bytes; Scope: strict read-only import binding admission.
 IMPORT_BINDINGS_MAX_BYTES = 16 * 1024 * 1024
+
+# Purpose: Bound the non-secret, one-use update continuation document.
+# Type: int. Units: bytes. Scope: one flight workspace's update checkpoint.
+# Consumers: WatcherContinuation.load. Rationale: 16384 bytes cover the fixed
+# identity fields without allowing an unbounded local metadata read.
+WATCHER_CONTINUATION_MAX_BYTES = 16384
+# Purpose: Expire automatic continuation after an interrupted installation.
+# Type: float. Units: seconds. Scope: one explicitly prepared update.
+# Consumers: WatcherContinuation.load. Rationale: 86400 seconds allow an
+# overnight installation without turning an old update into startup consent.
+WATCHER_CONTINUATION_LIFETIME_SECONDS = 86400.0
 
 
 def connection_binding(url: str, key: str) -> str:
@@ -844,6 +856,240 @@ class WorkspaceLease:
                 directory = self.directory
                 self.directory = None
                 directory.close()
+
+
+@dataclass(frozen=True)
+class WatcherContinuation:
+    """Bind one update restart to an existing session without credentials.
+
+    Args:
+        session_id (str): Existing opaque session directory name.
+        binding (str): Exact non-secret upload-target fingerprint.
+        profile_hash (str): Digest of the original flight workspace spelling.
+        source_version (str): Version preparing the update checkpoint.
+        target_version (str): Version explicitly selected for installation.
+        update_session (str): Helper nonce, empty only while preparing.
+        mode (Literal['legacy', 'linked']): Original admitted upload mode.
+        contextual (bool): Whether the original capture used a Watcher key.
+        created (float): Unix time of the explicit continuation decision.
+        phase (Literal['preparing', 'prepared', 'claimed', 'consumed', 'cancelled']):
+            Durable checkpoint ownership and consumption state.
+        approved_scope (str): Exact original linked upload scope, or empty for
+            the independent saved API-key mode.
+        legacy_source_pid (int): Explicitly prepared old-client bridge PID,
+            or zero for the ordinary updater protocol.
+    """
+
+    session_id: str
+    binding: str
+    profile_hash: str
+    source_version: str
+    target_version: str
+    update_session: str
+    mode: Literal['legacy', 'linked']
+    contextual: bool
+    created: float
+    phase: Literal['preparing', 'prepared', 'claimed', 'consumed', 'cancelled']
+    approved_scope: str = ''
+    legacy_source_pid: int = 0
+
+    @staticmethod
+    def profile_digest(root: Path) -> str:
+        """Identify the same lexical workspace used by its native owner.
+
+        Args:
+            root (Path): Flight workspace whose lease is already verified.
+
+        Returns:
+            str: SHA-256 digest without exposing the user's profile path.
+        """
+        spelling = os.path.normcase(os.path.abspath(str(root)))
+        return hashlib.sha256(spelling.encode('utf-8')).hexdigest()
+
+    def payload(self) -> dict[str, JsonValue]:
+        """Encode only fixed checkpoint fields, never upload credentials.
+
+        Returns:
+            dict[str, JsonValue]: Schema version, session/profile/binding
+                fingerprints, source/target versions, helper nonce, mode,
+                original approved scope, contextual flag, decision time,
+                phase and legacy bridge PID.
+        """
+        return {
+            'schema_version': 1,  # First explicit update continuation format.
+            'session_id': self.session_id,
+            'binding': self.binding,
+            'profile_hash': self.profile_hash,
+            'source_version': self.source_version,
+            'target_version': self.target_version,
+            'update_session': self.update_session,
+            'mode': self.mode,
+            'contextual': self.contextual,
+            'created': self.created,
+            'phase': self.phase,
+            'approved_scope': self.approved_scope,
+            'legacy_source_pid': self.legacy_source_pid,
+        }
+
+    @classmethod
+    def from_payload(
+        cls, row: dict[str, JsonValue], root: Path,
+    ) -> 'WatcherContinuation':
+        """Validate the complete fixed-format checkpoint for this profile.
+
+        Args:
+            row (dict[str, JsonValue]): Exact fields emitted by payload().
+            root (Path): Workspace selected by the current native lease.
+
+        Returns:
+            WatcherContinuation: Validated non-secret checkpoint data.
+
+        Raises:
+            ValueError: Shape, identity, mode or version is malformed.
+        """
+        required = {
+            'schema_version', 'session_id', 'binding', 'profile_hash',
+            'source_version', 'target_version', 'update_session', 'mode',
+            'contextual', 'created', 'phase', 'legacy_source_pid',
+            'approved_scope',
+        }
+        if (set(row) != required or type(row.get('schema_version')) is not int
+                or row['schema_version'] != 1):
+            raise ValueError('Update continuation metadata is malformed.')
+        for name, pattern in (
+            ('session_id', r'[0-9a-f]{32}'),
+            ('binding', r'[0-9a-f]{64}'),
+            ('profile_hash', r'[0-9a-f]{64}'),
+            ('source_version', r'[0-9]+\.[0-9]+\.[0-9]+'),
+            ('target_version', r'[0-9]+\.[0-9]+\.[0-9]+'),
+            ('update_session', r'(?:[0-9a-f]{32})?'),
+        ):
+            value = row[name]
+            if not isinstance(value, str) or re.fullmatch(pattern, value) is None:
+                raise ValueError('Update continuation identity is malformed.')
+        mode, phase = row['mode'], row['phase']
+        created, legacy_pid = row['created'], row['legacy_source_pid']
+        scope = row['approved_scope']
+        if not isinstance(scope, str):
+            raise ValueError('Update continuation scope is malformed.')
+        if mode == 'linked':
+            from uploader.app_linking import UPLOAD_SCOPE, scope_base
+
+            if scope_base(scope) != UPLOAD_SCOPE:
+                raise ValueError('Update continuation scope is malformed.')
+        elif scope:
+            raise ValueError('An API-key continuation cannot carry linked scope.')
+        if (mode not in ('legacy', 'linked')
+                or phase not in (
+                    'preparing', 'prepared', 'claimed', 'consumed', 'cancelled',
+                )
+                or not isinstance(row['contextual'], bool)
+                or type(created) not in (int, float)
+                or not isinstance(created, (int, float))
+                or not 0.0 <= float(created) < float('inf')
+                or type(legacy_pid) is not int or legacy_pid < 0
+                or row['profile_hash'] != cls.profile_digest(root)
+                or (phase != 'preparing' and not row['update_session'])
+                or (mode == 'legacy' and row['contextual'])
+                or (legacy_pid and (mode != 'legacy' or row['contextual']))):
+            raise ValueError('Update continuation does not match this profile.')
+        return cls(
+            session_id=str(row['session_id']), binding=str(row['binding']),
+            profile_hash=str(row['profile_hash']),
+            source_version=str(row['source_version']),
+            target_version=str(row['target_version']),
+            update_session=str(row['update_session']), mode=mode,
+            contextual=row['contextual'], created=float(created), phase=phase,
+            approved_scope=scope,
+            legacy_source_pid=legacy_pid,
+        )
+
+    @classmethod
+    def load(cls, lease: WorkspaceLease) -> 'WatcherContinuation | None':
+        """Read a bounded checkpoint while retaining native profile ownership.
+
+        Args:
+            lease (WorkspaceLease): Current exclusive flight workspace lease.
+
+        Returns:
+            WatcherContinuation | None: Verified checkpoint, or None if absent.
+
+        Raises:
+            ValueError: Metadata is malformed, redirected, expired or replaced.
+            OSError: Its physical identity or bytes cannot be read safely.
+        """
+        lease.verify()
+        path = lease.root / 'watcher-continuation.json'
+        try:
+            named = path.lstat()
+        except FileNotFoundError:
+            return None
+        if (not stat.S_ISREG(named.st_mode) or named.st_nlink != 1
+                or path.is_symlink()
+                or (getattr(named, 'st_file_attributes', 0)
+                    & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))):
+            raise ValueError('Update continuation metadata is redirected.')
+        with path.open('rb') as source:
+            opened = os.fstat(source.fileno())
+            if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+                raise ValueError('Update continuation metadata was replaced.')
+            payload = source.read(WATCHER_CONTINUATION_MAX_BYTES + 1)
+        after = path.lstat()
+        if ((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+                != (named.st_dev, named.st_ino, named.st_size, named.st_mtime_ns)
+                or after.st_nlink != 1
+                or len(payload) > WATCHER_CONTINUATION_MAX_BYTES):
+            raise ValueError('Update continuation metadata changed or is oversized.')
+        try:
+            row = json.loads(
+                payload.decode('utf-8'),
+                object_pairs_hook=_strict_mode_history_object,
+                parse_float=_strict_mode_history_float,
+                parse_constant=_reject_mode_history_constant,
+            )
+        except (UnicodeError, ValueError, RecursionError):
+            raise ValueError('Update continuation metadata is malformed.') from None
+        if not isinstance(row, dict):
+            raise ValueError('Update continuation metadata is malformed.')
+        result = cls.from_payload(row, lease.root)
+        age = time.time() - result.created
+        if (result.phase in ('preparing', 'prepared', 'claimed')
+                and not 0.0 <= age <= WATCHER_CONTINUATION_LIFETIME_SECONDS):
+            raise ValueError('Update continuation expired; explicit resume is required.')
+        lease.verify()
+        return result
+
+    def save(self, lease: WorkspaceLease) -> None:
+        """Publish the complete checkpoint through the existing atomic writer.
+
+        Args:
+            lease (WorkspaceLease): Current exclusive flight workspace lease.
+
+        Returns:
+            None: Publishes and verifies a non-secret, profile-bound checkpoint.
+
+        Raises:
+            ValueError: The checkpoint or native workspace identity is invalid.
+            OSError: The document cannot be published.
+        """
+        lease.verify()
+        payload = self.payload()
+        self.from_payload(payload, lease.root)
+        path = lease.root / 'watcher-continuation.json'
+        try:
+            existing = path.lstat()
+        except FileNotFoundError:
+            existing = None
+        if existing is not None and (
+            not stat.S_ISREG(existing.st_mode) or existing.st_nlink != 1
+            or (getattr(existing, 'st_file_attributes', 0)
+                & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))
+        ):
+            raise ValueError('Update continuation metadata is redirected.')
+        atomic_write_json(path, payload)
+        lease.verify()
+        if self.load(lease) != self:
+            raise ValueError('Update continuation could not be verified.')
 
 
 class ImportBindings:

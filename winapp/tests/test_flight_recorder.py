@@ -145,6 +145,140 @@ def write_session(
 class FlightAnalysisReplayTests(unittest.TestCase):
     """Verify full-resolution event extraction independently from chart sampling."""
 
+    def test_resume_restores_same_session_and_appends_after_elapsed_gap(self) -> None:
+        """Continue the existing durable recorder identity and sample stream.
+
+        Returns:
+            None: Old bytes and metadata remain unchanged; the resumed sample
+                uses the same UUID, advances elapsed time and marks a split.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original = FlightRecorder(
+                root, "gallery #12", "", lambda _level, _message: None,
+            )
+            original.directory.mkdir(parents=True)
+            original.started_utc = "2026-10-18T09:00:00+00:00"
+            original.simulator = "Microsoft Flight Simulator 2024"
+            original.simulator_build = "fixture-build"
+            original.aircraft = "fixture-aircraft"
+            original.warnings = ["fixture warning"]
+            original._capture_mode = "approach"
+            original._detail_sample_count = 1
+            original._detail_max_gap_seconds = 0.75
+            sample = FlightSample(
+                session_elapsed_seconds=12.0,
+                recorded_utc="2026-10-18T09:00:12+00:00",
+                simulator_elapsed_seconds=11.5,
+            )
+            self.assertTrue(original._write_sample(sample))
+            original._checkpoint()
+            prior_bytes = (original.directory / "samples.jsonl").read_bytes()
+            session_id = original.session_id
+
+            resumed = FlightRecorder.from_session(
+                original.directory, "gallery #12", "",
+                lambda _level, _message: None,
+            )
+
+            self.assertEqual(session_id, resumed.session_id)
+            self.assertEqual(original.directory, resumed.directory)
+            self.assertEqual(original.started_utc, resumed.started_utc)
+            self.assertEqual(original.simulator, resumed.simulator)
+            self.assertEqual(original.simulator_build, resumed.simulator_build)
+            self.assertEqual(original.aircraft, resumed.aircraft)
+            self.assertEqual(original.warnings, resumed.warnings)
+            self.assertEqual(1, resumed.diagnostics_snapshot()["sample_count"])
+            self.assertEqual("approach", resumed.diagnostics_snapshot()["capture_mode"])
+            self.assertEqual(1, resumed.diagnostics_snapshot()["detail_samples"])
+            self.assertGreater(resumed._elapsed_offset, 12.0)
+            self.assertEqual(prior_bytes, (original.directory / "samples.jsonl").read_bytes())
+
+            next_sample = FlightSample(
+                session_elapsed_seconds=resumed._elapsed_offset + 1.0,
+                recorded_utc="2026-10-18T09:00:13+00:00",
+                simulator_elapsed_seconds=12.5,
+            )
+            self.assertTrue(resumed._write_sample(next_sample))
+            rows = (original.directory / "samples.jsonl").read_text(
+                encoding="utf-8",
+            ).splitlines()
+            self.assertEqual(2, len(rows))
+            self.assertEqual(prior_bytes.decode("utf-8").strip(), rows[0])
+            appended = json.loads(rows[1])["sample"]
+            self.assertEqual(
+                "application resumed after update",
+                appended["discontinuity_before"],
+            )
+            self.assertGreater(appended["session_elapsed_seconds"], 12.0)
+            # One extra byte is a boundary probe proving both records still
+            # consume the unchanged global raw-session storage budget.
+            resumed._initialize_storage_budget(
+                (original.directory / "samples.jsonl").stat().st_size + 1,
+            )
+            self.assertEqual(1, resumed._global_remaining_bytes)
+
+    def test_resume_refuses_corrupt_jsonl_without_rewriting_it(self) -> None:
+        """Keep incomplete sample history intact for explicit recovery review.
+
+        Returns:
+            None: A partial JSONL tail raises a safe error and remains bytewise
+                unchanged for later diagnosis.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            original = FlightRecorder(
+                Path(temporary), "gallery", "", lambda _level, _message: None,
+            )
+            original.directory.mkdir(parents=True)
+            original._checkpoint()
+            history = original.directory / "samples.jsonl"
+            history.write_bytes(b'{"type":"sample","sample":')
+            before = history.read_bytes()
+
+            with self.assertRaisesRegex(ValueError, "sample history"):
+                FlightRecorder.from_session(
+                    original.directory, "gallery", "",
+                    lambda _level, _message: None,
+                )
+
+            self.assertEqual(before, history.read_bytes())
+
+    def test_resume_refuses_symlinked_sample_history(self) -> None:
+        """Do not follow a redirected JSONL path during session recovery.
+
+        Returns:
+            None: The link is refused before reading or rewriting its target.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original = FlightRecorder(
+                root / "sessions", "gallery", "",
+                lambda _level, _message: None,
+            )
+            original.directory.mkdir(parents=True)
+            original._write_sample(FlightSample(
+                session_elapsed_seconds=1.0,
+                recorded_utc="2026-10-18T09:00:01+00:00",
+            ))
+            original._checkpoint()
+            history = original.directory / "samples.jsonl"
+            target = root / "external-samples.jsonl"
+            target.write_bytes(history.read_bytes())
+            history.unlink()
+            try:
+                history.symlink_to(target)
+            except OSError:
+                self.skipTest("Symlink creation is unavailable on this runner.")
+            target_bytes = target.read_bytes()
+
+            with self.assertRaisesRegex(ValueError, "sample history"):
+                FlightRecorder.from_session(
+                    original.directory, "gallery", "",
+                    lambda _level, _message: None,
+                )
+
+            self.assertEqual(target_bytes, target.read_bytes())
+
     def test_live_display_expires_and_pause_never_exposes_old_values(self) -> None:
         """Keep compact instrument snapshots passive and bounded in freshness.
 

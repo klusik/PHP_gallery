@@ -46,15 +46,6 @@ namespace Gallery\Core {
         return $GLOBALS['app_link_test_https'];
     }
 
-    /**
-     * Supply this fixture's front-controller installation mount.
-     *
-     * @return string Mount path without a trailing slash.
-     */
-    function request_script_base_path(): string
-    {
-        return $GLOBALS['app_link_test_mount'];
-    }
 }
 
 namespace {
@@ -301,13 +292,14 @@ namespace {
 
     $GLOBALS['app_link_test_config'] = [];
     $GLOBALS['app_link_test_https'] = true;
-    $GLOBALS['app_link_test_mount'] = '/Galerie';
     app_link_test_check(
         \Gallery\Controllers\app_linking_discovery_model() === ['available' => false]
             && \Gallery\Services\app_linking_discovery_capabilities() === [],
         'Missing optional linking configuration must hide linking without touching legacy auth.',
     );
     $_SERVER['HTTP_HOST'] = 'gallery.example.test';
+    $_SERVER['SCRIPT_NAME'] = '/private/rewritten/public/index.php';
+    $_SERVER['REQUEST_URI'] = '/Galerie/index.php?page=app_linking_discovery';
     app_link_test_check(
         app_linking_configured_issuer() === null,
         'An absent issuer must refuse authorization.',
@@ -333,6 +325,63 @@ namespace {
         'A malformed explicit issuer must fail closed instead of using the website address.',
     );
     unset($GLOBALS['app_link_test_config']['app_linking']);
+    // Public request paths confirm the configured mount independently of the
+    // hosting server's internal SCRIPT_NAME. The URI never supplies authority.
+    foreach ([
+        null,
+        '/other/index.php',
+        '/galerie/index.php',
+        '/Galerie-other/index.php',
+        '/private/rewritten/public/index.php',
+        '//gallery.example.test/Galerie/index.php',
+        'https://gallery.example.test/Galerie/index.php',
+        '/Galerie/index.php/extra',
+        '/Galerie/%69ndex.php',
+        '/Gal%65rie/index.php',
+        '/Galerie/../Galerie/index.php',
+        '/Galerie//index.php',
+        '/Galerie\\index.php',
+        '/Galerie/index.php#fragment',
+        "/Galerie/index.php\0",
+    ] as $unsafeRequestUri) {
+        $_SERVER['REQUEST_URI'] = $unsafeRequestUri;
+        app_link_test_check(
+            app_linking_configured_issuer() === null,
+            'An absent, ambiguous or different public mount must be refused.',
+        );
+    }
+    foreach ([
+        '/Galerie/index.php?page=app_linking_discovery',
+        '/Galerie/index.php?page=app_linking_push',
+        '/Galerie/public/index.php?page=app_linking_start',
+    ] as $publicRequestUri) {
+        $_SERVER['REQUEST_URI'] = $publicRequestUri;
+        app_link_test_check(
+            app_linking_configured_issuer()
+                === 'https://gallery.example.test/Galerie',
+            'Rewritten and direct public entrypoints preserve the exact issuer.',
+        );
+    }
+    $GLOBALS['app_link_test_config']['base_url'] = 'https://gallery.example.test';
+    $_SERVER['REQUEST_URI'] = '/index.php?page=app_linking_discovery';
+    app_link_test_check(
+        app_linking_configured_issuer() === 'https://gallery.example.test',
+        'A public root installation must ignore a private script mount.',
+    );
+    app_link_test_check(
+        \Gallery\Controllers\app_linking_public_route_path(
+            'app_linking_start', app_linking_configured_issuer(),
+        ) === '/index.php?page=app_linking_start',
+        'Login returns and approval forms must use the configured public mount.',
+    );
+    app_link_test_check(
+        \Gallery\Controllers\app_linking_public_route_path(
+            'app_linking_devices', null,
+        ) === '/index.php?page=app_linking_devices',
+        'Owner inspection uses the public path without issuance configuration.',
+    );
+    $GLOBALS['app_link_test_config']['base_url'] = 'https://gallery.example.test/Galerie/';
+    $_SERVER['REQUEST_URI'] = '/Galerie/index.php?page=app_linking_discovery';
     $refused = false;
     try {
         app_link_push_key('state');
@@ -434,9 +483,9 @@ namespace {
     $_SERVER['HTTP_HOST'] = 'other.example.test';
     app_link_test_check(app_linking_configured_issuer() === null, 'Wrong Host must be refused.');
     $_SERVER['HTTP_HOST'] = 'gallery.example.test';
-    $GLOBALS['app_link_test_mount'] = '/other';
+    $_SERVER['REQUEST_URI'] = '/other/index.php?page=app_linking_discovery';
     app_link_test_check(app_linking_configured_issuer() === null, 'Wrong mount must be refused.');
-    $GLOBALS['app_link_test_mount'] = '/Galerie';
+    $_SERVER['REQUEST_URI'] = '/Galerie/index.php?page=app_linking_discovery';
     $GLOBALS['app_link_test_https'] = false;
     app_link_test_check(app_linking_configured_issuer() === null, 'A TLS issuer cannot use HTTP.');
 
@@ -453,6 +502,8 @@ namespace {
             'SERVER_ADDR' => $loopback,
             'SERVER_PORT' => '8888',
             'HTTP_HOST' => 'localhost:8888',
+            'SCRIPT_NAME' => '/private/rewritten/public/index.php',
+            'REQUEST_URI' => '/Galerie/index.php?page=app_linking_discovery',
         ];
         app_link_test_check(app_linking_configured_issuer() === $localIssuer,
             'Direct localhost HTTP must preserve the exact port and mount.');
@@ -488,7 +539,7 @@ namespace {
             'An opaque origin or an origin with a different scheme or port must fail.',
         );
     }
-    $GLOBALS['app_link_test_mount'] = '/galerie';
+    $_SERVER['REQUEST_URI'] = '/galerie/index.php?page=app_linking_discovery';
     app_link_test_check(app_linking_configured_issuer() === null,
         'Local HTTP cannot change the configured mount.');
     app_link_test_check(

@@ -809,6 +809,36 @@ deletion, exact quoted terms, display ancestry and live search-grant
 revocation. The WinApp transport fixture checks the scoped form POST and
 rejects malformed hierarchy data.
 
+The WinApp linking transport fixture covers client identification on JSON and
+native-media requests, rejected HTTP/HTML responses and safe DNS/TLS/network
+failure categories. It preserves exact JSON/cache/encoding and redirect rules.
+The linking UI fixture verifies that HTTP rejection and advertised server
+unavailability remain distinct, and that the retained failure excludes response
+bodies, credentials, callback handles and raw exception messages. These
+regressions run through the hosted central WinApp owner; BASIC alone checks
+source syntax and changed declarations, not runtime behavior.
+
+The isolated linking security fixture keeps `SCRIPT_NAME` independent of
+`REQUEST_URI` and verifies root and subdirectory public mounts through internal
+rewrites. Missing, foreign, encoded, case-changed, path-info and ambiguous public
+paths remain refused. It covers public start/login/consent route construction
+and owner-inspection fallback separately from issuer authorization. Existing
+host, scheme, port, proxy, loopback, PKCE and scope negative assertions remain.
+
+Watcher update qualification uses the existing flight recorder/queue fixtures
+and the continuation host fixture. It covers an ACK completing before pause,
+no next dispatch, original initial/pending boundary, outage-created files,
+append-only telemetry with the same session ID, strict metadata/profile/scope
+validation, helper nonce propagation and cancellation. Resumed dispatch waits
+for the GUI to durably consume the checkpoint. Failed consumption, wrong nonce,
+stopped/completed work and changed linked scope do not upload. Legacy tickets
+are strict, bounded and tied to the installed version and verified bytes; their
+older ambiguous running intent produces an explicit Resume offer. Real Windows
+qualification must additionally start the exact process, record Python/Tk and
+source SHA, stop and resume in a disposable local gallery, and inspect the log
+and delivered new photograph. A hosted fixture is not proof of a live installer
+upgrade or power-loss recovery.
+
 The WinApp linking fixture switches two approvals for distinct mounts on one
 host. It checks exact account selection, the existing upload guard, unlinking
 one parked session, and address-only history round trips and removal in an
@@ -1371,7 +1401,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.0.0. Release verification uses the
+This guide applies to PHP Gallery Version 1.0.1. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

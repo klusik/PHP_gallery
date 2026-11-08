@@ -29,8 +29,6 @@ use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
 use function Gallery\Core\request_is_https;
 use function Gallery\Core\request_method;
-use function Gallery\Core\request_mount_url;
-use function Gallery\Core\request_script_base_path;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\app_linking_authenticate;
 use function Gallery\Services\app_linking_discovery_capabilities;
@@ -275,7 +273,7 @@ function app_linking_request_origin(): ?string
  * proxy headers can confirm the request but never supply the trusted address.
  *
  * @return string|null Canonical installation issuer, or null for invalid
- *     configuration, insecure transport, or an authority or mount mismatch.
+ *     configuration, insecure transport, or a public authority/mount mismatch.
  */
 function app_linking_configured_issuer(): ?string
 {
@@ -298,9 +296,70 @@ function app_linking_configured_issuer(): ?string
         return null;
     }
     $origin = app_linking_request_origin();
+    $mount = (string) (parse_url($issuer, PHP_URL_PATH) ?? '');
+    $request = $_SERVER['REQUEST_URI'] ?? null;
+    if (!is_string($request)
+        || str_contains($request, '#')
+        || str_contains($request, '\\')
+        || preg_match('/[\x00-\x20\x7F]/', $request) === 1) {
+        return null;
+    }
+    $publicPath = explode('?', $request, 2)[0];
+    // Internal rewrites can put a private filesystem mount into SCRIPT_NAME.
+    // Only the public request path confirms the configured issuer; it never
+    // supplies an authority. Keep the supported direct public front controller.
+    if (!hash_equals($mount . '/index.php', $publicPath)
+        && !hash_equals($mount . '/public/index.php', $publicPath)) {
+        return null;
+    }
     return $origin !== null
-        && hash_equals($issuer, $origin . request_script_base_path())
+        && hash_equals($issuer, $origin . $mount)
         ? $issuer : null;
+}
+
+/**
+ * Keep linking forms and login returns on the public front controller.
+ *
+ * A verified issuer owns authorization URLs. Owner-only grant inspection must
+ * also remain usable with invalid issuance settings; its permanent fallback
+ * uses the current safe public request path, never an internal script mount.
+ * Neither path supplies authentication or changes grant ownership.
+ *
+ * @param string $page Fixed linking start, consent, devices or Admin login route.
+ * @param string|null $issuer Previously verified issuer, or null for owner-only
+ *     inspection independent of issuance readiness.
+ * @return string Same-origin public route path without secrets or handles.
+ * @throws \InvalidArgumentException For an unsupported route or unsafe path.
+ */
+function app_linking_public_route_path(string $page, ?string $issuer): string
+{
+    if (!in_array($page, [
+        'app_linking_start', 'app_linking_consent', 'app_linking_devices',
+        'admin_login',
+    ], true)) {
+        throw new \InvalidArgumentException('Invalid linking browser route.');
+    }
+    if ($issuer !== null) {
+        if (!app_linking_issuer_valid($issuer)) {
+            throw new \InvalidArgumentException('Invalid linking issuer.');
+        }
+        $controller = (string) (parse_url($issuer, PHP_URL_PATH) ?? '')
+            . '/index.php';
+    } else {
+        $request = $_SERVER['REQUEST_URI'] ?? null;
+        if (!is_string($request)
+            || !str_starts_with($request, '/')
+            || str_starts_with($request, '//')
+            || str_contains($request, '\\') || str_contains($request, '#')
+            || preg_match('/[\x00-\x20\x7F]/', $request) === 1) {
+            throw new \InvalidArgumentException('Invalid public linking path.');
+        }
+        $controller = explode('?', $request, 2)[0];
+        if (!str_ends_with($controller, '/index.php')) {
+            throw new \InvalidArgumentException('Invalid public linking path.');
+        }
+    }
+    return $controller . '?page=' . $page;
 }
 
 /**
@@ -713,8 +772,8 @@ function cms_app_linking_start(): void
             // or PKCE material in the browser URL, and claim only after login
             // using the current session's CSRF-protected POST.
             $_SESSION['app_link_browser_handle'] = $handle;
-            header('Location: ' . request_mount_url(
-                'index.php?page=app_linking_start',
+            header('Location: ' . app_linking_public_route_path(
+                'app_linking_start', $issuer,
             ), true, 303);
             return;
         }
@@ -733,8 +792,8 @@ function cms_app_linking_start(): void
                 app_linking_json_error(401, 'access_denied');
                 return;
             }
-            $return = request_mount_url('index.php?page=app_linking_start');
-            $login = request_mount_url('index.php?page=admin_login&')
+            $return = app_linking_public_route_path('app_linking_start', $issuer);
+            $login = app_linking_public_route_path('admin_login', $issuer) . '&'
                 . http_build_query(['return' => $return], '', '&', PHP_QUERY_RFC3986);
             app_linking_security_headers();
             header('Location: ' . $login, true, 303);
@@ -752,8 +811,8 @@ function cms_app_linking_start(): void
             app_linking_security_headers($nonce);
             header('Content-Type: text/html; charset=utf-8');
             view_render_app_linking_start(
-                request_mount_url('index.php?page=app_linking_start'),
-                request_mount_url('index.php?page=app_linking_consent'),
+                app_linking_public_route_path('app_linking_start', $issuer),
+                app_linking_public_route_path('app_linking_consent', $issuer),
                 csrf_token(), $nonce, translation_active_language(),
                 app_linking_theme_model(), $issuer, $admin['username'],
                 [
@@ -1184,8 +1243,9 @@ function cms_app_linking_devices(): void
                 app_linking_json_error(401, 'access_denied');
                 return;
             }
-            $return = request_mount_url('index.php?page=app_linking_devices');
-            $login = request_mount_url('index.php?page=admin_login&')
+            $issuer = app_linking_configured_issuer();
+            $return = app_linking_public_route_path('app_linking_devices', $issuer);
+            $login = app_linking_public_route_path('admin_login', $issuer) . '&'
                 . http_build_query(['return' => $return], '', '&', PHP_QUERY_RFC3986);
             header('Location: ' . $login, true, 303);
             return;
@@ -1310,7 +1370,9 @@ function cms_app_linking_devices(): void
         app_linking_security_headers($nonce);
         header('Content-Type: text/html; charset=utf-8');
         view_render_app_linking_devices(
-            request_mount_url('index.php?page=app_linking_devices'),
+            app_linking_public_route_path(
+                'app_linking_devices', app_linking_configured_issuer(),
+            ),
             csrf_token(),
             $nonce,
             translation_active_language(),

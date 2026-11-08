@@ -1079,6 +1079,52 @@ class LinkingTransportTests(unittest.TestCase):
         self.assertIsNone(call.kwargs['body'])
         self.assertNotIn('Authorization', call.kwargs['headers'])
         self.assertNotIn('X-Gallery-API-Key', call.kwargs['headers'])
+        self.assertEqual(
+            linking.LINKING_USER_AGENT, call.kwargs['headers']['User-Agent'],
+        )
+
+    def test_html_and_http_failures_keep_only_safe_response_metadata(self) -> None:
+        """Preserve bounded response facts while discarding unsafe body text.
+
+        Returns:
+            None: HTML 401 and JSON 429 failures report fixed stage, route,
+                status, response kind and reason without retaining body content.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        cases = (
+            (401, 'text/html', b'<html>private gateway secret</html>',
+             'response_kind=html; reason=http_status'),
+            (429, 'application/json', b'{\"secret\":\"private payload\"}',
+             'response_kind=json; reason=http_status'),
+            (200, 'application/problem+json', b'{\"secret\":\"private payload\"}',
+             'response_kind=json; reason=content_type'),
+        )
+        for status, media_type, body, expected in cases:
+            with self.subTest(status=status, media_type=media_type):
+                headers = Message()
+                headers['Content-Type'] = media_type
+                headers['Cache-Control'] = 'no-store'
+                response = mock.MagicMock()
+                response.__enter__.return_value = response
+                response.status = status
+                response.headers = headers
+                response.read.return_value = body
+                connection = mock.MagicMock()
+                connection.getresponse.return_value = response
+                with mock.patch.object(
+                    linking, '_DeadlineHTTPSConnection',
+                    return_value=connection,
+                ), self.assertRaises(linking.LinkingResponseError) as raised:
+                    linking._request_json(
+                        issuer, 'app_linking_discovery', 'GET', None, None,
+                    )
+                summary = raised.exception.safe_summary
+                self.assertIn('stage=discovery', summary)
+                self.assertIn('route=app_linking_discovery', summary)
+                self.assertIn(f'http={status}', summary)
+                self.assertIn(expected, summary)
+                self.assertNotIn(body.decode('ascii'), summary)
+                self.assertNotIn('private', str(raised.exception))
 
     def test_gallery_cursor_is_sent_only_to_fixed_https_route(self) -> None:
         """Keep a bearer out of the URL while requesting a subsequent page.
@@ -1145,6 +1191,7 @@ class LinkingTransportTests(unittest.TestCase):
                 'Accept': 'application/json',
                 'Authorization': 'Bearer fixture',
                 'Content-Type': 'application/json; charset=utf-8',
+                'User-Agent': linking.LINKING_USER_AGENT,
             },
         )
 
@@ -2947,6 +2994,10 @@ class NativeMediaTransportTests(unittest.TestCase):
         self.assertEqual('1', connection.request.call_args.kwargs['headers'][
             'X-PHP-Gallery-Photo-Cache'
         ])
+        self.assertEqual(
+            linking.LINKING_USER_AGENT,
+            connection.request.call_args.kwargs['headers']['User-Agent'],
+        )
 
         not_modified = Message()
         not_modified['ETag'] = etag
@@ -3063,12 +3114,22 @@ class NativeMediaTransportTests(unittest.TestCase):
             with mock.patch.object(
                 linking, '_linking_connection', return_value=connection,
             ), self.assertRaises(linking.LinkingMediaThrottled) as raised:
-                linking._native_media_read_once(
-                    'https://gallery.example', query, 'opaque-test-bearer',
-                    ('image/jpeg',), mock.Mock(), admin_preload=True,
+                linking._run_linking_transport(
+                    lambda control: linking._native_media_read_once(
+                        'https://gallery.example', query, 'opaque-test-bearer',
+                        ('image/jpeg',), control, admin_preload=True,
+                    ),
+                    None, linking.LINKING_REQUEST_DEADLINE_SECONDS,
+                    linking.LINKING_SOCKET_TIMEOUT_SECONDS,
+                    phase='media', route='app_linking_media',
                 )
             self.assertEqual(expected, raised.exception.retry_after_seconds)
             self.assertNotIn('temporarily_unavailable', str(raised.exception))
+            self.assertEqual(
+                'stage=media; route=app_linking_media; http=429; '
+                'response_kind=json; reason=throttled',
+                raised.exception.safe_summary,
+            )
 
     def test_legacy_photo_response_remains_uncached(self) -> None:
         """Keep older no-store image servers usable without disk persistence.
@@ -3295,6 +3356,88 @@ class NativeMediaTransportTests(unittest.TestCase):
 class LinkingDeliveryTests(unittest.TestCase):
     """Exercise worker-event delivery without opening a Tk window."""
 
+    def test_linking_diagnostic_survives_ui_delivery_without_raw_details(self) -> None:
+        """Retain safe HTTP facts and fixed unavailable status for the host.
+
+        Returns:
+            None: UI status, callback and getter receive only bounded summaries,
+                and the latest linking diagnostic survives a later event.
+        """
+        owner = object()
+        callback = mock.Mock()
+        manager = object.__new__(LinkingManager)
+        manager._events = queue.Queue()
+        manager._owner = owner
+        manager._direct_owner = owner
+        manager._window = None
+        manager._worker = None
+        manager._session = None
+        manager._parked_links = ()
+        manager._handoff = None
+        manager._attempt = None
+        manager._polling = False
+        manager._shutting_down = False
+        manager._gallery_search_waiting = False
+        manager._refresh_address_prompt = None
+        manager._status = mock.Mock()
+        manager._diagnostic_callback = callback
+        manager._diagnostics_snapshot = ''
+        error = linking.LinkingResponseError(
+            'discovery', 'app_linking_discovery', 401, 'html', 'http_status',
+        )
+        manager._events.put((owner, 'response_error', error))
+
+        manager._poll()
+
+        expected = (
+            'stage=discovery; route=app_linking_discovery; http=401; '
+            'response_kind=html; reason=http_status'
+        )
+        snapshot = manager.diagnostics_snapshot()
+        self.assertIn(f'latest={expected}', snapshot)
+        self.assertIn(f'last_failure={expected}', snapshot)
+        self.assertRegex(
+            snapshot,
+            r'last_failure_utc=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$',
+        )
+        callback.assert_called_once_with(expected)
+        visible = manager._status.set.call_args.args[0]
+        self.assertIn('HTTP 401', visible)
+        self.assertNotIn('route=', visible)
+        self.assertNotIn('body', manager.diagnostics_snapshot())
+
+        manager._events.put((owner, 'unavailable', None))
+        manager._poll()
+        self.assertIn(
+            'availability=unknown; http=none; response_kind=other; '
+            'reason=request_unavailable',
+            manager.diagnostics_snapshot(),
+        )
+        unavailable_error = linking.LinkingUnavailable(
+            'The selected gallery does not offer browser linking.',
+            availability='false', status=200, content_kind='json',
+            reason='server_unavailable',
+        )
+        manager._events.put((owner, 'unavailable', unavailable_error))
+        manager._poll()
+        unavailable = (
+            'stage=discovery; route=app_linking_discovery; '
+            'availability=false; http=200; response_kind=json; '
+            'reason=server_unavailable'
+        )
+        snapshot = manager.diagnostics_snapshot()
+        self.assertIn(f'latest={unavailable}', snapshot)
+        self.assertIn(f'last_failure={unavailable}', snapshot)
+        manager._record_diagnostic(
+            'stage=linking; route=app_linking_identity; '
+            'availability=true; reason=connected',
+            failure=False,
+        )
+        snapshot = manager.diagnostics_snapshot()
+        self.assertIn('latest=stage=linking;', snapshot)
+        self.assertIn(f'last_failure={unavailable}', snapshot)
+        self.assertEqual(4, callback.call_count)
+
     def test_photos_gallery_editor_uses_current_site_and_browser_session(self) -> None:
         """Open only a bounded listed gallery on the live Photos site.
 
@@ -3401,8 +3544,8 @@ class LinkingDeliveryTests(unittest.TestCase):
         """Exercise cancellation, correction and submission from the prompt.
 
         Returns:
-            None: Only a valid submitted address starts an attempt, using the
-                exact installation path and keeping the prompt for feedback.
+            None: Valid bare addresses infer HTTPS and start with their exact
+                canonical issuer; ambiguous inputs are refused without an attempt.
         """
         directory = TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -3411,8 +3554,26 @@ class LinkingDeliveryTests(unittest.TestCase):
             ('Cancel', 'https://gallery.example/Galerie/', ''),
             ('Link gallery', 'http://gallery.example/Galerie/',
              'https://gallery.example/Galerie'),
+            ('Link gallery', 'gallery.example/Galerie/',
+             'https://gallery.example/Galerie'),
+            ('Link gallery', 'gallery.example',
+             'https://gallery.example'),
+            ('Link gallery', '  gallery.example  ',
+             'https://gallery.example'),
+            ('Link gallery', 'localhost/Galerie',
+             'https://localhost/Galerie'),
+            ('Link gallery', 'gallery.example:8443/Galerie/sub/',
+             'https://gallery.example:8443/Galerie/sub'),
+            ('Link gallery', 'https://gallery.example/Galerie/',
+             'https://gallery.example/Galerie'),
             ('Link gallery', 'http://localhost:8888/galerie/',
              'http://localhost:8888/galerie'),
+            ('Link gallery', 'relative/gallery', ''),
+            ('Link gallery', '//gallery.example/Galerie', ''),
+            ('Link gallery', 'gallery.example/Bad Gallery', ''),
+            ('Link gallery', 'ftp://gallery.example/Galerie', ''),
+            ('Link gallery', 'gallery.example:99999/Galerie', ''),
+            ('Link gallery', 'user@gallery.example/Galerie', ''),
         ):
             with self.subTest(action=action, value=value):
                 manager = object.__new__(LinkingManager)
@@ -3467,11 +3628,25 @@ class LinkingDeliveryTests(unittest.TestCase):
                     command()
                     if action == 'Link gallery':
                         dialog.destroy.assert_not_called()
-                        hint.configure.assert_called_with(
-                            textvariable=manager._status, style='Status.TLabel',
-                        )
-                        manager._start.assert_called_once_with(issuer, direct=True)
-                        self.assertEqual(issuer, manager.address())
+                        if issuer:
+                            hint.configure.assert_called_with(
+                                textvariable=manager._status,
+                                style='Status.TLabel',
+                            )
+                            manager._start.assert_called_once_with(
+                                issuer, direct=True,
+                            )
+                            self.assertEqual(issuer, manager.address())
+                            if '://' not in value:
+                                field.set.assert_called_with(issuer)
+                        else:
+                            hint.configure.assert_called_with(
+                                textvariable='',
+                                text='Enter a valid gallery address.',
+                                style='Status.TLabel',
+                            )
+                            manager._start.assert_not_called()
+                            self.assertEqual(known, manager.address())
                     else:
                         dialog.destroy.assert_called_once_with()
                         manager._start.assert_not_called()

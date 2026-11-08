@@ -4883,17 +4883,19 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         )
         app.simulator_presence.stop.assert_not_called()
 
-    def test_update_close_exits_all_threads_without_worker_checks(self) -> None:
-        """Kill app-owned children and exit despite active or unknown workers.
+    def test_update_close_exits_after_checkpoint_and_terminates_children(self) -> None:
+        """Exit only after a durable checkpoint and settled app workers.
 
         Returns:
-            None: Confirms no drain, revocation prompt or updater recursion.
+            None: Confirms child cleanup and process exit after admission checks.
         """
         app = object.__new__(MAIN.WatcherApp)
         app.exiting = False
         app._save_ui_layout_now = mock.Mock()
+        app._update_checkpoint_ready = True
+        app._update_checkpoint_workers = ()
         app.updates = mock.Mock()
-        app.api_key_revoke_running = True
+        app.api_key_revoke_running = False
         app.flights = mock.Mock()
         app.simulator_presence = mock.Mock()
         child = mock.Mock()
@@ -4916,6 +4918,36 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.updates.request_close.assert_not_called()
         dialogs.showwarning.assert_not_called()
         dialogs.askyesno.assert_not_called()
+
+    def test_update_close_refuses_unready_checkpoint_or_active_writer(self) -> None:
+        """Never terminate the app while accepted work lacks a safe checkpoint.
+
+        Returns:
+            None: An unready marker or live captured worker keeps the process
+                open and does not terminate helper-owned child processes.
+        """
+        for ready, worker_alive in ((False, False), (True, True)):
+            with self.subTest(ready=ready, worker_alive=worker_alive):
+                app = object.__new__(MAIN.WatcherApp)
+                app.exiting = False
+                app._save_ui_layout_now = mock.Mock()
+                app._update_checkpoint_ready = ready
+                worker = mock.Mock()
+                worker.is_alive.return_value = worker_alive
+                app._update_checkpoint_workers = (worker,) if worker_alive else ()
+                app.write_log = mock.Mock()
+                child = mock.Mock()
+                with mock.patch.object(
+                    MAIN.multiprocessing, 'active_children',
+                    return_value=[child],
+                ), mock.patch.object(
+                    MAIN.os, '_exit', side_effect=SystemExit(0),
+                ) as exit_process:
+                    MAIN.WatcherApp.close(app, for_update=True)
+                self.assertFalse(app.exiting)
+                exit_process.assert_not_called()
+                child.terminate.assert_not_called()
+                app.write_log.assert_called_once()
 
     def test_confirmed_close_clears_update_offer_before_teardown(self) -> None:
         """Clear the persistent offer only when shutdown reaches teardown.
