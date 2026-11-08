@@ -1,5 +1,109 @@
 # Patch notes
 
+## Version 1.0.3
+
+PHP Gallery and WinApp 1.0.3 expanded Photos preload diagnostics, restored
+connection setup from idle API-key mode and continued large gallery catalogues
+automatically. The production media-response refusal remained unresolved; this
+release added diagnostic detail to help identify its cause.
+
+### Highlights
+
+#### Preload failures in logs and copied diagnostics
+
+- Added immediate preload failure records to `watcher.log`, the visible **Log**
+  and **Copy diagnostics**, distinguishing listing, local cache checks, storage,
+  transfer and final verification.
+- Added terminal log records with known totals and processed, stored and skipped
+  counts. Failed and partial outcomes also reached copied diagnostics, including
+  refusals that produced no exception.
+- Kept a running preload's failure history when switching albums within the same
+  approved session. Replacing the session excluded late events from the old
+  worker.
+
+#### Available Begin and reconnect actions
+
+- Fixed idle API-key mode hiding **Begin** when a key was already saved or a
+  Photos browsing link existed. **Begin** stayed available without a detected
+  game and opened the existing connection editor directly.
+- Gave an explicitly selected linked upload mode or target its gallery reconnect
+  action. Active capture, pending work and finalization kept their existing
+  **Finish**, **Review** or **Progress** priority; active manual imports retained
+  their own controls.
+
+#### Automatic continuation of large gallery trees
+
+- Kept the initial ten-page burst of up to 500 galleries, then continued from the
+  saved cursor automatically, one page every five seconds. Loaded galleries
+  remained usable while the loading status indicated further work.
+- Removed the routine **Load more** click after that initial burst. Errors
+  stopped automatic continuation and offered an explicit retry; session changes
+  and workspace destruction cancelled scheduled work.
+
+### Technical Details
+
+#### Safe Photos diagnostics
+
+- Shared `format_safe_photos_failure()` in `winapp/uploader/diagnostics.py`
+  between the native viewer and the preload worker without importing Tk into
+  the worker. Records retained fixed operation stages, exception classes, owned
+  source locations and validated HTTP response facts.
+- Added `MediaPolicyFacts` in `winapp/uploader/app_linking.py` for
+  `response_policy` refusals. Facts identified missing, repeated or different
+  cache directives and cache/preload markers, bounded parsed `max-age`, required
+  `Vary` conditions and the presence of content encoding. Raw headers, response
+  bodies, URLs, credentials, arbitrary exception messages and private local
+  paths stayed out of these diagnostics.
+- Forwarded accepted Photos failures through the host event queue to the visible
+  log. Consecutive identical preload failures were collapsed; a later distinct
+  refusal after a transient throttle remained observable. Optional diagnostic
+  callback failures preserved the original operation's result.
+- Preserved existing authorization, media cache admission, wire protocol, saved
+  credentials and on-disk formats. Opening **Begin** did not accept capture
+  work. Catalogue continuation retained the existing cursor and single worker,
+  with session, generation, cursor and timer checks rejecting stale callbacks.
+
+#### Tests and documentation
+
+- Expanded `winapp/tests/test_gallery_preload.py` and
+  `winapp/tests/test_app_linking.py` for actual worker failure stages, terminal
+  counts, callback failures, distinct errors after throttling and finite
+  header-policy facts. Refusal and storage assertions remained in place.
+- Expanded `winapp/tests/test_native_gallery_viewer.py` for copied diagnostics,
+  queued host logs, session isolation, paced pagination, cancelled timers and
+  manual retry after errors. Updated `winapp/tests/test_redesign.py` for idle
+  **Begin**, saved and absent keys, Photos-only links, linked reconnection and
+  lifecycle action priority.
+- Updated `TESTING.md`, `docs/COMPATIBILITY_LIFECYCLE.md`, `winapp/README.md`
+  and all four English, Czech, German and Swedish manual sources with the
+  diagnostics, connection actions and automatic catalogue continuation.
+
+#### Verification limits
+
+- The observed production failure remained an HTTP 200 media response rejected
+  as `response_policy` before image decoding. The precise header mismatch
+  remained unidentified, and this release did not establish a production
+  image-loading or preload repair.
+- Automated fixtures covered the diagnostic and control boundaries. Runtime
+  behavior in an installed 1.0.3 application and live production media loading
+  were not manually verified.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery viewing behavior did not change.
+
+#### For administrators
+
+- Web Admin workflows did not change; the behavior changes applied to WinApp.
+- Made connection setup reachable before game detection and reduced manual
+  continuation of large Photos trees while keeping explicit recovery after
+  catalogue errors.
+- Made preload failures reportable through the ordinary log and
+  **Copy diagnostics** without enabling a debug mode. Production loading still
+  required diagnosis using the new response-policy facts.
+
 ## Version 1.0.2
 
 PHP Gallery and WinApp 1.0.2 improved recovery and troubleshooting in the

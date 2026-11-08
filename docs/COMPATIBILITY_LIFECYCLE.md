@@ -404,6 +404,26 @@ authentication. Usage of retained galleries is unknown. Cache/worker fixtures
 own quota, restart, failure and cancellation regression; native UI acceptance
 is separate from hosted Python qualification.
 
+Preload diagnostics now share the pure Photos formatter with the native viewer.
+Listing, local-cache, transfer and verification failures retain safe source and
+response facts, and terminal events retain the actual counts. Background
+preload facts survive an album change only within their exact approved session.
+The host receives queued safe messages without worker calls into Tk. Optional
+diagnostic callback failure cannot change the operation's outcome. Cache-policy
+refusals expose only finite header decisions and bounded numeric metadata;
+raw headers remain excluded. This diagnostic extension preserves the existing
+wire protocol, cache admission, authorization and on-disk format. Current
+production response-header mismatch still requires observed runtime facts;
+diagnostic coverage alone does not qualify a media-loading repair.
+
+The Photos gallery catalogue retains its initial ten-page burst, then continues
+one page every five seconds through the same cursor and single worker. This
+client pacing keeps the initial tree responsive while leaving server request
+headroom. No server limit or protocol changes. Session changes and destruction
+cancel scheduled work; errors stop automatic continuation until explicit retry.
+Catalogue fixtures own those timer and identity boundaries. Live production
+catalogue size and traffic are unknown.
+
 Explicit Admin preload extends the existing media owner with the additive
 `media:admin-preload-v1` capability, descriptor fields and a fixed binary opt-in
 header. It preserves older public validators and no-store browsing. Private
@@ -2059,8 +2079,13 @@ Windows dialog acceptance remain separate.
 ## Manual flight PDFs and compact recorder readings (0.5.3)
 
 Finish flight is visible below Target gallery, including at compact widths.
-Without a saved key it becomes enabled Begin flight and opens API settings.
-One click authorizes PDF creation and final revocation without confirmation.
+Idle API-key mode shows enabled Begin even with a saved key or Photos browsing
+link, independently of game detection. It opens the existing API connection
+editor; explicit linked upload mode retains its own reconnect flow. Active,
+pending and draining sessions keep their existing lifecycle action ahead of
+setup, and manual imports retain their controls. This changes discoverability
+without changing key persistence, target admission or finalization.
+Finish authorizes PDF creation and final revocation without confirmation.
 Keep locally and Retry preserve that same process's accepted, unsubmitted intent
 for the same saved endpoint/key;
 cancellation, changed credentials and restart never reconstruct consent.

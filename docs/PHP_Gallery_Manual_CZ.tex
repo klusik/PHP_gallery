@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.0.2}
+\newcommand{\version}{1.0.3}
 \newcommand{\manualdate}{8.~listopadu~2026}
 
 \hypersetup{
@@ -1781,8 +1781,10 @@ Spuštění s~\texttt{--startup} zůstane v~oznamovací oblasti až do obnovení
 okna. Při spuštění ze zdrojů na macOS se používá běžné okno Tk.
 Dočasné propojení skončí s~procesem.
 
-Velké stromy nejprve načtou nejvýše 500 galerií. Pojmenovaná akce
-\ui{Načíst další} vpravo na liště stromu pokračuje od uložené pozice.
+Velké stromy nejprve načtou nejvýše 500 galerií a~poté pokračují automaticky
+od~uložené pozice, jednou stránkou každých pět sekund. Načtené galerie lze
+procházet, zatímco stav signalizuje pokračující načítání. Chyba postup zastaví
+a~nabídne ruční opakování; běžné procházení nevyžaduje \ui{Načíst další}.
 Kontextové panely zachovávají zavření klávesnicí a~kliknutím mimo panel.
 Windows ořízne jejich zaoblený obrys bez tmavých vnějších rohů; pokud nativní
 tvarování není dostupné, zůstává použitelný plochý neprůhledný panel motivu.
@@ -2241,6 +2243,13 @@ technické podrobnosti jsou v~běžném logu bez zapínání ladicího režimu.
 úspěšné kontrole. Obsahuje také chyby Fotek v~aktuálním propojení a~rozlišuje
 čtení katalogu, přenos náhledu a~dekódování obrázku. Přepnutí alba tyto údaje
 zachová; změna schváleného aktivního propojení přehled chyb Fotek vymaže.
+Chyby preloadu se také zapisují do běžného logu, viditelného Logu
+i~kopírovatelné diagnostiky; rozlišují výpis, kontrolu cache, přenos
+a~závěrečné ověření. Výsledek uvádí počty zpracovaných, uložených
+a~přeskočených snímků. Běžící preload zachová diagnostiku při změně alba
+v~rámci stejného schváleného propojení. Odmítnutá odpověď uvádí omezené údaje
+o~podmínkách cache hlaviček bez jejich syrového obsahu a~bez uvolnění
+oprávnění či pravidel místního ukládání.
 
 \subsection{Poloha simulátoru ve Windows}
 
@@ -2433,6 +2442,12 @@ popisky. Kontrola probíhá každé tři sekundy i~před sledováním nebo při 
 záznamu a~UTC. SimConnect pouze otevře a~zavře, bez telemetrie a~změn
 simulátoru;
 procesy zůstávají místní.
+V~klidovém režimu API klíče zůstává Zahájit viditelné s~uloženým klíčem
+i~bez něj a~bez spuštěné hry. Přímo otevře nastavení připojení; samotné
+propojení pro prohlížení Fotek je~neskryje. Režim propojeného uploadu nabízí
+opětovné připojení galerie. Aktivní záznam, čekající úlohy a~dokončování mají
+přednostní akci Dokončit, Zkontrolovat nebo Průběh; běžící ruční import
+zachová vlastní ovládání.
 Tlačítko načtení/odebrání SimBriefu, jeho nastavení a~stav jsou viditelné pouze
 při detekovaném letu; skrytí zachová načtený plán. Mimo let používají Watcher,
 Import i~průběh \ui{Opustit hru} včetně odpovídajícího potvrzení a~stavu.

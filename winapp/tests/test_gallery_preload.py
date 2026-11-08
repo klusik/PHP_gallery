@@ -199,6 +199,254 @@ class GalleryPreloadWorkerTests(unittest.TestCase):
         )
         self.assertEqual(1, session.media_photo.call_count)
 
+    def test_response_failure_reaches_safe_log_and_copy_snapshot(self) -> None:
+        """Retain worker response facts without preserving arbitrary text.
+
+        Returns:
+            None: The real worker logs and copies validated response metadata
+                while excluding raw error messages and private URL material.
+        """
+        session = self._session()
+        session.media_page.return_value = linking.LinkedMediaPage(
+            TEST_PRELOAD_GALLERY_ID, None,
+            (linking.LinkedPhoto(101, 'Private album title'),), None,
+        )
+        error = linking.LinkingResponseError(
+            'media', 'app_linking_media', 200, 'other', 'response_policy',
+        )
+        error.args = (
+            'token=secret https://private.example/photo C:\\private\\item',
+        )
+        session.media_photo.side_effect = error
+
+        callback_values: list[str] = []
+        worker = GalleryPreloadWorker(
+            session, TEST_PRELOAD_GALLERY_ID,
+            diagnostic_callback=callback_values.append,
+        )
+
+        with self.assertLogs(
+            'uploader.gallery_preload', level='WARNING',
+        ) as captured:
+            worker.run()
+
+        self.assertEqual('error', worker.snapshot().phase)
+        self.assertEqual('unavailable', worker.snapshot().reason)
+        self.assertEqual(2, len(captured.records))
+        self.assertEqual(2, len(callback_values))
+        for summary in (*captured.output, *callback_values):
+            self.assertIn('phase=preload-fetch', summary)
+            self.assertIn('kind=preload', summary)
+            self.assertIn('response_kind=other', summary)
+            self.assertIn('reason=response_policy', summary)
+            self.assertIn('site=gallery_preload.py:_run_owned:', summary)
+            self.assertNotIn('secret', summary)
+            self.assertNotIn('private.example', summary)
+            self.assertNotIn('Private album title', summary)
+            self.assertNotIn('C:\\private', summary)
+        self.assertIn('preload_phase=error', callback_values[1])
+        self.assertIn('completed=1; cached=0; skipped=1', callback_values[1])
+        self.assertIn('reason=unavailable', callback_values[1])
+        self.assertEqual(
+            1,
+            sum('preload_phase=error' in line for line in captured.output),
+        )
+
+    def test_listing_runtime_failure_is_logged_without_message_and_callback_survives(self) -> None:
+        """Retain generic worker failures as safe staged diagnostics.
+
+        Returns:
+            None: Listing failures preserve the fixed stage and completion
+                counts while excluding exception text and callback failures.
+        """
+        session = self._session()
+        session.media_page.side_effect = RuntimeError(
+            'secret token=private https://private.example/gallery',
+        )
+        callback_values: list[str] = []
+
+        def broken_callback(summary: str) -> None:
+            """Capture a safe summary before simulating a broken owner.
+
+            Args:
+                summary (str): Safe worker diagnostic supplied for retention.
+
+            Returns:
+                None: Stores the first summary and raises to model callback loss.
+            """
+            callback_values.append(summary)
+            raise RuntimeError('callback token=private')
+
+        worker = GalleryPreloadWorker(
+            session, TEST_PRELOAD_GALLERY_ID,
+            diagnostic_callback=broken_callback,
+        )
+        with self.assertLogs(
+            'uploader.gallery_preload', level='WARNING',
+        ) as captured:
+            worker.run()
+
+        self.assertEqual('error', worker.snapshot().phase)
+        self.assertEqual('storage', worker.snapshot().reason)
+        self.assertIn('phase=preload-listing', callback_values[0])
+        self.assertIn('site=gallery_preload.py:_list_photos:', callback_values[0])
+        self.assertNotIn('private.example', '\n'.join(captured.output))
+        self.assertNotIn('token=private', '\n'.join(captured.output))
+        self.assertTrue(any('total=unknown' in line for line in captured.output))
+
+    def test_cache_and_verify_errors_report_owned_stages(self) -> None:
+        """Distinguish local cache admission from final cache verification.
+
+        Returns:
+            None: Each storage exception identifies the operation stage without
+                changing the worker's fixed storage terminal reason.
+        """
+        photo = linking.LinkedPhoto(101, 'Photo')
+        page = linking.LinkedMediaPage(
+            TEST_PRELOAD_GALLERY_ID, None, (photo,), None,
+        )
+        cases = (
+            ('cache', (RuntimeError('cache token=private'),)),
+            (
+                'verify',
+                (False, False, OSError('verify private path C:\\private')),
+            ),
+        )
+        for stage, failures in cases:
+            with self.subTest(stage=stage):
+                session = self._session()
+                session.media_page.return_value = page
+                session.prepare_cached_photo.side_effect = failures
+                observed: list[str] = []
+                worker = GalleryPreloadWorker(
+                    session, TEST_PRELOAD_GALLERY_ID,
+                    diagnostic_callback=observed.append,
+                )
+                worker.run()
+
+                self.assertEqual('storage', worker.snapshot().reason)
+                self.assertIn(f'phase=preload-{stage}', observed[0])
+                self.assertNotIn('token=private', observed[0])
+                self.assertNotIn('C:\\private', observed[0])
+
+    def test_storage_failure_reports_storage_stage(self) -> None:
+        """Classify a retention-store error before catalogue work begins.
+
+        Returns:
+            None: Storage exceptions retain their safe class and fixed phase,
+                while arbitrary exception messages stay out of the callback.
+        """
+        session = self._session()
+        session.gallery_pinned.side_effect = OSError(
+            'C:\\private\\cache token=secret',
+        )
+        observed: list[str] = []
+        worker = GalleryPreloadWorker(
+            session, TEST_PRELOAD_GALLERY_ID,
+            diagnostic_callback=observed.append,
+        )
+
+        worker.run()
+
+        self.assertEqual('storage', worker.snapshot().reason)
+        self.assertIn('phase=preload-storage', observed[0])
+        self.assertNotIn('C:\\private', observed[0])
+        self.assertNotIn('token=secret', observed[0])
+
+    def test_refused_preload_intent_reaches_host_without_exception(self) -> None:
+        """Expose a fixed storage refusal even when no exception was raised.
+
+        Returns:
+            None: The terminal failure reaches the copied log callback with
+                its phase, zero counts and fixed storage reason.
+        """
+        session = self._session()
+        session.can_read_admin_media.return_value = True
+        session.supports_admin_preload.return_value = True
+        session.set_gallery_preload_intent.return_value = False
+        observed: list[str] = []
+        worker = GalleryPreloadWorker(
+            session, TEST_PRELOAD_GALLERY_ID,
+            diagnostic_callback=observed.append,
+        )
+        with self.assertLogs(
+            'uploader.gallery_preload', level='WARNING',
+        ) as captured:
+            worker.run()
+
+        self.assertEqual('error', worker.snapshot().phase)
+        self.assertEqual('storage', worker.snapshot().reason)
+        self.assertEqual(1, len(observed))
+        self.assertIn('preload_phase=error', observed[0])
+        self.assertIn('completed=0; cached=0; skipped=0', observed[0])
+        self.assertIn('reason=storage', observed[0])
+        self.assertTrue(any('preload_phase=error' in line for line in captured.output))
+
+    def test_distinct_fatal_failure_after_throttle_is_retained(self) -> None:
+        """Keep a later refusal after one transient server throttle.
+
+        Returns:
+            None: Identical consecutive summaries can collapse, but a distinct
+                response-policy refusal reaches logs and the copied snapshot.
+        """
+        session = self._session()
+        session.media_page.return_value = linking.LinkedMediaPage(
+            TEST_PRELOAD_GALLERY_ID, None,
+            (linking.LinkedPhoto(101, 'Photo'),), None,
+        )
+        session.prepare_cached_photo.return_value = False
+        session.media_photo.side_effect = (
+            linking.LinkingMediaThrottled(7),
+            linking.LinkingResponseError(
+                'media', 'app_linking_media', 200, 'other',
+                'response_policy',
+            ),
+        )
+        observed: list[str] = []
+        worker = GalleryPreloadWorker(
+            session, TEST_PRELOAD_GALLERY_ID,
+            diagnostic_callback=observed.append,
+        )
+        with mock.patch.object(worker, '_wait_before_retry', return_value=True):
+            with self.assertLogs(
+                'uploader.gallery_preload', level='WARNING',
+            ) as captured:
+                worker.run()
+
+        self.assertEqual('error', worker.snapshot().phase)
+        self.assertEqual(3, len(observed))
+        self.assertIn('reason=throttled', observed[0])
+        self.assertIn('reason=response_policy', observed[1])
+        self.assertIn('reason=response_policy', observed[2])
+        self.assertIn('preload_phase=error', observed[2])
+        self.assertEqual(3, len(captured.records))
+
+    def test_successful_preload_logs_completion_without_failure_snapshot(self) -> None:
+        """Log successful worker completion without replacing failure history.
+
+        Returns:
+            None: The terminal count summary is logged, while success produces
+                no copied failure diagnostic.
+        """
+        session = self._session()
+        session.media_page.return_value = linking.LinkedMediaPage(
+            TEST_PRELOAD_GALLERY_ID, None, (), None,
+        )
+        callback_values: list[str] = []
+        worker = GalleryPreloadWorker(
+            session, TEST_PRELOAD_GALLERY_ID,
+            diagnostic_callback=callback_values.append,
+        )
+        with self.assertLogs(
+            'uploader.gallery_preload', level='INFO',
+        ) as captured:
+            worker.run()
+
+        self.assertEqual('complete', worker.snapshot().phase)
+        self.assertEqual([], callback_values)
+        self.assertTrue(any('preload_phase=complete' in line for line in captured.output))
+        self.assertTrue(any('total=0' in line for line in captured.output))
+
     def test_bounded_retry_wait_is_cancelable_and_resumes_once(self) -> None:
         """Resume one request after its bounded server delay without sleeping.
 

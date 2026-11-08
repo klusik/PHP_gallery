@@ -64,7 +64,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.0.2}
+\newcommand{\version}{1.0.3}
 \newcommand{\manualdate}{8 November 2026}
 
 \hypersetup{
@@ -1784,9 +1784,11 @@ A~logon \texttt{--startup} launch remains in~the~system tray until restored.
 On~macOS, source launches use the~normal Tk window.
 Temporary links end with the~process.
 
-Large trees initially load at~most 500 galleries. The~labeled
-\ui{Load more} action on~the~right of~the~tree toolbar continues from
-the~saved position. Contextual panels keep their existing keyboard and~outside
+Large trees initially load at~most 500 galleries, then continue automatically
+from the~saved position, one page every five seconds. Loaded galleries remain
+usable while the~loading status shows remaining work. Errors pause continuation
+and~offer an~explicit retry; normal browsing needs no~\ui{Load more} click.
+Contextual panels keep their existing keyboard and~outside
 click dismissal. Windows clips their rounded boundary without dark outer
 corner blocks; if~native shaping is~unavailable, a~flat opaque themed panel
 remains usable.
@@ -2267,6 +2269,12 @@ successful checks. It~also includes current-session Photos failures,
 distinguishing catalogue reads, thumbnail transfer and~image decoding.
 Album changes retain those facts; changing the~approved live session resets
 the~Photos snapshot.
+Preload failures also reach the~ordinary log, visible Log and~copied
+diagnostics, distinguishing listing, cache checks, transfer and~verification.
+Terminal records include processed, stored and~skipped counts. A~running
+preload keeps its~failure facts across album changes within the~same approved
+session. Rejected media responses show bounded cache-header decisions without
+copying raw headers or~relaxing permissions and~local-storage rules.
 
 \subsection{Windows simulator location}
 
@@ -2442,6 +2450,11 @@ Unknown or~ambiguous games keep general wording. The~background observer checks
 every three seconds, even before watching starts or~with recording/UTC sync
 disabled. It~opens/closes SimConnect without telemetry or~simulator writes;
 process names stay local.
+In~idle API-key mode, Begin stays visible with or~without a~saved key
+or~running game and~opens the~connection editor directly. A~Photos browsing
+link does not~hide it. Explicit linked upload mode offers gallery reconnection.
+Active capture, pending work and~finalization retain Finish, Review or~Progress
+before setup; an~active manual import retains its~own controls.
 SimBrief's Load/Unload control, settings icon and~status appear only
 for~a~detected
 flight; hiding retains the~loaded plan. Outside a~flight context, Watcher,

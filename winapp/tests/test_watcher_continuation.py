@@ -1345,6 +1345,7 @@ class WatcherContinuationTests(unittest.TestCase):
         photos._photo_diagnostic_recent = deque(
             maxlen=PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
         )
+        photos._diagnostic_callback = None
         photos._generation = 1
         photos._record_photo_diagnostic(
             1,

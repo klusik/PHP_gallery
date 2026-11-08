@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.0.2}
+\newcommand{\version}{1.0.3}
 \newcommand{\manualdate}{8~november~2026}
 
 \hypersetup{
@@ -1838,9 +1838,11 @@ väljs med \ui{Use for uploads}. Start med \texttt{--startup} förblir dold i
 systemfältet tills fönstret återställs. På macOS öppnas det vanliga Tk-fönstret
 vid start från källkod. Tillfälliga länkar upphör med processen.
 
-Stora träd läser först in högst 500 gallerier. Den namngivna åtgärden
-\ui{Visa fler} till höger i trädets verktygsrad fortsätter från den sparade
-positionen. Kontextpaneler behåller stängning med tangentbord och klick
+Stora träd läser först in högst 500 gallerier och fortsätter sedan automatiskt
+från den sparade positionen, en sida var femte sekund. Inlästa gallerier kan
+användas medan laddningsstatusen visar fortsatt arbete. Fel stoppar förloppet
+och erbjuder ett manuellt nytt försök; vanlig bläddring kräver inte \ui{Visa fler}.
+Kontextpaneler behåller stängning med tangentbord och klick
 utanför panelen. Windows klipper deras rundade kontur utan mörka yttre hörn.
 Om inbyggd formgivning saknas förblir en platt ogenomskinlig temapanel användbar.
 
@@ -2323,6 +2325,12 @@ senare lyckade kontroller. Det innehåller även fotofel för den aktuella länk
 och skiljer mellan katalogläsning, miniatyröverföring och bildavkodning.
 Albumbyten bevarar uppgifterna; ett byte av godkänd aktiv länk återställer
 översikten över fotofel.
+Preload-fel visas även i den vanliga loggen, den synliga Log-vyn och kopierbar
+diagnostik, med skilda steg för listning, cachekontroll, överföring och
+slutkontroll. Slutposten innehåller antal behandlade, lagrade och överhoppade
+bilder. Ett pågående preload behåller feluppgifter vid albumbyte inom samma
+godkända anslutning. Avvisade mediesvar visar begränsade cachebeslut utan råa
+huvuden eller lättnader i behörighet och lokal lagring.
 
 \subsection{Simulatorposition i Windows}
 
@@ -2519,7 +2527,14 @@ behåller
 allmän text. Bakgrundskontrollen sker var tredje sekund, även före bevakning
 och utan inspelning/UTC-synkronisering. SimConnect öppnas/stängs utan telemetri
 eller simulatorändring; processnamn stannar lokalt. Åtgärder, rapporter och
-nyckelhantering förblir oförändrade. SimBriefs ladda/ta bort-knapp,
+nyckelhantering förblir oförändrade.
+I vilande API-nyckelläge visas Börja med eller utan sparad nyckel och utan
+ett spel igång. Knappen öppnar anslutningsinställningarna direkt; en länk
+enbart för fotovisning döljer den inte. Länkat uppladdningsläge erbjuder
+återanslutning till galleriet. Aktiv inspelning, väntande arbete och avslut
+behåller sina åtgärder för avslut, granskning eller förlopp; en pågående
+manuell import behåller sina egna kontroller.
+SimBriefs ladda/ta bort-knapp,
 inställningsikon och status visas bara vid upptäckt flygning; dold vy behåller
 den laddade planen. Annars använder Watcher, Import och förloppet
 \ui{Överge spel}, inklusive motsvarande bekräftelse och statustext.

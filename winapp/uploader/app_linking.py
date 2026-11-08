@@ -521,6 +521,83 @@ _LinkingDiagnosticReason = Literal[
     'invalid_json', 'invalid_shape', 'dns_failure', 'connect_failure',
     'tls_failure', 'timeout', 'transport_failure', 'throttled',
 ]
+_MediaPolicyState = Literal[
+    'expected', 'missing', 'multiple', 'different',
+]
+_MediaPolicyMarkerState = Literal[
+    'expected', 'missing', 'multiple', 'different', 'not_requested',
+]
+
+# Purpose: Bound numeric max-age values retained only in rejection diagnostics.
+# Type: int. Units: seconds. Scope: one reported media Cache-Control value.
+# Consumers: MediaPolicyFacts and _native_media_policy_facts.
+# Rationale: Values beyond signed 32-bit seconds are reported as unknown; this
+# display bound does not set cache TTL or authorization policy.
+MEDIA_POLICY_FACT_MAX_AGE_SECONDS = 2_147_483_647
+
+
+@dataclass(frozen=True)
+class MediaPolicyFacts:
+    """Hold only finite parsed facts from one rejected media response.
+
+    Attributes:
+        cache_control (_MediaPolicyState): Whether the response directive
+            exactly matches the expected policy or is absent, repeated or different.
+        cache_marker (_MediaPolicyMarkerState): Whether the requested cache marker
+            is exact, absent, repeated, different or was not requested.
+        private (bool): Whether a private directive name was present.
+        must_revalidate (bool): Whether a revalidation directive name was present.
+        max_age_seconds (int | None): One bounded parsed max-age, if unambiguous.
+        vary_auth (bool): Whether Vary contains authorization.
+        vary_marker (bool): Whether Vary contains the requested cache marker.
+        vary_wildcard (bool): Whether Vary contains the wildcard token.
+        preload_marker (_MediaPolicyMarkerState): Status of the requested preload marker.
+        vary_preload (bool): Whether Vary contains the preload marker.
+        encoding_present (bool): Whether Content-Encoding was supplied.
+    """
+
+    cache_control: _MediaPolicyState
+    cache_marker: _MediaPolicyMarkerState
+    private: bool
+    must_revalidate: bool
+    max_age_seconds: int | None
+    vary_auth: bool
+    vary_marker: bool
+    vary_wildcard: bool
+    preload_marker: _MediaPolicyMarkerState
+    vary_preload: bool
+    encoding_present: bool
+
+    def __post_init__(self) -> None:
+        """Reject values outside the fixed enum, boolean and numeric fields.
+
+        Returns:
+            None: Invalid facts cannot enter an error or a safe summary.
+
+        Raises:
+            ValueError: A field is not one of its declared safe values.
+        """
+        states = ('expected', 'missing', 'multiple', 'different')
+        marker_states = (*states, 'not_requested')
+        if (type(self.cache_control) is not str
+                or self.cache_control not in states
+                or any(
+                    type(value) is not str or value not in marker_states
+                    for value in (self.cache_marker, self.preload_marker)
+                )):
+            raise ValueError('Invalid media policy diagnostic state.')
+        if any(type(value) is not bool for value in (
+            self.private, self.must_revalidate, self.vary_auth,
+            self.vary_marker, self.vary_wildcard, self.vary_preload,
+            self.encoding_present,
+        )):
+            raise ValueError('Invalid media policy diagnostic flag.')
+        if (self.max_age_seconds is not None and (
+            type(self.max_age_seconds) is not int
+            or not 0 <= self.max_age_seconds
+            <= MEDIA_POLICY_FACT_MAX_AGE_SECONDS
+        )):
+            raise ValueError('Invalid media policy max-age diagnostic.')
 
 
 class LinkingError(RuntimeError):
@@ -536,6 +613,8 @@ class LinkingResponseError(LinkingError):
         status (int | None): HTTP status, or None if no response arrived.
         content_kind (_LinkingDiagnosticContent): Coarse response media class.
         reason (_LinkingDiagnosticReason): Fixed protocol refusal category.
+        media_policy_facts (MediaPolicyFacts | None): Optional finite facts
+            attached only to a media response-policy refusal.
     """
 
     def __init__(
@@ -543,6 +622,7 @@ class LinkingResponseError(LinkingError):
         route: _LinkingDiagnosticRoute, status: int | None,
         content_kind: _LinkingDiagnosticContent,
         reason: _LinkingDiagnosticReason,
+        *, media_policy_facts: MediaPolicyFacts | None = None,
     ) -> None:
         """Store only validated diagnostic fields and a safe display string.
 
@@ -552,6 +632,8 @@ class LinkingResponseError(LinkingError):
             status (int | None): HTTP status, or None if no response arrived.
             content_kind (_LinkingDiagnosticContent): Coarse response media class.
             reason (_LinkingDiagnosticReason): Fixed protocol refusal category.
+            media_policy_facts (MediaPolicyFacts | None): Optional allowlisted
+                parsed facts from the rejected media response headers.
 
         Returns:
             None: Stores no response body, header value, URL or exception text.
@@ -582,6 +664,11 @@ class LinkingResponseError(LinkingError):
                     'dns_failure', 'connect_failure', 'tls_failure', 'timeout',
                     'transport_failure', 'throttled',
                 )
+                or (media_policy_facts is not None and (
+                    type(media_policy_facts) is not MediaPolicyFacts
+                    or reason != 'response_policy'
+                    or phase != 'media'
+                ))
                 ):
             raise ValueError('Invalid safe linking diagnostic.')
         self.phase = phase
@@ -589,11 +676,40 @@ class LinkingResponseError(LinkingError):
         self.status = status
         self.content_kind = content_kind
         self.reason = reason
+        self.media_policy_facts = (
+            None if media_policy_facts is None else MediaPolicyFacts(
+                media_policy_facts.cache_control,
+                media_policy_facts.cache_marker,
+                media_policy_facts.private,
+                media_policy_facts.must_revalidate,
+                media_policy_facts.max_age_seconds,
+                media_policy_facts.vary_auth,
+                media_policy_facts.vary_marker,
+                media_policy_facts.vary_wildcard,
+                media_policy_facts.preload_marker,
+                media_policy_facts.vary_preload,
+                media_policy_facts.encoding_present,
+            )
+        )
         status_text = 'none' if status is None else str(status)
         self.safe_summary = (
             f'stage={phase}; route={route}; http={status_text}; '
             f'response_kind={content_kind}; reason={reason}'
         )
+        if self.media_policy_facts is not None:
+            facts = self.media_policy_facts
+            max_age = (
+                'none' if facts.max_age_seconds is None
+                else str(facts.max_age_seconds)
+            )
+            self.safe_summary += (
+                f'; policy=cc:{facts.cache_control};cm:{facts.cache_marker}'
+                f';p:{int(facts.private)};mr:{int(facts.must_revalidate)}'
+                f';ma:{max_age};va:{int(facts.vary_auth)}'
+                f';vm:{int(facts.vary_marker)};vw:{int(facts.vary_wildcard)}'
+                f';pm:{facts.preload_marker};vp:{int(facts.vary_preload)}'
+                f';enc:{int(facts.encoding_present)}'
+            )
         super().__init__(self.safe_summary)
 
 
@@ -3020,6 +3136,105 @@ def _native_media_title(value: JsonValue) -> bool:
                         for c in value))
 
 
+def _native_media_policy_facts(
+    headers: http.client.HTTPMessage, cache_header: str | None,
+    cache_policy: str, admin_preload: bool,
+) -> MediaPolicyFacts:
+    """Reduce media response headers to finite cache-policy observations.
+
+    Args:
+        headers (http.client.HTTPMessage): Parsed response header collection.
+        cache_header (str | None): Requested cache marker name, if any.
+        cache_policy (str): Exact cache directive required by the request.
+        admin_preload (bool): Whether the explicit preload marker was requested.
+
+    Returns:
+        MediaPolicyFacts: Validated allowlisted facts with no retained header
+            strings, values, URLs or response content.
+    """
+    cache_controls = headers.get_all('Cache-Control', [])
+    if not cache_controls:
+        cache_control: _MediaPolicyState = 'missing'
+    elif len(cache_controls) > 1:
+        cache_control = 'multiple'
+    elif cache_policy and cache_controls[0].strip().lower() == cache_policy:
+        cache_control = 'expected'
+    else:
+        cache_control = 'different'
+
+    cache_markers = (
+        [] if cache_header is None
+        else headers.get_all(cache_header, [])
+    )
+    if cache_header is None:
+        cache_marker: _MediaPolicyMarkerState = 'not_requested'
+    elif not cache_markers:
+        cache_marker = 'missing'
+    elif len(cache_markers) > 1:
+        cache_marker = 'multiple'
+    elif cache_markers[0] == '1':
+        cache_marker = 'expected'
+    else:
+        cache_marker = 'different'
+
+    directives = [
+        part.strip().lower()
+        for value in cache_controls
+        for part in value.split(',')
+    ]
+    directive_names = [
+        directive.partition('=')[0].strip()
+        for directive in directives
+    ]
+    max_age_values: list[int] = []
+    max_age_directives = [
+        directive.partition('=')[2].strip()
+        for directive, name in zip(directives, directive_names)
+        if name == 'max-age'
+    ]
+    if (len(max_age_directives) == 1
+            and re.fullmatch(r'[0-9]{1,10}', max_age_directives[0]) is not None):
+        parsed_max_age = int(max_age_directives[0])
+        if parsed_max_age <= MEDIA_POLICY_FACT_MAX_AGE_SECONDS:
+            max_age_values.append(parsed_max_age)
+
+    vary_tokens = {
+        part.strip().lower()
+        for value in headers.get_all('Vary', [])
+        for part in value.split(',')
+    }
+    preload_markers = (
+        headers.get_all('X-PHP-Gallery-Preload', [])
+        if admin_preload else []
+    )
+    if not admin_preload:
+        preload_marker: _MediaPolicyMarkerState = 'not_requested'
+    elif not preload_markers:
+        preload_marker = 'missing'
+    elif len(preload_markers) > 1:
+        preload_marker = 'multiple'
+    elif preload_markers[0] == 'admin-v1':
+        preload_marker = 'expected'
+    else:
+        preload_marker = 'different'
+
+    return MediaPolicyFacts(
+        cache_control=cache_control,
+        cache_marker=cache_marker,
+        private='private' in directive_names,
+        must_revalidate='must-revalidate' in directive_names,
+        max_age_seconds=max_age_values[0] if max_age_values else None,
+        vary_auth='authorization' in vary_tokens,
+        vary_marker=(
+            cache_header is not None and cache_header.lower() in vary_tokens
+        ),
+        vary_wildcard='*' in vary_tokens,
+        preload_marker=preload_marker,
+        vary_preload='x-php-gallery-preload' in vary_tokens,
+        encoding_present=bool(headers.get_all('Content-Encoding', [])),
+    )
+
+
 def _native_media_read_once(
     issuer: str, query: str, bearer: str, accepted: tuple[str, ...],
     control: _LinkingTransportControl, if_none_match: str | None = None,
@@ -3104,9 +3319,13 @@ def _native_media_read_once(
                           for value in cache_controls
                           for part in value.split(',')}
             if response.headers.get('Content-Encoding') is not None:
+                policy_facts = _native_media_policy_facts(
+                    response.headers, cache_header, cache_policy, admin_preload,
+                )
                 raise LinkingResponseError(
                     'media', 'app_linking_media', response.status,
                     content_kind, 'response_policy',
+                    media_policy_facts=policy_facts,
                 )
             if response.status == 401:
                 if content_kind != 'json':
@@ -3131,9 +3350,14 @@ def _native_media_read_once(
                         or not (cacheable or (
                             not admin_preload and 'no-store' in directives
                         ))):
+                    policy_facts = _native_media_policy_facts(
+                        response.headers, cache_header, cache_policy,
+                        admin_preload,
+                    )
                     raise LinkingResponseError(
                         'media', 'app_linking_media', response.status,
                         content_kind, 'response_policy',
+                        media_policy_facts=policy_facts,
                     )
                 control.remaining()
                 return None, '', etags[0], cacheable
@@ -3192,14 +3416,26 @@ def _native_media_read_once(
                     else 'content_type' if media_type not in accepted
                     else 'response_policy'
                 )
+                policy_facts = (
+                    _native_media_policy_facts(
+                        response.headers, cache_header, cache_policy,
+                        admin_preload,
+                    )
+                    if reason == 'response_policy' else None
+                )
                 raise LinkingResponseError(
                     'media', 'app_linking_media', response.status,
                     content_kind, reason,
+                    media_policy_facts=policy_facts,
                 )
             if admin_preload and not cacheable and 'no-store' not in directives:
+                policy_facts = _native_media_policy_facts(
+                    response.headers, cache_header, cache_policy, admin_preload,
+                )
                 raise LinkingResponseError(
                     'media', 'app_linking_media', response.status,
                     content_kind, 'response_policy',
+                    media_policy_facts=policy_facts,
                 )
             if media_type == 'application/json':
                 max_bytes = (

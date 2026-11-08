@@ -26,7 +26,6 @@ import tempfile
 import threading
 import time
 import tkinter as tk
-import traceback
 from tkinter import ttk
 import uuid
 from typing import Callable, Literal, TypeAlias
@@ -48,6 +47,7 @@ from .app_linking import (
     LinkingSession,
 )
 from .flight_report_translations import tr
+from .diagnostics import format_safe_photos_failure
 from .gallery_lightbox import (
     LIGHTBOX_ZOOM_STEP,
     PhotoLightbox,
@@ -280,42 +280,6 @@ _SafePhotosPhase: TypeAlias = Literal[
     "page-fetch", "media-fetch", "media-decode", "page-apply", "media-apply",
 ]
 
-# Purpose: Restrict diagnostic labels to fixed, non-user-supplied operations.
-# Type: frozenset[str]; Units: operation labels; Scope: Photos failure logs.
-# Consumers: _log_safe_media_failure.
-# Rationale: Prevent accidental URL, title or payload text from entering logs.
-_SAFE_PHOTOS_DIAGNOSTIC_KINDS = frozenset({
-    "page", "more", "slide_more", "refresh", "revision", "thumbnail",
-    "catalogue",
-    "detail", "prefetch", "audio_track", "other",
-})
-
-# Purpose: Limit source locations in safe media diagnostics to local owners.
-# Type: frozenset[str]; Units: Python source basenames; Scope: Photos logs.
-# Consumers: _safe_media_error_site. Rationale: Never expose arbitrary paths.
-_SAFE_PHOTOS_SOURCE_FILES = frozenset({
-    "native_gallery_viewer.py", "app_linking.py", "photos_workspace.py",
-})
-
-
-def _safe_media_error_site(error: Exception) -> str:
-    """Return a whitelisted source basename, function and line when available.
-
-    Args:
-        error (Exception): Caught worker or Tk-application failure.
-
-    Returns:
-        str: Safe local source-site label, or the fixed value ``unknown``.
-    """
-    frames = traceback.extract_tb(error.__traceback__)
-    for frame in reversed(frames):
-        basename = os.path.basename(frame.filename)
-        if (basename in _SAFE_PHOTOS_SOURCE_FILES
-                and frame.name.isidentifier() and frame.lineno > 0):
-            return f"{basename}:{frame.name}:{frame.lineno}"
-    return "unknown"
-
-
 def _log_safe_media_failure(
     phase: _SafePhotosPhase,
     kind: str,
@@ -336,23 +300,7 @@ def _log_safe_media_failure(
     Returns:
         str: Fixed phase, class, owned source site and validated response facts.
     """
-    safe_kind = kind if kind in _SAFE_PHOTOS_DIAGNOSTIC_KINDS else "other"
-    site = _safe_media_error_site(error)
-    response = ""
-    if isinstance(error, LinkingResponseError):
-        try:
-            validated = LinkingResponseError(
-                error.phase, error.route, error.status,
-                error.content_kind, error.reason,
-            )
-        except (AttributeError, TypeError, ValueError):
-            validated = None
-        if validated is not None:
-            response = " " + validated.safe_summary
-    summary = (
-        f"phase={phase} kind={safe_kind} error_type={type(error).__name__} "
-        f"site={site}{response}"
-    )
+    summary = format_safe_photos_failure(phase, kind, error)
     logging.getLogger(__name__).warning(
         "Photos failure %s", summary,
     )

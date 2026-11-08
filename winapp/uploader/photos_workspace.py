@@ -13,6 +13,7 @@
 """Main-window gallery hierarchy and embedded photo workspace."""
 
 from collections import deque
+import logging
 import queue
 import threading
 import tkinter as tk
@@ -63,11 +64,17 @@ PHOTOS_TREE_WIDTH = 210
 # Rationale: Three candidates handle a few empty/protected galleries quickly.
 PHOTOS_INITIAL_CANDIDATE_LIMIT = 3
 
-# Purpose: Bound automatic catalogue reads against shared per-IP request limits.
-# Type: int. Units: pages. Scope: one automatic loading pass per live session.
+# Purpose: Bound the initial unpaced catalogue burst against shared request limits.
+# Type: int. Units: pages. Scope: initial unpaced burst per live session.
 # Consumers: PhotosWorkspace._continue_catalogue.
 # Rationale: Ten 50-row pages load common trees while preserving site capacity.
 PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT = 10
+
+# Purpose: Pace catalogue continuation after the first automatic burst.
+# Type: int. Units: milliseconds. Scope: each page after the initial pass cap.
+# Consumers: PhotosWorkspace._continue_catalogue.
+# Rationale: One five-second interval limits steady requests without a user tap.
+PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS = 5_000
 
 # Purpose: Bound metadata-only cache checks for large galleries.
 # Type: int. Units: pages. Scope: one gallery info action.
@@ -181,6 +188,7 @@ class PhotosWorkspace(ttk.Frame):
         save_tree_state: Callable[[LinkingSession, dict[int, bool]], None] | None = None,
         load_tree_width: Callable[[], int | None] | None = None,
         save_tree_width: Callable[[int], None] | None = None,
+        diagnostic_callback: Callable[[str], None] | None = None,
     ) -> None:
         """Create the two-pane workspace and request its current session.
 
@@ -207,6 +215,8 @@ class PhotosWorkspace(ttk.Frame):
                 Optional per-profile Photos tree sash position.
             save_tree_width (Callable[[int], None] | None):
                 Optional owner for persisting the Photos tree sash position.
+            diagnostic_callback (Callable[[str], None] | None): Optional
+                thread-safe host receiver for accepted safe Photos failures.
 
         Returns:
             None: Starts a bounded asynchronous catalogue read when available.
@@ -225,6 +235,7 @@ class PhotosWorkspace(ttk.Frame):
         self._save_tree_state = save_tree_state
         self._load_tree_width = load_tree_width
         self._save_tree_width = save_tree_width
+        self._diagnostic_callback = diagnostic_callback
         self._tree_width_save_after: str | None = None
         self._tree_width_restored = False
         self._tree_width_dragging = False
@@ -285,6 +296,7 @@ class PhotosWorkspace(ttk.Frame):
         self._worker: threading.Thread | None = None
         self._events: queue.Queue[_GalleryResult] = queue.Queue()
         self._poll_id: str | None = None
+        self._catalogue_after: str | None = None
         self._pending_cursor: int | None = None
         self._has_pending_page = False
         self._next_after: int | None = None
@@ -824,7 +836,9 @@ class PhotosWorkspace(ttk.Frame):
         if session is self._session:
             return
         self._dismiss_context(restore=False)
-        self._session = session
+        self._cancel_catalogue_continuation()
+        with self._photo_diagnostic_lock:
+            self._session = session
         self._tree_state = (
             self._load_tree_state(session)
             if session is not None and self._load_tree_state is not None else {}
@@ -865,6 +879,7 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             None: Old site data and image references are released immediately.
         """
+        self._cancel_catalogue_continuation()
         if self._viewer is not None:
             self._viewer.destroy()
             self._viewer = None
@@ -887,14 +902,38 @@ class PhotosWorkspace(ttk.Frame):
         self.viewer_status.pack(fill="x", padx=8, pady=8)
 
     def _clear_photo_diagnostics(self) -> None:
-        """Forget failure facts when the approved live session changes.
+        """Forget retained failure facts when the live session changes.
 
         Returns:
-            None: No previous-account diagnostic remains in the new session.
+            None: No prior-session diagnostic remains in the copied snapshot.
         """
         with self._photo_diagnostic_lock:
             self._photo_diagnostic_latest = None
             self._photo_diagnostic_recent.clear()
+
+    def _record_preload_diagnostic(
+        self, session: LinkingSession, summary: str,
+    ) -> None:
+        """Retain one safe preload fact only for its exact live session.
+
+        Args:
+            session (LinkingSession): Session captured by the preload worker.
+            summary (str): Fixed safe line from the Photos diagnostic formatter.
+
+        Returns:
+            None: Same-session failures survive album changes; stale accounts
+                and unsafe strings are refused.
+        """
+        if (type(summary) is not str
+                or len(summary) > PHOTOS_DIAGNOSTIC_MAX_CHARS
+                or not summary.isprintable()):
+            return
+        with self._photo_diagnostic_lock:
+            if session is not self._session:
+                return
+            self._photo_diagnostic_latest = summary
+            self._photo_diagnostic_recent.append(summary)
+        self._notify_diagnostic_callback(summary)
 
     def _record_photo_diagnostic(
         self, generation: int, summary: str,
@@ -917,6 +956,26 @@ class PhotosWorkspace(ttk.Frame):
                 return
             self._photo_diagnostic_latest = summary
             self._photo_diagnostic_recent.append(summary)
+        self._notify_diagnostic_callback(summary)
+
+    def _notify_diagnostic_callback(self, summary: str) -> None:
+        """Forward one retained safe line to the optional thread-safe host.
+
+        Args:
+            summary (str): Already validated current-session diagnostic line.
+
+        Returns:
+            None: Callback failures cannot replace or erase the local snapshot.
+        """
+        callback = getattr(self, '_diagnostic_callback', None)
+        if not callable(callback):
+            return
+        try:
+            callback(summary)
+        except Exception:
+            logging.getLogger(__name__).warning(
+                'Photos diagnostic host callback failed.',
+            )
 
     def diagnostics_snapshot(self) -> str:
         """Return current-session Photos failures without gallery content.
@@ -1044,6 +1103,7 @@ class PhotosWorkspace(ttk.Frame):
             None: Current rows become visible without retaining prior image data.
         """
         if page is None:
+            self._cancel_catalogue_continuation()
             self.tree_status.configure(text=self._text("error"))
             self.viewer_status.configure(text=self._text("error"))
             self.retry_button.pack(side="right")
@@ -1240,31 +1300,73 @@ class PhotosWorkspace(ttk.Frame):
         )
 
     def _continue_catalogue(self) -> None:
-        """Continue pagination or expose the manual action at the page cap.
+        """Continue immediately or schedule one paced post-cap page.
 
         Returns:
-            None: Automatic reads stop at the documented per-pass limit.
+            None: One bounded timer continues the current exact session/cursor.
         """
-        if self._next_after is None:
-            return
-        if self._pages_this_pass >= PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT:
-            self.tree_status.configure(text="")
-            self.load_more_button.pack(side="right")
+        if (self._destroyed or self._session is None
+                or self._next_after is None
+                or self._catalogue_paused_for_preview):
             return
         self.load_more_button.pack_forget()
+        if self._pages_this_pass >= PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT:
+            if self._catalogue_after is not None:
+                return
+            self.tree_status.configure(text=self._text("loading"))
+            session = self._session
+            generation = self._generation
+            cancel = self._cancel
+            cursor = self._next_after
+            after_id: str | None = None
+
+            def continue_page() -> None:
+                """Request the captured next page after validating its owner.
+
+                Returns:
+                    None: Stale session, cursor, preview or teardown cancels it.
+                """
+                if self._catalogue_after != after_id:
+                    return
+                self._catalogue_after = None
+                if (self._destroyed or self._generation != generation
+                        or self._session is not session
+                        or self._session_provider() is not session
+                        or self._cancel is not cancel or cancel.is_set()
+                        or self._next_after != cursor
+                        or self._catalogue_paused_for_preview):
+                    return
+                self._request_page(cursor)
+
+            after_id = self.after(
+                PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS, continue_page,
+            )
+            self._catalogue_after = after_id
+            return
         self._request_page(self._next_after)
 
-    def _load_more_catalogue(self) -> None:
-        """Start another bounded pass from the saved server cursor.
+    def _cancel_catalogue_continuation(self) -> None:
+        """Cancel the one pending post-cap page timer, if present.
 
         Returns:
-            None: The server cursor and current tree remain authoritative.
+            None: Repeated cancellation is harmless and stale callbacks fail
+                their session/cursor checks.
         """
-        if self._session is None or self._next_after is None:
+        after_id = self._catalogue_after
+        self._catalogue_after = None
+        if after_id is None:
             return
-        self.load_more_button.pack_forget()
-        self._pages_this_pass = 0
-        self.tree_status.configure(text=self._text("loading"))
+        try:
+            self.after_cancel(after_id)
+        except tk.TclError:
+            pass
+
+    def _load_more_catalogue(self) -> None:
+        """Resume the paced continuation from the current server cursor.
+
+        Returns:
+            None: Existing burst limits and request cadence remain unchanged.
+        """
         self._continue_catalogue()
 
     def _all_items(self) -> list[str]:
@@ -1460,6 +1562,7 @@ class PhotosWorkspace(ttk.Frame):
         """
         if self._session is None:
             return
+        self._cancel_catalogue_continuation()
         self.retry_button.pack_forget()
         self.tree_status.configure(text=self._text("loading"))
         self._request_page(self._next_after)
@@ -1510,7 +1613,7 @@ class PhotosWorkspace(ttk.Frame):
             if self._catalogue_paused_for_preview:
                 self._catalogue_paused_for_preview = False
                 if self._next_after is not None:
-                    self._request_page(self._next_after)
+                    self._continue_catalogue()
         self.tree.selection_set(str(gallery.gallery_id))
         if not implicit:
             self.tree.see(str(gallery.gallery_id))
@@ -2695,10 +2798,15 @@ class PhotosWorkspace(ttk.Frame):
                 column=0, columnspan=2, sticky='ew',
             )
             return
+        diagnostic_generation = self._generation
         self._preload_worker = GalleryPreloadWorker(
-            session, gallery.gallery_id, pinned=pinned, download=pinned is not False,
+            session, gallery.gallery_id, pinned=pinned,
+            download=pinned is not False,
+            diagnostic_callback=lambda summary: self._record_preload_diagnostic(
+                session, summary,
+            ),
         )
-        self._preload_generation = self._generation
+        self._preload_generation = diagnostic_generation
         self._preload_last = None
         self._preload_unpin = pinned is False
         self._preload_text.set(self._text('preload_listing'))
@@ -4147,6 +4255,7 @@ class PhotosWorkspace(ttk.Frame):
             return
         self._destroyed = True
         self._dismiss_context(restore=False)
+        self._cancel_catalogue_continuation()
         self._generation += 1
         self._cancel.set()
         if self._preload_worker is not None:
