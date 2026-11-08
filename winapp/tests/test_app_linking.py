@@ -36,6 +36,7 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader import app_linking as linking
 from uploader import gallery_media_cache, offline_linking
+from uploader.diagnostics import format_safe_photos_failure
 from uploader.flight_report_translations import tr
 from uploader.linked_create import (
     BoundCreateReceipt, CreateIntent, GalleryCreateJournal,
@@ -3092,6 +3093,170 @@ class NativeMediaTransportTests(unittest.TestCase):
                     'https://gallery.example', query, 'opaque-test-bearer',
                     ('image/jpeg',), mock.Mock(), admin_preload=True,
                 )
+
+    def test_policy_refusal_retains_only_finite_header_facts(self) -> None:
+        """Explain rejected cache policy without retaining response headers.
+
+        Returns:
+            None: Missing, repeated and changed markers/directives become finite
+                facts that survive safe error reconstruction without raw text.
+        """
+        query = 'page=app_linking_media&gallery_id=4&kind=photo&image_id=7'
+        base = [
+            ('Content-Type', 'image/jpeg'),
+            ('Content-Length', '3'),
+            ('ETag', '"' + hashlib.sha256(b'img').hexdigest() + '"'),
+        ]
+        cases = (
+            (
+                'missing', base,
+                ('missing', 'missing', False, False, None,
+                 False, False, False, 'missing', False, False),
+            ),
+            (
+                'multiple', base + [
+                    ('Cache-Control', 'private, max-age=60, must-revalidate'),
+                    ('Cache-Control', 'private, max-age=60, must-revalidate'),
+                    ('X-PHP-Gallery-Photo-Cache', '1'),
+                    ('X-PHP-Gallery-Photo-Cache', '1'),
+                    ('X-PHP-Gallery-Preload', 'admin-v1'),
+                    ('X-PHP-Gallery-Preload', 'admin-v1'),
+                    ('Vary', 'Authorization, X-PHP-Gallery-Photo-Cache'),
+                ],
+                ('multiple', 'multiple', True, True, None,
+                 True, True, False, 'multiple', False, False),
+            ),
+            (
+                'changed', base + [
+                    (
+                        'Cache-Control',
+                        'private, max-age=61, must-revalidate, token=secret '
+                        'https://private.example C:\\private\\image',
+                    ),
+                    ('X-PHP-Gallery-Photo-Cache', 'wrong token=secret'),
+                    ('X-PHP-Gallery-Preload', 'wrong https://private.example'),
+                    ('Vary', 'Accept, *'),
+                ],
+                ('different', 'different', True, True, 61,
+                 False, False, True, 'different', False, False),
+            ),
+            (
+                'encoding', base + [
+                    ('Cache-Control', 'private, max-age=60, must-revalidate'),
+                    ('X-PHP-Gallery-Photo-Cache', '1'),
+                    ('X-PHP-Gallery-Preload', 'admin-v1'),
+                    ('Vary', 'Authorization, X-PHP-Gallery-Photo-Cache, '
+                     'X-PHP-Gallery-Preload'),
+                    ('Content-Encoding', 'gzip'),
+                ],
+                ('expected', 'expected', True, True, 60,
+                 True, True, False, 'expected', True, True),
+            ),
+            (
+                'bounded-max-age', base + [
+                    (
+                        'Cache-Control',
+                        'private, max-age=2147483648, must-revalidate',
+                    ),
+                    ('X-PHP-Gallery-Photo-Cache', '1'),
+                    ('X-PHP-Gallery-Preload', 'admin-v1'),
+                    ('Vary', 'Authorization, X-PHP-Gallery-Photo-Cache, '
+                     'X-PHP-Gallery-Preload'),
+                ],
+                ('different', 'expected', True, True, None,
+                 True, True, False, 'expected', True, False),
+            ),
+        )
+        for name, header_rows, expected in cases:
+            with self.subTest(case=name):
+                headers = Message()
+                for field, value in header_rows:
+                    headers.add_header(field, value)
+                connection, _response = self._response(200, headers, b'img')
+                with mock.patch.object(
+                    linking, '_linking_connection', return_value=connection,
+                ), self.assertRaises(linking.LinkingResponseError) as raised:
+                    linking._native_media_read_once(
+                        'https://gallery.example', query, 'opaque-test-bearer',
+                        ('image/jpeg',), mock.Mock(), admin_preload=True,
+                    )
+
+                error = raised.exception
+                facts = error.media_policy_facts
+                self.assertIsInstance(facts, linking.MediaPolicyFacts)
+                self.assertEqual(
+                    expected,
+                    (
+                        facts.cache_control, facts.cache_marker, facts.private,
+                        facts.must_revalidate, facts.max_age_seconds,
+                        facts.vary_auth, facts.vary_marker, facts.vary_wildcard,
+                        facts.preload_marker, facts.vary_preload,
+                        facts.encoding_present,
+                    ),
+                )
+                self.assertEqual('response_policy', error.reason)
+                copied = linking.LinkingResponseError(
+                    error.phase, error.route, error.status,
+                    error.content_kind, error.reason,
+                    media_policy_facts=facts,
+                )
+                self.assertEqual(error.safe_summary, copied.safe_summary)
+                self.assertIn('policy=cc:', error.safe_summary)
+                formatted = format_safe_photos_failure(
+                    'preload-fetch', 'preload', error,
+                )
+                self.assertIn(error.safe_summary, formatted)
+                unsafe_facts = object.__new__(linking.MediaPolicyFacts)
+                for field in (
+                    'cache_control', 'cache_marker', 'private',
+                    'must_revalidate', 'max_age_seconds', 'vary_auth',
+                    'vary_marker', 'vary_wildcard', 'preload_marker',
+                    'vary_preload', 'encoding_present',
+                ):
+                    object.__setattr__(unsafe_facts, field, getattr(facts, field))
+                object.__setattr__(unsafe_facts, 'cache_control', 'token=secret')
+                with self.assertRaises(ValueError):
+                    linking.LinkingResponseError(
+                        error.phase, error.route, error.status,
+                        error.content_kind, error.reason,
+                        media_policy_facts=unsafe_facts,
+                    )
+                error.media_policy_facts = unsafe_facts
+                safe_after_mutation = format_safe_photos_failure(
+                    'preload-fetch', 'preload', error,
+                )
+                self.assertNotIn('token=secret', safe_after_mutation)
+                self.assertIn('reason=response_policy', safe_after_mutation)
+                for secret in (
+                    'token=secret', 'private.example', 'C:\\private',
+                    'opaque-test-bearer',
+                ):
+                    self.assertNotIn(secret, error.safe_summary)
+                    self.assertNotIn(secret, str(facts))
+
+    def test_non_policy_refusal_has_no_media_policy_facts(self) -> None:
+        """Limit header facts to explicit media response-policy refusals.
+
+        Returns:
+            None: An HTTP status refusal keeps its existing reason and does not
+                acquire media cache-policy observations.
+        """
+        headers = Message()
+        headers['Content-Type'] = 'text/html'
+        headers['Cache-Control'] = 'token=private'
+        connection, _response = self._response(503, headers)
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ), self.assertRaises(linking.LinkingResponseError) as raised:
+            linking._native_media_read_once(
+                'https://gallery.example',
+                'page=app_linking_media&gallery_id=4&kind=photo&image_id=7',
+                'opaque-test-bearer', ('image/jpeg',), mock.Mock(),
+                admin_preload=True,
+            )
+
+        self.assertEqual('http_status', raised.exception.reason)
+        self.assertIsNone(raised.exception.media_policy_facts)
 
     def test_retry_after_is_single_bounded_decimal(self) -> None:
         """Retain only one bounded decimal Retry-After from a no-store throttle.

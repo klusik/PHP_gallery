@@ -222,8 +222,12 @@ the saved-file confirmation dialog does not capture the file's bytes or hash.
 
 During capture, **Finish flight…** sits below the upload gallery in Watcher
 and Import. Without flight detection it uses **Finish game…**. **Begin
-flight…** or **Begin game…** opens API-key setup only before a connection
-has been configured in API-key mode.
+flight…** or **Begin game…** stays available whenever API-key mode is idle,
+with or without a saved key or running game. It opens the existing connection
+editor directly. A Photos browsing link does not hide this action. Explicit
+linked upload mode instead offers its gallery reconnect action. Active capture,
+pending work and finalization keep Finish, Review or Progress first; an active
+manual import retains its own controls.
 A background observer checks every three seconds, even before Watcher starts
 and with recording or UTC sync disabled. SimConnect open/close takes priority;
 it requests no telemetry and changes no simulator state. When it is unavailable,
@@ -658,6 +662,16 @@ failure even after a later successful check. It also includes current-session
 Photos failures, distinguishing catalogue reads, thumbnail transport and image
 decoding. Switching albums keeps those facts; switching the approved live
 session resets the Photos snapshot. Full records remain in the log.
+The background preload worker uses the same safe diagnostic formatter for
+listing, cache checks, transfers and final verification. Its first and later
+distinct failures appear immediately in the ordinary log, the visible Log and
+copied diagnostics. Every terminal outcome records processed, stored and
+skipped counts. An album change keeps a running preload's diagnostics within
+the same approved session; another session cannot receive them.
+Rejected native-media responses include bounded cache-policy facts: which
+cache marker and cache-control contract matched, the parsed age and required
+Vary/encoding conditions. Raw headers are not copied. These facts explain a
+refusal without relaxing media admission or permitting an unapproved disk copy.
 
 Discovery examines paginated releases for the highest newer
 `PHPGalleryUploader-X.Y.Z-Setup.exe` asset. CMS release tags are not the
@@ -736,14 +750,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 1.0.1)
+## Windows installer (next version: 1.0.3)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **1.0.1**; this source version
+Gallery CMS release. The current source targets **1.0.3**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/1.0.1/`. Existing version outputs and other version folders remain
+`winapp/dist/1.0.3/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -887,10 +901,11 @@ photo grid on the right. It opens an initial gallery automatically. Expand or
 collapse a branch or the whole tree and click a gallery to show its photos in
 the same window. When disconnected, **Connect** opens the existing address
 dialog and browser approval flow. An active listing link can browse public
-photos directly after approval. Large trees offer a continuation control after
-the initial 500 entries. **Load more**, at the right of the tree toolbar,
-continues from the saved cursor without replacing loaded galleries. Its text
-distinguishes it from the expand and create controls. Choose the upload target in
+photos directly after approval. Large trees first load up to 500 entries, then
+continue automatically from the saved cursor, one page every five seconds.
+Loaded galleries remain usable while the loading status indicates more work.
+An error stops continuation and offers an explicit retry; normal browsing needs
+no **Load more** click. Choose the upload target in
 Watcher or Import using **Use for uploads**. A logon `--startup` launch stays
 in the system tray until restored. An approved saved link can resume on
 startup.

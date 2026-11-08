@@ -8569,6 +8569,9 @@ class WatcherApp:
             save_tree_state=self.save_photos_tree_state,
             load_tree_width=lambda: preferred_tree_width,
             save_tree_width=self.save_photos_tree_width,
+            diagnostic_callback=lambda message: self.events.put(
+                ('warning', '[Photos] ' + message),
+            ),
         )
         self.photos_workspace.grid(row=0, column=0, sticky="nsew")
         self._sync_watcher_recording()
@@ -11978,7 +11981,6 @@ class WatcherApp:
                 "progress": "show_upload_progress",
                 "recover": "review_pending_uploads",
                 "reconnect": "reconnect_upload_gallery",
-                "choose": "linking_select_gallery",
             }.get(action, "show_upload_progress"))
         for attr in ("revoke_button",):
             button = getattr(self, attr, None)
@@ -12026,12 +12028,12 @@ class WatcherApp:
 
     def flight_action_state(
         self,
-    ) -> Literal["idle", "begin", "finish", "progress", "recover", "reconnect", "choose"]:
-        """Resolve the session action before considering credential setup.
+    ) -> Literal["idle", "begin", "finish", "progress", "recover", "reconnect"]:
+        """Resolve the primary action from work and explicit upload mode.
 
         Returns:
-            str: One visible action for capture, pending work or connection
-                setup, or idle when the Watcher and Import controls suffice.
+            str: One visible lifecycle, recovery, reconnect or Begin action;
+                a Photos-only link and saved legacy key do not hide Begin.
         """
         state = self.flights.session_state()
         if state == "working":
@@ -12042,13 +12044,10 @@ class WatcherApp:
             return "finish"
         if self.manual_worker is not None and self.manual_worker.is_alive():
             return "idle"
-        if self.linking_manager.selected_upload_target() is not None:
-            return "idle"
-        if self.linking_manager.linked_upload_mode_selected():
+        if (self.linking_manager.selected_upload_target() is not None
+                or self.linking_manager.linked_upload_mode_selected()):
             return "reconnect"
-        if self.config.api_key.strip():
-            return "idle"
-        return "choose" if self.linking_manager.linked_address.get() else "begin"
+        return "begin"
 
     def refresh_revoke_button_state(self) -> None:
         """
@@ -12333,7 +12332,7 @@ class WatcherApp:
             self.flights.show_progress()
         elif action == "recover":
             self.flights.show_recovery()
-        elif action in ("choose", "reconnect"):
+        elif action == "reconnect":
             self.reconnect_upload_gallery()
 
     def abandon_flight(self) -> None:

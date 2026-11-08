@@ -1496,9 +1496,16 @@ class LinkingManager:
                 validated = LinkingResponseError(
                     error.phase, error.route, error.status,
                     error.content_kind, error.reason,
+                    media_policy_facts=error.media_policy_facts,
                 )
             except (AttributeError, TypeError, ValueError):
-                validated = None
+                try:
+                    validated = LinkingResponseError(
+                        error.phase, error.route, error.status,
+                        error.content_kind, error.reason,
+                    )
+                except (AttributeError, TypeError, ValueError):
+                    validated = None
             if validated is not None:
                 response_summary = '; ' + validated.safe_summary
         self._record_diagnostic(

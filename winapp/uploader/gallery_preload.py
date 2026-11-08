@@ -11,14 +11,21 @@
 # License: MIT License (see LICENSE file in repository)
 """Bounded background worker for retaining one linked gallery locally."""
 
+import logging
 import threading
 import time
 from dataclasses import dataclass
+from typing import Callable, Literal
 
 from .app_linking import (
     MEDIA_PRELOAD_RETRY_MAX_ATTEMPTS, LinkedPhoto, LinkingError,
     LinkingMediaThrottled, LinkingSession,
 )
+from .diagnostics import format_safe_photos_failure
+
+_PreloadDiagnosticStage = Literal[
+    'listing', 'cache', 'fetch', 'verify', 'storage', 'setup',
+]
 
 # Purpose: Bound a complete direct-photo preload and its final verification.
 # Type: int. Units: direct photo descriptors. Scope: one worker run.
@@ -70,6 +77,7 @@ class GalleryPreloadWorker(threading.Thread):
     def __init__(
         self, session: LinkingSession, gallery_id: int, *,
         pinned: bool | None = None, download: bool = True,
+        diagnostic_callback: Callable[[str], None] | None = None,
     ) -> None:
         """Prepare one background gallery retention operation.
 
@@ -78,6 +86,8 @@ class GalleryPreloadWorker(threading.Thread):
             gallery_id (int): Positive physical gallery ID to preload.
             pinned (bool | None): Pin state to set, or None to preserve current.
             download (bool): Whether cache misses may use the media transport.
+            diagnostic_callback (Callable[[str], None] | None): Optional owner
+                retaining safe failure facts in copied Photos diagnostics.
 
         Returns:
             None: Creates a daemon worker with a private cancellation event.
@@ -87,6 +97,10 @@ class GalleryPreloadWorker(threading.Thread):
         self._gallery_id = gallery_id
         self._requested_pin = pinned
         self._download = download
+        self._diagnostic_callback = diagnostic_callback
+        self._failure_summary: str | None = None
+        self._diagnostic_stage: _PreloadDiagnosticStage = 'setup'
+        self._outcome_logged = False
         self._cancelled = threading.Event()
         self._snapshot_lock = threading.Lock()
         self._snapshot = PreloadProgress(
@@ -119,17 +133,21 @@ class GalleryPreloadWorker(threading.Thread):
         """
         try:
             self._run_owned()
-        except LinkingMediaThrottled:
+        except LinkingMediaThrottled as error:
+            self._record_failure(error)
             self._finish('partial', 'throttled')
-        except LinkingError:
+        except LinkingError as error:
+            self._record_failure(error)
             reason = (
                 'session' if not self._session.can_read_media()
                 else 'unavailable'
             )
             self._finish('partial' if self.snapshot().completed else 'error', reason)
-        except (OSError, RuntimeError, ValueError):
+        except (OSError, RuntimeError, ValueError) as error:
+            self._record_failure(error)
             self._finish('partial' if self.snapshot().completed else 'error', 'storage')
-        except Exception:  # noqa: BLE001
+        except Exception as error:  # noqa: BLE001
+            self._record_failure(error)
             self._finish(
                 'partial' if self.snapshot().completed else 'error',
                 'unavailable',
@@ -145,6 +163,7 @@ class GalleryPreloadWorker(threading.Thread):
                 or not self._session.can_read_media()):
             self._finish('error', 'session')
             return
+        self._diagnostic_stage = 'storage'
         if (self._download and self._session.can_read_admin_media()
                 and self._session.supports_admin_preload()
                 and not self._session.set_gallery_preload_intent(
@@ -152,6 +171,7 @@ class GalleryPreloadWorker(threading.Thread):
                 )):
             self._finish('error', 'storage')
             return
+        self._diagnostic_stage = 'storage'
         pinned = self._session.gallery_pinned(self._gallery_id)
         if self._requested_pin is not None:
             pinned = self._requested_pin
@@ -165,6 +185,7 @@ class GalleryPreloadWorker(threading.Thread):
         if self._cancelled.is_set():
             self._finish('cancelled', '', pinned=pinned)
             return
+        self._diagnostic_stage = 'listing'
         photos = self._list_photos()
         if photos is None:
             return
@@ -176,6 +197,7 @@ class GalleryPreloadWorker(threading.Thread):
         prepared_bytes = 0
         retained: dict[tuple[int, bool], bool] = {}
         complete_before_download: set[int] = set()
+        self._diagnostic_stage = 'cache'
         for photo in photos:
             if self._cancelled.is_set():
                 self._finish('cancelled', '', total=total, pinned=pinned)
@@ -237,6 +259,7 @@ class GalleryPreloadWorker(threading.Thread):
                     missing_before_fetch = not retained.get(
                         (photo.image_id, thumbnail), False,
                     )
+                    self._diagnostic_stage = 'fetch'
                     for attempt in range(MEDIA_PRELOAD_RETRY_MAX_ATTEMPTS):
                         try:
                             body, _mime = self._session.media_photo(
@@ -253,6 +276,7 @@ class GalleryPreloadWorker(threading.Thread):
                                 prepared_bytes += len(body)
                             break
                         except LinkingMediaThrottled as error:
+                            self._record_failure(error)
                             delay = error.retry_after_seconds
                             if (delay is None
                                     or attempt + 1 >= MEDIA_PRELOAD_RETRY_MAX_ATTEMPTS):
@@ -265,7 +289,8 @@ class GalleryPreloadWorker(threading.Thread):
                                     prepared_bytes=prepared_bytes,
                                 )
                                 return
-                        except LinkingError:
+                        except LinkingError as error:
+                            self._record_failure(error)
                             transfer_reason = (
                                 'session' if not self._session.can_read_media()
                                 else 'unavailable'
@@ -291,6 +316,7 @@ class GalleryPreloadWorker(threading.Thread):
             'checking', total=total, pinned=pinned,
             completed=completed, prepared_bytes=prepared_bytes,
         )
+        self._diagnostic_stage = 'verify'
         verified, skipped, any_cached = self._verify_photos(photos)
         if self._cancelled.is_set():
             self._finish(
@@ -380,6 +406,33 @@ class GalleryPreloadWorker(threading.Thread):
                 and self._session.can_read_admin_media()
                 and self._session.supports_admin_preload()
                 and self._session.gallery_preload_intent(self._gallery_id))
+
+    def _record_failure(self, error: Exception) -> None:
+        """Log and retain each distinct consecutive preload failure summary.
+
+        Args:
+            error (Exception): Caught operation error whose raw message and
+                request data must never enter diagnostics.
+
+        Returns:
+            None: Distinct safe facts reach the log and copied Photos snapshot.
+        """
+        summary = format_safe_photos_failure(
+            f'preload-{self._diagnostic_stage}', 'preload', error,
+        )
+        if summary == self._failure_summary:
+            return
+        logging.getLogger(__name__).warning(
+            'Photos failure %s', summary,
+        )
+        self._failure_summary = summary
+        if self._diagnostic_callback is not None:
+            try:
+                self._diagnostic_callback(summary)
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    'Photos preload diagnostic retention callback failed.',
+                )
 
     def _wait_before_retry(
         self, seconds: int, total: int, completed: int,
@@ -515,3 +568,33 @@ class GalleryPreloadWorker(threading.Thread):
             skipped=skipped, prepared_bytes=prepared_bytes, pinned=pinned,
             reason=reason, cache_state=cache_state,
         )
+        if self._outcome_logged:
+            return
+        progress = self.snapshot()
+        total_text = 'unknown' if progress.total is None else str(progress.total)
+        outcome = (
+            f'preload_phase={progress.phase}; total={total_text}; '
+            f'completed={progress.completed}; cached={progress.cached}; '
+            f'skipped={progress.skipped}; reason={progress.reason or "none"}'
+        )
+        summary = (
+            f'{self._failure_summary}; {outcome}'
+            if self._failure_summary is not None else outcome
+        )
+        logger = logging.getLogger(__name__)
+        if progress.phase in ('complete', 'cancelled'):
+            logger.info('Photos preload outcome %s', summary)
+        else:
+            logger.warning('Photos preload outcome %s', summary)
+        should_retain = (
+            self._failure_summary is not None
+            or progress.phase in ('partial', 'error')
+        )
+        if should_retain and self._diagnostic_callback is not None:
+            try:
+                self._diagnostic_callback(summary)
+            except Exception:
+                logging.getLogger(__name__).warning(
+                    'Photos preload diagnostic retention callback failed.',
+                )
+        self._outcome_logged = True

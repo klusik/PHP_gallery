@@ -830,10 +830,24 @@ not update the installed application or prove a live installer upgrade.
 Native Photos fixtures check swallowed thumbnail transport and decoder errors,
 catalogue failures, generation fencing, and their presence in copied support
 text. A diagnostic callback failure cannot replace the original operation.
+Preload fixtures exercise the actual worker's listing, cache, transfer and
+verification failures, immediate safe callbacks and terminal counts. The pure
+worker suite must not import Tk. Native fixtures verify the copied snapshot
+and queued host-log path, including a later album switch in the same session
+and rejection of an old session's callback. A distinct failure after a
+transient throttle must remain observable. Header-policy fixtures retain the
+original refusal and storage assertions while checking finite safe facts;
+arbitrary header values, URLs, credentials and local paths must be absent.
+Watcher action fixtures verify idle Begin with saved or absent API credentials,
+with no detected game and with a Photos browsing link. They retain linked-mode
+reconnection and active, pending, draining and manual-import state precedence;
+Begin opens the existing API connection editor without accepting capture work.
 Contextual-card fixtures verify GDI handle ownership, resize deduplication and
 safe fallback. On Windows, a mapped Tk card's actual region excludes its corner
-and includes its center and resized edge. Pagination retains its existing cap
-and cursor behind the localized Load more action; switching A to B and back
+and includes its center and resized edge. Pagination retains its initial burst
+cap and cursor, then queues a single paced continuation without a mandatory
+Load more click. Controlled timer fixtures verify pacing, session/destruction
+fences and error-to-manual-retry behavior; switching A to B and back
 scopes each gallery's preload status. These assertions complement manual
 rendering checks; they do not establish every DPI or desktop composition.
 

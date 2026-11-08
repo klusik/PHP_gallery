@@ -3661,12 +3661,13 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.flights.revoked.assert_not_called()
         app.config_store.save.assert_not_called()
 
-    def test_begin_flight_opens_connection_setup_when_no_key_is_saved(self) -> None:
-        """Keep connection setup separate from active and recoverable uploads.
+    def test_begin_flight_opens_connection_setup_for_legacy_upload_mode(self) -> None:
+        """Keep legacy Begin discoverable without changing lifecycle routes.
 
         Returns:
-            None: Begin is available for unconfigured key mode. A linked
-                capture finishes or opens progress and recovery without a key.
+            None: Missing or saved keys and a Photos-only link retain Begin;
+                explicit linked targets reconnect and accepted work keeps its
+                existing Finish, progress and recovery destinations.
         """
         app = mock.Mock()
         app.flight_action_state = MAIN.WatcherApp.flight_action_state.__get__(app)
@@ -3677,23 +3678,108 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.linking_manager.selected_upload_target.return_value = None
         app.linking_manager.linked_upload_mode_selected.return_value = False
         app.linking_manager.linked_address.get.return_value = ""
+        self.assertEqual("begin", app.flight_action_state())
         MAIN.WatcherApp.flight_action(app)
         app.open_connection_dialog.assert_called_once_with()
         app.revoke_api_key.assert_not_called()
 
+        app.open_connection_dialog.reset_mock()
+        app.linking_manager.linked_address.get.return_value = (
+            "https://photos-only.example/Galerie"
+        )
+        self.assertEqual("begin", app.flight_action_state())
+        MAIN.WatcherApp.flight_action(app)
+        app.open_connection_dialog.assert_called_once_with()
+
+        app.open_connection_dialog.reset_mock()
+        app.config.api_key = "saved-legacy-key"
+        self.assertEqual("begin", app.flight_action_state())
+        MAIN.WatcherApp.flight_action(app)
+        app.open_connection_dialog.assert_called_once_with()
+
+        app.linking_manager.selected_upload_target.return_value = mock.Mock()
+        self.assertEqual("reconnect", app.flight_action_state())
+        MAIN.WatcherApp.flight_action(app)
+        app.reconnect_upload_gallery.assert_called_once_with()
+
+        app.reconnect_upload_gallery.reset_mock()
+        app.linking_manager.selected_upload_target.return_value = None
+        app.linking_manager.linked_upload_mode_selected.return_value = True
+        self.assertEqual("reconnect", app.flight_action_state())
+        MAIN.WatcherApp.flight_action(app)
+        app.reconnect_upload_gallery.assert_called_once_with()
+
+        app.linking_manager.linked_upload_mode_selected.return_value = False
+        app.manual_worker = mock.Mock()
+        app.manual_worker.is_alive.return_value = True
+        app.flights.session_state.return_value = "idle"
+        self.assertEqual("idle", app.flight_action_state())
+        app.manual_worker = None
+
+        app.config.api_key = ""
         app.linking_manager.linked_upload_mode_selected.return_value = True
         app.linking_manager.selected_upload_target.return_value = mock.Mock()
-        self.assertEqual("idle", app.flight_action_state())
         app.flights.session_state.return_value = "active"
+        self.assertEqual("finish", app.flight_action_state())
         MAIN.WatcherApp.flight_action(app)
         app.flights.finish_report.assert_called_once_with()
         app.flights.session_state.return_value = "working"
+        self.assertEqual("progress", app.flight_action_state())
         MAIN.WatcherApp.flight_action(app)
         app.flights.show_progress.assert_called_once_with()
         app.flights.session_state.return_value = "pending"
+        self.assertEqual("recover", app.flight_action_state())
         MAIN.WatcherApp.flight_action(app)
         app.flights.show_recovery.assert_called_once_with()
-        app.open_connection_dialog.assert_called_once_with()
+        app.flights.session_state.return_value = "blocked"
+        self.assertEqual("recover", app.flight_action_state())
+        MAIN.WatcherApp.flight_action(app)
+        self.assertEqual(2, app.flights.show_recovery.call_count)
+
+    def test_legacy_begin_button_stays_visible_without_game_detection(self) -> None:
+        """Keep Begin visible for legacy setup with either saved-key state.
+
+        Returns:
+            None: No running game, absent or saved API keys, and a linked Photos
+                address all leave the primary Begin control visible.
+        """
+        for api_key in ("", "saved-legacy-key"):
+            with self.subTest(api_key_saved=bool(api_key)):
+                app = mock.Mock()
+                gallery_url = "https://photos-only.example/Galerie"
+                app.config = MAIN.WatcherConfig(
+                    gallery_url=gallery_url, api_key=api_key,
+                )
+                app.flight_action_state = (
+                    MAIN.WatcherApp.flight_action_state.__get__(app)
+                )
+                app.gallery_url_var.get.return_value = gallery_url
+                app.api_key_var.get.return_value = api_key
+                app.api_key_revoke_running = False
+                app.api_key_request_blockers.return_value = []
+                app.manual_worker = None
+                app.flights.session_state.return_value = "idle"
+                app.flights.ui_language.get.return_value = "en"
+                app.simulator_presence = MAIN.GamePresence(
+                    lambda: "", WINAPP_DIR,
+                )
+                app.linking_manager.selected_upload_target.return_value = None
+                app.linking_manager.linked_upload_mode_selected.return_value = False
+                app.linking_manager.linked_address.get.return_value = gallery_url
+
+                self.assertEqual("begin", app.flight_action_state())
+                MAIN.WatcherApp.refresh_connection_controls(app)
+
+                app.finish_flight_button.grid.assert_called_once_with()
+                app.finish_flight_button.grid_remove.assert_not_called()
+                app.finish_flight_button.configure.assert_called_with(
+                    text="Begin game…",
+                )
+                app.import_revoke_button.grid.assert_called_once_with()
+                app.import_revoke_button.grid_remove.assert_not_called()
+                app.import_revoke_button.configure.assert_called_with(
+                    text="Begin game…",
+                )
 
     def test_action_wording_tracks_simulator_and_saved_key_in_all_languages(self) -> None:
         """Keep Watcher and Import actions identical across presence changes.

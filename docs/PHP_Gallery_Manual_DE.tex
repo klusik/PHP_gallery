@@ -1982,9 +1982,12 @@ Ein Start mit \texttt{--startup} bleibt bis zum Wiederherstellen im
 Infobereich. Unter macOS verwendet der Start aus dem Quellcode das normale
 Tk-Fenster. Temporäre Verknüpfungen enden mit dem Prozess.
 
-Große Bäume laden zunächst höchstens 500 Galerien. Die beschriftete Aktion
-\ui{Mehr laden} rechts in der Baumleiste setzt an der gespeicherten Position
-fort. Kontextpanels behalten das Schließen per Tastatur und Außenklick bei.
+Große Bäume laden zunächst höchstens 500 Galerien und setzen dann automatisch
+an der gespeicherten Position fort, eine Seite alle fünf Sekunden. Geladene
+Galerien bleiben während der angezeigten Fortsetzung benutzbar. Bei Fehlern
+stoppt der Ablauf und bietet einen manuellen neuen Versuch; normales Blättern
+benötigt keinen Klick auf \ui{Mehr laden}. Kontextpanels behalten das Schließen
+per Tastatur und Außenklick bei.
 Windows beschneidet ihre abgerundete Kontur ohne dunkle äußere Eckblöcke.
 Ist native Formgebung nicht verfügbar, bleibt ein flaches undurchsichtiges
 Panel im aktuellen Design benutzbar.
@@ -2508,6 +2511,13 @@ erfolgreichen Prüfungen. Ebenso enthält es Fotofehler der~aktuellen Verbindung
 und~unterscheidet Kataloglesen, Vorschaubildübertragung und~Bilddekodierung.
 Ein Albumwechsel erhält diese Angaben; ein Wechsel der~genehmigten aktiven
 Verbindung setzt den~Fotofehlerüberblick zurück.
+Preload-Fehler erscheinen auch im normalen Protokoll, im sichtbaren Log und
+in kopierbaren Diagnosen, getrennt nach Auflistung, Cache-Prüfung, Übertragung
+und Abschlussprüfung. Der Abschluss nennt bearbeitete, gespeicherte und
+übersprungene Bilder. Bei einem Albumwechsel bleiben Fehler eines laufenden
+Preloads innerhalb derselben genehmigten Verbindung erhalten. Abgelehnte
+Medienantworten zeigen begrenzte Cache-Header-Entscheidungen ohne rohe Header
+oder gelockerte Berechtigungen und lokale Speicherregeln.
 
 \subsection{Simulatorposition unter Windows}
 
@@ -2722,6 +2732,13 @@ SimConnect wird nur geöffnet/geschlossen, ohne Telemetrie oder
 Simulatoränderung;
 Prozessnamen bleiben lokal. Aktionen, Berichte und Schlüssel bleiben
 unverändert.
+Im ruhenden API-Schlüsselmodus bleibt Beginnen mit oder ohne gespeicherten
+Schlüssel und ohne laufendes Spiel sichtbar und öffnet direkt den
+Verbindungseditor. Eine reine Fotoverbindung blendet es nicht aus. Der
+verknüpfte Uploadmodus bietet das erneute Verbinden der Galerie. Aktive
+Aufzeichnung, ausstehende Arbeit und Abschluss behalten ihre bisherigen
+Abschluss-, Prüf- oder Fortschrittsaktionen; ein laufender manueller Import
+behält seine eigenen Bedienelemente.
 SimBriefs Laden/Entfernen-Aktion, Einstellungssymbol und Status erscheinen nur
 bei erkanntem Flug; Ausblenden behält den geladenen Plan. Außerhalb eines Flugs
 verwenden Watcher, Import und Fortschritt \ui{Spiel aufgeben} samt passender

@@ -15,12 +15,14 @@ import ctypes
 import gc
 import hashlib
 import io
+import queue
 import sys
 import threading
 import time
 import types
 import unittest
 import wave
+from collections import deque
 from pathlib import Path
 from typing import Callable, cast
 from unittest import mock
@@ -63,6 +65,7 @@ if sys.platform == 'win32' and tk is not None and Image is not None:
     from uploader import (
         gallery_lightbox, native_gallery_viewer, photos_workspace, ui_theme,
     )
+    from uploader.gallery_preload import GalleryPreloadWorker
 else:
     gallery_lightbox = None
     native_gallery_viewer = None
@@ -390,6 +393,80 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertIn('reason=http_status', snapshot)
         self.assertNotIn('gallery title', snapshot)
         workspace.destroy()
+
+    def test_preload_diagnostic_reaches_copy_and_log_for_exact_session(self) -> None:
+        """Forward safe worker facts to copied support and the host log queue.
+
+        Returns:
+            None: Album navigation preserves same-session preload evidence,
+                while a replaced session rejects the old worker's late event.
+        """
+        page = LinkedMediaPage(
+            42, None, (LinkedPhoto(101, 'Private album'),), None,
+        )
+        presentation = LinkedPresentation(
+            False, False, 5, 'medium', False, (),
+        )
+        session = self._session(page, presentation, {})
+        error = LinkingResponseError(
+            'media', 'app_linking_media', 200, 'other', 'response_policy',
+        )
+        error.args = ('token=private https://private.example/photo',)
+        session.prepare_cached_photo.return_value = False
+        session.media_photo.side_effect = error
+        host_events: queue.Queue[tuple[str, str]] = queue.Queue()
+        workspace = photos_workspace.PhotosWorkspace.__new__(
+            photos_workspace.PhotosWorkspace,
+        )
+        workspace._photo_diagnostic_lock = threading.Lock()
+        workspace._photo_diagnostic_latest = None
+        workspace._photo_diagnostic_recent = deque(
+            maxlen=photos_workspace.PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
+        )
+        workspace._diagnostic_callback = lambda summary: host_events.put(
+            ('warning', '[Photos] ' + summary),
+        )
+        workspace._session = session
+        workspace._generation = 2
+        worker = GalleryPreloadWorker(
+            session, 42,
+            diagnostic_callback=lambda summary: (
+                workspace._record_preload_diagnostic(session, summary)
+            ),
+        )
+
+        worker.run()
+
+        self.assertGreater(session.media_photo.call_count, 0)
+        snapshot = workspace.diagnostics_snapshot()
+        self.assertIn('phase=preload-fetch', snapshot)
+        self.assertIn('preload_phase=error', snapshot)
+        self.assertNotIn('private.example', snapshot)
+        first_host_event = host_events.get_nowait()
+        self.assertEqual('warning', first_host_event[0])
+        self.assertIn('phase=preload-fetch', first_host_event[1])
+        self.assertNotIn('token=private', first_host_event[1])
+        outcome_event = host_events.get_nowait()
+        self.assertIn('preload_phase=error', outcome_event[1])
+
+        workspace._generation += 1
+        workspace._record_preload_diagnostic(
+            session, 'phase=preload-fetch same-session-after-album-change',
+        )
+        self.assertIn(
+            'same-session-after-album-change',
+            workspace.diagnostics_snapshot(),
+        )
+        host_events.get_nowait()
+        replacement = self._session(page, presentation, {})
+        with workspace._photo_diagnostic_lock:
+            workspace._session = replacement
+        workspace._clear_photo_diagnostics()
+        workspace._record_preload_diagnostic(
+            session, 'phase=preload-fetch stale-replaced-session',
+        )
+        self.assertIn('No Photos failure', workspace.diagnostics_snapshot())
+        self.assertTrue(host_events.empty())
 
     def test_smooth_icon_button_updates_text_state_and_arrow_direction(self) -> None:
         """Keep accessible text while redrawing dynamic and disabled icons.
@@ -1232,40 +1309,138 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertIsNone(card._rounded_region_after)
         card.destroy()
 
-    def test_catalogue_cap_exposes_localized_load_more_action(self) -> None:
-        """Keep bounded pagination explicit and distinguish it from plus tools.
+    def test_catalogue_cap_schedules_one_paced_page(self) -> None:
+        """Continue cataloguing at a fixed pace after the bounded burst.
 
         Returns:
-            None: A labeled compact action appears at the cap and resumes from
-                the existing cursor without changing the pass limit.
+            None: One timer requests the captured cursor, then later pages
+                retain the pass count and error retry stays explicit.
         """
+        session = cast(LinkingSession, mock.Mock())
         workspace = photos_workspace.PhotosWorkspace(
             self.root, lambda: None, mock.Mock(), lambda: 'en',
         )
         workspace.pack(fill='both', expand=True)
         self.root.update_idletasks()
         self.root.update()
-        workspace._session = cast(LinkingSession, mock.Mock())
+        workspace._session = session
+        workspace._session_provider = lambda: session
         workspace._next_after = TEST_GALLERY_ID
         workspace._pages_this_pass = (
             photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT
         )
-        workspace._continue_catalogue()
-        self.root.update_idletasks()
-
-        button = workspace.load_more_button
-        self.assertEqual(button.cget('text'), tr('en', 'photos_workspace_load_more'))
-        self.assertEqual(button.cget('style'), 'Compact.TButton')
-        self.assertEqual(button.winfo_manager(), 'pack')
-        self.assertLessEqual(button.winfo_width(), button.master.winfo_width())
-        self.assertEqual(int(button.master.grid_info()['row']), 0)
-        self.assertNotEqual(button.cget('text'), '+')
+        scheduled: list[tuple[int, Callable[[], None]]] = []
+        workspace.after = mock.Mock(
+            side_effect=lambda delay, callback: (
+                scheduled.append((delay, callback))
+                or f'after#{len(scheduled)}'
+            ),
+        )
+        workspace.after_cancel = mock.Mock()
         request_page = mock.Mock()
         workspace._request_page = request_page
-        button.invoke()
-        request_page.assert_called_once_with(TEST_GALLERY_ID)
-        self.assertEqual(workspace._pages_this_pass, 0)
+        workspace._continue_catalogue()
+        workspace._continue_catalogue()
+        self.assertEqual(len(scheduled), 1)
+        self.assertEqual(
+            scheduled[0][0],
+            photos_workspace.PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS,
+        )
+        self.assertEqual(workspace._catalogue_after, 'after#1')
+        self.assertEqual(workspace.load_more_button.winfo_manager(), '')
+        self.assertEqual(
+            workspace._pages_this_pass,
+            photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT,
+        )
+        scheduled[0][1]()
+        self.assertEqual(
+            request_page.call_args_list,
+            [mock.call(TEST_GALLERY_ID)],
+        )
+        self.assertIsNone(workspace._catalogue_after)
+
+        workspace._next_after = TEST_GALLERY_ID + 1
+        workspace._pages_this_pass += 1
+        workspace._continue_catalogue()
+        self.assertEqual(len(scheduled), 2)
+        self.assertEqual(workspace._catalogue_after, 'after#2')
+        self.assertEqual(
+            workspace._pages_this_pass,
+            photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT + 1,
+        )
+        workspace._accept_page(None)
+        workspace.after_cancel.assert_called_once_with('after#2')
+        scheduled[1][1]()
+        self.assertEqual(
+            request_page.call_args_list,
+            [mock.call(TEST_GALLERY_ID)],
+        )
+        workspace._retry_catalogue()
+        self.assertEqual(
+            request_page.call_args_list,
+            [mock.call(TEST_GALLERY_ID), mock.call(TEST_GALLERY_ID + 1)],
+        )
+        self.assertEqual(
+            workspace._pages_this_pass,
+            photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT + 1,
+        )
         workspace.destroy()
+
+    def test_cancelled_catalogue_timer_cannot_clear_its_replacement(self) -> None:
+        """Fence late cancelled callbacks from replacing current page work.
+
+        Returns:
+            None: A stale callback cannot erase or request ahead of a newer
+                timer, and destruction cancels the still-current timer.
+        """
+        session = cast(LinkingSession, mock.Mock())
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.root.update_idletasks()
+        self.root.update()
+        workspace._session = session
+        workspace._session_provider = lambda: session
+        workspace._next_after = TEST_GALLERY_ID
+        workspace._pages_this_pass = (
+            photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT
+        )
+        scheduled: list[Callable[[], None]] = []
+        workspace.after = mock.Mock(
+            side_effect=lambda _delay, callback: (
+                scheduled.append(callback) or f'after#{len(scheduled)}'
+            ),
+        )
+        workspace.after_cancel = mock.Mock()
+        request_page = mock.Mock()
+        workspace._request_page = request_page
+
+        workspace._continue_catalogue()
+        workspace._cancel_catalogue_continuation()
+        workspace._next_after += 1
+        workspace._continue_catalogue()
+        self.assertEqual(workspace._catalogue_after, 'after#2')
+        scheduled[0]()
+        self.assertEqual(workspace._catalogue_after, 'after#2')
+        request_page.assert_not_called()
+
+        workspace._cancel_catalogue_continuation()
+        workspace._next_after += 1
+        workspace._continue_catalogue()
+        self.assertEqual(workspace._catalogue_after, 'after#3')
+        workspace._session_provider = lambda: cast(LinkingSession, mock.Mock())
+        scheduled[2]()
+        self.assertIsNone(workspace._catalogue_after)
+        request_page.assert_not_called()
+
+        workspace._session_provider = lambda: session
+        workspace._continue_catalogue()
+        self.assertEqual(workspace._catalogue_after, 'after#4')
+        workspace.destroy()
+        self.assertIsNone(workspace._catalogue_after)
+        scheduled[3]()
+        request_page.assert_not_called()
 
     def test_gallery_context_opens_editor_only_for_gallery_rows(self) -> None:
         """Expose the browser editor action only on a real gallery context.
@@ -1760,14 +1935,31 @@ class NativeGalleryViewerTests(unittest.TestCase):
                         and widget.cget('text') == workspace._text('preload')
                     )
                     preload.invoke()
-                factory.assert_called_once_with(
-                    session, TEST_GALLERY_ID, pinned=pinned, download=True,
+                factory.assert_called_once()
+                args, kwargs = factory.call_args
+                self.assertEqual((session, TEST_GALLERY_ID), args)
+                self.assertEqual(
+                    {'pinned': pinned, 'download': True},
+                    {
+                        key: value for key, value in kwargs.items()
+                        if key != 'diagnostic_callback'
+                    },
+                )
+                diagnostic_callback = kwargs.get('diagnostic_callback')
+                self.assertTrue(callable(diagnostic_callback))
+                diagnostic_callback('phase=preload-fetch accepted-session')
+                self.assertIn(
+                    'accepted-session', workspace.diagnostics_snapshot(),
                 )
             self.assertIsNone(workspace._context_card)
             self.assertEqual('grid', workspace._preload_strip.winfo_manager())
             workspace._cancel_preload()
         self.assertEqual(2, worker.start.call_count)
         self.assertEqual(2, worker.stop.call_count)
+        with workspace._photo_diagnostic_lock:
+            workspace._session = mock.Mock(spec=LinkingSession)
+        diagnostic_callback('phase=preload-fetch stale-session')
+        self.assertNotIn('stale-session', workspace.diagnostics_snapshot())
         workspace.destroy()
 
     def test_preload_terminal_status_is_scoped_to_selected_gallery(self) -> None:
