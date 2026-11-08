@@ -12,6 +12,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Main-window gallery hierarchy and embedded photo workspace."""
 
+from collections import deque
 import queue
 import threading
 import tkinter as tk
@@ -19,17 +20,24 @@ from tkinter import ttk
 from typing import Callable, TypeAlias
 
 from .app_linking import (
+    LINKING_CREATE_TITLE_MAX_BYTES,
     NATIVE_MEDIA_DELETE_BATCH_MAX,
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage, LinkedMediaDetails,
     LinkedMediaGalleryInfo, LinkedPhoto, LinkingSession,
+    LinkingMediaThrottled,
 )
 from .app_linking_ui import LinkingManager
 from .flight_report_translations import tr
 from .gallery_folders import GalleryFolderShelf
 from .gallery_preload import GalleryPreloadWorker, PreloadProgress
-from .linked_create import BoundCreateReceipt
+from .linked_create import (
+    BoundCreateReceipt, CreateDispatch, CreateJournalSnapshot,
+)
 from .linked_upload import LinkedUploadTarget
-from .native_gallery_viewer import GalleryThumbnailMemory, mount_native_gallery_view
+from .native_gallery_viewer import (
+    GalleryThumbnailMemory, _log_safe_media_failure,
+    mount_native_gallery_view,
+)
 from .tk_scroll_input import vertical_scroll_delta
 from .ui_theme import (
     GlassCard, ThemeImage, _PALETTE, attach_inline_tooltip,
@@ -108,6 +116,18 @@ PHOTOS_TREE_MARKER_SIZE = 18
 # Consumers: PhotosWorkspace._cache_snapshot_changed.
 # Rationale: 300 ms groups thumbnail completions without remote metadata reads.
 PHOTOS_CACHE_REFRESH_MS = 300
+
+# Purpose: Keep a compact failure trail available to copied support diagnostics.
+# Type: int. Units: diagnostic summaries. Scope: one live Photos session.
+# Consumers: PhotosWorkspace._photo_diagnostic_recent.
+# Rationale: Retain the latest useful failures without an unbounded event log.
+PHOTOS_DIAGNOSTIC_RECENT_LIMIT = 12
+
+# Purpose: Bound one safe Photos diagnostic line retained for support.
+# Type: int. Units: characters. Scope: one Photos failure summary.
+# Consumers: PhotosWorkspace._record_photo_diagnostic.
+# Rationale: Formatter facts are short; reject any accidental oversized payload.
+PHOTOS_DIAGNOSTIC_MAX_CHARS = 512
 
 _GalleryResult: TypeAlias = tuple[int, LinkedGalleryPage | None]
 _InfoRow: TypeAlias = tuple[str, str | int | float | bool | None]
@@ -253,7 +273,13 @@ class PhotosWorkspace(ttk.Frame):
         self._context_busy = False
         self._probe_cancel: threading.Event | None = None
         self._create_receipt: BoundCreateReceipt | None = None
+        self._create_dispatch: CreateDispatch | None = None
         self._session: LinkingSession | None = None
+        self._photo_diagnostic_lock = threading.Lock()
+        self._photo_diagnostic_latest: str | None = None
+        self._photo_diagnostic_recent: deque[str] = deque(
+            maxlen=PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
+        )
         self._cancel = threading.Event()
         self._generation = 0
         self._worker: threading.Thread | None = None
@@ -376,11 +402,11 @@ class PhotosWorkspace(ttk.Frame):
             self._text("create_root"),
         )
         self.add_root_button.pack(side="left", padx=(4, 0))
-        self.load_more_button = icon_button(
+        self.load_more_button = ttk.Button(
             controls,
-            "+",
-            self._load_more_catalogue,
-            self._text("load_more"),
+            text=self._text("load_more"),
+            command=self._load_more_catalogue,
+            style="Compact.TButton",
         )
         self.load_more_button.pack(side="right")
         self.load_more_button.pack_forget()
@@ -789,7 +815,8 @@ class PhotosWorkspace(ttk.Frame):
         """Switch to the current live gallery session and reload its tree.
 
         Returns:
-            None: Releases stale reads, decoded media and contextual actions.
+            None: Releases stale reads, decoded media and contextual actions;
+                safe failure history resets only when the live session changes.
         """
         if self._destroyed:
             return
@@ -812,6 +839,7 @@ class PhotosWorkspace(ttk.Frame):
         self._preload_bar.stop()
         self._create_receipt = None
         self._generation += 1
+        self._clear_photo_diagnostics()
         self._cancel.set()
         self._cancel = threading.Event()
         self._clear_catalogue()
@@ -858,6 +886,56 @@ class PhotosWorkspace(ttk.Frame):
         self.viewer_status.configure(text=self._text("select_gallery"))
         self.viewer_status.pack(fill="x", padx=8, pady=8)
 
+    def _clear_photo_diagnostics(self) -> None:
+        """Forget failure facts when the approved live session changes.
+
+        Returns:
+            None: No previous-account diagnostic remains in the new session.
+        """
+        with self._photo_diagnostic_lock:
+            self._photo_diagnostic_latest = None
+            self._photo_diagnostic_recent.clear()
+
+    def _record_photo_diagnostic(
+        self, generation: int, summary: str,
+    ) -> None:
+        """Retain one already-sanitized failure from the current generation.
+
+        Args:
+            generation (int): Viewer/session generation that produced the event.
+            summary (str): Fixed safe line from the Photos diagnostic formatter.
+
+        Returns:
+            None: Current-session failures enter a bounded copyable snapshot.
+        """
+        if (type(summary) is not str
+                or len(summary) > PHOTOS_DIAGNOSTIC_MAX_CHARS
+                or not summary.isprintable()):
+            return
+        with self._photo_diagnostic_lock:
+            if generation != self._generation:
+                return
+            self._photo_diagnostic_latest = summary
+            self._photo_diagnostic_recent.append(summary)
+
+    def diagnostics_snapshot(self) -> str:
+        """Return current-session Photos failures without gallery content.
+
+        Returns:
+            str: Latest safe failure and bounded recent failures, or a fixed
+                message when no failure has been recorded for this session.
+        """
+        with self._photo_diagnostic_lock:
+            latest = self._photo_diagnostic_latest
+            recent = tuple(self._photo_diagnostic_recent)
+        if latest is None:
+            return 'No Photos failure recorded for the current session.'
+        return '\n'.join((
+            'Latest failure: ' + latest,
+            'Recent failures:',
+            *('  ' + entry for entry in recent),
+        ))
+
     def _request_page(self, after_id: int | None) -> None:
         """Queue one server catalogue page on the current session.
 
@@ -865,7 +943,8 @@ class PhotosWorkspace(ttk.Frame):
             after_id (int | None): Exclusive cursor from the prior page.
 
         Returns:
-            None: At most one request occupies the session transport.
+            None: At most one request occupies the session transport; safe
+                catalogue failures remain available in the Photos snapshot.
         """
         if self._session is None or self._destroyed:
             return
@@ -885,7 +964,15 @@ class PhotosWorkspace(ttk.Frame):
             """
             try:
                 page = session.gallery_page(after_id, cancelled=cancel)
-            except Exception:
+            except Exception as exc:
+                if (not cancel.is_set()
+                        and not isinstance(exc, LinkingMediaThrottled)):
+                    _log_safe_media_failure(
+                        'page-fetch', 'catalogue', exc,
+                        diagnostic_callback=lambda summary: (
+                            self._record_photo_diagnostic(generation, summary)
+                        ),
+                    )
                 page = None
             if not cancel.is_set():
                 self._events.put((generation, page))
@@ -1407,7 +1494,8 @@ class PhotosWorkspace(ttk.Frame):
             implicit (bool): Whether this is an automatic first-preview attempt.
 
         Returns:
-            None: The previous bounded viewer state is destroyed before mounting.
+            None: The previous bounded viewer is replaced; its safe failure
+                facts flow to the current-session Photos snapshot.
         """
         session = self._session
         if session is None:
@@ -1426,6 +1514,7 @@ class PhotosWorkspace(ttk.Frame):
         self.tree.selection_set(str(gallery.gallery_id))
         if not implicit:
             self.tree.see(str(gallery.gallery_id))
+        diagnostic_generation = self._generation
         if self._viewer is not None:
             self._viewer.destroy()
             self._viewer = None
@@ -1440,6 +1529,11 @@ class PhotosWorkspace(ttk.Frame):
                 thumbnail_memory=self._thumbnail_memory,
                 context_menu=lambda photo, event: self._viewer_context(
                     gallery.gallery_id, photo, event,
+                ),
+                diagnostic_callback=lambda summary: (
+                    self._record_photo_diagnostic(
+                        diagnostic_generation, summary,
+                    )
                 ),
                 preview_result=(
                     lambda has_photos: self._on_implicit_preview(
@@ -1463,6 +1557,8 @@ class PhotosWorkspace(ttk.Frame):
                 self._on_implicit_preview(gallery.gallery_id, False)
         self._sync_subgalleries()
         self._refresh_cache_widgets(gallery.gallery_id)
+        if self._preload_last is not None:
+            self._show_preload_progress(self._preload_last)
 
     def _sync_subgalleries(self) -> None:
         """Project the selected gallery's direct children into its folder strip.
@@ -1511,6 +1607,10 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             None: Other workspace controls remain available.
         """
+        dispatch = self._create_dispatch
+        self._create_dispatch = None
+        if dispatch is not None:
+            dispatch.cancel()
         if self._probe_cancel is not None:
             self._probe_cancel.set()
             self._probe_cancel = None
@@ -1674,7 +1774,9 @@ class PhotosWorkspace(ttk.Frame):
             GlassCard: The new current contextual surface.
         """
         self._dismiss_context(restore=False)
-        card = GlassCard(self, padding=8, takefocus=True)
+        card = GlassCard(
+            self, padding=8, takefocus=True, rounded_clip=True,
+        )
         self._context_card, self._context_origin = card, event.widget
         self._context_xy = (
             event.x_root - self.winfo_rootx(), event.y_root - self.winfo_rooty(),
@@ -2502,6 +2604,7 @@ class PhotosWorkspace(ttk.Frame):
             return
         progress = worker.snapshot()
         if progress == self._preload_last:
+            self._show_preload_progress(progress)
             return
         self._preload_last = progress
         self._show_preload_progress(progress)
@@ -2618,8 +2721,16 @@ class PhotosWorkspace(ttk.Frame):
             progress (PreloadProgress): Latest immutable worker snapshot.
 
         Returns:
-            None: Updates activity or measured progress without touching storage.
+            None: Shows status only for its selected gallery and never touches
+                storage or attributes one gallery's failure to another.
         """
+        if self._selected_gallery_id != progress.gallery_id:
+            self._preload_strip.grid_remove()
+            return
+        self._preload_strip.grid(
+            row=2 if self._heading_stacked else 1,
+            column=0, columnspan=2, sticky='ew', pady=(4, 0),
+        )
         gallery = self._galleries.get(progress.gallery_id)
         title = gallery.title if gallery is not None else ''
         phase = self._text(
@@ -2667,6 +2778,7 @@ class PhotosWorkspace(ttk.Frame):
             self._preload_cancel.state(['disabled'])
         else:
             self._preload_strip.grid_remove()
+            self._preload_last = None
 
     def _cache_glyph(self, gallery_id: int) -> str:
         """Return the icon for the latest local coverage check.
@@ -3307,7 +3419,7 @@ class PhotosWorkspace(ttk.Frame):
         self, card: GlassCard, session: LinkingSession, parent_id: int | None,
         title: str,
     ) -> None:
-        """Journal one explicitly submitted creation in the background.
+        """Inspect saved work before dispatching one Photos gallery creation.
 
         Args:
             card (GlassCard): Originating name form.
@@ -3316,25 +3428,584 @@ class PhotosWorkspace(ttk.Frame):
             title (str): Entered physical gallery title.
 
         Returns:
-            None: Creation completion or recovery is presented inline.
+            None: A saved operation is checked, resolved or confirmed inline.
         """
         manager = self._manager
         if not title or manager is None:
             return
+        try:
+            valid_title = (
+                bool(title.strip(' \t\n\r\x00\x0b'))
+                and len(title.encode('utf-8')) <= LINKING_CREATE_TITLE_MAX_BYTES
+                and not any(ord(char) < 32 or ord(char) == 127 for char in title)
+            )
+        except UnicodeError:
+            valid_title = False
+        if not valid_title:
+            if card is self._context_card:
+                self._context_content(card, self._text('create_invalid_title'))
+                self._place_context(card)
+            return
+        identity = manager.photos_site_identity(session)
+        if (identity is None or not self._creation_context_is_current(
+                card, session, parent_id, identity)):
+            self._creation_context_changed(card)
+            return
 
-        def create() -> Callable[[], None]:
-            """Run the original creation through the shared journal owner.
+        def inspect() -> Callable[[], None]:
+            """Read the key-free journal before any new operation is sent.
 
             Returns:
-                Callable[[], None]: Tk callback for the bound completed receipt.
+                Callable[[], None]: Tk callback routing the validated state.
             """
-            receipt = manager.create_photos_gallery(session, title, parent_id)
+            try:
+                snapshot = manager.inspect_photos_gallery_creation()
+            except Exception as error:
+                manager.record_photos_creation_failure('inspect', error)
+                return lambda: self._creation_check_failed(
+                    card,
+                    lambda: self._retry_photos_create_check(
+                        card, session, parent_id, title, preflight=True,
+                    ),
+                )
+            return lambda: self._route_photos_create_snapshot(
+                card, session, parent_id, title, identity, snapshot,
+            )
+
+        self._run_context(
+            card, inspect,
+            lambda: self._creation_check_failed(
+                card,
+                lambda: self._retry_photos_create_check(
+                    card, session, parent_id, title, preflight=True,
+                ),
+            ),
+        )
+
+    def _creation_context_is_current(
+        self, card: GlassCard, session: LinkingSession,
+        parent_id: int | None, identity: tuple[str, int],
+    ) -> bool:
+        """Recheck the exact context, live account and direct parent on Tk.
+
+        Args:
+            card (GlassCard): Context card captured for the submitted draft.
+            session (LinkingSession): Exact live session captured by Photos.
+            parent_id (int | None): Chosen direct parent, or the web root.
+            identity (tuple[str, int]): Canonical issuer and verified account.
+
+        Returns:
+            bool: True while the same card/session and parent remain available.
+        """
+        manager = self._manager
+        if (manager is None or card is not self._context_card
+                or self._session is not session
+                or self._session_provider() is not session
+                or not session.available() or not session.can_create_gallery()
+                or manager.photos_site_identity(session) != identity):
+            return False
+        if parent_id is None:
+            return True
+        parent = self._galleries.get(parent_id)
+        return (parent is not None and parent.gallery_id == parent_id
+                and self.tree.exists(str(parent_id)))
+
+    def _route_photos_create_snapshot(
+        self, card: GlassCard, session: LinkingSession, parent_id: int | None,
+        title: str, identity: tuple[str, int],
+        snapshot: CreateJournalSnapshot,
+    ) -> None:
+        """Choose the safe Photos action for the inspected journal state.
+
+        Args:
+            card (GlassCard): Exact current create surface.
+            session (LinkingSession): Session captured by the submitted draft.
+            parent_id (int | None): Exact selected parent or web root.
+            title (str): Current user-entered title.
+            identity (tuple[str, int]): Captured current issuer and account.
+            snapshot (CreateJournalSnapshot): Key-free profile state.
+
+        Returns:
+            None: Only an empty journal dispatches a new request automatically.
+        """
+        if not self._creation_context_is_current(
+            card, session, parent_id, identity,
+        ):
+            self._creation_context_changed(card)
+            return
+        if snapshot.state == 'empty':
+            self._start_photos_gallery_create(
+                card, session, parent_id, title, identity,
+            )
+            return
+        if (snapshot.issuer is None or type(snapshot.account_id) is not int
+                or snapshot.account_id <= 0 or snapshot.title is None):
+            self._creation_status_unconfirmed(
+                card, session, parent_id, title,
+            )
+            return
+        if snapshot.state == 'pending':
+            if snapshot.issuer == identity[0] and snapshot.account_id == identity[1]:
+                self._start_photos_gallery_status(
+                    card, session, parent_id, title, identity, snapshot,
+                    already_exists=False,
+                )
+            else:
+                self._creation_pending_at_other_site(card, snapshot.issuer)
+            return
+        if snapshot.state != 'completed' or snapshot.receipt is None:
+            self._creation_status_unconfirmed(
+                card, session, parent_id, title,
+            )
+            return
+        same_original = (
+            snapshot.issuer == identity[0]
+            and snapshot.account_id == identity[1]
+            and snapshot.parent_id == parent_id
+            and snapshot.title.strip(' \t\n\r\x00\x0b')
+            == title.strip(' \t\n\r\x00\x0b')
+        )
+        if same_original:
+            self._start_photos_gallery_status(
+                card, session, parent_id, title, identity, snapshot,
+                already_exists=True,
+            )
+            return
+        self._offer_continue_after_prior_completion(
+            card, session, parent_id, title, identity, snapshot,
+        )
+
+    def _start_photos_gallery_status(
+        self, card: GlassCard, session: LinkingSession, parent_id: int | None,
+        title: str, identity: tuple[str, int],
+        snapshot: CreateJournalSnapshot, *, already_exists: bool,
+    ) -> None:
+        """Revalidate only a same-account saved operation off the Tk thread.
+
+        Args:
+            card (GlassCard): Current create context.
+            session (LinkingSession): Exact currently approved session.
+            parent_id (int | None): Draft parent used for stale-context checks.
+            title (str): Draft title used for stale-context checks.
+            identity (tuple[str, int]): Captured current site/account binding.
+            snapshot (CreateJournalSnapshot): Matching saved journal state.
+            already_exists (bool): Report a matching completed receipt as an
+                existing gallery instead of creating or describing it anew.
+
+        Returns:
+            None: A fresh server status is required before displaying a receipt.
+        """
+        manager = self._manager
+        if manager is None or not self._creation_context_is_current(
+            card, session, parent_id, identity,
+        ):
+            self._creation_context_changed(card)
+            return
+
+        def check_status() -> Callable[[], None]:
+            """Check the matching operation without resending its create key.
+
+            Returns:
+                Callable[[], None]: Tk callback for the verified result.
+            """
+            try:
+                receipt = manager.reconcile_photos_gallery_creation(
+                    session, snapshot,
+                )
+            except Exception as error:
+                manager.record_photos_creation_failure('status', error)
+                return lambda: self._creation_status_unconfirmed(
+                    card, session, parent_id, title,
+                )
+            if receipt is None:
+                return lambda: self._creation_status_unconfirmed(
+                    card, session, parent_id, title,
+                )
+            if already_exists:
+                return lambda: self._creation_completed(
+                    card, session, receipt, already_exists=True,
+                )
             return lambda: self._creation_completed(card, session, receipt)
 
-        self._run_context(card, create, lambda: self._creation_recovery(card))
+        self._run_context(
+            card, check_status,
+            lambda: self._creation_status_unconfirmed(
+                card, session, parent_id, title,
+            ),
+        )
+
+    def _offer_continue_after_prior_completion(
+        self, card: GlassCard, session: LinkingSession, parent_id: int | None,
+        title: str, identity: tuple[str, int],
+        snapshot: CreateJournalSnapshot,
+    ) -> None:
+        """Ask before clearing an older completion and creating this draft.
+
+        Args:
+            card (GlassCard): Current title-entry context.
+            session (LinkingSession): Current live create-authorized session.
+            parent_id (int | None): Current draft parent or web root.
+            title (str): Current draft title.
+            identity (tuple[str, int]): Current issuer and verified account.
+            snapshot (CreateJournalSnapshot): Older completed local record.
+
+        Returns:
+            None: No record is cleared until the user presses Continue.
+        """
+        if (snapshot.receipt is None or snapshot.issuer is None
+                or snapshot.title is None
+                or not self._creation_context_is_current(
+                    card, session, parent_id, identity,
+                )):
+            self._creation_context_changed(card)
+            return
+        self._context_content(
+            card,
+            self._text('create_continue_prior').format(
+                previous_title=snapshot.title, site=snapshot.issuer, title=title,
+            ),
+        )
+        self._context_action(
+            card, self._text('create_continue'),
+            lambda: self._continue_after_prior_completion(
+                card, session, parent_id, title, identity, snapshot,
+            ),
+        )
+        self._context_action(card, self._text('cancel'), self._dismiss_context)
+        self._place_context(card)
+
+    def _continue_after_prior_completion(
+        self, card: GlassCard, session: LinkingSession, parent_id: int | None,
+        title: str, identity: tuple[str, int],
+        snapshot: CreateJournalSnapshot,
+    ) -> None:
+        """Acknowledge the shown old result, then create the current draft once.
+
+        Args:
+            card (GlassCard): Context card whose Continue action was explicit.
+            session (LinkingSession): Current live session and grant.
+            parent_id (int | None): Captured current direct parent or root.
+            title (str): Captured current user-entered title.
+            identity (tuple[str, int]): Captured current issuer/account.
+            snapshot (CreateJournalSnapshot): Exact prior receipt shown to the
+                user before the explicit Continue action.
+
+        Returns:
+            None: A stale card or changed binding cannot start a new request.
+        """
+        if not self._creation_context_is_current(
+            card, session, parent_id, identity,
+        ):
+            self._creation_context_changed(card)
+            return
+        dispatch = CreateDispatch()
+        self._create_dispatch = dispatch
+        self._run_photos_gallery_create(
+            card, session, parent_id, title, identity, dispatch,
+            prior_snapshot=snapshot,
+        )
+
+    def _start_photos_gallery_create(
+        self, card: GlassCard, session: LinkingSession, parent_id: int | None,
+        title: str, identity: tuple[str, int],
+    ) -> None:
+        """Start a new create only after the empty journal was rechecked on Tk.
+
+        Args:
+            card (GlassCard): Exact current title-entry card.
+            session (LinkingSession): Exact live Photos session.
+            parent_id (int | None): Exact current direct parent or root.
+            title (str): User-entered physical gallery title.
+            identity (tuple[str, int]): Current issuer and verified account.
+
+        Returns:
+            None: Creates once if the context remains current and the journal
+                still admits a new operation.
+        """
+        if not self._creation_context_is_current(
+            card, session, parent_id, identity,
+        ):
+            self._creation_context_changed(card)
+            return
+        dispatch = CreateDispatch()
+        self._create_dispatch = dispatch
+        self._run_photos_gallery_create(
+            card, session, parent_id, title, identity, dispatch,
+        )
+
+    def _run_photos_gallery_create(
+        self, card: GlassCard, session: LinkingSession, parent_id: int | None,
+        title: str, identity: tuple[str, int], dispatch: CreateDispatch,
+        *, prior_snapshot: CreateJournalSnapshot | None = None,
+    ) -> None:
+        """Run explicit prior acknowledgement and one journaled create.
+
+        Args:
+            card (GlassCard): Originating current Photos context.
+            session (LinkingSession): Exact current live session.
+            parent_id (int | None): Captured direct parent or web root.
+            title (str): User-entered physical gallery title.
+            identity (tuple[str, int]): Captured issuer and Admin account.
+            dispatch (CreateDispatch): Cancellation gate tied to this context.
+            prior_snapshot (CreateJournalSnapshot | None): Prior completed
+                record explicitly shown and accepted, if one must be cleared.
+
+        Returns:
+            None: A validated receipt or safe recovery notice reaches Tk.
+        """
+        manager = self._manager
+        if manager is None:
+            self._finish_photos_create_dispatch(dispatch)
+            return
+
+        def create() -> Callable[[], None]:
+            """Run the authorized journal operations without touching Tk.
+
+            Returns:
+                Callable[[], None]: Tk completion for the confirmed receipt.
+            """
+            if prior_snapshot is not None:
+                try:
+                    if dispatch.cancelled.is_set():
+                        return lambda: self._finish_photos_create_recovery(
+                            card, dispatch, session, parent_id, title,
+                        )
+                    manager.acknowledge_prior_photos_gallery(
+                        prior_snapshot, session, identity[0], identity[1],
+                    )
+                except Exception as error:
+                    manager.record_photos_creation_failure('acknowledge', error)
+                    return lambda: self._finish_photos_create_recovery(
+                        card, dispatch, session, parent_id, title,
+                    )
+            if dispatch.cancelled.is_set():
+                return lambda: self._finish_photos_create_recovery(
+                    card, dispatch, session, parent_id, title,
+                )
+            try:
+                receipt = manager.create_photos_gallery(
+                    session, title, parent_id, dispatch,
+                )
+            except Exception as error:
+                manager.record_photos_creation_failure('create', error)
+                return lambda: self._finish_photos_create_recovery(
+                    card, dispatch, session, parent_id, title,
+                )
+            return lambda: self._finish_photos_create_success(
+                card, session, receipt, dispatch,
+            )
+
+        self._run_context(
+            card, create,
+            lambda: self._finish_photos_create_recovery(
+                card, dispatch, session, parent_id, title,
+            ),
+        )
+
+    def _finish_photos_create_dispatch(self, dispatch: CreateDispatch) -> None:
+        """Release a finished context's cancellation gate on the Tk thread.
+
+        Args:
+            dispatch (CreateDispatch): Gate created for one Photos create flow.
+
+        Returns:
+            None: A later context cannot cancel an already finished request.
+        """
+        if self._create_dispatch is dispatch:
+            self._create_dispatch = None
+
+    def _finish_photos_create_success(
+        self, card: GlassCard, session: LinkingSession,
+        receipt: BoundCreateReceipt, dispatch: CreateDispatch,
+    ) -> None:
+        """Clear the gate and present the newly confirmed gallery.
+
+        Args:
+            card (GlassCard): Originating context card, if still open.
+            session (LinkingSession): Session that completed the request.
+            receipt (BoundCreateReceipt): Freshly confirmed gallery receipt.
+            dispatch (CreateDispatch): Gate owned by this completed operation.
+
+        Returns:
+            None: The result is reconciled through the existing Photos tree.
+        """
+        self._finish_photos_create_dispatch(dispatch)
+        self._creation_completed(card, session, receipt)
+
+    def _finish_photos_create_recovery(
+        self, card: GlassCard, dispatch: CreateDispatch,
+        session: LinkingSession, parent_id: int | None, title: str,
+    ) -> None:
+        """Clear a finished create gate and show the existing recovery action.
+
+        Args:
+            card (GlassCard): Originating context, if it remains mounted.
+            dispatch (CreateDispatch): Gate owned by this finished operation.
+            session (LinkingSession): Session captured for the create draft.
+            parent_id (int | None): Captured direct parent or web root.
+            title (str): Captured current user-entered title.
+
+        Returns:
+            None: Unconfirmed work remains saved and is never replayed here.
+        """
+        self._finish_photos_create_dispatch(dispatch)
+        self._creation_recovery(card, session, parent_id, title)
+
+    def _creation_check_failed(
+        self, card: GlassCard, retry: Callable[[], None] | None = None,
+    ) -> None:
+        """Explain a preflight refusal before any new gallery request is sent.
+
+        Args:
+            card (GlassCard): Current create context, if still mounted.
+            retry (Callable[[], None] | None): Safe read-only recheck action.
+
+        Returns:
+            None: The user may retry after checking the existing operation.
+        """
+        if card is not self._context_card:
+            return
+        self._context_content(card, self._text('create_check_failed'))
+        if retry is not None:
+            self._context_action(
+                card, self._text('create_check_again'), retry,
+            )
+        if self._manage_link is not None:
+            self._context_action(
+                card, self._text('manage'), self._manage_link,
+            )
+        self._place_context(card)
+
+    def _creation_status_unconfirmed(
+        self, card: GlassCard, session: LinkingSession,
+        parent_id: int | None, title: str,
+    ) -> None:
+        """Offer a read-only retry for the same unresolved journal operation.
+
+        Args:
+            card (GlassCard): Current create card.
+            session (LinkingSession): Current same-account live session.
+            parent_id (int | None): Captured current draft parent or root.
+            title (str): Captured current draft title.
+
+        Returns:
+            None: The retry reads only status and never resends a create request.
+        """
+        if card is not self._context_card:
+            return
+        self._context_content(card, self._text('create_status_unconfirmed'))
+        self._context_action(
+            card, self._text('create_check_again'),
+            lambda: self._retry_photos_create_check(
+                card, session, parent_id, title,
+            ),
+        )
+        if self._manage_link is not None:
+            self._context_action(card, self._text('manage'), self._manage_link)
+        self._place_context(card)
+
+    def _creation_pending_at_other_site(
+        self, card: GlassCard, issuer: str,
+    ) -> None:
+        """Keep a pending key at its original account and site.
+
+        Args:
+            card (GlassCard): Current create context.
+            issuer (str): Original issuer from the key-free saved snapshot.
+
+        Returns:
+            None: The current session is never sent the other site's key.
+        """
+        if card is not self._context_card:
+            return
+        self._context_content(
+            card,
+            self._text('create_pending_other').format(site=issuer),
+        )
+        if self._manage_link is not None:
+            self._context_action(card, self._text('manage'), self._manage_link)
+        self._place_context(card)
+
+    def _retry_photos_create_check(
+        self, card: GlassCard, session: LinkingSession,
+        parent_id: int | None, title: str, *, preflight: bool = False,
+    ) -> None:
+        """Reinspect saved state without automatically dispatching a new POST.
+
+        Args:
+            card (GlassCard): Current Photos context card.
+            session (LinkingSession): Exact session from the original draft.
+            parent_id (int | None): Captured parent or web root.
+            title (str): Captured title, used only to compare completed state.
+            preflight (bool): True only when no create POST has been admitted.
+
+        Returns:
+            None: An empty journal returns to the title form for a fresh click.
+        """
+        manager = self._manager
+        if manager is None:
+            return
+        identity = manager.photos_site_identity(session)
+        if identity is None or not self._creation_context_is_current(
+            card, session, parent_id, identity,
+        ):
+            self._creation_context_changed(card)
+            return
+
+        def inspect() -> Callable[[], None]:
+            """Read the key-free profile state on the worker thread.
+
+            Returns:
+                Callable[[], None]: Tk callback that does not send a mutation.
+            """
+            try:
+                snapshot = manager.inspect_photos_gallery_creation()
+            except Exception as error:
+                manager.record_photos_creation_failure('inspect', error)
+                if preflight:
+                    return lambda: self._creation_check_failed(
+                        card,
+                        lambda: self._retry_photos_create_check(
+                            card, session, parent_id, title, preflight=True,
+                        ),
+                    )
+                return lambda: self._creation_status_unconfirmed(
+                    card, session, parent_id, title,
+                )
+            if snapshot.state == 'empty':
+                return lambda: self._creation_form(card, session, parent_id)
+            return lambda: self._route_photos_create_snapshot(
+                card, session, parent_id, title, identity, snapshot,
+            )
+
+        self._run_context(
+            card, inspect,
+            (lambda: self._creation_check_failed(
+                card,
+                lambda: self._retry_photos_create_check(
+                    card, session, parent_id, title, preflight=True,
+                ),
+            )) if preflight else lambda: self._creation_status_unconfirmed(
+                card, session, parent_id, title,
+            ),
+        )
+
+    def _creation_context_changed(self, card: GlassCard) -> None:
+        """Refuse a stale Photos card without starting or acknowledging work.
+
+        Args:
+            card (GlassCard): Previously captured context card.
+
+        Returns:
+            None: A current card receives the localized stale-context message.
+        """
+        if card is self._context_card:
+            self._context_content(card, self._text('create_context_changed'))
+            self._place_context(card)
 
     def _creation_completed(
-        self, card: GlassCard, session: LinkingSession, receipt: BoundCreateReceipt,
+        self, card: GlassCard, session: LinkingSession,
+        receipt: BoundCreateReceipt, *, already_exists: bool = False,
     ) -> None:
         """Insert the confirmed gallery and request explicit receipt acknowledgement.
 
@@ -3342,6 +4013,8 @@ class PhotosWorkspace(ttk.Frame):
             card (GlassCard): Originating context, if still open.
             session (LinkingSession): Exact link that completed the creation.
             receipt (BoundCreateReceipt): Validated gallery and original intent.
+            already_exists (bool): Present a fresh status result as an existing
+                matching gallery, not as a creation from this click.
 
         Returns:
             None: The first root becomes active; existing selection is preserved.
@@ -3364,10 +4037,14 @@ class PhotosWorkspace(ttk.Frame):
             self._select_gallery(gallery)
         if card is self._context_card:
             self._context_content(
-                card, self._text("created").format(title=gallery.title),
+                card,
+                self._text(
+                    'create_already_exists' if already_exists else 'created',
+                ).format(title=gallery.title),
             )
             self._context_action(
-                card, "OK", lambda: self._acknowledge_creation(card, session, receipt),
+                card, self._text('create_done'),
+                lambda: self._acknowledge_creation(card, session, receipt),
             ).focus_set()
             self._place_context(card)
 
@@ -3394,7 +4071,11 @@ class PhotosWorkspace(ttk.Frame):
             Returns:
                 Callable[[], None]: Tk callback clearing the acknowledged result.
             """
-            manager.acknowledge_photos_gallery(session, receipt)
+            try:
+                manager.acknowledge_photos_gallery(session, receipt)
+            except Exception as error:
+                manager.record_photos_creation_failure('acknowledge', error)
+                raise
             return lambda: self._creation_acknowledged(card)
 
         self._run_context(card, acknowledge, lambda: self._creation_recovery(card))
@@ -3412,11 +4093,18 @@ class PhotosWorkspace(ttk.Frame):
         if card is self._context_card:
             self._dismiss_context()
 
-    def _creation_recovery(self, card: GlassCard) -> None:
+    def _creation_recovery(
+        self, card: GlassCard, session: LinkingSession | None = None,
+        parent_id: int | None = None, title: str | None = None,
+    ) -> None:
         """Offer the established recovery surface for an unconfirmed operation.
 
         Args:
             card (GlassCard): Originating creation or receipt confirmation card.
+            session (LinkingSession | None): Captured session for an optional
+                read-only status retry.
+            parent_id (int | None): Captured direct parent or root for retry.
+            title (str | None): Captured title for the optional status retry.
 
         Returns:
             None: The operation remains journalled for review.
@@ -3424,6 +4112,13 @@ class PhotosWorkspace(ttk.Frame):
         if card is not self._context_card:
             return
         self._context_content(card, self._text("creation_uncertain"))
+        if session is not None and title is not None:
+            self._context_action(
+                card, self._text('create_check_again'),
+                lambda: self._retry_photos_create_check(
+                    card, session, parent_id, title,
+                ),
+            )
         if self._manage_link is not None:
             self._context_action(card, self._text("manage"), self._open_creation_recovery)
         self._place_context(card)

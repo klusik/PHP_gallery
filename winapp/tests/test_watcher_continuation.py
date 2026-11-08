@@ -12,11 +12,13 @@
 
 import importlib.machinery
 import importlib.util
+from collections import deque
 from dataclasses import replace
 import json
 import queue
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -30,8 +32,17 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader.flight_jobs import SessionPlan, WatcherContinuation, WorkspaceLease
 from uploader.app_linking import UPLOAD_OFFLINE_SCOPE, UPLOAD_SCOPE
+from uploader.self_update import UpdateDiagnostic
 from uploader.linked_upload import LinkedUploadTarget, linked_target_binding
 from uploader.app_linking_ui import LinkingManager
+from uploader.photos_workspace import (
+    PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
+    PhotosWorkspace,
+)
+from uploader.update_ui import (
+    UPDATE_DIAGNOSTIC_RECENT_LIMIT,
+    UpdateController,
+)
 
 # Bound local event waits so a broken continuation cannot hang the hosted suite.
 # Type: float; Units: seconds; Scope: one synthetic continuation test event.
@@ -1291,11 +1302,11 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertEqual(1, manager._commit_linked_target.call_count)
 
     def test_diagnostics_keep_safe_browser_runtime_and_update_context(self) -> None:
-        """Copy support data with current host context and no raw API secret.
+        """Copy updater and host context while retaining no raw API secret.
 
         Returns:
-            None: Browser, update, runtime and Tk summaries are copied while
-                configured credentials remain redacted.
+            None: Browser, retained updater failure, runtime and Tk summaries
+                are copied while configured credentials remain redacted.
         """
         app = object.__new__(MAIN.WatcherApp)
         app.root = mock.Mock()
@@ -1310,6 +1321,36 @@ class WatcherContinuationTests(unittest.TestCase):
         app.linking_manager = SimpleNamespace(
             diagnostics_snapshot=lambda: "stage=discovery; reason=server_unavailable",
         )
+        updater = UpdateController.__new__(UpdateController)
+        updater._diagnostic_latest = None
+        updater._diagnostic_last_failure = None
+        updater._diagnostic_recent = deque(
+            maxlen=UPDATE_DIAGNOSTIC_RECENT_LIMIT,
+        )
+        updater._retain_diagnostic(UpdateDiagnostic(
+            phase='download', stage='http_open', endpoint='installer_asset',
+            host='github.com', outcome='failed', elapsed_ms=1200,
+            http_status=504, category='http', error_type='HTTPError',
+            source='self_update._open',
+        ))
+        updater._retain_diagnostic(UpdateDiagnostic(
+            phase='discovery', stage='metadata_read', endpoint='release_manifest',
+            host='github.com', outcome='succeeded', elapsed_ms=42,
+            source='self_update._json',
+        ))
+        app.updates = updater
+        photos = PhotosWorkspace.__new__(PhotosWorkspace)
+        photos._photo_diagnostic_lock = threading.Lock()
+        photos._photo_diagnostic_latest = None
+        photos._photo_diagnostic_recent = deque(
+            maxlen=PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
+        )
+        photos._generation = 1
+        photos._record_photo_diagnostic(
+            1,
+            'phase=media-fetch kind=thumbnail http=504 reason=http_status',
+        )
+        app.photos_workspace = photos
         app._update_resume_status = "stage=resume; reason=continuation_unverified"
         app.gallery_url_var = SimpleNamespace(get=lambda: "https://gallery.example.test")
         api_secret = "fixture-secret-key"
@@ -1325,6 +1366,11 @@ class WatcherContinuationTests(unittest.TestCase):
         copied = app.root.clipboard_append.call_args.args[0]
         for expected in (
             "Browser linking: stage=discovery; reason=server_unavailable",
+            "Updater diagnostics:\nLatest: [updater] phase=discovery",
+            "Last failure: [updater] phase=download",
+            "http_status=504",
+            "Photos diagnostics:\nLatest failure: phase=media-fetch",
+            "http=504 reason=http_status",
             "Update continuation: stage=resume; reason=continuation_unverified",
             "Runtime: source",
             "Tk: 8.6.15",

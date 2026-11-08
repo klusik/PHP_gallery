@@ -13307,10 +13307,11 @@ class WatcherApp:
             self.activity_drawer.insert("", "end", iid=f"event-{index}-{int(event.timestamp * 1000)}", values=(stamp, event.level, filename, event.operation, event.message))
 
     def copy_diagnostics(self) -> None:
-        """Copy redacted linking, runtime, UTC and saved flight diagnostics.
+        """Copy redacted linking, updater, runtime and saved flight diagnostics.
 
         Returns:
-            None: Copies support text to the clipboard and records the action.
+            None: Copies bounded support snapshots to the clipboard and records
+                the action without adding credentials or transport text.
         """
         job_summary = self.describe_job(self.current_job) if self.current_job is not None else "No selected job"
         capability_summary = ", ".join(
@@ -13323,6 +13324,20 @@ class WatcherApp:
             for event in self.activity_events[-30:]
         )
         simconnect = getattr(self.worker, "simconnect_diagnostics", {"connection": "not queried", "last_result": "not requested"})
+        updater_snapshot = getattr(
+            getattr(self, 'updates', None), 'diagnostics_snapshot', None,
+        )
+        updater_diagnostics = (
+            updater_snapshot() if callable(updater_snapshot)
+            else 'No updater diagnostic event recorded.'
+        )
+        photos_snapshot = getattr(
+            getattr(self, 'photos_workspace', None), 'diagnostics_snapshot', None,
+        )
+        photos_diagnostics = (
+            photos_snapshot() if callable(photos_snapshot)
+            else 'No Photos failure recorded for the current session.'
+        )
         recorder = self.flights.recorder
         flight_progress = (
             recorder.diagnostics_snapshot() if recorder is not None
@@ -13344,6 +13359,8 @@ class WatcherApp:
                     self.linking_manager.diagnostics_snapshot()
                     or "No linking outcome recorded yet."
                 ),
+                "Updater diagnostics:\n" + updater_diagnostics,
+                "Photos diagnostics:\n" + photos_diagnostics,
                 f"Update continuation: {self._update_resume_status}",
                 f"Watcher: {self.watcher_activity_var.get()}",
                 f"UTC synchronization: {self.utc_sync.status()}",

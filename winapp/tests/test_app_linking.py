@@ -37,7 +37,9 @@ if str(WINAPP_DIR) not in sys.path:
 from uploader import app_linking as linking
 from uploader import gallery_media_cache, offline_linking
 from uploader.flight_report_translations import tr
-from uploader.linked_create import BoundCreateReceipt, CreateIntent
+from uploader.linked_create import (
+    BoundCreateReceipt, CreateIntent, GalleryCreateJournal,
+)
 from uploader.linked_upload import LinkedUploadTarget
 from uploader.state_store import load_recent_gallery_addresses
 
@@ -3355,6 +3357,56 @@ class NativeMediaTransportTests(unittest.TestCase):
 @unittest.skipIf(LinkingManager is None, 'Tkinter is unavailable')
 class LinkingDeliveryTests(unittest.TestCase):
     """Exercise worker-event delivery without opening a Tk window."""
+
+    def test_photos_create_diagnostic_keeps_safe_http_and_source_facts(self) -> None:
+        """Retain the useful response cause without saved request contents.
+
+        Returns:
+            None: The diagnostic contains the owned journal site and validated
+                HTTP fields, while omitting the key, title, URL and path.
+        """
+        with TemporaryDirectory() as temporary:
+            journal = GalleryCreateJournal(Path(temporary))
+            session = mock.Mock(spec=linking.LinkingSession)
+            session.matches_issuer.return_value = True
+            session.can_create_gallery.return_value = True
+            session.identity.return_value = linking.LinkedIdentity(7, 'admin')
+            session.gallery_create_request.return_value = None
+            issuer = 'https://gallery.example/photos'
+            with self.assertRaises(linking.LinkingError):
+                journal.create(session, issuer, 7, 'Private create title', None)
+
+            response_error = linking.LinkingResponseError(
+                'media', 'app_linking_gallery_create', 504, 'html',
+                'http_status',
+            )
+            response_error.args = (
+                'secret token=value body=private path=C:\\private\\file',
+            )
+            session.gallery_create_request.side_effect = response_error
+            manager = object.__new__(LinkingManager)
+            manager._diagnostic_callback = None
+            manager._diagnostics_snapshot = ''
+            manager._latest_diagnostic = ''
+            manager._last_failure_diagnostic = ''
+            manager._last_failure_utc = ''
+            try:
+                journal.reconcile(session, issuer, 7)
+            except linking.LinkingResponseError as error:
+                manager.record_photos_creation_failure('status', error)
+            else:
+                self.fail('The synthetic gallery status error was not raised.')
+            summary = manager.diagnostics_snapshot()
+            self.assertIn('operation=status', summary)
+            self.assertIn('site=linked_create.py:reconcile:', summary)
+            self.assertIn('http=504', summary)
+            self.assertIn('response_kind=html', summary)
+            self.assertIn('reason=http_status', summary)
+            for secret in (
+                'secret token=value', 'Private create title',
+                'gallery.example', 'C:\\private\\file',
+            ):
+                self.assertNotIn(secret, summary)
 
     def test_linking_diagnostic_survives_ui_delivery_without_raw_details(self) -> None:
         """Retain safe HTTP facts and fixed unavailable status for the host.

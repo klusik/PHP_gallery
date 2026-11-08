@@ -9,6 +9,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Safe deterministic controller tests; no Tk windows, network or installer."""
 from dataclasses import asdict
+from collections import deque
 import json
 from pathlib import Path
 import queue
@@ -21,8 +22,13 @@ from typing import Callable
 from unittest.mock import Mock, call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from uploader.update_ui import InstallGate, UpdateController, check_due
-from uploader.self_update import ReleaseAsset
+from uploader.update_ui import (
+    UPDATE_DIAGNOSTIC_RECENT_LIMIT,
+    InstallGate,
+    UpdateController,
+    check_due,
+)
+from uploader.self_update import ReleaseAsset, UpdateDiagnostic
 
 
 class UpdateControllerTests(unittest.TestCase):
@@ -63,6 +69,11 @@ class UpdateControllerTests(unittest.TestCase):
         controller.check_result_pending = False
         controller.worker = None
         controller.cancel = threading.Event()
+        controller._diagnostic_latest = None
+        controller._diagnostic_last_failure = None
+        controller._diagnostic_recent = deque(
+            maxlen=UPDATE_DIAGNOSTIC_RECENT_LIMIT,
+        )
         controller.state_path = Path("updates") / "state.json"
         controller.installer = Path('setup.exe')
         controller.asset = SimpleNamespace(version='1.2.3', sha256='a' * 64, size=100)
@@ -80,6 +91,83 @@ class UpdateControllerTests(unittest.TestCase):
         self.assertTrue(gate.active)
         gate.cancel()
         self.assertFalse(gate.active)
+
+    def test_worker_diagnostic_is_queued_without_exception_text(self) -> None:
+        """Queue safe worker diagnostics and exclude arbitrary failure text.
+
+        Returns:
+            None: Tk logging receives the owned source site and exception class,
+                while a secret-like exception message stays absent.
+        """
+        controller = self.controller()
+        controller._diagnostic_phase = 'discovery'
+        secret = 'https://private.example/path?token=secret-response-body'
+
+        def inline_thread(
+            target: Callable[[], None], name: str, daemon: bool,
+        ) -> SimpleNamespace:
+            """Return a test thread that executes only when started.
+
+            Args:
+                target (Callable[[], None]): Worker entrypoint under test.
+                name (str): Existing updater thread name.
+                daemon (bool): Existing daemon-thread policy.
+
+            Returns:
+                SimpleNamespace: Thread-shaped fixture whose start runs target.
+            """
+            return SimpleNamespace(start=Mock(side_effect=target))
+
+        def fail_with_secret() -> None:
+            """Raise a generic failure whose text must never be retained.
+
+            Returns:
+                None: Always raises for this deterministic diagnostic fixture.
+            """
+            raise RuntimeError(secret)
+
+        with patch('uploader.update_ui.threading.Thread', side_effect=inline_thread):
+            controller.run_worker(fail_with_secret)
+        controller.poll()
+
+        logged = '\n'.join(
+            str(call.args[0]) for call in controller.app.write_log.call_args_list
+        )
+        self.assertIn('phase=discovery', logged)
+        self.assertIn('stage=worker_operation', logged)
+        self.assertIn('elapsed_ms=', logged)
+        self.assertIn('error_type=RuntimeError', logged)
+        self.assertIn('error_site=update_ui.py:run:', logged)
+        self.assertNotIn(secret, logged)
+
+    def test_diagnostic_snapshot_keeps_failure_after_later_success(self) -> None:
+        """Keep the most useful updater failure after a successful phase.
+
+        Returns:
+            None: Snapshot reports the newest event, last failure and bounded
+                recent phases without exposing arbitrary diagnostic payloads.
+        """
+        controller = self.controller()
+        failed = UpdateDiagnostic(
+            phase='download', stage='http_open', endpoint='installer_asset',
+            host='github.com', outcome='failed', elapsed_ms=1200,
+            http_status=504, category='http', error_type='HTTPError',
+            source='self_update._open',
+        )
+        succeeded = UpdateDiagnostic(
+            phase='discovery', stage='metadata_read', endpoint='release_manifest',
+            host='github.com', outcome='succeeded', elapsed_ms=42,
+            source='self_update._json',
+        )
+
+        controller._retain_diagnostic(failed)
+        controller._retain_diagnostic(succeeded)
+        snapshot = controller.diagnostics_snapshot()
+
+        self.assertIn('Latest: [updater] phase=discovery', snapshot)
+        self.assertIn('Last failure: [updater] phase=download', snapshot)
+        self.assertIn('http_status=504', snapshot)
+        self.assertIn('Recent phases:', snapshot)
 
     def test_install_hands_off_with_active_background_work(self) -> None:
         """Prepare the helper even with presence, uploads and API work active.
@@ -415,7 +503,8 @@ class UpdateControllerTests(unittest.TestCase):
         self.assertIsNone(saved['available'])
         controller.app.set_update_available.assert_called_once_with(None)
         controller.app.write_log.assert_any_call(
-            'Previous installer cleanup refused: cleanup refused', 'warning'
+            'Previous installer cleanup refused; see updater diagnostics.',
+            'warning',
         )
 
     def test_cached_offer_restores_after_restart_through_validator(self) -> None:

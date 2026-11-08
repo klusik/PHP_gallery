@@ -64,7 +64,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.0.1}
+\newcommand{\version}{1.0.2}
 \newcommand{\manualdate}{8 November 2026}
 
 \hypersetup{
@@ -1784,6 +1784,13 @@ A~logon \texttt{--startup} launch remains in~the~system tray until restored.
 On~macOS, source launches use the~normal Tk window.
 Temporary links end with the~process.
 
+Large trees initially load at~most 500 galleries. The~labeled
+\ui{Load more} action on~the~right of~the~tree toolbar continues from
+the~saved position. Contextual panels keep their existing keyboard and~outside
+click dismissal. Windows clips their rounded boundary without dark outer
+corner blocks; if~native shaping is~unavailable, a~flat opaque themed panel
+remains usable.
+
 The~Watcher screen shows the~gallery target. Its~top API-key control opens
 a~compact key dialog with a~masked key and~\ui{Save \& Test}; this~control
 remains available in~the~header on~every screen. The~separate ordinary header
@@ -2043,6 +2050,16 @@ starting a~separate creation. None starts automatically; a~verified
 completed result instead remains as~a~receipt for~acknowledgement.
 An~invalid or~unreadable local intent remains blocked and~requires administrator
 assistance because its original key cannot be~verified.
+Before sending a~new gallery, Photos checks earlier work in~the~same local
+profile. A~pending result is~checked only with~the~original site and~Admin
+account; another site offers reconnection. This check never repeats creation.
+For~a~completed earlier gallery, confirm \ui{Continue} before creating
+the~next one. Only the~exact local completion is~retired; the~earlier gallery
+and~upload target stay unchanged. The~current connection and~selected parent
+are~checked again. Submitting the~same title and~parent on~the~same site
+and~account instead checks the~completed result without creating a~duplicate.
+An~unknown result or~failed local confirmation keeps the~saved work
+for~another check.
 A~confirmed receipt remains until explicit acknowledgement. The~client writes
 and~checks a~complete staged receipt before exclusive publication; uncertainty
 retains the~intent and~any published receipt. A~local binding to~the~original
@@ -2235,6 +2252,21 @@ operating-system toast notifications.
 A~failed network recheck preserves the~validated cached offer across restart;
 the~offer is~validated again before it~is~restored. A~successful check with
 no~current offer clears the~banner, header mark, and~tray badge.
+
+Update operations automatically record their phase, stage, result and~duration
+in~\path{watcher.log}. Network failures retain the~HTTP status and~typed
+transport cause; transfers include known byte counts. Checkpoint, helper
+handoff and~cleanup have separate diagnostic stages. Cleanup failure preserves
+the~original update error. Credentials, signed download queries, response
+bodies, raw exception messages and~local paths are~excluded. The~notice keeps
+its~concise status; technical detail is~available in~the~ordinary log without
+a~debug switch.
+
+\ui{Copy diagnostics} includes the~retained updater failure after later
+successful checks. It~also includes current-session Photos failures,
+distinguishing catalogue reads, thumbnail transfer and~image decoding.
+Album changes retain those facts; changing the~approved live session resets
+the~Photos snapshot.
 
 \subsection{Windows simulator location}
 

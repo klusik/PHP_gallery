@@ -26,7 +26,9 @@ from uploader.app_linking import (
     LinkedGallery, LinkedIdentity, LinkingError, LinkingSession,
 )
 from uploader import linked_create
-from uploader.linked_create import CreateDispatch, CreateIntent, GalleryCreateJournal
+from uploader.linked_create import (
+    CreateDispatch, CreateIntent, GalleryCreateJournal,
+)
 from uploader.linked_upload import LinkedTargetLease
 
 
@@ -70,6 +72,86 @@ class GalleryCreateJournalTests(unittest.TestCase):
             restarted.acknowledge(issuer, 7, second)
             self.assertIsNone(restarted._read())
             self.assertIsNone(restarted._read_receipt())
+
+    def test_inspection_hides_key_and_status_checks_exact_intent(self) -> None:
+        """Keep Photos snapshots key-free and bind status to that exact intent.
+
+        Returns:
+            None: A replaced or stale digest is refused before a status request.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = GalleryCreateJournal(Path(temporary))
+            session = mock.Mock(spec=LinkingSession)
+            session.matches_issuer.return_value = True
+            session.can_create_gallery.return_value = True
+            session.identity.return_value = LinkedIdentity(7, 'admin')
+            issuer = 'https://gallery.example'
+            empty = journal.inspect()
+            self.assertEqual('empty', empty.state)
+            self.assertIsNone(empty.intent_fingerprint)
+
+            session.gallery_create_request.return_value = None
+            with self.assertRaises(LinkingError):
+                journal.create(session, issuer, 7, 'First', None)
+            pending = journal.inspect()
+            saved_intent = journal._read()
+            self.assertEqual('pending', pending.state)
+            self.assertIsNotNone(saved_intent)
+            self.assertEqual('First', pending.title)
+            self.assertEqual(issuer, pending.issuer)
+            self.assertRegex(pending.intent_fingerprint or '', r'^[a-f0-9]{64}$')
+            assert saved_intent is not None
+            self.assertNotIn(saved_intent[0].operation_key, repr(pending))
+
+            session.gallery_create_request.return_value = LinkedGallery(42, None, 'First')
+            first_receipt = journal.reconcile(
+                session, issuer, 7,
+                expected_intent_fingerprint=pending.intent_fingerprint,
+            )
+            self.assertIsNotNone(first_receipt)
+            assert first_receipt is not None
+            journal.acknowledge(issuer, 7, first_receipt)
+
+            session.gallery_create_request.return_value = None
+            with self.assertRaises(LinkingError):
+                journal.create(session, issuer, 7, 'First', None)
+            replacement = journal.inspect()
+            replacement_intent = journal._read()
+            self.assertIsNotNone(replacement_intent)
+            assert replacement_intent is not None
+            self.assertNotEqual(
+                pending.intent_fingerprint, replacement.intent_fingerprint,
+            )
+            self.assertNotEqual(
+                saved_intent[0].operation_key, replacement_intent[0].operation_key,
+            )
+
+            session.gallery_create_request.reset_mock()
+            with self.assertRaises(LinkingError):
+                journal.reconcile(
+                    session, issuer, 7,
+                    expected_intent_fingerprint=pending.intent_fingerprint,
+                )
+            session.gallery_create_request.assert_not_called()
+            still_pending = journal._read()
+            self.assertIsNotNone(still_pending)
+            assert still_pending is not None
+            self.assertEqual(
+                replacement_intent[0].operation_key, still_pending[0].operation_key,
+            )
+
+            session.gallery_create_request.return_value = LinkedGallery(43, None, 'First')
+            second_receipt = journal.reconcile(
+                session, issuer, 7,
+                expected_intent_fingerprint=replacement.intent_fingerprint,
+            )
+            self.assertIsNotNone(second_receipt)
+            completed = journal.inspect()
+            self.assertEqual('completed', completed.state)
+            self.assertEqual(
+                replacement.intent_fingerprint, completed.intent_fingerprint,
+            )
+            self.assertNotIn(replacement_intent[0].operation_key, repr(completed))
 
     def test_target_admission_retains_the_receipt_lease(self) -> None:
         """Prevent another process changing the receipt while it is applied.

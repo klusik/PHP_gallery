@@ -13,16 +13,26 @@
 import json
 import math
 import os
+from collections import deque
 from pathlib import Path
 import queue
 from dataclasses import asdict
 import sys
+import subprocess
 import threading
 import time
-from typing import Callable, Optional, Protocol, TYPE_CHECKING
+from typing import Callable, Optional, Protocol, TYPE_CHECKING, cast
 
 from uploader.state_store import atomic_write_json
-from uploader.self_update import ReleaseAsset
+from uploader.self_update import (
+    ReleaseAsset,
+    UpdateCancelled,
+    UpdateDiagnostic,
+    UpdateError,
+    capture_update_diagnostics,
+    format_update_diagnostic,
+    report_update_diagnostic,
+)
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -107,6 +117,11 @@ class UpdateApplication(Protocol):
 
 
 UPDATE_CHECK_INTERVAL_SECONDS = 3600
+# Purpose: Retain enough recent updater phase boundaries to locate a failure.
+# Type: int. Units: diagnostic events. Scope: one UpdateController lifetime.
+# Consumers: UpdateController._diagnostic_recent.
+# Rationale: Keep copied support data useful while bounding memory and output.
+UPDATE_DIAGNOSTIC_RECENT_LIMIT = 24
 # Purpose: Bound how many persisted state bytes are read before cache validation.
 # Type: int. Units: bytes. Scope: one updater state file.
 # Consumers: read_update_state.
@@ -199,6 +214,12 @@ class UpdateController:
         self.installer: Optional[Path] = None
         self.window: Optional["tk.Toplevel"] = None
         self.worker: Optional[threading.Thread] = None
+        self._diagnostic_phase = 'update'
+        self._diagnostic_latest: UpdateDiagnostic | None = None
+        self._diagnostic_last_failure: UpdateDiagnostic | None = None
+        self._diagnostic_recent: deque[UpdateDiagnostic] = deque(
+            maxlen=UPDATE_DIAGNOSTIC_RECENT_LIMIT,
+        )
         local = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
         self.state_path = local / "PHPGalleryUploader" / "updates" / "state.json"
         try:
@@ -411,17 +432,130 @@ class UpdateController:
             self.status.set(message)
         self.app.write_log(message, "system")
 
+    def _queue_diagnostic(
+        self, phase: str, stage: str, outcome: str, *,
+        category: str | None = None, error: BaseException | None = None,
+        source: str,
+    ) -> None:
+        """Queue one safe diagnostic for a failure observed on the Tk thread.
+
+        Args:
+            phase (str): Fixed updater operation label.
+            stage (str): Fixed owner step label.
+            outcome (str): Fixed result such as failed or cancelled.
+            category (str | None): Fixed safe category, when known.
+            error (BaseException | None): Exception classified without text.
+            source (str): Fixed owner method label.
+
+        Returns:
+            None: The ordinary poller receives an immutable safe event.
+        """
+        started = time.monotonic()
+        with capture_update_diagnostics(
+            lambda diagnostic: self.events.put(('diagnostic', diagnostic)),
+        ):
+            report_update_diagnostic(
+                phase, stage, 'local', 'local', outcome,
+                category=category, error=error, source=source, started=started,
+            )
+
+    def _retain_diagnostic(self, diagnostic: UpdateDiagnostic) -> None:
+        """Keep bounded safe updater evidence for the copy-diagnostics action.
+
+        Args:
+            diagnostic (UpdateDiagnostic): Already sanitized immutable phase data.
+
+        Returns:
+            None: Latest, last failed, and recent events are retained in memory.
+        """
+        recent = getattr(self, '_diagnostic_recent', None)
+        if not isinstance(recent, deque):
+            recent = deque(maxlen=UPDATE_DIAGNOSTIC_RECENT_LIMIT)
+            self._diagnostic_recent = recent
+        self._diagnostic_latest = diagnostic
+        recent.append(diagnostic)
+        if diagnostic.outcome == 'failed':
+            self._diagnostic_last_failure = diagnostic
+
+    def diagnostics_snapshot(self) -> str:
+        """Return bounded updater history without URLs, paths, or exception text.
+
+        Returns:
+            str: Latest event, last failure, and recent sanitized phase events;
+                an empty-history message when no updater event has occurred.
+        """
+        latest = getattr(self, '_diagnostic_latest', None)
+        if latest is None:
+            return 'No updater diagnostic event recorded.'
+        last_failure = getattr(self, '_diagnostic_last_failure', None)
+        recent = tuple(getattr(self, '_diagnostic_recent', ()))
+        lines = ['Latest: ' + format_update_diagnostic(latest)]
+        if last_failure is not None:
+            lines.append(
+                'Last failure: ' + format_update_diagnostic(last_failure),
+            )
+        lines.append('Recent phases:')
+        lines.extend(
+            '  ' + format_update_diagnostic(item) for item in recent
+        )
+        return '\n'.join(lines)
+
     def run_worker(self, operation: Callable[[], None]) -> None:
-        """Run one updater phase off Tk, with no GUI calls from the worker."""
+        """Run one updater phase off Tk and queue safe diagnostics.
+
+        Args:
+            operation (Callable[[], None]): Existing updater operation executed
+                by a daemon worker without direct Tk calls.
+
+        Returns:
+            None: Queues bounded diagnostics, a safe status result and completion.
+        """
         self.busy = True
         def run() -> None:
-            """Report every phase outcome through the UI queue."""
-            try:
-                operation()
-            except Exception as exc:
-                self.events.put(("error", str(exc)))
-            finally:
-                self.events.put(("done", None))
+            """Capture one operation's safe diagnostics before its error is lost.
+
+            Returns:
+                None: Queues all events for processing by the Tk poller.
+            """
+            phase = getattr(self, '_diagnostic_phase', 'update')
+            started = time.monotonic()
+            with capture_update_diagnostics(
+                lambda diagnostic: self.events.put(('diagnostic', diagnostic)),
+            ):
+                report_update_diagnostic(
+                    phase, 'worker_operation', 'local', 'local', 'started',
+                    source='update_ui.UpdateController.run_worker',
+                    started=started,
+                )
+                try:
+                    operation()
+                except Exception as exc:
+                    cancelled = isinstance(exc, UpdateCancelled)
+                    report_update_diagnostic(
+                        phase, 'worker_operation', 'local', 'local',
+                        'cancelled' if cancelled else 'failed',
+                        category=(
+                            'cancelled' if cancelled else
+                            'transport_failure' if phase in {'discovery', 'download'}
+                            and type(exc) not in {UpdateError, UpdateCancelled} else None
+                        ),
+                        error=exc,
+                        source='update_ui.UpdateController.run_worker',
+                        started=started,
+                    )
+                    message = (
+                        str(exc) if type(exc) in {UpdateError, UpdateCancelled}
+                        else 'Update operation failed. See diagnostics.'
+                    )
+                    self.events.put(('error', message))
+                else:
+                    report_update_diagnostic(
+                        phase, 'worker_operation', 'local', 'local', 'succeeded',
+                        source='update_ui.UpdateController.run_worker',
+                        started=started,
+                    )
+                finally:
+                    self.events.put(('done', None))
         self.worker = threading.Thread(target=run, name="PHPGalleryUpdate", daemon=True)
         self.worker.start()
 
@@ -453,6 +587,7 @@ class UpdateController:
                 pass
             return
         previous_installer = self.installer
+        self._diagnostic_phase = 'discovery'
         if self.window is not None:
             if self.asset is None and self.installer is None:
                 self.action.configure(state="disabled", text="Update", command=self.download)
@@ -478,27 +613,51 @@ class UpdateController:
                 except (OSError, RuntimeError) as exc:
                     # Updater-owned housekeeping cannot revoke a validated check;
                     # refusing unsafe cleanup preserves unknown bytes in the session.
-                    self.events.put(("cleanup_warning", str(exc)))
+                    self._queue_diagnostic(
+                        'cleanup', 'previous_installer_cleanup', 'failed',
+                        category='cleanup_refused', error=exc,
+                        source='update_ui.UpdateController.check',
+                    )
+                    self.events.put(("cleanup_warning", None))
             self.events.put(("checked", asset))
         self.run_worker(work)
 
     def download(self) -> None:
-        """Download while upload workers remain active; installation is a later phase."""
+        """Download in a worker while upload workers remain active.
+
+        Returns:
+            None: Schedules the download and verification phase, or leaves the
+                current offer unchanged when another operation owns the gate.
+        """
         if self.busy or self.asset is None or self.gate.active:
             return
         self.cancel.clear()
         self.action.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self.set_status("Downloading installer...")
+        self._diagnostic_phase = 'download'
         asset = self.asset
         def work() -> None:
-            """Own a local download session and remove it after cancellation/failure."""
+            """Own a local download session and retire it after failure.
+
+            Returns:
+                None: Queues a verified installer or re-raises the primary
+                    download failure after best-effort safe cleanup.
+            """
             from uploader.self_update import (download_update, verify_installer, create_download_session,
                                               cleanup_old_download_sessions, retire_download_session, UpdateCancelled)
             cleanup_old_download_sessions(self.state_path.parent, time.time())
             directory = create_download_session(self.state_path.parent)
             def progress(done: int, total: int) -> None:
-                """Queue actual streamed bytes without touching Tk."""
+                """Queue actual streamed byte progress without touching Tk.
+
+                Args:
+                    done (int): Bytes written and hashed so far.
+                    total (int): Published installer size in bytes.
+
+                Returns:
+                    None: Appends a progress event for the Tk poller.
+                """
                 self.events.put(("progress", (done, total)))
             try:
                 path = download_update(asset, directory, progress, self.cancel)
@@ -508,7 +667,14 @@ class UpdateController:
                     raise UpdateCancelled("Update download canceled before installation.")
                 self.events.put(("downloaded", path))
             except Exception:
-                retire_download_session(directory, self.state_path.parent)
+                try:
+                    retire_download_session(directory, self.state_path.parent)
+                except (OSError, RuntimeError) as cleanup_error:
+                    self._queue_diagnostic(
+                        'cleanup', 'download_session_cleanup', 'failed',
+                        category='cleanup_refused', error=cleanup_error,
+                        source='update_ui.UpdateController.download',
+                    )
                 raise
         self.run_worker(work)
 
@@ -525,20 +691,38 @@ class UpdateController:
         try:
             installed_identity()
         except (OSError, RuntimeError) as exc:
-            self.set_status(str(exc) + " Open the downloaded installer manually to install this application.")
+            self._queue_diagnostic(
+                'handoff', 'installed_identity', 'failed',
+                category='checkpoint_refused', error=exc,
+                source='update_ui.UpdateController.install',
+            )
+            self.set_status(
+                "The installed application could not be verified. "
+                "Open the downloaded installer manually to install this application."
+            )
             self.app.open_local_path(self.installer)
             return
         self.gate.begin()
         self.action.configure(state="disabled")
         try:
             self.app.prepare_update_checkpoint(self.asset.version)
-        except (OSError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError) as exc:
+            self._queue_diagnostic(
+                'handoff', 'install_gate', 'failed',
+                category='checkpoint_refused', error=exc,
+                source='update_ui.UpdateController.install',
+            )
             self.gate.cancel()
             try:
                 # The app hook may have durably prepared a continuation before
                 # a later checkpoint step refused; always request its recovery.
                 self.app.cancel_update_checkpoint()
-            except (OSError, ValueError, RuntimeError):
+            except (OSError, ValueError, RuntimeError) as cancel_error:
+                self._queue_diagnostic(
+                    'handoff', 'install_gate', 'failed',
+                    category='checkpoint_refused', error=cancel_error,
+                    source='update_ui.UpdateController.install',
+                )
                 self.app.write_log(
                     "Update continuation cancellation needs review.", "warning",
                 )
@@ -549,6 +733,7 @@ class UpdateController:
             self.action.configure(state="normal")
             return
         self.set_status("Finishing current uploads and saving Watcher state…")
+        self._diagnostic_phase = 'handoff'
         self.run_worker(self.handoff)
 
     def handoff(self) -> None:
@@ -559,18 +744,74 @@ class UpdateController:
                 checkpoint and its helper binding; errors retain the app.
         """
         from uploader.update_helper import prepare_helper, launch_helper
-        self.app.wait_for_update_checkpoint()
-        ticket = prepare_helper(self.installer, self.asset.version, self.asset.sha256, self.asset.size)
-        self.app.bind_update_checkpoint(ticket)
-        launch_helper(ticket)
+        self._run_handoff_step(
+            'checkpoint_wait', self.app.wait_for_update_checkpoint,
+        )
+        ticket = cast(
+            Path,
+            self._run_handoff_step(
+                'helper_prepare',
+                lambda: prepare_helper(
+                    self.installer, self.asset.version, self.asset.sha256,
+                    self.asset.size,
+                ),
+            ),
+        )
+        self._run_handoff_step(
+            'helper_bind', lambda: self.app.bind_update_checkpoint(ticket),
+        )
+        self._run_handoff_step('helper_launch', lambda: launch_helper(ticket))
         if self.installer is not None:
             from uploader.self_update import retire_download_session
             try:
                 retire_download_session(self.installer.parent, self.state_path.parent)
-            except (OSError, RuntimeError):
+            except (OSError, RuntimeError) as exc:
                 # A refused cleanup never revokes an already-ready helper handoff.
-                pass
+                self._queue_diagnostic(
+                    'cleanup', 'download_session_cleanup', 'failed',
+                    category='cleanup_refused', error=exc,
+                    source='update_ui.UpdateController.handoff',
+                )
         self.events.put(("handoff_ready", None))
+
+    def _run_handoff_step(
+        self, stage: str,
+        operation: Callable[[], Path | subprocess.Popen[bytes] | None],
+    ) -> Path | subprocess.Popen[bytes] | None:
+        """Run one fixed helper handoff step with measured safe diagnostics.
+
+        Args:
+            stage (str): Fixed handoff stage from the controller's allowlist.
+            operation (Callable[[], Path | subprocess.Popen[bytes] | None]):
+                Existing step callback; preparation returns its ticket path,
+                launch returns a byte-stream subprocess, and wait/bind return
+                None.
+
+        Returns:
+            Path | subprocess.Popen[bytes] | None: The callback's actual result,
+                preserving its original return value.
+
+        Raises:
+            Exception: Re-raises the operation failure after queuing safe facts.
+        """
+        started = time.monotonic()
+        report_update_diagnostic(
+            'handoff', stage, 'local', 'local', 'started',
+            source='update_ui.UpdateController.handoff', started=started,
+        )
+        try:
+            result = operation()
+        except Exception as exc:
+            report_update_diagnostic(
+                'handoff', stage, 'local', 'local', 'failed', error=exc,
+                source='update_ui.UpdateController.handoff', started=started,
+            )
+            raise
+        report_update_diagnostic(
+            'handoff', stage, 'local', 'local', 'succeeded',
+            source='update_ui.UpdateController.handoff', started=started,
+        )
+        return result
 
     def poll(self) -> None:
         """Apply queued phase transitions and app-wide indicators on Tk only.
@@ -611,7 +852,15 @@ class UpdateController:
                     try:
                         retire_download_session(value.parent, self.state_path.parent)
                     except (OSError, RuntimeError) as exc:
-                        self.app.write_log("Update cleanup refused: " + str(exc), "warning")
+                        self._queue_diagnostic(
+                            'cleanup', 'download_session_cleanup', 'failed',
+                            category='cleanup_refused', error=exc,
+                            source='update_ui.UpdateController.poll',
+                        )
+                        self.app.write_log(
+                            "Update cleanup refused; see updater diagnostics.",
+                            "warning",
+                        )
                     self.auto_install = False
                     self.set_status("Update canceled before installation.")
                     self.action.configure(state="normal", text="Update", command=self.download)
@@ -631,7 +880,18 @@ class UpdateController:
                 self.cancel_button.configure(state="disabled")
             elif kind == "error":
                 self.gate.cancel()
-                self.app.cancel_update_checkpoint()
+                try:
+                    self.app.cancel_update_checkpoint()
+                except (OSError, ValueError, RuntimeError) as exc:
+                    self._queue_diagnostic(
+                        'cleanup', 'checkpoint_cancel', 'failed',
+                        category='checkpoint_refused', error=exc,
+                        source='update_ui.UpdateController.poll',
+                    )
+                    self.app.write_log(
+                        "Update checkpoint cleanup needs review; see updater diagnostics.",
+                        "warning",
+                    )
                 self.set_status("Update stopped: " + value)
                 if self.window is not None:
                     self.action.configure(
@@ -639,7 +899,14 @@ class UpdateController:
                     )
                     self.cancel_button.configure(state="disabled")
             elif kind == "cleanup_warning":
-                self.app.write_log("Previous installer cleanup refused: " + value, "warning")
+                self.app.write_log(
+                    "Previous installer cleanup refused; see updater diagnostics.",
+                    "warning",
+                )
+            elif kind == 'diagnostic' and isinstance(value, UpdateDiagnostic):
+                self._retain_diagnostic(value)
+                level = 'warning' if value.outcome in {'failed', 'cancelled'} else 'info'
+                self.app.write_log(format_update_diagnostic(value), level)
             elif kind == "done":
                 self.busy = False
                 if self.check_result_pending:
