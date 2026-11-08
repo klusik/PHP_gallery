@@ -43,6 +43,7 @@ from .app_linking import (
     LinkedTrack,
     LinkingMediaThrottled,
     LinkingMediaUnavailable,
+    LinkingResponseError,
     LinkingRevisionUnsupported,
     LinkingSession,
 )
@@ -275,6 +276,9 @@ _WorkerPayload: TypeAlias = (
 )
 _WorkerEvent: TypeAlias = tuple[int, str, _WorkerPayload]
 _MciSender: TypeAlias = Callable[[str, ctypes.c_wchar_p | None, int, int | None], int]
+_SafePhotosPhase: TypeAlias = Literal[
+    "page-fetch", "media-fetch", "media-decode", "page-apply", "media-apply",
+]
 
 # Purpose: Restrict diagnostic labels to fixed, non-user-supplied operations.
 # Type: frozenset[str]; Units: operation labels; Scope: Photos failure logs.
@@ -282,6 +286,7 @@ _MciSender: TypeAlias = Callable[[str, ctypes.c_wchar_p | None, int, int | None]
 # Rationale: Prevent accidental URL, title or payload text from entering logs.
 _SAFE_PHOTOS_DIAGNOSTIC_KINDS = frozenset({
     "page", "more", "slide_more", "refresh", "revision", "thumbnail",
+    "catalogue",
     "detail", "prefetch", "audio_track", "other",
 })
 
@@ -289,7 +294,7 @@ _SAFE_PHOTOS_DIAGNOSTIC_KINDS = frozenset({
 # Type: frozenset[str]; Units: Python source basenames; Scope: Photos logs.
 # Consumers: _safe_media_error_site. Rationale: Never expose arbitrary paths.
 _SAFE_PHOTOS_SOURCE_FILES = frozenset({
-    "native_gallery_viewer.py", "app_linking.py",
+    "native_gallery_viewer.py", "app_linking.py", "photos_workspace.py",
 })
 
 
@@ -312,27 +317,54 @@ def _safe_media_error_site(error: Exception) -> str:
 
 
 def _log_safe_media_failure(
-    phase: Literal["page-fetch", "media-fetch", "page-apply", "media-apply"],
+    phase: _SafePhotosPhase,
     kind: str,
     error: Exception,
-) -> None:
+    *,
+    diagnostic_callback: Callable[[str], None] | None = None,
+) -> str:
     """Log safe phase metadata without exception messages or request data.
 
     Args:
-        phase (Literal["page-fetch", "media-fetch", "page-apply", "media-apply"]):
-            Fixed worker-fetch or Tk-result application phase.
+        phase (_SafePhotosPhase): Fixed phase distinguishing media transport
+            from image decoding and page work.
         kind (str): Internal viewer operation, reduced to a known safe label.
         error (Exception): Caught failure whose class name is diagnostic only.
+        diagnostic_callback (Callable[[str], None] | None): Optional owner for
+            retaining the bounded summary in copied Photos diagnostics.
 
     Returns:
-        None: Emits one fixed-format warning with no exception text or traceback.
+        str: Fixed phase, class, owned source site and validated response facts.
     """
     safe_kind = kind if kind in _SAFE_PHOTOS_DIAGNOSTIC_KINDS else "other"
     site = _safe_media_error_site(error)
-    logging.getLogger(__name__).warning(
-        "Photos failure phase=%s kind=%s error_type=%s site=%s",
-        phase, safe_kind, type(error).__name__, site,
+    response = ""
+    if isinstance(error, LinkingResponseError):
+        try:
+            validated = LinkingResponseError(
+                error.phase, error.route, error.status,
+                error.content_kind, error.reason,
+            )
+        except (AttributeError, TypeError, ValueError):
+            validated = None
+        if validated is not None:
+            response = " " + validated.safe_summary
+    summary = (
+        f"phase={phase} kind={safe_kind} error_type={type(error).__name__} "
+        f"site={site}{response}"
     )
+    logging.getLogger(__name__).warning(
+        "Photos failure %s", summary,
+    )
+    if diagnostic_callback is not None:
+        try:
+            diagnostic_callback(summary)
+        except Exception:
+            # Retention is supplemental and must not replace media fallback.
+            logging.getLogger(__name__).warning(
+                "Photos diagnostic retention callback failed.",
+            )
+    return summary
 
 
 class _NativeGalleryViewer:
@@ -350,6 +382,8 @@ class _NativeGalleryViewer:
             thumbnail cache shared by album selections.
         context_menu (Callable[[LinkedPhoto | None, tk.Event], str | None] | None):
             Optional owner for photo or empty-grid context actions.
+        diagnostic_callback (Callable[[str], None] | None): Optional thread-safe
+            receiver for already-sanitized Photos failure summaries.
     """
 
     def __init__(
@@ -362,6 +396,7 @@ class _NativeGalleryViewer:
         show_title: bool = True,
         thumbnail_memory: GalleryThumbnailMemory | None = None,
         context_menu: Callable[[LinkedPhoto | None, tk.Event], str | None] | None = None,
+        diagnostic_callback: Callable[[str], None] | None = None,
     ) -> None:
         """Create the embedded view and start its first bounded page load.
 
@@ -377,6 +412,8 @@ class _NativeGalleryViewer:
                 shared across selections, or None for a viewer-owned cache.
             context_menu (Callable[[LinkedPhoto | None, tk.Event], str | None] | None):
                 Handler for a photo or empty-grid context, or None to omit it.
+            diagnostic_callback (Callable[[str], None] | None): Optional
+                thread-safe receiver for sanitized failure facts.
 
         Returns:
             None: The viewer owns the returned child frame until it is destroyed.
@@ -389,6 +426,7 @@ class _NativeGalleryViewer:
         self._owns_thumbnail_memory = thumbnail_memory is None
         self._thumbnail_memory = thumbnail_memory or GalleryThumbnailMemory()
         self._context_menu = context_menu
+        self._diagnostic_callback = diagnostic_callback
         self.on_photos_changed: Callable[[], None] | None = None
         self.on_cache_changed: Callable[
             [tuple[LinkedPhoto, ...], bool], None
@@ -1276,7 +1314,10 @@ class _NativeGalleryViewer:
                     if kind in ("page", "more", "slide_more")
                     else "media-fetch"
                 )
-                _log_safe_media_failure(phase, kind, exc)
+                _log_safe_media_failure(
+                    phase, kind, exc,
+                    diagnostic_callback=self._diagnostic_callback,
+                )
                 self._events.put((generation, kind + '_error', error_payload))
 
         self._worker = threading.Thread(
@@ -1798,7 +1839,8 @@ class _NativeGalleryViewer:
             index (int): Zero-based photo index requested by the queue.
 
         Returns:
-            tuple[int, Image.Image | None]: Photo index and bounded RGB image.
+            tuple[int, Image.Image | None]: Photo index and bounded RGB image;
+                safe transport or decode failure facts are retained if configured.
         """
         if self._thumbnail_cancelled.is_set() or self._cancelled.is_set():
             return index, None
@@ -1820,10 +1862,25 @@ class _NativeGalleryViewer:
                 ),
                 preload_verified_at=getattr(photo, 'preload_verified_at', None),
             )
-            return index, self._prepare_thumbnail(body)
         except LinkingMediaThrottled:
             raise
-        except Exception:
+        except Exception as exc:
+            if not self._thumbnail_cancelled.is_set() and not self._cancelled.is_set():
+                _log_safe_media_failure(
+                    "media-fetch", "thumbnail", exc,
+                    diagnostic_callback=self._diagnostic_callback,
+                )
+            return index, None
+        if self._thumbnail_cancelled.is_set() or self._cancelled.is_set():
+            return index, None
+        try:
+            return index, self._prepare_thumbnail(body)
+        except Exception as exc:
+            if not self._thumbnail_cancelled.is_set() and not self._cancelled.is_set():
+                _log_safe_media_failure(
+                    "media-decode", "thumbnail", exc,
+                    diagnostic_callback=self._diagnostic_callback,
+                )
             return index, None
 
     def _load_next_thumbnail(self) -> None:
@@ -3373,6 +3430,7 @@ def mount_native_gallery_view(
     show_title: bool = True,
     thumbnail_memory: GalleryThumbnailMemory | None = None,
     context_menu: Callable[[LinkedPhoto | None, tk.Event], str | None] | None = None,
+    diagnostic_callback: Callable[[str], None] | None = None,
 ) -> ttk.Frame:
     """Mount an inline, bounded gallery reader for a selected gallery.
 
@@ -3388,6 +3446,8 @@ def mount_native_gallery_view(
             thumbnail cache shared by album selections.
         context_menu (Callable[[LinkedPhoto | None, tk.Event], str | None] | None):
             Optional owner for photo or empty-grid context actions.
+        diagnostic_callback (Callable[[str], None] | None): Optional thread-safe
+            receiver for sanitized failure facts, or None to omit retention.
 
     Returns:
         ttk.Frame: Child view whose destruction releases worker and UI resources.
@@ -3401,5 +3461,6 @@ def mount_native_gallery_view(
         show_title=show_title,
         thumbnail_memory=thumbnail_memory,
         context_menu=context_menu,
+        diagnostic_callback=diagnostic_callback,
     )
     return viewer.frame

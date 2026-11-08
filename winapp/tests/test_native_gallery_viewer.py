@@ -18,6 +18,7 @@ import io
 import sys
 import threading
 import time
+import types
 import unittest
 import wave
 from pathlib import Path
@@ -36,9 +37,11 @@ from uploader.app_linking import (
     LinkedPresentation,
     LinkedTrack,
     LinkingMediaUnavailable,
+    LinkingResponseError,
     LinkingSession,
 )
 from uploader.flight_report_translations import tr
+from uploader.linked_create import BoundCreateReceipt, CreateJournalSnapshot
 
 try:
     import tkinter as tk
@@ -57,11 +60,14 @@ except ModuleNotFoundError as exc:
     ImageTk = None
 
 if sys.platform == 'win32' and tk is not None and Image is not None:
-    from uploader import gallery_lightbox, native_gallery_viewer, photos_workspace
+    from uploader import (
+        gallery_lightbox, native_gallery_viewer, photos_workspace, ui_theme,
+    )
 else:
     gallery_lightbox = None
     native_gallery_viewer = None
     photos_workspace = None
+    ui_theme = None
 
 
 # Purpose: Bound polling for one real Tk worker result in native CI.
@@ -93,6 +99,19 @@ TEST_WORKER_JOIN_SECONDS = 2.0
 # Consumers: NativeGalleryViewerTests.test_page_detail_manual_slideshow_and_close.
 # Rationale: Exercise a narrow but useful in-window Photos layout.
 TEST_VIEWER_MINIMUM_SIZE = (580, 380)
+
+# Purpose: Observe corner exclusion and resize tracking on a native card HWND.
+# Type: tuple[int, int]. Units: pixels. Scope: contextual region regression.
+# Consumers: test_context_glass_card_native_region_matches_mapped_geometry.
+# Rationale: Distinct mapped geometries expose stale-size clipping directly.
+TEST_CONTEXT_CARD_INITIAL_SIZE = (140, 80)
+TEST_CONTEXT_CARD_RESIZED_SIZE = (220, 90)
+
+# Purpose: Provide one explicit failed preload item for status scoping.
+# Type: int. Units: photos. Scope: one terminal-status workspace fixture.
+# Consumers: test_preload_terminal_status_is_scoped_to_selected_gallery.
+# Rationale: One skipped photo makes the stale gallery error visible and bounded.
+TEST_PRELOAD_STATUS_PHOTO_COUNT = 1
 
 # Purpose: Confirm the initial gallery layout retains enough photo columns.
 # Type: int. Units: columns. Scope: wide native grid fixture.
@@ -271,6 +290,107 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertNotIn("secret URL", output)
         self.assertNotIn("private gallery title", output)
 
+    def test_thumbnail_transport_and_decode_failures_are_distinguished(self) -> None:
+        """Retain safe response facts while separating decode failures.
+
+        Returns:
+            None: A media HTTP refusal keeps status and reason, while a local
+                decode error gets its own phase; neither retains secret text.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        viewer.session = session
+        viewer.gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Album')
+        viewer._thumbnail_cancelled = threading.Event()
+        viewer._cancelled = threading.Event()
+        summaries: list[str] = []
+        viewer._diagnostic_callback = summaries.append
+        secret = 'https://private.example/photo?token=secret-body'
+        response_error = LinkingResponseError(
+            'media', 'app_linking_media', 504, 'html', 'http_status',
+        )
+        response_error.args = (secret,)
+        session.media_photo.side_effect = response_error
+
+        with self.assertLogs(
+            native_gallery_viewer.__name__, level='WARNING',
+        ) as captured:
+            self.assertEqual((0, None), viewer._load_thumbnails(page.photos, 0))
+
+        self.assertIn('phase=media-fetch kind=thumbnail', captured.output[0])
+        self.assertIn('http=504', summaries[0])
+        self.assertIn('reason=http_status', summaries[0])
+        self.assertNotIn(secret, summaries[0])
+
+        session.media_photo.side_effect = None
+        session.media_photo.return_value = (b'image-bytes', 'image/jpeg')
+        viewer._prepare_thumbnail = mock.Mock(side_effect=ValueError(secret))
+        with self.assertLogs(
+            native_gallery_viewer.__name__, level='WARNING',
+        ) as captured:
+            self.assertEqual((0, None), viewer._load_thumbnails(page.photos, 0))
+
+        self.assertIn('phase=media-decode kind=thumbnail', captured.output[0])
+        self.assertNotIn(secret, summaries[-1])
+
+        def fail_diagnostic_sink(summary: str) -> None:
+            """Raise secret-bearing sink text to prove it cannot mask fallback.
+
+            Args:
+                summary (str): Safe summary delivered by the media failure owner.
+
+            Returns:
+                None: Always raises a local sink error for this fixture.
+            """
+            raise RuntimeError(secret)
+
+        session.media_photo.side_effect = RuntimeError(secret)
+        viewer._diagnostic_callback = fail_diagnostic_sink
+        with self.assertLogs(
+            native_gallery_viewer.__name__, level='WARNING',
+        ) as captured:
+            self.assertEqual((0, None), viewer._load_thumbnails(page.photos, 0))
+        output = '\n'.join(captured.output)
+        self.assertIn('error_type=RuntimeError', output)
+        self.assertIn('diagnostic retention callback failed', output)
+        self.assertNotIn(secret, output)
+
+    def test_catalogue_failure_reaches_current_session_snapshot(self) -> None:
+        """Retain safe catalogue failures for the existing copy action.
+
+        Returns:
+            None: The bounded workspace snapshot records HTTP status and reason
+                without response content or an old session's gallery details.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.gallery_page.side_effect = LinkingResponseError(
+            'linking', 'app_linking_galleries', 502, 'html', 'http_status',
+        )
+        provider_state: list[LinkingSession | None] = [None]
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider_state[0], mock.Mock(), lambda: 'en',
+        )
+        provider_state[0] = session
+
+        with self.assertLogs(
+            native_gallery_viewer.__name__, level='WARNING',
+        ):
+            workspace.refresh_session()
+            self._wait_until(
+                lambda: 'http=502' in workspace.diagnostics_snapshot(),
+                'The catalogue error was not retained for support diagnostics.',
+            )
+
+        snapshot = workspace.diagnostics_snapshot()
+        self.assertIn('phase=page-fetch kind=catalogue', snapshot)
+        self.assertIn('reason=http_status', snapshot)
+        self.assertNotIn('gallery title', snapshot)
+        workspace.destroy()
+
     def test_smooth_icon_button_updates_text_state_and_arrow_direction(self) -> None:
         """Keep accessible text while redrawing dynamic and disabled icons.
 
@@ -424,6 +544,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         source.close()
 
         viewer = object.__new__(native_gallery_viewer._NativeGalleryViewer)
+        viewer._diagnostic_callback = None
         normalized = viewer._prepare_image(
             stream.getvalue(), native_gallery_viewer.MEDIA_THUMBNAIL_SIZE,
         )
@@ -455,6 +576,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         source.close()
 
         viewer = object.__new__(native_gallery_viewer._NativeGalleryViewer)
+        viewer._diagnostic_callback = None
         normalized = viewer._prepare_image(
             stream.getvalue(), native_gallery_viewer.MEDIA_THUMBNAIL_SIZE,
         )
@@ -731,6 +853,43 @@ class NativeGalleryViewerTests(unittest.TestCase):
         }
         return page, presentation, image_bytes
 
+    def _photos_create_context(
+        self, manager: mock.Mock, parent: LinkedGallery,
+    ) -> tuple['photos_workspace.PhotosWorkspace', mock.Mock, tk.Widget]:
+        """Mount Photos with one exact direct parent and a live create grant.
+
+        Args:
+            manager (mock.Mock): Contextual gallery manager fake.
+            parent (LinkedGallery): Direct parent offered in the visible tree.
+
+        Returns:
+            tuple[photos_workspace.PhotosWorkspace, mock.Mock, tk.Widget]: Workspace, session,
+                and active contextual card for create-flow assertions.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.available.return_value = True
+        session.can_create_gallery.return_value = True
+        session.gallery_page.return_value = LinkedGalleryPage((parent,), None)
+        manager.photos_site_identity.return_value = (
+            'https://current.example/photos', 7,
+        )
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+            manager=manager,
+        )
+        workspace.pack(fill='both', expand=True)
+        self._wait_until(
+            lambda: workspace.tree.exists(str(parent.gallery_id)),
+            'The Photos create parent did not load.',
+        )
+        event = mock.Mock()
+        event.widget = workspace.tree
+        event.x_root = workspace.tree.winfo_rootx() + 20
+        event.y_root = workspace.tree.winfo_rooty() + 20
+        card = workspace._open_context(event)
+        return workspace, session, card
+
     def _open_viewer(
         self,
         session: LinkingSession,
@@ -910,6 +1069,204 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'A recreated Photos workspace did not restore the saved sash width.',
         )
 
+    def test_context_glass_card_native_region_matches_mapped_geometry(self) -> None:
+        """Verify the actual Windows child HWND region excludes its corners.
+
+        Returns:
+            None: The copied region excludes the top-left corner and includes
+                its center after initial mapping and a subsequent resize.
+        """
+        card = photos_workspace.GlassCard(
+            self.root, padding=8, rounded_clip=True,
+        )
+        initial_width, initial_height = TEST_CONTEXT_CARD_INITIAL_SIZE
+        card.place(
+            x=4, y=4, width=initial_width, height=initial_height,
+        )
+        self.root.update_idletasks()
+        self.root.update()
+        self._wait_until(
+            lambda: card._rounded_region_size == (
+                card.winfo_width(), card.winfo_height(),
+            ),
+            'The real Windows card region did not settle after mapping.',
+        )
+        self.assertTrue(card._rounded_region_active)
+        self.assertEqual(card.cget('style'), 'Glass.TFrame')
+        api = card._rounded_region_api
+        self.assertIsNotNone(api)
+        assert api is not None
+        copied_region = api.gdi32.CreateRectRgn(0, 0, 0, 0)
+        self.assertTrue(copied_region)
+        try:
+            result = api.user32.GetWindowRgn(
+                ctypes.c_void_p(card.winfo_id()),
+                ctypes.c_void_p(copied_region),
+            )
+            # GetWindowRgn returns zero only when no region could be copied.
+            self.assertGreater(result, 0)
+            # (0, 0) is the half-open region's outer top-left corner.
+            self.assertEqual(
+                api.gdi32.PtInRegion(ctypes.c_void_p(copied_region), 0, 0),
+                0,
+            )
+            self.assertNotEqual(
+                api.gdi32.PtInRegion(
+                    ctypes.c_void_p(copied_region),
+                    card.winfo_width() // 2, card.winfo_height() // 2,
+                ),
+                0,
+            )
+
+            resized_width, resized_height = TEST_CONTEXT_CARD_RESIZED_SIZE
+            card.place(width=resized_width, height=resized_height)
+            self._wait_until(
+                lambda: card._rounded_region_size == (
+                    card.winfo_width(), card.winfo_height(),
+                ),
+                'The rounded region did not follow the resized card.',
+            )
+            result = api.user32.GetWindowRgn(
+                ctypes.c_void_p(card.winfo_id()),
+                ctypes.c_void_p(copied_region),
+            )
+            self.assertGreater(result, 0)
+            self.assertNotEqual(
+                api.gdi32.PtInRegion(
+                    ctypes.c_void_p(copied_region),
+                    card.winfo_width() // 2, card.winfo_height() // 2,
+                ),
+                0,
+            )
+            # width-1 is the final in-window pixel, not the half-open edge.
+            self.assertNotEqual(
+                api.gdi32.PtInRegion(
+                    ctypes.c_void_p(copied_region),
+                    card.winfo_width() - 1, card.winfo_height() // 2,
+                ),
+                0,
+            )
+            self.assertNotEqual(
+                api.gdi32.PtInRegion(
+                    ctypes.c_void_p(copied_region),
+                    card.winfo_width() // 2, card.winfo_height() - 1,
+                ),
+                0,
+            )
+        finally:
+            # GetWindowRgn copies the owned HWND region into this caller handle.
+            api.gdi32.DeleteObject(ctypes.c_void_p(copied_region))
+            card.destroy()
+
+    def test_context_glass_card_uses_flat_fallback_when_region_api_missing(self) -> None:
+        """Keep contextual cards readable when native clipping is unavailable.
+
+        Returns:
+            None: Missing native APIs select the opaque card surface without
+                claiming that Windows applied a rounded region.
+        """
+        with mock.patch.object(ui_theme, '_load_context_region_api', return_value=None):
+            card = photos_workspace.GlassCard(
+                self.root, padding=8, rounded_clip=True,
+            )
+        card.pack(anchor='nw')
+        self.root.update_idletasks()
+        self.assertFalse(card._rounded_region_active)
+        self.assertEqual(card.cget('style'), 'ContextFallback.TFrame')
+        self.assertEqual(
+            ttk.Style(card).lookup('ContextFallback.TFrame', 'background'),
+            ui_theme._PALETTE['card_surface'],
+        )
+        card.destroy()
+
+    def test_context_region_failure_releases_handles_and_clears_old_clip(self) -> None:
+        """Keep resize fallback safe and release only caller-owned regions.
+
+        Returns:
+            None: Equal geometry is deduplicated; a refused resize deletes its
+                new HRGN, clears the old one and switches to the flat style.
+        """
+        card = photos_workspace.GlassCard(self.root, padding=8)
+        card.place(x=0, y=0, width=80, height=50)
+        self.root.update_idletasks()
+        self.root.update()
+        gdi32 = types.SimpleNamespace(
+            CreateRoundRectRgn=mock.Mock(side_effect=[101, 202]),
+            DeleteObject=mock.Mock(return_value=1),
+        )
+        user32 = types.SimpleNamespace(
+            SetWindowRgn=mock.Mock(side_effect=[1, 0, 1]),
+        )
+        card._rounded_region_api = cast(
+            ui_theme._ContextRegionApi,
+            types.SimpleNamespace(user32=user32, gdi32=gdi32),
+        )
+        card._rounded_region_active = True
+        card._apply_rounded_region()
+        self.assertEqual(card._rounded_region_size, (80, 50))
+        self.assertEqual(gdi32.CreateRoundRectRgn.call_count, 1)
+        self.assertEqual(gdi32.DeleteObject.call_count, 0)
+        card._apply_rounded_region()
+        self.assertEqual(gdi32.CreateRoundRectRgn.call_count, 1)
+
+        card.place(width=120, height=70)
+        self.root.update_idletasks()
+        self.root.update()
+        card._apply_rounded_region()
+        self.assertEqual(gdi32.DeleteObject.call_count, 1)
+        self.assertEqual(gdi32.DeleteObject.call_args.args[0].value, 202)
+        self.assertIsNone(user32.SetWindowRgn.call_args_list[-1].args[1])
+        self.assertFalse(card._rounded_region_active)
+        self.assertIsNone(card._rounded_region_size)
+        self.assertEqual(card.cget('style'), 'ContextFallback.TFrame')
+        self.assertEqual(
+            ttk.Style(card).lookup('ContextFallback.TFrame', 'background'),
+            ui_theme._PALETTE['card_surface'],
+        )
+
+        card._rounded_region_active = True
+        card._rounded_region_after = card.after_idle(lambda: None)
+        event = tk.Event()
+        event.widget = card
+        card._dispose_rounded_region(event)
+        self.assertIsNone(card._rounded_region_after)
+        card.destroy()
+
+    def test_catalogue_cap_exposes_localized_load_more_action(self) -> None:
+        """Keep bounded pagination explicit and distinguish it from plus tools.
+
+        Returns:
+            None: A labeled compact action appears at the cap and resumes from
+                the existing cursor without changing the pass limit.
+        """
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.root.update_idletasks()
+        self.root.update()
+        workspace._session = cast(LinkingSession, mock.Mock())
+        workspace._next_after = TEST_GALLERY_ID
+        workspace._pages_this_pass = (
+            photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT
+        )
+        workspace._continue_catalogue()
+        self.root.update_idletasks()
+
+        button = workspace.load_more_button
+        self.assertEqual(button.cget('text'), tr('en', 'photos_workspace_load_more'))
+        self.assertEqual(button.cget('style'), 'Compact.TButton')
+        self.assertEqual(button.winfo_manager(), 'pack')
+        self.assertLessEqual(button.winfo_width(), button.master.winfo_width())
+        self.assertEqual(int(button.master.grid_info()['row']), 0)
+        self.assertNotEqual(button.cget('text'), '+')
+        request_page = mock.Mock()
+        workspace._request_page = request_page
+        button.invoke()
+        request_page.assert_called_once_with(TEST_GALLERY_ID)
+        self.assertEqual(workspace._pages_this_pass, 0)
+        workspace.destroy()
+
     def test_gallery_context_opens_editor_only_for_gallery_rows(self) -> None:
         """Expose the browser editor action only on a real gallery context.
 
@@ -957,6 +1314,292 @@ class NativeGalleryViewerTests(unittest.TestCase):
             )
             for widget in workspace._context_card.winfo_children()
         ))
+        workspace.destroy()
+
+    def test_foreign_completed_create_requires_continue_before_new_post(self) -> None:
+        """Acknowledge a foreign completion locally only after Continue.
+
+        Returns:
+            None: The old gallery never enters the current tree and exactly one
+                request is sent for the explicitly entered current draft.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        old_gallery = LinkedGallery(
+            TEST_PARENT_GALLERY_ID + 9000, None, 'Earlier gallery',
+        )
+        old_receipt = BoundCreateReceipt(old_gallery, 'a' * 64)
+        snapshot = CreateJournalSnapshot(
+            'completed', 'https://earlier.example/photos', 11,
+            old_gallery.title, None, old_receipt.intent_fingerprint, old_receipt,
+        )
+        new_gallery = LinkedGallery(
+            TEST_GALLERY_ID + 10000, parent.gallery_id, 'Current draft title',
+        )
+        new_receipt = BoundCreateReceipt(new_gallery, 'b' * 64)
+        manager = mock.Mock()
+        manager.inspect_photos_gallery_creation.return_value = snapshot
+        manager.create_photos_gallery.return_value = new_receipt
+        workspace, session, card = self._photos_create_context(manager, parent)
+        workspace._create_gallery(
+            card, session, parent.gallery_id, 'Current draft title',
+        )
+
+        def continue_button() -> ttk.Button | None:
+            """Find the explicit confirmation after the preflight completes.
+
+            Returns:
+                ttk.Button | None: Continue action if the prompt is visible.
+            """
+            for child in card.winfo_children():
+                if (isinstance(child, ttk.Button)
+                        and child.cget('text') == tr(
+                            'en', 'photos_workspace_create_continue',
+                        )):
+                    return child
+            return None
+
+        self._wait_until(
+            lambda: continue_button() is not None,
+            'A prior completed gallery did not require an explicit Continue.',
+        )
+        prompt = next(
+            child.cget('text') for child in card.winfo_children()
+            if isinstance(child, ttk.Label)
+        )
+        self.assertIn('Earlier gallery', prompt)
+        self.assertIn('Current draft title', prompt)
+        self.assertIn('https://earlier.example/photos', prompt)
+        manager.create_photos_gallery.assert_not_called()
+        manager.acknowledge_prior_photos_gallery.assert_not_called()
+
+        button = continue_button()
+        assert button is not None
+        button.invoke()
+        self._wait_until(
+            lambda: manager.create_photos_gallery.call_count == 1
+            and workspace.tree.exists(str(new_gallery.gallery_id)),
+            'Continue did not create the current gallery exactly once.',
+        )
+        manager.acknowledge_prior_photos_gallery.assert_called_once_with(
+            snapshot, session, 'https://current.example/photos', 7,
+        )
+        create_args = manager.create_photos_gallery.call_args.args
+        self.assertEqual(
+            (session, 'Current draft title', parent.gallery_id), create_args[:3],
+        )
+        self.assertNotIn(old_gallery.gallery_id, workspace._galleries)
+        workspace.destroy()
+
+    def test_same_account_completed_title_is_reconciled_without_new_post(self) -> None:
+        """Show the existing same-account gallery instead of duplicating it.
+
+        Returns:
+            None: A fresh status result is shown and create is never requested.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        existing = LinkedGallery(
+            TEST_GALLERY_ID + 11000, parent.gallery_id, 'Same title',
+        )
+        receipt = BoundCreateReceipt(existing, 'c' * 64)
+        snapshot = CreateJournalSnapshot(
+            'completed', 'https://current.example/photos', 7,
+            existing.title, parent.gallery_id, receipt.intent_fingerprint, receipt,
+        )
+        manager = mock.Mock()
+        manager.inspect_photos_gallery_creation.return_value = snapshot
+        manager.reconcile_photos_gallery_creation.return_value = receipt
+        workspace, session, card = self._photos_create_context(manager, parent)
+        workspace._create_gallery(card, session, parent.gallery_id, 'Same title')
+        self._wait_until(
+            lambda: any(
+                isinstance(child, ttk.Button)
+                and child.cget('text') == tr(
+                    'en', 'photos_workspace_create_done',
+                )
+                for child in card.winfo_children()
+            ),
+            'The matching completed gallery was not shown after status check.',
+        )
+        manager.reconcile_photos_gallery_creation.assert_called_once_with(
+            session, snapshot,
+        )
+        manager.create_photos_gallery.assert_not_called()
+        self.assertIn(existing.gallery_id, workspace._galleries)
+        self.assertEqual(
+            tr('en', 'photos_workspace_create_already_exists').format(
+                title=existing.title,
+            ),
+            next(
+                child.cget('text') for child in card.winfo_children()
+                if isinstance(child, ttk.Label)
+            ),
+        )
+        workspace.destroy()
+
+    def test_unknown_pending_photos_create_check_again_stays_read_only(self) -> None:
+        """Keep repeated status checks read-only while a result is unknown.
+
+        Returns:
+            None: Check again issues another status request but no new create.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        snapshot = CreateJournalSnapshot(
+            'pending', 'https://current.example/photos', 7,
+            'Unconfirmed title', parent.gallery_id, 'd' * 64, None,
+        )
+        manager = mock.Mock()
+        manager.inspect_photos_gallery_creation.return_value = snapshot
+        manager.reconcile_photos_gallery_creation.return_value = None
+        workspace, session, card = self._photos_create_context(manager, parent)
+        workspace._create_gallery(
+            card, session, parent.gallery_id, 'Unconfirmed title',
+        )
+
+        def check_again_button() -> ttk.Button | None:
+            """Find the current status-only action.
+
+            Returns:
+                ttk.Button | None: Check again action if unresolved status is shown.
+            """
+            for child in card.winfo_children():
+                if (isinstance(child, ttk.Button)
+                        and child.cget('text') == tr(
+                            'en', 'photos_workspace_create_check_again',
+                        )):
+                    return child
+            return None
+
+        self._wait_until(
+            lambda: check_again_button() is not None,
+            'An unknown create result did not expose a status-only retry.',
+        )
+        check_again_button().invoke()
+        self._wait_until(
+            lambda: manager.reconcile_photos_gallery_creation.call_count == 2,
+            'Check again did not reconcile the original pending operation.',
+        )
+        manager.create_photos_gallery.assert_not_called()
+        workspace.destroy()
+
+    def test_dismissing_create_context_during_preflight_never_posts(self) -> None:
+        """Refuse a late empty-journal callback after its card was dismissed.
+
+        Returns:
+            None: A stale context cannot admit a gallery create request.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        entered = threading.Event()
+        release = threading.Event()
+        manager = mock.Mock()
+        manager.photos_site_identity.return_value = (
+            'https://current.example/photos', 7,
+        )
+
+        def inspect() -> CreateJournalSnapshot:
+            """Hold inspection so the test can dismiss before its result.
+
+            Returns:
+                CreateJournalSnapshot: Empty state after the gate is released.
+            """
+            entered.set()
+            release.wait(TEST_GUI_WAIT_SECONDS)
+            return CreateJournalSnapshot(
+                'empty', None, None, None, None, None, None,
+            )
+
+        manager.inspect_photos_gallery_creation.side_effect = inspect
+        workspace, session, card = self._photos_create_context(manager, parent)
+        workspace._create_gallery(card, session, parent.gallery_id, 'New title')
+        self.assertTrue(entered.wait(TEST_GUI_WAIT_SECONDS))
+        workspace._dismiss_context(restore=False)
+        release.set()
+        self._wait_until(
+            lambda: not workspace._context_busy,
+            'The dismissed preflight did not finish its queued result.',
+        )
+        manager.create_photos_gallery.assert_not_called()
+        workspace.destroy()
+
+    def test_dismissal_during_prior_ack_cancels_new_create_dispatch(self) -> None:
+        """Finish explicit old-record cleanup without posting a stale draft.
+
+        Returns:
+            None: Dismissing the card while local acknowledgement waits prevents
+                the new create request from being admitted.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        old_receipt = BoundCreateReceipt(
+            LinkedGallery(TEST_PARENT_GALLERY_ID + 12000, None, 'Earlier'),
+            'e' * 64,
+        )
+        snapshot = CreateJournalSnapshot(
+            'completed', 'https://earlier.example/photos', 11,
+            'Earlier', None, old_receipt.intent_fingerprint, old_receipt,
+        )
+        ack_started = threading.Event()
+        release_ack = threading.Event()
+        ack_arguments: list[tuple[CreateJournalSnapshot, LinkingSession, str, int]] = []
+        manager = mock.Mock()
+        manager.inspect_photos_gallery_creation.return_value = snapshot
+
+        def acknowledge(
+            received: CreateJournalSnapshot, session: LinkingSession,
+            issuer: str, account_id: int,
+        ) -> None:
+            """Hold the exact local acknowledgement while the card is dismissed.
+
+            Args:
+                received (CreateJournalSnapshot): Confirmed prior completion.
+                session (LinkingSession): Current approved session.
+                issuer (str): Current canonical site.
+                account_id (int): Current verified account.
+
+            Returns:
+                None: Releases only after the UI cancellation signal is set.
+            """
+            ack_arguments.append((received, session, issuer, account_id))
+            ack_started.set()
+            release_ack.wait(TEST_GUI_WAIT_SECONDS)
+
+        manager.acknowledge_prior_photos_gallery.side_effect = acknowledge
+        workspace, session, card = self._photos_create_context(manager, parent)
+        workspace._create_gallery(
+            card, session, parent.gallery_id, 'Current draft title',
+        )
+
+        def continue_button() -> ttk.Button | None:
+            """Find the explicit old-record continuation control.
+
+            Returns:
+                ttk.Button | None: Continue action once the old result is shown.
+            """
+            return next((
+                child for child in card.winfo_children()
+                if isinstance(child, ttk.Button)
+                and child.cget('text') == tr(
+                    'en', 'photos_workspace_create_continue',
+                )
+            ), None)
+
+        self._wait_until(
+            lambda: continue_button() is not None,
+            'The old completed gallery did not ask before continuing.',
+        )
+        button = continue_button()
+        assert button is not None
+        button.invoke()
+        self.assertTrue(ack_started.wait(TEST_GUI_WAIT_SECONDS))
+        workspace._dismiss_context(restore=False)
+        release_ack.set()
+        self._wait_until(
+            lambda: not workspace._context_busy,
+            'The cancelled Photos create did not finish its local callback.',
+        )
+        self.assertEqual(
+            [(snapshot, session, 'https://current.example/photos', 7)],
+            ack_arguments,
+        )
+        manager.create_photos_gallery.assert_not_called()
         workspace.destroy()
 
     def test_cache_icons_update_from_viewer_without_information_request(self) -> None:
@@ -1125,6 +1768,57 @@ class NativeGalleryViewerTests(unittest.TestCase):
             workspace._cancel_preload()
         self.assertEqual(2, worker.start.call_count)
         self.assertEqual(2, worker.stop.call_count)
+        workspace.destroy()
+
+    def test_preload_terminal_status_is_scoped_to_selected_gallery(self) -> None:
+        """Hide one album's terminal error while another album is selected.
+
+        Returns:
+            None: Switching away hides the old gallery's status and returning
+                to that gallery restores its retained terminal outcome.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'First album')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self._wait_until(
+            lambda: TEST_GALLERY_ID in workspace._galleries,
+            'The preload status fixture gallery did not load.',
+        )
+        progress = photos_workspace.PreloadProgress(
+            'error', TEST_GALLERY_ID, TEST_PRELOAD_STATUS_PHOTO_COUNT,
+            0, 0, TEST_PRELOAD_STATUS_PHOTO_COUNT, 0, False, 'unavailable',
+        )
+        workspace._preload_last = progress
+        status_row = 2 if workspace._heading_stacked else 1
+        workspace._preload_strip.grid(
+            row=status_row, column=0, columnspan=2, sticky='ew',
+        )
+
+        workspace._selected_gallery_id = TEST_GALLERY_ID
+        workspace._show_preload_progress(progress)
+        self.assertEqual('grid', workspace._preload_strip.winfo_manager())
+        self.assertIn('First album', workspace._preload_text.get())
+
+        workspace._selected_gallery_id = TEST_PARENT_GALLERY_ID
+        workspace._show_preload_progress(progress)
+        self.assertEqual('', workspace._preload_strip.winfo_manager())
+
+        workspace._selected_gallery_id = TEST_GALLERY_ID
+        workspace._show_preload_progress(progress)
+        self.assertEqual('grid', workspace._preload_strip.winfo_manager())
+        self.assertIn('First album', workspace._preload_text.get())
+
+        workspace._cancel_preload()
+        self.assertIsNone(workspace._preload_last)
+        workspace._selected_gallery_id = TEST_PARENT_GALLERY_ID
+        workspace._show_preload_progress(progress)
+        workspace._selected_gallery_id = TEST_GALLERY_ID
+        self.assertEqual('', workspace._preload_strip.winfo_manager())
         workspace.destroy()
 
     def test_photos_information_is_explicit_grouped_and_scope_filtered(self) -> None:

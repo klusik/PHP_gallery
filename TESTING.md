@@ -818,6 +818,25 @@ bodies, credentials, callback handles and raw exception messages. These
 regressions run through the hosted central WinApp owner; BASIC alone checks
 source syntax and changed declarations, not runtime behavior.
 
+The existing self-update and updater-UI fixtures additionally exercise safe
+diagnostics at the real worker-to-Tk boundary. Deterministic HTTP 504, wrapped
+DNS/TLS/timeout failures, interrupted reads, integrity rejection, cancellation
+and cleanup errors preserve the failed stage and bounded exception causes.
+Assertions check elapsed/byte context and exclude credential-bearing messages,
+signed URLs, bodies and local paths. Cleanup failures must retain the primary
+error. These fixtures use fake transports and owned temporary files; they do
+not update the installed application or prove a live installer upgrade.
+
+Native Photos fixtures check swallowed thumbnail transport and decoder errors,
+catalogue failures, generation fencing, and their presence in copied support
+text. A diagnostic callback failure cannot replace the original operation.
+Contextual-card fixtures verify GDI handle ownership, resize deduplication and
+safe fallback. On Windows, a mapped Tk card's actual region excludes its corner
+and includes its center and resized edge. Pagination retains its existing cap
+and cursor behind the localized Load more action; switching A to B and back
+scopes each gallery's preload status. These assertions complement manual
+rendering checks; they do not establish every DPI or desktop composition.
+
 The isolated linking security fixture keeps `SCRIPT_NAME` independent of
 `REQUEST_URI` and verifies root and subdirectory public mounts through internal
 rewrites. Missing, foreign, encoded, case-changed, path-info and ambiguous public
@@ -8367,6 +8386,18 @@ the restricted binary's no-store response and the absence of a persistent
 cache entry. Try a photo visibility change with the previous value, then
 with a stale value. Refresh the source after a conflict or uncertain reply.
 Check root and child creation under the existing creation intent and receipt.
+The native create regressions inspect empty, pending and completed local
+journals without exposing operation keys to the UI. Exercise an old completed
+result from another site: the new request must wait for explicit local
+confirmation, retire only that exact result and revalidate its current account
+and direct parent. The earlier gallery must not enter the current site's tree
+or become an upload target. Repeating the same title and parent must check the
+existing result without a second create request. Pending work may receive only
+a same-site/account status query; unknown results and failed acknowledgements
+retain the journal. Change the selected parent during preflight and during
+confirmation, close the card, and change the live connection: stale steps must
+not dispatch. Inspect the safe diagnostic phase and exception category for
+refusals, without raw exception text, operation keys, gallery titles or paths.
 Approve Admin Photos over an existing saved rolling listing link. Verify the
 same issuer and account, immediate Photos inventory and creation actions, and
 renewal after restart. Exercise vault publication failure and retain the old

@@ -310,6 +310,19 @@ pending intent and any published receipt for explicit reconciliation. This
 does not atomically exclude unrelated local writers or qualify Windows,
 hardlink behavior or directory durability after power loss.
 
+Photos now preflights this existing profile-wide journal before a new create.
+A pending operation is reconciled read-only only with its original issuer and
+Admin account. A completed operation can be acknowledged locally after an
+explicit user action, including when it belongs to a different site. This
+reuses the exact bound-receipt check and profile lease; the foreign gallery
+never supplies current gallery or upload authority. The current session,
+account and selected direct parent must still match before a new dispatch.
+A same-site/account request with the same normalized title and parent checks
+the completed result instead of sending a replacement. Corrupt data, failed
+acknowledgement and an unknown server result remain retained. This recovery
+keeps the journal format and server ledger unchanged and does not establish
+safe automatic retry, installer migration or power-loss durability.
+
 Explicit linked-create abandonment records a permanent key tombstone without
 claiming no filesystem effects. An older runtime may report this new ledger
 state as unknown but must not replay it. Existing upload claims and states are
@@ -636,6 +649,16 @@ between differently scaled monitors is not claimed. Native display/ClearType
 appearance, fractional scaling and monitor moves need manual qualification.
 No OS display or smoothing preferences are changed.
 
+Contextual `GlassCard` surfaces opt into native child-window clipping on
+Windows. This removes the fixed dark matte from their rounded exterior while
+preserving ordinary cards and the existing inline focus/dismissal owners.
+The theme permanently supports a flat opaque contextual fallback when native
+region APIs are unavailable or refuse a shape. A resize fallback clears a
+previous native region before returning to rectangular rendering. This path
+keeps controls usable without introducing transparent-image rendering or a
+new dependency. Supported-platform prevalence is unknown; retirement requires
+equivalent corner, resize, ownership and fallback coverage on those platforms.
+
 ## WinApp update process exit
 
 The updater permanently retains verified downloads, installed-path validation,
@@ -656,6 +679,15 @@ upload. Those old records cannot establish automatic resume consent. Existing
 credentials and files are retained; Abandon is not the continuation path.
 Installed upgrade acceptance and rollback/power-loss behavior remain separate
 from hosted controller, recorder, queue and helper fixtures.
+
+Updater diagnostic records preserve bounded transport causes and owned source
+sites before the worker-to-Tk boundary reduces failures to a concise status.
+Cleanup warnings retain the original update failure and never grant authority
+to delete unrelated bytes. Fixed fields exclude credential-bearing URLs,
+response bodies, arbitrary exception messages and local paths. The updater
+retains its last failure for copied diagnostics after later successful work;
+this support boundary does not change trusted hosts, integrity checks,
+checkpoint admission, continuation consent or publication policy.
 
 ## Consistency evidence and imported disk names
 

@@ -21,7 +21,7 @@ import stat
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 from .app_linking import (
     LINKING_CREATE_TITLE_MAX_BYTES, LINKING_GALLERY_ID_MAX, LinkedGallery,
@@ -125,6 +125,34 @@ class BoundCreateReceipt:
     intent_fingerprint: str
 
 
+@dataclass(frozen=True)
+class CreateJournalSnapshot:
+    """Describe a persisted create state without exposing its operation key.
+
+    Attributes:
+        state (Literal['empty', 'pending', 'completed']): Validated journal
+            state observed while the profile lease was held.
+        issuer (str | None): Original canonical issuer for a pending/completed
+            operation, or None when the journal is empty.
+        account_id (int | None): Original verified Admin identity, or None when
+            the journal is empty.
+        title (str | None): Original gallery title, or None when empty.
+        parent_id (int | None): Original parent, or None for empty or root.
+        intent_fingerprint (str | None): Digest binding the exact saved intent
+            without exposing its operation key.
+        receipt (BoundCreateReceipt | None): Non-secret completed gallery proof;
+            present only for a completed state.
+    """
+
+    state: Literal['empty', 'pending', 'completed']
+    issuer: str | None
+    account_id: int | None
+    title: str | None
+    parent_id: int | None
+    intent_fingerprint: str | None
+    receipt: BoundCreateReceipt | None
+
+
 def _decode_intent(data: object) -> CreateIntent:
     """Validate non-secret persisted creation inputs before using them.
 
@@ -182,10 +210,24 @@ def _bind_receipt(intent: CreateIntent, gallery: LinkedGallery) -> BoundCreateRe
     Returns:
         BoundCreateReceipt: Gallery and deterministic non-secret intent digest.
     """
-    encoded = json.dumps(_intent_fields(intent), ensure_ascii=True, sort_keys=True,
-                         separators=(',', ':')).encode('ascii')
+    return BoundCreateReceipt(gallery, _intent_fingerprint(intent))
+
+
+def _intent_fingerprint(intent: CreateIntent) -> str:
+    """Bind the exact persisted intent without exposing its operation key.
+
+    Args:
+        intent (CreateIntent): Validated original issuer, account and inputs.
+
+    Returns:
+        str: Stable lowercase SHA-256 digest of the complete intent fields.
+    """
+    encoded = json.dumps(
+        _intent_fields(intent), ensure_ascii=True, sort_keys=True,
+        separators=(',', ':'),
+    ).encode('ascii')
     digest = hashlib.sha256(b'php-gallery-create-intent-binding-v1\x00' + encoded)
-    return BoundCreateReceipt(gallery, digest.hexdigest())
+    return digest.hexdigest()
 
 
 class GalleryCreateJournal:
@@ -558,6 +600,49 @@ class GalleryCreateJournal:
         finally:
             lease.release()
 
+    def inspect(self) -> CreateJournalSnapshot:
+        """Inspect the profile journal without returning any operation key.
+
+        Returns:
+            CreateJournalSnapshot: Empty, pending or completed state and only
+                the original site/account/title/parent, non-secret intent digest
+                and an optional bound receipt.
+
+        Raises:
+            LinkingError: Existing journal data is malformed, inconsistent or
+                cannot be read safely under the profile lease.
+        """
+        lease = LinkedTargetLease(self._config_dir, _CREATE_LEASE_BINDING)
+        lease.acquire()
+        try:
+            pending = self._read()
+            receipt = self._read_receipt()
+            if pending is None and receipt is None:
+                return CreateJournalSnapshot(
+                    'empty', None, None, None, None, None, None,
+                )
+            if receipt is not None:
+                intent, gallery, _identity = receipt
+                if pending is not None and pending[0] != intent:
+                    raise LinkingError(
+                        'Gallery creation journal records are inconsistent.',
+                    )
+                return CreateJournalSnapshot(
+                    'completed', intent.issuer, intent.account_id,
+                    intent.title, intent.parent_id,
+                    _intent_fingerprint(intent),
+                    _bind_receipt(intent, gallery),
+                )
+            if pending is None:
+                raise LinkingError('Gallery creation journal state is unavailable.')
+            intent = pending[0]
+            return CreateJournalSnapshot(
+                'pending', intent.issuer, intent.account_id,
+                intent.title, intent.parent_id, _intent_fingerprint(intent), None,
+            )
+        finally:
+            lease.release()
+
     def resume(
         self, session: LinkingSession, intent: CreateIntent,
         dispatch: CreateDispatch | None = None,
@@ -662,6 +747,7 @@ class GalleryCreateJournal:
 
     def reconcile(
         self, session: LinkingSession, issuer: str, account_id: int,
+        *, expected_intent_fingerprint: str | None = None,
     ) -> BoundCreateReceipt | None:
         """Read status once for the original account without issuing a mutation.
 
@@ -669,6 +755,9 @@ class GalleryCreateJournal:
             session (LinkingSession): Live session with explicit create scope.
             issuer (str): Exact current installation issuer.
             account_id (int): Previously server-verified Admin account ID.
+            expected_intent_fingerprint (str | None): Optional digest from a
+                prior key-free snapshot; when supplied, status may proceed only
+                if the profile still contains that exact intent.
 
         Returns:
             BoundCreateReceipt | None: Current gallery bound to the original
@@ -679,7 +768,12 @@ class GalleryCreateJournal:
         """
         if (not session.matches_issuer(issuer) or not session.can_create_gallery()
                 or type(account_id) is not int
-                or not 0 < account_id <= LINKING_GALLERY_ID_MAX):
+                or not 0 < account_id <= LINKING_GALLERY_ID_MAX
+                or (expected_intent_fingerprint is not None
+                    and (not isinstance(expected_intent_fingerprint, str)
+                         or re.fullmatch(
+                             r'[a-f0-9]{64}', expected_intent_fingerprint,
+                         ) is None))):
             raise LinkingError('Gallery creation session is unavailable.')
         lease = LinkedTargetLease(self._config_dir, _CREATE_LEASE_BINDING)
         lease.acquire()
@@ -691,6 +785,11 @@ class GalleryCreateJournal:
             intent = saved[0] if saved is not None else receipt[0]
             if intent.issuer != issuer or intent.account_id != account_id:
                 raise LinkingError('Reconnect to the original gallery and Admin account.')
+            if (expected_intent_fingerprint is not None
+                    and not hmac.compare_digest(
+                        _intent_fingerprint(intent), expected_intent_fingerprint,
+                    )):
+                raise LinkingError('Gallery creation changed before status check.')
             if session.identity().user_id != intent.account_id:
                 raise LinkingError('Reconnect to the original gallery and Admin account.')
             if receipt is not None:

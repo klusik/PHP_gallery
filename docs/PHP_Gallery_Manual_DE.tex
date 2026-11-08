@@ -1982,6 +1982,13 @@ Ein Start mit \texttt{--startup} bleibt bis zum Wiederherstellen im
 Infobereich. Unter macOS verwendet der Start aus dem Quellcode das normale
 Tk-Fenster. Temporäre Verknüpfungen enden mit dem Prozess.
 
+Große Bäume laden zunächst höchstens 500 Galerien. Die beschriftete Aktion
+\ui{Mehr laden} rechts in der Baumleiste setzt an der gespeicherten Position
+fort. Kontextpanels behalten das Schließen per Tastatur und Außenklick bei.
+Windows beschneidet ihre abgerundete Kontur ohne dunkle äußere Eckblöcke.
+Ist native Formgebung nicht verfügbar, bleibt ein flaches undurchsichtiges
+Panel im aktuellen Design benutzbar.
+
 Der Watcher-Bildschirm zeigt die Zielgalerie. Die obere API-Schlüsselsteuerung
 öffnet einen kompakten Dialog mit maskiertem Schlüssel und \ui{Save \& Test};
 diese Steuerung bleibt
@@ -2275,7 +2282,18 @@ Galerie und Speicher; automatisch startet keine. Bestätigt
 der Server stattdessen ein abgeschlossenes Ergebnis, bleibt dessen Beleg zur
 Bestätigung erhalten. Eine ungültige oder nicht lesbare lokale Absicht bleibt
 blockiert und erfordert Hilfe des Administrators, da ihr Schlüssel nicht geprüft
-werden kann. Ein bestätigter Beleg bleibt bis zur ausdrücklichen Bestätigung
+werden kann. Vor einer neuen Galerie prüft Photos frühere Arbeit im selben
+lokalen Profil. Ein ausstehendes Ergebnis wird nur mit der ursprünglichen
+Website und dem Administratorkonto geprüft; bei einer anderen Website wird
+eine erneute Verbindung angeboten. Diese Prüfung wiederholt keine Erstellung.
+Bei einer früher fertiggestellten Galerie bestätigen Sie \ui{Fortfahren}, um die
+nächste zu erstellen. Nur der genaue lokale Abschluss wird entfernt; die
+frühere Galerie und das Upload-Ziel bleiben unverändert. Aktuelle Verbindung
+und ausgewählte Elterngalerie werden erneut geprüft. Gleicher Titel und
+Elternteil für dieselbe Website und dasselbe Konto prüfen stattdessen das
+fertige Ergebnis, ohne ein Duplikat anzulegen. Unklare Ergebnisse oder eine
+fehlgeschlagene lokale Bestätigung erhalten die gespeicherte Arbeit.
+Ein bestätigter Beleg bleibt bis zur ausdrücklichen Bestätigung
 gespeichert. Vor der exklusiven Veröffentlichung schreibt und prüft der Client
 einen vollständigen vorbereiteten Beleg; bei Ungewissheit bleiben Absicht und
 ein eventuell veröffentlichter Beleg erhalten. Eine lokale Bindung an die
@@ -2475,6 +2493,21 @@ auch über einen Neustart hinweg; vor der~Wiederherstellung wird es erneut
 validiert. Eine erfolgreiche Prüfung ohne aktuelles Angebot entfernt
 den~Hinweis,
 die~Markierung in~der~Kopfzeile und~den~Ablage-Badge.
+
+Updatevorgänge protokollieren Phase, Schritt, Ergebnis und~Dauer automatisch
+in~\path{watcher.log}. Netzwerkfehler erhalten den~HTTP-Status und~den~Typ
+der~Transportursache; Übertragungen enthalten bekannte Bytezahlen.
+Kontrollpunkt, Helferübergabe und~Bereinigung haben eigene Diagnoseschritte.
+Ein Bereinigungsfehler erhält den~ursprünglichen Updatefehler. Zugangsdaten,
+signierte Downloadparameter, Antwortinhalte, rohe Ausnahmetexte und~lokale
+Pfade werden ausgeschlossen. Der~Hinweis bleibt kurz; technische Details
+stehen ohne Debugschalter im~normalen Protokoll.
+
+\ui{Copy diagnostics} enthält den~letzten Updatefehler auch nach späteren
+erfolgreichen Prüfungen. Ebenso enthält es Fotofehler der~aktuellen Verbindung
+und~unterscheidet Kataloglesen, Vorschaubildübertragung und~Bilddekodierung.
+Ein Albumwechsel erhält diese Angaben; ein Wechsel der~genehmigten aktiven
+Verbindung setzt den~Fotofehlerüberblick zurück.
 
 \subsection{Simulatorposition unter Windows}
 

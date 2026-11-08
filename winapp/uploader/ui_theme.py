@@ -12,7 +12,9 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from math import cos, radians, sin
+import ctypes
 import _tkinter
+import sys
 import tkinter as tk
 from tkinter import font as tkfont, ttk
 from typing import TYPE_CHECKING, TypeAlias
@@ -171,6 +173,12 @@ _BUTTON_CORNER_RADIUS = 6
 # Consumers: Pillow rounded rectangle drawing.
 # Rationale: 10 px softens corners without wasting panel content area.
 _PANEL_CORNER_RADIUS = 10
+
+# Purpose: Restrict native region DLL lookup to trusted Windows system folders.
+# Type: int. Units: LoadLibraryEx flag bits. Scope: contextual card clipping.
+# Consumers: _load_context_region_api for user32.dll and gdi32.dll.
+# Rationale: Region APIs must never resolve from the working directory or PATH.
+_LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
 
 # Purpose: Render antialiased edges for the compact source theme images.
 # Type: int; Units: scale factor; Scope: Pillow artwork generation.
@@ -1621,12 +1629,17 @@ class GlassCard(ttk.Frame):
     def __init__(
         self,
         parent: tk.Misc,
+        *,
+        rounded_clip: bool = False,
         **kwargs: str | int | bool | tuple[int, ...] | tk.Misc | ThemeImage,
     ) -> None:
-        """Create a themed card frame.
+        """Create a themed card, optionally clipping its rounded corners.
 
         Args:
             parent (tk.Misc): Parent widget that owns the card.
+            rounded_clip (bool): Whether to clip the opaque exterior matte from
+                this card's HWND on Windows; unsupported platforms use a flat
+                opaque contextual style.
             **kwargs (str | int | bool | tuple[int, ...] | tk.Misc | ThemeImage):
                 Standard ttk.Frame options such as style, padding, dimensions
                 and an optional Tk image.
@@ -1634,8 +1647,211 @@ class GlassCard(ttk.Frame):
         Returns:
             None: The initialized frame is ready to receive child widgets.
         """
-        kwargs.setdefault("style", "Glass.TFrame")
+        self._rounded_region_api = (
+            _load_context_region_api() if rounded_clip else None
+        )
+        self._rounded_region_active = rounded_clip and (
+            self._rounded_region_api is not None
+        )
+        self._rounded_region_size: tuple[int, int] | None = None
+        self._rounded_region_after: str | None = None
+        if rounded_clip and not self._rounded_region_active:
+            ttk.Style(parent).configure(
+                "ContextFallback.TFrame",
+                background=_PALETTE["card_surface"],
+                relief="flat", borderwidth=0,
+            )
+            kwargs.setdefault("style", "ContextFallback.TFrame")
+        else:
+            kwargs.setdefault("style", "Glass.TFrame")
         super().__init__(parent, **kwargs)
+        if self._rounded_region_active:
+            self.bind("<Configure>", self._schedule_rounded_region, add="+")
+            self.bind("<Destroy>", self._dispose_rounded_region, add="+")
+
+    def _schedule_rounded_region(self, event: tk.Event) -> None:
+        """Defer native shape updates until Tk finishes layout negotiation.
+
+        Args:
+            event (tk.Event): Configure event for the card's actual HWND.
+
+        Returns:
+            None: At most one idle callback is queued for the current geometry.
+        """
+        if (event.widget is not self or not self._rounded_region_active
+                or self._rounded_region_after is not None):
+            return
+        self._rounded_region_after = self.after_idle(
+            self._apply_rounded_region,
+        )
+
+    def _apply_rounded_region(self) -> None:
+        """Apply a DPI-consistent native rounded region to this card HWND.
+
+        Returns:
+            None: Windows owns a successful HRGN; unsupported geometry falls
+                back to the flat opaque style without leaking GDI objects.
+        """
+        self._rounded_region_after = None
+        if not self._rounded_region_active or not self.winfo_exists():
+            return
+        width, height = self.winfo_width(), self.winfo_height()
+        if width <= 0 or height <= 0:
+            return
+        if self._rounded_region_size == (width, height):
+            return
+
+        api = self._rounded_region_api
+        if api is None:
+            self._use_context_fallback()
+            return
+        radius = min(_PANEL_CORNER_RADIUS, width // 2, height // 2)
+        if radius <= 0:
+            return
+        # GDI clips the final raster row/column at the nominal half-open bounds.
+        # The extra pixel keeps the HWND's last in-window pixel inside the region.
+        try:
+            region = api.gdi32.CreateRoundRectRgn(
+                # The corner ellipse dimensions are the panel radius diameter.
+                0, 0, width + 1, height + 1, radius * 2, radius * 2,
+            )
+        except (AttributeError, OSError, TypeError, ValueError,
+                ctypes.ArgumentError):
+            self._use_context_fallback()
+            return
+        if not region:
+            self._use_context_fallback()
+            return
+        try:
+            # The final Win32 flag is TRUE so Windows redraws the shaped child.
+            result = api.user32.SetWindowRgn(
+                ctypes.c_void_p(self.winfo_id()), ctypes.c_void_p(region), 1,
+            )
+        except (AttributeError, OSError, TypeError, ValueError,
+                ctypes.ArgumentError):
+            try:
+                api.gdi32.DeleteObject(ctypes.c_void_p(region))
+            except (AttributeError, OSError, TypeError, ValueError,
+                    ctypes.ArgumentError):
+                pass
+            self._use_context_fallback()
+            return
+        if not result:
+            try:
+                api.gdi32.DeleteObject(ctypes.c_void_p(region))
+            except (AttributeError, OSError, TypeError, ValueError,
+                    ctypes.ArgumentError):
+                pass
+            self._use_context_fallback()
+            return
+        # SetWindowRgn transfers HRGN ownership to Windows on success.
+        self._rounded_region_size = (width, height)
+
+    def _use_context_fallback(self) -> bool:
+        """Switch to an opaque flat card after native clipping is unavailable.
+
+        Returns:
+            bool: True when the old region was removed and the flat style was
+                applied; False when Windows refused to clear the prior region.
+        """
+        api = self._rounded_region_api
+        if api is not None and self._rounded_region_size is not None:
+            try:
+                # Passing a null HRGN removes the old shape from this HWND.
+                cleared = api.user32.SetWindowRgn(
+                    ctypes.c_void_p(self.winfo_id()), None, 1,
+                )
+            except (AttributeError, OSError, TypeError, ValueError,
+                    ctypes.ArgumentError):
+                cleared = 0
+            if not cleared:
+                # Retain the API and resize binding so a later Configure can
+                # retry; dropping it here would leave a stale clipped region.
+                return False
+        self._rounded_region_size = None
+        self._rounded_region_active = False
+        self._rounded_region_api = None
+        ttk.Style(self).configure(
+            "ContextFallback.TFrame",
+            background=_PALETTE["card_surface"],
+            relief="flat", borderwidth=0,
+        )
+        self.configure(style="ContextFallback.TFrame")
+        return True
+
+    def _dispose_rounded_region(self, event: tk.Event) -> None:
+        """Cancel pending region work when this card is destroyed.
+
+        Args:
+            event (tk.Event): Destroy event identifying the widget being removed.
+
+        Returns:
+            None: No callback or caller-owned HRGN remains after destruction.
+        """
+        if event.widget is not self or self._rounded_region_after is None:
+            return
+        try:
+            self.after_cancel(self._rounded_region_after)
+        except tk.TclError:
+            pass
+        self._rounded_region_after = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ContextRegionApi:
+    """Own trusted system DLL interfaces for rounded child-window regions.
+
+    Attributes:
+        user32 (ctypes.CDLL): System user32 exports for setting and querying
+            one child-window region.
+        gdi32 (ctypes.CDLL): System GDI exports for region creation, point
+            checks and deletion.
+    """
+
+    user32: ctypes.CDLL
+    gdi32: ctypes.CDLL
+
+
+def _load_context_region_api() -> _ContextRegionApi | None:
+    """Load typed window-region functions only from Windows system libraries.
+
+    Returns:
+        _ContextRegionApi | None: Configured system APIs on Windows, or None
+            so the caller can select a flat opaque fallback.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        user32 = ctypes.WinDLL(
+            "user32.dll", winmode=_LOAD_LIBRARY_SEARCH_SYSTEM32,
+        )
+        gdi32 = ctypes.WinDLL(
+            "gdi32.dll", winmode=_LOAD_LIBRARY_SEARCH_SYSTEM32,
+        )
+        gdi32.CreateRoundRectRgn.argtypes = [
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int,
+        ]
+        gdi32.CreateRoundRectRgn.restype = ctypes.c_void_p
+        gdi32.DeleteObject.argtypes = [ctypes.c_void_p]
+        gdi32.DeleteObject.restype = ctypes.c_int
+        user32.SetWindowRgn.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
+        ]
+        user32.SetWindowRgn.restype = ctypes.c_int
+        user32.GetWindowRgn.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        user32.GetWindowRgn.restype = ctypes.c_int
+        gdi32.CreateRectRgn.argtypes = [
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        ]
+        gdi32.CreateRectRgn.restype = ctypes.c_void_p
+        gdi32.PtInRegion.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+        ]
+        gdi32.PtInRegion.restype = ctypes.c_int
+        return _ContextRegionApi(user32=user32, gdi32=gdi32)
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
 
 
 @dataclass(slots=True)

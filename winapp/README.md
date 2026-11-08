@@ -640,6 +640,25 @@ cached release metadata passes the current validator before the offer is
 restored. A successful check that finds no current offer clears the banner,
 header mark, and tray badge.
 
+Update checks and installation preparation automatically write structured
+`[updater]` records to `watcher.log`. They identify the operation, stage,
+endpoint role, trusted host, result and elapsed time. Failures retain HTTP
+status, typed transport causes and available numeric platform/TLS codes;
+transfer and verification records include known byte counts. Checkpoint,
+helper handoff and cleanup have separate stages. A cleanup failure keeps the
+original update failure available for diagnosis.
+
+These records exclude credentials, signed download queries, response bodies,
+raw exception messages and local paths. The notice keeps its concise status;
+the ordinary log supplies the technical detail automatically, without a debug
+switch or another reproduction with a patched executable.
+
+**Copy diagnostics** includes a bounded updater snapshot and its retained last
+failure even after a later successful check. It also includes current-session
+Photos failures, distinguishing catalogue reads, thumbnail transport and image
+decoding. Switching albums keeps those facts; switching the approved live
+session resets the Photos snapshot. Full records remain in the log.
+
 Discovery examines paginated releases for the highest newer
 `PHPGalleryUploader-X.Y.Z-Setup.exe` asset. CMS release tags are not the
 uploader
@@ -869,7 +888,9 @@ collapse a branch or the whole tree and click a gallery to show its photos in
 the same window. When disconnected, **Connect** opens the existing address
 dialog and browser approval flow. An active listing link can browse public
 photos directly after approval. Large trees offer a continuation control after
-the initial 500 entries. Choose the separate upload destination in
+the initial 500 entries. **Load more**, at the right of the tree toolbar,
+continues from the saved cursor without replacing loaded galleries. Its text
+distinguishes it from the expand and create controls. Choose the upload target in
 Watcher or Import using **Use for uploads**. A logon `--startup` launch stays
 in the system tray until restored. An approved saved link can resume on
 startup.
@@ -1123,6 +1144,13 @@ and local cache headers. A partial catalogue never claims that an entire
 gallery is cached. The heading's cache icon opens the same gallery menu and
 explains the symbols on hover.
 
+Windows clips the shared contextual card to its rounded boundary, so the
+opaque material's dark outer matte does not cover the content behind its
+corners. Resize and dismissal retain the same inline panel. When native
+shaping is unavailable, a flat opaque themed surface keeps the controls
+readable. Ordinary cards keep their existing material; no transparent image
+pixels or operating-system appearance changes are required.
+
 **Preload gallery** reads the selected gallery's direct photos in the
 background, including thumbnails and lightbox renditions. Subgalleries are
 separate targets. Progress reports photo counts and supports cancellation.
@@ -1193,6 +1221,18 @@ The context offers SimBrief when a flight simulator is detected. Finish a game
 to drain its screenshots, or finish a flight to save its available reports
 locally. Finishing revokes the temporary capture key and leaves the website
 linked. This action requires the server's temporary Watcher key migration.
+
+Before sending a new gallery, Photos checks for an earlier creation in this
+local profile. It checks a pending result with the original site and Admin
+account; another site's pending work offers reconnection to that site. This
+status check never repeats a create request. A completed earlier gallery offers
+an explicit **Continue** action before the next creation. That action retires
+only the matching local completion, then rechecks the current connection and
+selected parent. It does not change the earlier gallery or select it for upload.
+Submitting the same title and parent for the same site and account instead
+rechecks the completed result and avoids creating a duplicate. An unreadable
+record or failed confirmation stays blocked with a plain explanation and safe
+diagnostics; it is not deleted automatically.
 
 The source also contains an experimental **Create gallery** workflow that
 requires separate `galleries:create` browser consent and verified server scope

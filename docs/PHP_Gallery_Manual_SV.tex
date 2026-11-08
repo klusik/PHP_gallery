@@ -1838,6 +1838,12 @@ väljs med \ui{Use for uploads}. Start med \texttt{--startup} förblir dold i
 systemfältet tills fönstret återställs. På macOS öppnas det vanliga Tk-fönstret
 vid start från källkod. Tillfälliga länkar upphör med processen.
 
+Stora träd läser först in högst 500 gallerier. Den namngivna åtgärden
+\ui{Visa fler} till höger i trädets verktygsrad fortsätter från den sparade
+positionen. Kontextpaneler behåller stängning med tangentbord och klick
+utanför panelen. Windows klipper deras rundade kontur utan mörka yttre hörn.
+Om inbyggd formgivning saknas förblir en platt ogenomskinlig temapanel användbar.
+
 Watcher-skärmen visar gallerimålet. API-nyckelkontrollen öppnar en kompakt
 dialog med maskerad nyckel och \ui{Save \& Test}; den finns kvar i sidhuvudet
 på alla skärmar. Osparade
@@ -2104,6 +2110,16 @@ du startar en separat skapning; ingen startas automatiskt. Om servern i
 stället verifierar ett slutfört resultat sparas kvittot för bekräftelse.
 En ogiltig eller oläsbar lokal avsikt förblir blockerad och kräver hjälp av en
 administratör eftersom dess nyckel inte kan verifieras.
+Innan ett nytt galleri skickas kontrollerar Photos tidigare arbete i samma
+lokala profil. Ett väntande resultat kontrolleras bara med den ursprungliga
+webbplatsen och administratörskontot; för en annan webbplats erbjuds
+återanslutning. Kontrollen upprepar aldrig skapandet. För ett tidigare skapat
+galleri bekräftar du \ui{Fortsätt} innan nästa skapas. Bara den exakta lokala
+slutförandeposten tas bort; det tidigare galleriet och uppladdningsmålet
+förblir oförändrade. Aktuell anslutning och vald förälder kontrolleras igen.
+Samma titel och förälder för samma webbplats och konto kontrollerar i stället
+det färdiga resultatet utan att skapa en dubblett. Ett okänt resultat eller en
+misslyckad lokal bekräftelse bevarar det sparade arbetet för en ny kontroll.
 Ett bekräftat kvitto sparas tills användaren uttryckligen kvitterar det. Före
 exklusiv publicering skriver och kontrollerar klienten ett fullständigt
 förberett kvitto; vid osäkerhet bevaras avsikten och ett eventuellt publicerat
@@ -2292,6 +2308,21 @@ En misslyckad nätverkskontroll bevarar det validerade erbjudandet i cachen äve
 efter omstart; erbjudandet valideras på nytt innan det återställs. En lyckad
 kontroll utan ett aktuellt erbjudande tar bort bannern, markeringen i sidhuvudet
 och uppdateringsmärket i systemfältet.
+
+Uppdateringar skriver automatiskt fas, steg, resultat och varaktighet till
+\path{watcher.log}. Nätverksfel bevarar HTTP-status och typen av transportorsak;
+överföringar innehåller kända byteantal. Kontrollpunkt, hjälparöverlämning och
+städning har egna diagnostiksteg. Ett städningsfel bevarar det ursprungliga
+uppdateringsfelet. Inloggningsuppgifter, signerade nedladdningsparametrar,
+svarsinnehåll, råa undantagsmeddelanden och lokala sökvägar utesluts.
+Meddelandet förblir kort; tekniska detaljer finns i den vanliga loggen utan
+att aktivera felsökningsläge.
+
+\ui{Copy diagnostics} innehåller det senaste uppdateringsfelet även efter
+senare lyckade kontroller. Det innehåller även fotofel för den aktuella länken
+och skiljer mellan katalogläsning, miniatyröverföring och bildavkodning.
+Albumbyten bevarar uppgifterna; ett byte av godkänd aktiv länk återställer
+översikten över fotofel.
 
 \subsection{Simulatorposition i Windows}
 

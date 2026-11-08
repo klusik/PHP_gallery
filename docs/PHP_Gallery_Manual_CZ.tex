@@ -1781,6 +1781,12 @@ Spuštění s~\texttt{--startup} zůstane v~oznamovací oblasti až do obnovení
 okna. Při spuštění ze zdrojů na macOS se používá běžné okno Tk.
 Dočasné propojení skončí s~procesem.
 
+Velké stromy nejprve načtou nejvýše 500 galerií. Pojmenovaná akce
+\ui{Načíst další} vpravo na liště stromu pokračuje od uložené pozice.
+Kontextové panely zachovávají zavření klávesnicí a~kliknutím mimo panel.
+Windows ořízne jejich zaoblený obrys bez tmavých vnějších rohů; pokud nativní
+tvarování není dostupné, zůstává použitelný plochý neprůhledný panel motivu.
+
 Obrazovka Watcher zobrazuje cílovou galerii. Horní ovládání API klíče otevře
 kompaktní dialog se skrytým klíčem a~volbou
 \ui{Save \& Test}; toto ovládání zůstává v~záhlaví dostupné na každé
@@ -2038,6 +2044,15 @@ vytvořením ověřte její ukončení a~zkontrolujte galerii i~úložiště; ni
 nespustí automaticky. Pokud server místo toho ověří dokončený
 výsledek, klient jej uchová k~potvrzení. Nečitelný nebo neplatný lokální záměr
 zůstává blokovaný a~vyžaduje pomoc správce, protože jeho klíč nelze ověřit.
+Před odesláním nové galerie Photos zkontroluje předchozí práci ve stejném
+místním profilu. Čekající výsledek ověřuje pouze s~původním webem a~účtem
+správce; u~jiného webu nabídne opětovné připojení. Tato kontrola vytvoření
+neopakuje. U~dříve dokončené galerie potvrďte \ui{Pokračovat} pro vytvoření
+další. Uzavře se pouze přesný místní záznam; původní galerie ani cíl uploadu
+se nezmění. Aktuální propojení a~vybraný rodič se znovu ověří. Stejný název
+a~rodič pro stejný web a~účet místo toho ověří dokončený výsledek bez vytvoření
+duplikátu. Neurčitý výsledek nebo neúspěšné místní potvrzení zachová uloženou
+práci pro další kontrolu.
 Potvrzený výsledek zůstává uložený až do výslovného převzetí. Klient před
 výhradním zveřejněním zapíše a~ověří úplné dočasné potvrzení; nejistota
 zachová záměr i~případné zveřejněné potvrzení. Lokální vazba na původní záměr
@@ -2213,6 +2228,19 @@ Windows ani nezobrazuje systémová oznámení toast.
 Neúspěšná síťová kontrola zachová ověřenou nabídku v~mezipaměti i~po restartu;
 před obnovením se nabídka znovu ověří. Úspěšná kontrola bez aktuální nabídky
 skryje banner, označení v~hlavičce i~odznak tray.
+
+Aktualizace automaticky zapisují fázi, krok, výsledek a~dobu trvání do
+\path{watcher.log}. Síťové chyby zachovají stav HTTP a~typ přenosové příčiny;
+u~přenosu je uveden známý počet bajtů. Kontrolní bod, předání pomocníkovi
+a~úklid mají samostatné diagnostické kroky. Chyba úklidu zachová původní chybu
+aktualizace. Přihlašovací údaje, podepsané parametry stažení, těla odpovědí,
+syrové zprávy výjimek a~lokální cesty se nezapisují. Oznámení zůstává stručné;
+technické podrobnosti jsou v~běžném logu bez zapínání ladicího režimu.
+
+\ui{Copy diagnostics} obsahuje poslední chybu aktualizace i~po pozdější
+úspěšné kontrole. Obsahuje také chyby Fotek v~aktuálním propojení a~rozlišuje
+čtení katalogu, přenos náhledu a~dekódování obrázku. Přepnutí alba tyto údaje
+zachová; změna schváleného aktivního propojení přehled chyb Fotek vymaže.
 
 \subsection{Poloha simulátoru ve Windows}
 

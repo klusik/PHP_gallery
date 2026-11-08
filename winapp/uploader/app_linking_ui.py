@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import traceback
 import unicodedata
 import webbrowser
 from dataclasses import replace
@@ -44,7 +45,8 @@ from .linked_upload import (
     LinkedUploadTarget, linked_target_binding, verify_linked_upload_target,
 )
 from .linked_create import (
-    BoundCreateReceipt, CreateDispatch, CreateIntent, GalleryCreateJournal,
+    BoundCreateReceipt, CreateDispatch, CreateIntent, CreateJournalSnapshot,
+    GalleryCreateJournal,
 )
 from .credential_store import (
     KeychainCredentialStore, NativeCredentialStore, WindowsCredentialStore,
@@ -1357,6 +1359,7 @@ class LinkingManager:
 
     def create_photos_gallery(
         self, session: LinkingSession, title: str, parent_id: int | None,
+        dispatch: CreateDispatch | None = None,
     ) -> BoundCreateReceipt:
         """Journal an explicit Photos creation without applying an upload target.
 
@@ -1364,6 +1367,7 @@ class LinkingManager:
             session (LinkingSession): Live link captured when the user submitted.
             title (str): User-entered physical gallery title.
             parent_id (int | None): Exact parent gallery ID, or root.
+            dispatch (CreateDispatch | None): Optional contextual cancellation gate.
 
         Returns:
             BoundCreateReceipt: Authoritative completed gallery and intent binding.
@@ -1374,7 +1378,134 @@ class LinkingManager:
         issuer, account = self._session_issuer, self._session_user_id
         if session is not self.photos_session() or not session.can_create_gallery():
             raise LinkingError('Photos gallery creation is unavailable.')
-        return self._create_journal.create(session, issuer, account, title, parent_id)
+        return self._create_journal.create(
+            session, issuer, account, title, parent_id, dispatch,
+        )
+
+    def inspect_photos_gallery_creation(self) -> CreateJournalSnapshot:
+        """Read key-free saved creation state for the Photos workspace.
+
+        Returns:
+            CreateJournalSnapshot: Validated empty, pending or completed state.
+
+        Raises:
+            LinkingError: The journal records are unsafe or inconsistent.
+        """
+        return self._create_journal.inspect()
+
+    def reconcile_photos_gallery_creation(
+        self, session: LinkingSession, snapshot: CreateJournalSnapshot,
+    ) -> BoundCreateReceipt | None:
+        """Check a matching saved operation without issuing another mutation.
+
+        Args:
+            session (LinkingSession): Exact current live Photos session.
+            snapshot (CreateJournalSnapshot): Key-free state captured by the
+                profile journal before this status request.
+
+        Returns:
+            BoundCreateReceipt | None: Current confirmed gallery, or None while
+                the original operation remains unknown.
+
+        Raises:
+            LinkingError: The snapshot, live identity or current grant changed.
+        """
+        if (snapshot.state not in ('pending', 'completed')
+                or not isinstance(snapshot.issuer, str)
+                or type(snapshot.account_id) is not int
+                or snapshot.account_id <= 0
+                or not isinstance(snapshot.intent_fingerprint, str)
+                or session is not self.photos_session()
+                or not session.can_create_gallery()
+                or self._session_issuer != snapshot.issuer
+                or self._session_user_id != snapshot.account_id
+                or not session.matches_issuer(snapshot.issuer)
+                or session.identity().user_id != snapshot.account_id):
+            raise LinkingError('Saved gallery creation is not current.')
+        return self._create_journal.reconcile(
+            session, snapshot.issuer, snapshot.account_id,
+            expected_intent_fingerprint=snapshot.intent_fingerprint,
+        )
+
+    def acknowledge_prior_photos_gallery(
+        self, snapshot: CreateJournalSnapshot, session: LinkingSession,
+        issuer: str, account_id: int,
+    ) -> None:
+        """Clear a prior completion only after explicit Photos confirmation.
+
+        Args:
+            snapshot (CreateJournalSnapshot): Exact key-free completed state
+                presented to the user.
+            session (LinkingSession): Current live create-authorized session.
+            issuer (str): Current canonical issuer captured with the new draft.
+            account_id (int): Current verified Admin account identifier.
+
+        Returns:
+            None: Removes only the prior matching local completion record.
+
+        Raises:
+            LinkingError: Authority changed or the completion record no longer
+                matches the explicit confirmation.
+        """
+        if (snapshot.state != 'completed' or snapshot.receipt is None
+                or not isinstance(snapshot.issuer, str)
+                or type(snapshot.account_id) is not int
+                or snapshot.account_id <= 0
+                or snapshot.intent_fingerprint != snapshot.receipt.intent_fingerprint
+                or session is not self.photos_session()
+                or self._session_issuer != issuer
+                or self._current_issuer != issuer
+                or self._session_user_id != account_id
+                or not session.available() or not session.can_create_gallery()
+                or not session.matches_issuer(issuer)
+                or session.identity().user_id != account_id):
+            raise LinkingError('The current gallery connection changed.')
+        self._create_journal.acknowledge(
+            snapshot.issuer, snapshot.account_id, snapshot.receipt,
+        )
+
+    def record_photos_creation_failure(
+        self, operation: str, error: BaseException,
+    ) -> None:
+        """Retain fixed safe facts about one Photos create failure.
+
+        Args:
+            operation (str): Fixed Photos journal operation label.
+            error (BaseException): Failure whose raw message is omitted; only
+                owned source locations and validated response facts are retained.
+
+        Returns:
+            None: A bounded diagnostic summary is retained for support.
+        """
+        allowed_operations = {'inspect', 'status', 'acknowledge', 'create'}
+        safe_operation = operation if operation in allowed_operations else 'create'
+        error_type = type(error).__name__
+        if not error_type.isascii() or not error_type.isidentifier():
+            error_type = 'Exception'
+        site = 'unknown'
+        for frame in reversed(traceback.extract_tb(error.__traceback__)):
+            basename = Path(frame.filename).name
+            if (basename in (
+                    'app_linking_ui.py', 'linked_create.py', 'app_linking.py',
+                ) and frame.name.isidentifier() and frame.lineno > 0):
+                site = f'{basename}:{frame.name}:{frame.lineno}'
+                break
+        response_summary = ''
+        if isinstance(error, LinkingResponseError):
+            try:
+                validated = LinkingResponseError(
+                    error.phase, error.route, error.status,
+                    error.content_kind, error.reason,
+                )
+            except (AttributeError, TypeError, ValueError):
+                validated = None
+            if validated is not None:
+                response_summary = '; ' + validated.safe_summary
+        self._record_diagnostic(
+            f'stage=photos_create; operation={safe_operation}; '
+            f'error_type={error_type}; site={site}{response_summary}',
+            failure=True,
+        )
 
     def acknowledge_photos_gallery(
         self, session: LinkingSession, receipt: BoundCreateReceipt,
