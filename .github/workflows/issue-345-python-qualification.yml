@@ -10,6 +10,7 @@
 #   - Preserve per-test diagnostics and explicit platform-specific skips.
 #   - Smoke the existing Windows installer builder without a release.
 #   - Run the browser-free PHP regression owner on disposable MariaDB.
+#   - Offer explicitly scoped native UI diagnosis without replacing full coverage.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 
@@ -22,16 +23,23 @@ on:
     branches:
       - feature/345-browser-approved-linking
   workflow_dispatch:
+    inputs:
+      native_only:
+        description: Run only the central Windows native-viewer diagnostic; this does not qualify complete WinApp coverage.
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: issue-345-winapp-${{ github.ref }}
+  group: issue-345-winapp-${{ github.ref }}-${{ inputs.native_only && 'native' || 'all' }}
   cancel-in-progress: true
 
 jobs:
   node:
+    if: inputs.native_only != true
     name: Browser handoff Node regression
     runs-on: ubuntu-24.04
     # Purpose: Bound the existing portable JavaScript diagnostic owner.
@@ -79,15 +87,13 @@ jobs:
           retention-days: 7
 
   winapp:
-    name: WinApp Python regression (${{ matrix.os }})
+    name: WinApp ${{ inputs.native_only && 'native viewer diagnostic' || 'Python regression' }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - windows-2025
+        os: ${{ fromJSON(inputs.native_only && '["windows-2025"]' || '["ubuntu-24.04","windows-2025"]') }}
     env:
       PHP_GALLERY_REQUIRE_PILLOW: '1'
       PHP_GALLERY_BROWSER: disabled
@@ -97,7 +103,7 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Reject a mismatched checkout
@@ -109,6 +115,12 @@ jobs:
           if ($actual -ne $env:EXPECTED_SHA) {
             throw "Unexpected checkout: expected $env:EXPECTED_SHA, got $actual"
           }
+          $sourceBase = (git merge-base HEAD refs/remotes/origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or !$sourceBase) {
+            throw 'BLOCKED immutable main comparison base is unavailable.'
+          }
+          "PHP_GALLERY_SOURCE_BASE=$sourceBase" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Output "Checking exact commit $actual on ${{ matrix.os }}"
 
       - name: Select Python
@@ -142,8 +154,14 @@ jobs:
         shell: pwsh
         env:
           PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          NATIVE_ONLY: ${{ inputs.native_only }}
         run: |
-          php scripts/audit.php --suite winapp
+          $suiteName = if ($env:NATIVE_ONLY -eq 'true') {
+            'winapp-native'
+          } else {
+            'winapp'
+          }
+          php scripts/audit.php --suite $suiteName
           if ($LASTEXITCODE -ne 0) {
             throw "Central WinApp audit failed with code $LASTEXITCODE"
           }
@@ -158,7 +176,7 @@ jobs:
           retention-days: 7
 
       - name: Build a disposable Windows installer with the existing builder
-        if: matrix.os == 'windows-2025'
+        if: matrix.os == 'windows-2025' && inputs.native_only != true
         shell: pwsh
         run: |
           $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
@@ -182,6 +200,7 @@ jobs:
           Write-Output "PASS disposable installer $($asset.name), SHA-256 $digest"
 
   php-mariadb:
+    if: inputs.native_only != true
     name: PHP 8.5 / MariaDB 10.11 regression (browser disabled)
     runs-on: ubuntu-24.04
     # Type: int. Units: minutes. Scope: one diagnostic owner.

@@ -27,11 +27,18 @@ else:
     ThemeImage: TypeAlias = tk.PhotoImage
 
 
-# Purpose: Set the shared delay before hover or focus help appears.
+# Purpose: Set the shared delay before pointer-hover help appears.
 # Type: int; Units: milliseconds; Scope: transient tooltip lifecycle.
 # Consumers: tooltip scheduling and cancellation callbacks.
 # Rationale: 550 ms avoids flicker while retaining timely discovery.
 _TOOLTIP_DELAY_MS = 550
+
+# Purpose: Dismiss hover help even when Tk misses a pointer-leave event.
+# Type: int. Units: milliseconds. Scope: the one visible inline tooltip.
+# Consumers: attach_inline_tooltip hover monitor.
+# Rationale: 80 ms catches window switches and missed Leave events promptly
+# without adding a timer for every idle control.
+_TOOLTIP_POINTER_CHECK_MS = 80
 
 # Purpose: Keep inline tooltip panels clear of trigger controls and edges.
 # Type: int; Units: pixels; Scope: one themed inline tooltip placement.
@@ -1904,7 +1911,7 @@ def _load_context_region_api() -> _ContextRegionApi | None:
 
 @dataclass(slots=True)
 class _InlineTooltipState:
-    """Track one delayed tooltip and its dismissal callback."""
+    """Track one hover delay or pointer monitor and its dismissal callback."""
 
     timer: str | None = None
     label: ttk.Label | None = None
@@ -1998,10 +2005,10 @@ class GalleryIdentityLabel(ttk.Label):
 
 
 def _attach_tooltip(widget: tk.Misc, message: str | tk.StringVar) -> None:
-    """Bind a delayed in-window tooltip to hover and keyboard focus.
+    """Bind a delayed in-window tooltip exclusively to pointer hover.
 
     Args:
-        widget (tk.Misc): Widget that owns pointer and keyboard tooltip bindings.
+        widget (tk.Misc): Widget that owns pointer-hover tooltip bindings.
         message (str | tk.StringVar): Fixed help or live formatted tooltip text.
 
     Returns:
@@ -2019,16 +2026,39 @@ def attach_inline_tooltip(
     message: str | tk.StringVar,
     surface: tk.Misc,
 ) -> None:
-    """Show a delayed themed tooltip inside an existing mapped surface.
+    """Show themed help only while the pointer remains over its trigger.
 
     Args:
-        widget (tk.Misc): Control that owns hover and keyboard focus events.
+        widget (tk.Misc): Control that owns the pointer-hover activation area.
         message (str | tk.StringVar): Fixed or live accessible description.
         surface (tk.Misc): Existing widget that hosts the placed label.
     Returns:
-        None: Tooltip lifecycle is bound without creating a separate window.
+        None: One delay or hover monitor is bound without a separate window;
+            keyboard focus alone never displays a tooltip.
     """
     state = _InlineTooltipState()
+
+    def pointer_over_trigger() -> bool:
+        """Check the actual mapped widget under the pointer, including children.
+
+        Returns:
+            bool: True only over this trigger or one of its child widgets on
+                the mapped surface; hidden, destroyed or covered controls fail.
+        """
+        try:
+            if (not widget.winfo_exists() or not widget.winfo_ismapped()
+                    or not surface.winfo_exists()
+                    or not surface.winfo_ismapped()):
+                return False
+            x, y = widget.winfo_pointerxy()
+            target = widget.winfo_containing(x, y)
+            while target is not None:
+                if target is widget:
+                    return True
+                target = target.master
+        except (tk.TclError, KeyError):
+            return False
+        return False
 
     def hide(event: tk.Event | None = None) -> None:
         """Cancel display and hide the label owned by this trigger.
@@ -2064,22 +2094,17 @@ def attach_inline_tooltip(
             state.label = None
 
     def show() -> None:
-        """Place the themed label beside its still-mapped trigger.
+        """Place the themed label beside its still-hovered trigger.
 
         Returns:
             None: The surface contains a viewport-clamped tooltip if eligible.
         """
         state.timer = None
         try:
-            if not widget.winfo_exists() or not widget.winfo_ismapped():
+            if (getattr(surface, "_inline_tooltip_state", None) is not state
+                    or not pointer_over_trigger()):
+                hide()
                 return
-            if not surface.winfo_exists() or not surface.winfo_ismapped():
-                return
-            previous = getattr(surface, "_inline_tooltip_state", None)
-            if previous is not None and previous is not state:
-                if previous.hide is not None:
-                    previous.hide(None)
-            surface._inline_tooltip_state = state
             if state.label is None:
                 state.label = ttk.Label(
                     surface,
@@ -2114,27 +2139,56 @@ def attach_inline_tooltip(
             y = max(0, min(surface.winfo_height() - height, y))
             label.place(x=x, y=y, width=width)
             label.lift()
+            monitor_pointer()
         except tk.TclError:
+            hide()
+
+    def monitor_pointer() -> None:
+        """Retire visible help when a Leave event was lost or a window moved.
+
+        Returns:
+            None: Only the current hovered tooltip keeps one monitoring timer;
+                pointer departure cancels and unmaps it without waiting for focus.
+        """
+        state.timer = None
+        if (getattr(surface, "_inline_tooltip_state", None) is not state
+                or not pointer_over_trigger()):
+            hide()
             return
+        try:
+            state.timer = widget.after(
+                _TOOLTIP_POINTER_CHECK_MS, monitor_pointer,
+            )
+        except tk.TclError:
+            hide()
 
     def schedule(_event: tk.Event | None = None) -> None:
-        """Schedule display after the shared hover and focus delay.
+        """Schedule display only for the currently hovered activation area.
 
         Args:
-            _event (tk.Event | None): Optional entry or focus event.
+            _event (tk.Event | None): Optional pointer-entry event.
         Returns:
             None: One safe delayed callback replaces any earlier callback.
         """
         hide()
+        if not pointer_over_trigger():
+            return
+        previous = getattr(surface, "_inline_tooltip_state", None)
+        if previous is not None and previous is not state:
+            if previous.hide is not None:
+                previous.hide(None)
+        # Register pending help too, so surface transitions can cancel the
+        # delay before it ever places a label over the new content.
+        surface._inline_tooltip_state = state
         try:
             state.timer = widget.after(_TOOLTIP_DELAY_MS, show)
         except tk.TclError:
-            state.timer = None
+            hide()
 
     widget.bind("<Enter>", schedule, add="+")
     widget.bind("<Leave>", hide, add="+")
-    widget.bind("<FocusIn>", schedule, add="+")
     widget.bind("<FocusOut>", hide, add="+")
+    widget.bind("<ButtonPress>", hide, add="+")
     widget.bind("<Escape>", hide, add="+")
     widget.bind("<Destroy>", hide, add="+")
     widget.bind("<Unmap>", hide, add="+")

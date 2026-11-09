@@ -9058,6 +9058,27 @@ Installed-client capture and a real screenshot upload remain separate acceptance
 The same native owner checks that an immediate cache probe cancels its pending
 delayed callback before clearing the timer reference. Closing the workspace must
 leave no obsolete Tcl command scheduled on the surviving root.
+Catalogue progress fixtures retain renamed/new rows together with previously
+known unmounted children, round-trip that partial state through the real disk
+cache, and preserve it after a later page failure. A controlled serialized
+writer must finish its newest accepted snapshot after UI/session cancellation.
+Creation during full-tree mounting must preserve unmounted confirmed titles
+without restoring a row absent from that complete response.
+The native tree refresh fixture holds an obsolete request across repeated
+toolbar activation, injects a late queued result, then checks updated names,
+changed parents, complete-pass removal, preserved selection/expansion and the
+same photo viewer. Desktop and narrow toolbar screenshots are retained as
+`photos-tree-refresh-1180.png` and `photos-tree-refresh-720.png` in the Windows
+diagnostic artifact. Complete-tree metadata is retained before later Tk batches
+mount. Shared tooltip fixtures check pointer departure before the delay, missed
+Leave after display, focus-only refusal and pending-help cancellation on a
+surface transition. Installed restart/window-switch acceptance remains manual.
+Native capture uses the app's display bootstrap and theme, clamping target
+windows to the runner's screen. A moved selected row must open its new parent
+path. Detail fallback checks keep authorization/proof inputs equal while
+asserting full-version intent only on the full rendition. The rapid-selection
+fixture observes adjacent enqueue separately from its foreground transport;
+the dedicated adjacent-prefetch test retains real neighbor-read coverage.
 `winapp/tests/test_redesign.py` additionally invokes the production receipt,
 Watcher-admission and cache-timer methods with mocked widget boundaries. These
 portable regressions execute in the ordinary central WinApp owner on Linux as
@@ -9097,6 +9118,14 @@ qualification remains with its required FULL owner.
 These jobs prove only their exact-source diagnostics. They do not publish a
 release, qualify a prepared integration SHA, or replace the required FULL
 Chromium and installed GUI coverage.
+For focused Windows UI diagnosis, its optional `native_only` dispatch selects
+the central `winapp-native` suite and Windows runner only; unrelated jobs and
+installer assembly are omitted. The adapter records
+`test_native_gallery_viewer.py` as the actual discovery pattern. Its validator
+requires that explicit scope and refuses the same report as complete WinApp
+evidence. Default complete discovery and the 90-second child cap remain intact.
+This scope permits hosted native UI verification after a whole-suite timeout;
+it does not repair or qualify an incomplete full Windows run.
 
 The gallery writer fixture executes the real copy, Trash and restore wrappers
 against an injected linked-creation reservation refusal. It requires each guard

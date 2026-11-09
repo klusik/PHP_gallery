@@ -73,6 +73,7 @@ if sys.platform == 'win32' and tk is not None and Image is not None:
         gallery_lightbox, native_gallery_viewer, photos_workspace, ui_theme,
     )
     from uploader.gallery_preload import GalleryPreloadWorker
+    from uploader.windows_display import prepare_windows_display
 else:
     gallery_lightbox = None
     native_gallery_viewer = None
@@ -103,6 +104,20 @@ TEST_TK_SCALING = 1.5
 # Consumers: NativeGalleryViewerTests cached-tree UI regressions.
 # Rationale: One extra row proves later tree work yields to Tk.
 TEST_CATALOGUE_CACHE_ROWS = 65
+
+# Purpose: Verify the gallery refresh action in normal and compact native views.
+# Type: tuple[tuple[int, int], ...]. Units: Tk pixels, width and height.
+# Scope: one native gallery refresh fixture. Consumers: tree refresh regression.
+# Rationale: 1180 by 760 represents a desktop window; 720 by 620 exercises the
+# compact layout while retaining the fixed-width gallery navigation pane.
+TEST_TREE_REFRESH_VIEWPORTS = ((1180, 760), (720, 620))
+
+# Purpose: Keep captured fixture windows inside the hosted desktop work area.
+# Type: int. Units: Tk pixels. Scope: tree refresh screenshot viewports.
+# Consumers: NativeGalleryViewerTests tree refresh regression.
+# Rationale: 80 px leaves room for native title bars and the runner's taskbar;
+# target viewports are clamped instead of capturing off-screen black pixels.
+TEST_TREE_REFRESH_SCREEN_MARGIN = 80
 
 # Purpose: Give generated button clicks deterministic Windows event times.
 # Type: tuple[int, int]. Units: milliseconds. Scope: double-click Tk fixture.
@@ -305,10 +320,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
     """Exercise mounted Tk frames and synthetic media responses."""
 
     def setUp(self) -> None:
-        """Create a real Tk root with a high-DPI test scale.
+        """Use the app's Windows display bootstrap before a high-DPI Tk root.
 
         Returns:
-            None: A mapped root is available to each native viewer test.
+            None: A mapped root with native display coordinates is available
+                to each native viewer test and its screenshots.
         """
         # These widget tests inject storage observations explicitly. Avoid
         # starting the background reader against the runner's real profile.
@@ -320,6 +336,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         storage_poll.start()
         self.addCleanup(storage_poll.stop)
+        prepare_windows_display()
         self.root = tk.Tk()
         self.root.tk.call('tk', 'scaling', TEST_TK_SCALING)
         self.root.geometry('840x620')
@@ -848,6 +865,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         Returns:
             None: Transport/auth/cancel/corruption failures do not trigger a
                 fallback, and a preview is never retained as original detail.
+                Saved full-version intent differs by rendition while all
+                authorization, cancellation and catalogue proof inputs match.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -897,6 +916,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         preview_policy = dict(preview_call.kwargs)
         full_policy.pop('thumbnail')
         preview_policy.pop('thumbnail')
+        self.assertTrue(full_policy.pop('use_preloaded_snapshot'))
+        self.assertFalse(preview_policy.pop('use_preloaded_snapshot'))
         self.assertEqual(full_policy, preview_policy)
 
         session.media_photo.reset_mock()
@@ -1128,10 +1149,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace.destroy()
 
     def test_failed_catalogue_walk_retains_prior_complete_snapshot(self) -> None:
-        """Keep cached rows and snapshot intact when fresh paging fails early.
+        """Keep saved rows and successful updates when fresh paging fails early.
 
         Returns:
-            None: An old complete cache survives the error path without a save.
+            None: The latest known tree retains prior children and a renamed
+                first page, without treating the partial walk as a full revision.
         """
         cached = GalleryCatalogueSnapshot((
             LinkedGallery(1, None, 'Saved first'),
@@ -1149,8 +1171,155 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._accept_page(None)
         self.assertTrue(workspace.tree.exists('1'))
         self.assertTrue(workspace.tree.exists('2'))
-        self.assertIs(workspace._catalogue_cache_snapshot, cached)
+        self.assertEqual(
+            'Fresh first page row',
+            workspace._catalogue_cache_snapshot.galleries[0].title,
+        )
+        self.assertIsNone(workspace._catalogue_cache_snapshot.revision)
         self.assertEqual('Saved child', workspace._galleries[2].title)
+        workspace.destroy()
+
+    def test_tree_refresh_keeps_selection_and_rejects_superseded_results(self) -> None:
+        """Refresh names and hierarchy without clearing the current photo view.
+
+        Returns:
+            None: Repeated toolbar refreshes serialize requests, ignore the old
+                pass, preserve expansion and selection, and save changed names.
+                Desktop and narrow screenshots retain the actual toolbar layout.
+        """
+        from PIL import ImageGrab
+
+        original = (
+            LinkedGallery(1, None, 'Original parent'),
+            LinkedGallery(2, 1, 'Selected before refresh'),
+            LinkedGallery(3, None, 'Removed on server'),
+        )
+        renamed = LinkedGallery(2, 4, 'Renamed on server')
+        replacement = (original[0], renamed, LinkedGallery(4, None, 'New parent'))
+        provider: list[LinkingSession | None] = [None]
+        session = self._session(*self._gallery_data())
+        session.supports_gallery_tree.return_value = False
+        session.gallery_page.return_value = LinkedGalleryPage(original, None)
+        cache = mock.Mock()
+        cache.load.return_value = None
+        cache.save.return_value = True
+        ui_theme.configure_theme(self.root)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+            catalogue_cache=lambda _session: cache,
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._ensure_initial_gallery = mock.Mock()
+        provider[0] = session
+        workspace.refresh_session()
+        self._wait_until(
+            lambda: workspace._worker is None and workspace.tree.exists('3'),
+            'Initial refresh fixture did not finish its gallery tree.',
+        )
+        with mock.patch.object(
+            photos_workspace, 'mount_native_gallery_view',
+            return_value=mock.Mock(),
+        ):
+            workspace._select_gallery(original[1])
+        viewer = workspace._viewer
+        workspace.tree.item('1', open=True)
+        workspace.tree.focus('2')
+        session_cancel = workspace._cancel
+        workspace_generation = workspace._generation
+        started = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
+        refresh_calls: list[int | None] = []
+
+        def read_page(
+            after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> LinkedGalleryPage:
+            """Hold the obsolete read while the next refresh is requested.
+
+            Args:
+                after_id (int | None): Initial cursor for each refreshed pass.
+                cancelled (threading.Event | None): Pass-specific cancellation.
+            Returns:
+                LinkedGalleryPage: Old descriptors first, then renamed metadata.
+            """
+            refresh_calls.append(after_id)
+            if len(refresh_calls) == 1:
+                started.set()
+                if not release.wait(TEST_GUI_WAIT_SECONDS):
+                    raise TimeoutError('Refresh fixture was not released.')
+                return LinkedGalleryPage(original, None)
+            return LinkedGalleryPage(replacement, None)
+
+        session.gallery_page.side_effect = read_page
+        workspace.tree_refresh_button.invoke()
+        self.assertTrue(started.wait(TEST_GUI_WAIT_SECONDS))
+        old_generation = workspace._catalogue_generation
+        old_cancel = workspace._catalogue_cancel
+        self.assertEqual('2', workspace.tree.selection()[0])
+        self.assertTrue(workspace.tree.exists('3'))
+        workspace.tree_refresh_button.invoke()
+        self.assertTrue(old_cancel.is_set())
+        self.assertIs(session_cancel, workspace._cancel)
+        self.assertFalse(session_cancel.is_set())
+        self.assertEqual(workspace_generation, workspace._generation)
+        # A response already queued before cancellation must also be fenced.
+        workspace._events.put(photos_workspace._CataloguePageResult(
+            old_generation, LinkedGalleryPage((), None),
+        ))
+        self._wait_until(
+            workspace._events.empty,
+            'The obsolete queued refresh result was not examined.',
+        )
+        self.assertTrue(workspace.tree.exists('3'))
+        self.assertIs(viewer, workspace._viewer)
+        release.set()
+        self._wait_until(
+            lambda: workspace._worker is None
+            and workspace._galleries.get(2) == renamed
+            and not workspace.tree.exists('3')
+            and cache.save.call_args is not None
+            and cache.save.call_args.args[0].galleries == replacement,
+            'Refresh did not reconcile renamed, moved and removed galleries.',
+        )
+        self.assertEqual([None, None], refresh_calls)
+        self.assertEqual(('2',), workspace.tree.selection())
+        self.assertEqual('4', workspace.tree.parent('2'))
+        self.assertTrue(workspace.tree.item('1', 'open'))
+        self.assertTrue(workspace.tree.item('4', 'open'))
+        self.assertEqual('Renamed on server', workspace._gallery_title.get())
+        self.assertIn('Renamed on server', workspace.tree.item('2', 'text'))
+        self.assertIs(viewer, workspace._viewer)
+        viewer.destroy.assert_not_called()
+        for width, height in TEST_TREE_REFRESH_VIEWPORTS:
+            with self.subTest(width=width):
+                visible_width = min(
+                    width,
+                    self.root.winfo_screenwidth() - TEST_TREE_REFRESH_SCREEN_MARGIN,
+                )
+                visible_height = min(
+                    height,
+                    self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN,
+                )
+                self.root.geometry(f'{visible_width}x{visible_height}+0+0')
+                self.root.update()
+                self.assertTrue(workspace.tree.bbox('2'))
+                button = workspace.tree_refresh_button
+                self.assertTrue(button.winfo_ismapped())
+                self.assertLessEqual(
+                    button.winfo_rootx() + button.winfo_width(),
+                    workspace.tree_pane.winfo_rootx()
+                    + workspace.tree_pane.winfo_width(),
+                )
+                bounds = (
+                    self.root.winfo_rootx(), self.root.winfo_rooty(),
+                    self.root.winfo_rootx() + self.root.winfo_width(),
+                    self.root.winfo_rooty() + self.root.winfo_height(),
+                )
+                evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+                evidence.mkdir(parents=True, exist_ok=True)
+                with ImageGrab.grab(bbox=bounds) as captured:
+                    captured.save(evidence / f'photos-tree-refresh-{width}.png')
         workspace.destroy()
 
     def test_unchanged_catalogue_confirms_cached_rows_without_rerender(self) -> None:
@@ -1317,7 +1486,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         """Yield between complete-tree slices instead of mounting all at once.
 
         Returns:
-            None: The final IDs become visible through the owned timer callback.
+            None: All metadata is retained before later IDs become visible
+                through the owned timer callback, so an early close can save it.
         """
         workspace = photos_workspace.PhotosWorkspace(
             self.root, lambda: None, mock.Mock(), lambda: 'en',
@@ -1336,6 +1506,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             workspace.tree.exists(str(TEST_CATALOGUE_CACHE_ROWS)),
         )
         self.assertIsNotNone(workspace._cached_mount_after)
+        self.assertEqual(
+            galleries, workspace._catalogue_cache_snapshot.galleries,
+        )
         self._wait_until(
             lambda: workspace.tree.exists(str(TEST_CATALOGUE_CACHE_ROWS))
             and workspace._complete_catalogue_tree is None,
@@ -7021,7 +7194,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
         """Keep the newest selected photo after an earlier read completes.
 
         Returns:
-            None: The delayed first result cannot replace the second selection.
+            None: The delayed first result cannot replace the second selection
+                or enter its detail cache. Adjacent prefetch is observed at its
+                enqueue boundary; its transport has separate native coverage.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -7087,6 +7262,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             and viewer._worker is None,
             'The grid was not ready before the detail race started.',
         )
+        # Isolate foreground race requests from legitimate neighbor prefetch.
+        # The adjacent-prefetch fixture checks that independent transport path.
+        viewer._queue_adjacent_prefetch = mock.Mock()
         viewer._select_photo(0)
         self.assertTrue(first_detail_started.wait(TEST_GUI_WAIT_SECONDS))
         viewer._select_photo(1)
@@ -7107,6 +7285,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertEqual(
             [TEST_FIRST_IMAGE_ID, TEST_SECOND_IMAGE_ID], detail_ids,
         )
+        viewer._queue_adjacent_prefetch.assert_called_once_with(1)
+        self.assertNotIn(TEST_FIRST_IMAGE_ID, viewer._detail_cache)
         viewer.close()
 
     def test_escape_during_page_read_keeps_refreshed_grid(self) -> None:

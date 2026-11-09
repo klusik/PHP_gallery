@@ -12,8 +12,10 @@ only Python plus the lightweight dependencies in `requirements.txt`.
 ## Interface and local feature settings
 
 The compact dark interface uses slate glass panels, cyan actions, an icon
-navigation rail and borderless contextual icons. Hover or focus an icon to
-discover its action; the selected screen remains highlighted. Boolean
+navigation rail and borderless contextual icons. Hover over an icon to
+discover its action; the selected screen remains highlighted. Tooltips appear
+only while the pointer is over their trigger, including after window or screen
+changes; keyboard focus alone does not open them. Boolean
 preferences use sliding switches, including
 keyboard focus, Space activation and disabled states. Glass is composited into
 opaque RGB artwork for reliable Windows Tk rendering; it does not change window
@@ -267,7 +269,7 @@ row. The gallery title owns its sanitized physical folder name: saving a title
 change also renames the folder and updates descendant paths. Inventory keeps
 the human-readable title and sanitized storage path distinct as values.
 Older APIs without `gallery_title` display the final folder segment.
-Hover over or focus the name to see the complete physical folder
+Hover over the name to see the complete physical folder
 hierarchy on separate indented lines, from the root to the selected gallery.
 The heading and tooltip follow connection changes; the full identity remains
 available to flight records and import history.
@@ -924,7 +926,7 @@ tool remains a source-only utility.
 
 A normal launch opens **Photos**, the first task in the navigation order:
 **Photos**, **Watcher**, **Import**, **Activity**, **AI**, and **Settings**.
-With an active gallery link, Photos shows its last complete saved tree on the
+With an active gallery link, Photos shows its last-known saved tree on the
 left while checking current server data. It restores the last explicitly
 selected gallery for that site and account; otherwise it chooses an initial
 gallery automatically. Saved rows are navigation hints: photo requests still
@@ -941,8 +943,22 @@ optional tree replies use that same paged path. Authorization refusals,
 cancellation and rate limits stop the read instead of downgrading it.
 Both cached and complete trees mount in short UI batches; existing rows change
 only when their metadata differs. A failed or incomplete pass retains the prior
-complete snapshot. Rows absent from the new catalogue disappear only when a
-complete result or the last successful page confirms their absence.
+known structure, including successful pages received before an interruption.
+Every successful page and confirmed creation saves the merged known metadata,
+including rows not yet mounted in the UI. Accepted disk writes finish on normal
+exit even when network work is cancelled. Rows absent from the new catalogue
+disappear only when a complete result or the last successful page confirms
+their absence.
+The circular-arrow **Refresh galleries** control beside expand, collapse and
+add restarts this check from the beginning. It updates renamed galleries and
+changed parents while preserving expansion, selection and the current photo
+view. A moved selected row opens its new ancestor path to remain visible.
+Repeated refreshes cancel and ignore older responses through the same
+single catalogue worker. Until fresh confirmation, retained rows remain
+navigation hints and upload/create actions wait.
+Maintainer UI diagnostics can select `native_only` in the existing hosted
+WinApp workflow. This runs the central `winapp-native` suite on Windows and
+records its exact narrower scope; it cannot qualify complete WinApp coverage.
 Loaded galleries remain usable while the loading status above the tree and a
 small smooth spinning ring beside it indicate more work. The indicator covers
 initial reads and paced continuation, then stops on completion, error or
@@ -966,7 +982,7 @@ The persistent API-key connection
 control opens the compact key dialog from every view. The separate ordinary
 header **Link gallery** flow remains the upload/search path. The app header
 also has Settings, updates, and help controls. Icon controls have
-hover/focus tooltips and keyboard focus; help opens usage guidance.
+hover tooltips and keyboard focus; help opens usage guidance.
 Long pages and dialogs scroll with the mouse wheel or scrollbar; text and table
 controls keep their own scrolling.
 

@@ -470,12 +470,23 @@ headroom. No server limit or protocol changes. Session changes and destruction
 cancel scheduled work; errors stop automatic continuation until explicit retry.
 Catalogue fixtures own those timer and identity boundaries. Live production
 catalogue size and traffic are unknown. The client first mounts an optional
-last-complete local snapshot, bound to verified issuer, account and exact
+last-known local snapshot, bound to verified issuer, account and exact
 approved scope. Windows uses user-scoped DPAPI and refuses redirected/nonlocal
 profile storage; POSIX uses private owned files. Integrity failure, corruption
 or unavailable storage is a miss. One background reader and a serialized
-latest-pending writer keep this optional I/O outside Tk. Only complete results
-replace the atomic snapshot; partial/failing pages never prune cached-only rows.
+latest-pending writer keep this optional I/O outside Tk. Each successful page
+and confirmed creation merges known rows into an atomic snapshot, retaining
+unmounted cached rows. Partial snapshots clear the optional complete-tree
+revision; only a complete successful pass proves absence and prunes old rows.
+Already accepted immutable metadata writes drain on normal exit independently
+of network cancellation, using their original account/scope-bound cache.
+The encrypted format and existing complete snapshots remain readable unchanged.
+The tree toolbar refresh starts a new catalogue pass without resetting the
+selected viewer or expansion. Independent catalogue cancellation and generation
+fence late results; current responses update titles and parent relationships.
+Source regressions cover interrupted paging, retained disk metadata, writer
+teardown and repeated refreshes. Installed performance and crash/power-loss
+durability remain unknown; no server or credential format changes are required.
 Cached and complete-tree UI updates yield in short batches and retain unchanged
 rows. The account-scoped last explicit gallery preference reuses existing
 versioned tree preferences; version 1 expansion states remain supported.
@@ -517,6 +528,13 @@ deployed adoption and current installed performance are unknown.
 The catalogue activity label and smooth spinning ring appear above the tree and
 share the existing initial/read/continuation lifecycle. They do not estimate
 completion and stop on completion, failure, disconnection or destruction.
+Shared inline tooltips now require actual pointer hover before delayed display
+and monitor the pointer while visible, including missed Leave events. Keyboard
+focus alone cannot activate them. Surface dismissal cancels pending help as well
+as visible labels. Focus and keyboard actions remain available. Portable fixtures
+cover stale delays and missed Leave; installed Windows window-switch behavior
+still requires manual verification. The shared theme owns this permanent UI
+behavior; no compatibility fallback or new dependency is introduced.
 
 Ordinary Photos grid reads request thumbnail renditions only. Selected detail
 and adjacent-photo reads belong to the open lightbox; explicit gallery preload

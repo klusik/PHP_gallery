@@ -1793,11 +1793,22 @@ Novější server může nabídnout úplný JSON strom s~revizí. Před vrácen�
 nebo zprávy beze změny znovu ověří aktuální oprávnění účtu. Původní
 stránkované API zůstává pro~starší web, nedostupná data a~stromy přesahující
 limit úplné odpovědi.
-Klient nejprve zobrazí poslední úplnou uloženou strukturu a~obnoví poslední
+Klient nejprve zobrazí poslední známou uloženou strukturu a~obnoví poslední
 výslovně vybranou galerii daného účtu. Volitelný strom vyžádá jen při oznámené
 podpoře; neplatná či nepodporovaná odpověď ponechá uložený strom a~použije
-stránkované API, včetně webu~1.0.3. Chybějící řádky odstraní a~kopii nahradí
-jen úplná úspěšná obnova. Krátké dávky rozhraní aktualizují změněné řádky.
+stránkované API, včetně webu~1.0.3. Každá úspěšná stránka a~potvrzené vytvoření
+uloží známá metadata včetně dřívějších řádků, i~když se načítání přeruší.
+Přijaté místní zápisy doběhnou při běžném ukončení aplikace. Chybějící řádky
+odstraní jen úplná úspěšná obnova. Kruhová šipka vedle rozbalení, sbalení
+a~přidání obnoví strom včetně přejmenování a~změn rodičů; zachová rozbalení,
+výběr i~prohlížeč fotek. Opakovaná obnova ignoruje zastaralé odpovědi.
+Při přesunu vybrané galerie se její nová větev rozbalí, aby výběr zůstal vidět.
+Krátké dávky rozhraní aktualizují změněné řádky. Tooltip je viditelný pouze
+s~kurzorem nad aktivačním prvkem; samotný fokus klávesnice jej neotevře.
+Správce může v~hosted WinApp workflow zvolit \texttt{native\_only}.
+Centrální sada \texttt{winapp-native} zaznamená užší rozsah nativního
+prohlížeče a~nenahrazuje úplné ověření WinApp. Výchozí úplný výběr testů
+i~jeho časový limit zůstávají zachovány.
 Windows chrání uložené názvy uživatelským DPAPI; nebezpečné úložiště či
 poškozený soubor znamená chybějící cache. Média stále vyžadují aktuální
 ověření serverem a~nové nahrávání či tvorba galerie čerstvé potvrzení cíle.
@@ -2498,7 +2509,7 @@ instalátoru po úplném ukončení staré aplikace.
 \subsection{Záznam letů a zprávy}
 
 Uploader používá tmavé skleněné panely, navigaci pomocí ikon a~posuvné
-přepínače. Popis ikony se zobrazí při najetí nebo zaměření klávesnicí.
+přepínače. Popis ikony se zobrazí při najetí kurzorem.
 Podtitulek o~autopilotu je v~hlavičce u~PHP Gallery. Ozubená kolečka jsou
 přímo u~galerie, sledované složky nebo záznamu letu. Watcher zobrazuje cestu
 a~tlačítko \ui{Choose folder…}. Kolečko letu otevírá lokální nastavení
@@ -2626,8 +2637,8 @@ z~autentizovaného inventarizačního API. Dlouhé názvy se zalamují podle š�
 řádku. Název fyzické složky se vždy odvozuje ze sanitized zdrojového názvu
 galerie. Uložení změny názvu přejmenuje složku a~aktualizuje cesty potomků;
 kolize cílové složky operaci odmítne bez přepsání dat. Starší API bez údaje
-o~názvu zobrazí koncový segment složky. Najetí myší nebo přesun klávesnicového
-fokusu na název zobrazí celou hierarchii složek na samostatných odsazených
+o~názvu zobrazí koncový segment složky. Najetí myší na název zobrazí celou
+hierarchii složek na samostatných odsazených
 řádcích, od kořene po galerii. Změna připojení aktualizuje název i~tooltip;
 záznamy letů a~historie importů zachovávají úplnou identitu galerie.
 

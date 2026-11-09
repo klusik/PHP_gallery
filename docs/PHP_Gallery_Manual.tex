@@ -1795,15 +1795,27 @@ Newer servers can~advertise an~optional complete JSON tree with a~revision.
 They recheck current account permissions before returning the~tree or~an
 unchanged reply. The~existing paged API remains available for~older servers,
 unavailable data and~trees beyond the~complete-response limit.
-The~client first shows the~last complete saved structure and~restores
+The~client first shows the~last-known saved structure and~restores
 the~account's last explicitly selected gallery. It~requests the~optional tree
 only when advertised; invalid or~unsupported replies retain the~saved tree
-and~use the~paged API, including with web~1.0.3. Only a~complete successful
-refresh removes missing rows or~replaces the~snapshot. Short UI batches update
-changed rows. Windows protects saved titles with user-scoped DPAPI; unsafe
+and~use the~paged API, including with web~1.0.3. Every successful page
+and~confirmed creation saves known metadata, preserving earlier rows even
+if~loading is~interrupted. Accepted local writes finish on~normal exit.
+Only a~complete successful refresh removes missing rows. The~circular arrow
+beside expand, collapse and~add refreshes the~tree, including renamed galleries
+and~changed parents, while preserving expansion, selection and~the~photo view.
+If~the~selected gallery moves, its~new ancestor path opens to~keep it~visible.
+Repeated refreshes ignore obsolete responses. Short UI batches update
+changed rows. Tooltips appear only while the~pointer remains over their
+trigger; keyboard focus alone does~not open them. Windows protects saved titles
+with user-scoped DPAPI; unsafe
 or~corrupt local storage is~a~cache miss. Media still needs live authorization;
 new upload/create actions wait for~fresh gallery confirmation. This metadata
 does~not grant offline photo access.
+Maintainer diagnostics can~select \texttt{native\_only} in~the~hosted WinApp
+workflow. The~central \texttt{winapp-native} suite records its~narrower native
+viewer scope and~cannot qualify complete WinApp coverage. Default complete
+discovery and~its~existing time limit remain unchanged.
 Contextual panels keep their existing keyboard and~outside
 click dismissal. Windows clips their rounded boundary without dark outer
 corner blocks; if~native shaping is~unavailable, a~flat opaque themed panel
@@ -2525,7 +2537,7 @@ need a~manual installer launch after fully closing the~old application.
 \subsection{Flight recording and reports}
 
 The~uploader uses dark glass panels, an~icon navigation rail, and~sliding
-switches. Hover or~focus icons for their descriptions. The~header groups
+switches. Hover over icons for~their descriptions. The~header groups
 PHP Gallery with its~autopilot subtitle. Settings gears sit directly beside
 their gallery, watch-folder, or~flight control. The~flight gear opens a~local
 sheet for automatic reports, report languages, interface language, progress,
@@ -2635,7 +2647,7 @@ The~physical folder name is~always derived from the~sanitized source title.
 Saving a~title change renames the~folder and~updates descendant paths;
 a~destination collision refuses the~rename without overwriting data.
 Older APIs without title metadata display the~final folder segment.
-Hover over or~focus the~name to~see the~full physical folder
+Hover over the~name to~see the~full physical folder
 hierarchy on~separate indented lines, from root to~gallery. Connection changes
 refresh both presentations; flight records and~import history retain
 the~complete identity.

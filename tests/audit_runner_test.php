@@ -1456,6 +1456,25 @@ audit_test_assert(
     'Only a complete valid successful report plus a clean process result may pass WinApp coverage.',
 );
 
+$nativeWinappReport = $winappReport;
+$nativeWinappReport['runtime']['suite_settings']['pattern'] =
+    'test_native_gallery_viewer.py';
+audit_test_assert(
+    !audit_validate_winapp_report($nativeWinappReport)['valid']
+        && audit_validate_winapp_report($nativeWinappReport, true)['valid']
+        && !audit_validate_winapp_report($winappReport, true)['valid'],
+    'Native diagnostic evidence must never substitute for complete discovery.',
+);
+$nativeWinappSuccess = audit_evaluate_winapp_report(
+    json_encode($nativeWinappReport),
+    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.1],
+    true,
+);
+audit_test_assert(
+    $nativeWinappSuccess['status'] === 'PASS',
+    'Explicit native diagnostic evaluation must retain ordinary outcome checks.',
+);
+
 $invalidWinappCases = [];
 $badWinapp = $winappReport;
 $badWinapp['tests'] = [];
@@ -1754,7 +1773,14 @@ audit_test_assert(
             $winappRunnerBody,
             'parse_python_unittest_summary($output)',
         )
-        && php_source_contains($winappRunnerBody, 'run_process($command, $root, 90)'),
+        && php_source_contains(
+            $winappRunner,
+            'const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;',
+        )
+        && php_source_contains(
+            $winappRunnerBody,
+            'run_process($command, $root, AUDIT_WINAPP_TIMEOUT_SECONDS)',
+        ),
     'Central WinApp audit must preserve the existing 90-second discovery owner and consume only its saved structured report.',
 );
 

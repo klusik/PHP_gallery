@@ -1998,16 +1998,29 @@ Neuere Server können einen optionalen vollständigen JSON-Baum mit Revision
 anbieten. Vor~dem Baum oder einer Unverändert-Antwort prüfen sie~die aktuellen
 Kontoberechtigungen erneut. Die~bisherige Seiten-API bleibt für~ältere Server,
 nicht verfügbare Daten und~zu große vollständige Antworten erhalten.
-Der Client zeigt zuerst die zuletzt vollständig gespeicherte Struktur und
+Der Client zeigt zuerst die zuletzt bekannte gespeicherte Struktur und
 öffnet die letzte ausdrücklich gewählte Galerie dieses Kontos. Der optionale
 Baum wird nur bei angekündigter Unterstützung abgefragt; ungültige oder nicht
 unterstützte Antworten behalten den gespeicherten Baum und verwenden das
-Seiten-API, auch mit Web~1.0.3. Erst ein vollständiger erfolgreicher Abruf
-entfernt fehlende Zeilen und ersetzt den gespeicherten Stand. Kurze UI-Schritte
-aktualisieren geänderte Zeilen. Windows schützt Titel mit benutzergebundenem
+Seiten-API, auch mit Web~1.0.3. Jede erfolgreiche Seite und bestätigte Erstellung
+speichert bekannte Metadaten samt früheren Zeilen, auch bei abgebrochenem Laden.
+Angenommene lokale Schreibvorgänge enden beim normalen Beenden vollständig.
+Erst ein vollständiger erfolgreicher Abruf entfernt fehlende Zeilen. Der
+Kreispfeil neben Aufklappen, Zuklappen und Hinzufügen aktualisiert Namen und
+Elternzuordnungen; Aufklappzustand, Auswahl und Fotoansicht bleiben erhalten.
+Bei verschobener Auswahl öffnet sich ihr neuer Vorfahrenpfad und bleibt sichtbar.
+Wiederholte Aktualisierungen ignorieren veraltete Antworten. Kurze UI-Schritte
+aktualisieren geänderte Zeilen. Tooltips erscheinen nur mit dem Zeiger über
+ihrem Auslöser; Tastaturfokus allein öffnet sie nicht. Windows schützt Titel
+mit benutzergebundenem
 DPAPI; unsichere oder beschädigte Dateien gelten als Cache-Fehlschlag. Medien
 benötigen weiterhin aktuelle Serverfreigabe, neue Upload-/Erstellaktionen eine
 frisch bestätigte Galerie. Die Metadaten gewähren keinen Offline-Fotozugriff.
+Für Wartungsdiagnosen kann der gehostete WinApp-Workflow
+\texttt{native\_only} auswählen. Die zentrale Suite \texttt{winapp-native}
+protokolliert den engeren Umfang des nativen Betrachters und ersetzt keine
+vollständige WinApp-Prüfung. Vollständige Standardauswahl und vorhandenes
+Zeitlimit bleiben unverändert.
 
 Der Watcher-Bildschirm zeigt die Zielgalerie. Ein geprüfter Titel im API-Modus
 bleibt bei Aktualisierungen derselben gespeicherten Verbindung erhalten;
@@ -2791,7 +2804,7 @@ Installerstart nach vollständigem Schließen der alten Anwendung.
 \subsection{Flugaufzeichnung und Berichte}
 
 Der Uploader verwendet dunkle Glaspaneele, eine Symbolnavigation und
-Schiebeschalter. Zeigerkontakt oder Tastaturfokus zeigt die Symbolbeschreibung.
+Schiebeschalter. Zeigerkontakt zeigt die Symbolbeschreibung.
 Der Autopilot-Untertitel steht bei PHP Gallery im Kopfbereich. Zahnräder
 stehen direkt neben Galerie, Überwachungsordner oder Flugaufzeichnung.
 Das Flugzahnrad öffnet lokale Einstellungen für automatische Berichte,
@@ -2936,8 +2949,7 @@ Quelltitel abgeleitet. Eine gespeicherte Titeländerung benennt den Ordner um un
 aktualisiert die Pfade seiner Nachfolger; Zielkonflikte werden ohne
 Überschreiben
 abgewiesen. Ältere APIs ohne Titelmetadaten zeigen das letzte Ordnersegment.
-Beim Überfahren
-oder Tastaturfokus zeigt der Tooltip die vollständige Ordnerhierarchie auf
+Beim Überfahren zeigt der Tooltip die vollständige Ordnerhierarchie auf
 einzelnen eingerückten Zeilen, von der Wurzel bis zur Galerie. Änderungen der
 Verbindung aktualisieren beide Darstellungen; Flugaufzeichnungen und
 Importverlauf behalten die vollständige Identität.

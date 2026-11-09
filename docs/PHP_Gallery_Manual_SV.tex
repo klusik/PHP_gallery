@@ -1852,15 +1852,27 @@ Nyare servrar kan~erbjuda ett~valfritt fullständigt JSON-träd med~revision.
 De~kontrollerar aktuella kontobehörigheter igen före trädet eller ett~svar om
 oförändrat innehåll. Det~befintliga sid-API:t finns kvar för~äldre servrar,
 otillgängliga data och~träd som~överstiger gränsen för~ett komplett svar.
-Klienten visar först den senast fullständigt sparade strukturen och öppnar
+Klienten visar först den senast kända sparade strukturen och öppnar
 kontots senast uttryckligen valda galleri. Det valfria trädet begärs bara när
 stöd annonseras; ogiltiga eller ej stödda svar behåller det sparade trädet och
-använder sid-API:t, även med webb~1.0.3. Endast en fullständig lyckad uppdatering
-tar bort saknade rader och ersätter den sparade kopian. Korta UI-steg uppdaterar
-ändrade rader. Windows skyddar titlar med användarbundet DPAPI; osäker eller
+använder sid-API:t, även med webb~1.0.3. Varje lyckad sida och bekräftat skapande
+sparar kända metadata med tidigare rader även när inläsningen avbryts. Godkända
+lokala skrivningar slutförs vid normal avslutning. Endast en fullständig lyckad
+uppdatering tar bort saknade rader. Cirkelpilen bredvid expandera, fäll ihop och
+lägg till uppdaterar namn och överordnade gallerier men behåller expansion,
+markering och fotovyn. Upprepade uppdateringar ignorerar föråldrade svar.
+Om det valda galleriet flyttas öppnas dess nya överordnade sökväg så att det syns.
+Korta UI-steg uppdaterar ändrade rader. Verktygstips visas bara med pekaren över
+utlösaren; tangentbordsfokus ensamt öppnar dem inte. Windows skyddar titlar med
+användarbundet DPAPI; osäker eller
 skadad lagring räknas som en cachemiss. Media kräver fortfarande aktuell
 serverbehörighet och nya uppladdnings-/skapandeåtgärder ett färskt bekräftat
 galleri. Dessa metadata ger inte fotoåtkomst offline.
+För underhållsdiagnostik kan \texttt{native\_only} väljas i det hostade
+WinApp-arbetsflödet. Den centrala sviten \texttt{winapp-native} registrerar sitt
+snävare omfång för den inbyggda visaren och ersätter inte fullständig
+WinApp-kvalificering. Fullständig standardupptäckt och befintlig tidsgräns
+förblir oförändrade.
 
 Watcher-skärmen visar gallerimålet. En verifierad titel i API-läge behålls
 när samma sparade anslutning uppdateras; nyckel- eller lägesbyte gör den
@@ -2586,7 +2598,7 @@ behöver manuell installation efter att den gamla appen stängts helt.
 \subsection{Flygregistrering och rapporter}
 
 Uppladdaren använder mörka glaspaneler, symbolnavigering och skjutreglage.
-Pekaren eller tangentbordsfokus visar symbolens beskrivning. Autopilottexten
+Pekaren visar symbolens beskrivning. Autopilottexten
 står vid PHP Gallery i sidhuvudet. Kugghjul sitter direkt vid galleri,
 bevakningsmapp eller flygregistrering. Flygets kugghjul öppnar lokala
 inställningar för automatiska rapporter, rapport- och gränssnittsspråk,
@@ -2716,8 +2728,8 @@ det autentiserade inventerings-API:et. Långa namn radbryts inom radens bredd.
 Det fysiska mappnamnet härleds alltid från den rensade källtiteln. När en
 titeländring sparas byter mappen namn och underordnade sökvägar uppdateras;
 målkonflikter avvisas utan att data skrivs över. Äldre API:er utan titelmetadata
-visar det sista mappsegmentet. Håll pekaren över namnet eller ge det
-tangentbordsfokus för att visa hela mapphierarkin på separata indragna rader,
+visar det sista mappsegmentet. Håll pekaren över namnet för att visa hela
+mapphierarkin på separata indragna rader,
 från roten till galleriet. Anslutningsändringar uppdaterar båda vyerna;
 flygloggar och importhistorik behåller den fullständiga identiteten.
 

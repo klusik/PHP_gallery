@@ -1946,6 +1946,7 @@ _TRANSLATIONS["sv"].update({
 _TRANSLATIONS["en"].update({
     "photos_pane_title": "Photos",
     "photos_workspace_expand_all": "Expand all",
+    "photos_workspace_refresh_galleries": "Refresh galleries",
     "photos_workspace_collapse_all": "Collapse all",
     "photos_workspace_load_more": "Load more",
     "photos_workspace_loading": "Loading galleries…",
@@ -2058,6 +2059,7 @@ _TRANSLATIONS["en"].update({
 _TRANSLATIONS["cs"].update({
     "photos_pane_title": "Fotky",
     "photos_workspace_expand_all": "Rozbalit vše",
+    "photos_workspace_refresh_galleries": "Obnovit galerie",
     "photos_workspace_collapse_all": "Sbalit vše",
     "photos_workspace_load_more": "Načíst další",
     "photos_workspace_loading": "Načítám galerie…",
@@ -2170,6 +2172,7 @@ _TRANSLATIONS["cs"].update({
 _TRANSLATIONS["de"].update({
     "photos_pane_title": "Fotos",
     "photos_workspace_expand_all": "Alle erweitern",
+    "photos_workspace_refresh_galleries": "Galerien aktualisieren",
     "photos_workspace_collapse_all": "Alle reduzieren",
     "photos_workspace_load_more": "Mehr laden",
     "photos_workspace_loading": "Galerien werden geladen…",
@@ -2282,6 +2285,7 @@ _TRANSLATIONS["de"].update({
 _TRANSLATIONS["sv"].update({
     "photos_pane_title": "Foton",
     "photos_workspace_expand_all": "Expandera alla",
+    "photos_workspace_refresh_galleries": "Uppdatera gallerier",
     "photos_workspace_collapse_all": "Fäll ihop alla",
     "photos_workspace_load_more": "Visa fler",
     "photos_workspace_loading": "Laddar gallerier…",
