@@ -499,6 +499,7 @@ class UtcTransportTests(unittest.TestCase):
         worker.cancelled.wait = clock.wait
         path = WINAPP_DIR / "SimConnect.dll"
         with (
+            mock.patch.object(UTC, "msfs_running", return_value=True),
             mock.patch.object(UTC, "os", SimpleNamespace(name="nt")),
             mock.patch.object(
                 UTC.SimConnectTimeClient, "resolve_dll_path",

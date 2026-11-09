@@ -234,8 +234,13 @@ linked upload mode instead offers its gallery reconnect action. Active capture,
 pending work and finalization keep Finish, Review or Progress first; an active
 manual import retains its own controls.
 A background observer checks every three seconds, even before Watcher starts
-and with recording or UTC sync disabled. SimConnect open/close takes priority;
-it requests no telemetry and changes no simulator state. When it is unavailable,
+and with recording or UTC sync disabled. SimConnect open/close takes priority
+only while this account runs MSFS 2020 (`FlightSimulator.exe`) or MSFS 2024
+(`FlightSimulator2024.exe`). Photo GPS, recorder connections and UTC sync also
+wait or skip silently without either process; other games never trigger native
+connection attempts. Established recorder/UTC handles detect simulator exit
+through SimConnect. The observer requests no telemetry and changes no simulator
+state. When it is unavailable,
 known process names owned by the same Windows account provide an optional
 fallback without admin rights. Microsoft Flight Simulator processes retain
 flight wording. Cyberpunk 2077, the Mass Effect trilogy, Skyrim and Dragon Age

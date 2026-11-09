@@ -709,7 +709,10 @@ The primary Watcher/Import action fixtures cover localized Begin/Finish
 game/flight wording for both saved-key states in all four interface languages.
 Native presence fixtures cover simulator start/exit/restart, unavailable DLLs,
 empty handles, handle cleanup and observer cancellation without telemetry
-requests. `test_game_presence.py` covers SimConnect priority, process-only MSFS,
+requests. SimConnect presence and watched-upload fixtures also verify that
+absent MSFS skips DLL discovery/location without warnings; process fixtures
+restrict admission to the two MSFS 2020/2024 executable names.
+`test_game_presence.py` covers SimConnect priority, process-only MSFS,
 context replacement on game exit, four-language phrases, original/Legendary
 Mass Effect versus Andromeda, shared-name/multiple-game ambiguity, catalog
 provenance counts and profile additions/malformed rows. Native adapter fixtures

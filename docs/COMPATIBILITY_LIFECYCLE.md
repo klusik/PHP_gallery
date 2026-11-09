@@ -1136,12 +1136,21 @@ changes, public-page scraping or additional network requests are introduced.
 
 ## WinApp optional game context
 
-`game_presence.py` owns label selection: SimConnect first, then offline exact
+`game_presence.py` owns label selection: SimConnect first only with a running
+current-account MSFS 2020/2024 process, then offline exact
 process rules restricted by `windows_game_processes.py` to the current account's
 SID and existing limited query rights. Missing/denied APIs, catalogs or
 identities,
 unknown games and ambiguous matches permanently retain general game wording;
-they never gate watching, recording, reports or key handling. The bundled
+they never gate watching, reports or key handling. The shared
+`windows_game_processes.msfs_running` gate restricts new presence, photo GPS,
+recorder and UTC connections to `FlightSimulator.exe` and
+`FlightSimulator2024.exe`; denied inspection skips native work silently.
+This intentionally excludes other SimConnect-compatible games. Established
+recorder/UTC handles keep their native exit handling. The maintainer reported
+unwanted SimConnect warnings while playing Mass Effect on 2026-11-09;
+live MSFS start/exit and target-PC warning absence remain unverified.
+The bundled
 Discord snapshot is incomplete; profile JSON additions require no app rebuild.
 These fallbacks support ordinary games and PCs without SimConnect. No usage
 evidence justifies retirement. Hosted fixtures own deterministic behavior;

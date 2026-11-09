@@ -199,6 +199,21 @@ class GameContextTests(unittest.TestCase):
 class WindowsGameProcessTests(unittest.TestCase):
     """Constrain fallback presence to readable candidate processes of this user."""
 
+    def test_only_msfs_2020_and_2024_admit_simconnect(self) -> None:
+        """Keep unrelated games and unsupported simulators outside admission.
+
+        Returns:
+            None: Only the two supported executable names reach the adapter;
+                absent processes deny admission, and either MSFS admits it.
+        """
+        with mock.patch.object(PROCESSES, "current_user_game_processes") as names:
+            for found in (set(), {"flightsimulator.exe"}, {"flightsimulator2024.exe"}):
+                names.return_value = found
+                self.assertEqual(bool(found), PROCESSES.msfs_running())
+                names.assert_called_with({
+                    "flightsimulator.exe", "flightsimulator2024.exe",
+                })
+
     def test_other_accounts_and_denied_processes_are_excluded_and_handles_close(self) -> None:
         """Use limited queries and exact SID equality without enabling privileges.
 

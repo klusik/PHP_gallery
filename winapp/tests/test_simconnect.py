@@ -70,6 +70,30 @@ def packet_header(packet, receive_id):
 class SimulatorPresenceTests(unittest.TestCase):
     """Keep label detection independent of telemetry and native side effects."""
 
+    def setUp(self) -> None:
+        """Model a running supported simulator for native transport vectors.
+
+        Returns:
+            None: Restores the process admission mock after each test.
+        """
+        patcher = mock.patch.object(PRESENCE, "msfs_running", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_absent_msfs_skips_dll_resolution(self) -> None:
+        """Keep ordinary games from loading or probing SimConnect.
+
+        Returns:
+            None: No native runtime discovery occurs without MSFS 2020/2024.
+        """
+        observer = PRESENCE.GamePresence(lambda: "", WINAPP_DIR)
+        with (
+            mock.patch.object(PRESENCE, "msfs_running", return_value=False),
+            mock.patch.object(PRESENCE.SimConnectLocationClient, "resolve_dll_path") as resolve,
+        ):
+            self.assertFalse(observer.probe())
+            resolve.assert_not_called()
+
     def test_presence_reconnects_and_closes_without_requesting_data(self) -> None:
         """Observe start, exit and restart using only open/close operations.
 
@@ -837,6 +861,28 @@ def load_main_module():
 
 class WatchedUploadLocationTests(unittest.TestCase):
     """An optional simulator location must never prevent a watched upload."""
+
+    def setUp(self) -> None:
+        """Admit the existing native-location vectors as running MSFS.
+
+        Returns:
+            None: Restores process detection after each watched-upload vector.
+        """
+        patcher = mock.patch.object(self.main, "msfs_running", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_absent_msfs_uploads_without_location_or_warning(self) -> None:
+        """Skip optional GPS silently when playing an ordinary game.
+
+        Returns:
+            None: No location request or warning is emitted without MSFS.
+        """
+        watcher = self.watcher()
+        with mock.patch.object(self.main, "msfs_running", return_value=False):
+            self.assertEqual({}, watcher.sim_camera_metadata_fields(Path("game.png")))
+        watcher.simconnect_client.current_location.assert_not_called()
+        self.assertTrue(watcher.events.empty())
 
     @classmethod
     def setUpClass(cls):
