@@ -2017,7 +2017,10 @@ refreshes keep tiles and~update their verification ages. Large JPEG thumbnail
 variants also reduce the~decoder raster before RGB allocation.
 The~shared-header \ui{Thumbnails} indicator and~\ui{Photo storage} control use
 the~compact Watcher-pill style: icons, short counts and~simple bars, without
-long labels. The~storage popup opens on~demand, anchored to~its control. It~shows
+long labels. The~storage popup opens on~demand below its~header control and
+aligns with the~right edge of~the~visible main-window client area. Window
+resizing and~changed values reposition the~whole panel inside that area.
+It~shows
 all~stored typed thumbnails and~their bytes; its~detail separates ordinary quota
 and~\ui{Keep preloaded}, listing retained thumbnails, other media and~galleries
 separately. RAM means this process's Windows working set or~macOS resident set;
@@ -2432,6 +2435,11 @@ credential-free restart checkpoint. Within its~existing 24-hour lifetime,
 startup restores the~exact saved gallery/account and~rechecks access before
 admitting the~same queue and~recorder with fresh contextual authority.
 Stop, Finish and~unlink cancel this intent; stopped capture stays stopped.
+Startup waits for~mode readiness. Temporary checkpoint reads or~gallery
+verification failures keep the~same intent for~bounded retry; invalid state,
+changed identity/scope and~revoked access still block capture. Stop or~unlink
+also cancels pending retries and~late results. Diagnostics identify the~failed
+phase and~a~fixed safe reason without keys, checkpoint contents or~local paths.
 A~securely saved gallery grant or~unchanged saved API key is~required.
 Expired/revoked or~unsaved transient links need normal reconnection;
 uncertain uploads and~forced termination retain explicit recovery.

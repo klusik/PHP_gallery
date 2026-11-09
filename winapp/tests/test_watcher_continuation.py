@@ -31,7 +31,11 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader.flight_jobs import SessionPlan, WatcherContinuation, WorkspaceLease
-from uploader.app_linking import UPLOAD_OFFLINE_SCOPE, UPLOAD_SCOPE
+from uploader.app_linking import (
+    LinkingResponseError, UPLOAD_OFFLINE_SCOPE, UPLOAD_SCOPE,
+)
+from uploader.flight_ui import FlightUI
+import uploader.flight_ui as FLIGHT_UI_MODULE
 from uploader.self_update import UpdateDiagnostic
 from uploader.linked_upload import LinkedUploadTarget, linked_target_binding
 from uploader.app_linking_ui import LinkingManager
@@ -105,10 +109,33 @@ def initialize_event_pump_fixture(app: MAIN.WatcherApp) -> None:
     app._event_drain_last_ms = 0.0
     app._event_drain_max_ms = 0.0
     app._activity_drawer_flush_count = 0
+    app._update_resume_generation = getattr(app, '_update_resume_generation', 0)
+    app._update_resume_cancelled = getattr(app, '_update_resume_cancelled', False)
+    app._update_resume_inspecting = getattr(app, '_update_resume_inspecting', False)
     app._drain_event_batch = MAIN.WatcherApp._drain_event_batch.__get__(
         app, MAIN.WatcherApp,
     )
     app.refresh_contextual_watcher_copy = mock.Mock()
+
+
+def initialize_continuation_inspection_fixture(app: MAIN.WatcherApp) -> None:
+    """Initialize the complete one-use inspection lifecycle for host fixtures.
+
+    Args:
+        app (MAIN.WatcherApp): Constructor-bypassed watcher under inspection.
+
+    Returns:
+        None: Startup readiness, retry ownership, deadline and generation are
+            initialized exactly once for this isolated fixture.
+    """
+    app._update_resume_attempted = False
+    app._update_resume_inspecting = False
+    app._update_resume_cancelled = False
+    app._update_resume_generation = 0
+    app._update_resume_deadline = (
+        time.monotonic() + MAIN.UPDATE_CONTINUATION_LINK_SECONDS
+    )
+    app._gui_mode_ready = True
 
 
 def wait_for_event_kind(
@@ -297,14 +324,14 @@ class WatcherContinuationTests(unittest.TestCase):
                 self.session_directory / 'watch-drain.json', queue_row,
             )
             app = object.__new__(MAIN.WatcherApp)
-            app._update_resume_attempted = False
-            app._gui_mode_ready = True
+            initialize_continuation_inspection_fixture(app)
             app._after_update_nonce = None
             app.events = queue.Queue()
-            app.flights = SimpleNamespace(
-                lease=self.lease, directory=self.flight_root,
-                pending=mock.Mock(return_value=[self.plan]),
-            )
+            flight_owner = object.__new__(FlightUI)
+            flight_owner.lease = self.lease
+            flight_owner.directory = self.flight_root
+            flight_owner.load_error = ""
+            app.flights = flight_owner
             app.mode_owner = SimpleNamespace(view=mock.Mock(return_value=SimpleNamespace(
                 state='legacy', record=None,
             )))
@@ -330,7 +357,13 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertTrue(inspect_marker(replace(
             record, update_session='e' * 32,
         )).empty())
-        self.assertTrue(inspect_marker(record, frozen=True).empty())
+        rejected = inspect_marker(record, frozen=True)
+        failure = rejected.get_nowait()
+        self.assertEqual('watcher_resume_failed', failure['kind'])
+        self.assertEqual(
+            'restart_queue_needs_review', failure['payload']['reason'],
+        )
+        self.assertTrue(rejected.empty())
 
     def test_ordinary_close_publishes_same_version_primary_and_mirror(self) -> None:
         """A safe checkpoint publishes matching one-use restart records.
@@ -341,9 +374,16 @@ class WatcherContinuationTests(unittest.TestCase):
         record = replace(
             self.record, source_version=MAIN.APP_VERSION,
             target_version=MAIN.APP_VERSION, update_session='',
+            binding=MAIN.connection_binding(
+                MAIN.normalize_upload_url('https://gallery.example.test'),
+                'fixture-api-key',
+            ),
             phase='preparing',
         )
+        self.plan = replace(self.plan, binding=record.binding)
+        self.plan.save()
         app = object.__new__(MAIN.WatcherApp)
+        initialize_continuation_inspection_fixture(app)
         app.wait_for_update_checkpoint = mock.Mock()
         app._update_continuation = record
         app.flights = SimpleNamespace(lease=self.lease)
@@ -360,6 +400,75 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertEqual('prepared', primary.phase)
         self.assertNotEqual('', primary.update_session)
         self.assertEqual('ordinary_restart_ready', app.events.get_nowait()['kind'])
+
+        self.lease.release()
+        host = SimpleNamespace(
+            root=SimpleNamespace(after=mock.Mock()),
+            config=SimpleNamespace(
+                gallery_url='https://gallery.example.test',
+                api_key='fixture-api-key',
+            ),
+            simulator_presence=SimpleNamespace(
+                text=lambda key, _language: key,
+            ),
+            linking_manager=SimpleNamespace(
+                linked_upload_mode_selected=lambda: False,
+            ),
+            api_key_revoke_running=False,
+        )
+
+        def variable(value: str | bool = '') -> SimpleNamespace:
+            """Create the minimal Tk variable contract for FlightUI startup.
+
+            Args:
+                value (str | bool): Initial value loaded from the temporary
+                    flight preferences.
+
+            Returns:
+                SimpleNamespace: Isolated ``get()`` returning the initial
+                    string/boolean and ``set(value)`` mock for UI values.
+            """
+            return SimpleNamespace(
+                get=lambda: value, set=mock.Mock(),
+            )
+
+        with mock.patch.object(
+                FLIGHT_UI_MODULE.tk, 'StringVar', side_effect=variable), \
+                mock.patch.object(
+                    FLIGHT_UI_MODULE.tk, 'BooleanVar', side_effect=variable,
+                ):
+            restarted_flights = FlightUI(
+                host, self.flight_root, MAIN.normalize_upload_url,
+                MAIN.revoke_upload_key, MAIN.WatcherApp.resume_flight_photos,
+            )
+        self.lease = restarted_flights.lease
+        self.assertIsNotNone(restarted_flights.lease)
+        self.addCleanup(restarted_flights.lease.release)
+
+        startup = object.__new__(MAIN.WatcherApp)
+        initialize_continuation_inspection_fixture(startup)
+        startup._after_update_nonce = None
+        startup.events = queue.Queue()
+        startup.flights = restarted_flights
+        startup.config = SimpleNamespace(
+            gallery_url='https://gallery.example.test',
+            api_key='fixture-api-key',
+        )
+        startup.mode_owner = SimpleNamespace(view=mock.Mock(return_value=(
+            SimpleNamespace(state='legacy', record=None)
+        )))
+
+        with mock.patch.object(
+                MAIN.threading, 'Thread',
+                side_effect=lambda **kwargs: SimpleNamespace(
+                    start=lambda: kwargs['target'](),
+                )):
+            MAIN.WatcherApp._inspect_update_continuation(startup)
+
+        offered = startup.events.get_nowait()
+        self.assertEqual('watcher_resume_available', offered['kind'])
+        self.assertTrue(offered['payload']['ordinary_restart'])
+        self.assertEqual(primary, offered['payload']['continuation'])
 
     def test_partial_ordinary_consumption_restores_both_unadmitted_markers(self) -> None:
         """Keep safe retry usable after only the mirror consumption commits.
@@ -1115,15 +1224,18 @@ class WatcherContinuationTests(unittest.TestCase):
             with self.subTest(phase=record.phase, nonce=requested_nonce[:1]):
                 record.save(self.lease)
                 app = object.__new__(MAIN.WatcherApp)
-                app._update_resume_attempted = False
-                app._gui_mode_ready = True
+                initialize_continuation_inspection_fixture(app)
                 app._after_update_nonce = requested_nonce
                 app.flights = SimpleNamespace(lease=self.lease)
                 app.events = queue.Queue()
                 MAIN.WatcherApp._inspect_update_continuation(app)
                 event = wait_for_event_kind(app.events, "watcher_resume_failed")
                 self.assertEqual(
-                    "saved_update_state_unverified", event["payload"]["reason"],
+                    "update_nonce_or_version_mismatch",
+                    event["payload"]["reason"],
+                )
+                self.assertEqual(
+                    "update_nonce_and_version", event["payload"]["stage"],
                 )
 
         changed_profile = self.record.payload()
@@ -1132,14 +1244,262 @@ class WatcherContinuationTests(unittest.TestCase):
             self.flight_root / "watcher-continuation.json", changed_profile,
         )
         app = object.__new__(MAIN.WatcherApp)
-        app._update_resume_attempted = False
-        app._gui_mode_ready = True
+        initialize_continuation_inspection_fixture(app)
         app._after_update_nonce = self.record.update_session
         app.flights = SimpleNamespace(lease=self.lease)
         app.events = queue.Queue()
         MAIN.WatcherApp._inspect_update_continuation(app)
         event = wait_for_event_kind(app.events, "watcher_resume_failed")
-        self.assertEqual("saved_update_state_unverified", event["payload"]["reason"])
+        self.assertEqual(
+            "checkpoint_profile_mismatch", event["payload"]["reason"],
+        )
+        self.assertEqual("primary_checkpoint", event["payload"]["stage"])
+
+    def test_inspection_does_not_consume_attempt_before_mode_readiness(self) -> None:
+        """A delayed startup prerequisite leaves inspection available to retry.
+
+        Returns:
+            None: Unverified GUI mode does not consume the single inspection
+                attempt or start checkpoint I/O.
+        """
+        app = object.__new__(MAIN.WatcherApp)
+        initialize_continuation_inspection_fixture(app)
+        app._gui_mode_ready = False
+        app._after_update_nonce = self.record.update_session
+        app.events = queue.Queue()
+        app.flights = SimpleNamespace(lease=self.lease)
+
+        MAIN.WatcherApp._inspect_update_continuation(app)
+
+        self.assertFalse(app._update_resume_attempted)
+        self.assertTrue(app.events.empty())
+        app._gui_mode_ready = True
+        with mock.patch.object(
+                MAIN.threading, "Thread",
+                side_effect=lambda **kwargs: SimpleNamespace(
+                    start=lambda: kwargs["target"](),
+                )):
+            MAIN.WatcherApp._inspect_update_continuation(app)
+        self.assertTrue(app._update_resume_attempted)
+        self.assertEqual(
+            "watcher_resume_available", app.events.get_nowait()["kind"],
+        )
+
+    def test_checkpoint_read_oserror_retries_real_primary_and_mirror_load(self) -> None:
+        """A transient native read failure retries strict durable validation.
+
+        Returns:
+            None: One injected primary read OSError is retried through the real
+                checkpoint loader and initialized FlightUI pending owner.
+        """
+        gallery_url = 'https://gallery.example.test'
+        api_key = 'fixture-api-key'
+        binding = MAIN.connection_binding(
+            MAIN.normalize_upload_url(gallery_url), api_key,
+        )
+        plan = replace(self.plan, binding=binding)
+        plan.save()
+        record = replace(
+            self.record, binding=binding, source_version=MAIN.APP_VERSION,
+            target_version=MAIN.APP_VERSION, phase='prepared',
+        )
+        record.save(self.lease)
+        record.save(self.lease, ordinary_restart=True)
+
+        flight_owner = object.__new__(FlightUI)
+        flight_owner.lease = self.lease
+        flight_owner.directory = self.flight_root
+        flight_owner.load_error = ''
+        app = object.__new__(MAIN.WatcherApp)
+        initialize_continuation_inspection_fixture(app)
+        app._after_update_nonce = None
+        app.events = queue.Queue()
+        app.flights = flight_owner
+        app.config = SimpleNamespace(gallery_url=gallery_url, api_key=api_key)
+        app.mode_owner = SimpleNamespace(view=mock.Mock(return_value=SimpleNamespace(
+            state='legacy', record=None,
+        )))
+        app._continue_update_resume = mock.Mock()
+        app.exiting = False
+        app.root = SimpleNamespace(after=mock.Mock(return_value='retry-id'))
+        app.status_var = mock.Mock()
+        initialize_event_pump_fixture(app)
+
+        original_load = WatcherContinuation.load
+        failed = {'once': False}
+
+        def read_after_one_failure(
+            cls: type[WatcherContinuation], lease: WorkspaceLease,
+            *, ordinary_restart: bool = False,
+        ) -> WatcherContinuation | None:
+            """Inject one native primary-file read refusal only.
+
+            Args:
+                cls (type[WatcherContinuation]): Durable checkpoint owner.
+                lease (WorkspaceLease): Actual temporary workspace lease.
+                ordinary_restart (bool): Select the independent restart mirror.
+
+            Returns:
+                WatcherContinuation | None: Exact owner result after retry.
+
+            Raises:
+                OSError: The first primary read simulates transient sharing.
+            """
+            if not ordinary_restart and not failed['once']:
+                failed['once'] = True
+                raise OSError('fixture transient read refusal')
+            return original_load(lease, ordinary_restart=ordinary_restart)
+
+        with mock.patch.object(
+                WatcherContinuation, 'load',
+                classmethod(read_after_one_failure),
+        ), mock.patch.object(
+                MAIN.threading, 'Thread',
+                side_effect=lambda **kwargs: SimpleNamespace(
+                    start=lambda: kwargs['target'](),
+                )):
+            MAIN.WatcherApp._inspect_update_continuation(app)
+            retry = app.events.get_nowait()
+            self.assertEqual(
+                'watcher_resume_inspection_retry', retry['kind'],
+            )
+            app.events.put(retry)
+            MAIN.WatcherApp._drain_event_batch(app)
+            self.assertFalse(app._update_resume_attempted)
+            scheduled = app.root.after.call_args.args[1]
+            scheduled()
+            MAIN.WatcherApp._drain_event_batch(app)
+
+        self.assertTrue(failed['once'])
+        self.assertTrue(app._update_resume_attempted)
+        self.assertEqual(record, app._resume_continuation)
+        app._continue_update_resume.assert_called_once_with()
+        self.assertEqual([str(self.pending_photo)], MAIN.read_document(
+            self.session_directory / 'watch-drain.json',
+        )['pending'])
+
+    def test_late_inspection_offer_after_stop_cannot_revive_checkpoint(self) -> None:
+        """A queued result from an older startup attempt stays inadmissible.
+
+        Returns:
+            None: Stop advances the active generation and a stale availability
+                event cannot start the Watcher or claim its checkpoint.
+        """
+        stale = replace(self.record, phase='prepared')
+        stale.save(self.lease)
+        app = object.__new__(MAIN.WatcherApp)
+        initialize_event_pump_fixture(app)
+        app._update_resume_generation = 2
+        app._update_resume_cancelled = True
+        app.exiting = False
+        app.events = queue.Queue()
+        app.events.put({
+            'kind': 'watcher_resume_available',
+            'payload': {
+                'continuation': stale, 'automatic': True,
+                'ordinary_restart': False, 'generation': 1,
+            },
+        })
+        app._continue_update_resume = mock.Mock()
+
+        MAIN.WatcherApp._drain_event_batch(app)
+
+        app._continue_update_resume.assert_not_called()
+        self.assertIsNone(getattr(app, '_resume_continuation', None))
+        self.assertEqual('prepared', WatcherContinuation.load(self.lease).phase)
+
+    def test_explicit_stop_cancels_both_restart_markers_before_late_offer(self) -> None:
+        """Stop revokes the durable pair and invalidates already queued offers.
+
+        Returns:
+            None: Both profile-owned markers become cancelled while accepted
+                photographs remain and a prior-generation offer is ignored.
+        """
+        record = replace(
+            self.record, source_version=MAIN.APP_VERSION,
+            target_version=MAIN.APP_VERSION, phase='prepared',
+            binding=MAIN.connection_binding(
+                MAIN.normalize_upload_url('https://gallery.example.test'),
+                'fixture-api-key',
+            ),
+        )
+        record.save(self.lease)
+        record.save(self.lease, ordinary_restart=True)
+        app = object.__new__(MAIN.WatcherApp)
+        app._update_resume_cancelled = False
+        app._update_resume_generation = 0
+        app._resume_continuation = None
+        app._update_continuation = None
+        app._resume_retry_available = False
+        app._after_update_nonce = None
+        app.flights = SimpleNamespace(lease=self.lease)
+        app.mode_owner = SimpleNamespace(view=mock.Mock(return_value=SimpleNamespace(
+            state='legacy', record=None,
+        )))
+        app.config = SimpleNamespace(
+            gallery_url='https://gallery.example.test',
+            api_key='fixture-api-key',
+        )
+        app._close_update_resume_context_key = mock.Mock()
+        app.write_log = mock.Mock()
+        MAIN.WatcherApp._cancel_ordinary_restart_for_action(app)
+
+        self.assertEqual('cancelled', WatcherContinuation.load(self.lease).phase)
+        self.assertEqual(
+            'cancelled', WatcherContinuation.load(
+                self.lease, ordinary_restart=True,
+            ).phase,
+        )
+        self.assertTrue(self.pending_photo.is_file())
+        app.exiting = False
+        app.events = queue.Queue()
+        app.events.put({
+            'kind': 'watcher_resume_available',
+            'payload': {
+                'continuation': record, 'automatic': True,
+                'ordinary_restart': True, 'generation': 0,
+            },
+        })
+        app._continue_update_resume = mock.Mock()
+        initialize_event_pump_fixture(app)
+
+        MAIN.WatcherApp._drain_event_batch(app)
+
+        app._continue_update_resume.assert_not_called()
+        self.assertIsNone(getattr(app, '_resume_continuation', None))
+
+    def test_event_pump_releases_prepared_worker_for_stale_generation(self) -> None:
+        """Discard a late prepared worker without leaking its linked lease.
+
+        Returns:
+            None: Event generation filtering releases only that event's idle
+                worker lease and dispatches no accepted photo.
+        """
+        worker, _events, dispatched = self.make_watcher()
+        owned_lease = mock.Mock()
+        worker._linked_lease = owned_lease
+        app = object.__new__(MAIN.WatcherApp)
+        app._update_resume_generation = 3
+        app._update_resume_context_target = None
+        app._close_update_resume_context_key = mock.Mock()
+        app.exiting = False
+        app.events = queue.Queue()
+        app.events.put({
+            'kind': 'watcher_resume_prepared',
+            'payload': {
+                'continuation': self.record, 'worker': worker,
+                'recorder': mock.Mock(), 'target': None, 'generation': 2,
+            },
+        })
+        initialize_event_pump_fixture(app)
+        app._update_resume_generation = 3
+
+        MAIN.WatcherApp._drain_event_batch(app)
+
+        owned_lease.release.assert_called_once_with()
+        self.assertFalse(worker.is_alive())
+        self.assertEqual([], dispatched)
+        app._close_update_resume_context_key.assert_not_called()
 
     def test_stale_prepared_worker_event_releases_without_starting_uploads(self) -> None:
         """A delayed result for an earlier claim cannot start its prepared worker.
@@ -1344,6 +1704,9 @@ class WatcherContinuationTests(unittest.TestCase):
         app.linking_manager = mock.Mock()
         app.linking_manager.resume_upload_session.return_value = session
         app.events = queue.Queue()
+        app.root = SimpleNamespace(after=mock.Mock())
+        app.status_var = mock.Mock()
+        initialize_event_pump_fixture(app)
 
         def inline_thread(
             *, target: Callable[[], None], name: str, daemon: bool,
@@ -1412,6 +1775,9 @@ class WatcherContinuationTests(unittest.TestCase):
         app.linking_manager = mock.Mock()
         app.linking_manager.resume_upload_session.return_value = session
         app.events = queue.Queue()
+        app.root = SimpleNamespace(after=mock.Mock())
+        app.status_var = mock.Mock()
+        initialize_event_pump_fixture(app)
 
         def inline_thread(
             *, target: Callable[[], None], name: str, daemon: bool,
@@ -1450,6 +1816,166 @@ class WatcherContinuationTests(unittest.TestCase):
             "saved_gallery_access_unverified",
             failure_event["payload"]["reason"],
         )
+
+    def test_linked_resume_retries_transient_gallery_read_without_losing_intent(self) -> None:
+        """A temporary server failure keeps the exact restart intent retryable.
+
+        Returns:
+            None: HTTP 503 queues a bounded retry event and retains the same
+                checkpoint without starting a watcher or discarding its queue.
+        """
+        issuer = "https://gallery.example.test/Galerie"
+        account_id = 19
+        gallery_id = 73
+        binding = linked_target_binding(issuer, account_id, gallery_id)
+        record = replace(
+            self.record, binding=binding, mode="linked",
+            approved_scope=UPLOAD_SCOPE,
+        )
+        session = mock.Mock()
+        session.approved_scope.return_value = UPLOAD_SCOPE
+        mode_record = SimpleNamespace(
+            mode="linked", issuer=issuer, account_id=account_id,
+            gallery_id=gallery_id, scope=UPLOAD_SCOPE,
+        )
+        app = object.__new__(MAIN.WatcherApp)
+        app._resume_continuation = record
+        app._update_resume_preparing = False
+        app._update_checkpoint_workers = ()
+        app._update_resume_deadline = (
+            time.monotonic() + TEST_RESUME_DEADLINE_SECONDS
+        )
+        app.exiting = False
+        app.mode_owner = SimpleNamespace(
+            view=mock.Mock(return_value=SimpleNamespace(
+                state="linked_active", record=mode_record,
+            )),
+        )
+        app.linking_manager = mock.Mock()
+        app.linking_manager.resume_upload_session.return_value = session
+        app.events = queue.Queue()
+        app.root = SimpleNamespace(after=mock.Mock())
+        app.status_var = mock.Mock()
+        initialize_event_pump_fixture(app)
+
+        def inline_thread(
+            *, target: Callable[[], None], name: str, daemon: bool,
+        ) -> SimpleNamespace:
+            """Run one isolated target verifier callback synchronously.
+
+            Args:
+                target (Callable[[], None]): Production verifier callback.
+                name (str): Fixed worker name used by the host.
+                daemon (bool): Host daemon-thread setting.
+
+            Returns:
+                SimpleNamespace: Thread-shaped object whose start runs callback.
+            """
+            return SimpleNamespace(start=target)
+
+        temporary_error = LinkingResponseError(
+            'linking', 'app_linking_galleries', 503, 'other', 'http_status',
+        )
+        with mock.patch.object(
+                MAIN.threading, "Thread", side_effect=inline_thread), \
+                mock.patch.object(
+                    MAIN, "verify_linked_upload_target",
+                    side_effect=temporary_error,
+                ):
+            MAIN.WatcherApp._continue_update_resume(app)
+
+        self.assertTrue(app._update_resume_preparing)
+        self.assertIs(record, app._resume_continuation)
+        event = app.events.get_nowait()
+        self.assertEqual("watcher_resume_retry", event["kind"])
+        self.assertEqual(
+            "temporary_target_verification_failure",
+            event["payload"]["reason"],
+        )
+        self.assertEqual("target_verification", event["payload"]["stage"])
+        app.events.put(event)
+        MAIN.WatcherApp._drain_event_batch(app)
+        self.assertFalse(app._update_resume_preparing)
+        self.assertEqual(
+            MAIN.UPDATE_CONTINUATION_TARGET_RETRY_MS,
+            app.root.after.call_args.args[0],
+        )
+        self.assertTrue(self.pending_photo.is_file())
+        app.linking_manager.start_photos_watcher.assert_not_called()
+
+    def test_linked_resume_does_not_retry_revoked_gallery_authority(self) -> None:
+        """Authentication refusal remains terminal and cannot become a retry.
+
+        Returns:
+            None: HTTP 403 reports revoked access while retaining the queue and
+                never starting another worker.
+        """
+        issuer = "https://gallery.example.test/Galerie"
+        account_id = 19
+        gallery_id = 73
+        binding = linked_target_binding(issuer, account_id, gallery_id)
+        record = replace(
+            self.record, binding=binding, mode="linked",
+            approved_scope=UPLOAD_SCOPE,
+        )
+        session = mock.Mock()
+        session.approved_scope.return_value = UPLOAD_SCOPE
+        mode_record = SimpleNamespace(
+            mode="linked", issuer=issuer, account_id=account_id,
+            gallery_id=gallery_id, scope=UPLOAD_SCOPE,
+        )
+        app = object.__new__(MAIN.WatcherApp)
+        app._resume_continuation = record
+        app._update_resume_preparing = False
+        app._update_checkpoint_workers = ()
+        app._update_resume_deadline = (
+            time.monotonic() + TEST_RESUME_DEADLINE_SECONDS
+        )
+        app.exiting = False
+        app.mode_owner = SimpleNamespace(
+            view=mock.Mock(return_value=SimpleNamespace(
+                state="linked_active", record=mode_record,
+            )),
+        )
+        app.linking_manager = mock.Mock()
+        app.linking_manager.resume_upload_session.return_value = session
+        app.events = queue.Queue()
+
+        def inline_thread(
+            *, target: Callable[[], None], name: str, daemon: bool,
+        ) -> SimpleNamespace:
+            """Run one isolated target verifier callback synchronously.
+
+            Args:
+                target (Callable[[], None]): Production verifier callback.
+                name (str): Fixed worker name used by the host.
+                daemon (bool): Host daemon-thread setting.
+
+            Returns:
+                SimpleNamespace: Thread-shaped object whose start runs callback.
+            """
+            return SimpleNamespace(start=target)
+
+        revoked = LinkingResponseError(
+            'linking', 'app_linking_galleries', 403, 'json', 'http_status',
+        )
+        with mock.patch.object(
+                MAIN.threading, "Thread", side_effect=inline_thread), \
+                mock.patch.object(
+                    MAIN, "verify_linked_upload_target", side_effect=revoked,
+                ):
+            MAIN.WatcherApp._continue_update_resume(app)
+
+        failure = app.events.get_nowait()
+        self.assertEqual("watcher_resume_failed", failure["kind"])
+        self.assertEqual(
+            "saved_gallery_access_revoked", failure["payload"]["reason"],
+        )
+        self.assertEqual(
+            "target_authorization", failure["payload"]["stage"],
+        )
+        self.assertTrue(self.pending_photo.is_file())
+        app.linking_manager.start_photos_watcher.assert_not_called()
 
     def test_linked_manager_uses_only_the_same_restored_account_and_target(self) -> None:
         """Keep resume inside current approved account and saved target guards.

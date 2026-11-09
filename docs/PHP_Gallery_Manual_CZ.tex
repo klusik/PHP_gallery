@@ -2010,7 +2010,9 @@ obnova zachová dlaždice a~aktualizuje stáří ověření. Velké varianty ná
 také zmenší dekódovaný rastr před alokací RGB.
 Indikátor \ui{Thumbnails} a~ovladač \ui{Photo storage} ve společné hlavičce
 mají kompaktní podobu pilulky Watcheru: ikony, krátké počty a~jednoduché pruhy,
-bez dlouhých popisků. Kontextové okno detailů se otevírá na vyžádání u~ovladače.
+bez dlouhých popisků. Panel detailů se otevírá na vyžádání pod ovladačem
+v~hlavičce a~zarovnává se k~pravému okraji viditelné klientské oblasti hlavního
+okna. Změna velikosti okna i~zobrazených hodnot udrží celý panel uvnitř.
 Ukazuje všechny typované uložené náhledy a~jejich velikost; detail odděluje
 běžnou kvótu od \ui{Keep preloaded} a~uvádí uchované náhledy, další média
 a~galerie. RAM znamená working set tohoto procesu ve Windows nebo resident set
@@ -2397,6 +2399,11 @@ obnovovací záznam bez přihlašovacích údajů. Během jeho stávající plat
 24~hodin aplikace obnoví přesný web/účet/galerii, ověří oprávnění a~naváže
 na stejnou frontu a~záznam s~novým dočasným přístupem. Stop, Finish a~odpojení
 tento záměr zruší; zastavené sledování se samo nespustí.
+Spuštění počká na připravenost režimu. Dočasná chyba čtení checkpointu nebo
+ověření galerie zachová stejný záměr pro omezené opakování; neplatný stav,
+změna identity či scope a~odvolané oprávnění nadále brání spuštění. Stop nebo
+odpojení zruší i~čekající opakování a~pozdní výsledky. Diagnostika uvede fázi
+a~pevný bezpečný důvod bez klíčů, obsahu checkpointu a~soukromých cest.
 Je nutné bezpečně uložené propojení galerie nebo nezměněný uložený API klíč.
 Vypršelé, odvolané nebo neuložené dočasné propojení vyžaduje běžné připojení;
 nejisté přenosy a~násilné ukončení ponechávají výslovnou obnovu.

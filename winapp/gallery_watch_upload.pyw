@@ -183,7 +183,7 @@ from uploader.simconnect_time import UtcSyncManager
 from uploader.game_presence import GamePresence
 from uploader.windows_game_processes import msfs_running
 from uploader.flight_jobs import (
-    SessionPlan, WatcherContinuation,
+    SessionPlan, WatcherContinuation, WatcherContinuationError,
     WATCHER_CONTINUATION_LIFETIME_SECONDS,
     connection_binding, read_document,
 )
@@ -192,7 +192,8 @@ from uploader.photos_workspace import (
     PHOTOS_INFO_PANE_WIDTH, PHOTOS_TREE_WIDTH, PhotosWorkspace,
 )
 from uploader.app_linking import (
-    LINKING_GALLERY_ID_MAX, LinkedGallery, LinkingError, LinkingSession,
+    LINKING_GALLERY_ID_MAX, LinkedGallery, LinkingError,
+    LinkingResponseError, LinkingSession,
 )
 from uploader.gallery_catalogue_cache import GalleryCatalogueCache
 from uploader.gallery_view_preferences import (
@@ -281,15 +282,22 @@ REQUIREMENTS_PATH = APP_DIR / "requirements.txt"
 # covers ordinary uploads; a slower unresolved transfer postpones installation
 # rather than letting setup terminate its writer.
 UPDATE_CHECKPOINT_TIMEOUT_SECONDS = 120.0
-# Purpose: Observe asynchronous continuation readiness without blocking Tk.
+# Purpose: Poll local readiness and retry transient checkpoint reads off Tk.
 # Type: int. Units: milliseconds. Scope: startup and cancelled update recovery.
-# Consumers: WatcherApp._continue_update_resume. Rationale: 250 ms provides
-# responsive phase feedback without adding another network worker.
+# Consumers: WatcherApp._inspect_update_continuation and
+# WatcherApp._continue_update_resume. Rationale: 250 ms keeps filesystem and
+# already-approved link readiness responsive within the existing deadline.
 UPDATE_CONTINUATION_POLL_MS = 250
-# Purpose: Bound waiting for an already approved saved link after restart.
+# Purpose: Space read-only gallery revalidation after transient server errors.
+# Type: int. Units: milliseconds. Scope: one automatic Watcher continuation.
+# Consumers: WatcherApp.drain_events. Rationale: 2000 ms avoids rapid repeated
+# gallery reads while the existing 60-second continuation deadline bounds work.
+UPDATE_CONTINUATION_TARGET_RETRY_MS = 2000
+# Purpose: Bound checkpoint and already-approved saved-link recovery.
 # Type: float. Units: seconds. Scope: one automatic Watcher continuation.
-# Consumers: WatcherApp._continue_update_resume. Rationale: 60 seconds allows
-# the existing bounded renewal/identity requests; missing authority stays paused.
+# Consumers: WatcherApp._inspect_update_continuation and
+# WatcherApp._continue_update_resume. Rationale: 60 seconds bounds transient
+# local read refusals and existing identity requests; missing authority pauses.
 UPDATE_CONTINUATION_LINK_SECONDS = 60.0
 # Purpose: Bound exception class names in safe continuation diagnostics.
 # Type: int. Units: characters. Scope: Watcher resume exception summaries.
@@ -7443,6 +7451,10 @@ class WatcherApp:
         self._after_update_nonce = after_update
         self._gui_mode_ready = False
         self._update_resume_attempted = False
+        self._update_resume_inspecting = False
+        self._update_resume_cancelled = False
+        self._update_resume_deadline = 0.0
+        self._update_resume_generation = 0
         self._update_resume_status = 'No update continuation requested.'
         self._update_checkpoint_ready = False
         self._update_continuation: Optional[WatcherContinuation] = None
@@ -10979,10 +10991,20 @@ class WatcherApp:
             None: Queues a profile-bound continuation or a fixed safe reason;
                 an ordinary startup never resumes a stopped capture.
         """
-        if self._update_resume_attempted or not self._gui_mode_ready:
+        if (self._update_resume_attempted or not self._gui_mode_ready
+                or getattr(self, '_update_resume_cancelled', False)
+                or getattr(self, '_update_resume_inspecting', False)):
             return
+        if self._update_resume_deadline <= 0.0:
+            self._update_resume_deadline = (
+                time.monotonic() + UPDATE_CONTINUATION_LINK_SECONDS
+            )
+        self._update_resume_generation += 1
+        generation = self._update_resume_generation
         self._update_resume_attempted = True
+        self._update_resume_inspecting = True
         requested = self._after_update_nonce
+        inspection_stage = 'workspace_lease'
 
         def inspect() -> None:
             """Verify saved intent without touching Tk or uploading media.
@@ -10990,14 +11012,37 @@ class WatcherApp:
             Returns:
                 None: Queues only validated checkpoint metadata or a safe failure.
             """
+            nonlocal inspection_stage
+
+            def reject(reason: str) -> None:
+                """Queue a fixed local diagnosis for a rejected checkpoint.
+
+                Args:
+                    reason (str): Fixed stage-specific reason identifier.
+
+                Returns:
+                    None: Publishes no checkpoint contents or private values.
+                """
+                self.events.put({
+                    'kind': 'watcher_resume_failed',
+                    'payload': {
+                        'reason': reason, 'stage': inspection_stage,
+                        'generation': generation,
+                    },
+                })
+
             try:
+                if getattr(self, '_update_resume_cancelled', False):
+                    return
                 automatic = requested is not None
                 lease = self.flights.lease
                 if lease is None:
                     raise ValueError('The flight workspace is unavailable.')
+                inspection_stage = 'primary_checkpoint'
                 saved = WatcherContinuation.load(lease)
                 ordinary_restart = False
                 if requested is not None:
+                    inspection_stage = 'update_nonce_and_version'
                     if (saved is None or saved.update_session != requested
                             or saved.phase not in ('prepared', 'claimed')
                             or APP_VERSION not in (
@@ -11005,6 +11050,7 @@ class WatcherApp:
                             )):
                         raise ValueError('No matching update continuation.')
                 elif saved is not None:
+                    inspection_stage = 'ordinary_restart_mirror'
                     ordinary = WatcherContinuation.load(
                         lease, ordinary_restart=True,
                     )
@@ -11017,6 +11063,7 @@ class WatcherApp:
                     ):
                         ordinary_restart = True
                     else:
+                        inspection_stage = 'ordinary_restart_not_admitted'
                         return
                 elif requested is not None:
                     raise ValueError('The update continuation is missing.')
@@ -11024,6 +11071,7 @@ class WatcherApp:
                     # Older helpers cannot pass a nonce. Admit only an actual,
                     # verified installed-version transition plus an active API
                     # session with no potentially interrupted accepted upload.
+                    inspection_stage = 'legacy_update_bridge'
                     from uploader.update_helper import find_legacy_update_ticket
 
                     ticket = find_legacy_update_ticket(
@@ -11059,8 +11107,10 @@ class WatcherApp:
                     )
                     saved.save(lease)
                 if ordinary_restart:
+                    inspection_stage = 'ordinary_session_and_queue'
                     pending = self.flights.pending(binding=saved.binding)
                     if len(pending) != 1 or pending[0].session_id != saved.session_id:
+                        reject('restart_session_mismatch')
                         return
                     plan = pending[0]
                     queue_row = read_document(plan.directory / 'watch-drain.json')
@@ -11071,20 +11121,24 @@ class WatcherApp:
                             or queue_row.get('initial_captured') is not True
                             or queue_row.get('frozen') is not False
                             or queue_row.get('cutoff') != 0 or queue_row.get('error')):
+                        reject('restart_queue_needs_review')
                         return
                     if saved.mode == 'linked':
+                        inspection_stage = 'ordinary_linked_identity'
                         if (mode_record is None or mode_record.mode != 'linked'
                                 or mode_record.scope != saved.approved_scope
                                 or linked_target_binding(
                                     mode_record.issuer, mode_record.account_id,
                                     mode_record.gallery_id,
                                 ) != saved.binding):
+                            reject('restart_linked_identity_changed')
                             return
                     elif (saved.mode != 'legacy' or mode_view.state != 'legacy'
                           or saved.binding != connection_binding(
                               normalize_upload_url(self.config.gallery_url),
                               self.config.api_key,
                           )):
+                        reject('restart_legacy_target_changed')
                         return
                     automatic = True
                 self.events.put({
@@ -11092,17 +11146,73 @@ class WatcherApp:
                     'payload': {
                         'continuation': saved, 'automatic': automatic,
                         'ordinary_restart': ordinary_restart,
+                        'generation': generation,
                     },
                 })
-            except (OSError, ValueError, RuntimeError):
+            except OSError:
+                if (not getattr(self, '_update_resume_cancelled', False)
+                        and time.monotonic() < self._update_resume_deadline):
+                    self.events.put({
+                        'kind': 'watcher_resume_inspection_retry',
+                        'payload': {
+                            'reason': 'temporary_checkpoint_read_failure',
+                            'stage': inspection_stage,
+                            'generation': generation,
+                        },
+                    })
+                    return
                 self.events.put({
                     'kind': 'watcher_resume_failed',
-                    'payload': {'reason': 'saved_update_state_unverified'},
+                    'payload': {
+                        'reason': 'checkpoint_read_unavailable',
+                        'stage': inspection_stage,
+                        'generation': generation,
+                    },
+                })
+            except WatcherContinuationError as error:
+                self.events.put({
+                    'kind': 'watcher_resume_failed',
+                    'payload': {
+                        'reason': 'checkpoint_' + error.reason,
+                        'stage': inspection_stage,
+                        'generation': generation,
+                    },
+                })
+            except (ValueError, RuntimeError):
+                reason_by_stage = {
+                    'workspace_lease': 'workspace_lease_unavailable',
+                    'primary_checkpoint': 'primary_checkpoint_unverified',
+                    'update_nonce_and_version': 'update_nonce_or_version_mismatch',
+                    'ordinary_restart_mirror': 'restart_mirror_unverified',
+                    'legacy_update_bridge': 'legacy_bridge_unverified',
+                    'ordinary_session_and_queue': 'restart_queue_unverified',
+                    'ordinary_linked_identity': 'restart_linked_identity_changed',
+                }
+                self.events.put({
+                    'kind': 'watcher_resume_failed',
+                    'payload': {
+                        'reason': reason_by_stage.get(
+                            inspection_stage, 'checkpoint_admission_unverified',
+                        ),
+                        'stage': inspection_stage,
+                        'generation': generation,
+                    },
                 })
 
-        threading.Thread(
-            target=inspect, name='PHPGalleryUpdateResumeInspect', daemon=True,
-        ).start()
+        try:
+            threading.Thread(
+                target=inspect, name='PHPGalleryUpdateResumeInspect', daemon=True,
+            ).start()
+        except RuntimeError:
+            self._update_resume_inspecting = False
+            self.events.put({
+                'kind': 'watcher_resume_failed',
+                'payload': {
+                    'reason': 'inspection_worker_unavailable',
+                    'stage': 'checkpoint_inspection',
+                    'generation': generation,
+                },
+            })
 
     def _continue_update_resume(self) -> None:
         """Wait for owned writers and fresh linked authority without blocking Tk.
@@ -11113,6 +11223,9 @@ class WatcherApp:
         record = self._resume_continuation
         if record is None or self.exiting or self._update_resume_preparing:
             return
+        if getattr(self, '_update_resume_cancelled', False):
+            return
+        generation = getattr(self, '_update_resume_generation', 0)
         if any(worker is not None and worker.is_alive()
                for worker in self._update_checkpoint_workers):
             if time.monotonic() >= self._update_resume_deadline:
@@ -11165,9 +11278,44 @@ class WatcherApp:
                         record.approved_scope, target_record.gallery_id,
                     )
                     self.events.put({
-                        'kind': 'watcher_resume_target', 'payload': {'target': target},
+                        'kind': 'watcher_resume_target',
+                        'payload': {
+                            'target': target, 'generation': generation,
+                        },
                     })
                 except Exception as error:
+                    if isinstance(error, LinkingResponseError):
+                        transient_reasons = {
+                            'dns_failure', 'connect_failure', 'tls_failure',
+                            'timeout', 'transport_failure', 'throttled',
+                        }
+                        transient = (
+                            error.status == 429
+                            or error.status is not None
+                            and 500 <= error.status <= 599
+                            or error.status is None
+                            and error.reason in transient_reasons
+                        )
+                        if transient:
+                            self.events.put({
+                                'kind': 'watcher_resume_retry',
+                                'payload': {
+                                    'reason': 'temporary_target_verification_failure',
+                                    'stage': 'target_verification',
+                                    'generation': generation,
+                                },
+                            })
+                            return
+                        if error.status in (401, 403):
+                            self.events.put({
+                                'kind': 'watcher_resume_failed',
+                                'payload': {
+                                    'reason': 'saved_gallery_access_revoked',
+                                    'stage': 'target_authorization',
+                                    'generation': generation,
+                                },
+                            })
+                            return
                     error_type = type(error).__name__
                     if (not error_type.isidentifier()
                             or len(error_type) > UPDATE_RESUME_EXCEPTION_CLASS_MAX_CHARS):
@@ -11180,7 +11328,11 @@ class WatcherApp:
                     ))
                     self.events.put({
                         'kind': 'watcher_resume_failed',
-                        'payload': {'reason': 'saved_gallery_access_unverified'},
+                        'payload': {
+                            'reason': 'saved_gallery_access_unverified',
+                            'stage': 'target_verification',
+                            'generation': generation,
+                        },
                     })
 
             threading.Thread(
@@ -11189,11 +11341,12 @@ class WatcherApp:
         except (OSError, ValueError, RuntimeError):
             self._update_resume_failed('saved_target_changed')
 
-    def _update_resume_failed(self, reason: str) -> None:
+    def _update_resume_failed(self, reason: str, *, stage: str = 'resume') -> None:
         """Leave unfinished work recoverable with a fixed non-secret diagnosis.
 
         Args:
             reason (str): Locally authored continuation failure identifier.
+            stage (str): Locally authored validation or recovery phase.
 
         Returns:
             None: Retains credentials and queue while showing the next action.
@@ -11201,8 +11354,10 @@ class WatcherApp:
         # The identifier is diagnostic data, never server text or an exception.
         if re.fullmatch(r'[a-z_]+', reason) is None:
             reason = 'continuation_unverified'
+        if re.fullmatch(r'[a-z_]+', stage) is None:
+            stage = 'resume'
         self._close_update_resume_context_key()
-        self._update_resume_status = 'stage=resume; reason=' + reason
+        self._update_resume_status = 'stage=' + stage + '; reason=' + reason
         self._update_resume_preparing = False
         self._resume_continuation = None
         messages = {
@@ -11222,6 +11377,38 @@ class WatcherApp:
                 'Saved screenshot or flight data needs review. Copy diagnostics.',
             'saved_update_state_unverified':
                 'The saved update state could not be verified. Review pending uploads.',
+            'primary_checkpoint_unverified':
+                'The saved Watcher checkpoint could not be verified. Review pending uploads.',
+            'restart_mirror_unverified':
+                'The restart checkpoint could not be verified. Review pending uploads.',
+            'restart_queue_unverified':
+                'The saved Watcher queue could not be verified. Review pending uploads.',
+            'restart_queue_needs_review':
+                'The saved Watcher queue needs review before resuming.',
+            'restart_session_mismatch':
+                'The saved Watcher session no longer matches its checkpoint.',
+            'restart_linked_identity_changed':
+                'The linked account or gallery changed. Select the original target.',
+            'restart_legacy_target_changed':
+                'The saved upload target changed. Select it before resuming.',
+            'update_nonce_or_version_mismatch':
+                'The update restart could not be matched to this checkpoint.',
+            'workspace_lease_unavailable':
+                'The saved Watcher workspace is unavailable. Review pending uploads.',
+            'legacy_bridge_unverified':
+                'The older update handoff could not be verified. Review pending uploads.',
+            'checkpoint_admission_unverified':
+                'The saved Watcher checkpoint could not be verified. Review pending uploads.',
+            'inspection_worker_unavailable':
+                'The saved Watcher checkpoint could not be inspected. Review pending uploads.',
+            'checkpoint_expired':
+                'The saved Watcher checkpoint expired. Review pending uploads.',
+            'checkpoint_profile_mismatch':
+                'The saved Watcher checkpoint belongs to a different profile.',
+            'checkpoint_invalid_scope':
+                'The saved linked permission scope changed. Reconnect the original gallery.',
+            'saved_gallery_access_revoked':
+                'The original gallery permission was refused. Reconnect that gallery.',
             'continuation_worker_stopped':
                 'Watcher stopped before resume was confirmed. Review pending uploads before trying again.',
             'saved_watcher_key_close_pending':
@@ -11337,6 +11524,7 @@ class WatcherApp:
             bool: True once this owner accepts responsibility for preparation.
         """
         record = self._resume_continuation
+        generation = getattr(self, '_update_resume_generation', 0)
         lease = self.flights.lease
         staged_target = getattr(self, '_update_resume_context_target', None)
         if (record is not None and record.contextual
@@ -11446,6 +11634,7 @@ class WatcherApp:
                     'payload': {
                         'continuation': claimed, 'worker': worker,
                         'recorder': recorder, 'target': target,
+                        'generation': generation,
                     },
                 })
             except Exception as error:
@@ -11463,7 +11652,11 @@ class WatcherApp:
                 ))
                 self.events.put({
                     'kind': 'watcher_resume_failed',
-                    'payload': {'reason': 'saved_session_needs_review'},
+                    'payload': {
+                        'reason': 'saved_session_needs_review',
+                        'stage': operation,
+                        'generation': generation,
+                    },
                 })
 
         try:
@@ -11548,7 +11741,8 @@ class WatcherApp:
         if not valid:
             if worker._linked_lease is not None:
                 worker._linked_lease.release()
-            self._close_update_resume_context_key()
+            if target is getattr(self, '_update_resume_context_target', None):
+                self._close_update_resume_context_key()
             return
         try:
             lease = self.flights.lease
@@ -12227,6 +12421,11 @@ class WatcherApp:
         Returns:
             None: Revokes ordinary consent while leaving session data intact.
         """
+        self._update_resume_cancelled = True
+        self._update_resume_generation += 1
+        self._discard_update_resume_intent(explicit=True)
+        self._resume_continuation = None
+        self._resume_retry_available = False
         try:
             lease = self.flights.lease
             ordinary = (WatcherContinuation.load(lease, ordinary_restart=True)
@@ -12235,7 +12434,7 @@ class WatcherApp:
             ordinary = None
         if ordinary is not None and ordinary.phase in (
                 'preparing', 'prepared', 'claimed'):
-            self._discard_update_resume_intent()
+            self._discard_update_resume_intent(explicit=True)
         self._cancel_ordinary_restart_intent()
 
     def resume_flight_photos(self, directory: Path) -> Optional[WatcherThread]:
@@ -13102,6 +13301,8 @@ class WatcherApp:
                     self.manual_worker, self.ai_worker,
                 ))):
             raise RuntimeError('Finish the current accepted operation before updating.')
+        self._update_resume_cancelled = False
+        self._update_resume_generation += 1
         self._update_checkpoint_ready = False
         self._update_continuation = None
         self._update_context_target = None
@@ -13249,8 +13450,12 @@ class WatcherApp:
         self._update_resume_status = 'stage=resume; reason=handoff_cancelled'
         self._continue_update_resume()
 
-    def _discard_update_resume_intent(self) -> None:
+    def _discard_update_resume_intent(self, *, explicit: bool = False) -> None:
         """Persist an explicit Stop/Quit without deleting unfinished work.
+
+        Args:
+            explicit (bool): Whether Stop, unlink or true exit explicitly
+                revokes an unclaimed startup nonce.
 
         Returns:
             None: Cancels only automatic continuation; photos, telemetry,
@@ -13261,10 +13466,11 @@ class WatcherApp:
             or getattr(self, '_update_continuation', None)
         )
         offered_retry = getattr(self, '_resume_retry_available', False) is True
+        requested_nonce = getattr(self, '_after_update_nonce', None)
         self._resume_continuation = None
         self._resume_retry_available = False
         self._close_update_resume_context_key()
-        if owned is None and not offered_retry:
+        if owned is None and not offered_retry and not explicit:
             return
         try:
             lease = self.flights.lease
@@ -13282,7 +13488,6 @@ class WatcherApp:
                          or current.update_session == owned.update_session)
                 )
             else:
-                requested_nonce = getattr(self, '_after_update_nonce', None)
                 if requested_nonce is not None and current.update_session != requested_nonce:
                     return
                 if (APP_VERSION not in (
@@ -13302,8 +13507,7 @@ class WatcherApp:
                 elif current.mode == 'linked':
                     mode_record = mode_view.record
                     matches_owner = (
-                        mode_view.state == 'linked_active'
-                        and mode_record is not None
+                        mode_record is not None
                         and mode_record.mode == 'linked'
                         and mode_record.scope == current.approved_scope
                         and linked_target_binding(
@@ -13423,7 +13627,7 @@ class WatcherApp:
         self.utc_sync.stop()
         if (not ordinary_prepared
                 and getattr(self, '_ordinary_restart_resuming', False) is not True):
-            self._discard_update_resume_intent()
+            self._discard_update_resume_intent(explicit=True)
         self.exiting = True
         self._cancel_event_ui_callbacks()
         self._set_watcher_recording(False)
@@ -13500,6 +13704,8 @@ class WatcherApp:
         Returns:
             None: Queues either a safe close event or a recoverable failure.
         """
+        self._update_resume_cancelled = False
+        self._update_resume_generation += 1
         try:
             self.wait_for_update_checkpoint()
             record = self._update_continuation
@@ -14497,6 +14703,22 @@ class WatcherApp:
             if isinstance(event, dict):
                 kind = str(event.get("kind", "") or "")
                 payload = event.get("payload", {}) if isinstance(event.get("payload", {}), dict) else {}
+                if (kind.startswith('watcher_resume_')
+                        and 'generation' in payload
+                        and payload.get('generation') != getattr(
+                            self, '_update_resume_generation', 0)):
+                    if kind == 'watcher_resume_prepared':
+                        worker = payload.get('worker')
+                        if (isinstance(worker, WatcherThread)
+                                and worker._linked_lease is not None):
+                            worker._linked_lease.release()
+                        target = payload.get('target')
+                        if (isinstance(target, LinkedUploadTarget)
+                                and target is getattr(
+                                    self, '_update_resume_context_target', None,
+                                )):
+                            self._close_update_resume_context_key()
+                    continue
                 if kind == 'gui_mode_initialized':
                     self._gui_mode_ready = payload.get('verified') is True
                     if self._gui_mode_ready:
@@ -14521,6 +14743,10 @@ class WatcherApp:
                     )
                     continue
                 if kind == 'watcher_resume_available':
+                    self._update_resume_inspecting = False
+                    if (self.exiting or getattr(
+                            self, '_update_resume_cancelled', False)):
+                        continue
                     record = payload.get('continuation')
                     if isinstance(record, WatcherContinuation):
                         self._resume_continuation = record
@@ -14546,9 +14772,65 @@ class WatcherApp:
                             self.refresh_watcher_action()
                     continue
                 if kind == 'watcher_resume_failed':
-                    self._update_resume_failed(str(payload.get('reason', 'continuation_unverified')))
+                    self._update_resume_inspecting = False
+                    if (self.exiting or getattr(
+                            self, '_update_resume_cancelled', False)):
+                        continue
+                    self._update_resume_failed(
+                        str(payload.get('reason', 'continuation_unverified')),
+                        stage=str(payload.get('stage', 'resume')),
+                    )
+                    continue
+                if kind == 'watcher_resume_inspection_retry':
+                    self._update_resume_inspecting = False
+                    if (self.exiting or getattr(
+                            self, '_update_resume_cancelled', False)):
+                        continue
+                    if time.monotonic() >= self._update_resume_deadline:
+                        self._update_resume_failed(
+                            'checkpoint_read_unavailable',
+                            stage=str(payload.get('stage', 'checkpoint_read')),
+                        )
+                        continue
+                    self._update_resume_attempted = False
+                    self._update_resume_status = (
+                        'stage=' + str(payload.get('stage', 'checkpoint_read'))
+                        + '; reason=temporary_checkpoint_read_failure'
+                    )
+                    self.root.after(
+                        UPDATE_CONTINUATION_POLL_MS,
+                        self._inspect_update_continuation,
+                    )
+                    continue
+                if kind == 'watcher_resume_retry':
+                    if (self._resume_continuation is None or self.exiting
+                            or getattr(self, '_update_resume_cancelled', False)
+                            or not self._update_resume_preparing):
+                        continue
+                    self._update_resume_preparing = False
+                    if time.monotonic() >= self._update_resume_deadline:
+                        self._update_resume_failed(
+                            'saved_gallery_access_unavailable',
+                            stage='target_verification',
+                        )
+                        continue
+                    self._update_resume_status = (
+                        'stage=target_verification; '
+                        'reason=temporary_target_verification_failure'
+                    )
+                    self.status_var.set(
+                        'The original gallery is temporarily unavailable. '
+                        'Retrying safely…',
+                    )
+                    self.root.after(
+                        UPDATE_CONTINUATION_TARGET_RETRY_MS,
+                        self._continue_update_resume,
+                    )
                     continue
                 if kind == 'watcher_resume_target':
+                    if (self.exiting or getattr(
+                            self, '_update_resume_cancelled', False)):
+                        continue
                     target = payload.get('target')
                     if isinstance(target, LinkedUploadTarget):
                         self._accept_update_resume_target(target)

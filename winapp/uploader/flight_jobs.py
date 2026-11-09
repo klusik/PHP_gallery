@@ -859,6 +859,31 @@ class WorkspaceLease:
                 directory.close()
 
 
+class WatcherContinuationError(ValueError):
+    """Identify a safe Watcher continuation validation failure.
+
+    Args:
+        reason (str): Fixed local category without checkpoint contents.
+        message (str): Existing compatible validation message.
+
+    Returns:
+        None: Creates a ValueError-compatible diagnostic with a safe reason.
+    """
+
+    def __init__(self, reason: str, message: str) -> None:
+        """Store one fixed reason and preserve the existing error message.
+
+        Args:
+            reason (str): Fixed category selected by the validation owner.
+            message (str): Existing human-readable validation message.
+
+        Returns:
+            None: Initializes the ValueError and its safe reason attribute.
+        """
+        self.reason = reason
+        super().__init__(message)
+
+
 @dataclass(frozen=True)
 class WatcherContinuation:
     """Bind ordinary or updater restarts without credentials.
@@ -949,7 +974,8 @@ class WatcherContinuation:
             WatcherContinuation: Validated non-secret checkpoint data.
 
         Raises:
-            ValueError: Shape, identity, mode or version is malformed.
+            WatcherContinuationError: Checkpoint validation failed with a
+                fixed safe ``reason`` category.
         """
         required = {
             'schema_version', 'session_id', 'binding', 'profile_hash',
@@ -959,7 +985,9 @@ class WatcherContinuation:
         }
         if (set(row) != required or type(row.get('schema_version')) is not int
                 or row['schema_version'] != 1):
-            raise ValueError('Update continuation metadata is malformed.')
+            raise WatcherContinuationError(
+                'malformed_shape', 'Update continuation metadata is malformed.',
+            )
         for name, pattern in (
             ('session_id', r'[0-9a-f]{32}'),
             ('binding', r'[0-9a-f]{64}'),
@@ -970,33 +998,57 @@ class WatcherContinuation:
         ):
             value = row[name]
             if not isinstance(value, str) or re.fullmatch(pattern, value) is None:
-                raise ValueError('Update continuation identity is malformed.')
+                raise WatcherContinuationError(
+                    'malformed_identity',
+                    'Update continuation identity is malformed.',
+                )
         mode, phase = row['mode'], row['phase']
         created, legacy_pid = row['created'], row['legacy_source_pid']
         scope = row['approved_scope']
         if not isinstance(scope, str):
-            raise ValueError('Update continuation scope is malformed.')
+            raise WatcherContinuationError(
+                'invalid_scope', 'Update continuation scope is malformed.',
+            )
         if mode == 'linked':
             from uploader.app_linking import UPLOAD_SCOPE, scope_base
 
             if scope_base(scope) != UPLOAD_SCOPE:
-                raise ValueError('Update continuation scope is malformed.')
+                raise WatcherContinuationError(
+                    'invalid_scope', 'Update continuation scope is malformed.',
+                )
         elif scope:
-            raise ValueError('An API-key continuation cannot carry linked scope.')
-        if (mode not in ('legacy', 'linked')
-                or phase not in (
+            raise WatcherContinuationError(
+                'invalid_scope',
+                'An API-key continuation cannot carry linked scope.',
+            )
+        if mode not in ('legacy', 'linked'):
+            raise WatcherContinuationError(
+                'malformed_identity', 'Update continuation identity is malformed.',
+            )
+        if (phase not in (
                     'preparing', 'prepared', 'claimed', 'consumed', 'cancelled',
                 )
-                or not isinstance(row['contextual'], bool)
+                or (phase != 'preparing' and not row['update_session'])):
+            raise WatcherContinuationError(
+                'invalid_phase',
+                'Update continuation does not match this profile.',
+            )
+        if (not isinstance(row['contextual'], bool)
                 or type(created) not in (int, float)
                 or not isinstance(created, (int, float))
                 or not 0.0 <= float(created) < float('inf')
                 or type(legacy_pid) is not int or legacy_pid < 0
-                or row['profile_hash'] != cls.profile_digest(root)
-                or (phase != 'preparing' and not row['update_session'])
                 or (mode == 'legacy' and row['contextual'])
                 or (legacy_pid and (mode != 'legacy' or row['contextual']))):
-            raise ValueError('Update continuation does not match this profile.')
+            raise WatcherContinuationError(
+                'malformed_identity',
+                'Update continuation does not match this profile.',
+            )
+        if row['profile_hash'] != cls.profile_digest(root):
+            raise WatcherContinuationError(
+                'profile_mismatch',
+                'Update continuation does not match this profile.',
+            )
         return cls(
             session_id=str(row['session_id']), binding=str(row['binding']),
             profile_hash=str(row['profile_hash']),
@@ -1023,7 +1075,9 @@ class WatcherContinuation:
             WatcherContinuation | None: Verified checkpoint, or None if absent.
 
         Raises:
-            ValueError: Metadata is malformed, redirected, expired or replaced.
+            WatcherContinuationError: Checkpoint validation failed with a
+                fixed safe ``reason`` category.
+            ValueError: The native workspace lease no longer verifies.
             OSError: Its physical identity or bytes cannot be read safely.
         """
         lease.verify()
@@ -1040,18 +1094,25 @@ class WatcherContinuation:
                 or path.is_symlink()
                 or (getattr(named, 'st_file_attributes', 0)
                     & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))):
-            raise ValueError('Update continuation metadata is redirected.')
+            raise WatcherContinuationError(
+                'redirected', 'Update continuation metadata is redirected.',
+            )
         with path.open('rb') as source:
             opened = os.fstat(source.fileno())
             if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
-                raise ValueError('Update continuation metadata was replaced.')
+                raise WatcherContinuationError(
+                    'replaced', 'Update continuation metadata was replaced.',
+                )
             payload = source.read(WATCHER_CONTINUATION_MAX_BYTES + 1)
         after = path.lstat()
         if ((after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
                 != (named.st_dev, named.st_ino, named.st_size, named.st_mtime_ns)
                 or after.st_nlink != 1
                 or len(payload) > WATCHER_CONTINUATION_MAX_BYTES):
-            raise ValueError('Update continuation metadata changed or is oversized.')
+            raise WatcherContinuationError(
+                'changed_or_oversized',
+                'Update continuation metadata changed or is oversized.',
+            )
         try:
             row = json.loads(
                 payload.decode('utf-8'),
@@ -1060,14 +1121,21 @@ class WatcherContinuation:
                 parse_constant=_reject_mode_history_constant,
             )
         except (UnicodeError, ValueError, RecursionError):
-            raise ValueError('Update continuation metadata is malformed.') from None
+            raise WatcherContinuationError(
+                'malformed_json', 'Update continuation metadata is malformed.',
+            ) from None
         if not isinstance(row, dict):
-            raise ValueError('Update continuation metadata is malformed.')
+            raise WatcherContinuationError(
+                'malformed_json', 'Update continuation metadata is malformed.',
+            )
         result = cls.from_payload(row, lease.root)
         age = time.time() - result.created
         if (result.phase in ('preparing', 'prepared', 'claimed')
                 and not 0.0 <= age <= WATCHER_CONTINUATION_LIFETIME_SECONDS):
-            raise ValueError('Update continuation expired; explicit resume is required.')
+            raise WatcherContinuationError(
+                'expired',
+                'Update continuation expired; explicit resume is required.',
+            )
         lease.verify()
         return result
 

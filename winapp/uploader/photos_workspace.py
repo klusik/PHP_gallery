@@ -3411,11 +3411,43 @@ class PhotosWorkspace(ttk.Frame):
         if card is None or card is not self._context_card:
             return
         x, y = self._context_xy
-        width, height = card.winfo_reqwidth(), card.winfo_reqheight()
         surface = self._context_surface
+        width = max(card.winfo_reqwidth(), card.winfo_width())
+        height = max(card.winfo_reqheight(), card.winfo_height())
+        if self._context_origin is self._storage_button:
+            # The header and Photos occupy different branches of the window.
+            # Re-read the trigger after every layout rather than retaining the
+            # screen coordinates captured before a resize or a text update.
+            y = (self._storage_button.winfo_rooty()
+                 + self._storage_button.winfo_height()
+                 - surface.winfo_rooty())
+            pending = list(card.winfo_children())
+            while pending:
+                child = pending.pop()
+                if child.winfo_ismapped():
+                    width = max(
+                        width, child.winfo_rootx() + child.winfo_width()
+                        - card.winfo_rootx(),
+                    )
+                pending.extend(child.winfo_children())
+        top = self.winfo_toplevel()
+        right = min(
+            surface.winfo_width(),
+            top.winfo_rootx() + top.winfo_width() - surface.winfo_rootx(),
+        )
+        bottom = min(
+            surface.winfo_height(),
+            top.winfo_rooty() + top.winfo_height() - surface.winfo_rooty(),
+        )
+        if self._context_origin is self._storage_button:
+            # Align the right edge with the visible client/surface intersection.
+            x = right - width
         card.place(
-            x=max(0, min(x, surface.winfo_width() - width)),
-            y=max(0, min(y, surface.winfo_height() - height)),
+            x=max(0, min(x, right - width)),
+            y=max(0, min(y, bottom - height)),
+            # Coordinates above use the surface's exterior root origin.
+            # Tk's default inside mode adds its internal border/padding again.
+            bordermode='outside',
         )
         card.lift()
 

@@ -2075,7 +2075,9 @@ behåller rutorna och får aktuella kontrolltider. Stora JPEG-miniatyrvarianter
 minskar också avkodningsrastret före RGB-allokering.
 Indikatorn \ui{Thumbnails} och kontrollen \ui{Photo storage} i den gemensamma
 rubriken har Watcher-pillens kompakta stil: ikoner, korta tal och enkla staplar
-utan långa etiketter. Detaljens popup öppnas vid behov, förankrad vid kontrollen.
+utan långa etiketter. Detaljens popup öppnas vid behov under rubrikens kontroll
+och följer högerkanten av huvudfönstrets synliga klientyta. När fönstrets storlek
+eller värdena ändras hålls hela panelen inom denna yta.
 Den visar alla typade sparade miniatyrer och deras byte; detaljerna skiljer
 vanlig kvot från \ui{Keep preloaded} och visar sparade miniatyrer, andra medier
 och gallerier separat. RAM avser bara denna Windows-process working set eller
@@ -2489,7 +2491,13 @@ Watcher-nyckeln stängts innan en separat omstartspost utan inloggningsuppgifter
 sparas. Inom dess befintliga livslängd på 24~timmar återställs exakt sparat
 konto och galleri och behörigheten kontrolleras före samma kö och inspelning
 får ny tillfällig åtkomst. Stop, Finish och frånkoppling tar bort avsikten;
-stoppad bevakning förblir stoppad. En säkert sparad gallerilänk eller oförändrad
+stoppad bevakning förblir stoppad. Starten väntar på att läget är klart.
+Tillfälliga fel vid läsning av omstartsposten eller kontroll av galleriet
+behåller samma avsikt för begränsade återförsök; ogiltigt tillstånd, ändrad
+identitet eller scope och återkallad åtkomst blockerar fortsatt start. Stop
+eller frånkoppling avbryter även väntande försök och sena resultat. Diagnostiken
+anger fas och fast säker orsak utan nycklar, postens innehåll eller privata sökvägar.
+En säkert sparad gallerilänk eller oförändrad
 sparad API-nyckel krävs. Utgångna, återkallade eller osparade tillfälliga länkar
 behöver normal återanslutning; osäkra överföringar och tvingat avslut behåller
 uttrycklig återställning.

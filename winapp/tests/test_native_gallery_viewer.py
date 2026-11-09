@@ -5373,11 +5373,13 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace.destroy()
 
     def test_storage_quota_applies_on_selection_without_save(self) -> None:
-        """Persist quota selection directly and keep failures in the same card.
+        """Persist quota and keep the real header's storage card in view.
 
         Returns:
             None: One background write owns the disabled selector, success
                 updates the observed limit, and failure restores its value.
+                Desktop, narrow and resized header layouts retain the card,
+                all mapped descendants and final values within the client.
         """
         from PIL import ImageGrab
 
@@ -5386,10 +5388,57 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session = self._session(page, presentation, image_bytes)
         gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Storage graphics')
         session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
-        workspace = photos_workspace.PhotosWorkspace(
-            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        # Mirror the app's padded outer surface and header/status nesting;
+        # the storage trigger is a sibling of the Photos workspace, not its
+        # child, and the watcher indicator occupies the rest of the status.
+        outer = ttk.Frame(self.root, padding=(16, 12, 16, 10))
+        outer.pack(fill='both', expand=True)
+        outer.columnconfigure(1, weight=1)
+        outer.rowconfigure(2, weight=1)
+        header = ttk.Frame(outer)
+        header.grid(row=0, column=0, columnspan=2, sticky='ew', pady=(0, 10))
+        header.columnconfigure(1, weight=1)
+        ttk.Label(header, text='PHP Gallery').grid(row=0, column=0, sticky='w')
+        ttk.Label(header, text='Your gallery on autopilot').grid(
+            row=1, column=0, sticky='w',
         )
-        workspace.pack(fill='both', expand=True)
+        status_header = ttk.Frame(header)
+        status_header.grid(row=0, column=2, rowspan=2, sticky='e')
+        storage_header = ttk.Frame(status_header)
+        storage_header.pack(side='left', padx=(0, 10))
+        tk.Canvas(
+            status_header, width=16, height=16, highlightthickness=0, bd=0,
+        ).pack(side='left', padx=(0, 6))
+        watcher = ui_theme.GlassCard(header, padding=(8, 4))
+        watcher.grid(
+            row=0, column=1, rowspan=2, sticky='e', padx=(12, 10),
+        )
+        for text, padding in (
+            ('●', (0, 8)), ('▧', (0, 3)), ('0', (0, 8)),
+            ('◷', (0, 3)), ('–', (0, 0)),
+        ):
+            ttk.Label(watcher, text=text, style='Card.TLabel').pack(
+                side='left', padx=padding,
+            )
+        ttk.Button(header, text='↻', style='Photos.Icon.TButton').grid(
+            row=0, column=3, rowspan=2, padx=4,
+        )
+        ttk.Button(header, text='?', style='Photos.Icon.TButton').grid(
+            row=0, column=5, rowspan=2, padx=(4, 0),
+        )
+        link_bar = ttk.Frame(header)
+        link_bar.grid(row=2, column=0, columnspan=6, sticky='w', pady=(5, 0))
+        ttk.Label(link_bar, text='Linked: https://example.test').grid(
+            row=0, column=0, sticky='w', padx=(0, 8),
+        )
+        ttk.Button(link_bar, text='⋯', style='Photos.Icon.TButton').grid(
+            row=0, column=1, sticky='w', padx=(2, 0),
+        )
+        workspace = photos_workspace.PhotosWorkspace(
+            outer, lambda: session, mock.Mock(), lambda: 'cs',
+            storage_parent=storage_header, storage_surface=outer,
+        )
+        workspace.grid(row=2, column=0, columnspan=2, sticky='nsew')
         self.addCleanup(workspace.destroy)
         self._wait_until(
             lambda: workspace._session is session,
@@ -5462,26 +5511,95 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._dismiss_context(restore=False)
         evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
         evidence.mkdir(parents=True, exist_ok=True)
-        for width in (1180, 720):
-            # Existing desktop and narrow contexts must remain within the root.
-            self.root.geometry(f'{width}x620+0+0')
-            self.root.update()
-            workspace._storage_button.invoke()
+        # Large localized numbers exercise both populated value rows, including
+        # their final values, after the panel has negotiated its real width.
+        workspace._storage_snapshot = (
+            123456789, 1234567890123, 4 * 1024**3, True, None,
+        )
+        workspace._retained_storage_snapshot = (
+            123456, 987654321, 1234567890123, 87654321, 987654321012, True,
+        )
+        workspace._show_storage_snapshot()
+        workspace._storage_button.invoke()
+        for index, (width, height) in enumerate((
+            *TEST_TREE_REFRESH_VIEWPORTS, TEST_TREE_REFRESH_VIEWPORTS[0],
+        )):
+            # Keep the same open card while resizing, as in the real window.
+            visible_width = min(
+                width,
+                self.root.winfo_screenwidth() - TEST_TREE_REFRESH_SCREEN_MARGIN,
+            )
+            visible_height = min(
+                height,
+                self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN,
+            )
+            self.root.geometry(f'{visible_width}x{visible_height}+0+0')
             self.root.update()
             card = workspace._context_card
-            self.assertGreaterEqual(card.winfo_rootx(), workspace.winfo_rootx())
+            self.assertIsNotNone(card)
+            self.assertGreaterEqual(card.winfo_rootx(), self.root.winfo_rootx())
+            right = self.root.winfo_rootx() + self.root.winfo_width()
             self.assertLessEqual(
-                card.winfo_rootx() + card.winfo_width(),
-                workspace.winfo_rootx() + workspace.winfo_width(),
+                card.winfo_rootx() + card.winfo_width(), right,
             )
+            self.assertEqual(
+                card.winfo_rootx() + card.winfo_width(),
+                min(right, outer.winfo_rootx() + outer.winfo_width()),
+            )
+            descendants = list(card.winfo_children())
+            for widget in descendants:
+                descendants.extend(widget.winfo_children())
+                if widget.winfo_ismapped():
+                    self.assertLessEqual(
+                        widget.winfo_rootx() + widget.winfo_width(), right,
+                    )
+                    self.assertLessEqual(
+                        widget.winfo_rootx() + widget.winfo_width(),
+                        card.winfo_rootx() + card.winfo_width(),
+                    )
+            labels = [str(widget.cget('text')) for widget in descendants
+                      if widget.winfo_class() == 'TLabel']
+            self.assertTrue(any('87,654,321' in value for value in labels))
+            self.assertTrue(any(
+                workspace._storage_bytes(987654321012) in value
+                for value in labels
+            ))
+            self.assertTrue(any('GiB' in value for value in labels))
             bounds = (
                 self.root.winfo_rootx(), self.root.winfo_rooty(),
                 self.root.winfo_rootx() + self.root.winfo_width(),
                 self.root.winfo_rooty() + self.root.winfo_height(),
             )
             with ImageGrab.grab(bbox=bounds) as captured:
-                captured.save(evidence / f'photos-storage-compact-{width}.png')
-            workspace._dismiss_context(restore=False)
+                captured.save(
+                    evidence / f'photos-storage-compact-{width}-{index}.png',
+                )
+            if index == 0:
+                value_label = next(
+                    widget for widget in descendants
+                    if widget.winfo_class() == 'TLabel'
+                    and '87,654,321' in str(widget.cget('text'))
+                )
+                original_value = str(value_label.cget('text'))
+                value_label.configure(text=original_value + ' · 999')
+                self.root.update()
+            elif index == 1:
+                value_label.configure(text=original_value)
+                self.root.update()
+        # A mapped hosted Windows window need not own keyboard focus. Verify
+        # real key delivery before testing Escape and its focus-return action.
+        card.focus_force()
+        self.root.update()
+        self.assertIs(card, self.root.focus_get())
+        card.event_generate('<Escape>')
+        self.root.update()
+        self.assertIsNone(workspace._context_card)
+        self.assertIs(workspace._storage_button, self.root.focus_get())
+        workspace._storage_button.invoke()
+        self.root.update()
+        header.event_generate('<ButtonPress-1>', x=1, y=1)
+        self.root.update()
+        self.assertIsNone(workspace._context_card)
 
     def test_storage_refresh_coalesces_and_preserves_ready_retained_snapshot(self) -> None:
         """Refresh live occupancy without replacing known retained totals early.
