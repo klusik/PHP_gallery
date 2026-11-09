@@ -181,6 +181,16 @@ The manual language does not change the administrator or public interface
 language. See [manual build instructions](docs/LATEX_BUILD.md) for rebuilding
 the PDFs.
 
+## Developer API
+
+The [gallery-scoped API-key reference](docs/API.MD) documents the original
+`pgu_` HTTP protocol, including photo uploads, inventory comparisons,
+revocation, specialized AI/report actions and explicit gallery migration.
+It contains complete request/response contracts and executable examples.
+The same technical reference is included in all four maintained TeX manuals.
+Automatic browsing, server-wide gallery discovery and browser-approved client
+linking are not part of this public API contract.
+
 ## Core Features
 
 ### Browser-local gallery progress and notifications

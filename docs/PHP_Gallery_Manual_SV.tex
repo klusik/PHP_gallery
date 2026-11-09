@@ -8417,6 +8417,1496 @@ språklista. Den offentliga miniatyrbildsrenderaren använder
 \setting{public_thumbnail_rendering_mode} med värdena \setting{responsive} och
 \setting{progressive}.
 
+% BEGIN gallery-key-api reference (#352)
+
+% Author: Rudolf Klusal
+
+\section{API-referens för galleribundna nycklar}
+
+\label{sec:gallery-key-api}
+
+\index{API!pgu\_}
+
+Fullständig referens för det ursprungliga gallerinyckelprotokollet. Autentisering exponerar
+inte automatisk bläddring. Exemplen har fiktiva identiteter; använd endast gallerier och
+nycklar som ni är behöriga att hantera.
+
+\subsection{\texorpdfstring{Omfattning och supportgräns}{Omfattning och supportgräns}}
+
+\label{api352:scope}
+
+Denna referens beskriver det befintliga HTTP-API:et med en galleribunden
+\codeword{pgu_}-nyckel. Det är avsett även för självständigt utvecklade klienter, inte bara
+Windows-uppladdaren. Granskad bas är PHP Gallery \codeword{1.0.4}, commit
+\codeword{150160d3771f97f5b96dab86e98ac6fe5365ccb4}. Uppgiften anger vilken källkod som
+granskats för utgåvan; den är inte versionsförhandling vid körning eller ett löfte om att
+äldre installationer stöder alla valfria åtgärder.
+
+Endast uttryckliga operationer som auktoriseras av en gallerinyckel ingår. Automatisk
+bläddring, serveromfattande upptäckt/listning/sökning av gallerier, filsystemupptäckt,
+Watcher-genomsökning, webbläsargodkänd länkning och resurs-API:et från ärende \#345 ingår
+inte i detta offentliga kontrakt. WebDAV är ett separat protokoll med egna
+autentiseringsuppgifter. Inventering jämför filkandidater som klienten skickar; den är inte
+en ändpunkt för att bläddra bland alla gallerier. Intern registrering efter uppladdning är
+serverimplementation, inte ett offentligt skanningskommando.
+
+Nyckeln bestämmer uppladdningsmålet. Den är dock inte nödvändigtvis begränsad till
+uppladdning: när gallerimigrering är aktiverad kan samma nyckel exportera det auktoriserade
+galleriet och dess undergallerier, och en målnyckel kan importera ett nytt underträd. Ge den
+inte till en opålitlig part som en nyckel för enbart skrivning.
+\codeword{include_subgalleries=0} begränsar en exportbegäran, inte nyckelns egen behörighet.
+Dokumentationen inför inga nya behörigheter, ändpunkter eller serverbeteenden.
+
+\subsection{\texorpdfstring{Åtgärdsförteckning}{Åtgärdsförteckning}}
+
+\label{api352:operation-index}
+
+De första nio åtgärderna delar index.php?page=\codeword{upload_automation_upload}. Migrering
+använder åtta separat namngivna rutter. Varje anrop kräver rätt gallerinyckel;
+specialåtgärder har egna villkor. Dokumentationen täcker 17 operationer. Identifierare och
+kod är identiska i alla språk.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Åtgärd eller rutt} & \textbf{HTTP-metod och begärans kodning} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Åtgärd eller rutt} & \textbf{HTTP-metod och begärans kodning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{upload} & POST; multipart/form-data \\
+\codeword{inventory} & POST; application/json \\
+\codeword{revoke} & POST; application/json | form \\
+\codeword{ai_next_job} & POST; application/json \\
+\codeword{ai_heartbeat} & POST; application/json \\
+\codeword{ai_complete} & POST; application/json \\
+\codeword{ai_asset} & POST; form \\
+\codeword{flight_report_status} & POST; application/json \\
+\codeword{flight_report} & POST; multipart/form-data \\
+\codeword{gallery_migration_manifest} & GET / POST; query / form \\
+\codeword{gallery_migration_asset} & GET / POST; query / form \\
+\codeword{gallery_migration_package} & POST; form \\
+\codeword{gallery_migration_receive_manifest} & POST; form \\
+\codeword{gallery_migration_receive_asset} & POST; multipart/form-data \\
+\codeword{gallery_migration_receive_package} & POST; multipart/form-data \\
+\codeword{gallery_migration_receive_status} & GET / POST; query / form \\
+\codeword{gallery_migration_receive_complete} & POST; form \\
+\end{longtable}
+
+\subsection{\texorpdfstring{Anslutning, nycklar och anropsregler}{Anslutning, nycklar och anropsregler}}
+
+\label{api352:connection}
+
+Öppna det avsedda galleriet i Admin och välj fliken API. Skapa en separat märkt nyckel för
+varje klient och kopiera både den exakta uppladdningsadressen och nyckeln. Rånyckeln visas
+en gång; endast dess SHA-256-hash lagras. Vanliga nycklar består av \codeword{pgu_} följt av
+64 hexadecimala tecken. Detta API har inget refresh-token-utbyte eller generellt
+utgångsfält. Nyckeln måste vara aktiv och inte återkallad; den slutar också fungera om
+galleriet eller nödvändig lagring saknas. Skapa och verifiera en ersättningsnyckel för samma
+galleri innan den gamla återkallas. Publicera inte uppgifterna i källkod, skärmbilder,
+URL:er, loggar eller delad skalhistorik.
+
+Använd den kopierade kanoniska frontcontroller-URL:en och behåll eventuella
+installationsunderkataloger. Den portabla uppladdningsadressen är
+\codeword{<base>/index.php?page=upload_automation_upload}. \codeword{/api/upload} är ett
+kompatibilitetsalias som kräver URL-omskrivning, inte den kanoniska adressen. Migrering
+använder samma form \codeword{<base>/index.php?page=...} med exakt ruttnamn nedan.
+API-nycklar är inte Admin-sessioner; nyckelskapande och global nyckellistning kräver
+inloggad Admin-vy/CSRF och är inte operationer som enbart auktoriseras av nyckeln.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{X-Gallery-API-Key} & Rekommenderad header. Ett icke-tomt trimmat värde har högst
+prioritet. \\
+\codeword{Authorization: Bearer} & Reserv när den särskilda headern är tom. Bearer-värdet är
+fortfarande den ursprungliga gallerinyckeln, inte en länkad åtkomsttoken. \\
+\codeword{api_key} & Äldre skalärt formulärfält, endast när användbara headeruppgifter
+saknas. Läses inte ur query eller JSON-objekt. \\
+\codeword{Accept: application/json} & Begär JSON-fel även för multipart-anrop. Lyckade
+binärsvar behåller sin faktiska medietyp. \\
+\codeword{action} & För uppladdning/automation har ett icke-tomt formulärvärde företräde
+framför JSON; utelämnat/tomt betyder uppladdning. Använd endast dokumenterade åtgärder. \\
+\end{longtable}
+
+Skicka exakt en form av autentiseringsuppgifter. En ogiltig nyckel med högre prioritet
+ersätts inte av en giltig med lägre prioritet. Behåll TLS-verifiering och använd HTTPS för
+fjärrinstallationer; den äldre hanteraren ersätter inte HTTPS-tvång på webbhotellet. Vägra
+omdirigeringar med autentiseringsuppgifter, särskilt byte av värd eller schema. Återanvänd
+inte webbläsarcookies och exponera inte nyckeln i publik JavaScript. Kontraktet utlovar inte
+CORS/preflight för webbläsare från andra ursprung.
+
+All kod nedan använder exempeladresser och skalvariabler. Sätt \codeword{API_URL} till den
+kopierade ändpunkten och tillför \codeword{PG_API_KEY} säkert via processmiljön; verkliga
+nycklar hör inte hemma i exemplen. Curl-transportens returkod räcker inte: kontrollera
+tillagd HTTP-status och JSON-fältet \codeword{ok}. Följ inte omdirigeringar och stäng inte
+av certifikatkontroll.
+
+\begin{lstlisting}[language={}]
+API_URL='https://gallery.example/photos/index.php?page=upload_automation_upload'
+: "${PG_API_KEY:?Set PG_API_KEY securely before running requests}"
+# Never add -L or --insecure to credential-bearing calls.
+\end{lstlisting}
+
+\subsection{\texorpdfstring{Ladda upp fotografier}{Ladda upp fotografier}}
+
+\label{api352:upload}
+
+Operation: \codeword{POST index.php?page=upload_automation_upload},
+\codeword{multipart/form-data}, \codeword{action=upload} (även standard). Autentisering och
+\codeword{upload_api} måste vara tillgängliga. Ange inte multipart-gränsen manuellt med
+curl. Dessa nyckelautentiserade anrop kräver varken Admin-cookie eller CSRF-fält.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{image} / \codeword{images[]} & Binärt; en fil eller upprepade filer,
+obligatoriskt. Använd en form per begäran; icke-tom images[] har företräde. Servern
+verifierar namn och faktiska bilddata. \\
+\codeword{gallery_id} & Valfri heltalsbekräftelse av målet. Ett positivt värde som skiljer
+sig från nyckelns galleri ger 403. Utelämning utökar inte behörigheten. \\
+\codeword{create_thumbnails} & Valfri skalär flagga; standard true. Sant: 1/true/yes/on
+oavsett skiftläge. 0 stänger av komplettering av härledda bilder på servern. Giltiga
+klientminiatyrer kan fortfarande installeras. \\
+\codeword{image_client_ids[]} & Valfria korrelationssträngar per original; [A-Za-z0-9\_-],
+1..80 tecken. Följer originalfilernas positioner, inte beständiga operations-ID:n eller
+idempotensnycklar. \\
+\codeword{client_thumbnails[]} & Valfria binära miniatyrfiler. Varje fil kräver motsvarande
+poster i de tre parallella metadatafälten nedan. \\
+\codeword{thumbnail_client_ids[]} & String; obligatorisk för varje miniatyr. Måste motsvara
+ett giltigt \codeword{image_client_ids}-värde i samma begäran. \\
+\codeword{thumbnail_sizes[]} & Integer, mållängd för längsta sidan i pixlar; 300, 600, 800,
+960, 1280, 1600. Den avkodade längsta sidan får överskrida värdet med högst 4 pixlar. \\
+\codeword{thumbnail_formats[]} & String jpg eller webp (normaliseras till gemener);
+identifierad MIME måste stämma. Giltiga extra JPG-varianter kan räknas som överhoppade på en
+WebP-installation utan att originalet avvisas. \\
+\codeword{sim_location_source} & Valfri string; endast \codeword{simconnect_camera}
+aktiverar följande gemensamma kamerakoordinater. \\
+\codeword{sim_camera_latitude} / \codeword{sim_camera_longitude} & Valfria ändliga tal; båda
+krävs för godkända kamerametadata. Latitud -90..90; longitud -180..180; avrundning till 7
+decimaler. Ogiltiga metadata ignoreras; detta är ingen ny GPS-skrivändpunkt. \\
+\codeword{sim_camera_altitude} & Valfri ändlig höjd i fot (äldre SimConnect-enhet; ingen
+omräkning i hanteraren), avrundad till 2 decimaler; saknat/ogiltigt blir null. En
+koordinatuppsättning gäller de mottagna bilderna i begäran. \\
+\end{longtable}
+
+Grundformaten är JPG/JPEG, PNG, GIF och WebP. HEIC/HEIF och DNG beror på serverns faktiska
+konverterare; anta inte stöd enbart utifrån filnamnet. PDF, musik, godtyckliga ZIP-filer och
+JSON/base64-bilder tillhör inte denna operation. PHP \codeword{upload_max_filesize},
+\codeword{post_max_size}, \codeword{max_file_uploads} och webbhotellets proxy kan ge snävare
+gränser. Det äldre protokollet annonserar ingen universell batchstorlek eller anropsbudget.
+Använd små omgångar och kopiera inte gränser från det separata linked API:et.
+
+Servern naturligsorterar uppladdade filnamn och kan välja unika namn eller använda
+konfigurerad namnändring. Anta inte att svarens positioner bevarar godtycklig indataordning.
+Vid positionsbaserad miniatyrkoppling ska originalen skickas i samma naturliga namnordning;
+ett original med sina härledda filer undviker tvetydighet. Återuppladdning är inte
+kontrollsummabaserad deduplicering och kan skapa en ny fil. Använd returnerade filnamn och
+bild-ID:n, inte gissade URL:er. Moderna regler föredrar WebP; avstängd generering garanterar
+inte att förhandsbilder finns.
+
+\begin{lstlisting}[language={}]
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_API_KEY" \
+  --header 'Accept: application/json' \
+  --form 'action=upload' --form 'image=@photo.jpg' \
+  --form 'create_thumbnails=1' \
+  --write-out '\nHTTP %{http_code}\n' "$API_URL"
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{
+  "ok": true, "gallery_id": 42, "gallery_title": "Example",
+  "gallery_url": "https://gallery.example/photos/gallery/example",
+  "edit_url": "/photos/index.php?page=admin_edit_gallery&id=42",
+  "uploaded": 1, "scanned": 1, "image_ids": [501],
+  "filenames": ["photo.jpg"], "renamed": 0,
+  "rename_warnings": [], "rename_failures": [],
+  "thumbnails": 6, "thumbnail_failed": 0, "thumbnail_errors": [],
+  "post_upload_errors": [],
+  "sim_camera_metadata": {"attached": 0, "skipped": 0, "error": ""},
+  "client_thumbnails": {
+    "installed": 0, "skipped": 0, "failed": 0, "errors": []
+  }
+}
+\end{lstlisting}
+
+Exemplet visar ett möjligt svar, inte garanterade antal eller URL-former.
+\codeword{uploaded}, \codeword{scanned}, \codeword{renamed}, \codeword{thumbnails} och
+\codeword{thumbnail_failed} är heltalsräknare; \codeword{image_ids} är en heltalslista;
+\codeword{filenames}, \codeword{rename_warnings}, \codeword{rename_failures},
+\codeword{thumbnail_errors} och \codeword{post_upload_errors} är stränglistor. Kontrollera
+också kamerans räknare/fel och klientminiatyrernas räknare/fel. HTTP 200 med
+\codeword{ok=true} kan samtidigt rapportera misslyckad bildgenerering, GPS eller bokföring.
+Det är ingen atomär allt-eller-inget-transaktion. Fångade uppladdningsfel ger 422;
+gemensamma autentiseringsfel beskrivs nedan.
+
+Följande valfria exempel kopplar en förberedd WebP-miniatyr till ett original. Filen måste
+redan ha deklarerade mått och verkligt WebP-innehåll; namn/MIME-uppgift kringgår inte
+servervalidering. Flera original kan använda upprepade images[] med
+\codeword{image_client_ids}[] i serverns filnamnsordning.
+
+\begin{lstlisting}[language={}]
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_API_KEY" \
+  --header 'Accept: application/json' \
+  --form 'action=upload' --form 'images[]=@photo.jpg' \
+  --form 'image_client_ids[]=photo-001' \
+  --form 'client_thumbnails[]=@photo-300.webp;type=image/webp' \
+  --form 'thumbnail_client_ids[]=photo-001' \
+  --form 'thumbnail_sizes[]=300' --form 'thumbnail_formats[]=webp' \
+  --form 'create_thumbnails=1' \
+  --write-out '\nHTTP %{http_code}\n' "$API_URL"
+\end{lstlisting}
+
+\subsection{\texorpdfstring{Inventering: jämför angivna filkandidater}{Inventering: jämför angivna filkandidater}}
+
+\label{api352:inventory}
+
+Operation: \codeword{POST index.php?page=upload_automation_upload},
+\codeword{application/json}, \codeword{action=inventory}. Returnerar träffar för angivna
+kandidater i det auktoriserade galleriet, inte en fullständig fotokatalog eller
+serversökning. En tom files-lista kan kontrollera galleriidentitet och returnerade
+funktioner utan uppladdning. JSON-anrop måste autentiseras med en header.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{action} & Obligatorisk string inventory. \\
+\codeword{files} & Lista med kandidatobjekt; saknat eller icke-lista normaliseras till tomt.
+Ogiltiga rader tas bort. Högst 5000 skilda SHA-256-värden; samma hash ersätter tidigare
+kandidat. \\
+\codeword{files[].sha256} & Obligatoriskt: 64 hexadecimala tecken; trimmas och görs till
+gemener. Hasha exakt de originalbyte som skickas till servern. \\
+\codeword{files[].filename} & Valfri string; sökvägsdelar tas bort. Tomt ersätts med sha256.
+Ett visnings-/korrelationsnamn, inte en målsökväg. \\
+\codeword{files[].size} & Valfria heltalsbyte; normaliseras till minst noll. Positiv storlek
+är en extra träffkontroll och krävs för filsystemsreservkontroll. \\
+\codeword{files[].client_id} & Valfri trimmad string som återges för koppling, standard
+sha256. Varken uppladdningens \codeword{image_client_ids} eller ett beständigt kvitto. \\
+\codeword{deep_check} & Valfri JSON-boolean, standard false; endast bokstavligt true
+aktiverar den. Filsystemskontrollen använder högst de första 8 normaliserade kandidaterna.
+Gränsen gäller kandidater, inte genomgångstid eller antal lästa katalogposter. \\
+\end{longtable}
+
+\begin{lstlisting}[language={}]
+python - <<'PYJSON' > inventory.json
+import hashlib
+import json
+from pathlib import Path
+path = Path("photo.jpg")
+digest = hashlib.sha256(path.read_bytes()).hexdigest()
+print(json.dumps({"action": "inventory", "deep_check": False,
+    "files": [{"client_id": "photo-1", "filename": path.name,
+               "size": path.stat().st_size, "sha256": digest}]}))
+PYJSON
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_API_KEY" \
+  --header 'Accept: application/json' \
+  --header 'Content-Type: application/json' \
+  --data-binary @inventory.json \
+  --write-out '\nHTTP %{http_code}\n' "$API_URL"
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{
+  "ok": true, "action": "inventory", "gallery_id": 42,
+  "gallery_title": "Example", "gallery_folder": "example",
+  "checked": 1, "matched": 1,
+  "existing": [{
+    "client_id": "photo-1", "filename": "photo.jpg", "size": 1024,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "remote_filename": "photo.jpg", "remote_relative_path": "photo.jpg",
+    "remote_image_id": 501, "matched_by": "checksum_sha256"
+  }],
+  "deep_check_applied": false,
+  "fingerprint": "opaque-server-fingerprint",
+  "server_time": "2026-11-09 10:00:00",
+  "capabilities": {"flight_reports_v1": true}
+}
+\end{lstlisting}
+
+HTTP 200 returnerar \codeword{ok}, \codeword{action}, heltalet \codeword{gallery_id},
+strängarna \codeword{gallery_title} och \codeword{gallery_folder}, räknarna
+\codeword{checked} och \codeword{matched}, listan \codeword{existing}, boolean
+\codeword{deep_check_applied}, ogenomskinligt \codeword{fingerprint}, SQL-formaterad
+\codeword{server_time} och valfria \codeword{capabilities}. Varje träff återger
+\codeword{client_id}/filename/size/sha256 och tillför
+\codeword{remote_filename}/\codeword{remote_relative_path}/\codeword{remote_image_id}/\codeword{matched_by}.
+Sökvägar är metadata, inte offentliga medie-URL:er. \codeword{checksum_sha256} anger en
+indexerad träff; \codeword{disk_sha256} kan ha \codeword{remote_image_id=0}. Saknad rad
+betyder ingen observerad träff, inte bevis för att en tidigare begäran aldrig lagrades.
+Tolka inte fingerprints; SQL-tider saknar uttrycklig tidszonsförskjutning.
+
+\subsection{\texorpdfstring{Delresultat, tidsgränser och återhämtning}{Delresultat, tidsgränser och återhämtning}}
+
+\label{api352:recovery}
+
+Efter bekräftad framgång ska kvittot sparas och varningar granskas. Vid timeout, avbrott,
+ogiltigt svar eller avklippt JSON markeras uppladdningen som okänd och originalet behålls.
+Skicka inte om automatiskt, radera inte lokala filer, byt inte mål och anta inte att 422
+betyder återställning. Kontrollera inventering med originalbyten och endast vid behov en
+liten uttrycklig \codeword{deep_check}. En träff visar innehåll, inte slutförandet av en
+viss begäran; en filsystemsträff bevisar inte databasregistrering. Stäm av galleri och
+varningar innan en operatör medvetet beslutar om ny uppladdning. Protokollet saknar
+generellt statuskvitto för fotouppladdning, avbrytningsändpunkt, universell Idempotency-Key
+och exakt-en-gång-garanti.
+
+\subsection{\texorpdfstring{Återkalla aktuell nyckel}{Återkalla aktuell nyckel}}
+
+\label{api352:revoke}
+
+Operation: POST till uppladdningsändpunkten, \codeword{action=revoke}, som JSON eller
+URL-kodat formulär. Åtgärden tar ingen \codeword{token_id}-väljare: den återkallar uppgiften
+som autentiserar denna begäran, för dess galleri. Nyckeln kan varken skapa en ersättare
+eller återkalla andra godtyckliga nycklar. Stoppa och stäm först av pågående överföringar.
+Detta är en uttrycklig destruktiv autentiseringsåtgärd, aldrig ett rutinmässigt
+anslutningstest. Fotografier raderas inte. Fortsatt användning ger 401 på den aktiverade
+uppladdningsrutten; upprepning är inget nytt lyckat återkallningskvitto.
+
+\begin{lstlisting}[language={}]
+# OPTIONAL: this invalidates the currently supplied key.
+curl --silent --show-error --proto '=https' --max-time 30 \
+  --header "X-Gallery-API-Key: $PG_API_KEY" \
+  --header 'Accept: application/json' \
+  --data-urlencode 'action=revoke' \
+  --write-out '\nHTTP %{http_code}\n' "$API_URL"
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{"ok": true, "action": "revoke", "gallery_id": 42,
+ "token_id": 7, "message": "API key revoked."}
+\end{lstlisting}
+
+Framgång ger HTTP 200. Misslyckad återkallelse ger 422 med ok=false/error. Om svaret
+förloras kontrolleras nyckelns användbarhet eller Admin-status; ingen ny nyckel skapas
+automatiskt.
+
+\subsection{\texorpdfstring{Specialiserat protokoll för AI-arbetare}{Specialiserat protokoll för AI-arbetare}}
+
+\label{api352:ai-contract}
+
+De följande fyra åtgärderna återanvänder uppladdningsändpunkten och gallerinyckeln men är
+specialiserade arbetaroperationer, inte allmän fotobläddring. \codeword{upload_api} och
+\codeword{ai_image_metadata} måste vara aktiverade och AI-kö-/metadataschemat finnas. Utöver
+gallerinyckeln behöver arbetaren aktuell \codeword{job_id} och hemlig
+\codeword{claim_token}. Anspråk gäller detta galleri; \codeword{worker_id} är diagnostik,
+inte autentisering. Logga inte anspråkstoken. Exemplen innehåller ingen automatisk
+webbläsare, filsystemgenomsökare eller ständig pollningsslinga.
+
+Gemensamma AI-svar: 403 när AI-metadata är avstängda; 409 när schemat saknas; 503 när
+lagringen inte kan verifieras; 400 för okänd ai\_-åtgärd; 422 för övriga fångade arbetarfel.
+Gemensamma uppladdningskontroller för autentisering/funktion sker fortfarande först. Ett
+förlorat tilldelningssvar tillåter inte slutförande av ett annat jobb: endast mottagen
+anspråkstoken visar innehav. Återupprepning av avslut nedan gör inte fotouppladdning
+idempotent.
+
+\subsection{\texorpdfstring{Ta ett AI-jobb: \codeword{ai_next_job}}{Ta ett AI-jobb: ai\_next\_job}}
+
+\label{api352:ai-next-job}
+
+POST, application/json, action=\codeword{ai_next_job}. En tilldelning som ändrar tillstånd:
+saknade jobb kan köas och ett jobb tas för direkta bilder i nyckelns galleri. Inte ett
+skrivskyddat anslutningstest.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{worker_id} & Valfri string; standard unknown-worker; otillåtna tecken ersätts med
+understreck, högst 190 tecken. \\
+\codeword{model_name} / \codeword{model_version} & Valfria strängar; standard
+local-image-metadata / 1; blanksteg normaliseras, högst 120 tecken vardera. Håll dem stabila
+för avsedd modell-/versionskö. \\
+\codeword{lease_seconds} & Valfria heltalssekunder, standard 600. Icke-positiva värden
+använder standard; annars begränsning till 60..3600. Samma normalisering för heartbeat. \\
+\end{longtable}
+
+\begin{lstlisting}[language={}]
+{"action":"ai_next_job","worker_id":"example-worker",
+ "model_name":"local-image-metadata","model_version":"1",
+ "lease_seconds":600}
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{
+  "ok": true, "asset_action": "ai_asset",
+  "job": {
+    "job_id": 91, "claim_token": "REPLACE_WITH_RECEIVED_CLAIM_TOKEN",
+    "lease_seconds": 600, "lease_expires_at": "2026-11-09 10:10:00",
+    "model_name": "local-image-metadata", "model_version": "1",
+    "gallery_id": 42, "gallery_title": "Example",
+    "image": {
+      "id": 501, "filename": "photo.jpg", "title": "Example",
+      "relative_path": "photo.jpg", "mime_type": "image/jpeg",
+      "file_size": 1024, "modified_at": "2026-11-09 09:00:00",
+      "checksum_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "width": 1600, "height": 900
+    }
+  }
+}
+\end{lstlisting}
+
+HTTP 200 ger ett job-objekt med alla fält ovan eller job=null med
+\codeword{poll_after_seconds}=60 och ett meddelande. Heltalsfält är \codeword{job_id},
+\codeword{lease_seconds}, \codeword{gallery_id} och \codeword{image.id},
+\codeword{image.file_size}, \codeword{image.width}, \codeword{image.height}; övriga visade
+fält är strängar. Respektera föreslagen väntan vid tom kö och anspråkets tidsgräns.
+Platshållaren är avsiktligt ingen giltig anspråkstoken.
+
+\subsection{\texorpdfstring{Förnya AI-anspråk: \codeword{ai_heartbeat}}{Förnya AI-anspråk: ai\_heartbeat}}
+
+\label{api352:ai-heartbeat}
+
+POST, application/json, action=\codeword{ai_heartbeat}. Förlänger aktuellt giltigt anspråk;
+kan inte återuppliva ett utgånget eller främmande anspråk.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{job_id} / \codeword{claim_token} & Obligatoriskt positivt heltal och exakt hemlig
+sträng från tilldelningssvaret. Gallerinyckeln krävs fortfarande i headern. \\
+\codeword{lease_seconds} & Valfritt; samma standard 600 och intervall 60..3600 sekunder som
+vid anspråk. \\
+\codeword{progress_percent} & Valfritt heltal; standard 0, begränsas till 0..99. Slutförande
+är en separat åtgärd. \\
+\codeword{message} & Valfri string; standard Worker heartbeat.; lagrad text begränsas till
+500 tecken. \\
+\end{longtable}
+
+\begin{lstlisting}[language={}]
+{"action":"ai_heartbeat","job_id":91,
+ "claim_token":"REPLACE_WITH_RECEIVED_CLAIM_TOKEN",
+ "lease_seconds":600,"progress_percent":40,"message":"Analyzing image"}
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{"ok":true,"job_id":91,"message":"Heartbeat accepted."}
+\end{lstlisting}
+
+HTTP 200 bekräftar förnyelse; ogiltigt eller utgånget anspråk ger 409 med ok=false/error.
+Gemensamma AI-fel gäller också.
+
+\subsection{\texorpdfstring{Slutför eller felrapportera AI-jobb: \codeword{ai_complete}}{Slutför eller felrapportera AI-jobb: ai\_complete}}
+
+\label{api352:ai-complete}
+
+POST, application/json, action=\codeword{ai_complete}. Framgång sparar modellmetadata och
+sökbar text; inte ett generellt API för att ändra fototitel, taggar eller inställningar.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{job_id} / \codeword{claim_token} & Obligatorisk anspråksidentitet som för
+heartbeat. \\
+\codeword{status} & Valfri string; standard succeeded. Skicka uttryckligen succeeded eller
+failed. Nuvarande hanterare behandlar alla andra värden som fel; förlita dig inte på
+felskrivningar. \\
+\codeword{metadata} & Framgång: JSON-objekt, normalt tomt. Arbetarens strukturerade metadata
+utan fast obligatoriskt taggvokabulär. Andra värden än objekt/lista ger 422. Lagra inte
+hemligheter eller diagnostik som sökbart innehåll. \\
+\codeword{searchable_text} & Framgång: valfri string, normalt tom. Kombineras med skalära
+metadata till djup 5; diagnostiknycklar utelämnas, blanksteg normaliseras; sluttext högst
+60000 tecken. \\
+\codeword{error} & Fel: valfri string, begränsad till 2000 tecken. Servern använder ett
+standardmeddelande om den saknas. Ta inte med autentiseringsuppgifter. \\
+\end{longtable}
+
+\begin{lstlisting}[language={}]
+{"action":"ai_complete","job_id":91,
+ "claim_token":"REPLACE_WITH_RECEIVED_CLAIM_TOKEN",
+ "status":"succeeded","metadata":{"objects":["aircraft"]},
+ "searchable_text":"Aircraft on the apron"}
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{"ok":true,"job_id":91,"status":"succeeded","message":"AI metadata stored."}
+\end{lstlisting}
+
+Bekräftelse av rapporterat fel är också HTTP 200 med status=failed och message="AI job
+failure recorded."; det betyder inte lyckad analys. Ogiltigt/utgånget anspråk ger 409.
+Upprepat lyckat avslut med samma redan lyckade jobb/anspråk kan bekräfta lagrat resultat
+utan att ersätta det; identiska upprepade nyttodata verifieras inte. Serverpolicy kan
+återköa fel (högst 5 försök, exponentiell väntan begränsad till 3600 sekunder). Klienten får
+inte skapa ett påhittat anspråk eller skicka om blint efter 409.
+
+\subsection{\texorpdfstring{Hämta AI-anspråkets indata: \codeword{ai_asset}}{Hämta AI-anspråkets indata: ai\_asset}}
+
+\label{api352:ai-asset}
+
+POST till uppladdningsändpunkten som application/x-www-form-urlencoded (multipart fyller
+också nödvändiga formulärfält). Obligatoriska fält är action=\codeword{ai_asset}, positivt
+heltal \codeword{job_id} och exakt \codeword{claim_token}. Till skillnad från andra
+AI-åtgärder läses \codeword{job_id} och \codeword{claim_token} från formulärdata, inte JSON.
+Framgång är HTTP 200 med bildbyte, identifierad Content-Type, Content-Length,
+Content-Disposition attachment, X-Content-Type-Options nosniff och Cache-Control no-store,
+private. Servern kan returnera en befintlig visningsrepresentation i stället för
+ursprungliga RAW-byte; anta inte samma hash som originalets kontrollsumma i jobbet. Ingen
+saknad härledd bild skapas enbart för hämtningen.
+
+\begin{lstlisting}[language={}]
+# CLAIM_TOKEN and JOB_ID come from a successful ai_next_job response.
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_API_KEY" \
+  --header 'Accept: application/json' \
+  --data-urlencode 'action=ai_asset' \
+  --data-urlencode "job_id=$JOB_ID" \
+  --data-urlencode "claim_token=$CLAIM_TOKEN" \
+  --dump-header ai-asset.headers --output ai-asset.response \
+  --write-out 'HTTP %{http_code}\n' "$API_URL"
+\end{lstlisting}
+
+Ogiltigt anspråk eller otillgänglig fil ger JSON 409 med ok=false/error; övriga gemensamma
+AI-fel är också JSON. Kontrollera HTTP-status och Content-Type innan det sparade svaret
+används som bild.
+
+\subsection{\texorpdfstring{Kontrollera PDF-rapportkvitto: \codeword{flight_report_status}}{Kontrollera PDF-rapportkvitto: flight\_report\_status}}
+
+\label{api352:flight-report-status}
+
+POST till uppladdningsändpunkten, application/json, action=\codeword{flight_report_status}.
+Specialiserat protokoll för rapportbilagor, inte obegränsad PDF-hantering. Inventering kan
+annonsera capabilities.\codeword{flight_reports_v1}=true; äldre svar kan sakna capabilities.
+Uppgiften garanterar inte beredskap. I granskad revision är den ovillkorlig efter lyckad
+inventering och verifierar inte separat PDF-lagring eller PDF-visningsbrytaren. Härled inte
+andra behörigheter eller UI-tillgänglighet ur den.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{report_id} & Obligatorisk string, 1..80 ASCII-tecken [A-Za-z0-9\_-]. Stabil
+klientidentitet för kontroll och uppladdning. \\
+\codeword{language} & Obligatorisk string en/cs/de/sv, normaliseras till gemener. Tjeckisk
+protokollkod är cs, inte manualfilens suffix CZ. \\
+\codeword{sha256} & Obligatorisk 64-teckens hex-digest för förväntad PDF; trimmas och görs
+till gemener. Identitet: \codeword{report_id} + language inom nyckelns galleri. \\
+\end{longtable}
+
+\begin{lstlisting}[language={}]
+{"action":"flight_report_status","report_id":"flight-demo-001",
+ "language":"cs",
+ "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{"ok":true,"action":"flight_report_status","found":false,
+ "conflict":false,"report":null}
+\end{lstlisting}
+
+HTTP 200 innehåller boolean found, conflict=false och report=null när ingen verifierad
+bilaga observeras, annars report=\{id:string, sha256:string, size:integer byte,
+filename:string\}. Ett matchande kvitto har found=true. Kontrollen bygger på verifierade
+indexerade filer; found=false bevisar inte att en förlorad skrivning aldrig skedde.
+Konfliktinnehåll eller dubbla identiteter ger HTTP 409 med ok=false, action, conflict=true
+och error. Ogiltig indata/overifierbar status ger 422; saknad/icke-JSON-statusdata ger 400.
+Ingen överskrivningsflagga finns.
+
+\subsection{\texorpdfstring{Bifoga PDF-rapport: \codeword{flight_report}}{Bifoga PDF-rapport: flight\_report}}
+
+\label{api352:flight-report}
+
+POST till uppladdningsändpunkten, multipart/form-data, action=\codeword{flight_report}.
+Obligatoriska skalärfält \codeword{report_id}, language och sha256 följer statusreglerna.
+Skicka också \codeword{session_id} (1..80 tecken [A-Za-z0-9\_-]) och en binär fil i report.
+\codeword{session_id} valideras men ingår inte i lagrad rapportidentitet. PDF-byten måste
+matcha angiven SHA-256; giltiga filer är 16 byte till 25 MiB (26214400 byte), med
+PDF-signatur, EOF-markör och godkänd identifierad PDF-MIME. Webbhotellets gränser kan vara
+lägre.
+
+\begin{lstlisting}[language={}]
+PDF_SHA=$(python -c \
+ 'import hashlib; print(hashlib.sha256(open("report.pdf","rb").read()).hexdigest())')
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_API_KEY" \
+  --header 'Accept: application/json' \
+  --form 'action=flight_report' --form 'report_id=flight-demo-001' \
+  --form 'session_id=session-demo-001' --form 'language=cs' \
+  --form "sha256=$PDF_SHA" --form 'report=@report.pdf;type=application/pdf' \
+  --write-out '\nHTTP %{http_code}\n' "$API_URL"
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{"ok":true,"action":"flight_report","found":true,"conflict":false,
+ "report":{"id":"0123456789abcdef0123456789abcdef",
+ "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ "size":2048,"filename":"flight-report-0123456789abcdef-cs.pdf"}}
+\end{lstlisting}
+
+HTTP 200 ger ett lagrat eller redan befintligt matchande kvitto. Samma
+\codeword{report_id}/language och identisk PDF kan ge samma kvitto; annan kontrollsumma för
+identiteten ger 409 utan överskrivning. Saknad/ofullständig PDF, validerings-/lagringsfel
+eller felaktig kontrollsumma ger 422. Efter förlorat svar ska
+\codeword{flight_report_status} frågas med ursprunglig identitet/kontrollsumma före medvetet
+nytt försök. Denna specifika kvittosemantik får inte överföras till vanlig fotouppladdning,
+inventering eller godtycklig PDF-redigering. Rapportborttagning, ersättning eller
+mediebläddring exponeras inte.
+
+\subsection{\texorpdfstring{Migrering: behörighet och datakontrakt}{Migrering: behörighet och datakontrakt}}
+
+\label{api352:migration-contract}
+
+Migrering överför uttryckligen galleriet som källnyckeln auktoriserar till ett nytt
+undergalleri under galleriet som målnyckeln auktoriserar. Det är inte serverupptäckt eller
+ett allmänt bläddrings-API. Båda installationerna behöver \codeword{gallery_migration} och
+rätt databasschema. Granskad \codeword{protocol_version} är 2;
+\codeword{app_version}-strängarna måste vara exakt lika. Bevara serverns manifest,
+identiteter, ordning och valfria fält i stället för att skapa ett eget manifest från en
+lokal mapp.
+
+Källexporten inkluderar undergallerier som standard. Ange \codeword{include_subgalleries}=0
+för endast roten. Parametern begränsar exportbegäran, inte nyckelns bestående behörighet: en
+källfilbegäran kan auktorisera ett undergalleri i samma träd. Behandla nyckeln som åtkomst
+till exportdata, inte enbart uppladdning. Målnyckeln tillåter ett importerat underträd, inte
+godtyckliga rötter eller ändringar av andra gallerier. Importerade metadata kan behålla
+källans synlighet; använd ett skyddat mål och granska resultatet före exponering.
+
+Alla migreringsadresser använder index.php?page=<route>. GET-fält ligger i frågesträngen,
+skalära POST-fält i application/x-www-form-urlencoded eller multipart/form-data. JSON i
+\codeword{manifest_json} eller \codeword{assets_json} är ett formulärvärde, inte en
+application/json-kropp. På GET/POST-rutter vinner POST-fält vid samma namn. Använd alltid en
+autentiseringsheader för GET. Lyckad JSON har application/json; charset=utf-8. Fel
+innehåller ok=false och error:string med åtgärdsspecifika statuskoder nedan. Fel metod ger
+405. Förlita er inte på lokaliserade feltexters ordalydelse.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{scope} & Filväljare, string image (standard) eller gallery. \\
+\codeword{source_gallery_id} & Heltal för källgalleri. Skicka exakt manifestvärde;
+noll/utelämning på källan använder nyckelns rot. Målreferenser måste identifiera
+manifestposten. \\
+\codeword{kind} & Obligatorisk string: för image original eller thumbnail; för gallery
+\codeword{cover_image_path}, \codeword{banner_image_path}, \codeword{logo_image_path} eller
+\codeword{separator_image_path}. \\
+\codeword{source_image_id} & Heltal för bildfil; äldre alias \codeword{image_id} används
+endast när \codeword{source_image_id} saknas. Gallerigrafik behöver inget bild-ID. \\
+\codeword{size} / \codeword{format} & Endast miniatyridentitet: size heltal i pixlar, format
+jpg eller webp. Kopiera beskrivningen, gissa inte storlek. size är inte byteantal; det anges
+i \codeword{file_size}. \\
+\codeword{file_size} / \codeword{checksum_sha256} / \codeword{mime_type} &
+Beskrivningsmetadata: byteantal, SHA-256 och MIME-sträng. Vidarebefordra oförändrat och
+kontrollera nedladdningar när hash finns. \\
+\codeword{filename} / \codeword{relative_path} / \codeword{asset_key} / \codeword{label} &
+Beskrivningsvärden, inte godtycklig filåtkomst. \codeword{asset_key} är en opak identitet
+med 24 hextecken i överföringsplanen; label är visningstext. Bygg aldrig filsystemadresser
+från sökvägar. \\
+\end{longtable}
+
+Migreringen överför protokollets uppräknade filer, inte en fullständig installationsbackup.
+Allmänna PDF-bilagor i sidolagring och musikarkiv/spellistor omfattas inte automatiskt.
+Hitta inte på nedladdningsadresser eller lova överföring av ej uppräknade dolda filer.
+Behåll separat filsystems- och databasbackup för hela installationen.
+
+\subsection{\texorpdfstring{Exportera manifestet}{Exportera manifestet}}
+
+\label{api352:migration-manifest}
+
+\begin{lstlisting}[language={}]
+GET|POST index.php?page=gallery_migration_manifest
+\end{lstlisting}
+
+Autentisera med källgalleriets nyckel. Valfritt \codeword{gallery_id} är en positiv
+heltalsbekräftelse; annan rot ger 403. \codeword{include_subgalleries} är true som standard;
+0, false, off och no (trimmade och skiftlägesoberoende) väljer endast roten. Framgång: HTTP
+200 med ok, \codeword{app_version}, \codeword{protocol_version} och manifest. Undantag från
+autentisering, schemakontroll och manifestgenerering mappas alla till 401 här; statusen
+betyder alltså inte enbart fel nyckel.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{protocol_version} / \codeword{app_version} & Heltal 2 och exakt versionssträng
+från källan. Målet kräver samma programversion. \\
+\codeword{migration_id} / \codeword{source_instance_id} & Opaka strängar skapade av källan.
+Behåll båda; målets återupptagningsjobb baseras på käll-/manifestidentitet. \\
+\codeword{source_gallery_id} / \codeword{source_gallery_folder} & Heltals-ID för
+auktoriserad rot och relativ gallerimapp, varken behörighetstoken eller direkt medieadress.
+\\
+\codeword{include_subgalleries} / \codeword{generated_at} / \codeword{counts} & Boolean för
+exportomfattning, SQL-tidssträng från servern och objekt \{galleries:integer,
+images:integer, assets:integer\}. \\
+\codeword{galleries[]} & Föräldrar först: \codeword{source_id}, \codeword{parent_source_id}
+(rot 0), \codeword{source_folder}, \codeword{folder_name}, \codeword{relative_folder} (tom
+för rot), gallery, \codeword{gallery_assets}[], images[] och \codeword{flight_map} (kan vara
+null). \\
+\codeword{gallery} / \codeword{gallery_assets} / \codeword{images} / \codeword{flight_map} &
+Rotkopior för kompatibilitet bredvid galleries[]. Bevara dem och blanda inte olika
+källögonblicksbilder. \\
+\end{longtable}
+
+Nästlade gallery-metadata innehåller endast befintliga lagringsfält samt tags (string),
+\codeword{description_layout_semantics_version}, \codeword{cover_source_id} och valfria
+\codeword{cover_selection_source_ids} (heltalslista, även tom automatiskt val).
+\codeword{content_language} och translations beror på lokaliseringsschemat. Bildmetadata
+innehåller \codeword{source_id}, \codeword{source_gallery_id}, tags och assets samt
+befintliga attribut nedan. Numeriska databasvärden kan vara strängar och valfria värden
+null: konvertera eller översätt inte dessa versionsbundna överföringsposter. De är
+migreringsposter, inte allmänna PATCH-operationer. Vidarebefordra hela serverobjektet
+oförändrat.
+
+\begin{lstlisting}[language={}]
+gallery:
+title, slug, description, sort_order, visibility, voting_enabled,
+show_filenames, newest_uploads_first, gallery_date, gallery_date_end,
+description_layout, count_badge_visibility, picture_game_enabled,
+gps_map_enabled, grid_columns, grid_rows, grid_use_for_subgalleries,
+thumbnail_min_size, thumbnail_max_size, background_source,
+banner_image_path, logo_image_path, separator_image_path,
+cover_image_path, nsfw_enabled
+
+images[]:
+relative_path, filename, title, description, width, height, mime_type,
+file_size, modified_at, checksum_sha256, sort_order, visibility,
+exif_taken_at, exif_camera_make, exif_camera_model, exif_lens_model,
+exif_focal_length, exif_aperture, exif_exposure_time, exif_iso,
+gps_lat, gps_lng, gps_altitude, gps_extracted_at, nsfw_enabled,
+thumbnail_min_size, thumbnail_max_size
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+SOURCE_BASE='https://source.example/photos'
+: "${PG_SOURCE_KEY:?Set PG_SOURCE_KEY securely}"
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_SOURCE_KEY" \
+  --header 'Accept: application/json' \
+  --get --data-urlencode 'include_subgalleries=0' \
+  "$SOURCE_BASE/index.php?page=gallery_migration_manifest" \
+  --output manifest-response.json --write-out 'HTTP %{http_code}\n'
+# Validate HTTP/ok before using the file. Extract only the manifest member.
+python -c 'import json; r=json.load(open("manifest-response.json")); assert r["ok"] is True; json.dump(r["manifest"],open("manifest.json","w"))'
+\end{lstlisting}
+
+När \codeword{flight_map} finns är det ett objekt med \codeword{map_source_type}:string,
+\codeword{route_text}:string, \codeword{resolved_points_json}:string,
+\codeword{unresolved_points_json}:string, \codeword{point_count}:integer och
+\codeword{resolved_at}:string. De två *\_json-fälten är serialiserade JSON-strängar, inte
+nästlade listor. Bevara dem oförändrade med det versionsbundna manifestet; inget separat API
+för att skapa rutter avses.
+
+\subsection{\texorpdfstring{Hämta en källfil}{Hämta en källfil}}
+
+\label{api352:migration-asset}
+
+\begin{lstlisting}[language={}]
+GET|POST index.php?page=gallery_migration_asset
+\end{lstlisting}
+
+Använd källnyckeln och filväljarna ovan. Servern hittar original, befintlig miniatyr eller
+gallerigrafik inom den auktoriserade roten/trädet. En klientsökväg ger inte godtyckligt
+filval. Denna källrutt kräver ingen manifest-\codeword{job_id}. Behörighet för
+undergallerier kontrolleras per begäran oavsett om tidigare manifest exkluderade dem.
+Framgång: HTTP 200 binärt med identifierad Content-Type, Content-Length och
+Content-Disposition attachment. Undantag inklusive autentisering/saknad fil ger 404 JSON,
+fel metod 405. Spara inte JSON-fel som fotografi.
+
+\begin{lstlisting}[language={}]
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_SOURCE_KEY" \
+  --header 'Accept: application/json' \
+  --get --data-urlencode 'scope=image' \
+  --data-urlencode 'source_gallery_id=12' \
+  --data-urlencode 'source_image_id=34' --data-urlencode 'kind=original' \
+  "$SOURCE_BASE/index.php?page=gallery_migration_asset" \
+  --output source-asset.bin --write-out 'HTTP %{http_code}\n'
+# IDs must come from the actual authorized manifest, not this example.
+\end{lstlisting}
+
+\subsection{\texorpdfstring{Hämta ett ZIP-paket från källan}{Hämta ett ZIP-paket från källan}}
+
+\label{api352:migration-package}
+
+\begin{lstlisting}[language={}]
+POST index.php?page=gallery_migration_package
+\end{lstlisting}
+
+Källnyckel, formulärfält: \codeword{assets_json} (obligatorisk JSON-kodad icke-tom
+beskrivningslista, högst 2048 filer) och \codeword{include_subgalleries} (valfri, true som
+standard). Hämta exakt filgrupp från målets paketplan. Källan löser varje beskrivning,
+verifierar tillgänglig storlek/hash och skapar ZIP med okomprimerade poster (ZIP-metod 0).
+ZipArchive krävs. Framgång: HTTP 200 application/zip, Content-Length och bilagan
+php-gallery-migration-package.zip. Undantag inklusive ogiltig nyckel,
+beskrivnings-/storleks-/hashproblem eller ZIP-fel ger 422 JSON. Fel metod ger 405.
+
+\begin{lstlisting}[language={}]
+# package-assets.json is one packages[i].assets array from the target plan.
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_SOURCE_KEY" \
+  --header 'Accept: application/json' \
+  --data-urlencode 'assets_json@package-assets.json' \
+  --data-urlencode 'include_subgalleries=0' \
+  "$SOURCE_BASE/index.php?page=gallery_migration_package" \
+  --output transfer.zip --write-out 'HTTP %{http_code}\n'
+\end{lstlisting}
+
+\subsection{\texorpdfstring{Förbered målimporten}{Förbered målimporten}}
+
+\label{api352:migration-receive-manifest}
+
+\begin{lstlisting}[language={}]
+POST index.php?page=gallery_migration_receive_manifest
+\end{lstlisting}
+
+Målgalleriets nyckel och obligatoriskt formulärfält \codeword{manifest_json} med endast hela
+manifest-objektet från källsvaret. Detta ändrar data: serverjobb och importerat underträd
+förbereds under nyckelns galleri. Återanvänd exakt manifest och mål för att återuppta ett
+kompatibelt jobb; välj inte ny ögonblicksbild eller annat mål efter ett oklart svar.
+Serverns \codeword{job_id} är opakt; spara med käll-/målidentitet och manifest utan
+hemligheter. Programversionerna måste stämma exakt och \codeword{protocol_version} stödjas.
+Undantag inklusive autentisering ger 422 med ok=false/error, fel metod 405.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{ok} / \codeword{app_version} / \codeword{job_id} & HTTP 200: true, målets
+versionssträng och jobbidentitet. \\
+\codeword{compatibility} & Objekt \{ok:boolean, \codeword{source_version}:string,
+\codeword{target_version}:string, policy:"exact", message:string\}. Inkompatibla begäranden
+avvisas före lyckad förberedelse. \\
+\codeword{target_gallery_id} / \codeword{imported_root_gallery_id} / \codeword{gallery_ids}
+& Heltal för auktoriserad förälder; heltal för importerad rot; heltalslista för importerade
+gallerier. Förälder och importerad rot är olika saker. \\
+\codeword{assets[]} / \codeword{packages[]} & Ordnade beskrivningar med
+\codeword{asset_key}/label; paket \{\codeword{package_id}:string,
+\codeword{asset_keys}:string[], assets:object[], \codeword{asset_count}:integer,
+\codeword{source_bytes}:integer\}. Använd returnerad plan, gruppera inte ZIP-filer på eget
+sätt. \\
+\codeword{counts} / \codeword{status} & Räknarobjekt \{galleries:integer, images:integer,
+assets:integer, packages:integer, received:integer\}. status är jobbstatusobjektet nedan
+(kan vara null i hanterarens omslag). \\
+\end{longtable}
+
+Paketplaneringen följer målets uppladdningsgränser och ett mjukt storleksmål. Ett original
+med härledda filer kan överskrida det mjuka målet men inte den hårda gränsen; större grupper
+avvisas. 24 MiB som reservmål är inte en universell uppladdningsgräns. Ett tomt galleri kan
+ha en plan utan filer men kräver ändå slutförande.
+
+\begin{lstlisting}[language={}]
+TARGET_BASE='https://target.example/gallery'
+: "${PG_TARGET_KEY:?Set PG_TARGET_KEY securely}"
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_TARGET_KEY" \
+  --header 'Accept: application/json' \
+  --data-urlencode 'manifest_json@manifest.json' \
+  "$TARGET_BASE/index.php?page=gallery_migration_receive_manifest" \
+  --output job-response.json --write-out 'HTTP %{http_code}\n'
+# Preserve the validated job response before transferring any bytes.
+\end{lstlisting}
+
+\subsection{\texorpdfstring{Ladda upp en fil till målet}{Ladda upp en fil till målet}}
+
+\label{api352:migration-receive-asset}
+
+\begin{lstlisting}[language={}]
+POST index.php?page=gallery_migration_receive_asset
+\end{lstlisting}
+
+Målnyckel och multipart/form-data. Obligatoriskt: \codeword{job_id}, filväljarfält och en
+binär fil i asset. Väljarna måste identifiera en planerad manifestfil; servern verifierar
+jobbägarskap, beskrivning, storlek/hash och målsäkerhet. Följ returnerad ordning så original
+kommer före miniatyrer. Gallerigrafik kräver scope=gallery och exakt kind. Framgång: HTTP
+200 med ok=true, \codeword{job_id}, \codeword{asset_key}, \codeword{target_gallery_id}
+(importerat galleri som tar emot filen), result, received och \codeword{total_assets}. Denna
+\codeword{target_gallery_id} kan skilja sig från nyckelns förälder. Undantag inklusive
+nyckel, okänt jobb/fil, saknad uppladdning eller hashfel ger 422, fel metod 405.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Fält} & \textbf{Typ, krav och betydelse} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\codeword{result: image original} & \{scope:"image", kind:"original",
+\codeword{source_image_id}:integer, \codeword{image_id}:integer\}; käll- och mål-ID skiljer
+sig. \\
+\codeword{result: image thumbnail} & \{scope:"image", kind:"thumbnail",
+\codeword{source_image_id}:integer, \codeword{image_id}:integer, size:integer,
+format:string\}. \\
+\codeword{result: gallery} & \{scope:"gallery", kind:string,
+\codeword{relative_path}:string\}; kind är grafikfältet från beskrivningen. \\
+\end{longtable}
+
+\begin{lstlisting}[language={}]
+{"ok":true,"job_id":"0123456789abcdef0123456789abcdef",
+ "asset_key":"0123456789abcdef01234567","target_gallery_id":41,
+ "result":{"scope":"image","kind":"original",
+ "source_image_id":34,"image_id":100},"received":1,"total_assets":3}
+\end{lstlisting}
+
+\subsection{\texorpdfstring{Ladda upp ett planerat ZIP-paket}{Ladda upp ett planerat ZIP-paket}}
+
+\label{api352:migration-receive-package}
+
+\begin{lstlisting}[language={}]
+POST index.php?page=gallery_migration_receive_package
+\end{lstlisting}
+
+Målnyckel, multipart/form-data: \codeword{job_id} och \codeword{package_id} är obligatoriska
+strängar från förberedelsen; package är den binära ZIP-filen. \codeword{assets_json}
+ersätter inte målplanen. Skicka oförändrad ZIP från källan för exakt paketet. Mottagaren
+kontrollerar namn/antal, avvisar dubbla/oväntade och komprimerade poster (endast metod 0),
+verifierar filuppgifter och använder auktoriserad jobbmappning. Vissa filer kan installeras
+före senare fel; detta är inte atomisk återställning. Efter oklar uppladdning, fråga
+\codeword{receive_status} för samma jobb före beslut om omsändning.
+
+\begin{lstlisting}[language={}]
+{"ok":true,"job_id":"0123456789abcdef0123456789abcdef",
+ "package_id":"abcdef0123456789abcdef01",
+ "asset_keys":["0123456789abcdef01234567"],
+ "received":1,"total_assets":1}
+\end{lstlisting}
+
+HTTP-200-fälten ovan innehåller strängar/stränglistor och heltalsräknare. Undantag vid
+autentisering, jobb-/planavvikelse, ogiltig ZIP, saknat paket, fel innehåll eller
+ofullständig överföring ger 422 JSON; fel metod 405. Ett registrerat paket tillåter inte
+byte av innehåll eller jobb. Använd aktuell status och ursprunglig paketidentitet för
+återupptagning.
+
+\subsection{\texorpdfstring{Stäm av målets förlopp}{Stäm av målets förlopp}}
+
+\label{api352:migration-receive-status}
+
+\begin{lstlisting}[language={}]
+GET|POST index.php?page=gallery_migration_receive_status
+\end{lstlisting}
+
+Målnyckel och obligatoriskt \codeword{job_id}. Skicka valfritt de sex filväljarfälten för en
+viss manifestfil. Samma behörighet för målföräldern kontrolleras vid varje anrop. Hanteraren
+stämmer av mottagningskvitton mot filer; även GET kan uppdatera återupptagningsdata och är
+inte en biverkningsfri ögonblicksbild. Saknat/omatchat val ger \codeword{asset_key}="" och
+\codeword{asset_received}=false, inget generellt bevis för filfrånvaro. Ogiltig
+nyckel/jobb/mål, skadat jobb eller avstämningsfel ger 422, fel metod 405.
+
+\begin{lstlisting}[language={}]
+{"ok":true,"action":"status",
+ "job_id":"0123456789abcdef0123456789abcdef","mode":"source_push",
+ "target_gallery_id":40,"imported_root_gallery_id":41,"gallery_ids":[41],
+ "received":1,"total_assets":3,"received_packages":0,"total_packages":1,
+ "received_asset_keys":["0123456789abcdef01234567"],
+ "asset_key":"","asset_received":false,
+ "updated_at":"2026-11-09 12:00:00","server_time":"2026-11-09 12:00:03"}
+\end{lstlisting}
+
+Ovan visas hela HTTP-200-strukturen. ID/räknare är heltal, \codeword{gallery_ids} en
+heltalslista, \codeword{received_asset_keys} en stränglista, tider SQL-strängar och
+\codeword{asset_received} boolean. \codeword{received_packages} räknar paket vars samtliga
+filer mottagits. mode är \codeword{source_push} för offentligt förberedda jobb. Svaret har
+ingen completed-flagga. received==\codeword{total_assets} betyder redovisade filer, inte
+lyckad slutlig metadatatillämpning; anropa \codeword{receive_complete} separat.
+
+\subsection{\texorpdfstring{Slutför målimporten}{Slutför målimporten}}
+
+\label{api352:migration-receive-complete}
+
+\begin{lstlisting}[language={}]
+POST index.php?page=gallery_migration_receive_complete
+\end{lstlisting}
+
+Målnyckel och obligatoriskt formulärfält \codeword{job_id}, ingen fil. Servern kräver
+auktoriserat jobb, alla förväntade filer och fungerande schema och tillämpar därefter
+metadata, käll-/målbilds- och omslagsmappning samt slutförande. Importerat galleri kan få
+ändrad presentation/synlighet. Förlorat lyckat svar bevisar inte återställning. Behåll
+ursprungligt jobb och granska resultatet; starta inte ny import på grund av oklart avslut.
+Inget offentligt avbrytnings-/borttagnings-/återställningsanrop definieras här.
+
+\begin{lstlisting}[language={}]
+{"ok":true,"job_id":"0123456789abcdef0123456789abcdef",
+ "target_gallery_id":40,"target_parent_gallery_id":40,
+ "imported_root_gallery_id":41,"gallery_ids":[41],
+ "assets_received":3,"total_assets":3,
+ "gallery_url":"https://target.example/gallery/gallery/imported/",
+ "edit_url":"https://target.example/gallery/index.php?page=admin_edit_gallery&id=41&tab=admin-edit-api#admin-edit-api"}
+\end{lstlisting}
+
+HTTP 200 innehåller fälten ovan; ID/räknare är heltal, \codeword{gallery_ids} heltalslista
+och adresser strängar (använd returnerade värden, inte exempelstavningen).
+Autentiseringsfel, saknade filer och mål-/schema-/metadatafel ger 422 med ok=false/error,
+fel metod 405. Admin-\codeword{edit_url} är en webbläsarlänk som kräver vanlig
+Admin-inloggning; den ger inte gallerinyckeln åtkomst till Admin-funktioner.
+
+\subsection{\texorpdfstring{HTTP-fel, gränser och kompatibilitet}{HTTP-fel, gränser och kompatibilitet}}
+
+\label{api352:errors}
+
+Matrisen beskriver granskade hanterares beteende efter att begäran når PHP, inte en enhetlig
+REST-statuspolicy. Avstängda funktioner, installations-/schematillstånd, PHP-kroppsgränser,
+omvänd proxy eller tidigare fel kan ge annan status eller HTML. Skicka Accept:
+application/json; verifiera status, Content-Type och JSON-struktur oberoende. Härled inte
+återställning av skrivning ur HTTP- eller JSON-tolkningsfel. Styr inte logik efter översatta
+fria feltexter.
+
+\begin{longtable}{@{}>{\RaggedRight\arraybackslash}p{0.28\linewidth}>{\RaggedRight\arraybackslash}p{0.67\linewidth}@{}}
+\toprule
+\textbf{Operationsgrupp} & \textbf{Feltolkning} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Operationsgrupp} & \textbf{Feltolkning} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Alla uppladdningsåtgärder & 405 fel metod; 503 nyckelschema otillgängligt/overifierbart; 401
+saknad/ogiltig/återkallad nyckel; 404 saknat nyckelgalleri. Före åtgärdsdispatch. \\
+\codeword{upload} / \codeword{inventory} / \codeword{revoke} & Upload: 403 fel positiv
+galleribekräftelse, 422 fångat uppladdningsfel. Återkallning: 422 misslyckande. Inventering
+har ingen egen lokal undantagsmappning; infrastrukturfel behöver inte ge vanligt
+JSON-omslag. \\
+\codeword{ai_*} & 403 AI-funktion av, 409 saknat köschema, 503 overifierbart schema, 400
+okänd AI-åtgärd, 422 fångat AI-fel; heartbeat/complete/asset 409 vid ogiltigt anspråk eller
+otillgänglig tilldelad indata. \\
+\codeword{flight_report_status} / \codeword{flight_report} & Status: 400 saknad JSON-kropp;
+båda: 409 konflikt i PDF-identitet, 422 ogiltig indata eller status-/lagringsfel. \\
+\codeword{gallery_migration_manifest} & 403 fel rotbekräftelse; 401 alla fångade undantag
+inklusive nyckel, schema eller export; 405 fel metod. \\
+\codeword{gallery_migration_asset} & 404 fångat
+autentiserings-/uppslagnings-/läsförberedelsefel; 405 fel metod. Fel efter påbörjad
+strömning kan inte alltid ges som ren JSON. \\
+\codeword{gallery_migration_package} / \codeword{gallery_migration_receive_*} & 422 alla
+fångade undantag inklusive nyckel/mål/jobb/version/data/ZIP/integritet; 405 fel metod.
+Autentiseringsfel är inte alltid 401 på dessa rutter. \\
+\end{longtable}
+
+\begin{lstlisting}[language={}]
+{"ok":false,"error":"Invalid or revoked API key."}
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+{"ok":false,"action":"flight_report_status","conflict":true,
+ "error":"A different PDF is already stored for this report identity."}
+\end{lstlisting}
+
+Detta är separata felexempel, inte ett universellt schema som kräver action/conflict. En
+nyckelklient utan Admin-cookies får normalt 404 med
+\{"ok":false,"error":"\codeword{not_found}"\} för avstängd \codeword{upload_api} eller
+\codeword{gallery_migration} när JSON begärs; autentiserad Admin-kontext kan i stället få
+403 \codeword{feature_disabled}. Håll API-anrop skilda från webbläsarsessioner.
+JSON-hjälparna skiljer sig: upload använder application/json, migrering lägger till
+charset=utf-8. Anta inte identiska cache-/säkerhetsheaders för alla svar. Behandla
+autentiserade metadata som privata och cacha aldrig nycklar.
+
+Driftgränser är skärningen av programvalidering, funktions-/schemastöd, PHP
+\codeword{upload_max_filesize}/\codeword{post_max_size}/\codeword{max_file_uploads},
+webbserverns kropps-/tidsgränser och klientens minnes-/tidsgränser. Webbhotellet kan ge 413
+eller 429 utan att de är enhetliga programgarantier. Inget universellt Retry-After,
+sidindelning, återupptagbar multipart, chunk-API, kvot eller exakt-en-gång-garanti
+definieras här. Behåll original och underlag för osäkra operationer. Inventering och
+rapportkvitton betyder olika saker. Respektera valfria/saknade äldre svarsfält; ingen allmän
+API-versionsändpunkt utlovas. Endast migrering kräver exakt lika programversioner.
+
+\subsection{\texorpdfstring{Fullständigt Python-exempel för uppladdning, inventering och migrering}{Fullständigt Python-exempel för uppladdning, inventering och migrering}}
+
+\label{api352:complete-client}
+
+Spara följande fullständiga skript som \codeword{gallery_api_example}.py. Det kräver Python
+3.10+ utan tredjepartspaket. \codeword{PG_BASE}, \codeword{PG_SOURCE_BASE} och
+\codeword{PG_TARGET_BASE} är uttryckliga installationsbasadresser inklusive undermapp, utan
+index.php, frågesträng eller fragment. Tillför nycklar endast via miljövariabler. Exemplet
+begränsar medvetet filer/binärsvar till 64 MiB och JSON till 8 MiB med 120 sekunders
+sockettimeout; detta är exempelklientens gränser, inte serverns. Filer buffras begränsat och
+multipart-filnamn är ASCII; större/annorlunda namngivna uppladdningar behöver lämplig
+strömnings-/kodningsklient. urllib kan använda operatörens konfigurerade proxy. TLS
+verifieras och alla omdirigeringar vägras.
+
+Kommandot migrate kör en fullständig ny sekvens manifest -> målförberedelse -> ordnade
+enskilda filer -> slutförande för uttryckligt valda käll-/målnycklar. Enskilda filrutter
+behöver inget ZIP-verktyg; paketrutterna ovan är ett separat alternativ för gruppering.
+Befintlig arbetsmapp vägras för att inte starta en andra import. Privata manifest-/jobbfiler
+behålls vid fel; de kan innehålla privata metadata men aldrig nycklar. Efter fel, granska
+sparat jobb och fråga dess status manuellt. Kör inte bara om i en annan mapp. Saknad
+job-response.json efter förberedelsefel kräver också avstämning av ursprungligt sparat
+manifest och mål före nytt försök. Skriptet tar inte bort original och försöker inte
+automatiskt skriva igen. Utskriven upload-JSON kan innehålla varningar även vid ok=true.
+
+\begin{lstlisting}[language={}]
+"""Example client for the documented gallery-key API. Author: Rudolf Klusal.
+
+Requires Python 3.10+ and the standard library. It never follows redirects,
+retries writes, deletes original files, or enumerates unrelated galleries.
+The bounds below belong to this example, not to PHP Gallery's API contract.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import secrets
+import ssl
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+# Example-only memory/time bounds; stop explicitly when an input is larger.
+FILE_LIMIT = 64 * 1024 * 1024
+JSON_LIMIT = 8 * 1024 * 1024
+TIMEOUT_SECONDS = 120
+UPLOAD_ROUTE = "upload_automation_upload"
+ASSET_FIELDS = (
+    "scope", "source_gallery_id", "kind", "source_image_id", "size", "format"
+)
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse all redirect responses so credentials never follow a new URL."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        """Return no replacement request; urllib reports an HTTP error."""
+        return None
+
+
+class Api:
+    """Call fixed gallery routes with one installation-specific key."""
+
+    def __init__(self, base: str, key: str) -> None:
+        """Validate the explicit HTTPS installation base and retain its key."""
+        parsed = urllib.parse.urlsplit(base)
+        if (parsed.scheme != "https" or not parsed.hostname
+                or parsed.username or parsed.password
+                or parsed.query or parsed.fragment or not key):
+            raise ValueError("Use an HTTPS installation base and a nonempty key")
+        self.base = base.rstrip("/")
+        self.key = key
+        self.opener = urllib.request.build_opener(
+            NoRedirect(), urllib.request.HTTPSHandler(
+                context=ssl.create_default_context()
+            )
+        )
+
+    def call(self, route: str, fields: dict | None = None,
+             payload: dict | None = None,
+             upload: tuple[str, str, bytes] | None = None,
+             binary: bool = False) -> dict | bytes:
+        """POST once; return verified JSON success or binary bytes, else raise.
+
+        :param route: Fixed documented front-controller route.
+        :param fields: Scalar form fields, not JSON request-body fields.
+        :param payload: JSON body; mutually exclusive with fields/upload.
+        :param upload: Multipart (field name, ASCII filename, file bytes).
+        :param binary: Read a bounded binary attachment instead of JSON.
+        :return: Successful JSON object or received binary bytes.
+        :raises RuntimeError: HTTP, transport, body-limit or JSON failure.
+        """
+        if payload is not None and (fields is not None or upload is not None):
+            raise ValueError("JSON and form/multipart cannot be combined")
+        headers = {"X-Gallery-API-Key": self.key, "Accept": "application/json"}
+        if upload is not None:
+            field, filename, content = upload
+            if len(content) > FILE_LIMIT:
+                raise ValueError("File exceeds the example's memory bound")
+            filename.encode("ascii")
+            if any(c in field + filename for c in '\r\n"\\'):
+                raise ValueError("Unsafe multipart field/filename")
+            boundary = "pg-example-" + secrets.token_hex(16)
+            chunks = []
+            for name, value in (fields or {}).items():
+                chunks.append((f"--{boundary}\r\nContent-Disposition: "
+                               f'form-data; name="{name}"\r\n\r\n'
+                               f"{value}\r\n").encode("utf-8"))
+            chunks.extend([
+                (f"--{boundary}\r\nContent-Disposition: form-data; "
+                 f'name="{field}"; filename="{filename}"\r\n'
+                 "Content-Type: application/octet-stream\r\n\r\n").encode(),
+                content, f"\r\n--{boundary}--\r\n".encode(),
+            ])
+            data = b"".join(chunks)
+            headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+        elif payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        else:
+            data = urllib.parse.urlencode(fields or {}).encode("ascii")
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+        url = self.base + "/index.php?" + urllib.parse.urlencode({"page": route})
+        request = urllib.request.Request(url, data=data, headers=headers,
+                                         method="POST")
+        try:
+            with self.opener.open(request, timeout=TIMEOUT_SECONDS) as response:
+                limit = FILE_LIMIT if binary else JSON_LIMIT
+                body = response.read(limit + 1)
+                mime = response.headers.get_content_type()
+                if response.status != 200 or len(body) > limit:
+                    raise RuntimeError("Unexpected status or oversized response")
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+            exc.close()
+            raise RuntimeError(f"HTTP {status}; no automatic retry") from None
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise RuntimeError("Transport failed; write outcome may be unknown") from exc
+        if binary:
+            if mime in ("application/json", "text/html"):
+                raise RuntimeError("Expected attachment, received JSON/HTML")
+            return body
+        if mime != "application/json":
+            raise RuntimeError("Expected JSON, received another media type")
+        result = json.loads(body)
+        if not isinstance(result, dict) or result.get("ok") is not True:
+            raise RuntimeError("Server did not confirm ok=true; inspect safely")
+        return result
+
+
+def read_file(path: Path) -> bytes:
+    """Read one bounded original without modifying it; raise if too large."""
+    with path.open("rb") as stream:
+        content = stream.read(FILE_LIMIT + 1)
+    if len(content) > FILE_LIMIT:
+        raise ValueError("File exceeds the example's 64 MiB limit")
+    return content
+
+
+def save_json(path: Path, value: dict) -> None:
+    """Exclusively save non-secret transfer metadata in the private workdir."""
+    with path.open("x", encoding="utf-8") as stream:
+        json.dump(value, stream, ensure_ascii=False, indent=2)
+        stream.write("\n")
+
+
+def migrate(directory: Path, include_children: bool) -> dict:
+    """Run a new explicit migration; preserve evidence and stop on any failure.
+
+    :param directory: New private directory; an existing directory is refused.
+    :param include_children: Explicitly include the authorized source tree.
+    :return: Successful completion receipt. Never retries ambiguous writes.
+    """
+    source = Api(os.environ["PG_SOURCE_BASE"], os.environ["PG_SOURCE_KEY"])
+    target = Api(os.environ["PG_TARGET_BASE"], os.environ["PG_TARGET_KEY"])
+    directory.mkdir(mode=0o700, parents=False, exist_ok=False)
+    envelope = source.call("gallery_migration_manifest", {
+        "include_subgalleries": "1" if include_children else "0"
+    })
+    save_json(directory / "source-response.json", envelope)
+    manifest = envelope["manifest"]
+    # This source snapshot is retained BEFORE any destination mutation.
+    save_json(directory / "manifest.json", manifest)
+    prepared = target.call("gallery_migration_receive_manifest", {
+        "manifest_json": json.dumps(manifest)
+    })
+    save_json(directory / "job-response.json", prepared)
+    job_id = prepared["job_id"]
+    status = target.call("gallery_migration_receive_status", {"job_id": job_id})
+    received = set(status["received_asset_keys"])
+    for asset in prepared["assets"]:
+        if asset["asset_key"] in received:
+            continue
+        selectors = {k: asset[k] for k in ASSET_FIELDS if k in asset}
+        content = source.call("gallery_migration_asset", selectors, binary=True)
+        expected_size = int(asset.get("file_size") or 0)
+        expected_hash = asset.get("checksum_sha256") or ""
+        if expected_size > 0 and len(content) != expected_size:
+            raise RuntimeError("Source size changed; stop and retain the job")
+        if expected_hash and hashlib.sha256(content).hexdigest() != expected_hash:
+            raise RuntimeError("Source checksum changed; stop and retain the job")
+        target.call("gallery_migration_receive_asset",
+                    {"job_id": job_id, **selectors},
+                    upload=("asset", "asset.bin", content))
+    result = target.call("gallery_migration_receive_complete", {"job_id": job_id})
+    save_json(directory / "completion.json", result)
+    return result
+
+
+def main() -> None:
+    """Dispatch one explicit upload/inventory or a new authorized migration."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("operation", choices=("upload", "inventory", "migrate"))
+    parser.add_argument("path", type=Path)
+    parser.add_argument("--include-children", action="store_true")
+    args = parser.parse_args()
+    if args.operation == "migrate":
+        result = migrate(args.path, args.include_children)
+    else:
+        client = Api(os.environ["PG_BASE"], os.environ["PG_API_KEY"])
+        content = read_file(args.path)
+        filename = args.path.name
+        if args.operation == "upload":
+            result = client.call(UPLOAD_ROUTE, {"action": "upload"},
+                                 upload=("image", filename, content))
+        else:
+            result = client.call(UPLOAD_ROUTE, payload={
+                "action": "inventory", "files": [{
+                    "client_id": "example-1", "filename": filename,
+                    "size": len(content),
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                }]
+            })
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (KeyError, ValueError, OSError, RuntimeError) as error:
+        detail = str(error) if isinstance(error, RuntimeError) else type(error).__name__
+        print(f"Stopped: {detail}. Preserve inputs and inspect "
+              "the original gallery/job; do not blindly repeat writes.",
+              file=sys.stderr)
+        sys.exit(1)
+\end{lstlisting}
+
+\begin{lstlisting}[language={}]
+export PG_BASE='https://gallery.example/photos'
+: "${PG_API_KEY:?Set securely}"
+export PG_API_KEY
+python gallery_api_example.py inventory photo.jpg
+# The next command stores a photograph. Do not blindly repeat it.
+python gallery_api_example.py upload photo.jpg
+
+export PG_SOURCE_BASE='https://source.example/photos'
+export PG_TARGET_BASE='https://target.example/gallery'
+: "${PG_SOURCE_KEY:?Set securely}" "${PG_TARGET_KEY:?Set securely}"
+# Keys must be exported into the child process environment.
+export PG_API_KEY PG_SOURCE_KEY PG_TARGET_KEY
+# Creates a child in the target; the workdir must not exist.
+python gallery_api_example.py migrate ./migration-evidence
+# Add --include-children only for an explicitly authorized subtree transfer.
+\end{lstlisting}
+
+För ett bevarat jobb skapar följande statusbegäran ingen ny import. \codeword{JOB_ID}
+kopieras från verifierad job-response.json. Besluta om återupptagning utifrån returnerat
+underlag; avsaknad av slutförandeflagga är avsiktlig. Finalisering är en separat medveten
+ändring, inte ett ofarligt anslutningstest.
+
+\begin{lstlisting}[language={}]
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_TARGET_KEY" \
+  --header 'Accept: application/json' --data-urlencode "job_id=$JOB_ID" \
+  "$TARGET_BASE/index.php?page=gallery_migration_receive_status"
+# Only after reviewing the original job and its complete asset receipts:
+curl --silent --show-error --proto '=https' --max-time 120 \
+  --header "X-Gallery-API-Key: $PG_TARGET_KEY" \
+  --header 'Accept: application/json' --data-urlencode "job_id=$JOB_ID" \
+  "$TARGET_BASE/index.php?page=gallery_migration_receive_complete"
+\end{lstlisting}
+
+\subsection{\texorpdfstring{Implementationsöversikt och underhåll}{Implementationsöversikt och underhåll}}
+
+\label{api352:source-map}
+
+Det offentliga kontraktet skiljs medvetet från intern funktionsdokumentation. Följande
+implementationsägare används för verifiering av typer, tillgänglighetsvillkor och
+felbeteende. Bevara kommentarer/docstrings och uppdatera Markdown och alla fyra manualer när
+överföringskontrakt ändras. En implementation endast på en gren är inte automatiskt ett
+utgivet API. Lägg inte till automatisk bläddring, serveromfattande listor eller
+webbläsargodkända API:er bara för att rutter finns. docs/API.MD är den engelska referensen;
+motsvarande manualkapitel har samma tekniska innehåll på utgåvans språk.
+
+\begin{lstlisting}[language={}]
+app/bootstrap.php
+app/bootstrap/routing.php
+app/bootstrap/dispatch.php
+app/controllers/upload_automation.php
+app/services/upload_automation.php
+app/models/upload_automation.php
+app/views/upload_automation.php
+app/services/ai_image_analysis.php
+app/services/upload_flight_reports.php
+app/services/gallery_pdf_documents.php
+app/controllers/gallery_migration.php
+app/services/gallery_migration/versions.php
+app/services/gallery_migration/manifest.php
+app/services/gallery_migration/metadata.php
+app/services/gallery_migration/assets.php
+app/services/gallery_migration/target_setup.php
+app/services/gallery_migration/install.php
+app/services/gallery_migration/packages.php
+app/services/gallery_migration/jobs.php
+app/services/gallery_migration/recovery.php
+winapp/uploader/simconnect_location.py
+winapp/uploader/flight_delivery.py
+docs/HTTP_ENTRYPOINTS.md
+docs/COMPATIBILITY_LIFECYCLE.md
+docs/AGENTS.md
+docs/LATEX_BUILD.md
+\end{lstlisting}
+
+% END gallery-key-api reference (#352)
+
 \section{Valfri referens för utvecklare}
 \label{sec:development}
 \index{u00262@utveckling}
