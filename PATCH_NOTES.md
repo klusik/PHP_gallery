@@ -1,5 +1,136 @@
 # Patch notes
 
+## Version 1.0.4
+
+PHP Gallery 1.0.4 added an optional complete gallery-tree API and shipped the
+already versioned WinApp 1.0.4 with improved Photos navigation, cache handling
+and foreground scheduling. The companion version remained 1.0.4.
+
+### Highlights
+
+#### Faster access to gallery catalogues and photo information
+
+- Added saved, account-scoped complete gallery catalogues and restored the last
+  explicitly selected gallery while checking current server data. Added a
+  loading ring above the tree and applied catalogue changes in bounded batches.
+- Added single-click photo selection and an adjustable information pane shared
+  with the context-menu inspector. Double-click or Enter opened the lightbox;
+  modifier clicks, ranges, arrows and Space supported multiple selection.
+- Preserved the information-pane width and improved filename tooltip contrast
+  and wrapping. Fixed Windows fullscreen shortcuts with keyboard lock states.
+
+#### Thumbnail storage and responsive browsing
+
+- Added a separate ordinary thumbnail pool with a default 4 GiB quota and a
+  shared 1/2/4/8/16/32/64 GiB setting. Kept full photos and audio in their
+  separate ordinary pool and retained pinned media outside ordinary quotas.
+- Added live thumbnail storage, retained-media and current-process RAM
+  observations beside Watcher status. Loading and unavailable states remained
+  distinct from measured zero; VRAM remained unavailable.
+- Prioritized visible thumbnails, selected photos and foreground work over
+  speculative preparation. Coalesced viewport changes, bounded GUI attachment
+  work and retained nearby images for short scroll reversals.
+- Added thumbnail-only preload alongside full-gallery preload, with separate
+  progress scope. Reused verified cached media and prepared details where
+  current authorization and matching catalogue proofs allowed it.
+
+#### Watcher lifecycle and game context
+
+- Made the main Finish flight/game action revoke the captured saved API key
+  after accepted work and required receipts completed. Ordinary Stop and
+  separate PDF creation retained the key. Local cleanup required positive
+  server confirmation and exact configuration ownership.
+- Added neutral session wording outside flight contexts and extended simulator
+  process fallbacks to Prepar3D and X-Plane. Preserved hidden UTC preferences,
+  actual historical flight reports and optional custom game phrases.
+- Retained the verified upload-gallery title across refreshes of the same
+  connection without allowing Photos selection to change the upload target.
+
+### Technical Details
+
+#### Gallery API and catalogue compatibility
+
+- Added the optional `galleries:tree-v1` discovery capability and GET-only
+  `app_linking_galleries&tree=1` mode with revision checks. Bounded complete
+  responses to 10,000 rows and 4 MiB, with current authority checks before and
+  after the read; oversized trees were refused rather than returned partially.
+- Reused existing model and linking schema ownership without adding a database
+  migration. Scoped revisions and saved catalogues to issuer, account and scope.
+- Kept paged loading for older servers, including web 1.0.3, and unsupported,
+  invalid, oversized or unavailable optional replies. Authentication failures,
+  cancellation and rate limits stopped reads instead of entering fallback.
+- Added atomic catalogue snapshots and Windows user-scoped DPAPI protection.
+  Saved rows remained navigation hints; photo access required live authority,
+  and upload/create actions required fresh gallery confirmation.
+
+#### Media cache and decoding
+
+- Added SQLite thumbnail accounting and indexed LRU eviction under the shared
+  cache lock. Durable dirty state and bounded worker reconciliation protected
+  admissions after interrupted writes; accounting did not grant media access.
+- Cached eligible viewed Admin thumbnails in the verified account namespace.
+  Restricted retained full-photo reuse required saved preload intent, a live
+  matching catalogue proof and hash-verified bytes. Expired proofs refreshed
+  metadata; missing or corrupt files used normal server reads.
+- Kept no-store media transient, private authorization checks, transfer/pixel
+  limits and the local 60-second HTTP freshness bound. Accepted equivalent
+  repeated or reordered cache directives without relaxing required markers.
+- Added one fresh authorized read after a conditional photo response lacked
+  required cache metadata; rejected responses did not authorize stale bytes.
+- Reduced supported JPEG/MPO decoder rasters before RGB allocation. Allowed one
+  authorized thumbnail preview only for the pixel-budget refusal path, while
+  retaining authorization, cancellation, corruption and rate-limit refusals.
+
+#### Scheduling, transport and diagnostics
+
+- Added a bounded public disk/decode lane independent of network work, while
+  preserving serialized authenticated media transport. Capped decoded thumbnail
+  memory at 16 MiB and 256 entries and kept Tk attachment on its owner thread.
+- Reused eligible sequential HTTP/1.1 connections and the session SSL context.
+  Discarded sockets after incomplete, ambiguous or failed responses; bounded
+  stale-socket reconnection did not replay mutations or failed response bodies.
+- Bounded FIFO GUI event dispatch and coalesced recent-activity redraws without
+  dropping retained history, footer updates or writer submissions.
+- Expanded copied diagnostics for cache sources, bytes, transport phases,
+  decoding, queue waits, viewport work and fullscreen handling. Kept safe
+  categories and numeric facts separate from credentials and private paths.
+
+#### Tests, documentation and verification limits
+
+- Added complete-tree service and catalogue snapshot regressions. Expanded
+  WinApp fixtures for selection, fullscreen, cache quotas/accounting, proof
+  expiry, preload scheduling, connection reuse and exact-key revocation cleanup.
+- Added controlled render, transport and decoding measurements. These fixture
+  observations did not establish installed FPS, hosting latency or the absence
+  of transient rendering artifacts during motion.
+- Updated architecture, testing, compatibility and companion documentation and
+  all four English, Czech, German and Swedish manual sources. Preserved
+  compatibility paths for older web endpoints and existing cache data.
+- Recorded manual confirmation of photo display, fullscreen, catalogue
+  persistence and cache use against web 1.0.3 for the earlier source batch;
+  complete installed performance and production acceptance remained separate.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery viewing behavior did not change.
+
+#### For administrators and companion users
+
+- Added quicker catalogue restoration, richer photo selection and information,
+  configurable thumbnail storage and clearer preload/cache observations.
+- Reduced redundant work during browsing while retaining live authorization
+  and bounded memory/storage policies; no offline photo access was granted.
+- Distinguished ordinary Watcher Stop from mission Finish and its saved-key
+  revocation. Web Admin workflows did not change.
+
+#### For maintainers
+
+- Added an optional bounded catalogue protocol while preserving older-server
+  paging and the independent WinApp version. Expanded diagnostic evidence for
+  investigating cold and warm browsing without claiming an installed benchmark.
+
 ## Version 1.0.3
 
 PHP Gallery and WinApp 1.0.3 expanded Photos preload diagnostics, restored
