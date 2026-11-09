@@ -623,20 +623,22 @@ WINDOWS_MOUSEWHEEL_DELTA = 120
 def render_tray_icon(
     base_image: "Image.Image",
     update_available: bool,
+    watcher_pulse: bool = False,
 ) -> "Image.Image":
-    """Return a fresh tray image with a contrasting update mark when needed.
+    """Return fresh tray artwork with independent update and Watcher marks.
 
     Args:
         base_image (Image.Image): Unmodified source artwork loaded from the
             bundled tray icon asset.
         update_available (bool): Whether to draw the red and white update badge.
+        watcher_pulse (bool): Whether the Watcher marker is currently bright.
 
     Returns:
-        Image.Image: A new RGBA image, either identical to the source artwork
-            or carrying one badge in its upper-right corner.
+        Image.Image: A new RGBA image with the requested update badge and
+            Watcher dot, or the unmarked source artwork.
     """
     icon_image = base_image.convert("RGBA")
-    if not update_available or ImageDraw is None:
+    if ImageDraw is None:
         return icon_image
 
     width, height = icon_image.size
@@ -645,6 +647,18 @@ def render_tray_icon(
         min(width, height) // TRAY_BADGE_RADIUS_DIVISOR,
     )
     inset = TRAY_BADGE_EDGE_INSET
+    draw = ImageDraw.Draw(icon_image)
+    if watcher_pulse:
+        center = radius + inset
+        draw.ellipse(
+            (center - radius, height - center - radius,
+             center + radius, height - center + radius),
+            fill="#D92D3F",
+            outline="#FFFFFF",
+            width=TRAY_BADGE_OUTLINE_WIDTH,
+        )
+    if not update_available:
+        return icon_image
     center_x = width - radius - inset - 1
     center_y = radius + inset
     bounds = (
@@ -653,7 +667,6 @@ def render_tray_icon(
         center_x + radius,
         center_y + radius,
     )
-    draw = ImageDraw.Draw(icon_image)
     draw.ellipse(
         bounds,
         fill="#D92D3F",
@@ -8159,10 +8172,10 @@ class WatcherApp:
         )
 
     def _render_watcher_recording(self) -> None:
-        """Paint the persistent rail dot and forward exact Photos target state.
+        """Paint the rail and tray markers and forward Photos target state.
 
         Returns:
-            None: Uses two visible danger-token shades and updates one workspace.
+            None: Updates the rail, tray and one workspace from the shared pulse.
         """
         button = getattr(self, "navigation_buttons", {}).get("watch")
         if button is not None:
@@ -8192,6 +8205,12 @@ class WatcherApp:
                 self._watcher_recording_target,
                 self._watcher_recording_pulse,
             )
+        tray_icon = getattr(self, "tray_icon", None)
+        if tray_icon is not None:
+            try:
+                tray_icon.icon = self.make_tray_icon_image()
+            except Exception:  # noqa: BLE001
+                logging.debug("Could not refresh tray Watcher marker.", exc_info=True)
 
 
     def configure_window_icon(self) -> None:
@@ -8206,7 +8225,7 @@ class WatcherApp:
             logging.warning("Window icon could not be loaded: %s", exc)
 
     def make_tray_icon_image(self) -> "Image.Image":
-        """Load the bundled base art and compose the current update badge.
+        """Load the base art and compose current update and Watcher badges.
 
         Raises:
             RuntimeError: Tray image support is unavailable without Pillow.
@@ -8222,6 +8241,7 @@ class WatcherApp:
         return render_tray_icon(
             base_image,
             self.update_available_version is not None,
+            self._watcher_recording_active and self._watcher_recording_pulse,
         )
 
     def build_tray_menu(self) -> Optional["pystray.Menu"]:
