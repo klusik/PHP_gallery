@@ -985,6 +985,16 @@ def configure_theme(root: tk.Tk) -> None:
                           ("active", colors["surface_alt"])],
               foreground=[("disabled", colors["muted"])])
     style.configure("Compact.TButton", padding=(7, 3), width=-1)
+    style.configure("Storage.Metric.TButton", padding=0, width=-1,
+                    background=colors["card_surface"], foreground=colors["ink"])
+    style.layout("Storage.Metric.TButton", [(
+        "Button.padding", {"sticky": "nsew", "children": [
+            ("Button.label", {"sticky": "nsew"}),
+        ]},
+    )])
+    style.map("Storage.Metric.TButton", foreground=[
+        ("focus", colors["focus"]), ("active", colors["focus"]),
+    ])
     style.configure("Accent.Compact.TButton", foreground=colors["focus"])
     style.map("Accent.Compact.TButton",
               foreground=[("disabled", colors["muted"])])

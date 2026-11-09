@@ -797,14 +797,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 1.0.7)
+## Windows installer (next version: 1.0.8)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **1.0.7**; this source version
+Gallery CMS release. The current source targets **1.0.8**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/1.0.7/`. Existing version outputs and other version folders remain
+`winapp/dist/1.0.8/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -1219,7 +1219,18 @@ postpone the initial probe.
 The existing serialized session transport remains the network owner.
 First viewing does not require a manual preload: eligible Admin renditions use
 the already negotiated verified binary protocol directly. Viewed thumbnails
-are saved automatically in the account-bound ordinary thumbnail pool. Full
+are saved automatically in the account-bound ordinary thumbnail pool. Scroll
+uses bounded decoded RAM and the verified persistent disk cache. A thumbnail
+entry is identified by its issuer/session-owned gallery, photo, public
+eligibility, strong validator and private account. Proof timestamps and row
+epochs authorize reuse only for the current session proof; renewal can keep
+unchanged content while renewing its proof, but expired or denied access cannot
+reuse it. Before per-photo reads, the viewer coalesces renewal of expired
+visible thumbnail proofs through the existing bounded metadata-catalogue
+refresh. This applies to public and eligible non-NSFW Admin media. Older
+servers and no-store responses continue through their existing authorized
+reads. One existing revision-interval retry bound prevents repeated refresh
+storms. Full
 private media still requires the account's explicit saved opt-in. A switched-away
 view withdraws cancelled admission tickets; obsolete detail/prefetch reads are
 cancelled when a new selection takes priority. Foreground photo/page requests
@@ -1424,7 +1435,11 @@ storage and refuses ordinary publication. Arbitrary external in-place edits
 are unsupported; cooperating writers use atomic replacement and the shared
 lock. Lowering the quota preserves data until bounded eviction on later
 admissions; a failed admission can remain partial.
-An activity ring marks the initial accounting wait. The widget refreshes
+An activity ring marks the initial accounting wait. The shared-header
+**Thumbnails** indicator and the **Photo storage** control use the compact
+Watcher-pill treatment: icons, short counts and simple bars, without long
+labels. Storage details remain on demand in a popup anchored to the control.
+The widget refreshes
 coalesced snapshots off Tk, including other-process writes,
 pin/unpin and recovery. The main thumbnail count and bytes include ordinary
 and typed retained thumbnail files, with matching scope. The anchored detail
@@ -1442,7 +1457,10 @@ bodies for the widget and never holds image-read locks during a walk.
 Used/limit uses KiB/MiB/GiB. Loading/unavailable never means measured zero or
 authorized offline coverage. RAM is explicitly current-process resident memory:
 Windows working set or macOS RSS, excluding children. VRAM stays unavailable; no GPU/game
-memory is attributed to the uploader. Decoded 16 MiB/256-item bounds remain.
+memory is attributed to the uploader. Selecting a quota saves it immediately;
+no Save button or confirmation is required. A save failure keeps the previous
+value and reports the error inline. Accounting scopes do not change. Decoded
+16 MiB/256-item bounds remain.
 Retained reads skip duplicate-cleanup locking when the exact ordinary candidate
 does not exist. Existing candidates still receive the full locked checks.
 A bounded decoded

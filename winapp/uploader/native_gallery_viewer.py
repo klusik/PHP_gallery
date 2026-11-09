@@ -119,15 +119,18 @@ MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT = 256
 # Visible entries lead eviction; speculative overscan cannot displace history.
 MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 16 * 1024 * 1024
 
-# Purpose: Limit decoded-thumbnail reuse when the catalogue has no content ETag.
+# Purpose: Bound thumbnail proof age and validator-free decoded reuse.
 # Type: float. Units: seconds. Scope: one entry in a live session cache.
-# Consumers: _NativeGalleryViewer._cached_thumbnail.
-# Rationale: One minute matches the server's public media freshness interval.
+# Consumers: _NativeGalleryViewer._cached_thumbnail,
+# _NativeGalleryViewer._queue_thumbnail_proof_refresh.
+# Rationale: One minute matches server freshness; renew expired strong proofs
+# through metadata rather than extending authority from cached pixel age.
 MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS = 60.0
 
-# Purpose: Limit background revision checks to a quiet visible album cadence.
+# Purpose: Bound revision checks and failed thumbnail-proof refresh retries.
 # Type: int. Units: milliseconds. Scope: one embedded viewer.
-# Consumers: _NativeGalleryViewer._schedule_revision_check.
+# Consumers: _NativeGalleryViewer._schedule_revision_check,
+# _NativeGalleryViewer._queue_thumbnail_proof_refresh.
 # Rationale: 30 seconds keeps detection useful while limiting shared API load.
 MEDIA_REVISION_POLL_MS = 30000
 
@@ -147,10 +150,7 @@ class GalleryThumbnailMemory:
         """
         self.lock = threading.RLock()
         self.entries: OrderedDict[
-            tuple[
-                int, int, bool | None, str | None, int | None,
-                float | None, int | None,
-            ],
+            tuple[int, int, bool | None, str | None, int | None],
             tuple['Image.Image', int, float],
         ] = OrderedDict()
         self.size_bytes = 0
@@ -807,6 +807,8 @@ class _NativeGalleryViewer:
         self._refresh_pending = False
         self._refresh_manual_pending = False
         self._refresh_foreground = False
+        self._thumbnail_proof_refresh_attempt_at: float | None = None
+        self._thumbnail_proof_refresh_count = 0
         self._selected_photo_ids: set[int] = set()
         self._selection_anchor_index: int | None = None
         self._reconciling = False
@@ -1378,6 +1380,9 @@ class _NativeGalleryViewer:
             self._thumbnail_disk_lane.retain(
                 self.gallery.gallery_id, self._photos, tuple(admitted_order),
             )
+            if self._queue_thumbnail_proof_refresh():
+                self._dispatch_pending_work()
+                return
             self._warm_thumbnail_pending = [
                 item for item in self._warm_thumbnail_pending
                 if (item[0] == self.gallery.gallery_id
@@ -1645,6 +1650,7 @@ class _NativeGalleryViewer:
             f'admission_refusals={self._thumbnail_memory.admission_refusals} '
             f'expired={self._thumbnail_memory.expirations} '
             f'validator_changes={self._thumbnail_memory.validator_changes} '
+            f'proof_refreshes={self._thumbnail_proof_refresh_count} '
             f'batches={self._thumbnail_batch_count} '
             f'source_disk={self._thumbnail_source_disk_count} '
             f'source_network={self._thumbnail_source_network_count} '
@@ -2399,6 +2405,13 @@ class _NativeGalleryViewer:
         self._revision_timer = None
         if self._closed:
             return
+        if (self.frame.winfo_viewable()
+                and not (self._lightbox is not None
+                         and self._lightbox.visible)
+                and self._queue_thumbnail_proof_refresh()):
+            self._dispatch_pending_work()
+            self._schedule_revision_check()
+            return
         if (self._revision_supported and self.session.can_read_admin_media()
                 and self.frame.winfo_viewable()
                 and not (self._lightbox is not None
@@ -2410,6 +2423,66 @@ class _NativeGalleryViewer:
                 ),
             )
         self._schedule_revision_check()
+
+    def _queue_thumbnail_proof_refresh(self) -> bool:
+        """Renew expired thumbnail metadata once before retrying cached bytes.
+
+        Returns:
+            bool: True while a required catalogue refresh is queued or running;
+                False for fresh or unsupported descriptors, revoked access, or
+                the bounded retry interval after an unsuccessful refresh.
+        """
+        if self._closed or not self.session.can_read_media():
+            return False
+        if self._refresh_pending or self._worker_kind == 'refresh':
+            return True
+        now = time.monotonic()
+        if (self._thumbnail_proof_refresh_attempt_at is not None
+                and now - self._thumbnail_proof_refresh_attempt_at
+                < MEDIA_REVISION_POLL_MS / 1000.0):
+            return False
+        expired = False
+        for index in self._admitted_thumbnail_indices:
+            if not 0 <= index < len(self._photos):
+                continue
+            photo = self._photos[index]
+            verified_at = (
+                photo.thumbnail_verified_at
+                if photo.cache_eligible is True
+                else photo.preload_verified_at
+                if photo.cache_eligible is False
+                and photo.preload_eligible is True and photo.nsfw is False
+                else None
+            )
+            validator = (
+                photo.thumbnail_etag if photo.cache_eligible is True
+                else photo.preload_thumbnail_etag
+            )
+            if (validator is not None and verified_at is not None
+                    and now - verified_at
+                    >= MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS):
+                if (photo.cache_eligible is False
+                        and self.session.private_preload_cache_identity(
+                            self.gallery.gallery_id, photo, thumbnail=True,
+                        ) is not None):
+                    continue
+                expired = True
+                break
+        if not expired:
+            return False
+        # Reuse the existing bounded page reconciliation and refusal handling.
+        # A failed metadata read cannot extend authority or create a busy retry
+        # loop: ordinary authorized media reads remain the compatibility path
+        # until the next existing revision interval permits another attempt.
+        self._thumbnail_proof_refresh_attempt_at = now
+        self._thumbnail_proof_refresh_count += 1
+        self._cancel_thumbnail_gui_slice()
+        self._thumbnail_disk_lane.invalidate()
+        if self._worker_kind == 'thumbnail_batch':
+            self._thumbnail_cancelled.set()
+            self._generation += 1
+        self._refresh_pending = True
+        return True
 
     def refresh_photos(self) -> None:
         """Refresh loaded photo metadata without replacing the viewer.
@@ -3563,6 +3636,7 @@ class _NativeGalleryViewer:
                 'thumbnail', 'thumbnail_batch_item', 'detail', 'prefetch',
             ):
                 cache_changed = True
+        local_delivered = 0
         while (gui_count < MEDIA_THUMBNAIL_GUI_SLICE_SIZE
                and (gui_count == 0 or time.perf_counter() - gui_started
                     < MEDIA_THUMBNAIL_GUI_SLICE_SECONDS)):
@@ -3600,6 +3674,7 @@ class _NativeGalleryViewer:
                 self._thumbnail_local_miss_count += 1
                 self._thumbnail_pending.append(local.index)
             gui_count += 1
+            local_delivered += 1
         self._thumbnail_pending.sort(
             key=lambda index: (index not in self._visible_thumbnail_indices, index),
         )
@@ -3624,7 +3699,15 @@ class _NativeGalleryViewer:
             self._active_media_cancelled = None
             self._active_media_photo_id = None
         self._dispatch_pending_work()
-        self._schedule_queue_poll()
+        # Consuming a local result wakes the bounded producer. Continue its
+        # next slice after yielding instead of charging every ready cache batch
+        # the serialized network-worker polling interval. An empty local poll
+        # still falls back to the normal interval, so slow I/O cannot busy-spin.
+        self._schedule_queue_poll(
+            MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS
+            if local_delivered and self._thumbnail_disk_lane.busy()
+            else MEDIA_QUEUE_ACTIVE_POLL_MS,
+        )
 
     def _release_worker_result(
         self, result: _WorkerPayload, kind: str,
@@ -4017,7 +4100,8 @@ class _NativeGalleryViewer:
                 entry without extending its validation time.
 
         Returns:
-            None: The admitted row band retains a bounded Tk image or placeholder.
+            None: The admitted band retains a bounded image or placeholder;
+                the next coalesced pass reconciles changed widget bounds.
         """
         if index in self._thumbnail_pending:
             self._thumbnail_pending.remove(index)
@@ -4074,14 +4158,24 @@ class _NativeGalleryViewer:
                 )
         self._thumbnail_loaded.add(index)
         self._render_photo_selection((index,))
+        # A natural-aspect image can be shorter than its placeholder inside a
+        # fixed row. The frame extent then stays unchanged, so its Configure
+        # event cannot repair visible indices at the edge of the viewport.
+        self._on_grid_viewport(None)
 
-    def _cached_thumbnail(self, photo: LinkedPhoto) -> 'Image.Image | None':
-        """Return a retained raster owned by this session's thumbnail LRU.
+    def _thumbnail_memory_key(
+        self, photo: LinkedPhoto,
+    ) -> tuple[int, int, bool | None, str | None, int | None] | None:
+        """Authorize thumbnail reuse and identify its unchanged content.
 
         Args:
             photo (LinkedPhoto): Current server-authorized photo descriptor.
+
         Returns:
-            Image.Image | None: Independent source raster, or None on a miss.
+            tuple[int, int, bool | None, str | None, int | None] | None:
+                Gallery, photo, public eligibility, validator and private
+                account, or None when the live session denies reuse. Proof
+                timestamps and epochs authorize access, not pixel identity.
         """
         if not self.session.can_reuse_cached_media():
             return None
@@ -4103,34 +4197,38 @@ class _NativeGalleryViewer:
             private_identity[1] if private_identity is not None
             else getattr(photo, 'thumbnail_etag', None)
         )
-        key = (
+        return (
             self.gallery.gallery_id, photo.image_id,
             getattr(photo, 'cache_eligible', None),
             validator,
             private_identity[0] if private_identity is not None else None,
-            private_identity[2] if private_identity is not None else None,
-            private_identity[3] if private_identity is not None else None,
         )
+
+    def _cached_thumbnail(self, photo: LinkedPhoto) -> 'Image.Image | None':
+        """Return unchanged decoded pixels only under current session authority.
+
+        Args:
+            photo (LinkedPhoto): Current server-authorized photo descriptor.
+
+        Returns:
+            Image.Image | None: Independent raster copy, or None after a miss,
+                public freshness expiry, or refusal by the live private proof.
+        """
+        key = self._thumbnail_memory_key(photo)
+        if key is None:
+            return None
         with self._thumbnail_memory.lock:
             cached = self._thumbnail_memory.entries.get(key)
             if cached is None:
                 return None
             image, _size, stored_at = cached
-            verified_at = (
-                private_identity[2] if private_identity is not None
-                else photo.thumbnail_verified_at
-            )
+            verified_at = photo.thumbnail_verified_at
             descriptor_current = (
-                key[3] is not None and verified_at is not None
+                key[4] is not None
+                or key[3] is not None and verified_at is not None
                 and 0 <= time.monotonic() - verified_at
                 < MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS
             )
-            if (private_identity is not None and not descriptor_current):
-                self._thumbnail_memory.entries.pop(key, None)
-                self._thumbnail_memory.size_bytes -= _size
-                self._thumbnail_memory.expirations += 1
-                image.close()
-                return None
             if (not descriptor_current and time.monotonic() - stored_at
                     > MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS):
                 self._thumbnail_memory.entries.pop(key, None)
@@ -4151,35 +4249,12 @@ class _NativeGalleryViewer:
             None: Visible rasters lead eviction priority. Speculative overscan
                 cannot evict history; all retained pixels obey the byte bound.
         """
-        private_candidate = (
-            photo.cache_eligible is not True
-            and (self.session.can_read_admin_media()
-                 or photo.cache_eligible is False
-                 or photo.preload_eligible is not None)
-        )
-        private_identity = (
-            self.session.private_preload_cache_identity(
-                self.gallery.gallery_id, photo, thumbnail=True,
-            ) if self.session.can_read_admin_media()
-            and private_candidate else None
-        )
-        if private_candidate and private_identity is None:
+        key = self._thumbnail_memory_key(photo)
+        if key is None:
             image.close()
             with self._thumbnail_memory.lock:
                 self._thumbnail_memory.admission_refusals += 1
             return
-        validator = (
-            private_identity[1] if private_identity is not None
-            else getattr(photo, 'thumbnail_etag', None)
-        )
-        key = (
-            self.gallery.gallery_id, photo.image_id,
-            getattr(photo, 'cache_eligible', None),
-            validator,
-            private_identity[0] if private_identity is not None else None,
-            private_identity[2] if private_identity is not None else None,
-            private_identity[3] if private_identity is not None else None,
-        )
         # Pillow RGB is accounted at four bytes per pixel, conservatively
         # including alignment rather than relying on compressed source bytes.
         size = self._image_memory_size(image)
@@ -4197,35 +4272,14 @@ class _NativeGalleryViewer:
                     memory.validator_changes += 1
                     old_image.close()
             visible_keys: set[
-                tuple[
-                    int, int, bool | None, str | None, int | None,
-                    float | None, int | None,
-                ]
+                tuple[int, int, bool | None, str | None, int | None]
             ] = set()
             for index in self._visible_thumbnail_indices:
                 if index >= len(self._photos):
                     continue
-                visible_photo = self._photos[index]
-                visible_identity = (
-                    self.session.private_preload_cache_identity(
-                        self.gallery.gallery_id, visible_photo,
-                        thumbnail=True,
-                    ) if visible_photo.cache_eligible is not True
-                    and self.session.can_read_admin_media()
-                    else None
-                )
-                visible_validator = (
-                    visible_identity[1]
-                    if visible_identity is not None
-                    else visible_photo.thumbnail_etag
-                )
-                visible_keys.add((
-                    self.gallery.gallery_id, visible_photo.image_id,
-                    visible_photo.cache_eligible, visible_validator,
-                    visible_identity[0] if visible_identity is not None else None,
-                    visible_identity[2] if visible_identity is not None else None,
-                    visible_identity[3] if visible_identity is not None else None,
-                ))
+                visible_key = self._thumbnail_memory_key(self._photos[index])
+                if visible_key is not None:
+                    visible_keys.add(visible_key)
             speculative = key not in visible_keys and bool(visible_keys)
             previous_size = memory.entries[key][1] if key in memory.entries else 0
             if speculative and (

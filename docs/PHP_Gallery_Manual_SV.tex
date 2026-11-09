@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.0.7}
+\newcommand{\version}{1.0.8}
 \newcommand{\manualdate}{9~november~2026}
 
 \hypersetup{
@@ -2073,11 +2073,16 @@ Senaste albumdata från samma levande session visas direkt medan servern
 uppdaterar dem, utan extra synlighetsfilter i klienten. Oförändrade rader
 behåller rutorna och får aktuella kontrolltider. Stora JPEG-miniatyrvarianter
 minskar också avkodningsrastret före RGB-allokering.
-Den märkta kontrollen i den gemensamma rubriken visar alla typade sparade
-miniatyrer och deras byte. Detaljer skiljer vanlig kvot från \ui{Keep preloaded}
-och visar sparade miniatyrer, andra medier
+Indikatorn \ui{Thumbnails} och kontrollen \ui{Photo storage} i den gemensamma
+rubriken har Watcher-pillens kompakta stil: ikoner, korta tal och enkla staplar
+utan långa etiketter. Detaljens popup öppnas vid behov, förankrad vid kontrollen.
+Den visar alla typade sparade miniatyrer och deras byte; detaljerna skiljer
+vanlig kvot från \ui{Keep preloaded} och visar sparade miniatyrer, andra medier
 och gallerier separat. RAM avser bara denna Windows-process working set eller
-resident set i macOS; okänd VRAM förblir okänd.
+resident set i macOS; okänd VRAM förblir okänd. Att välja en kvot sparar den
+direkt, utan Spara-knapp eller bekräftelse. Om det inte går att spara behålls
+det tidigare värdet och felet visas direkt. Redovisningens omfattning förblir
+oförändrad.
 Fotorutnätet samlar upprepade rullnings- och layoutsignaler i en schemalagd
 vyuppdatering. Synliga miniatyrer prioriteras; en begränsad buffert av närliggande
 rader hjälper vid snabba riktningsbyten. Avkodningen ligger kvar i arbetstråden
@@ -2215,6 +2220,16 @@ Trädet kommer ihåg öppna och stängda grenar per länkad webbplats och konto.
 Den runda pilen bredvid albumtiteln uppdaterar fotona. WinApp kontrollerar
 indexet för det synliga administratörsalbumet ungefär var 30:e sekund och
 återanvänder oförändrade miniatyrer. Äldre servrar stöder manuell uppdatering.
+Vid rullning använder Foton begränsat RAM och den verifierade beständiga
+diskcachen. Miniatyrens identitet binds till utfärdare och session, galleri,
+foto, offentlig behörighet, stark validator och privat konto. Endast aktuella
+sessionsbevis tillåter återanvändning; förnyelse kan behålla oförändrat innehåll,
+men utgången eller nekad åtkomst får inte återanvända det. Före enskilda
+fotoanrop samordnar WinApp förnyelsen av utgångna bevis för synliga miniatyrer
+via den befintliga begränsade kataloguppdateringen. Detta gäller offentliga och
+behöriga NSFW-fria Admin-medier. Äldre servrar och no-store-svar behåller sina
+befintliga auktoriserade anrop. Ett omförsök per befintligt revisionsintervall
+begränsar upprepade uppdateringar.
 Markera foton med Ctrl-klick i~Windows, Command-klick i~macOS eller i~fotomenyn.
 I~snabbmenyn kan du radera ett foto eller hela urvalet. WinApp använder
 den aktuella administratörslänken. Bekräfta varje grupp om högst 64~foton
