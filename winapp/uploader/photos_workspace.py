@@ -26,6 +26,7 @@ from .app_linking import (
     LINKING_CREATE_TITLE_MAX_BYTES,
     LINKING_GALLERY_ID_MAX,
     NATIVE_MEDIA_DELETE_BATCH_MAX,
+    NATIVE_MEDIA_MAX_BYTES,
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage, LinkedGalleryTree,
     LinkedMediaDetails,
     LinkedMediaGalleryInfo, LinkedPhoto, LinkingSession,
@@ -35,10 +36,20 @@ from .app_linking_ui import LinkingManager
 from .gallery_catalogue_cache import (
     GalleryCatalogueCache, GalleryCatalogueSnapshot,
 )
-from .diagnostics import is_safe_photos_observation
+from .diagnostics import (
+    format_safe_photos_failure, is_safe_photos_observation,
+)
 from .flight_report_translations import tr
 from .gallery_folders import GalleryFolderShelf
 from .gallery_preload import GalleryPreloadWorker, PreloadProgress
+from .gallery_media_cache import (
+    GalleryMediaCache,
+    MEDIA_THUMBNAIL_CACHE_MAX_BYTES as THUMBNAIL_DISK_DEFAULT_BYTES,
+)
+from .config import (
+    THUMBNAIL_CACHE_LIMIT_CHOICES_GIB, set_thumbnail_cache_limit_gib,
+)
+from .process_memory import current_process_ram_bytes
 from .linked_create import (
     BoundCreateReceipt, CreateDispatch, CreateJournalSnapshot,
 )
@@ -84,9 +95,9 @@ PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT = 10
 # Rationale: One five-second interval limits steady requests without a user tap.
 PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS = 5_000
 
-# Purpose: Advance the catalogue spinner without continuous widget redraws.
-# Type: int. Units: milliseconds. Scope: indeterminate catalogue indicator.
-# Consumers: PhotosWorkspace._schedule_catalogue_spinner.
+# Purpose: Advance prepared activity artwork without continuous widget redraws.
+# Type: int. Units: milliseconds. Scope: Photos catalogue/preload/storage activity.
+# Consumers: PhotosWorkspace catalogue, preload and storage animation callbacks.
 # Rationale: 80 ms is smooth using pre-rendered artwork with no Pillow frame work.
 PHOTOS_CATALOGUE_PROGRESS_INTERVAL_MS = 80
 
@@ -188,6 +199,28 @@ PHOTOS_RECORDING_DOT_SIZE = 9
 # Rationale: 300 ms coalesces pointer motion into one atomic preference update.
 PHOTOS_TREE_WIDTH_SAVE_DELAY_MS = 300
 
+# Purpose: Debounce the right inspector sash using the established tree policy.
+# Type: int. Units: milliseconds. Scope: one inspector sash drag.
+# Consumers: PhotosWorkspace._schedule_info_width_save.
+# Rationale: 300 ms coalesces pointer motion into one profile update.
+PHOTOS_INFO_WIDTH_SAVE_DELAY_MS = 300
+
+# Purpose: Restore the inspector after Tk settles a reinserted pane.
+# Type: int. Units: milliseconds. Scope: one inspector show operation.
+# Consumers: PhotosWorkspace._show_photo_inspector_pane.
+# Rationale: 50 ms lets native pane geometry settle before positioning its sash.
+PHOTOS_INFO_RESTORE_DELAY_MS = 50
+# Purpose: Bound persisted right inspector widths across display sizes.
+# Type: tuple[int, int]. Units: Tk pixels. Scope: saved Photos inspector width.
+# Consumers: PhotosWorkspace._restore_info_width and _persist_info_width.
+# Rationale: 180 px keeps values readable and 600 px preserves viewer room.
+PHOTOS_INFO_WIDTH_BOUNDS = (180, 600)
+# Purpose: Preserve a usable viewer beside the visible right inspector.
+# Type: int. Units: Tk pixels. Scope: visible right-side inspector layout.
+# Consumers: PhotosWorkspace._restore_info_width.
+# Rationale: 320 px leaves room for a useful photo column and viewer controls.
+PHOTOS_INFO_VIEWER_MINIMUM_WIDTH = 320
+
 # Purpose: Keep composite cache and Watcher marks legible beside gallery titles.
 # Type: int. Units: logical pixels. Scope: one Photos tree marker image.
 # Consumers: PhotosWorkspace._tree_marker.
@@ -199,6 +232,22 @@ PHOTOS_TREE_MARKER_SIZE = 18
 # Consumers: PhotosWorkspace._cache_snapshot_changed.
 # Rationale: 300 ms groups thumbnail completions without remote metadata reads.
 PHOTOS_CACHE_REFRESH_MS = 300
+
+# Purpose: Coalesce cross-process disk accounting and optional RAM observations.
+# Type: int. Units: milliseconds. Scope: one PhotosWorkspace lifetime.
+# Consumers: PhotosWorkspace._poll_storage. Rationale: 2000 ms keeps live values
+# fresh without opening SQLite per GUI tick; all I/O remains off Tk.
+PHOTOS_STORAGE_REFRESH_MS = 2000
+# Purpose: Deliver event-driven accounting while the existing observer works.
+# Type: int. Units: milliseconds. Scope: one active storage observation.
+# Consumers: _request_storage_refresh and _poll_storage.
+# Rationale: 80 ms exposes ready totals promptly; polls never perform disk I/O.
+PHOTOS_STORAGE_ACTIVE_POLL_MS = 80
+# Purpose: Keep progress text clear of the activity ring and cancel action.
+# Type: int. Units: pixels. Scope: one responsive preload status row.
+# Consumers: PhotosWorkspace._on_heading_resize. Rationale: 16 px covers the
+# existing control gaps without forcing a wide label on narrow viewports.
+PHOTOS_PRELOAD_CONTROL_GAP = 16
 
 # Purpose: Keep a compact failure trail available to copied support diagnostics.
 # Type: int. Units: diagnostic summaries. Scope: one live Photos session.
@@ -276,6 +325,13 @@ _PhotoInfoResult: TypeAlias = tuple[
 # Each row contains state, complete-photo count, observed-photo count,
 # catalogue completeness and the locally persisted pin (None if unavailable).
 _CacheRow: TypeAlias = tuple[str | None, int, int, bool, bool | None]
+# Ordinary totals, retained totals, process RAM bytes and completed-scan flag.
+_StorageObservation: TypeAlias = tuple[
+    tuple[int | None, int | None, int | None, bool, str | None],
+    tuple[int | None, int | None, int | None, int | None, int | None, bool],
+    int | None,
+    bool,
+]
 
 
 class PhotosWorkspace(ttk.Frame):
@@ -309,6 +365,12 @@ class PhotosWorkspace(ttk.Frame):
             Load the per-profile Photos tree sash position.
         save_tree_width (Callable[[int], None] | None):
             Persist a settled Photos tree sash position.
+        load_info_width (Callable[[], int | None] | None):
+            Load the saved inspector width.
+        save_info_width (Callable[[int], None] | None):
+            Persist a settled inspector width.
+        storage_parent (tk.Misc | None): Optional global header for storage.
+        storage_surface (tk.Misc | None): Global context-card placement surface.
     """
 
     def __init__(
@@ -331,6 +393,10 @@ class PhotosWorkspace(ttk.Frame):
         catalogue_cache: _CatalogueCacheFactory | None = None,
         load_tree_width: Callable[[], int | None] | None = None,
         save_tree_width: Callable[[int], None] | None = None,
+        load_info_width: Callable[[], int | None] | None = None,
+        save_info_width: Callable[[int], None] | None = None,
+        storage_parent: tk.Misc | None = None,
+        storage_surface: tk.Misc | None = None,
         diagnostic_callback: Callable[[str], None] | None = None,
     ) -> None:
         """Create the gallery, viewer and optional metadata panes.
@@ -365,6 +431,14 @@ class PhotosWorkspace(ttk.Frame):
                 Optional per-profile Photos tree sash position.
             save_tree_width (Callable[[int], None] | None):
                 Optional owner for persisting the Photos tree sash position.
+            load_info_width (Callable[[], int | None] | None):
+                Optional profile reader for the right inspector width.
+            save_info_width (Callable[[int], None] | None):
+                Optional profile writer for the right inspector width.
+            storage_parent (tk.Misc | None): Global header owner for the storage
+                control, or None to use the Photos pane.
+            storage_surface (tk.Misc | None): Visible placement surface for its
+                contextual card, or None to use the Photos workspace.
             diagnostic_callback (Callable[[str], None] | None): Optional
                 thread-safe host receiver for accepted safe Photos failures.
 
@@ -388,12 +462,28 @@ class PhotosWorkspace(ttk.Frame):
         self._catalogue_cache_factory = catalogue_cache
         self._load_tree_width = load_tree_width
         self._save_tree_width = save_tree_width
+        self._load_info_width = load_info_width
+        self._save_info_width = save_info_width
+        self._storage_parent = storage_parent
+        self._storage_surface = storage_surface
         self._diagnostic_callback = diagnostic_callback
         self._tree_width_save_after: str | None = None
         self._tree_width_restored = False
         self._tree_width_dragging = False
         self._preferred_tree_width: int | None = None
         self._pending_tree_width: int | None = None
+        self._info_width_save_after: str | None = None
+        self._info_width_restore_after: str | None = None
+        self._info_width_restored = False
+        self._info_width_dragging = False
+        self._preferred_info_width = PHOTOS_INFO_PANE_WIDTH
+        if self._load_info_width is not None:
+            try:
+                info_width = self._load_info_width()
+            except (OSError, TypeError, ValueError):
+                info_width = None
+            if type(info_width) is int and info_width > 0:
+                self._preferred_info_width = info_width
         if self._load_tree_width is not None:
             try:
                 preferred_width = self._load_tree_width()
@@ -418,12 +508,31 @@ class PhotosWorkspace(ttk.Frame):
         self._preload_generation = 0
         self._preload_last: PreloadProgress | None = None
         self._preload_unpin = False
+        self._preload_foreground = threading.Event()
+        self._preload_foreground_reason = ''
+        self._preload_activity_after: str | None = None
+        self._preload_activity_index = 0
+        self._storage_after: str | None = None
+        self._storage_activity_after: str | None = None
+        self._storage_activity_index = 0
+        self._storage_refresh_requested = False
+        self._storage_refresh_waiting = False
+        self._storage_worker_requested = False
+        self._storage_preload_witness: tuple[int, int, int, int, str] | None = None
+        self._storage_cancel = threading.Event()
+        self._storage_worker: threading.Thread | None = None
+        self._storage_results: queue.Queue[_StorageObservation] = queue.Queue(maxsize=1)
+        self._storage_snapshot = (None, None, None, False, None)
+        self._retained_storage_snapshot = (None, None, None, None, None, False)
+        self._storage_ram: int | None = None
+        self._storage_narrow = False
         self._cache_context_gallery: int | None = None
         self._cache_context_status: tk.StringVar | None = None
         self._cache_pin_var: tk.BooleanVar | None = None
         self._cache_pin_button: ttk.Checkbutton | None = None
         self._context_card: GlassCard | None = None
         self._context_origin: tk.Misc | None = None
+        self._context_surface: tk.Misc = self
         self._context_xy = (0, 0)
         self._context_bindings: list[tuple[str, str]] = []
         self._context_bindtag = "PhotosContext" + str(id(self))
@@ -509,6 +618,7 @@ class PhotosWorkspace(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self._build_widgets()
         self.after_idle(self._restore_tree_width)
+        self.after_idle(self._restore_info_width)
         self.bind(
             "<Map>",
             lambda _event: self.after_idle(self._restore_tree_width),
@@ -519,15 +629,32 @@ class PhotosWorkspace(ttk.Frame):
             lambda _event: self.after_idle(self._restore_tree_width),
             add="+",
         )
+        self.panes.bind(
+            "<Map>",
+            lambda _event: self.after_idle(self._restore_info_width),
+            add="+",
+        )
         self.panes.bind("<Unmap>", self._on_panes_unmap, add="+")
+        self.panes.bind("<Configure>", lambda _event: self.after_idle(
+            self._restore_info_width,
+        ), add="+")
         self.panes.bind(
             "<ButtonPress-1>", self._begin_tree_width_drag, add="+",
+        )
+        self.panes.bind(
+            "<ButtonPress-1>", self._begin_info_width_drag, add="+",
         )
         self.panes.bind(
             "<ButtonRelease-1>", self._schedule_tree_width_save, add="+",
         )
         self.panes.bind(
+            "<ButtonRelease-1>", self._schedule_info_width_save, add="+",
+        )
+        self.panes.bind(
             "<KeyRelease>", self._schedule_tree_width_save, add="+",
+        )
+        self.panes.bind(
+            "<KeyRelease>", self._schedule_info_width_save, add="+",
         )
         self.bind("<Destroy>", self._on_destroy, add="+")
         self.bind("<Unmap>", lambda _event: self._dismiss_context(restore=False), add="+")
@@ -535,6 +662,8 @@ class PhotosWorkspace(ttk.Frame):
             "<Configure>", lambda _event: self._place_context(self._context_card),
             add="+",
         )
+        self._show_storage_snapshot()
+        self._poll_storage()
         self.refresh_session()
 
     def _text(self, key: str) -> str:
@@ -733,6 +862,23 @@ class PhotosWorkspace(ttk.Frame):
 
         for sequence in ("<Button-3>", "<Button-2>", "<Control-Button-1>"):
             self.tree.bind(sequence, self._tree_context)
+        storage_parent = self._storage_parent or self.viewer_pane
+        self._storage_heading = ttk.Frame(storage_parent, style='Card.TFrame')
+        self._storage_heading.pack(fill='x')
+        self._storage_text = tk.StringVar(self, self._text('storage_loading'))
+        self._storage_button = ttk.Button(
+            self._storage_heading, textvariable=self._storage_text,
+            command=self._open_storage_context, style='Compact.TButton',
+            takefocus=True,
+        )
+        self._storage_button.pack(side='right')
+        self._storage_icon = None
+        self._storage_hint = tk.StringVar(self, self._text('storage_scope_hint'))
+        attach_inline_tooltip(
+            self._storage_button, self._storage_hint,
+            self._storage_surface or self.viewer_pane,
+        )
+        self._storage_heading.bind('<Configure>', self._resize_storage, add='+')
         self._gallery_heading = ttk.Frame(self.viewer_pane, style="Card.TFrame")
         self._gallery_heading.pack(fill="x", padx=8, pady=(4, 6))
         self._gallery_heading.columnconfigure(0, weight=1)
@@ -788,15 +934,19 @@ class PhotosWorkspace(ttk.Frame):
             style='Muted.TLabel', wraplength=440,
         )
         self._preload_label.grid(row=0, column=0, sticky='w')
+        self._preload_activity = ttk.Label(
+            self._preload_strip, style='Card.TLabel', takefocus=False,
+        )
+        self._preload_activity.grid(row=0, column=1, padx=(4, 0))
         self._preload_cancel = icon_button(
             self._preload_strip, '×', self._cancel_preload,
             self._preload_cancel_hint,
         )
-        self._preload_cancel.grid(row=0, column=1, padx=(6, 0))
+        self._preload_cancel.grid(row=0, column=2, padx=(6, 0))
         self._preload_bar = ttk.Progressbar(
             self._preload_strip, mode='indeterminate',
         )
-        self._preload_bar.grid(row=1, column=0, columnspan=2, sticky='ew')
+        self._preload_bar.grid(row=1, column=0, columnspan=3, sticky='ew')
         self._gallery_heading.bind("<Configure>", self._on_heading_resize, add="+")
         self._folder_shelf = GalleryFolderShelf(
             self.viewer_pane, self._open_subgallery, self._gallery_context,
@@ -832,6 +982,101 @@ class PhotosWorkspace(ttk.Frame):
             self.panes.sashpos(0, min(width, available - 1))
         self._tree_width_restored = True
 
+    def _restore_info_width(self) -> None:
+        """Restore the preferred right-pane width when its sash is visible.
+
+        Returns:
+            None: Keeps the requested width for a later map when space is narrow.
+        """
+        if (self._destroyed or not self._photo_inspector_visible
+                or self._info_width_dragging
+                or not self.panes.winfo_ismapped()):
+            return
+        pane_width = self.panes.winfo_width()
+        if (pane_width <= 1
+                or str(self.panes.panes()[-1]) != str(self.info_pane)):
+            return
+        tree_edge = int(self.panes.sashpos(0))
+        available = pane_width - tree_edge
+        low, high = PHOTOS_INFO_WIDTH_BOUNDS
+        if available < low + PHOTOS_INFO_VIEWER_MINIMUM_WIDTH:
+            return
+        target = min(
+            high, max(low, self._preferred_info_width),
+            available - PHOTOS_INFO_VIEWER_MINIMUM_WIDTH,
+        )
+        current_width = pane_width - int(self.panes.sashpos(1))
+        if target > 0 and abs(current_width - target) > 2:
+            self.panes.sashpos(1, pane_width - target)
+        self._info_width_restored = True
+
+    def _schedule_info_width_save(self, event: tk.Event) -> None:
+        """Debounce a user drag of only the viewer/inspector sash.
+
+        Args:
+            event (tk.Event): Pointer or keyboard release in the Panedwindow.
+
+        Returns:
+            None: Schedules persistence of the right pane's actual width.
+        """
+        if not self._photo_inspector_visible or not self.panes.winfo_ismapped():
+            return
+        if not self._info_width_dragging:
+            return
+        pane_width = self.panes.winfo_width()
+        width = pane_width - int(self.panes.sashpos(1))
+        if width <= 0:
+            return
+        self._pending_info_width = width
+        low, high = PHOTOS_INFO_WIDTH_BOUNDS
+        self._preferred_info_width = min(high, max(low, width))
+        self._info_width_dragging = False
+        self._info_width_restored = True
+        if self._info_width_save_after is not None:
+            try:
+                self.after_cancel(self._info_width_save_after)
+            except tk.TclError:
+                pass
+        self._info_width_save_after = self.after(
+            PHOTOS_INFO_WIDTH_SAVE_DELAY_MS, self._persist_info_width,
+        )
+
+    def _persist_info_width(self) -> None:
+        """Persist the settled right inspector width through the host owner.
+
+        Returns:
+            None: Updates the desired width and calls the optional profile writer.
+        """
+        self._info_width_save_after = None
+        if self._destroyed:
+            return
+        width = getattr(self, '_pending_info_width', None)
+        self._pending_info_width = None
+        if type(width) is not int or width <= 0:
+            return
+        low, high = PHOTOS_INFO_WIDTH_BOUNDS
+        width = min(high, max(low, width))
+        self._preferred_info_width = width
+        if self._save_info_width is not None:
+            self._save_info_width(width)
+
+    def current_info_width(self) -> int | None:
+        """Return the latest desired inspector width, including pending drags.
+
+        Returns:
+            int | None: Desired preference independent of transient pane geometry,
+                or None before a valid width has been established.
+        """
+        pending = getattr(self, '_pending_info_width', None)
+        if type(pending) is int and pending > 0:
+            low, high = PHOTOS_INFO_WIDTH_BOUNDS
+            return min(high, max(low, pending))
+        preferred = getattr(self, '_preferred_info_width', None)
+        if type(preferred) is int and preferred > 0:
+            low, high = PHOTOS_INFO_WIDTH_BOUNDS
+            return min(high, max(low, preferred))
+        return None
+
     def _on_panes_unmap(self, event: tk.Event) -> None:
         """Retain a pending settled sash value before hiding the pane.
 
@@ -851,8 +1096,17 @@ class PhotosWorkspace(ttk.Frame):
                 pass
             self._tree_width_save_after = None
             self._persist_tree_width()
+        if self._info_width_save_after is not None:
+            try:
+                self.after_cancel(self._info_width_save_after)
+            except tk.TclError:
+                pass
+            self._info_width_save_after = None
+            self._persist_info_width()
         self._tree_width_dragging = False
+        self._info_width_dragging = False
         self._tree_width_restored = False
+        self._info_width_restored = False
 
     def _begin_tree_width_drag(self, event: tk.Event) -> None:
         """Mark pointer interaction with the Panedwindow sash as user-owned.
@@ -864,9 +1118,45 @@ class PhotosWorkspace(ttk.Frame):
             None: A later Map callback cannot replace an active sash drag.
         """
         # Ttk identifies a sash by its index (often "0"), not the word "sash".
-        sash_index = self.panes.identify(event.x, event.y)
-        if sash_index not in ('', None):
+        if self._sash_index_at(event.x, event.y) == 0:
             self._tree_width_dragging = True
+
+    def _sash_index_at(self, x: int, y: int) -> int | None:
+        """Return the numeric sash index reported at one pointer position.
+
+        Args:
+            x (int): Horizontal Panedwindow coordinate.
+            y (int): Vertical Panedwindow coordinate.
+
+        Returns:
+            int | None: Identified sash index, or None for a non-sash element.
+        """
+        identified = self.panes.identify(x, y)
+        if isinstance(identified, (tuple, list)):
+            parts = tuple(str(part) for part in identified)
+        else:
+            parts = str(identified).replace(',', ' ').split()
+        for part in reversed(parts):
+            try:
+                index = int(part)
+            except ValueError:
+                continue
+            if index >= 0:
+                return index
+        return None
+
+    def _begin_info_width_drag(self, event: tk.Event) -> None:
+        """Mark only the right inspector sash as directly user-controlled.
+
+        Args:
+            event (tk.Event): Pointer press and coordinates from Tk.
+
+        Returns:
+            None: The inspector preference survives later geometry changes.
+        """
+        if (self._photo_inspector_visible
+                and self._sash_index_at(event.x, event.y) == 1):
+            self._info_width_dragging = True
 
     def _schedule_tree_width_save(self, _event: tk.Event) -> None:
         """Debounce sash release before persisting the user-selected width.
@@ -879,11 +1169,13 @@ class PhotosWorkspace(ttk.Frame):
         """
         if not self.panes.winfo_ismapped():
             return
-        if self._tree_width_dragging:
-            self._tree_width_dragging = False
-            self._tree_width_restored = True
-        elif not self._tree_width_restored:
+        if (_event.type == tk.EventType.ButtonRelease
+                and self._sash_index_at(_event.x, _event.y) != 0):
             return
+        if not self._tree_width_dragging:
+            return
+        self._tree_width_dragging = False
+        self._tree_width_restored = True
         width = int(self.panes.sashpos(0))
         if width <= 0:
             return
@@ -947,7 +1239,10 @@ class PhotosWorkspace(ttk.Frame):
             )
             if self._preload_strip.winfo_manager() == 'grid':
                 self._preload_strip.grid_configure(row=2 if stacked else 1)
-        self._preload_label.configure(wraplength=max(160, event.width - 48))
+        self._preload_label.configure(wraplength=max(
+            1, event.width - self._preload_cancel.winfo_reqwidth()
+            - self._preload_activity.winfo_reqwidth() - PHOTOS_PRELOAD_CONTROL_GAP,
+        ))
         available = event.width
         if not stacked:
             available -= self._heading_controls.winfo_reqwidth()
@@ -1157,6 +1452,7 @@ class PhotosWorkspace(ttk.Frame):
             self._preload_worker.stop()
         self._preload_strip.grid_remove()
         self._preload_bar.stop()
+        self._set_preload_activity(False)
         self._create_receipt = None
         self._generation += 1
         self._clear_photo_diagnostics()
@@ -1417,11 +1713,12 @@ class PhotosWorkspace(ttk.Frame):
             )
 
     def diagnostics_snapshot(self) -> str:
-        """Return safe current-session Photos failures and observations.
+        """Return safe Photos failures, observations and live render counters.
 
         Returns:
-            str: Latest safe failure, bounded failure history and allowlisted
-                observations, or a fixed message when no failure is recorded.
+            str: Latest safe failure, bounded failure history, allowlisted
+                observations and numeric counters when a grid is mounted.
+                A fixed message identifies a session without recorded failures.
         """
         with self._photo_diagnostic_lock:
             latest = self._photo_diagnostic_latest
@@ -1440,6 +1737,19 @@ class PhotosWorkspace(ttk.Frame):
                 'Recent observations:',
                 *('  ' + entry for entry in observations),
             ))
+        controller = getattr(
+            getattr(self, '_viewer', None), '_gallery_viewer_controller', None,
+        )
+        render_diagnostics = getattr(controller, 'render_diagnostics', None)
+        if callable(render_diagnostics):
+            try:
+                lines.append(render_diagnostics())
+            except Exception as error:
+                # A diagnostic-only failure must not hide the original cause.
+                logging.getLogger(__name__).warning(
+                    'Photos render counters unavailable: %s',
+                    format_safe_photos_failure('media-apply', 'other', error),
+                )
         return '\n'.join(lines)
 
     def _request_page(self, after_id: int | None) -> None:
@@ -1545,6 +1855,7 @@ class PhotosWorkspace(ttk.Frame):
             None: Current results apply before pending catalogue work advances.
         """
         self._poll_id = None
+        self._update_preload_priority()
         self._poll_cache_work()
         while True:
             try:
@@ -1581,6 +1892,7 @@ class PhotosWorkspace(ttk.Frame):
             self._pending_cursor = None
             self._has_pending_page = False
             self._request_page(cursor)
+        self._update_preload_priority()
         if (self._worker is not None or self._has_pending_page or self._context_busy
                 or self._cache_worker is not None or self._cache_pending
                 or self._inspector_worker is not None
@@ -2795,22 +3107,26 @@ class PhotosWorkspace(ttk.Frame):
         ):
             self._dismiss_context(restore=False)
 
-    def _open_context(self, event: tk.Event) -> GlassCard:
-        """Place a compact inline surface at the pointer inside Photos.
+    def _open_context(
+        self, event: tk.Event, *, surface: tk.Misc | None = None,
+    ) -> GlassCard:
+        """Anchor a compact context to its trigger on the visible owner.
 
         Args:
             event (tk.Event): Trigger widget and screen coordinates.
+            surface (tk.Misc | None): Optional visible parent for a global
+                trigger, or None to place the card inside Photos.
 
         Returns:
             GlassCard: The new current contextual surface.
         """
         self._dismiss_context(restore=False)
-        card = GlassCard(
-            self, padding=8, takefocus=True, rounded_clip=True,
-        )
+        parent = surface if surface is not None else self
+        card = GlassCard(parent, padding=8, takefocus=True, rounded_clip=True)
         self._context_card, self._context_origin = card, event.widget
+        self._context_surface = parent
         self._context_xy = (
-            event.x_root - self.winfo_rootx(), event.y_root - self.winfo_rooty(),
+            event.x_root - parent.winfo_rootx(), event.y_root - parent.winfo_rooty(),
         )
         self._bind_context_clicks()
         for sequence, callback in (
@@ -2819,6 +3135,11 @@ class PhotosWorkspace(ttk.Frame):
         ):
             binding = self.winfo_toplevel().bind(sequence, callback, add="+")
             self._context_bindings.append((sequence, binding))
+        if parent is not self:
+            binding = self.winfo_toplevel().bind(
+                '<Configure>', lambda _event: self._place_context(card), add='+',
+            )
+            self._context_bindings.append(('<Configure>', binding))
         card.bind("<Configure>", lambda _event: self._place_context(card), add="+")
         card.bind("<Map>", lambda _event: card.focus_set(), add="+")
         self._place_context(card)
@@ -2838,7 +3159,7 @@ class PhotosWorkspace(ttk.Frame):
         return "break"
 
     def _place_context(self, card: GlassCard | None) -> None:
-        """Clamp the current card within the Photos viewport after content changes.
+        """Clamp the current card within its visible surface after changes.
 
         Args:
             card (GlassCard | None): The current surface, if one exists.
@@ -2850,9 +3171,10 @@ class PhotosWorkspace(ttk.Frame):
             return
         x, y = self._context_xy
         width, height = card.winfo_reqwidth(), card.winfo_reqheight()
+        surface = self._context_surface
         card.place(
-            x=max(0, min(x, self.winfo_width() - width)),
-            y=max(0, min(y, self.winfo_height() - height)),
+            x=max(0, min(x, surface.winfo_width() - width)),
+            y=max(0, min(y, surface.winfo_height() - height)),
         )
         card.lift()
 
@@ -3717,6 +4039,9 @@ class PhotosWorkspace(ttk.Frame):
             None: A late read cannot repaint a replaced gallery or session.
         """
         self._inspector_generation += 1
+        if self._info_width_restore_after is not None:
+            self.after_cancel(self._info_width_restore_after)
+            self._info_width_restore_after = None
         if self._inspector_cancel is not None:
             self._inspector_cancel.set()
             self._inspector_cancel = None
@@ -3750,6 +4075,21 @@ class PhotosWorkspace(ttk.Frame):
         self.info_pane.configure(width=width)
         self.panes.add(self.info_pane, weight=0)
         self._photo_inspector_visible = True
+        self._info_width_restored = False
+        self.after_idle(self._restore_info_width)
+        self._info_width_restore_after = self.after(
+            PHOTOS_INFO_RESTORE_DELAY_MS, self._settle_info_width,
+        )
+
+    def _settle_info_width(self) -> None:
+        """Restore the desired width once after native pane layout settles.
+
+        Returns:
+            None: Clears its owned timer and respects teardown, hiding and any
+                newer user drag through the existing restoration guards.
+        """
+        self._info_width_restore_after = None
+        self._restore_info_width()
 
     def _render_photo_inspector(
         self, photo: LinkedPhoto, fields: LinkedMediaDetails | None, *,
@@ -3979,6 +4319,7 @@ class PhotosWorkspace(ttk.Frame):
         """
         if self._destroyed or gallery_id not in self._galleries:
             return
+        self._request_storage_refresh()
         self._cache_pending[gallery_id] = (photos, complete)
         if self._cache_after is None:
             self._cache_after = self.after(
@@ -4096,7 +4437,7 @@ class PhotosWorkspace(ttk.Frame):
         self._show_preload_progress(progress)
         if progress.phase in ('complete', 'partial', 'cancelled', 'error'):
             gallery_id = progress.gallery_id
-            if progress.cache_state != 'unknown':
+            if progress.cache_state != 'unknown' and not progress.thumbnails_only:
                 self._cache_state[gallery_id] = progress.cache_state
                 self._cache_counts[gallery_id] = (
                     progress.cached, progress.total or 0, True,
@@ -4136,6 +4477,12 @@ class PhotosWorkspace(ttk.Frame):
                 card, self._text('preload'),
                 lambda: self._launch_preload(card, session, gallery),
             )
+            self._context_action(
+                card, self._text('preload_thumbnails'),
+                lambda: self._launch_preload(
+                    card, session, gallery, thumbnails_only=True,
+                ),
+            )
         self._cache_pin_var = tk.BooleanVar(
             card, self._gallery_pins.get(gallery_id, False),
         )
@@ -4158,7 +4505,7 @@ class PhotosWorkspace(ttk.Frame):
 
     def _launch_preload(
         self, card: GlassCard, session: LinkingSession, gallery: LinkedGallery,
-        *, pinned: bool | None = None,
+        *, pinned: bool | None = None, thumbnails_only: bool = False,
     ) -> None:
         """Start one explicit, cancellable preload for the captured gallery.
 
@@ -4167,6 +4514,8 @@ class PhotosWorkspace(ttk.Frame):
             session (LinkingSession): Exact session captured at menu opening.
             gallery (LinkedGallery): Exact listed target of this action.
             pinned (bool | None): Set retention, or None to preserve it.
+            thumbnails_only (bool): Explicitly fetch only direct thumbnails,
+                preserving the original full-preload completion semantics.
 
         Returns:
             None: Starts work off Tk; disabling retention performs no download.
@@ -4182,11 +4531,17 @@ class PhotosWorkspace(ttk.Frame):
             )
             return
         diagnostic_generation = self._generation
+        self._update_preload_priority()
         self._preload_worker = GalleryPreloadWorker(
             session, gallery.gallery_id, pinned=pinned,
             download=pinned is not False,
             diagnostic_callback=lambda summary: self._record_preload_diagnostic(
                 session, summary,
+            ),
+            thumbnails_only=thumbnails_only,
+            yield_to_foreground=self._preload_foreground.is_set,
+            foreground_reason=(
+                lambda: self._preload_foreground_reason
             ),
         )
         self._preload_generation = diagnostic_generation
@@ -4200,10 +4555,51 @@ class PhotosWorkspace(ttk.Frame):
         self._preload_bar.configure(mode='indeterminate')
         self._preload_bar.grid()
         self._preload_bar.start(PHOTOS_CATALOG_POLL_MS)
+        self._set_preload_activity(True)
         self._preload_cancel.state(['!disabled'])
         self._preload_worker.start()
         self._dismiss_context()
         self._schedule_poll()
+
+    def _update_preload_priority(self) -> None:
+        """Publish foreground demand to preload without worker-side Tk reads.
+
+        Returns:
+            None: The background worker sees only a thread-safe Event. An
+                already admitted bounded HTTP read may finish before yielding.
+        """
+        controller = getattr(self._viewer, '_gallery_viewer_controller', None)
+        demanded = bool(
+            (self._worker is not None and self._worker.is_alive())
+            or self._has_pending_page or self._context_busy
+            or (self._inspector_worker is not None
+                and self._inspector_worker.is_alive())
+            or self._inspector_pending is not None
+        )
+        reason = 'metadata' if demanded else ''
+        if controller is not None and not controller._closed:
+            urgent = bool(
+                (controller._worker is not None
+                 and controller._worker.is_alive()
+                 and controller._worker_kind in (
+                     'detail', 'prefetch', 'page', 'more', 'slide_more',
+                     'audio', 'presentation',
+                 ))
+                or controller._pending_detail_index is not None
+                or controller._pending_page_request is not None
+                or controller._audio_pending is not None
+            )
+            if urgent:
+                demanded = True
+                reason = 'browsing'
+        # Explicit preload shares serial admission with viewport and Watcher.
+        # Speculative RAM/disk/overscan queues have no transport claim and must
+        # not keep this event set indefinitely.
+        self._preload_foreground_reason = reason
+        if demanded:
+            self._preload_foreground.set()
+        else:
+            self._preload_foreground.clear()
 
     def _show_preload_progress(self, progress: PreloadProgress) -> None:
         """Show truthful transfer counts and terminal reasons in the heading.
@@ -4212,11 +4608,31 @@ class PhotosWorkspace(ttk.Frame):
             progress (PreloadProgress): Latest immutable worker snapshot.
 
         Returns:
-            None: Shows status only for its selected gallery and never touches
-                storage or attributes one gallery's failure to another.
+            None: Keeps active work/cancellation visible across navigation;
+                terminal results stay scoped to the exact selected gallery.
         """
-        if self._selected_gallery_id != progress.gallery_id:
+        terminal = progress.phase in ('complete', 'partial', 'cancelled', 'error')
+        previous_storage_witness = self._storage_preload_witness
+        storage_witness = (
+            progress.gallery_id, progress.cached,
+            progress.stored, progress.stored_bytes,
+            progress.phase,
+        )
+        storage_progress_changed = bool(
+            previous_storage_witness is not None
+            and previous_storage_witness[:4] != storage_witness[:4]
+        )
+        new_terminal_snapshot = bool(
+            terminal and (previous_storage_witness is None
+                          or previous_storage_witness != storage_witness)
+        )
+        self._storage_preload_witness = storage_witness
+        if storage_progress_changed or new_terminal_snapshot:
+            self._request_storage_refresh()
+        different_gallery = self._selected_gallery_id != progress.gallery_id
+        if different_gallery and terminal:
             self._preload_strip.grid_remove()
+            self._set_preload_activity(False)
             return
         self._preload_strip.grid(
             row=2 if self._heading_stacked else 1,
@@ -4228,19 +4644,29 @@ class PhotosWorkspace(ttk.Frame):
             'preload_unpinned' if self._preload_unpin and progress.phase == 'complete'
             else 'preload_' + progress.phase,
         )
+        if progress.phase == 'yielding' and progress.wait_reason == 'metadata':
+            phase = self._text('preload_wait_metadata')
         if progress.phase == 'waiting' and progress.retry_after_seconds is not None:
             phase += ' · ' + self._text('preload_retry_countdown').format(
                 seconds=progress.retry_after_seconds,
             )
         if progress.total is not None:
-            phase += ' · ' + self._text('preload_counts').format(
-                done=progress.completed, total=progress.total,
-                cached=progress.cached, skipped=progress.skipped,
-            )
+            if progress.thumbnails_only and not terminal:
+                phase += ' · ' + self._text('preload_thumbnail_counts').format(
+                    done=progress.completed, total=progress.total,
+                    hits=progress.current_hits, stored=progress.stored,
+                )
+            else:
+                phase += ' · ' + self._text('preload_counts').format(
+                    done=progress.completed, total=progress.total,
+                    cached=progress.cached, skipped=progress.skipped,
+                )
         if progress.reason:
             phase += ' · ' + self._text('preload_reason_' + progress.reason)
-        self._preload_text.set((title + ': ' if title else '') + phase)
-        terminal = progress.phase in ('complete', 'partial', 'cancelled', 'error')
+        self._preload_text.set(
+            (title + ': ' if different_gallery and title else '') + phase,
+        )
+        self._set_preload_activity(not terminal)
         self._preload_cancel_hint.set(self._text(
             'preload_close_status' if terminal else 'preload_cancel',
         ))
@@ -4248,14 +4674,385 @@ class PhotosWorkspace(ttk.Frame):
             self._preload_bar.stop()
             self._preload_bar.grid_remove()
             self._preload_cancel.state(['!disabled'])
-        elif progress.phase in ('listing', 'unpinning', 'waiting'):
+        elif progress.total is None:
             self._preload_bar.configure(mode='indeterminate')
+            self._preload_bar.start(PHOTOS_CATALOG_POLL_MS)
         else:
             self._preload_bar.stop()
+            self._preload_bar.grid()
             self._preload_bar.configure(
                 mode='determinate', maximum=max(1, progress.total or 1),
                 value=progress.completed,
             )
+
+    def _set_preload_activity(self, active: bool) -> None:
+        """Animate the existing smooth ring independently of photo progress.
+
+        Args:
+            active (bool): Whether listing, checks, waiting or transfer runs.
+        Returns:
+            None: Maintains one small animation timer and cancels it at rest.
+        """
+        if not active:
+            if self._preload_activity_after is not None:
+                self.after_cancel(self._preload_activity_after)
+                self._preload_activity_after = None
+            try:
+                self._preload_activity.configure(image='', text='')
+            except tk.TclError:
+                # A frame Destroy callback can follow destruction of its label.
+                pass
+        elif self._preload_activity_after is None:
+            self._animate_preload_activity()
+
+    def _animate_preload_activity(self) -> None:
+        """Advance pre-rendered activity artwork without cache or Pillow work.
+
+        Returns:
+            None: Schedules one bounded smooth-ring frame while work is active.
+        """
+        self._preload_activity_after = None
+        if self._destroyed:
+            return
+        if self._catalogue_spinner_frames:
+            self._preload_activity_index = (
+                self._preload_activity_index + 1
+            ) % len(self._catalogue_spinner_frames)
+            self._preload_activity.configure(
+                image=self._catalogue_spinner_frames[self._preload_activity_index],
+            )
+        else:
+            self._preload_activity.configure(text='…')
+        self._preload_activity_after = self.after(
+            PHOTOS_CATALOGUE_PROGRESS_INTERVAL_MS, self._animate_preload_activity,
+        )
+
+    @staticmethod
+    def _storage_bytes(value: int) -> str:
+        """Format physical storage with consistent binary units.
+
+        Args:
+            value (int): Nonnegative observed physical bytes.
+        Returns:
+            str: Compact B/KiB/MiB/GiB text using powers of 1024.
+        """
+        scaled = float(value)
+        for unit in ('B', 'KiB', 'MiB', 'GiB'):
+            if scaled < 1024 or unit == 'GiB':
+                return f'{scaled:.0f} {unit}' if unit == 'B' else f'{scaled:.1f} {unit}'
+            scaled /= 1024
+        return ''
+
+    def _resize_storage(self, event: tk.Event) -> None:
+        """Wrap storage text in a narrow viewer without moving other controls.
+
+        Args:
+            event (tk.Event): Storage heading's current mapped width.
+        Returns:
+            None: Updates text only when the layout mode changes.
+        """
+        narrow = (
+            self._storage_parent is None
+            and event.width < PHOTOS_HEADING_STACK_WIDTH
+        )
+        if narrow != self._storage_narrow:
+            self._storage_narrow = narrow
+            self._show_storage_snapshot()
+
+    def _show_storage_snapshot(self) -> None:
+        """Show total thumbnail count and bytes across both measured pools.
+
+        Returns:
+            None: Incomplete totals remain unknown; the detail keeps retained
+                bytes separate from the ordinary thumbnail quota.
+        """
+        count, used, _limit, ready, error = self._storage_snapshot
+        loading = not ready and not error
+        if not loading:
+            if self._storage_activity_after is not None:
+                self.after_cancel(self._storage_activity_after)
+                self._storage_activity_after = None
+            self._storage_button.configure(image=self._storage_icon or '')
+        elif self._storage_activity_after is None:
+            self._animate_storage_activity()
+        _, kept_count, kept_bytes, _, _other_bytes, kept_ready = (
+            self._retained_storage_snapshot
+        )
+        total_count = (
+            f'{count + kept_count:,}'
+            if ready and count is not None and kept_ready and kept_count is not None
+            else '—'
+        )
+        total_bytes = (
+            self._storage_bytes(used + kept_bytes)
+            if ready and used is not None and kept_ready and kept_bytes is not None
+            else self._text('storage_unavailable') if error
+            else '—'
+        )
+        self._storage_text.set(
+            '▧ ' + self._text('storage_title') + ' ' + total_count
+            + ' · ' + total_bytes,
+        )
+
+    def _animate_storage_activity(self) -> None:
+        """Reuse prepared ring frames while initial storage accounting waits.
+
+        Returns:
+            None: Keeps one cheap Tk timer until a measured or unavailable
+                snapshot arrives; no I/O or Pillow rendering occurs here.
+        """
+        self._storage_activity_after = None
+        if (self._destroyed or self._storage_snapshot[3]
+                or self._storage_snapshot[4]
+                or not self._catalogue_spinner_frames):
+            return
+        self._storage_activity_index = (
+            self._storage_activity_index + 1
+        ) % len(self._catalogue_spinner_frames)
+        self._storage_button.configure(
+            image=self._catalogue_spinner_frames[self._storage_activity_index],
+            compound='left',
+        )
+        self._storage_activity_after = self.after(
+            PHOTOS_CATALOGUE_PROGRESS_INTERVAL_MS, self._animate_storage_activity,
+        )
+
+    def _request_storage_refresh(self) -> None:
+        """Coalesce a live cache event into the existing storage observer.
+
+        Returns:
+            None: At most one owner worker remains active; a running observer
+                gets a short continuation until its result and follow-up arrive.
+        """
+        if self._destroyed:
+            return
+        self._storage_refresh_requested = True
+        if self._storage_refresh_waiting:
+            return
+        self._storage_refresh_waiting = True
+        if self._storage_after is not None:
+            self.after_cancel(self._storage_after)
+            self._storage_after = None
+        worker_active = (
+            self._storage_worker is not None
+            and self._storage_worker.is_alive()
+        )
+        delay = (
+            PHOTOS_STORAGE_ACTIVE_POLL_MS if worker_active else 0
+        )
+        self._storage_after = self.after(delay, self._poll_storage)
+
+    def _poll_storage(self) -> None:
+        """Coalesce off-Tk accounting/RAM observations into a safe snapshot.
+
+        Returns:
+            None: Retains at most one worker and one result; teardown cancels
+                recovery and the next timer. No scans or hashes run on Tk.
+        """
+        self._storage_after = None
+        if self._destroyed:
+            return
+        try:
+            snapshot, retained, ram, complete = self._storage_results.get_nowait()
+            self._storage_snapshot = snapshot
+            if retained[5] or not self._retained_storage_snapshot[5]:
+                self._retained_storage_snapshot = retained
+            if complete:
+                self._storage_ram = ram
+            self._show_storage_snapshot()
+        except queue.Empty:
+            pass
+        worker_finished = (
+            self._storage_worker is not None
+            and not self._storage_worker.is_alive()
+        )
+        if worker_finished:
+            self._storage_worker = None
+            if (self._storage_worker_requested
+                    and not self._storage_refresh_requested):
+                self._storage_worker_requested = False
+                self._storage_refresh_waiting = False
+                self._storage_after = self.after(
+                    PHOTOS_STORAGE_REFRESH_MS, self._poll_storage,
+                )
+                return
+            self._storage_worker_requested = False
+        if self._storage_worker is None:
+            cancel = self._storage_cancel
+            requested = self._storage_refresh_requested
+            self._storage_refresh_requested = False
+
+            def observe() -> None:
+                """Read physical accounting without touching linked media.
+
+                Returns:
+                    None: Publishes one immutable storage/RAM observation.
+                """
+                try:
+                    cache = GalleryMediaCache.for_current_user(
+                        NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
+                    )
+                except Exception:  # noqa: BLE001
+                    cache = None
+                try:
+                    snapshot = (cache.thumbnail_storage_snapshot(cancel)
+                                if cache is not None else
+                                (None, None, None, False, 'unavailable'))
+                except Exception:  # noqa: BLE001
+                    snapshot = (None, None, None, False, 'unavailable')
+                partial = (
+                    snapshot,
+                    (None, None, None, None, None, False),
+                    None,
+                    False,
+                )
+                if not cancel.is_set():
+                    publish_result(partial)
+                try:
+                    retained = (cache.retained_storage_snapshot(cancel)
+                                if cache is not None else
+                                (None, None, None, None, None, False))
+                except Exception:  # noqa: BLE001
+                    retained = (None, None, None, None, None, False)
+                try:
+                    ram = current_process_ram_bytes()
+                except Exception:  # noqa: BLE001
+                    ram = None
+                if not cancel.is_set():
+                    publish_result((snapshot, retained, ram, True))
+
+            def publish_result(
+                result: _StorageObservation,
+            ) -> None:
+                """Replace a stale queued observation with the latest phase.
+
+                Args:
+                    result (_StorageObservation): Ordinary and retained snapshots,
+                        process RAM bytes and completion of retained/RAM work.
+
+                Returns:
+                    None: The bounded queue keeps only the newest observation.
+                """
+                if cancel.is_set():
+                    return
+                try:
+                    self._storage_results.put_nowait(result)
+                    return
+                except queue.Full:
+                    pass
+                try:
+                    self._storage_results.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    self._storage_results.put_nowait(result)
+                except queue.Full:
+                    pass
+
+            self._storage_worker = threading.Thread(
+                target=observe, name='photos-storage-observation', daemon=True,
+            )
+            self._storage_worker_requested = requested
+            self._storage_worker.start()
+        polling_interval = (
+            PHOTOS_STORAGE_ACTIVE_POLL_MS
+            if self._storage_refresh_waiting
+            else PHOTOS_STORAGE_REFRESH_MS
+        )
+        self._storage_after = self.after(
+            polling_interval, self._poll_storage,
+        )
+
+    def _open_storage_context(self) -> None:
+        """Open anchored physical storage detail and shared quota settings.
+
+        Returns:
+            None: Reuses glass context/focus/Escape owners. RAM describes this
+                process only; unavailable per-process VRAM stays unknown.
+        """
+        card = self._open_context(
+            self._context_event(self._storage_button),
+            surface=self._storage_surface,
+        )
+        self._context_content(card, self._text('storage_scope'))
+        count, used, limit, ready, _error = self._storage_snapshot
+        ordinary = (
+            self._text('storage_ordinary_detail').format(
+                count=f'{count:,}', used=self._storage_bytes(used),
+                limit=self._storage_bytes(limit),
+            ) if ready and count is not None and used is not None and limit is not None
+            else self._text('storage_ordinary_unknown')
+        )
+        galleries, thumbs, thumb_bytes, others, other_bytes, kept_ready = (
+            self._retained_storage_snapshot
+        )
+        kept = (
+            self._text('storage_keep_detail').format(
+                galleries=f'{galleries:,}', thumbs=f'{thumbs:,}',
+                thumb_bytes=self._storage_bytes(thumb_bytes),
+                others=f'{others:,}', other_bytes=self._storage_bytes(other_bytes),
+            ) if kept_ready and all(value is not None for value in (
+                galleries, thumbs, thumb_bytes, others, other_bytes,
+            )) else self._text('storage_keep_unknown')
+        )
+        for description in (ordinary, kept):
+            ttk.Label(
+                card, text=description, style='Card.TLabel', justify='left',
+                wraplength=PHOTOS_INFO_CARD_MAX_WIDTH,
+            ).pack(anchor='w', fill='x', pady=(4, 0))
+        ram = '—' if self._storage_ram is None else self._storage_bytes(self._storage_ram)
+        ttk.Label(
+            card, text=self._text('storage_ram').format(value=ram),
+            style='Card.TLabel', wraplength=PHOTOS_INFO_CARD_MAX_WIDTH,
+        ).pack(anchor='w', pady=(4, 0))
+        ttk.Label(
+            card, text=self._text('storage_vram'), style='Muted.TLabel',
+        ).pack(anchor='w')
+        ttk.Label(
+            card, text=self._text('storage_limit'), style='Card.TLabel',
+        ).pack(anchor='w', pady=(6, 0))
+        quota = tk.StringVar(card)
+        current_limit = self._storage_snapshot[2]
+        quota.set(str((current_limit or THUMBNAIL_DISK_DEFAULT_BYTES) // 1024**3))
+        ttk.Combobox(
+            card, textvariable=quota, state='readonly', width=8,
+            values=[str(value) for value in THUMBNAIL_CACHE_LIMIT_CHOICES_GIB],
+        ).pack(anchor='w')
+        self._context_action(
+            card, self._text('storage_save'),
+            lambda: self._save_storage_limit(card, quota),
+        )
+        self._place_context(card)
+
+    def _save_storage_limit(self, card: GlassCard, quota: tk.StringVar) -> None:
+        """Persist the explicitly selected shared quota without blocking Tk.
+
+        Args:
+            card (GlassCard): Exact originating settings context.
+            quota (tk.StringVar): Selected ordinary thumbnail limit in GiB.
+        Returns:
+            None: Shows success only after the config owner confirms persistence.
+        """
+        try:
+            value = int(quota.get())
+        except ValueError:
+            return
+
+        def save() -> Callable[[], None]:
+            """Publish the shared quota through the existing config owner.
+
+            Returns:
+                Callable[[], None]: Tk callback showing the confirmed outcome.
+            """
+            success = set_thumbnail_cache_limit_gib(value)
+            return lambda: self._context_content(
+                card, self._text('storage_saved' if success else 'storage_save_failed'),
+            )
+
+        self._run_context(
+            card, save,
+            lambda: self._context_content(card, self._text('storage_save_failed')),
+        )
 
     def _cancel_preload(self) -> None:
         """Cancel new reads, or dismiss a completed preload status strip.
@@ -4269,6 +5066,7 @@ class PhotosWorkspace(ttk.Frame):
             self._preload_cancel.state(['disabled'])
         else:
             self._preload_strip.grid_remove()
+            self._set_preload_activity(False)
             self._preload_last = None
 
     def _cache_glyph(self, gallery_id: int) -> str:
@@ -5651,6 +6449,14 @@ class PhotosWorkspace(ttk.Frame):
         if event.widget is not self or self._destroyed:
             return
         self._destroyed = True
+        self._storage_cancel.set()
+        if self._storage_activity_after is not None:
+            self.after_cancel(self._storage_activity_after)
+            self._storage_activity_after = None
+        if self._storage_after is not None:
+            self.after_cancel(self._storage_after)
+            self._storage_after = None
+        self._set_preload_activity(False)
         self._dismiss_context(restore=False)
         self._cancel_catalogue_continuation()
         self._cancel_cached_catalogue_mount()
@@ -5676,6 +6482,17 @@ class PhotosWorkspace(ttk.Frame):
                 self.after_cancel(self._tree_width_save_after)
             except tk.TclError:
                 pass
+        if self._info_width_save_after is not None:
+            try:
+                self.after_cancel(self._info_width_save_after)
+            except tk.TclError:
+                pass
+        if self._info_width_restore_after is not None:
+            try:
+                self.after_cancel(self._info_width_restore_after)
+            except tk.TclError:
+                pass
+            self._info_width_restore_after = None
         if self._poll_id is not None:
             try:
                 self.after_cancel(self._poll_id)
@@ -5686,6 +6503,11 @@ class PhotosWorkspace(ttk.Frame):
             self._viewer = None
         self._galleries.clear()
         self._thumbnail_memory.clear()
+        if self._storage_parent is not None:
+            try:
+                self._storage_heading.destroy()
+            except tk.TclError:
+                pass
 
     def _invalidate_photo_info(
         self, gallery_id: int, image_ids: tuple[int, ...] | None = None,

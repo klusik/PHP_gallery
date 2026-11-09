@@ -1328,11 +1328,12 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertEqual(1, manager._commit_linked_target.call_count)
 
     def test_diagnostics_keep_safe_browser_runtime_and_update_context(self) -> None:
-        """Copy updater and host context while retaining no raw API secret.
+        """Copy safe updater, rendering and host context without API secrets.
 
         Returns:
-            None: Browser, retained updater failure, runtime and Tk summaries
-                are copied while configured credentials remain redacted.
+            None: Browser, retained updater failure, numeric rendering facts,
+                runtime and Tk summaries are copied with redacted credentials.
+                A failed render-counter getter preserves the media failure.
         """
         app = object.__new__(MAIN.WatcherApp)
         app.root = mock.Mock()
@@ -1385,6 +1386,20 @@ class WatcherContinuationTests(unittest.TestCase):
             'shortcut key=f state=0x8 widget=canvas visible=1 '
             'fullscreen=0->1 reason=toggled',
         )
+        render_summary = (
+            'Photos grid: viewport_events=20 viewport_updates=2 '
+            'tk_images_created=8 tk_images_released=0 warm_cache_hits=8 '
+            'batches=2 source_disk=4 source_network=4 source_revalidated=0 '
+            'disk_ms=2.00 disk_write_ms=1.00 gate_wait_ms=0.50 '
+            'renewal_ms=0.25 network_ms=15.00 network_reads=4 '
+            'decode_ms=3.00 queue_wait_ms=1.00 tk_ms=2.00 '
+            'peak_update_ms=3.25 visible=8 admitted=12 retained=8'
+        )
+        photos._viewer = SimpleNamespace(
+            _gallery_viewer_controller=SimpleNamespace(
+                render_diagnostics=lambda: render_summary,
+            ),
+        )
         app.photos_workspace = photos
         initialize_event_pump_fixture(app)
         app._update_resume_status = "stage=resume; reason=continuation_unverified"
@@ -1409,6 +1424,7 @@ class WatcherContinuationTests(unittest.TestCase):
             "http=504 reason=http_status",
             "Recent observations:",
             "shortcut key=f state=0x8",
+            render_summary,
             "Update continuation: stage=resume; reason=continuation_unverified",
             "Runtime: source",
             "Tk: 8.6.15",
@@ -1416,4 +1432,12 @@ class WatcherContinuationTests(unittest.TestCase):
         ):
             self.assertIn(expected, copied)
         self.assertNotIn(api_secret, copied)
+        photos._viewer._gallery_viewer_controller.render_diagnostics = mock.Mock(
+            side_effect=ValueError('token=private-render-fixture'),
+        )
+        with self.assertLogs('uploader.photos_workspace', level='WARNING') as logs:
+            snapshot = photos.diagnostics_snapshot()
+        self.assertIn('Latest failure: phase=media-fetch', snapshot)
+        self.assertIn('error_type=ValueError', '\n'.join(logs.output))
+        self.assertNotIn('private-render-fixture', '\n'.join(logs.output))
 

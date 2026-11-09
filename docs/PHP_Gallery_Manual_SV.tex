@@ -2033,14 +2033,99 @@ Windows helskärmskommandon fungerar även med NumLock, CapsLock och ScrollLock
 eller utan numeriskt tangentbord. Control/Alt-kombinationer och textinmatning
 behåller sitt beteende. Stora JPEG/MPO-bilder använder ett mindre avkodningsraster
 före RGB-allokering med samma gräns på 36~miljoner pixlar och samma visningsgräns.
+Det gäller även under pixelgränsen när källan är större än visningsmålet;
+JPEG-skalning som stöds minskar rastret före konvertering.
 Om detaljbilden fortfarande överstiger gränsen kan en auktoriserad miniatyr
 ge en begränsad förhandsbild, även med äldre webbversioner. Behörighetsfel,
 avbrott, hastighetsbegränsning och skadade data använder inte denna reservväg.
 Kopierad diagnostik innehåller säkra orsaker, mått och gränser samt ett separat
 begränsat F/F11-spår.
+Den första auktoriserade fotosidan visas före valfria presentationsinställningar
+via samma worker. Grönt betyder verifierade kodade filer; detaljavkodning och
+nödvändiga privata serverkontroller kvarstår. Windows och macOS delar dessa
+vägar; installerad latens behöver ett live-test.
+Senaste albumdata från samma levande session visas direkt medan servern
+uppdaterar dem, utan extra synlighetsfilter i klienten. Oförändrade rader
+behåller rutorna och får aktuella kontrolltider. Stora JPEG-miniatyrvarianter
+minskar också avkodningsrastret före RGB-allokering.
+Den märkta kontrollen till vänster om Watcher-status visar alla typade sparade
+miniatyrer och deras byte. Detaljer skiljer vanlig kvot från \ui{Keep preloaded}
+och visar sparade miniatyrer, andra medier
+och gallerier separat. RAM avser bara denna Windows-process working set eller
+resident set i macOS; okänd VRAM förblir okänd.
+Fotorutnätet samlar upprepade rullnings- och layoutsignaler i en schemalagd
+vyuppdatering. Synliga miniatyrer prioriteras; en begränsad buffert av närliggande
+rader hjälper vid snabba riktningsbyten. Avkodningen ligger kvar i arbetstråden
+och Tk-bildändringar i GUI-tråden. Kopierad diagnostik visar antal händelser och
+uppdateringar, skapade och frigjorda bilder, cacheträffar och den längsta
+vyuppdateringen. Detta är lokala observationer; rullningen behöver manuell
+kontroll på den installerade datorn.
+En arbetstråd lämnar färdiga miniatyrer i begränsade seriella grupper utan
+separat GUI-pollning mellan foton. Färdiga resultat och träffar i avkodad cache
+läggs till i små GUI-steg; prioriterade åtgärder och vyändringar avbryter
+återstående läsningar. Sessionens request-gate styr fortfarande autentiserade
+överföringar. Diagnostiken skiljer på disk, väntan vid gate,
+inloggningsförnyelse, medietransport, avkodning, kötid och Tk-tillämpning.
+Jämför kall och varm bläddring separat; mätningarna bevisar inte FPS.
+Aktuella auktoriserade diskfynd behandlas av en separat disk-/avkodningstråd med
+fyra resultatplatser; Admin-återanvändning kräver ett färskt kontobundet
+katalogbevis.
+Avkodad LRU räknar fyra byte per pixel inom 16~MiB och~256 poster. Synliga
+poster prioriteras vid eviction; overscan tränger inte undan färsk historik
+när cachen är full. Tk-bilder begränsas till det tillåtna radbandet.
+Seriella medie-GETs kan återanvända en HTTP/1.1-anslutning och en verifierande
+SSLContext med båda serialiseringsspärrarna kvar. Endast fullständigt lästa
+och verifierade svar kan återanvändas. Serverstängning, ofullständiga data,
+avbrott och förnyelse kastar socketen. En gammal lånad socket får ansluta om
+en gång före ett svar inom samma tidsgräns. Den första vilogränsen är
+15~sekunder; verkligt hostingstöd och latens återstår att mäta.
+Diagnostiken skiljer requests, anslutningar och TLS-handshakes, inklusive
+kastat arbete, samt context, DNS, TCP, TLS, headers och body.
+Cachemenyn erbjuder \textbf{Förladda endast miniatyrer} för valt direkt
+galleri. Den återupptar aktuella auktoriserade cachedater, lämnar plats för
+bläddring, följer Retry-After och hämtar varken fulla foton eller undergallerier.
+Slutfört innebär inte kompletta lightboxfiler; \textbf{Förladda galleri}
+behåller sin tidigare betydelse med båda varianterna.
+Första visningen använder det förhandlade verifierade Admin-protokollet direkt;
+privata fullbilder kräver fortfarande ett uttryckligt lokalt förladdningsval.
+En nyare auktoriserad sida med samma foto och starka validator kan bekräfta
+en äldre monterad beskrivning med sidans verkliga kontrolltid.
+Full förladdning verifierar gamla sparade fullbilder igen i stället för att
+hoppa över dem enbart för att filerna finns. En giltig 304 förnyar åldern utan
+ny kroppsnedladdning; kompletta filer får inte en gemensam giltighetsfrist.
+Aktuellt foto eller aktuell sida går före bakgrundsuppdatering. Ersatta bildanrop
+avbryts och förberedelse av närliggande lightboxbilder går före rutnätets miniatyrer.
+Lämnade vyer drar tillbaka avbrutna väntande anrop från den seriella gaten.
+Båda förladdningslägena lämnar företräde åt aktuell vy före katalogsidor och bilder.
+Visade miniatyrer sparas automatiskt i kontots vanliga cache med en gemensam
+standardgräns på 4~GiB; andra kontons gallerifästningar kringgår inte gränsen.
+Cachehändelser uppdaterar uppmätt antal före långsammare sparade galleri-/RAM-data.
+Full förladdning räknar bekräftat sparade foton under överföringen och kontrollerar
+slutlig täckning. Val av ett foto som redan förbereds övertar resultatet i stället
+för att starta samma anrop igen. Diagnostiken skiljer detalj/förhämtning efter
+disk, nätverk, 304, byte och RAM/övertagande.
+En isolerad pixeljämförelse i Windows kontrollerar den stilla vyn efter
+rullning; den bevisar varken borttagna övergående ränder eller högre FPS.
 En gemensam diskcache per användare lagrar godkända foton och spår med
 verifierade kontrollsummor. Vanliga miniatyrbilder har~en egen del~med
-256~MiB och~16\,384~poster. Stora foton och~ljud behåller 1~GiB och~4\,096~poster.
+som standard 4~GiB och~262\,144~poster. Stora foton och~ljud behåller 1~GiB och~4\,096~poster.
+Den kompakta kontrollen bredvid Watcher öppnar den gemensamma
+användargränsen 1/2/4/8/16/32/64~GiB. Antal och byte omfattar vanliga och typade
+sparade miniatyrer. Använt/gräns i detaljen avser bara vanliga filer med huvuden;
+fästa gallerier, detalj/ljud och decoded/Tk
+räknas separat. Laddning/okänt betyder varken noll eller offlinebehörighet.
+SQLite uppdaterar summor med differenser under befintligt lås. Avbrutna ändringar
+eller ny kataloggeneration kräver begränsad avbrytbar metadataåterställning
+utanför Tk; indexet ersätter varken behörighet eller SHA-256.
+Förladdning visar aktivitet före listning, vid kontroller, foreground-väntan
+och~Retry-After. Bearbetat, aktuella träffar och bekräftade skrivningar skiljs.
+Slutkontroll återanvänder bara exakt oförändrade verifierade filidentiteter.
+Misslyckade writes och~no-store bevisar inte fullständighet. Seriellt FIFO
+ger viewport/Watcher en tur; spekulativa warm-köer blockerar inte förladdning.
+Hostinghastighet och faktisk variant kräver ett överenskommet live-test.
+Högerinspektören sparar sin egen önskade bredd vid döljning, omstart och resize.
+RAM är endast denna Windows-process working set eller macOS RSS utan barnprocesser;
+process-VRAM är okänt. Decoded-minnet förblir begränsat till~16~MiB.
 Varje del~rensar bara sina minst nyligen använda poster; stora foton tränger
 inte undan miniatyrbilder. Galleriers bevarande och~privata förladdningsval
 delas fortfarande. När~bevarande stängs av~kontrolleras först plats för~alla
@@ -2066,8 +2151,21 @@ accepterar högst 100\,000 direkta foton.
 Uttrycklig förladdning med en Admin Photos-länk kan på servrar med stöd även
 spara privata foton och utkast. Fotot, galleriet och hela kedjan av föräldrar
 måste vara verifierat utan NSFW-begränsning. Inställningen och privata filer
-hör till installationen och det verifierade kontot. Före visning verifieras
-privata data alltid mot den aktiva servern, även efter omstart. Äldre servrar
+hör till installationen och det verifierade kontot. Ett aktuellt auktoriserat
+katalogbevis tillåter samma miniatyrer i högst 60~sekunder utan nytt binäranrop.
+Vanliga HTTP-anrop för fullbilder och uttrycklig förladdning kräver fortfarande
+egen verifierad kropp inom 60-sekundersfönstret och vanlig 200/304-kontroll.
+Fullbildsvisaren kan separat använda en uttryckligen nedladdad kopia när sparat
+förladdningsval för fullbilder, exakt utfärdare, verifierat konto, galleri och
+foto, en hashkontrollerad fil samt ett aktuellt katalogbevis som är högst
+60~sekunder gammalt stämmer. Kroppens ursprungliga HTTP-ålder begränsar inte
+denna visningsväg och skrivs aldrig om. När sidbeviset löper ut uppdateras den
+lilla fotosidan med metadata för gruppen, inte varje bildkropp. Saknade eller
+skadade filer använder vanlig serverläsning. Förberedda detaljer behåller
+15~sekunder; inloggning, kontobyte, avbrott, känd vägran och avstängt val
+blockerar fortfarande återanvändning. Saknat bevis och sessionsförnyelse
+använder annars vanlig serverväg. Senare ändringar upptäcks vid nästa
+auktoriserade läsning. Äldre servrar
 och vanlig skyddad bläddring förblir tillfälliga. Serverns väntetid visas med
 en avbrytbar nedräkning; färdiga filer behålls när försöken är slut.
 Noll sparade foton visar en säker orsak i stället för delvis framgång.
@@ -2698,7 +2796,14 @@ Båda åtgärderna använder samma beständiga samordnare. Ett fristående Stop
 avslutar mappbevakningen, dess egen UTC-synkronisering och flygregistreringen,
 och slutför sedan accepterade fotografier och nödvändig rapportleverans;
 oberoende AI-, manuella import- och förhandsgranskningsarbetare fortsätter.
-Stop lämnar nyckeln kvar. En bekräftad återkallelse utför samma Stop, avslutar
+Stop lämnar nyckeln kvar. Uttryckligt Slutför flygning/spel med sparad API-nyckel
+godkänner även slutlig återkallelse efter accepterat arbete. Det fångade
+revoke-ticketet hålls genom serversvaret och byts atomiskt till reservationen
+för konfigurationsskrivning. Endast samma operation, endpoint/nyckel och
+konfigurationsgeneration får rensa nyckeln; sena händelser och skrivfel får
+inte radera en ny nyckel eller rapportera framgång. Ett redan körande vanligt
+Stop måste slutföras före ett nytt Finish.
+En bekräftad återkallelse utför samma Stop, avslutar
 även andra autentiserade producenter, slutför accepterat arbete och begär
 återkallelse av den galleribundna servernyckeln först efter nödvändiga
 kvittenser.

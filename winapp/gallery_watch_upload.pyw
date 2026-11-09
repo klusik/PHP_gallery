@@ -187,12 +187,14 @@ from uploader.flight_jobs import (
     connection_binding, read_document,
 )
 from uploader.flight_report_translations import tr
-from uploader.photos_workspace import PHOTOS_TREE_WIDTH, PhotosWorkspace
+from uploader.photos_workspace import (
+    PHOTOS_INFO_PANE_WIDTH, PHOTOS_TREE_WIDTH, PhotosWorkspace,
+)
 from uploader.app_linking import (
     LINKING_GALLERY_ID_MAX, LinkedGallery, LinkingError, LinkingSession,
 )
 from uploader.gallery_catalogue_cache import GalleryCatalogueCache
-from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS
+from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS, FinalizationWorker
 from uploader.flight_recorder import FlightRecorder
 from uploader.windows_file_identity import assert_local_windows_profile
 from uploader.windows_display import prepare_windows_display
@@ -371,6 +373,12 @@ UI_LAYOUT_SAVE_DELAY_MS = 300
 # Rationale: A 150 to 600 px range avoids unreadable or viewer-starving panes.
 UI_LAYOUT_TREE_WIDTH_BOUNDS = (150, 600)
 
+# Purpose: Bound saved right inspector width across desktop layouts.
+# Type: tuple[int, int]; Units: pixels; Scope: Photos inspector preference.
+# Consumers: _clamp_ui_layout_state.
+# Rationale: 180 px retains readable metadata and 600 px preserves viewer room.
+UI_LAYOUT_INFO_WIDTH_BOUNDS = (180, 600)
+
 # Purpose: Keep a visible region for gallery media beside the tree pane.
 # Type: int; Units: pixels; Scope: saved Photos tree-pane maximum width.
 # Consumers: _clamp_ui_layout_state.
@@ -389,6 +397,7 @@ class ViewLayoutState:
         y (int): Normal window vertical position in virtual-root pixels.
         window_state (Literal["normal", "zoomed"]): Last visible window mode.
         photos_tree_width (int): Photos tree sash position in Tk pixels.
+        photos_info_width (int): Right inspector width in Tk pixels.
     """
 
     width: int
@@ -397,6 +406,7 @@ class ViewLayoutState:
     y: int
     window_state: Literal["normal", "zoomed"]
     photos_tree_width: int
+    photos_info_width: int = PHOTOS_INFO_PANE_WIDTH
 
 
 def _layout_display_bounds(root: "tk.Tk") -> Tuple[int, int, int, int]:
@@ -458,7 +468,11 @@ def _clamp_ui_layout_state(
     window_state = state.window_state if state.window_state in (
         "normal", "zoomed",
     ) else "normal"
-    return ViewLayoutState(width, height, x, y, window_state, tree_width)
+    info_minimum, info_maximum = UI_LAYOUT_INFO_WIDTH_BOUNDS
+    info_width = min(info_maximum, max(info_minimum, state.photos_info_width))
+    return ViewLayoutState(
+        width, height, x, y, window_state, tree_width, info_width,
+    )
 
 
 def _read_ui_layout(
@@ -515,6 +529,7 @@ def _read_ui_layout(
             integer_field(window, "y", bounds[1]),
             raw_state if raw_state in ("normal", "zoomed") else "normal",
             integer_field(photos, "tree_width", PHOTOS_TREE_WIDTH),
+            integer_field(photos, "info_width", PHOTOS_INFO_PANE_WIDTH),
         )
         return _clamp_ui_layout_state(state, bounds, minimum)
     except (OSError, ValueError, TypeError, KeyError):
@@ -551,6 +566,7 @@ def _write_ui_layout(path: Path, state: ViewLayoutState) -> None:
         "x": state.x, "y": state.y, "state": state.window_state,
     })
     photos["tree_width"] = state.photos_tree_width
+    photos["info_width"] = state.photos_info_width
     document.update({"version": 1, "window": window, "photos": photos})
     atomic_write_json(path, document)
 
@@ -2190,7 +2206,17 @@ def normalize_upload_url(value: str) -> str:
     return candidates[0] if candidates else ""
 
 
-def revoke_upload_key(upload_url: str, api_key: str) -> Dict[str, Any]:
+# Purpose: Bound the existing ambiguous gateway revocation retry delay.
+# Type: float. Units: seconds. Scope: one captured gallery-key revoke request.
+# Consumers: revoke_upload_key. Rationale: 2 seconds spaces its sole retry
+# without extending retry count or changing the server reconciliation policy.
+KEY_REVOCATION_RETRY_DELAY_SECONDS = 2.0
+
+
+def revoke_upload_key(
+    upload_url: str, api_key: str, *,
+    before_request: Optional[Callable[[], None]] = None,
+) -> Dict[str, JsonValue]:
     """
     Revoke the active upload automation key through the authenticated API.
 
@@ -2207,23 +2233,27 @@ def revoke_upload_key(upload_url: str, api_key: str) -> Dict[str, Any]:
     Args:
         upload_url (str): PHP Gallery upload endpoint or Gallery root URL.
         api_key (str): Current gallery-scoped API key.
+        before_request (Optional[Callable[[], None]]): Captured work checkpoint
+            before every route/redirect/retry attempt, or None for direct calls.
 
     Returns:
-        Dict[str, Any]: Parsed JSON response from the server.
+        Dict[str, JsonValue]: Positive ok/action=revoke response, optional message
+            string and reconciled_after_gateway_error boolean.
 
     Raises:
         RuntimeError: Raised for network, HTTP, non-JSON, or server failures.
     """
+    options = {'before_request': before_request} if before_request is not None else {}
     try:
-        return post_json(upload_url, api_key, {"action": "revoke"})
+        return post_json(upload_url, api_key, {"action": "revoke"}, **options)
     except RuntimeError as exc:
         first_message = str(exc)
         if not any(marker in first_message for marker in ("HTTP 502:", "HTTP 503:", "HTTP 504:")):
             raise
         logging.warning("API-key revocation received a transient gateway error; retrying once after a short delay.")
-        time.sleep(2.0)
+        time.sleep(KEY_REVOCATION_RETRY_DELAY_SECONDS)
         try:
-            return post_json(upload_url, api_key, {"action": "revoke"})
+            return post_json(upload_url, api_key, {"action": "revoke"}, **options)
         except RuntimeError as retry_exc:
             retry_message = str(retry_exc).lower()
             if "invalid or revoked api key" in retry_message:
@@ -7661,6 +7691,9 @@ class WatcherApp:
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
         status = ttk.Frame(header, style="App.TFrame")
         status.grid(row=0, column=1, rowspan=2, sticky="e")
+        self._storage_header = ttk.Frame(status, style="App.TFrame")
+        self._storage_header.pack(side="left", padx=(0, 10))
+        self._storage_context_surface = outer
         self.monitor_light = tk.Canvas(
             status,
             width=16,
@@ -8594,6 +8627,7 @@ class WatcherApp:
             None: Loads the exact current linked session without another window.
         """
         preferred_tree_width = self._ui_layout_state.photos_tree_width
+        preferred_info_width = self._ui_layout_state.photos_info_width
         parent.rowconfigure(0, weight=1)
         parent.columnconfigure(0, weight=1)
         self.photos_workspace = PhotosWorkspace(
@@ -8614,6 +8648,10 @@ class WatcherApp:
             catalogue_cache=self.photos_catalogue_cache,
             load_tree_width=lambda: preferred_tree_width,
             save_tree_width=self.save_photos_tree_width,
+            load_info_width=lambda: preferred_info_width,
+            save_info_width=self.save_photos_info_width,
+            storage_parent=getattr(self, '_storage_header', None),
+            storage_surface=getattr(self, '_storage_context_surface', None),
             diagnostic_callback=lambda message: self.events.put(
                 ('warning', '[Photos] ' + message),
             ),
@@ -8750,6 +8788,12 @@ class WatcherApp:
                 pane_width = 0
             if pane_width > 0:
                 current = replace(current, photos_tree_width=pane_width)
+            try:
+                info_width = int(workspace.current_info_width())
+            except (tk.TclError, TypeError, ValueError, AttributeError):
+                info_width = 0
+            if info_width > 0:
+                current = replace(current, photos_info_width=info_width)
         current = _clamp_ui_layout_state(
             current, _layout_display_bounds(self.root), WATCHER_WINDOW_MINIMUM,
         )
@@ -8779,6 +8823,28 @@ class WatcherApp:
             _write_ui_layout(self._ui_layout_path, current)
         except (OSError, ValueError, TypeError):
             logging.debug("Photos tree width preference could not be saved.")
+            return
+        self._ui_layout_state = current
+
+    def save_photos_info_width(self, width: int) -> None:
+        """Persist one settled Photos inspector width in the UI layout file.
+
+        Args:
+            width (int): Desired right inspector width in Tk pixels.
+
+        Returns:
+            None: The width is clamped and atomically merged with window state.
+        """
+        if type(width) is not int or width <= 0:
+            return
+        current = replace(self._ui_layout_state, photos_info_width=width)
+        current = _clamp_ui_layout_state(
+            current, _layout_display_bounds(self.root), WATCHER_WINDOW_MINIMUM,
+        )
+        try:
+            _write_ui_layout(self._ui_layout_path, current)
+        except (OSError, ValueError, TypeError):
+            logging.debug("Photos inspector width preference could not be saved.")
             return
         self._ui_layout_state = current
 
@@ -11359,12 +11425,15 @@ class WatcherApp:
         return True
 
     def _save_owned_config(self, config: WatcherConfig, *,
-                           first_setup: bool = False) -> WatcherConfig:
+                           first_setup: bool = False,
+                           completed_work: Optional[CoordinatedWork] = None) -> WatcherConfig:
         """Save one host configuration under exclusive mode admission.
 
         Args:
             config (WatcherConfig): Proposed complete settings with owner token.
             first_setup (bool): True only for an explicit first settings save.
+            completed_work (Optional[CoordinatedWork]): Exact server-confirmed
+                revoke lifetime to exchange atomically for this config save.
 
         Returns:
             WatcherConfig: The accepted host object, retaining no-op identity.
@@ -11385,7 +11454,8 @@ class WatcherApp:
             self.config_store.save(config)
             return self.config_store.mode_port(config)
 
-        self.mode_owner.save(save, first_setup=first_setup)
+        options = {'completed_work': completed_work} if completed_work is not None else {}
+        self.mode_owner.save(save, first_setup=first_setup, **options)
         return config
 
     def capture_flight_admission(self) -> Tuple[GuiModeOwner, ModeConfigPort, str, str]:
@@ -12550,8 +12620,10 @@ class WatcherApp:
                            LinkedUploadTarget)
                     and not self.contextual_watcher_is_flight()):
                 self.flights.begin(False, automatic=True, photos_only=True)
-            else:
+            elif isinstance(getattr(self, '_contextual_watch_target', None), LinkedUploadTarget):
                 self.flights.finish_report()
+            else:
+                self.flights.finish_report(revoke=True)
         elif action == "progress":
             self.flights.show_progress()
         elif action == "recover":
@@ -12598,6 +12670,59 @@ class WatcherApp:
         self.connection_detail_var.set(message)
         self.write_log(message, "system")
         self.record_activity("info", message, "system")
+        self.refresh_connection_controls()
+
+    def complete_legacy_revocation(self, operation: FinalizationWorker) -> None:
+        """Clear only the captured key after its exact server-confirmed Finish.
+
+        Args:
+            operation (FinalizationWorker): Exact current finalizer retaining its
+                legacy_revoke work and captured configuration generation.
+        Returns:
+            None: Atomically exchanges the sole revoke ticket for a verified
+                ConfigStore save. Failure keeps cleanup visibly unconfirmed;
+                a stale event cannot clear or acknowledge a newer operation.
+        """
+        if operation is not self.flights.operation or not operation.server_revocation_confirmed:
+            return
+        work: Optional[CoordinatedWork] = None
+        try:
+            if (operation.config_generation is None
+                    or operation.config_generation is not self.config._snapshot_token
+                    or operation.api_key != self.config.api_key
+                    or operation.upload_url != normalize_upload_url(self.config.gallery_url)):
+                raise ValueError('Captured revocation configuration changed.')
+            work = operation.revocation_work()
+            work.checkpoint()
+            cleared = self._save_owned_config(
+                replace(self.config, api_key=''), completed_work=work,
+            )
+        except Exception:  # noqa: BLE001
+            detail = 'Server revocation confirmed; local key cleanup needs review.'
+            retryable = False
+            if work is not None:
+                try:
+                    work.checkpoint()
+                    retryable = True
+                except RuntimeError:
+                    pass
+            operation.confirm_local_cleanup(detail, retryable=retryable)
+            self.connection_detail_var.set(detail)
+            self.write_log(detail, 'error')
+            self.record_activity('error', detail, 'system')
+        else:
+            self.config = cleared
+            self.api_key_var.set('')
+            self._verified_legacy_gallery = None
+            self.connection_status_var.set('Not configured')
+            self.gallery_label_var.set('Target gallery: unknown')
+            self.gallery_title_var.set('')
+            self.connection_detail_var.set('API key revoked and removed from local configuration.')
+            operation.confirm_local_cleanup()
+            self.write_log('Gallery API key revoked.', 'success')
+            self.record_activity('success', 'Gallery API key revoked.', 'system')
+        self.api_key_revoke_running = operation.local_cleanup_pending
+        self.api_key_revoke_thread = operation if operation.local_cleanup_pending else None
         self.refresh_connection_controls()
 
     def revoke_api_key(self) -> None:
@@ -14109,39 +14234,9 @@ class WatcherApp:
                 elif kind == "linking_resume_startup":
                     self.linking_manager.resume_recent_links()
                 elif kind == "api_key_revoked":
-                    self.api_key_revoke_running = False
-                    self.api_key_revoke_thread = None
-                    self.api_key_var.set("")
-                    self._verified_legacy_gallery = None
-                    cleared_config = replace(self.config, api_key="")
-                    cleanup_error = ""
-                    try:
-                        cleared_config = self._save_owned_config(cleared_config)
-                        self.config = cleared_config
-                    except Exception as exc:  # noqa: BLE001
-                        self.config.api_key = ""
-                        cleanup_error = str(exc)
-                        self.write_log("API key was revoked on the server, but clearing local configuration failed: " + str(exc), "error")
-                    self.flights.revoked(cleanup_error)
-                    message = str(payload.get("message", "API key revoked.") or "API key revoked.")
-                    self.connection_status_var.set("Not configured")
-                    self.gallery_label_var.set("Target gallery: unknown")
-                    self.gallery_title_var.set("")
-                    self.connection_detail_var.set(
-                        "Server revocation confirmed; local cleanup needs retry."
-                        if cleanup_error else
-                        "API key was revoked and removed from local configuration."
-                    )
-                    self.write_log(message, "success")
-                    self.record_activity(
-                        "error" if cleanup_error else "success",
-                        "Server key revoked; local cleanup failed." if cleanup_error
-                        else "API key revoked and removed from local configuration.",
-                        "system",
-                    )
-                    self.refresh_connection_controls()
-                    if not self.flights.automatic_completion():
-                        messagebox.showinfo("Revoke API key", message)
+                    operation = payload.get('operation')
+                    if isinstance(operation, FinalizationWorker):
+                        self.complete_legacy_revocation(operation)
                 elif kind == "api_key_revoke_error":
                     self.api_key_revoke_running = False
                     self.api_key_revoke_thread = None

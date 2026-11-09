@@ -1971,15 +1971,98 @@ Ve Windows funguje F/F11 se~zapnutým NumLockem, CapsLockem i~ScrollLockem
 a~na klávesnici bez numerického bloku. Kombinace s~Control/Alt a~psaní do polí
 si zachovávají chování. Velké JPEG/MPO se dekódují do menšího rastru před
 alokací RGB při stejném limitu 36~milionů pixelů a~omezení zobrazení.
+To platí i~pod limitem pixelů, pokud je zdroj větší než cílové zobrazení;
+podporované zmenšení JPEG omezí rastr ještě před převodem.
 Pokud detail limit stále překročí, může jeden schválený náhled poskytnout
 omezenou předlohu i~na starším webu. Odmítnuté oprávnění, zrušení, omezení
 četnosti a~poškozená data tento postup nepoužijí. Kopie diagnostiky obsahuje
 bezpečný důvod, rozměry a~limity i~samostatnou omezenou stopu F/F11.
+První schválená stránka fotek se zobrazí před načtením volitelných nastavení
+presentation přes stejné pracovní vlákno. Zelená ikona přednačtení znamená
+ověřené zakódované soubory; dekódování detailů a~povinné ověřování soukromých
+dat serverem zůstává. Tyto cesty sdílí Windows i~macOS; latenci ověří živý test.
+Nedávná metadata alba se zobrazí ihned ze stejné živé session a~současně se
+obnoví ze serveru, bez dalšího filtrování viditelnosti v~klientovi. Nezměněná
+obnova zachová dlaždice a~aktualizuje stáří ověření. Velké varianty náhledů JPEG
+také zmenší dekódovaný rastr před alokací RGB.
+Popsaný ovladač vlevo vedle stavu Watcheru ukazuje všechny typované uložené
+náhledy a~jejich velikost. Detail odděluje běžnou kvótu od \ui{Keep preloaded}
+a~uvádí uchované náhledy, další média a~galerie.
+RAM znamená working set tohoto procesu ve Windows nebo resident set v~macOS;
+neznámá VRAM zůstává neznámá.
+Mřížka fotek slučuje opakované signály posunu a~rozložení do jedné plánované
+aktualizace. Viditelné náhledy mají přednost, omezený buffer sousedních řádků
+usnadňuje rychlý návrat. Dekódování zůstává v~pracovním vlákně, aktualizace
+obrázků Tk v~hlavním vlákně GUI. Kopie diagnostiky obsahuje počty událostí
+a~aktualizací, vytvořených a~uvolněných obrázků, zásahů cache a~nejdelší dobu
+aktualizace pohledu. Jde o~lokální pozorování; plynulost vyžaduje ruční ověření.
+Jeden worker předává hotové náhledy v~omezených sériových dávkách bez čekání
+na samostatný GUI polling mezi fotkami. Hotové výsledky a~zásahy dekódované
+cache se připojují po malých částech v~GUI; přednostní akce a~změna pohledu
+přeruší zbývající čtení. Request gate session nadále řídí schválený transport.
+Diagnostika odděluje disk, čekání na gate, obnovu přihlášení, transport médií,
+dekódování, čekání ve frontě a~aplikaci v~Tk. Studené a~teplé procházení
+porovnávejte zvlášť; tato měření neprokazují FPS.
+Aktuální schválená data z~disku zpracuje samostatný diskový/dekódovací worker
+s~frontou čtyř výsledků; Admin reuse potřebuje čerstvé ověření katalogu účtu.
+Dekódovaná LRU počítá čtyři bajty na pixel s~limitem 16~MiB a~256 položek.
+Viditelné položky mají přednost při eviction; overscan při plné cache
+nevytlačí nedávnou historii. Obrázky Tk zůstávají jen v~přijatém pásmu řádků.
+Sériové media GETs mohou sdílet jedno HTTP/1.1 spojení a~ověřující SSLContext;
+obě serializační gate zůstávají zachované. Znovu se použije jen úplně přečtená
+a~ověřená odpověď. Uzavření serverem, neúplná data, zrušení či obnova
+přihlášení spojení zahodí. Jediný reconnect starého vypůjčeného spojení
+je možný před odpovědí v~původním deadline. Počáteční idle limit je
+15~sekund; skutečnou podporu hostingu a~latenci je třeba změřit.
+Diagnostika zvlášť počítá requests, connections a~TLS handshakes včetně
+zahozené práce a~odděluje context, DNS, TCP, TLS, hlavičky a~body.
+Nabídka cache má volbu \textbf{Přednačíst pouze náhledy} vybrané přímé galerie.
+Pokračuje z~aktuální schválené cache, ustupuje procházení, respektuje Retry-After
+a~nestahuje full photos ani podgalerie. Dokončení neznamená připravený lightbox;
+původní \textbf{Přednačíst galerii} nadále zahrnuje obě varianty.
+První otevření použije sjednaný ověřovaný přenos Admin fotek přímo;
+ukládání plných soukromých fotek stále vyžaduje výslovnou místní volbu přednačtení.
+Novější ověřená stránka se stejným snímkem a~silným validátorem může potvrdit
+starší popis v~otevřeném prohlížeči; platnost vychází z~času nové stránky.
+Plné přednačtení znovu ověří staré uložené velké fotky místo přeskočení podle
+existence souboru. Platná odpověď 304 obnoví stáří bez dalšího stahování těla;
+úplnost stále znamená ověřené soubory, nikoli společný konec jejich platnosti.
+Aktuální fotka či stránka mají přednost před obnovou na pozadí. Překonané čtení
+se zruší a~příprava sousedních fotek v~lightboxu předchází náhledům mřížky.
+Opuštěný pohled odstraní své zrušené požadavky z~čekací fronty gate.
+Oba režimy přednačtení ustoupí aktuálnímu pohledu před stránkou katalogu či fotkou.
+Zobrazené náhledy se ukládají automaticky do běžné cache oddělené podle účtu
+se společným výchozím limitem 4~GiB; cizí připnutí galerie tento limit neobejde.
+Události cache obnovují skutečný počet bez čekání na pomalejší údaje uchovaných
+galerií a~RAM. Plné přednačtení počítá potvrzeně uložené fotky už za běhu a~pak
+ověří konečnou úplnost. Výběr právě přednačítané fotky převezme hotový výsledek
+místo opakování požadavku. Diagnostika odděluje disk, síť, 304, bajty a~RAM
+i~převzatý prefetch pro detailní fotky.
+Izolované porovnání pixelů ve Windows kontroluje ustálený pohled po posunu;
+neprokazuje odstranění přechodných pruhů za pohybu ani vyšší FPS.
 Společná uživatelská disková cache ukládá schválené fotky a~skladby
 s~ověřenými otisky obsahu. Běžné náhledy mají samostatnou část s~limitem
-256~MiB a~16\,384~položek. Velké fotky a~hudba mají vlastní část s~limitem
-1~GiB a~4\,096~položek. Každá uvolňuje jen svá nejdéle nepoužívaná data;
-velké fotky nevytlačují náhledy. Uchování galerií a~volby soukromého přednačtení
+výchozími 4~GiB a~262\,144~položkami. Velké fotky a~hudba mají vlastní část s~limitem
+1~GiB a~4\,096~položek. Každá uvolňuje jen svá nejdéle nepoužívaná data.
+
+Kompaktní ukazatel vedle Watcheru otevře společný uživatelský limit
+1/2/4/8/16/32/64~GiB. Hlavní počet a~bajty zahrnují běžné i~typované uchované
+náhledy. Využito/limit v~detailu zahrnuje pouze běžné soubory včetně hlaviček;
+připnuté galerie, detail/audio a~decoded/Tk paměť jsou zvlášť.
+Načítání či nedostupnost neznamená nulu ani oprávnění offline.
+SQLite index aktualizuje součty rozdílem pod stávajícím zámkem. Přerušené
+změny či změna generace adresáře vyžadují omezenou přerušitelnou obnovu
+metadat mimo Tk; index nenahrazuje autorizaci ani SHA-256.
+Přednačtení ukazuje aktivitu před výpisem, během kontrol, čekání na foreground
+i~Retry-After. Zpracované položky, aktuální zásahy cache a~potvrzené zápisy
+jsou oddělené. Závěr znovu použije jen přesnou nezměněnou ověřenou identitu.
+Neúspěšné zápisy a~no-store nepotvrzují úplnost náhledů. Sériové FIFO
+zachovává prostor viewportu a~Watcheru; spekulativní fronty neblokují preload.
+Rychlost hostingu a~skutečná varianta vyžadují domluvený živý test.
+Pravý inspector ukládá samostatnou požadovanou šířku pro skrytí, restart
+a~resize. RAM je working set tohoto Windows procesu nebo RSS v~macOS bez
+child processes; per-process VRAM zůstává neznámá. Decoded RAM má limit 16~MiB.
+Velké fotky nevytlačují náhledy. Uchování galerií a~volby soukromého přednačtení
 zůstávají společné. Vypnutí uchování nejprve ověří kapacitu všech cílových kopií.
 Starší náhledy se~převedou podle přesné identity varianty bez obnovení stáří.
 Pokud se~shoduje ověřovací údaj z~aktuálního
@@ -2003,8 +2086,22 @@ ani platnost propojení. Jedna operace přijme nejvýše 100\,000~přímých fot
 Výslovné přednačtení s~Admin Photos propojením může na podporovaném serveru
 uložit i~soukromé a~rozpracované fotky. Snímek, galerie i~celá větev předků
 musí být ověřeně bez NSFW omezení. Volba i~soukromá data patří konkrétní
-instalaci a~ověřenému účtu. Před zobrazením se soukromá data vždy znovu
-ověří na živém serveru, také po restartu. Starší servery a~běžné prohlížení
+instalaci a~ověřenému účtu. Čerstvé schválené ověření z~katalogu dovolí
+nejvýše 60~sekund použít shodný náhled bez dalšího binárního požadavku.
+Běžné HTTP čtení velké fotky i~výslovné přednačtení nadále vyžadují vlastní
+ověřené tělo nejvýše 60~sekund staré a~běžné ověření odpovědí 200/304.
+Prohlížeč velkých fotek může samostatně použít výslovně stažený snímek, pokud
+souhlasí uložená volba přednačtení, přesný vydavatel, ověřený účet, galerie
+i~fotka, kontrolní součet souboru a~živé ověření katalogu staré nejvýše
+60~sekund. Původní stáří HTTP těla tuto cestu pouze pro prohlížeč neomezuje
+a~nikdy se nepřepisuje. Po vypršení ověření stránky se obnoví malá stránka
+metadat fotek pro skupinu, nikoli binární tělo každé fotky. Chybějící či
+poškozený soubor použije běžné čtení ze serveru. Připravený detail si zachová
+limit 15~sekund; přihlášení, změna účtu, zrušení, známé odmítnutí i~vypnutí
+volby nadále použití blokují. Neznámé ověření, obnova session a~známé
+odmítnutí jinak vrátí běžnou serverovou cestu. Změny od poslední stránky se
+zjistí při příštím schváleném čtení, nikoli okamžitě.
+Starší servery a~běžné prohlížení
 chráněných fotek zůstávají dočasné. Čekání podle limitu serveru ukazuje
 odpočet s~možností zrušení; po vyčerpání pokusů zůstávají hotové soubory.
 Nula uložených fotek zobrazí bezpečný důvod místo částečného úspěchu.
@@ -2607,7 +2704,13 @@ Obě akce používají jediný trvalý koordinátor. Samostatné Zastavení ukon
 sledování složky, jeho vlastní synchronizaci UTC a záznam letu, poté dokončí
 přijaté fotografie a povinné doručení zpráv; nesouvisející pracovníci AI,
 ručního importu a předběžné kontroly zůstávají spuštěni. Zastavení ponechá klíč
-nastavený. Potvrzené Zrušení klíče provede stejné Zastavení, navíc zastaví další
+nastavený. Výslovné Dokončit let/hru v~režimu uloženého API klíče navíc
+povoluje závěrečnou revokaci po přijaté práci. Zachycené oprávnění zůstává
+aktivní přes odpověď serveru a~atomicky přejde do rezervace zápisu konfigurace.
+Klíč odstraní jen stejná operace, endpoint/klíč a~generace konfigurace;
+pozdní událost ani chybný zápis neodstraní nový klíč a~nehlásí úspěch.
+Rozběhlý samostatný Stop musí doběhnout před novým Dokončit.
+Potvrzené Zrušení klíče provede stejné Zastavení, navíc zastaví další
 autentizované producenty, dokončí přijatou práci a požádá server o zrušení klíče
 omezeného na galerii teprve po povinných potvrzeních. Průběh ukazuje fázi a
 uplynulý čas; zbývající dobu pouze tehdy, lze-li ji měřit. Chyby zachovají úlohy

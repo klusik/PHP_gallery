@@ -11,8 +11,8 @@
 # License: MIT License (see LICENSE file in repository)
 """Native, bounded viewer for media returned by a linked gallery session."""
 
-from collections import OrderedDict
-from dataclasses import replace
+from collections import OrderedDict, deque
+from dataclasses import dataclass, replace
 import ctypes
 import hashlib
 import io
@@ -46,6 +46,7 @@ from .app_linking import (
     LinkingResponseError,
     LinkingRevisionUnsupported,
     LinkingSession,
+    MediaReadTimings,
 )
 from .flight_report_translations import tr
 from .diagnostics import (
@@ -82,17 +83,40 @@ MEDIA_IMAGE_MAX_SIZE = (2048, 1536)
 # Rationale: 144 px bounds both natural-aspect dimensions and retained pixels.
 MEDIA_THUMBNAIL_SIZE = (144, 144)
 
+# Purpose: Reduce large server fallback JPEGs before thumbnail RGB allocation.
+# Type: tuple[int, int]. Units: decoded pixels. Scope: one thumbnail worker.
+# Consumers: _NativeGalleryViewer._prepare_thumbnail.
+# Rationale: 288 px keeps twice the final tile dimensions and enough detail
+# for matte sampling; final 144 px and original source safety limits remain.
+MEDIA_THUMBNAIL_DECODE_SIZE = (288, 288)
+
+# Purpose: Coalesce wheel, scrollbar and geometry events into one viewport pass.
+# Type: int. Units: milliseconds. Scope: one live gallery viewer.
+# Consumers: _NativeGalleryViewer._on_grid_viewport.
+# Rationale: 24 ms coalesces bursts while canvas position changes immediately;
+# this initial scheduling policy does not establish a frame-rate guarantee.
+MEDIA_VIEWPORT_COALESCE_MS = 24
+
+# Purpose: Retain neighboring rows around the exact visible thumbnail viewport.
+# Type: int. Units: grid rows on each side. Scope: one live gallery viewer.
+# Consumers: _NativeGalleryViewer._apply_grid_viewport.
+# Rationale: One row avoids edge churn while keeping Tk image retention bounded.
+MEDIA_THUMBNAIL_OVERSCAN_ROWS = 1
+
 # Purpose: Keep visible decoded thumbnails warm across album selections.
 # Type: int. Units: decoded images. Scope: one shared live-session cache.
 # Consumers: _NativeGalleryViewer._remember_thumbnail.
-# Rationale: 48 entries cover a viewport and nearby rows while bounding memory.
-MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT = 48
+# Rationale: 256 bounds bookkeeping independently of raster dimensions. The
+# byte cap is authoritative for full-sized images, including wide viewports.
+MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT = 256
 
 # Purpose: Bound decoded thumbnail memory across album selections.
 # Type: int. Units: bytes. Scope: one shared live-session cache.
 # Consumers: _NativeGalleryViewer._remember_thumbnail.
-# Rationale: Four MiB holds 48 thumbnails at their 144 by 144 RGB bound.
-MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 4 * 1024 * 1024
+# Rationale: 16 MiB retains two 84-item bands (60 visible plus two 12-item
+# overscan rows) at four accounted bytes per pixel, with room for history.
+# Visible entries lead eviction; speculative overscan cannot displace history.
+MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 16 * 1024 * 1024
 
 # Purpose: Limit decoded-thumbnail reuse when the catalogue has no content ETag.
 # Type: float. Units: seconds. Scope: one entry in a live session cache.
@@ -122,10 +146,17 @@ class GalleryThumbnailMemory:
         """
         self.lock = threading.RLock()
         self.entries: OrderedDict[
-            tuple[int, int, bool | None, str | None],
+            tuple[
+                int, int, bool | None, str | None, int | None,
+                float | None, int | None,
+            ],
             tuple['Image.Image', int, float],
         ] = OrderedDict()
         self.size_bytes = 0
+        self.evictions = 0
+        self.admission_refusals = 0
+        self.expirations = 0
+        self.validator_changes = 0
 
     def clear(self) -> None:
         """Release every retained raster when its owning session ends.
@@ -254,6 +285,33 @@ MEDIA_SLIDESHOW_DEFAULT_SECONDS = 5
 # Rationale: 30 ms lowers visible wait without polling idle viewers.
 MEDIA_QUEUE_ACTIVE_POLL_MS = 30
 
+# Purpose: Fetch several consecutive admitted thumbnails in one serialized
+# worker turn while keeping cancellation and foreground dispatch boundaries.
+# Type: int. Units: thumbnails. Scope: one background thumbnail batch.
+# Consumers: _NativeGalleryViewer._load_next_thumbnail.
+# Rationale: Four amortizes GUI scheduling while bounding queued raster results.
+MEDIA_THUMBNAIL_BATCH_SIZE = 4
+
+# Purpose: Bound thumbnail attachment work performed in one Tk callback.
+# Type: int. Units: images. Scope: one viewer GUI drain callback.
+# Consumers: _NativeGalleryViewer._poll_queue.
+# Rationale: Four keeps image creation responsive and matches the batch bound.
+MEDIA_THUMBNAIL_GUI_SLICE_SIZE = 4
+
+# Purpose: Limit one thumbnail attachment slice even when image creation is slow.
+# Type: float. Units: seconds. Scope: one viewer GUI drain callback.
+# Consumers: _NativeGalleryViewer._poll_queue.
+# Rationale: Eight ms is a cooperative budget, checked after each image so
+# an individual Tk attachment can finish before yielding to input and repaint.
+MEDIA_THUMBNAIL_GUI_SLICE_SECONDS = 0.008
+
+# Purpose: Yield between ready thumbnail result slices without GUI polling delay.
+# Type: int. Units: milliseconds. Scope: one viewer's result continuation.
+# Consumers: _NativeGalleryViewer._drain_warm_thumbnail_slice,
+# _NativeGalleryViewer._schedule_queue_poll.
+# Rationale: One millisecond promptly resumes queued results after Tk yields.
+MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS = 1
+
 # Purpose: Match the only validated native presentation intervals.
 # Type: tuple[int, ...]. Units: seconds. Scope: one manual slideshow interval.
 # Consumers: _NativeGalleryViewer._slideshow_delay_ms.
@@ -290,8 +348,239 @@ WINDOWS_SYSTEM_DIRECTORY_BUFFER = 32768
 # Rationale: This flag prevents DLL search through the app or working folders.
 LOAD_LIBRARY_SEARCH_SYSTEM32 = 0x00000800
 
+@dataclass(frozen=True)
+class _ThumbnailResult:
+    """Carry one immutable thumbnail identity and its owned decoded result.
+
+    Attributes:
+        gallery_id (int): Physical gallery that authorized this media result.
+        index (int): Captured zero-based tile position.
+        photo (LinkedPhoto): Exact metadata descriptor admitted for the read.
+        image (Image.Image | None): Owned decoded raster, or None on failure.
+        timings (MediaReadTimings): Mutable timing facts filled by the session.
+        decode_ms (float): Thumbnail decode duration in milliseconds.
+        enqueued_at (float): Monotonic result-publication timestamp.
+    """
+
+    gallery_id: int
+    index: int
+    photo: LinkedPhoto
+    image: 'Image.Image | None'
+    timings: MediaReadTimings
+    decode_ms: float
+    enqueued_at: float
+
+
+class _ThumbnailDiskLane:
+    """Read authorized local thumbnails on one bounded, network-free lane."""
+
+    def __init__(
+        self, session: LinkingSession,
+        prepare: Callable[[bytes], 'Image.Image'],
+        observe: Callable[[MediaReadTimings, float], None],
+    ) -> None:
+        """Create a lazy cache worker without touching Tk or the transport gate.
+
+        Args:
+            session (LinkingSession): Exact authorization and cache owner.
+            prepare (Callable[[bytes], Image.Image]): Worker-only RGB decoder.
+            observe (Callable[[MediaReadTimings, float], None]): Thread-safe
+                recorder for all attempted work, including discarded results.
+
+        Returns:
+            None: No thread starts until the first admitted local lookup.
+        """
+        self._session = session
+        self._prepare = prepare
+        self._observe = observe
+        self._condition = threading.Condition()
+        self._jobs: OrderedDict[
+            tuple[int, int], tuple[int, LinkedPhoto],
+        ] = OrderedDict()
+        self._pending: dict[tuple[int, int], tuple[int, LinkedPhoto]] = {}
+        self._ready: deque[tuple[int, _ThumbnailResult]] = deque()
+        self._epoch = 0
+        self._closed = False
+        self._cancelled = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._active_key: tuple[int, int] | None = None
+        self.discarded_results = 0
+
+    def submit(self, gallery_id: int, index: int, photo: LinkedPhoto) -> None:
+        """Reserve one admitted descriptor before its disk-only lookup.
+
+        Args:
+            gallery_id (int): Physical gallery authorizing the descriptor.
+            index (int): Current zero-based tile position.
+            photo (LinkedPhoto): Exact current server descriptor.
+
+        Returns:
+            None: Duplicate pending descriptors share the existing lookup.
+        """
+        with self._condition:
+            key = (gallery_id, index)
+            identity = (self._epoch, photo)
+            if self._closed or self._pending.get(key) == identity:
+                return
+            self._pending[key] = identity
+            self._jobs[key] = identity
+            if self._thread is None:
+                self._thread = threading.Thread(
+                    target=self._run, name='linked-gallery-disk', daemon=True,
+                )
+                self._thread.start()
+            self._condition.notify_all()
+
+    def retain(self, gallery_id: int, photos: tuple[LinkedPhoto, ...],
+               indices: tuple[int, ...]) -> None:
+        """Reprioritize only the current visible-first admitted descriptors.
+
+        Args:
+            gallery_id (int): Gallery currently mounted on Tk.
+            photos (tuple[LinkedPhoto, ...]): Current ordered descriptors.
+            indices (tuple[int, ...]): Visible-first indices in the bounded band.
+
+        Returns:
+            None: Departed jobs lose their reservation and cannot publish.
+        """
+        with self._condition:
+            wanted = {(gallery_id, index): photos[index] for index in indices}
+            finishing = {key for key in (self._active_key,) if key is not None}
+            finishing.update(
+                (result.gallery_id, result.index) for _epoch, result in self._ready
+            )
+            self._pending = {
+                key: value for key, value in self._pending.items()
+                if wanted.get(key) == value[1] or key in finishing
+            }
+            self._jobs = OrderedDict(
+                ((gallery_id, index), self._jobs[(gallery_id, index)])
+                for index in indices if (gallery_id, index) in self._jobs
+                and (gallery_id, index) in self._pending
+            )
+            self._condition.notify_all()
+
+    def contains(self, gallery_id: int, index: int, photo: LinkedPhoto) -> bool:
+        """Inspect whether one current descriptor already has local work.
+
+        Args:
+            gallery_id (int): Exact gallery owning the tile.
+            index (int): Zero-based tile position.
+            photo (LinkedPhoto): Current descriptor to compare.
+
+        Returns:
+            bool: True for queued, in-flight or ready work for this identity.
+        """
+        with self._condition:
+            return self._pending.get((gallery_id, index)) == (self._epoch, photo)
+
+    def busy(self) -> bool:
+        """Inspect local work without waiting for network or decoding.
+
+        Returns:
+            bool: Whether a pending descriptor or ready result needs delivery.
+        """
+        with self._condition:
+            return bool(self._pending or self._ready)
+
+    def pop_ready(self) -> _ThumbnailResult | None:
+        """Transfer one current decoded result or miss to the GUI owner.
+
+        Returns:
+            _ThumbnailResult | None: One bounded result, or None when empty.
+        """
+        with self._condition:
+            while self._ready:
+                epoch, result = self._ready.popleft()
+                key = (result.gallery_id, result.index)
+                if self._pending.get(key) == (epoch, result.photo):
+                    self._pending.pop(key)
+                    self._condition.notify_all()
+                    return result
+                if result.image is not None:
+                    result.image.close()
+                self.discarded_results += 1
+            self._condition.notify_all()
+            return None
+
+    def invalidate(self, *, close: bool = False) -> None:
+        """Fence metadata replacement and release queued local rasters.
+
+        Args:
+            close (bool): Permanently stop this worker during viewer teardown.
+
+        Returns:
+            None: Late reads cannot publish into a new metadata generation.
+        """
+        with self._condition:
+            self._epoch += 1
+            self._jobs.clear()
+            self._pending.clear()
+            for _epoch, result in self._ready:
+                if result.image is not None:
+                    result.image.close()
+            self.discarded_results += len(self._ready)
+            self._ready.clear()
+            if close:
+                self._closed = True
+                self._cancelled.set()
+            self._condition.notify_all()
+
+    def _run(self) -> None:
+        """Decode only verified local bytes while bounding ready rasters.
+
+        Returns:
+            None: Close wakes the single worker and discards late results.
+        """
+        while True:
+            with self._condition:
+                self._condition.wait_for(lambda: self._closed or (
+                    bool(self._jobs)
+                    and len(self._ready) < MEDIA_THUMBNAIL_BATCH_SIZE
+                ))
+                if self._closed:
+                    return
+                (gallery_id, index), (epoch, photo) = self._jobs.popitem(
+                    last=False,
+                )
+                self._active_key = (gallery_id, index)
+            timings = MediaReadTimings()
+            image: 'Image.Image | None' = None
+            decode_ms = 0.0
+            try:
+                cached = self._session.cached_media_photo(
+                    gallery_id, photo, thumbnail=True,
+                    cancelled=self._cancelled, timings=timings,
+                )
+                if cached is not None and not self._cancelled.is_set():
+                    started = time.perf_counter()
+                    try:
+                        image = self._prepare(cached[0])
+                    finally:
+                        decode_ms = (time.perf_counter() - started) * 1000.0
+            except Exception:
+                # A failed local lookup is a miss. The normal session read
+                # remains the sole authorization/revalidation/network owner.
+                pass
+            self._observe(timings, decode_ms)
+            result = _ThumbnailResult(
+                gallery_id, index, photo, image, timings, decode_ms,
+                time.perf_counter(),
+            )
+            with self._condition:
+                key = (gallery_id, index)
+                self._active_key = None
+                if (self._closed or self._pending.get(key) != (epoch, photo)):
+                    if image is not None:
+                        image.close()
+                    self.discarded_results += 1
+                    continue
+                self._ready.append((epoch, result))
+
+
 _WorkerPayload: TypeAlias = (
     LinkedMediaPage
+    | LinkedPresentation
     | str
     | tuple[LinkedMediaPage, ...]
     | tuple[LinkedMediaPage, LinkedPresentation | None]
@@ -299,11 +588,12 @@ _WorkerPayload: TypeAlias = (
     | tuple[int, bytes | None]
     | tuple[int, bytes]
     | tuple[int, int, bytes]
-    | tuple[int, int, 'Image.Image', 'Image.Image', bytes | None]
+    | tuple[int, int, 'Image.Image', 'Image.Image | None', bytes | None]
     | tuple[int, int, None, None, None, str]
     | tuple[int, int, None, None, None]
     | tuple[int, 'Image.Image | None']
     | tuple[int, 'Image.Image', bytes | None]
+    | _ThumbnailResult
     | bytes
     | None
 )
@@ -464,12 +754,47 @@ class _NativeGalleryViewer:
             '<Escape>', self.window.bind('<Escape>', self._on_escape, add='+'),
         ))
 
-        self._events: queue.Queue[_WorkerEvent] = queue.Queue()
+        self._events: queue.Queue[_WorkerEvent] = queue.Queue(
+            maxsize=MEDIA_THUMBNAIL_BATCH_SIZE,
+        )
+        self._thumbnail_result_lock = threading.Lock()
+        self._thumbnail_metrics_lock = threading.Lock()
+        self._detail_media_metrics: dict[str, int] = {
+            name: 0 for name in (
+                'detail_source_disk', 'detail_source_network',
+                'detail_source_revalidated', 'detail_http_requests',
+                'detail_encoded_bytes', 'prefetch_source_disk',
+                'prefetch_source_network', 'prefetch_source_revalidated',
+                'prefetch_http_requests', 'prefetch_encoded_bytes',
+                'detail_ram_hits', 'prefetch_adoptions',
+            )
+        }
+        self._thumbnail_disk_lane = _ThumbnailDiskLane(
+            session, self._prepare_thumbnail, self._observe_thumbnail_read,
+        )
+        self._thumbnail_local_miss_count = 0
+        self._thumbnail_discarded_count = 0
+        self._thumbnail_cancelled_read_count = 0
+        self._thumbnail_retained_hit_count = 0
+        self._thumbnail_transport_totals: dict[str, float] = {
+            name: 0.0 for name in (
+                'http_requests', 'connections', 'tls_handshakes',
+                'connection_reuses', 'context_ms', 'dns_ms', 'tcp_ms',
+                'tls_ms', 'ttfb_ms', 'body_ms',
+            )
+        }
+        self._thumbnail_cache_outcomes: dict[str, int] = {
+            name: 0 for name in (
+                'miss', 'hit', 'revalidation', 'ineligible', 'changed', 'expired',
+            )
+        }
         self._cancelled = threading.Event()
         self._generation = 0
         self._worker: threading.Thread | None = None
         self._worker_kind: str | None = None
         self._thumbnail_cancelled = threading.Event()
+        self._active_media_cancelled: threading.Event | None = None
+        self._active_media_photo_id: int | None = None
         self._closed = False
         self._revision: str | None = None
         self._refresh_revision: str | None = None
@@ -495,6 +820,7 @@ class _NativeGalleryViewer:
         self._slideshow_started_music = False
         self._slide_index = 0
         self._presentation: LinkedPresentation | None = None
+        self._presentation_pending = False
         self._tracks: tuple[LinkedTrack, ...] = ()
         self._audio_path: str | None = None
         self._audio_alias: str | None = None
@@ -510,7 +836,10 @@ class _NativeGalleryViewer:
         self._mci: _MciSender | None = None
         self._photo_images: list[object | None] = []
         self._detail_cache: OrderedDict[
-            int, tuple[float, 'Image.Image', bytes, int],
+            int, tuple[
+                float, 'Image.Image', bytes, int,
+                tuple[int | None, str | None, float | None, int | None],
+            ],
         ] = OrderedDict()
         self._detail_cache_bytes = 0
         self._pending_prefetch_ids: list[int] = []
@@ -527,6 +856,30 @@ class _NativeGalleryViewer:
         self._thumbnail_loaded: set[int] = set()
         self._thumbnail_pending: list[int] = []
         self._visible_thumbnail_indices: set[int] = set()
+        self._admitted_thumbnail_indices: set[int] = set()
+        self._viewport_after_id: str | None = None
+        self._viewport_event_count = 0
+        self._viewport_update_count = 0
+        self._thumbnail_image_create_count = 0
+        self._thumbnail_image_release_count = 0
+        self._thumbnail_warm_cache_hit_count = 0
+        self._thumbnail_batch_count = 0
+        self._thumbnail_batch_indices: tuple[int, ...] = ()
+        self._thumbnail_source_disk_count = 0
+        self._thumbnail_source_network_count = 0
+        self._thumbnail_source_revalidated_count = 0
+        self._thumbnail_disk_ms = 0.0
+        self._thumbnail_disk_write_ms = 0.0
+        self._thumbnail_gate_wait_ms = 0.0
+        self._thumbnail_renewal_ms = 0.0
+        self._thumbnail_network_ms = 0.0
+        self._thumbnail_network_reads = 0
+        self._thumbnail_decode_ms = 0.0
+        self._thumbnail_queue_wait_ms = 0.0
+        self._thumbnail_tk_ms = 0.0
+        self._thumbnail_gui_after_id: str | None = None
+        self._warm_thumbnail_pending: list[tuple[int, int, LinkedPhoto]] = []
+        self._viewport_peak_update_ms = 0.0
         self._grid_columns = 1
         self._lightbox: PhotoLightbox | None = None
         self._lightbox_key_tag = 'GalleryLightboxKeys' + str(id(self))
@@ -938,35 +1291,121 @@ class _NativeGalleryViewer:
         )
 
     def _on_grid_viewport(self, _event: tk.Event | None) -> None:
-        """Request visible thumbnails and metadata near the loaded sequence end.
+        """Coalesce viewport signals before updating thumbnail admission.
 
         Args:
             _event (tk.Event | None): Canvas event, or None from scrollbar updates.
+
         Returns:
-            None: Only viewport-adjacent thumbnail bytes are requested.
+            None: One owned timer applies the latest viewport after a short delay.
         """
         if self._closed:
             return
-        if not self.grid_canvas.winfo_viewable():
+        self._viewport_event_count += 1
+        if self._viewport_after_id is not None:
             return
+
+        after_id: str | None = None
+
+        def apply_viewport() -> None:
+            """Apply only the timer instance still owned by this viewer.
+
+            Returns:
+                None: A cancelled timer cannot clear or run its replacement.
+            """
+            self._apply_grid_viewport(after_id)
+
+        after_id = self.window.after(
+            MEDIA_VIEWPORT_COALESCE_MS, apply_viewport,
+        )
+        self._viewport_after_id = after_id
+
+    def _apply_grid_viewport(self, after_id: str | None) -> None:
+        """Apply visible and one-row overscan thumbnail admission on Tk.
+
+        Args:
+            after_id (str | None): Exact callback identity captured at schedule.
+
+        Returns:
+            None: Stale callbacks are ignored; adjacent-row PhotoImages remain
+                bounded and reusable during small scrolls.
+        """
+        if after_id is None or self._viewport_after_id != after_id:
+            return
+        self._viewport_after_id = None
+        if self._closed or not self.grid_canvas.winfo_viewable():
+            return
+        started = time.perf_counter()
+        self._viewport_update_count += 1
         if self._photos:
             visible = tuple(self._visible_photo_indices())
-            self._visible_thumbnail_indices = set(visible)
+            visible_set = set(visible)
+            self._visible_thumbnail_indices = visible_set
+            admitted: set[int] = set()
+            if visible:
+                columns = max(1, self._grid_columns)
+                first_row = min(visible) // columns
+                last_row = max(visible) // columns
+                first_row = max(
+                    0, first_row - MEDIA_THUMBNAIL_OVERSCAN_ROWS,
+                )
+                last_row = min(
+                    (len(self._photos) - 1) // columns,
+                    last_row + MEDIA_THUMBNAIL_OVERSCAN_ROWS,
+                )
+                admitted.update(range(
+                    first_row * columns,
+                    min(len(self._photos), (last_row + 1) * columns),
+                ))
+            self._admitted_thumbnail_indices = admitted
             self._thumbnail_pending = [
-                index for index in self._thumbnail_pending if index in visible
+                index for index in self._thumbnail_pending if index in admitted
             ]
-            for index in tuple(self._thumbnail_loaded - self._visible_thumbnail_indices):
-                self._photo_images[index] = None
-                self._thumbnail_loaded.discard(index)
-                self._tile_buttons[index].configure(image='')
-            for index in visible:
-                if index not in self._thumbnail_loaded:
-                    cached = self._cached_thumbnail(self._photos[index])
-                    if cached is not None:
-                        self._show_thumbnail(index, cached, remember=False)
-                if index not in self._thumbnail_loaded and index not in self._thumbnail_pending:
-                    self._thumbnail_pending.append(index)
-            self._dispatch_pending_work()
+            for index in tuple(self._thumbnail_loaded - admitted):
+                self._release_thumbnail_image(index)
+            admitted_order = sorted(
+                admitted, key=lambda index: (index not in visible_set, index),
+            )
+            self._thumbnail_retained_hit_count += len(
+                self._thumbnail_loaded & visible_set,
+            )
+            self._thumbnail_disk_lane.retain(
+                self.gallery.gallery_id, self._photos, tuple(admitted_order),
+            )
+            self._warm_thumbnail_pending = [
+                item for item in self._warm_thumbnail_pending
+                if (item[0] == self.gallery.gallery_id
+                    and item[1] in admitted
+                    and self._photos[item[1]] == item[2])
+            ]
+            for index in admitted_order:
+                identity = (self.gallery.gallery_id, index, self._photos[index])
+                if (index not in self._thumbnail_loaded
+                        and index not in self._thumbnail_pending
+                        and not self._thumbnail_disk_lane.contains(
+                            self.gallery.gallery_id, index, self._photos[index],
+                        )
+                        and identity not in self._warm_thumbnail_pending):
+                    self._warm_thumbnail_pending.append(identity)
+            self._warm_thumbnail_pending.sort(
+                key=lambda item: (item[1] not in visible_set, item[1]),
+            )
+            self._thumbnail_pending.sort(
+                key=lambda index: (index not in visible_set, index),
+            )
+            if self._worker_kind == 'thumbnail_batch':
+                unfinished = tuple(
+                    index for index in self._thumbnail_batch_indices
+                    if index not in self._thumbnail_loaded
+                )
+                wanted = tuple(
+                    index for index in admitted_order
+                    if index in self._thumbnail_pending
+                )
+                if (any(index not in admitted for index in unfinished)
+                        or wanted[:len(unfinished)] != unfinished):
+                    self._thumbnail_cancelled.set()
+            self._drain_warm_thumbnail_slice()
             bounds = self.grid_canvas.bbox('all')
             scrollable = bool(
                 bounds is not None
@@ -982,7 +1421,240 @@ class _NativeGalleryViewer:
             )
             if (self._next_after is not None and not self._loading_more
                     and visible and (viewport_not_filled or near_scroll_end)):
+                # Admit the next metadata page before launching a thumbnail
+                # batch that this same viewport turn would immediately cancel.
                 self._load_more()
+            self._dispatch_pending_work()
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        self._viewport_peak_update_ms = max(
+            self._viewport_peak_update_ms, elapsed_ms,
+        )
+
+    def _cancel_grid_viewport_callback(self) -> None:
+        """Cancel the owned coalescing timer and fence a stale callback.
+
+        Returns:
+            None: A late callback cannot run viewport work after replacement.
+        """
+        after_id, self._viewport_after_id = self._viewport_after_id, None
+        if after_id is None:
+            return
+        try:
+            self.window.after_cancel(after_id)
+        except tk.TclError:
+            pass
+
+    def _drain_warm_thumbnail_slice(self) -> None:
+        """Attach a bounded group of warm cached thumbnails on Tk.
+
+        Returns:
+            None: At most four cache lookups/copies run before yielding; the
+                remaining descriptors continue in an identity-fenced timer.
+        """
+        if self._closed or self._thumbnail_gui_after_id is not None:
+            return
+        started = time.perf_counter()
+        count = 0
+        while (self._warm_thumbnail_pending
+               and count < MEDIA_THUMBNAIL_GUI_SLICE_SIZE
+               and (count == 0 or time.perf_counter() - started
+                    < MEDIA_THUMBNAIL_GUI_SLICE_SECONDS)):
+            gallery_id, index, photo = self._warm_thumbnail_pending.pop(0)
+            if (gallery_id == self.gallery.gallery_id
+                    and index in self._admitted_thumbnail_indices
+                    and index < len(self._photos)
+                    and self._photos[index] == photo):
+                cached = self._cached_thumbnail(photo)
+                if cached is not None:
+                    self._thumbnail_warm_cache_hit_count += 1
+                    attach_started = time.perf_counter()
+                    self._show_thumbnail(index, cached, remember=False)
+                    self._thumbnail_tk_ms += (
+                        time.perf_counter() - attach_started
+                    ) * 1000.0
+                elif index not in self._thumbnail_pending:
+                    self._thumbnail_disk_lane.submit(gallery_id, index, photo)
+                    self._schedule_queue_poll()
+            count += 1
+        self._thumbnail_pending.sort(
+            key=lambda index: (
+                index not in self._visible_thumbnail_indices, index,
+            ),
+        )
+        if self._warm_thumbnail_pending:
+            after_id: str | None = None
+
+            def continue_slice() -> None:
+                """Run only the still-owned warm-image continuation.
+
+                Returns:
+                    None: A replaced or cancelled timer cannot attach images.
+                """
+                if self._thumbnail_gui_after_id != after_id:
+                    return
+                self._thumbnail_gui_after_id = None
+                self._drain_warm_thumbnail_slice()
+                self._dispatch_pending_work()
+
+            after_id = self.window.after(
+                MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS, continue_slice,
+            )
+            self._thumbnail_gui_after_id = after_id
+
+    def _cancel_thumbnail_gui_slice(self) -> None:
+        """Cancel and release pending warm-image work owned by this viewer.
+
+        Returns:
+            None: Late slice callbacks fail their timer-identity check.
+        """
+        after_id, self._thumbnail_gui_after_id = (
+            self._thumbnail_gui_after_id, None,
+        )
+        if after_id is not None:
+            try:
+                self.window.after_cancel(after_id)
+            except tk.TclError:
+                pass
+        self._warm_thumbnail_pending.clear()
+
+    def _release_thumbnail_image(self, index: int) -> None:
+        """Release one Tk thumbnail reference outside its admitted row band.
+
+        Args:
+            index (int): Zero-based tile whose retained PhotoImage is released.
+
+        Returns:
+            None: Counters record actual image-reference eviction only.
+        """
+        if not 0 <= index < len(self._photo_images):
+            self._thumbnail_loaded.discard(index)
+            return
+        image = self._photo_images[index]
+        if image is not None:
+            self._thumbnail_image_release_count += 1
+            self._photo_images[index] = None
+        self._thumbnail_loaded.discard(index)
+        if index < len(self._tile_buttons):
+            self._tile_buttons[index].configure(
+                image='', text=MEDIA_THUMBNAIL_PLACEHOLDER,
+                style='LinkedPhotoPlaceholder.TButton',
+            )
+
+    def _observe_thumbnail_read(
+        self, timings: MediaReadTimings, decode_ms: float,
+    ) -> None:
+        """Record attempted I/O before GUI admission or cancellation fencing.
+
+        Args:
+            timings (MediaReadTimings): Source and cumulative read observations.
+            decode_ms (float): Actual decoder work in milliseconds.
+
+        Returns:
+            None: Dropped results still contribute their performed work.
+        """
+        with self._thumbnail_metrics_lock:
+            self._thumbnail_disk_ms += timings.disk_read_ms
+            self._thumbnail_disk_write_ms += timings.disk_write_ms
+            self._thumbnail_gate_wait_ms += timings.gate_wait_ms
+            self._thumbnail_renewal_ms += timings.renewal_ms
+            self._thumbnail_network_ms += timings.network_ms
+            self._thumbnail_network_reads += timings.network_reads
+            self._thumbnail_decode_ms += decode_ms
+            for name in self._thumbnail_transport_totals:
+                self._thumbnail_transport_totals[name] += getattr(timings, name)
+            self._thumbnail_cache_outcomes[timings.cache_state] += 1
+            if timings.source == 'disk':
+                self._thumbnail_source_disk_count += 1
+            elif timings.source == 'network':
+                self._thumbnail_source_network_count += 1
+            elif timings.source == 'revalidated':
+                self._thumbnail_source_revalidated_count += 1
+
+    def _observe_detail_read(
+        self, kind: Literal['detail', 'prefetch'], timings: MediaReadTimings,
+    ) -> None:
+        """Record numeric source and transport facts for one detail operation.
+
+        Args:
+            kind (Literal['detail', 'prefetch']): Fixed operation category.
+            timings (MediaReadTimings): Caller-owned aggregate media facts.
+
+        Returns:
+            None: Source, HTTP request count and encoded bytes join the
+                process-safe summary without retaining media or identities.
+        """
+        with self._thumbnail_metrics_lock:
+            if timings.source in ('disk', 'network', 'revalidated'):
+                self._detail_media_metrics[
+                    f'{kind}_source_{timings.source}'
+                ] += 1
+            self._detail_media_metrics[f'{kind}_http_requests'] += (
+                timings.http_requests
+            )
+            self._detail_media_metrics[f'{kind}_encoded_bytes'] += (
+                timings.encoded_bytes
+            )
+
+    def render_diagnostics(self) -> str:
+        """Return fixed numeric viewport, thumbnail and detail counters.
+
+        Returns:
+            str: Fixed numeric grid/detail sources, transport requests, byte
+                counts, event and image totals plus cumulative timing without
+                photo IDs, titles or request data.
+        """
+        retained = sum(
+            image is not None for image in self._photo_images
+        )
+        with self._thumbnail_metrics_lock:
+            transport = ' '.join(
+                f'{name}={value:.2f}'
+                for name, value in self._thumbnail_transport_totals.items()
+            )
+            outcomes = ' '.join(
+                f'cache_{name}={value}'
+                for name, value in self._thumbnail_cache_outcomes.items()
+            )
+            detail_metrics = ' '.join(
+                f'{name}={value}'
+                for name, value in self._detail_media_metrics.items()
+            )
+        return (
+            'Photos grid: '
+            f'viewport_events={self._viewport_event_count} '
+            f'viewport_updates={self._viewport_update_count} '
+            f'tk_images_created={self._thumbnail_image_create_count} '
+            f'tk_images_released={self._thumbnail_image_release_count} '
+            f'warm_cache_hits={self._thumbnail_warm_cache_hit_count} '
+            f'retained_hits={self._thumbnail_retained_hit_count} '
+            f'local_misses={self._thumbnail_local_miss_count} '
+            f'discarded={self._thumbnail_discarded_count} '
+            f'cancelled_reads={self._thumbnail_cancelled_read_count} '
+            f'disk_discarded={self._thumbnail_disk_lane.discarded_results} '
+            f'memory_bytes={self._thumbnail_memory.size_bytes} '
+            f'evictions={self._thumbnail_memory.evictions} '
+            f'admission_refusals={self._thumbnail_memory.admission_refusals} '
+            f'expired={self._thumbnail_memory.expirations} '
+            f'validator_changes={self._thumbnail_memory.validator_changes} '
+            f'batches={self._thumbnail_batch_count} '
+            f'source_disk={self._thumbnail_source_disk_count} '
+            f'source_network={self._thumbnail_source_network_count} '
+            f'source_revalidated={self._thumbnail_source_revalidated_count} '
+            f'disk_ms={self._thumbnail_disk_ms:.2f} '
+            f'disk_write_ms={self._thumbnail_disk_write_ms:.2f} '
+            f'gate_wait_ms={self._thumbnail_gate_wait_ms:.2f} '
+            f'renewal_ms={self._thumbnail_renewal_ms:.2f} '
+            f'network_ms={self._thumbnail_network_ms:.2f} '
+            f'network_reads={self._thumbnail_network_reads} '
+            f'{transport} {outcomes} {detail_metrics} '
+            f'decode_ms={self._thumbnail_decode_ms:.2f} '
+            f'queue_wait_ms={self._thumbnail_queue_wait_ms:.2f} '
+            f'tk_ms={self._thumbnail_tk_ms:.2f} '
+            f'peak_update_ms={self._viewport_peak_update_ms:.2f} '
+            f'visible={len(self._visible_thumbnail_indices)} '
+            f'admitted={len(self._admitted_thumbnail_indices)} '
+            f'retained={retained}'
+        )
 
     def _on_grid_resize(self, event: tk.Event) -> None:
         """Resize the embedded grid and recompute its responsive columns.
@@ -1014,6 +1686,7 @@ class _NativeGalleryViewer:
                 column=index % columns,
                 sticky='nsew',
             )
+        self._on_grid_viewport(None)
 
     def _on_grid_wheel(self, event: tk.Event) -> None:
         """Scroll the photo grid while the pointer is over its canvas.
@@ -1479,6 +2152,7 @@ class _NativeGalleryViewer:
         operation: Callable[[], _WorkerPayload],
         *,
         error_payload: _WorkerPayload = None,
+        operation_cancelled: threading.Event | None = None,
     ) -> bool:
         """Run one operation and return its result through the Tk queue.
 
@@ -1486,11 +2160,15 @@ class _NativeGalleryViewer:
             kind (str): Event type interpreted by the Tk polling callback.
             operation (Callable[[], _WorkerPayload]): Worker-only media work.
             error_payload (_WorkerPayload): Optional identity attached to failure.
+            operation_cancelled (threading.Event | None): Per-operation
+                supersession signal; a cancelled operation publishes no error.
 
         Returns:
             bool: True when a daemon worker was started; otherwise False.
         """
-        if self._closed or self._cancelled.is_set():
+        if (self._closed or self._cancelled.is_set()
+                or (operation_cancelled is not None
+                    and operation_cancelled.is_set())):
             return False
         if not self.session.can_read_media():
             self.close()
@@ -1508,14 +2186,21 @@ class _NativeGalleryViewer:
             """
             try:
                 result = operation()
-                if self._cancelled.is_set():
+                if (self._cancelled.is_set()
+                        or (operation_cancelled is not None
+                            and operation_cancelled.is_set())):
+                    self._release_worker_result(result, kind)
                     return
                 self._events.put((generation, kind, result))
             except LinkingRevisionUnsupported:
-                if not self._cancelled.is_set():
+                if (not self._cancelled.is_set()
+                        and (operation_cancelled is None
+                             or not operation_cancelled.is_set())):
                     self._events.put((generation, kind + '_unsupported', error_payload))
             except LinkingMediaUnavailable as exc:
-                if self._cancelled.is_set():
+                if (self._cancelled.is_set()
+                        or (operation_cancelled is not None
+                            and operation_cancelled.is_set())):
                     return
                 _log_safe_media_failure(
                     'media-fetch', kind, exc,
@@ -1523,11 +2208,26 @@ class _NativeGalleryViewer:
                 )
                 self._events.put((generation, kind + '_unavailable', error_payload))
             except LinkingMediaThrottled:
-                if self._cancelled.is_set():
+                if (self._cancelled.is_set()
+                        or (operation_cancelled is not None
+                            and operation_cancelled.is_set())):
                     return
                 self._events.put((generation, kind + '_throttled', error_payload))
             except Exception as exc:
-                if self._cancelled.is_set():
+                if (self._cancelled.is_set()
+                        or (operation_cancelled is not None
+                            and operation_cancelled.is_set())):
+                    return
+                if (kind == 'presentation'
+                        and isinstance(exc, LinkingResponseError)
+                        and exc.phase == 'media'
+                        and exc.route == 'app_linking_media'
+                        and exc.status == 404):
+                    # Optional presentation settings may be absent on older
+                    # galleries. Their absence does not make the photos fail.
+                    self._events.put((
+                        generation, 'presentation_unavailable', error_payload,
+                    ))
                     return
                 phase = (
                     "page-fetch"
@@ -1604,6 +2304,11 @@ class _NativeGalleryViewer:
         """
         if self._closed:
             return
+        self._cancel_thumbnail_gui_slice()
+        self._thumbnail_disk_lane.invalidate()
+        if self._worker_kind == 'thumbnail_batch':
+            self._thumbnail_cancelled.set()
+            self._generation += 1
         self._refresh_pending = True
         self._refresh_manual_pending = True
         self._dispatch_pending_work()
@@ -1612,13 +2317,17 @@ class _NativeGalleryViewer:
         """Read enough pages to cover the currently loaded album extent.
 
         Returns:
-            None: The serialized worker returns a validated metadata snapshot.
+            None: The serialized worker returns a validated metadata snapshot;
+                a new photo selection can cancel this background operation.
         """
         # A complete old snapshot admits one additional native page so an
         # upload after an exactly full final page is actually displayed.
         target_count = len(self._photos) + (
             NATIVE_MEDIA_PAGE_SIZE if self._next_after is None else 0
         )
+        operation_cancelled = threading.Event()
+        self._active_media_cancelled = operation_cancelled
+
         def read() -> tuple[LinkedMediaPage, ...]:
             """Fetch successive bounded pages through the loaded extent.
 
@@ -1635,7 +2344,7 @@ class _NativeGalleryViewer:
             for _page_number in range(page_limit):
                 page = self.session.media_page(
                     self.gallery.gallery_id, after_id=cursor,
-                    cancelled=self._cancelled,
+                    cancelled=operation_cancelled,
                 )
                 pages.append(page)
                 count += len(page.photos)
@@ -1649,7 +2358,10 @@ class _NativeGalleryViewer:
         self._refresh_pending = False
         self._refresh_foreground = self._refresh_manual_pending
         self._refresh_manual_pending = False
-        self._launch('refresh', read)
+        if not self._launch(
+            'refresh', read, operation_cancelled=operation_cancelled,
+        ) and self._active_media_cancelled is operation_cancelled:
+            self._active_media_cancelled = None
 
     def _accept_refresh(self, pages: tuple[LinkedMediaPage, ...]) -> None:
         """Reconcile a refreshed snapshot while preserving scroll and selection.
@@ -1664,10 +2376,21 @@ class _NativeGalleryViewer:
         self._selected_photo_ids.intersection_update(
             photo.image_id for photo in photos
         )
-        comparable = lambda photo: replace(photo, thumbnail_verified_at=None)
+        comparable = lambda photo: replace(
+            photo, thumbnail_verified_at=None, preload_verified_at=None,
+        )
         if (tuple(map(comparable, photos)) == tuple(map(comparable, self._photos))
                 and pages[-1].next_after == self._next_after):
+            # Keep fresh server proofs even when the visual rows are unchanged.
+            # Retaining the old descriptor age forced needless binary requests.
+            self._photos = photos
+            # Manual refresh interrupted warm admission even when metadata
+            # stayed equal. Restore its work without rebuilding any tile.
+            self._on_grid_viewport(None)
             return
+        self._cancel_grid_viewport_callback()
+        self._cancel_thumbnail_gui_slice()
+        self._thumbnail_disk_lane.invalidate()
         anchor_id = (
             self._photos[self._selection_anchor_index].image_id
             if self._selection_anchor_index is not None
@@ -1680,6 +2403,9 @@ class _NativeGalleryViewer:
             for index, photo in enumerate(self._photos)
             if index < len(self._photo_images) and self._photo_images[index] is not None
         }
+        previous_images = tuple(
+            image for image in self._photo_images if image is not None
+        )
         selected = (self._photos[self._slide_index].image_id
                     if self._lightbox is not None and self._photos
                     and self._slide_index < len(self._photos) else None)
@@ -1693,6 +2419,7 @@ class _NativeGalleryViewer:
         self._thumbnail_loaded.clear()
         self._thumbnail_pending.clear()
         self._visible_thumbnail_indices.clear()
+        self._admitted_thumbnail_indices.clear()
         self._page_request_mode = 'initial'
         self._reconciling = True
         try:
@@ -1714,6 +2441,13 @@ class _NativeGalleryViewer:
                 self._thumbnail_loaded.add(index)
                 if index in self._thumbnail_pending:
                     self._thumbnail_pending.remove(index)
+        retained_image_ids = {
+            id(image) for image in self._photo_images if image is not None
+        }
+        self._thumbnail_image_release_count += sum(
+            1 for image in previous_images
+            if id(image) not in retained_image_ids
+        )
         self._render_photo_selection()
         if selected is not None:
             index = next((i for i, photo in enumerate(self._photos)
@@ -1727,48 +2461,57 @@ class _NativeGalleryViewer:
         if self.on_photos_changed is not None:
             self.on_photos_changed()
 
-    def _schedule_queue_poll(self) -> None:
-        """Schedule result delivery only while a worker is active.
+    def _schedule_queue_poll(self, delay_ms: int = MEDIA_QUEUE_ACTIVE_POLL_MS) -> None:
+        """Schedule delivery while work or an already prepared result exists.
+
+        Args:
+            delay_ms (int): Bounded wait before the next queue drain in ms.
 
         Returns:
-            None: One bounded timer checks the active worker queue.
+            None: One bounded timer checks worker or ready in-memory results.
         """
         if (self._after_id is None and not self._closed
-                and self._worker is not None):
-            self._after_id = self.window.after(
-                MEDIA_QUEUE_ACTIVE_POLL_MS, self._poll_queue,
-            )
+                and (self._worker is not None
+                     or not self._events.empty()
+                     or self._thumbnail_disk_lane.busy())):
+            self._after_id = self.window.after(delay_ms, self._poll_queue)
 
     def _load_first_page(self) -> None:
-        """Request the initial photo page and optional presentation metadata.
+        """Show recent session metadata and refresh it through the same owner.
 
         Returns:
-            None: Work proceeds on the single owned background worker.
+            None: Recent rows can render immediately while a fresh server page
+                follows; binary authorization and descriptor ages are unchanged.
+                Otherwise the first page precedes optional presentation settings.
         """
+        self._page_request_cursor = None
+        self._page_request_mode = 'initial'
+        recent = getattr(self.session, 'recent_media_page', None)
+        page = recent(self.gallery.gallery_id) if callable(recent) else None
+        if (isinstance(page, LinkedMediaPage) and not self._closed
+                and self._worker is None and self._events.empty()):
+            # Deliver after mounting, so implicit-preview callbacks and cache
+            # owners are installed before they observe the reused page.
+            self._generation += 1
+            self._events.put_nowait((
+                self._generation, 'page_recent', (page, None),
+            ))
+            self._schedule_queue_poll(MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS)
+            return
+
         def operation() -> tuple[LinkedMediaPage, LinkedPresentation | None]:
-            """Fetch one media page and optional authorized settings.
+            """Fetch one authorized page for the existing page event.
 
             Returns:
                 tuple[LinkedMediaPage, LinkedPresentation | None]: Page and
-                    optional presentation.
+                    no presentation until its later owned request.
             """
             page = self.session.media_page(
                 self.gallery.gallery_id,
                 cancelled=self._cancelled,
             )
-            presentation = None
-            if self.session.can_read_presentation() and not self._cancelled.is_set():
-                try:
-                    presentation = self.session.media_presentation(
-                        self.gallery.gallery_id,
-                        cancelled=self._cancelled,
-                    )
-                except Exception:
-                    presentation = None
-            return page, presentation
+            return page, None
 
-        self._page_request_cursor = None
-        self._page_request_mode = 'initial'
         self._launch('page', operation)
 
     def _load_more(
@@ -1790,6 +2533,7 @@ class _NativeGalleryViewer:
         self._select_first_after_page = select_first or automatic
         if self._worker is not None:
             self._pending_page_request = (after_id, automatic)
+            self._thumbnail_cancelled.set()
             return
 
         self._start_page_after(after_id, automatic=automatic)
@@ -2092,17 +2836,20 @@ class _NativeGalleryViewer:
         self.status.pack(anchor='w', pady=(4, 8))
 
     def _prepare_thumbnail(self, body: bytes) -> 'Image.Image':
-        """Decode and bound one thumbnail directly to its owned RGB raster.
+        """Reduce oversized JPEG variants before preparing the bounded tile.
 
         Args:
             body (bytes): Complete authorized image response.
 
         Returns:
             Image.Image: Independent RGB raster at the thumbnail pixel bound.
+                Decoder subsampling avoids full camera-raster allocation when
+                the server supplies a larger fallback as its thumbnail.
 
         Raises:
             ValueError: Pillow is unavailable, body is oversized, or source
                 dimensions exceed the decoded-image policy.
+            OSError: The encoded image cannot be opened or decoded safely.
         """
         if Image is None or len(body) > NATIVE_MEDIA_MAX_BYTES:
             raise ValueError('Image support unavailable or response too large')
@@ -2111,6 +2858,10 @@ class _NativeGalleryViewer:
             with Image.open(io.BytesIO(body)) as source:
                 if source.width * source.height > MEDIA_IMAGE_MAX_PIXELS:
                     raise ValueError('Image dimensions exceed policy')
+                if (source.format in ('JPEG', 'MPO')
+                        and (source.width > MEDIA_THUMBNAIL_DECODE_SIZE[0]
+                             or source.height > MEDIA_THUMBNAIL_DECODE_SIZE[1])):
+                    source.draft('RGB', MEDIA_THUMBNAIL_DECODE_SIZE)
                 image = source.convert('RGB')
             crop = detect_black_matte_crop(image)
             if crop != (0, 0, image.width, image.height):
@@ -2129,23 +2880,29 @@ class _NativeGalleryViewer:
         self,
         photos: tuple[LinkedPhoto, ...],
         index: int,
-    ) -> tuple[int, 'Image.Image | None']:
+        timings: MediaReadTimings | None = None,
+        gallery_id: int | None = None,
+    ) -> tuple[int, 'Image.Image | None', float]:
         """Fetch and downsize one viewport-admitted album thumbnail.
 
         Args:
             photos (tuple[LinkedPhoto, ...]): Ordered photos in the album so far.
             index (int): Zero-based photo index requested by the queue.
+            timings (MediaReadTimings | None): Optional per-read transport
+                timing record, or None for a direct compatibility call.
+            gallery_id (int | None): Captured gallery identity, or None to use
+                the viewer's gallery for a direct compatibility call.
 
         Returns:
-            tuple[int, Image.Image | None]: Photo index and bounded RGB image;
-                safe transport or decode failure facts are retained if configured.
+            tuple[int, Image.Image | None, float]: Photo index, bounded RGB
+                image and direct thumbnail decode duration in milliseconds.
         """
         if self._thumbnail_cancelled.is_set() or self._cancelled.is_set():
-            return index, None
+            return index, None, 0.0
         photo = photos[index]
         try:
             body, _mime = self.session.media_photo(
-                self.gallery.gallery_id,
+                gallery_id if gallery_id is not None else self.gallery.gallery_id,
                 photo.image_id,
                 thumbnail=True,
                 cancelled=self._thumbnail_cancelled,
@@ -2159,6 +2916,7 @@ class _NativeGalleryViewer:
                     photo, 'preload_thumbnail_etag', None,
                 ),
                 preload_verified_at=getattr(photo, 'preload_verified_at', None),
+                timings=timings,
             )
         except LinkingMediaThrottled:
             raise
@@ -2168,24 +2926,32 @@ class _NativeGalleryViewer:
                     "media-fetch", "thumbnail", exc,
                     diagnostic_callback=self._diagnostic_callback,
                 )
-            return index, None
+            return index, None, 0.0
         if self._thumbnail_cancelled.is_set() or self._cancelled.is_set():
-            return index, None
+            return index, None, 0.0
+        decode_started = time.perf_counter()
         try:
-            return index, self._prepare_thumbnail(body)
+            image = self._prepare_thumbnail(body)
+            return index, image, (time.perf_counter() - decode_started) * 1000.0
         except Exception as exc:
             if not self._thumbnail_cancelled.is_set() and not self._cancelled.is_set():
                 _log_safe_media_failure(
                     "media-decode", "thumbnail", exc,
                     diagnostic_callback=self._diagnostic_callback,
                 )
-            return index, None
+            return index, None, (time.perf_counter() - decode_started) * 1000.0
 
-    def _load_next_thumbnail(self) -> None:
-        """Queue one thumbnail so a selected detail can take the next turn.
+    def _load_next_thumbnail(
+        self, limit: int = MEDIA_THUMBNAIL_BATCH_SIZE,
+    ) -> None:
+        """Fetch a bounded visible-first batch on the serialized worker.
+
+        Args:
+            limit (int): Maximum admitted items for this turn, capped by the
+                batch policy and any remaining initial revision budget.
 
         Returns:
-            None: At most one visible thumbnail request occupies the transport.
+            None: One worker serially publishes up to the batch limit.
         """
         if (self._media_throttled
                 or not self._thumbnail_pending
@@ -2195,14 +2961,93 @@ class _NativeGalleryViewer:
                 or self._pending_detail_index is not None
                 or self._pending_page_request is not None):
             return
+        if not self.session.can_read_media():
+            self.close()
+            return
         # Keep the in-flight index queued until it resolves. Configure events
         # can otherwise enqueue the same visible tile again during a download.
-        index = self._thumbnail_pending[0]
-        self._launch(
-            'thumbnail',
-            lambda: self._load_thumbnails(self._photos, index),
-            error_payload=index,
+        indices = tuple(self._thumbnail_pending[:max(
+            0, min(limit, MEDIA_THUMBNAIL_BATCH_SIZE),
+        )])
+        if not indices:
+            return
+        self._generation += 1
+        generation = self._generation
+        photos = self._photos
+        gallery_id = self.gallery.gallery_id
+        descriptors = tuple(photos[index] for index in indices)
+        thumbnail_cancelled = self._thumbnail_cancelled
+        session_cancelled = self._cancelled
+        result_lock = self._thumbnail_result_lock
+
+        def run_batch() -> None:
+            """Read and publish each captured thumbnail in serial order.
+
+            Returns:
+                None: Bounded image results enter the queue with captured identity.
+            """
+            try:
+                for index, descriptor in zip(indices, descriptors):
+                    if (thumbnail_cancelled.is_set()
+                            or session_cancelled.is_set()):
+                        break
+                    timings = MediaReadTimings()
+                    decode_ms = 0.0
+                    try:
+                        photo_index, image, decode_ms = self._load_thumbnails(
+                            photos, index, timings, gallery_id,
+                        )
+                    finally:
+                        self._observe_thumbnail_read(timings, decode_ms)
+                    if thumbnail_cancelled.is_set() or session_cancelled.is_set():
+                        with self._thumbnail_metrics_lock:
+                            self._thumbnail_cancelled_read_count += 1
+                        if image is not None:
+                            image.close()
+                        break
+                    result = _ThumbnailResult(
+                        gallery_id, photo_index, descriptor, image, timings,
+                        decode_ms, time.perf_counter(),
+                    )
+                    with result_lock:
+                        if thumbnail_cancelled.is_set() or session_cancelled.is_set():
+                            with self._thumbnail_metrics_lock:
+                                self._thumbnail_cancelled_read_count += 1
+                            if image is not None:
+                                image.close()
+                            break
+                        try:
+                            self._events.put_nowait((
+                                generation, 'thumbnail_batch_item', result,
+                            ))
+                        except queue.Full:
+                            if image is not None:
+                                image.close()
+                            break
+                    if thumbnail_cancelled.is_set():
+                        break
+            except LinkingMediaThrottled:
+                throttled_index = index
+                with result_lock:
+                    if (not session_cancelled.is_set()
+                            and not thumbnail_cancelled.is_set()):
+                        # Throttling replaces an item in the same batch, so
+                        # its control marker fits the existing result bound.
+                        self._events.put_nowait((
+                            generation, 'thumbnail_batch_throttled',
+                            throttled_index,
+                        ))
+
+        self._thumbnail_batch_count += 1
+        self._thumbnail_batch_indices = indices
+        self._worker = threading.Thread(
+            target=run_batch,
+            name='linked-gallery-thumbnail-batch',
+            daemon=True,
         )
+        self._worker_kind = 'thumbnail_batch'
+        self._worker.start()
+        self._schedule_queue_poll()
 
     def _prepare_image(
         self,
@@ -2246,6 +3091,11 @@ class _NativeGalleryViewer:
     def _prepare_detail(self, body: bytes) -> 'Image.Image':
         """Decode and constrain a detail image on the owned worker thread.
 
+        JPEG/MPO decoder subsampling is requested whenever source dimensions
+        exceed the final detail bounds, allowing supported scaling to reduce
+        RGB allocation before the final resize. The pixel ceiling remains a post-draft
+        safety bound; unsupported oversized rasters are rejected before convert.
+
         Args:
             body (bytes): Bounded raster response returned by the linked session.
 
@@ -2278,13 +3128,18 @@ class _NativeGalleryViewer:
                 )
                 decoded_size = source.size
                 source_pixels = source.width * source.height
-                if source_pixels > MEDIA_IMAGE_MAX_PIXELS:
-                    if image_format not in ('JPEG', 'MPO'):
-                        raise PhotosDecodeError(PhotosDecodeFacts(
-                            'pixel-check', 'pixel-limit', image_format,
-                            source_size, decoded_size, len(body),
-                            MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
-                        ))
+                is_jpeg = image_format in ('JPEG', 'MPO')
+                if source_pixels > MEDIA_IMAGE_MAX_PIXELS and not is_jpeg:
+                    raise PhotosDecodeError(PhotosDecodeFacts(
+                        'pixel-check', 'pixel-limit', image_format,
+                        source_size, decoded_size, len(body),
+                        MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
+                    ))
+                exceeds_detail_bounds = (
+                    source.width > MEDIA_IMAGE_MAX_SIZE[0]
+                    or source.height > MEDIA_IMAGE_MAX_SIZE[1]
+                )
+                if is_jpeg and exceeds_detail_bounds:
                     stage = 'draft'
                     try:
                         source.draft('RGB', MEDIA_IMAGE_MAX_SIZE)
@@ -2295,12 +3150,14 @@ class _NativeGalleryViewer:
                             MEDIA_IMAGE_MAX_SIZE,
                         )) from None
                     decoded_size = source.size
-                    if source.width * source.height > MEDIA_IMAGE_MAX_PIXELS:
-                        raise PhotosDecodeError(PhotosDecodeFacts(
-                            'pixel-check', 'pixel-limit', image_format,
-                            source_size, decoded_size, len(body),
-                            MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
-                        ))
+                if source.width * source.height > MEDIA_IMAGE_MAX_PIXELS:
+                    raise PhotosDecodeError(PhotosDecodeFacts(
+                        'pixel-check', 'pixel-limit', image_format,
+                        source_size, decoded_size, len(body),
+                        MEDIA_IMAGE_MAX_PIXELS, MEDIA_IMAGE_MAX_SIZE,
+                    ))
+                if (decoded_size[0] < source_size[0]
+                        or decoded_size[1] < source_size[1]):
                     _log_safe_photos_observation(
                         format_safe_photos_decode_facts(PhotosDecodeFacts(
                             'draft', 'reduced', image_format, source_size,
@@ -2350,12 +3207,15 @@ class _NativeGalleryViewer:
             self.close()
             return
         cache_changed = False
+        gui_started = time.perf_counter()
+        gui_count = 0
         while True:
             try:
                 generation, kind, result = self._events.get_nowait()
             except queue.Empty:
                 break
             if generation != self._generation or self._closed:
+                self._release_worker_result(result, kind)
                 continue
             if (kind in ('detail_error', 'detail_unavailable')
                     and isinstance(result, tuple)
@@ -2387,6 +3247,7 @@ class _NativeGalleryViewer:
                     # Keep the prior committed revision so a later probe can
                     # retry an interrupted refresh without a tight retry loop.
                     self._refresh_revision = None
+                    self._on_grid_viewport(None)
                     if self._refresh_foreground:
                         self.status.pack(anchor='w', pady=(4, 8))
                         error_key = (
@@ -2398,8 +3259,25 @@ class _NativeGalleryViewer:
                     self._revision_supported = False
                 elif kind in ('revision_error', 'revision_throttled'):
                     pass
-                elif kind == 'page':
+                elif kind in ('page', 'page_recent'):
                     self._accept_page(*result)
+                    self._presentation_pending = self.session.can_read_presentation()
+                    if kind == 'page_recent':
+                        self._refresh_pending = True
+                elif kind == 'presentation':
+                    if isinstance(result, LinkedPresentation):
+                        self._presentation = result
+                        self._tracks = tuple(result.tracks)
+                        self._refresh_audio_button()
+                        if (self._slideshow_running
+                                and not self._slideshow_music_attempted
+                                and self._audio_index is None
+                                and result.music and self._tracks):
+                            self._slideshow_music_attempted = True
+                            self._toggle_track()
+                            self._slideshow_started_music = self._audio_index is not None
+                elif kind.startswith('presentation_'):
+                    pass
                 elif kind in ('more', 'slide_more'):
                     self._accept_page(
                         result, self._presentation,
@@ -2407,11 +3285,73 @@ class _NativeGalleryViewer:
                     )
                 elif kind == 'thumbnail':
                     self._show_thumbnail(*result)
+                elif kind == 'thumbnail_batch_item':
+                    if not isinstance(result, _ThumbnailResult):
+                        continue
+                    valid_identity = bool(
+                        result.gallery_id == self.gallery.gallery_id
+                        and 0 <= result.index < len(self._photos)
+                        and self._photos[result.index] == result.photo
+                    )
+                    if not valid_identity:
+                        if result.image is not None:
+                            result.image.close()
+                        continue
+                    self._thumbnail_queue_wait_ms += max(
+                        0.0,
+                        (time.perf_counter() - result.enqueued_at) * 1000.0,
+                    )
+                    show_started = time.perf_counter()
+                    private_descriptor = (
+                        result.photo.cache_eligible is not True
+                        and (self.session.can_read_admin_media()
+                             or result.photo.cache_eligible is False
+                             or result.photo.preload_eligible is not None)
+                    )
+                    verified_private_response = (
+                        result.timings.source == 'disk'
+                        or result.timings.cache_stored
+                    )
+                    self._show_thumbnail(
+                        result.index, result.image,
+                        remember=(not private_descriptor
+                                  or verified_private_response),
+                    )
+                    self._thumbnail_tk_ms += (
+                        time.perf_counter() - show_started
+                    ) * 1000.0
+                    gui_count += 1
+                    if (gui_count >= MEDIA_THUMBNAIL_GUI_SLICE_SIZE
+                            or time.perf_counter() - gui_started
+                            >= MEDIA_THUMBNAIL_GUI_SLICE_SECONDS):
+                        break
                 elif kind == 'detail':
                     self._show_detail(*result)
                 elif kind == 'prefetch':
                     image_id, data, encoded = result
-                    if data is not None and encoded is not None:
+                    pending_index = self._pending_detail_index
+                    active_cancelled = self._active_media_cancelled
+                    adopt_prefetch = bool(
+                        data is not None
+                        and pending_index is not None
+                        and 0 <= pending_index < len(self._photos)
+                        and self._photos[pending_index].image_id == image_id
+                        and self._active_media_photo_id == image_id
+                        and active_cancelled is not None
+                        and not active_cancelled.is_set()
+                    )
+                    if adopt_prefetch:
+                        with self._thumbnail_metrics_lock:
+                            self._detail_media_metrics[
+                                'prefetch_adoptions'
+                            ] += 1
+                        self._pending_detail_index = None
+                        cached_image = data.copy() if encoded is not None else None
+                        self._show_detail(
+                            self._detail_serial, image_id, data,
+                            cached_image, encoded,
+                        )
+                    elif data is not None and encoded is not None:
                         self._remember_detail(image_id, data, encoded)
                     elif data is not None:
                         data.close()
@@ -2486,44 +3426,125 @@ class _NativeGalleryViewer:
             except Exception as exc:
                 phase = (
                     "page-apply"
-                    if kind in ("page", "more", "slide_more")
+                    if kind in ("page", "page_recent", "more", "slide_more")
                     else "media-apply"
                 )
                 _log_safe_media_failure(phase, kind, exc)
                 if kind == 'refresh':
                     self._refresh_revision = None
+                    self._on_grid_viewport(None)
                 if kind != 'refresh' or self._refresh_foreground:
                     self.status.configure(text=self._text('linking_media_error'))
             if kind in (
-                'page', 'more', 'slide_more', 'refresh',
-                'thumbnail', 'detail', 'prefetch',
+                'page', 'page_recent', 'more', 'slide_more', 'refresh',
+                'thumbnail', 'thumbnail_batch_item', 'detail', 'prefetch',
             ):
                 cache_changed = True
+        while (gui_count < MEDIA_THUMBNAIL_GUI_SLICE_SIZE
+               and (gui_count == 0 or time.perf_counter() - gui_started
+                    < MEDIA_THUMBNAIL_GUI_SLICE_SECONDS)):
+            local = self._thumbnail_disk_lane.pop_ready()
+            if local is None:
+                break
+            valid = (
+                local.gallery_id == self.gallery.gallery_id
+                and local.index in self._admitted_thumbnail_indices
+                and local.index < len(self._photos)
+                and self._photos[local.index] == local.photo
+                and not self._refresh_pending
+            )
+            if not valid:
+                if local.image is not None:
+                    local.image.close()
+                self._thumbnail_discarded_count += 1
+            elif local.image is not None:
+                self._thumbnail_queue_wait_ms += max(
+                    0.0, (time.perf_counter() - local.enqueued_at) * 1000.0,
+                )
+                show_started = time.perf_counter()
+                try:
+                    self._show_thumbnail(local.index, local.image)
+                    cache_changed = True
+                except Exception as exc:
+                    local.image.close()
+                    _log_safe_media_failure('media-apply', 'thumbnail', exc)
+                finally:
+                    self._thumbnail_tk_ms += (
+                        time.perf_counter() - show_started
+                    ) * 1000.0
+            elif (local.index not in self._thumbnail_pending
+                  and local.index not in self._thumbnail_loaded):
+                self._thumbnail_local_miss_count += 1
+                self._thumbnail_pending.append(local.index)
+            gui_count += 1
+        self._thumbnail_pending.sort(
+            key=lambda index: (index not in self._visible_thumbnail_indices, index),
+        )
         cache_callback = getattr(self, 'on_cache_changed', None)
         if cache_changed and cache_callback is not None and not self._closed:
             cache_callback(self._photos, self._next_after is None)
-        if (self._worker is not None and not self._worker.is_alive()
-                and not self._events.empty()):
-            self._schedule_queue_poll()
+        if not self._events.empty():
+            self._schedule_queue_poll(MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS)
             return
         if self._worker is not None and not self._worker.is_alive():
+            # The producer can publish between the first empty check and its
+            # exit. Once it is dead, this final check is stable: never advance
+            # the generation while its last raster is still undelivered.
+            if not self._events.empty():
+                self._schedule_queue_poll(
+                    MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS,
+                )
+                return
             self._worker = None
             self._worker_kind = None
+            self._thumbnail_batch_indices = ()
+            self._active_media_cancelled = None
+            self._active_media_photo_id = None
         self._dispatch_pending_work()
         self._schedule_queue_poll()
+
+    def _release_worker_result(
+        self, result: _WorkerPayload, kind: str,
+    ) -> None:
+        """Release decoded rasters that cannot reach the active viewer.
+
+        Args:
+            result (_WorkerPayload): Result from a superseded worker operation.
+            kind (str): Fixed event kind identifying its payload shape.
+
+        Returns:
+            None: Pillow resources are released without Tk access.
+        """
+        if kind == 'thumbnail_batch_item' and isinstance(result, _ThumbnailResult):
+            self._thumbnail_discarded_count += 1
+            if result.image is not None:
+                result.image.close()
+            return
+        if Image is None or not isinstance(result, tuple):
+            return
+        if kind == 'thumbnail' and len(result) >= 2:
+            rasters = (result[1],)
+        elif kind == 'detail' and len(result) >= 4:
+            rasters = (result[2], result[3])
+        elif kind == 'prefetch' and len(result) >= 2:
+            rasters = (result[1],)
+        else:
+            return
+        released: set[int] = set()
+        for raster in rasters:
+            if (isinstance(raster, Image.Image) and id(raster) not in released):
+                raster.close()
+                released.add(id(raster))
 
     def _dispatch_pending_work(self) -> None:
         """Dispatch foreground work, bounded tiles and visible speculation.
 
         Returns:
             None: Detail and page requests lead; audio stays ahead of tiles,
-                which get a bounded initial turn before revision and precede
-                visible-lightbox-only adjacent detail speculation.
+                then adjacent lightbox details precede grid thumbnails. Tiles
+                still get a bounded initial turn before presentation/revision.
         """
         if self._closed or self._worker is not None:
-            return
-        if self._refresh_pending:
-            self._start_refresh()
             return
         if self._pending_detail_index is not None:
             pending = self._pending_detail_index
@@ -2544,7 +3565,17 @@ class _NativeGalleryViewer:
                     automatic=automatic,
                 )
                 return
+        if self._refresh_pending and self._refresh_manual_pending:
+            self._start_refresh()
+            return
         if self._dispatch_audio_prefetch():
+            return
+        if self._pending_prefetch_ids and (
+                self._lightbox is not None and self._lightbox.visible):
+            if self._load_next_prefetch():
+                return
+        if self._refresh_pending:
+            self._start_refresh()
             return
         revision_due = (
             not self._revision_initial_attempted
@@ -2554,16 +3585,38 @@ class _NativeGalleryViewer:
             and not (self._lightbox is not None and self._lightbox.visible)
             and bool(self._photos)
         )
+        priority_due = revision_due or self._presentation_pending
         if (self._thumbnail_pending and not self._media_throttled
-                and (not revision_due
+                and (not priority_due
                      or self._initial_thumbnail_priority_count
                      < MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT)):
             previous_worker = self._worker
             self._thumbnail_cancelled.clear()
-            self._load_next_thumbnail()
+            remaining = (
+                MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT
+                - self._initial_thumbnail_priority_count
+                if priority_due else MEDIA_THUMBNAIL_BATCH_SIZE
+            )
+            self._load_next_thumbnail(remaining)
             if self._worker is not None and self._worker is not previous_worker:
-                if revision_due:
-                    self._initial_thumbnail_priority_count += 1
+                if priority_due:
+                    self._initial_thumbnail_priority_count += len(
+                        self._thumbnail_batch_indices,
+                    )
+                return
+        if self._presentation_pending:
+            if (self._photos and not self._thumbnail_loaded
+                    and (self._viewport_after_id is not None
+                         or self._warm_thumbnail_pending
+                         or self._thumbnail_disk_lane.busy())):
+                return
+            self._presentation_pending = False
+            if self.session.can_read_presentation():
+                self._launch(
+                    'presentation', lambda: self.session.media_presentation(
+                        self.gallery.gallery_id, cancelled=self._cancelled,
+                    ),
+                )
                 return
         if revision_due:
             self._revision_initial_attempted = True
@@ -2579,10 +3632,6 @@ class _NativeGalleryViewer:
             self._thumbnail_cancelled.clear()
             self._load_next_thumbnail()
             if self._worker is not None:
-                return
-        if self._pending_prefetch_ids and (
-                self._lightbox is not None and self._lightbox.visible):
-            if self._load_next_prefetch():
                 return
 
     def _image_memory_size(self, image: 'Image.Image') -> int:
@@ -2620,8 +3669,20 @@ class _NativeGalleryViewer:
         photo = next(
             (item for item in self._photos if item.image_id == image_id), None,
         )
-        if (self.session.can_read_admin_media() and photo is not None
-                and photo.cache_eligible is not True):
+        private_candidate = bool(
+            photo is not None and photo.cache_eligible is not True
+            and (self.session.can_read_admin_media()
+                 or photo.cache_eligible is False
+                 or photo.preload_eligible is not None)
+        )
+        private_identity = (
+            self.session.private_preload_cache_identity(
+                self.gallery.gallery_id, photo,
+            ) if (self.session.can_read_admin_media() and photo is not None
+                  and private_candidate) else None
+        )
+        if (private_candidate and photo is not None
+                and private_identity is None):
             previous = self._detail_cache.pop(image_id, None)
             if previous is not None:
                 self._detail_cache_bytes -= previous[3]
@@ -2638,11 +3699,15 @@ class _NativeGalleryViewer:
             previous[1].close()
         self._detail_cache[image_id] = (
             time.monotonic(), image, encoded, memory_size,
+            ((private_identity[0], private_identity[1],
+              private_identity[2], private_identity[3])
+             if private_identity is not None else (None, None, None, None)),
         )
         self._detail_cache_bytes += memory_size
         while (len(self._detail_cache) > MEDIA_DETAIL_CACHE_ENTRY_LIMIT
                or self._detail_cache_bytes > MEDIA_DETAIL_CACHE_MAX_BYTES):
-            _old_id, (_fetched_at, old_image, _old_encoded, old_size) = (
+            _old_id, (_fetched_at, old_image, _old_encoded, old_size,
+                      _old_proof) = (
                 self._detail_cache.popitem(last=False)
             )
             self._detail_cache_bytes -= old_size
@@ -2663,13 +3728,27 @@ class _NativeGalleryViewer:
         photo = next(
             (item for item in self._photos if item.image_id == image_id), None,
         )
-        if (self.session.can_read_admin_media() and photo is not None
-                and photo.cache_eligible is not True):
+        private_candidate = (
+            photo.cache_eligible is not True
+            and (self.session.can_read_admin_media()
+                 or photo.cache_eligible is False
+                 or photo.preload_eligible is not None)
+        ) if photo is not None else False
+        private_identity = (
+            self.session.private_preload_cache_identity(
+                self.gallery.gallery_id, photo,
+            ) if (self.session.can_read_admin_media() and photo is not None
+                  and private_candidate) else None
+        )
+        current_proof = (private_identity if private_identity is not None
+                         else (None, None, None, None))
+        if (private_candidate and photo is not None
+                and (private_identity is None or entry[4] != current_proof)):
             del self._detail_cache[image_id]
             self._detail_cache_bytes -= entry[3]
             entry[1].close()
             return None
-        fetched_at, image, _encoded, memory_size = entry
+        fetched_at, image, _encoded, memory_size = entry[:4]
         if time.monotonic() - fetched_at > MEDIA_DETAIL_CACHE_FRESH_SECONDS:
             del self._detail_cache[image_id]
             self._detail_cache_bytes -= memory_size
@@ -2756,20 +3835,51 @@ class _NativeGalleryViewer:
             if photo is None:
                 continue
 
-            def operation() -> tuple[int, 'Image.Image', bytes | None]:
-                """Read and prepare the adjacent image on the worker thread.
+            operation_cancelled = threading.Event()
+            self._active_media_cancelled = operation_cancelled
+            self._active_media_photo_id = photo.image_id
+
+            def operation() -> tuple[
+                int, 'Image.Image', bytes | None,
+            ]:
+                """Read the adjacent image under its operation cancellation.
 
                 Returns:
-                    tuple[int, Image.Image, bytes | None]: ID, prepared RGB and
-                        original bytes, or None when only a safe preview exists.
+                    tuple[int, Image.Image, bytes | None]: Photo ID, prepared
+                        raster and retained source, or None when only a safe
+                        preview exists.
                 """
-                image, body = self._read_prepared_detail(photo)
+                timings = MediaReadTimings()
+                try:
+                    image, body = self._read_prepared_detail(
+                        photo, timings, cancelled=operation_cancelled,
+                    )
+                finally:
+                    self._observe_detail_read('prefetch', timings)
+                if operation_cancelled.is_set():
+                    image.close()
+                    raise LinkingError('Adjacent photo request was superseded.')
+                private_descriptor = (
+                    photo.cache_eligible is not True
+                    and (self.session.can_read_admin_media()
+                         or photo.cache_eligible is False
+                         or photo.preload_eligible is not None)
+                )
+                if (private_descriptor and timings.source != 'disk'
+                        and not timings.cache_stored):
+                    body = None
                 return photo.image_id, image, body
 
-            return self._launch(
+            started = self._launch(
                 'prefetch', operation,
                 error_payload=(image_id, None),
+                operation_cancelled=operation_cancelled,
             )
+            if (not started
+                    and self._active_media_cancelled is operation_cancelled):
+                self._active_media_cancelled = None
+                self._active_media_photo_id = None
+            return started
         return False
 
     def _show_thumbnail(
@@ -2784,7 +3894,7 @@ class _NativeGalleryViewer:
                 entry without extending its validation time.
 
         Returns:
-            None: The grid retains a bounded Tk image or neutral placeholder.
+            None: The admitted row band retains a bounded Tk image or placeholder.
         """
         if index in self._thumbnail_pending:
             self._thumbnail_pending.remove(index)
@@ -2792,21 +3902,29 @@ class _NativeGalleryViewer:
             if data is not None:
                 data.close()
             return
-        if index not in self._visible_thumbnail_indices:
+        if index not in self._admitted_thumbnail_indices:
             if data is not None:
                 data.close()
             return
         if data is not None and ImageTk is not None:
+            image: object | None = None
             try:
                 image = ImageTk.PhotoImage(data, master=self.frame)
+                self._thumbnail_image_create_count += 1
                 if remember:
                     self._remember_thumbnail(self._photos[index], data.copy())
                 data.close()
+                if self._photo_images[index] is not None:
+                    self._thumbnail_image_release_count += 1
                 self._photo_images[index] = image
                 self._tile_buttons[index].configure(
                     image=image, text='', style='LinkedPhoto.TButton',
                 )
             except Exception:
+                if image is not None:
+                    self._thumbnail_image_release_count += 1
+                    if self._photo_images[index] is image:
+                        self._photo_images[index] = None
                 data.close()
                 data = None
         if data is None or ImageTk is None:
@@ -2832,23 +3950,59 @@ class _NativeGalleryViewer:
         Returns:
             Image.Image | None: Independent source raster, or None on a miss.
         """
-        if (self.session.can_read_admin_media()
-                and photo.cache_eligible is not True):
+        if not self.session.can_reuse_cached_media():
             return None
+        private_candidate = (
+            photo.cache_eligible is not True
+            and (self.session.can_read_admin_media()
+                 or photo.cache_eligible is False
+                 or photo.preload_eligible is not None)
+        )
+        private_identity = (
+            self.session.private_preload_cache_identity(
+                self.gallery.gallery_id, photo, thumbnail=True,
+            ) if self.session.can_read_admin_media()
+            and private_candidate else None
+        )
+        if private_candidate and private_identity is None:
+            return None
+        validator = (
+            private_identity[1] if private_identity is not None
+            else getattr(photo, 'thumbnail_etag', None)
+        )
         key = (
             self.gallery.gallery_id, photo.image_id,
             getattr(photo, 'cache_eligible', None),
-            getattr(photo, 'thumbnail_etag', None),
+            validator,
+            private_identity[0] if private_identity is not None else None,
+            private_identity[2] if private_identity is not None else None,
+            private_identity[3] if private_identity is not None else None,
         )
         with self._thumbnail_memory.lock:
             cached = self._thumbnail_memory.entries.get(key)
             if cached is None:
                 return None
             image, _size, stored_at = cached
-            if (not key[3] and time.monotonic() - stored_at
+            verified_at = (
+                private_identity[2] if private_identity is not None
+                else photo.thumbnail_verified_at
+            )
+            descriptor_current = (
+                key[3] is not None and verified_at is not None
+                and 0 <= time.monotonic() - verified_at
+                < MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS
+            )
+            if (private_identity is not None and not descriptor_current):
+                self._thumbnail_memory.entries.pop(key, None)
+                self._thumbnail_memory.size_bytes -= _size
+                self._thumbnail_memory.expirations += 1
+                image.close()
+                return None
+            if (not descriptor_current and time.monotonic() - stored_at
                     > MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS):
                 self._thumbnail_memory.entries.pop(key, None)
                 self._thumbnail_memory.size_bytes -= _size
+                self._thumbnail_memory.expirations += 1
                 image.close()
                 return None
             self._thumbnail_memory.entries.move_to_end(key)
@@ -2861,22 +4015,95 @@ class _NativeGalleryViewer:
             photo (LinkedPhoto): Current server-authorized photo descriptor.
             image (Image.Image): Independent RGB thumbnail copy to retain.
         Returns:
-            None: Oldest thumbnails close when the LRU bound is exceeded.
+            None: Visible rasters lead eviction priority. Speculative overscan
+                cannot evict history; all retained pixels obey the byte bound.
         """
-        if (self.session.can_read_admin_media()
-                and photo.cache_eligible is not True):
+        private_candidate = (
+            photo.cache_eligible is not True
+            and (self.session.can_read_admin_media()
+                 or photo.cache_eligible is False
+                 or photo.preload_eligible is not None)
+        )
+        private_identity = (
+            self.session.private_preload_cache_identity(
+                self.gallery.gallery_id, photo, thumbnail=True,
+            ) if self.session.can_read_admin_media()
+            and private_candidate else None
+        )
+        if private_candidate and private_identity is None:
+            image.close()
+            with self._thumbnail_memory.lock:
+                self._thumbnail_memory.admission_refusals += 1
             return
+        validator = (
+            private_identity[1] if private_identity is not None
+            else getattr(photo, 'thumbnail_etag', None)
+        )
         key = (
             self.gallery.gallery_id, photo.image_id,
             getattr(photo, 'cache_eligible', None),
-            getattr(photo, 'thumbnail_etag', None),
+            validator,
+            private_identity[0] if private_identity is not None else None,
+            private_identity[2] if private_identity is not None else None,
+            private_identity[3] if private_identity is not None else None,
         )
-        size = image.width * image.height * len(image.getbands())
+        # Pillow RGB is accounted at four bytes per pixel, conservatively
+        # including alignment rather than relying on compressed source bytes.
+        size = self._image_memory_size(image)
         if size > MEDIA_THUMBNAIL_CACHE_MAX_BYTES:
             image.close()
+            with self._thumbnail_memory.lock:
+                self._thumbnail_memory.admission_refusals += 1
             return
         memory = self._thumbnail_memory
         with memory.lock:
+            for old_key in tuple(memory.entries):
+                if old_key[:2] == key[:2] and old_key != key:
+                    old_image, old_size, _stored_at = memory.entries.pop(old_key)
+                    memory.size_bytes -= old_size
+                    memory.validator_changes += 1
+                    old_image.close()
+            visible_keys: set[
+                tuple[
+                    int, int, bool | None, str | None, int | None,
+                    float | None, int | None,
+                ]
+            ] = set()
+            for index in self._visible_thumbnail_indices:
+                if index >= len(self._photos):
+                    continue
+                visible_photo = self._photos[index]
+                visible_identity = (
+                    self.session.private_preload_cache_identity(
+                        self.gallery.gallery_id, visible_photo,
+                        thumbnail=True,
+                    ) if visible_photo.cache_eligible is not True
+                    and self.session.can_read_admin_media()
+                    else None
+                )
+                visible_validator = (
+                    visible_identity[1]
+                    if visible_identity is not None
+                    else visible_photo.thumbnail_etag
+                )
+                visible_keys.add((
+                    self.gallery.gallery_id, visible_photo.image_id,
+                    visible_photo.cache_eligible, visible_validator,
+                    visible_identity[0] if visible_identity is not None else None,
+                    visible_identity[2] if visible_identity is not None else None,
+                    visible_identity[3] if visible_identity is not None else None,
+                ))
+            speculative = key not in visible_keys and bool(visible_keys)
+            previous_size = memory.entries[key][1] if key in memory.entries else 0
+            if speculative and (
+                (key not in memory.entries
+                 and len(memory.entries) >= MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT)
+                or memory.size_bytes - previous_size + size
+                > MEDIA_THUMBNAIL_CACHE_MAX_BYTES
+            ):
+                memory.admission_refusals += 1
+                image.close()
+                return
             previous = memory.entries.pop(key, None)
             if previous is not None:
                 memory.size_bytes -= previous[1]
@@ -2885,10 +4112,14 @@ class _NativeGalleryViewer:
             memory.size_bytes += size
             while (len(memory.entries) > MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT
                    or memory.size_bytes > MEDIA_THUMBNAIL_CACHE_MAX_BYTES):
-                _evicted_key, (evicted, evicted_size, _stored_at) = (
-                    memory.entries.popitem(last=False)
+                victim = next(
+                    (candidate for candidate in memory.entries
+                     if candidate not in visible_keys),
+                    next(iter(memory.entries)),
                 )
+                evicted, evicted_size, _stored_at = memory.entries.pop(victim)
                 memory.size_bytes -= evicted_size
+                memory.evictions += 1
                 evicted.close()
 
     def _select_photo(self, index: int, *, keep_slideshow: bool = False) -> None:
@@ -2909,12 +4140,16 @@ class _NativeGalleryViewer:
 
     def _read_photo_body(
         self, photo: LinkedPhoto, *, thumbnail: bool,
+        timings: MediaReadTimings | None = None,
+        cancelled: threading.Event | None = None,
     ) -> tuple[bytes, str]:
-        """Read one exact photo rendition through the existing session gates.
+        """Read a thumbnail or saved full version through the session gates.
 
         Args:
             photo (LinkedPhoto): Current gallery descriptor and cache metadata.
             thumbnail (bool): Whether to request the server's bounded preview.
+            timings (MediaReadTimings | None): Optional cache-admission witness.
+            cancelled (threading.Event | None): Current detail operation owner.
 
         Returns:
             tuple[bytes, str]: Authorized body and validated media type.
@@ -2923,7 +4158,9 @@ class _NativeGalleryViewer:
             self.gallery.gallery_id,
             photo.image_id,
             thumbnail=thumbnail,
-            cancelled=self._cancelled,
+            cancelled=(
+                cancelled if cancelled is not None else self._cancelled
+            ),
             cache_eligible=getattr(photo, 'cache_eligible', None),
             thumbnail_etag=getattr(photo, 'thumbnail_etag', None),
             thumbnail_verified_at=getattr(
@@ -2936,15 +4173,21 @@ class _NativeGalleryViewer:
             preload_verified_at=getattr(
                 photo, 'preload_verified_at', None,
             ),
+            timings=timings,
+            use_preloaded_snapshot=not thumbnail,
         )
 
     def _read_prepared_detail(
         self, photo: LinkedPhoto,
+        timings: MediaReadTimings | None = None,
+        cancelled: threading.Event | None = None,
     ) -> tuple['Image.Image', bytes | None]:
         """Read and decode a selected detail, using one safe preview fallback.
 
         Args:
             photo (LinkedPhoto): Exact photo selected or prefetched in this view.
+            timings (MediaReadTimings | None): Optional cache-admission witness.
+            cancelled (threading.Event | None): Current detail operation owner.
 
         Returns:
             tuple[Image.Image, bytes | None]: Bounded image plus original bytes;
@@ -2955,24 +4198,44 @@ class _NativeGalleryViewer:
                 reduced inside the existing decoder limits.
             LinkingError: Existing authorization, transport or cancellation gates fail.
         """
-        body, _mime = self._read_photo_body(photo, thumbnail=False)
+        operation_cancelled = (
+            cancelled if cancelled is not None else self._cancelled
+        )
+        body, _mime = self._read_photo_body(
+            photo, thumbnail=False, timings=timings,
+            cancelled=operation_cancelled,
+        )
+        if operation_cancelled.is_set():
+            raise LinkingError('Detail request was cancelled.')
         try:
-            return self._prepare_detail(body), body
+            image = self._prepare_detail(body)
+            if operation_cancelled.is_set():
+                image.close()
+                raise LinkingError('Detail request was cancelled.')
+            return image, body
         except PhotosDecodeError as error:
             facts = error.facts
             if (facts.reason != 'pixel-limit'
-                    or self._cancelled.is_set()):
+                    or operation_cancelled.is_set()):
                 raise
+        if operation_cancelled.is_set():
+            raise LinkingError('Detail request was cancelled.')
         _log_safe_photos_observation(
             format_safe_photos_decode_facts(facts),
             self._observation_callback,
         )
         try:
             preview_body, _preview_mime = self._read_photo_body(
-                photo, thumbnail=True,
+                photo, thumbnail=True, timings=timings,
+                cancelled=operation_cancelled,
             )
             preview = self._prepare_detail(preview_body)
+            if operation_cancelled.is_set():
+                preview.close()
+                raise LinkingError('Detail request was cancelled.')
         except Exception:
+            if operation_cancelled.is_set():
+                raise LinkingError('Detail request was cancelled.') from None
             _log_safe_photos_observation(
                 format_safe_photos_decode_facts(PhotosDecodeFacts(
                     'thumbnail-fallback', 'preview-fallback',
@@ -2982,6 +4245,9 @@ class _NativeGalleryViewer:
                 self._observation_callback,
             )
             raise
+        if operation_cancelled.is_set():
+            preview.close()
+            raise LinkingError('Detail request was cancelled.')
         _log_safe_photos_observation(
             format_safe_photos_decode_facts(PhotosDecodeFacts(
                 'thumbnail-fallback', 'preview-fallback',
@@ -2999,18 +4265,46 @@ class _NativeGalleryViewer:
             index (int): Zero-based index in the visible photo page.
 
         Returns:
-            bool: True when the detail read was started.
+            bool: True when the detail is shown, started or queued; False
+                when the viewer, index or live media permission is unavailable.
         """
         if self._closed or index < 0 or index >= len(self._photos):
             return False
         if not self.session.can_read_media():
             self.close()
             return False
+        photo = self._photos[index]
+        active_media_kind = self._worker_kind
+        active_media_cancelled = self._active_media_cancelled
+        same_active_media = bool(
+            active_media_kind in ('detail', 'prefetch')
+            and self._active_media_photo_id == photo.image_id
+            and active_media_cancelled is not None
+            and not active_media_cancelled.is_set()
+        )
+        same_active_detail = same_active_media and active_media_kind == 'detail'
+        same_active_prefetch = (
+            same_active_media and active_media_kind == 'prefetch'
+        )
+        if active_media_kind == 'thumbnail_batch':
+            self._thumbnail_cancelled.set()
+            self._generation += 1
+        elif (active_media_kind in ('detail', 'prefetch', 'refresh')
+              and not same_active_media
+              and active_media_cancelled is not None):
+            self._active_media_cancelled.set()
+            self._generation += 1
+            if active_media_kind == 'refresh':
+                # Keep the requested refresh, but the user's newer selection
+                # now leads it and its bounded adjacent-image preparation.
+                self._refresh_pending = True
+                self._refresh_manual_pending = False
+        self._cancel_thumbnail_gui_slice()
         self._pending_detail_index = None
         self._pending_prefetch_ids.clear()
-        self._detail_serial += 1
+        if not same_active_detail:
+            self._detail_serial += 1
         detail_serial = self._detail_serial
-        photo = self._photos[index]
         self._slide_index = index
         self._ensure_lightbox()
         self._lightbox.present(
@@ -3023,8 +4317,15 @@ class _NativeGalleryViewer:
         )
         self._bind_lightbox_shortcuts(self._lightbox._overlay)
         self.retry_button.configure(state='disabled')
-        cached = self._cached_detail(photo.image_id)
+        if same_active_detail:
+            return True
+        cached = (
+            None if same_active_prefetch
+            else self._cached_detail(photo.image_id)
+        )
         if cached is not None:
+            with self._thumbnail_metrics_lock:
+                self._detail_media_metrics['detail_ram_hits'] += 1
             self._show_detail(
                 detail_serial, photo.image_id, cached.copy(), None,
                 self._cached_detail_encoded(photo.image_id),
@@ -3035,22 +4336,51 @@ class _NativeGalleryViewer:
             self._pending_detail_index = index
             return True
 
+        operation_cancelled = threading.Event()
+        self._active_media_cancelled = operation_cancelled
+        self._active_media_photo_id = photo.image_id
+
         def operation() -> tuple[
-            int, int, 'Image.Image', 'Image.Image', bytes | None,
+            int, int, 'Image.Image', 'Image.Image | None', bytes | None,
         ]:
             """Fetch and normalize the selected image or safe preview.
 
             Returns:
-                tuple[int, int, Image.Image, Image.Image, bytes | None]:
+                tuple[int, int, Image.Image, Image.Image | None, bytes | None]:
                     Selection, photo ID, display/cache rasters and original body.
             """
-            image, body = self._read_prepared_detail(photo)
-            return detail_serial, photo.image_id, image, image.copy(), body
+            timings = MediaReadTimings()
+            try:
+                image, body = self._read_prepared_detail(
+                    photo, timings, cancelled=operation_cancelled,
+                )
+            finally:
+                self._observe_detail_read('detail', timings)
+            if operation_cancelled.is_set():
+                image.close()
+                raise LinkingError('Selected photo request was superseded.')
+            private_descriptor = (
+                photo.cache_eligible is not True
+                and (self.session.can_read_admin_media()
+                     or photo.cache_eligible is False
+                     or photo.preload_eligible is not None)
+            )
+            cached_image: 'Image.Image | None' = image.copy()
+            if (private_descriptor and timings.source != 'disk'
+                    and not timings.cache_stored):
+                cached_image.close()
+                cached_image = None
+            return detail_serial, photo.image_id, image, cached_image, body
 
-        return self._launch(
+        started = self._launch(
             'detail', operation,
             error_payload=(detail_serial, photo.image_id, None, None, None),
+            operation_cancelled=operation_cancelled,
         )
+        if not started and self._active_media_cancelled is operation_cancelled:
+            self._active_media_cancelled = None
+            self._active_media_photo_id = None
+        return started
 
     def _ensure_lightbox(self) -> PhotoLightbox:
         """Create the shared photo overlay and its playlist toolbar actions.
@@ -3168,15 +4498,17 @@ class _NativeGalleryViewer:
         Returns:
             None: The lightbox owns the rendered image reference.
         """
+        if detail_serial != self._detail_serial:
+            if display_image is not None:
+                display_image.close()
+            if cached_image is not None:
+                cached_image.close()
+            return
         if cached_image is not None:
             if encoded is not None:
                 self._remember_detail(image_id, cached_image, encoded)
             else:
                 cached_image.close()
-        if detail_serial != self._detail_serial:
-            if display_image is not None:
-                display_image.close()
-            return
         if display_image is None or ImageTk is None:
             if display_image is not None:
                 display_image.close()
@@ -3258,9 +4590,14 @@ class _NativeGalleryViewer:
         """Dismiss the detail panel without closing its gallery viewer.
 
         Returns:
-            None: Grid browsing remains available in the parent window.
+            None: Grid focus and interrupted viewport admission resume in the
+                parent window; active detail/prefetch reads lose their slot.
         """
         self._detail_serial += 1
+        if (self._worker_kind in ('detail', 'prefetch')
+                and self._active_media_cancelled is not None):
+            self._active_media_cancelled.set()
+            self._generation += 1
         self._pending_detail_index = None
         self._pending_prefetch_ids.clear()
         if self._prefetch_edge_direction:
@@ -3272,6 +4609,8 @@ class _NativeGalleryViewer:
         if (not self._closed
                 and 0 <= self._slide_index < len(self._tile_buttons)):
             self._tile_buttons[self._slide_index].focus_set()
+        if not self._closed:
+            self._on_grid_viewport(None)
 
     def _on_escape(self, _event: tk.Event) -> str | None:
         """Route Escape through contextual panels while keeping Photos mounted.
@@ -3520,10 +4859,15 @@ class _NativeGalleryViewer:
         """Dispatch only the explicit selection or its immediate successor.
 
         Returns:
-            bool: True if an owned track request began on the shared worker.
+            bool: True when a track request starts; False when no current track
+                is pending, access is cancelled or another worker must finish.
         """
         index = self._audio_pending
         cancelled = self._audio_cancelled
+        if (self._worker_kind == 'thumbnail_batch' and index is not None
+                and cancelled is not None and not cancelled.is_set()):
+            self._thumbnail_cancelled.set()
+            self._generation += 1
         if (self._worker is not None or index is None or cancelled is None
                 or cancelled.is_set() or self._closed):
             return False
@@ -3884,7 +5228,13 @@ class _NativeGalleryViewer:
             return
         self._closed = True
         self._cancelled.set()
+        if self._active_media_cancelled is not None:
+            self._active_media_cancelled.set()
+        self._active_media_photo_id = None
+        self._thumbnail_disk_lane.invalidate(close=True)
         self._thumbnail_cancelled.set()
+        self._cancel_grid_viewport_callback()
+        self._cancel_thumbnail_gui_slice()
         if self._revision_timer is not None:
             try:
                 self.window.after_cancel(self._revision_timer)
@@ -3910,7 +5260,7 @@ class _NativeGalleryViewer:
         self._pending_detail_index = None
         self._pending_page_request = None
         self._pending_prefetch_ids.clear()
-        for _image_id, (_fetched_at, image, _encoded, _size) in (
+        for _image_id, (_fetched_at, image, _encoded, _size, _proof) in (
             self._detail_cache.items()
         ):
             image.close()
@@ -3918,15 +5268,24 @@ class _NativeGalleryViewer:
         self._detail_cache_bytes = 0
         if self._owns_thumbnail_memory:
             self._thumbnail_memory.clear()
+        self._thumbnail_image_release_count += sum(
+            image is not None for image in self._photo_images
+        )
         self._photo_images.clear()
+        self._thumbnail_loaded.clear()
+        self._thumbnail_pending.clear()
+        self._visible_thumbnail_indices.clear()
+        self._admitted_thumbnail_indices.clear()
         self._tile_tooltips.clear()
         self._tile_titles.clear()
         self._tile_buttons.clear()
-        while not self._events.empty():
-            try:
-                self._events.get_nowait()
-            except queue.Empty:
-                break
+        with self._thumbnail_result_lock:
+            while not self._events.empty():
+                try:
+                    _generation, kind, result = self._events.get_nowait()
+                    self._release_worker_result(result, kind)
+                except queue.Empty:
+                    break
         for sequence, identifier in self._window_bindings:
             if identifier is not None:
                 try:

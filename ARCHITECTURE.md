@@ -159,27 +159,128 @@ cancels it when that selection is replaced. The default-on Subgalleries switch
 adds direct child folder cards above the photo grid. Each cover is the first
 authorized direct thumbnail, with a neutral folder fallback. Photos keeps
 listings in memory and uses the current link grant. Internal cursor pages
-append to a continuously scrolling grid. The viewport drives thumbnail
-requests. Manual navigation and the slideshow use the same looping album
-order and prepare adjacent details in bounded memory. A per-user cache
-stores server-opted-in bytes with content digests: ordinary thumbnails have
-their own 16,384-entry/256-MiB pool, independent of the 4,096-entry/1-GiB
+append to a continuously scrolling grid. Scroll and layout signals share one
+scheduled viewport update. Visible thumbnails lead a bounded adjacent-row
+render band, so small scroll reversals can reuse existing Tk images. Image
+decode stays in the worker; Tk image creation stays on the GUI thread.
+One thumbnail worker publishes each ready result within a bounded serial
+batch, avoiding a GUI polling round trip between its items. Bounded GUI slices
+apply ready rasters and decoded-memory hits independently of in-flight I/O.
+Foreground requests and viewport changes interrupt remaining thumbnail work;
+generation, descriptor and gallery identity fence stale results and teardown.
+The session request gate retains credential renewal and transport ownership.
+One persistent disk-only lane independently verifies and decodes current public
+cache hits. It never takes the transport gate or returns private Admin bytes;
+misses go back to the original serialized worker. Its four-result queue and
+one in-flight decode are bounded independently of network waiting. Identity
+reservations survive an in-flight scroll reversal and metadata generations fence
+replacement/close. The decoded LRU accounts four bytes per pixel within 16 MiB
+and at most 256 entries. Eviction prefers non-visible entries; full-cache
+overscan admission cannot evict recent history. Tk retains only the admitted
+viewport/adjacent-row band.
+`LinkingSession` owns one idle media HTTP/1.1 connection and one lazy verified
+SSLContext. A completed validated response transfers its socket out of that
+request's cancellation control before reuse. Old stop/finish calls cannot close
+the next owner's socket. Both serialization gates remain unchanged. Pool leases
+are revoked on uncertainty, renewal or closure; server close and incomplete
+responses cannot be pooled. Only a stale borrowed GET failing before response
+headers can reconnect once within its original deadline. Uploads and mutations
+retain their original transport. Connection reuse does not authorize cache data.
+Caller-owned `MediaReadTimings` records observe cache lookup/publication,
+session admission, renewal and media transport without influencing policy.
+Copied Photos diagnostics aggregate those phases with decode, queue wait and
+Tk application, numeric render counters and callback duration, without photo
+titles or paths. Manual navigation and the slideshow use the same
+looping album order and prepare adjacent details in bounded memory. A per-user
+cache stores server-opted-in bytes with content digests: ordinary thumbnails have
+their own 262,144-entry pool with a shared configurable 4-GiB default,
+independent of the 4,096-entry/1-GiB
 detail/audio pool. The same lock and explicit gallery retention span both pools.
 An authorized matching ETag revalidates the stored
 photo bytes after their 60-second fresh interval. Authorized playlist
 descriptors bind reused track bytes by SHA-256, size and MIME type. The
 native player consumes local files and prepares the next track for handoff.
+The initial authorized photo page reaches Tk before optional presentation
+settings. That later request retains the same worker and transport gates;
+foreground detail/page/audio precede it and thumbnails get a bounded first
+turn. JPEG/MPO details request decoder reduction above the display target,
+including sources below the allocation ceiling, before RGB conversion.
+The post-draft pixel, transfer and display limits are unchanged. Disk preload
+does not retain every gallery's decoded images or remove private revalidation.
 `gallery_preload.py` prepares direct-photo renditions off the Tk thread.
+Its explicit thumbnail-only mode covers only the selected direct gallery,
+uses current authorized disk proofs to resume, yields to GUI-published foreground
+demand and retains server throttling. Thumbnail completion cannot publish full
+gallery cache counts/state; the existing two-rendition mode remains the owner
+of full preload completeness. Private cache display still requires live checks.
+Saved-key Finish owns a captured `legacy_revoke` lifetime through server
+confirmation and operation-bound GUI acknowledgement. ModeAdmission atomically
+exchanges its sole current ticket for the existing ConfigStore save reservation;
+operation/config-generation checks reject stale callbacks. Ordinary Stop uses
+legacy work, retains the credential and cannot be upgraded while running.
+`thumbnail_cache_index.py` owns SQLite accounting under the canonical media
+lock: O(1) totals, indexed eviction, dirty-before-mutation recovery and bounded
+off-Tk reconciliation. It never authorizes media or substitutes for a body
+hash. Same-operation receipts avoid repeated hashes only for the exact safe,
+unchanged file. Shared quota settings use `config.py`; Photos publishes physical
+ordinary count/bytes separately from coverage, pins and decoded/Tk memory.
+`process_memory.py` measures current-process Windows working set or macOS RSS;
+unsupported RAM/VRAM remains unknown. FIFO request gates retain existing
+serial transport ownership. Cancelled session-gate tickets withdraw while the
+active request still owns its slot. Superseded detail/prefetch reads cancel their
+own operation event; current detail/page dispatch precedes refresh, and adjacent
+lightbox preparation precedes grid thumbnails. No transport lane is added.
+Speculative disk/warm queues do not indefinitely
+yield explicit preload. Right inspector width is a separate desired width in
+the existing version-1 UI-layout owner, preserved through temporary clamps.
 Keep preloaded uses hashed retained-gallery directories outside ordinary LRU
 limits. Explicit Admin preload adds an issuer/account-bound private namespace
-and saved intent; private bytes always pass live conditional authorization
-before display from disk. The server retains ordinary no-store browsing and
+and saved intent. Fresh, session-generation-bound Admin catalogue proofs admit
+same-account thumbnail disk/decoded reuse for at most 60 seconds with an exact
+strong ETag. Full bodies require their own digest and fresh response age for
+ordinary HTTP/cache reads and explicit preload. Full viewer reads may
+separately request an explicitly downloaded saved snapshot: a
+hash-verified file is reusable when a fresh live catalogue proof matches its
+issuer, verified account, gallery and photo, regardless of that file's original
+response age. Expired catalogue proof refreshes the metadata page for its photo
+group, not the full binary. Missing/corrupt files use the normal server path;
+account/authentication changes, cancellation, known refusal and saved-intent
+opt-out still block reuse. This viewer-only mode is off by default and changes
+neither HTTP freshness metadata nor `stored_at`. It uses the existing linking
+grant and API, without offline access or a new capability. Stale/unknown proof
+requires fresh catalogue authorization before any saved-version display.
+An actual newer ledger observation for the same account/photo/validator may
+supersede a mounted descriptor's age. Caller timestamps never refresh authority.
+Eligible interactive Admin reads negotiate the existing verified binary lane;
+full private persistence remains conditional on explicit saved intent. Viewed
+eligible thumbnails persist automatically under issuer/account keys in the
+ordinary thumbnail pool; absent that account's opt-in, gallery pins are ignored
+for these reads/writes so the shared thumbnail quota still applies. Full
+preload skips only current authorized bytes, revalidating existing stale bodies.
+Both full and thumbnail-only preload yield to current GUI-published demand
+before catalogue pages and image reads.
+Full preload publishes confirmed complete-photo counts during transfer and
+reconciles them at final verification. Cache events refresh authoritative
+storage observations through the existing worker, publishing indexed totals
+before slower retained/RAM observations. A selected photo adopts its matching
+active prefetch; it does not cancel and download that same image again.
+The server retains ordinary no-store browsing and
 verifies the photo and complete gallery ancestry as non-NSFW for this separate
 opt-in.
 Bounded server retry delays publish cancelable progress without raising quotas.
 The workspace retains a bounded decoded thumbnail cache across album
-selections under the current authorized session. Viewport changes share one
-in-flight request per thumbnail. Contextual album and photo
+selections under the current authorized session. The live session additionally retains up to
+16 first-page metadata snapshots for at most the existing 60-second freshness
+interval, without filtering rows or changing proof timestamps. A return can
+render that page immediately while the same worker fetches fresh metadata.
+Equal refreshed rows update proof ages while keeping their existing Tk tiles.
+Larger JPEG preview variants use decoder reduction before RGB preparation.
+The shared header control sits immediately left of Watcher status and exposes
+all typed thumbnail count/bytes. Its anchored detail separates ordinary quota
+and retained Keep preloaded storage. The latter uses bounded generation-keyed
+metadata totals without body reads or holding the image lock during inventory.
+RAM describes the current Windows working set or macOS resident set only.
+Viewport changes share one in-flight request per thumbnail. Contextual album and photo
 panels show indexed server metadata and local cache coverage. Detailed Admin
 metadata is fetched on demand for the exact gallery or direct photo. Album
 creation and visibility changes go through the same server-owned mutations as

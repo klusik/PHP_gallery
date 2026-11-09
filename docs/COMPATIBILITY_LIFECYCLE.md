@@ -216,9 +216,18 @@ work; settings changes can be refused while admitted work is active. Legacy
 global path/hash history is retained but no longer authorizes a skip for a
 different connection. Old jobs with unverified duplicate decisions require a
 new preflight. Watched source-photo deletion and legacy source-ZIP deletion are
-temporarily disabled; saved preferences are retained. Flight API-key revoke is
-temporarily unavailable until its asynchronous acknowledgement and local save
-share a safe transition. These restrictions affect existing users; prevalence
+temporarily disabled; saved preferences are retained. Saved-key Finish now
+holds an exact `legacy_revoke` work ticket across positive server confirmation
+and its asynchronous GUI acknowledgement. Only that sole current ticket can
+atomically become the existing configuration-save reservation. Every HTTP
+attempt, including gateway retry, checkpoints the original configuration.
+Operation, endpoint/key binding and opaque ConfigStore generation must match
+before clearing the key. Ordinary Stop has no revoke authority and keeps the
+key; a running Stop cannot be upgraded by toggling a flag. Failed/uncertain
+local persistence remains an error without claiming rollback of server revoke
+or clearing newer credentials. Restart never reconstructs revocation consent
+or treats retained local credentials as proof the server key still works.
+Linked revocation remains a distinct lifecycle. These restrictions affect existing users; prevalence
 and Windows behavior are unknown. The separate experimental pgu journal is not
 integrated and restart after an uncertain transfer is not crash-safe.
 
@@ -405,7 +414,7 @@ own quota, restart, failure and cancellation regression; native UI acceptance
 is separate from hosted Python qualification.
 
 Ordinary thumbnail bytes now have a separate child pool and independent
-256-MiB/16,384-entry quota; full/detail media and audio retain the main
+configurable shared 4-GiB default/262,144-entry quota; full/detail media and audio retain the main
 1-GiB/4,096-entry pool. The canonical process/file lock and gallery pin/private
 preload markers remain shared. New retained thumbnail filenames carry a fixed
 rendition prefix; legacy unprefixed files are classified only when an exact
@@ -433,7 +442,8 @@ manual observation.
 
 Native media accepts equivalent Cache-Control directives across repeated or
 split fields, with exact cache markers, authorization and Vary checks retained.
-Photos still require private, must-revalidate and an explicit 60-second age.
+Ordinary photo HTTP/cache reads and explicit preload still require private,
+must-revalidate and an explicit 60-second age.
 Additional ages cannot be shorter than 60 seconds, and never extend the local
 60-second freshness cap. Unknown or conflicting directives do not grant disk
 storage; existing no-store responses remain transient. Audio normalizes only
@@ -505,8 +515,102 @@ session request gate, authorization, cancellation and cache admission remain
 unchanged. A bounded initial thumbnail burst precedes the optional background
 revision probe; explicit photo/page requests and active audio retain priority.
 Continuous viewport changes cannot indefinitely postpone this initial probe.
-No additional thread pool or process is introduced. Installed loading latency
-remains unmeasured.
+No additional network concurrency or process is introduced. Installed loading
+latency remains unmeasured.
+
+Live photo grids coalesce repeated viewport notifications and retain a bounded
+adjacent-row band of Tk thumbnails. This reduces image allocation churn during
+small scroll reversals without treating retained pixels as new access authority.
+Visible thumbnails remain first and use the same media/cache/cancellation
+owners; scrolling does not request detail photos. Refresh and teardown cancel
+or invalidate pending display work and discard obsolete photo identities.
+This is client-side support for existing media endpoints, including web 1.0.3,
+with no new renderer, GPU extension, process pool or server capability.
+Copied render counters distinguish event bursts, applied updates, image
+allocations/releases, cache hits and callback duration. A bounded serial
+thumbnail batch now publishes each ready raster without a GUI polling round
+trip between items. Ready results and decoded-memory hits apply in bounded
+GUI slices. Foreground work, viewport changes, refresh and close interrupt or
+fence the remaining work; stale rasters are explicitly released. HTTP 429
+still stops thumbnail admission until the existing explicit Retry action.
+The session request gate remains the authentication/renewal/transport owner;
+this change neither adds parallel network requests nor changes cache proofs.
+Passive numeric observations separate disk, gate admission, renewal, media
+transport, decode, queue wait and Tk application. Deterministic fixtures
+measure scheduling and bounds; real affected-profile scroll latency and
+visual artifacts still require manual qualification. Sampled frames from the
+reported Windows recording show serial thumbnail arrival and pending tiles;
+an original-resolution frame around 2.6 seconds also shows clipped duplicate
+thumbnail strips inside the viewport, below their correct row. This establishes
+a transient visual artifact in that recording, without identifying its
+application, Windows or capture cause. Neither its post-change removal nor
+application FPS has been verified.
+
+The same existing web 1.0.3 routes now support an independent public disk-only
+thumbnail lane and a byte-bound decoded LRU sized for wide viewports. Owner:
+`native_gallery_viewer.py` and the existing `LinkingSession` cache authority.
+Private Admin bytes remain in the live-revalidation path. A miss falls back to
+the existing serialized reader because stale, absent or ineligible local bytes
+cannot establish access; this is permanent older-web support, not a new cache
+permission. Visible-first eviction and refusal of full-cache speculative
+overscan preserve recent history within 16 MiB/four-byte-pixel accounting and
+256 entries. Retained Tk images still cover only the admitted row band.
+The session transport may reuse one fully consumed HTTP/1.1 media connection
+and verifying SSLContext, retaining both serialization gates. Its 15-second idle
+bound is an initial resource policy. One stale borrowed GET can reconnect only
+before a response; incomplete/rejected bodies and mutations are not replayed.
+Server closure, deadlines and cancellation retain the original close/failure
+path, permanently supporting hosts without keep-alive. Socket transfer and pool
+epochs prevent a late former cancellation owner from closing a successor.
+Explicit thumbnail-only preload covers a direct gallery without recursion,
+uses current public cache proofs, yields to foreground demand and respects
+429/Retry-After. It does not redefine full preload completion or private access.
+Explicit preload now processes thumbnails in a single cache/transport pass;
+final verification reuses only exact same-operation file witnesses with safe
+ancestry, key/pool, identity, size and mutation-time checks. Publication records
+opened-file metadata through the same API as verification, preserving Windows
+creation/change-time semantics rather than comparing unlike timestamp sources.
+Failed writes and
+no-store replies supply no witness. FIFO replaces the existing one-slot gates
+without increasing transport concurrency. Nonurgent warm/disk queues no longer
+keep foreground yielding active. Listing/checks/waits retain immediate activity
+and cancellation; counters distinguish current hits, processed and confirmed
+publications. Metadata and thumbnail phase/counter scopes remain separate.
+The ordinary pool's SQLite accounting is a rebuildable physical inventory hint,
+not access or integrity proof. Dirty intent commits before filesystem changes;
+incomplete or changed directory generations recover on a bounded cancelable
+worker before quota admission. An inaccessible/corrupt index remains unavailable
+and cannot admit ordinary writes. Legacy media files migrate lazily without
+deletion or freshness renewal. Unknown installed mixed-version usage requires
+continued support; no older file is inferred from its opaque hash. Cooperating
+processes use the existing lock and atomic replacements. Arbitrary external
+in-place cache edits are outside accounting guarantees. The storage widget uses
+physical ordinary files including headers, excludes pins/detail/audio and never
+implies offline authorization. The 16-MiB/256-item decoded bound is unchanged.
+`photos.info_width` adds a defaulted version-1 layout field; old JSON remains
+supported indefinitely. Optional process RAM is Windows working set or macOS
+RSS, excluding children; per-process VRAM is unsupported, never a measured zero.
+Existing native regressions cover these controls and retain safe aggregate
+fixture measurements. Real hosting reuse, installed latency, affected-profile
+source build identity and transient Windows scroll repaint remain unknown until
+an agreed live test; the isolated settled-render fixture alone cannot retire
+the embedded-widget renderer or establish an artifact fix.
+
+The control immediately left of Watcher status names thumbnails explicitly
+and totals ordinary plus typed retained thumbnails with matching byte scope.
+Its anchored detail separates the ordinary quota from Keep preloaded bytes.
+Retained statistics
+reuse bounded per-directory generation snapshots; a changing or unsafe
+inventory remains unknown and never authorizes media. Current-process RAM is
+Windows working set or macOS RSS, with no child/GPU attribution. Recent album
+metadata can appear immediately from the same unexpired session and original
+60-second observation window, while a fresh server read follows. No returned
+rows are filtered by client visibility. This is display metadata, not permission
+to bypass the binary owner. Equal refreshes replace proof timestamps instead
+of retaining expired ages. Larger JPEG thumbnail fallbacks request a smaller
+decoder raster before conversion, preserving original safety and tile bounds.
+Installed latency, the changed header render and fresh runtime qualification
+remain unverified. Existing unfiltered Admin access remains server-owned.
 
 Legacy Watcher identity is retained only for a verified saved upload binding;
 same-mode refresh does not erase the title. Credential and upload-mode changes
@@ -539,7 +643,11 @@ generated events without lock bits did not cover that rejection.
 The existing 36-million-pixel RGB allocation guard rejected camera originals
 even when their encoded responses fit the media byte limit. JPEG/MPO detail
 decoding now requests a reduced decoder raster before RGB allocation and
-checks the same pixel budget on that raster. Other formats never gain an
+checks the same pixel budget on that raster. This decoder reduction is also
+requested for ordinary JPEG/MPO sources above the existing display target but
+below the allocation ceiling. The real 4096-by-3072 fixture observes the
+smaller RGB input rather than inferring improvement from an output resize.
+Other formats never gain an
 unbounded full decode. A pixel-budget refusal alone may request one currently
 authorized thumbnail preview through the existing media owner; no new server
 capability is needed. Auth/cancellation/throttling/corrupt-content failures
@@ -548,6 +656,15 @@ render/cache bounds and selection fences remain. Typed decode facts retain
 format, dimensions, byte count, stage and reason without exception text or
 paths. Current production photo dimensions and affected usage are unknown
 beyond the reported guard failure; manual qualification remains separate.
+The initial authorized page no longer waits for optional presentation settings.
+Its later serialized request follows foreground work and a bounded first
+thumbnail turn. Errors in those optional settings leave photos available;
+generation/cancellation still discard late results. This permanently supports
+older or slow presentation providers through the same media owner, without a
+new endpoint or grant. A green preload means verified encoded storage, not
+decoded lightbox readiness. The reported MacBook behavior at `8146e1b1` remains
+live performance evidence only; the changed shared paths need installed macOS
+acceptance, including HDR, separately from Windows/Linux fixtures.
 
 The Tk event dispatcher yields between complete FIFO handlers after a bounded
 message count or cooperative elapsed-time budget. It never merges or discards
@@ -564,14 +681,97 @@ Explicit Admin preload extends the existing media owner with the additive
 `media:admin-preload-v1` capability, descriptor fields and a fixed binary opt-in
 header. It preserves older public validators and no-store browsing. Private
 entries and saved opt-ins use a separate issuer/verified-account namespace;
-private display always revalidates the live grant, exact target and current
-non-NSFW eligibility through the server. Complete non-NSFW ancestry and verified
+private display accepts a fresh live-page proof bound to the current session
+generation, account, exact target, opt-in and current non-NSFW eligibility.
+Thumbnail reuse requires the exact strong preload ETag within its original
+60-second proof window. Ordinary full HTTP reads and explicit preload require
+a verified body digest and their own response age within 60 seconds; the
+existing 200/304 path refreshes that age. A full viewer may separately request
+an explicitly downloaded snapshot with `use_preloaded_snapshot=True`. It reuses
+only the hash-verified file for the exact issuer, verified account, gallery and
+photo while saved full-media intent and a live catalogue proof no older than
+60 seconds remain valid. The saved body's HTTP age does not expire this
+viewer-only use, and neither its stored time nor HTTP freshness metadata is
+rewritten. When the metadata proof expires, the viewer renews the small photos
+page for that photo group without fetching the full binary. Missing or corrupt
+files return to the normal server read. Decoded detail stays bounded at 15
+seconds. Renewal, closure, known grant rejection and explicit local opt-out
+invalidate reuse authority. Remote revocation or NSFW changes after the last
+page cannot be detected before a new authenticated observation; this bounded
+window replaces the former per-binary private revalidation. Stale or missing
+proof requires authenticated catalogue renewal before any saved-version display.
+Complete non-NSFW ancestry and verified
 schema are required; missing rows, cycles, unknown flags and authorization
-changes fail closed. No migration or new linking scope is introduced. Older
+changes fail closed. The viewer flag is off by default outside full detail
+reads. This behavior uses the existing link, saved intent and API; it adds no
+server API, grant, offline access or migration. The supported WinApp 1.0.4 and
+web 1.0.3 do not require a new capability. Older
 servers remain transient for restricted media permanently while mixed versions
 are supported. Usage is unknown. Server/client fixtures cover persistence,
 identity separation, revocation and refusal boundaries; real Windows private
 preload acceptance remains separate from hosted qualification.
+
+A supplied macOS source snapshot, reported against `51a74685`, observed 29
+decoded-cache refusals, zero decoded bytes, 29 network-sourced tiles and 58 HTTP
+requests, with 33.49 seconds of cumulative media transport and only 252.69 ms
+of decode.
+Both supplied reports contain the same Photos sample. The blanket public-only
+reuse gate rejected Admin preloads despite their current catalogue proof;
+these observations justify the generation-bound reuse path. They do not
+measure the changed implementation or identify the exact headers that caused
+the existing unconditional-refresh fallback. An absent optional presentation
+(HTTP 404) is handled as unavailable settings rather than a failed photo grid.
+
+A later supplied macOS sample reports seven cold-view HTTP requests and seven
+local misses, zero decoded images and zero accepted network sources. The two
+reports repeat that sample. Generic transport wrapping hid the binary refusal
+stage; the exact hosting header mismatch remains unknown. Eligible interactive
+Admin reads now negotiate the same advertised verified binary protocol used by
+preload, independently from the explicit opt-in still required for local full
+private-media persistence. This supports first viewing on capable servers without
+manual preload; older or ineligible descriptors retain the restricted lane.
+Length, framing, validators and body integrity retain the same acceptance rules;
+refusals now preserve a fixed stage without header values or response content.
+
+Background cache/preload page reads can supersede a mounted descriptor's proof.
+The same account/photo/strong validator may use a newer real ledger observation,
+with freshness measured only from that observation and its epoch. Caller ages
+never extend it; removed cursor-range rows are invalidated. Explicit full
+preload now revalidates stale stored full responses rather than skipping them
+after physical verification alone. Foreground detail/page work precedes refresh,
+superseded image operations cancel, and adjacent lightbox preparation precedes
+grid thumbnails. Cancelled gate tickets withdraw without waiting for the current
+owner. Both preload modes honor foreground demand before listing pages and
+image reads. One network lane and existing freshness/byte bounds remain. The user
+confirmed fast cached thumbnails before these follow-ups; their changed cold
+load, lightbox latency and cancellation behavior lack new runtime evidence.
+
+Viewed eligible Admin thumbnails now persist automatically under their verified
+issuer/account key in the ordinary bounded thumbnail pool. Fresh page proofs
+are registered without a saved full-media opt-in; the ledger records that
+independent opt-in separately so thumbnail reuse cannot authorize full media.
+New writes still require the server's cacheable admin-v1 response and digest;
+no-store/NSFW-ineligible responses remain transient. With no account opt-in,
+read/write use no gallery retention context, so another account's gallery pin
+cannot bypass the ordinary quota. Full private photos keep their saved-intent
+requirement. Their ordinary HTTP and preload reads retain the existing body-age
+limit; full-viewer snapshots use the separate fresh-proof policy above. Missing
+or corrupt files still fall back to the server path.
+The user observed zero stored photos throughout transfer followed by 29 at the
+end. Full preload now publishes cache-confirmed complete-photo counts during
+transfer, followed by final reconciliation. Storage mutation events coalesce
+into the existing observer and can publish ordinary totals before retained/RAM
+work finishes. The user also reported very slow full-image navigation; selecting
+the image already being prefetched now adopts that result instead of cancelling
+and repeating it. Separate numeric detail/prefetch source and byte counters
+distinguish cached reads, 304 responses and body downloads without identities.
+The user later reported that only two photos felt fast while the rest remained
+slow. This is a reported symptom, not a controlled measurement; it does not
+establish how broadly the viewer snapshot path improves navigation. macOS
+acceptance of catalogue renewal followed by hash-verified full-body reuse
+without another binary request remains unverified.
+Changed automatic persistence, live counts and full-image latency still need
+installed macOS acceptance; no fresh runtime qualification is claimed.
 
 Explicit Admin Photos approval can upgrade the same previously saved rolling
 link. The native linking and vault owners compare the current binding and
@@ -644,7 +844,8 @@ requires its explicit `track_cache: true` capability, and checks that the track 
 matches its verified SHA-256, byte size and MIME type. Older playlist responses
 without the capability use online track delivery even after a downgrade.
 The main detail/audio cache holds up to 4,096 entries and 1 GiB. The independent
-ordinary thumbnail pool holds 16,384 entries and 256 MiB, so main-pool pressure
+ordinary thumbnail pool holds 262,144 entries with a configurable shared
+4 GiB default, so main-pool pressure
 does not evict thumbnails. Each pool evicts its own least recently accessed
 entries and retains no credentials or playlist metadata. WinApp's media
 transport owns the older no-store and

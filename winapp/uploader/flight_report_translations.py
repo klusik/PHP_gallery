@@ -2605,11 +2605,35 @@ _PHOTOS_PRELOAD_LABELS = {
         'cache_loaded_count': '{cached}/{total} checked photos',
         'cache_legend': '☁ online · ◐ partial · ● local · ◌ unchecked',
         'preload': 'Preload gallery',
+        'preload_thumbnails': 'Preload thumbnails only',
+        'preload_yielding': 'Waiting for browsing…',
+        'preload_verifying': 'Verifying thumbnails…',
+        'preload_wait_metadata': 'Waiting for metadata…',
+        'preload_thumbnail_counts': '{done}/{total} · {hits} current · {stored} saved',
+        'storage_title': 'Thumbnails',
+        'storage_keep_short': 'Kept galleries',
+        'storage_ordinary_detail': 'Thumbnail cache: {count} · {used} / {limit}',
+        'storage_ordinary_unknown': 'Thumbnail cache: unavailable',
+        'storage_keep_detail': 'Kept galleries: {galleries}\nThumbnails: {thumbs} · {thumb_bytes}\nOther stored media: {others} · {other_bytes}',
+        'storage_keep_unknown': 'Kept galleries: unavailable',
+        'storage_loading': 'Loading…',
+        'storage_unavailable': 'Unavailable',
+        'storage_scope': 'Photo storage',
+        'storage_scope_hint': (
+            'The total includes ordinary and kept thumbnails. Kept galleries '
+            'are outside the thumbnail limit. Other stored media can include '
+            'audio and older thumbnails.'
+        ),
+        'storage_ram': 'App RAM: {value}',
+        'storage_vram': 'Process VRAM: unavailable',
+        'storage_limit': 'Thumbnail limit (GiB) · default 4',
+        'storage_save': 'Save limit',
+        'storage_saved': 'Limit saved',
+        'storage_save_failed': 'Limit was not saved. Try again.',
         'keep_preloaded': 'Keep preloaded',
         'keep_preloaded_hint': (
             'Keep this gallery outside automatic cleanup and the normal cache '
-            'limit. Preload can retain eligible non-NSFW Admin photos; every '
-            'private view still requires a live server check.'
+            'limit. An active gallery link is required for viewing.'
         ),
         'preload_cancel': 'Cancel preload',
         'preload_close_status': 'Close preload status',
@@ -2638,11 +2662,35 @@ _PHOTOS_PRELOAD_LABELS = {
         'cache_loaded_count': '{cached}/{total} ověřených fotek',
         'cache_legend': '☁ online · ◐ částečně · ● místně · ◌ neověřeno',
         'preload': 'Přednačíst galerii',
+        'preload_thumbnails': 'Přednačíst pouze náhledy',
+        'preload_yielding': 'Čekám na procházení…',
+        'preload_verifying': 'Ověřuji náhledy…',
+        'preload_wait_metadata': 'Čekám na metadata…',
+        'preload_thumbnail_counts': '{done}/{total} · {hits} aktuálních · {stored} uloženo',
+        'storage_title': 'Náhledy',
+        'storage_keep_short': 'Uchované galerie',
+        'storage_ordinary_detail': 'Cache náhledů: {count} · {used} / {limit}',
+        'storage_ordinary_unknown': 'Cache náhledů: nedostupná',
+        'storage_keep_detail': 'Uchované galerie: {galleries}\nNáhledy: {thumbs} · {thumb_bytes}\nFotky a další soubory: {others} · {other_bytes}',
+        'storage_keep_unknown': 'Uchované galerie: nedostupné',
+        'storage_loading': 'Načítání…',
+        'storage_unavailable': 'Nedostupné',
+        'storage_scope': 'Úložiště fotek',
+        'storage_scope_hint': (
+            'Součet zahrnuje běžné i uchované náhledy. Uchované galerie jsou '
+            'mimo limit náhledů. Další soubory mohou zahrnovat audio '
+            'a starší náhledy.'
+        ),
+        'storage_ram': 'RAM aplikace: {value}',
+        'storage_vram': 'VRAM procesu: nedostupná',
+        'storage_limit': 'Limit náhledů (GiB) · výchozí 4',
+        'storage_save': 'Uložit limit',
+        'storage_saved': 'Limit uložen',
+        'storage_save_failed': 'Limit nebyl uložen. Zkuste to znovu.',
         'keep_preloaded': 'Uchovat přednačtenou',
         'keep_preloaded_hint': (
             'Galerie zůstane mimo automatické čištění a běžný limit cache. '
-            'Přednačtení může uchovat povolené fotky bez označení NSFW; '
-            'soukromé zobrazení vždy znovu ověří server.'
+            'K prohlížení potřebujete aktivní propojení galerie.'
         ),
         'preload_cancel': 'Zrušit přednačítání',
         'preload_close_status': 'Zavřít stav přednačítání',
@@ -2671,12 +2719,36 @@ _PHOTOS_PRELOAD_LABELS = {
         'cache_loaded_count': '{cached}/{total} geprüfte Fotos',
         'cache_legend': '☁ online · ◐ teilweise · ● lokal · ◌ ungeprüft',
         'preload': 'Galerie vorladen',
+        'preload_thumbnails': 'Nur Vorschaubilder vorladen',
+        'preload_yielding': 'Warten auf das Durchsuchen…',
+        'preload_verifying': 'Vorschaubilder werden geprüft…',
+        'preload_wait_metadata': 'Warten auf Metadaten…',
+        'preload_thumbnail_counts': '{done}/{total} · {hits} aktuell · {stored} gespeichert',
+        'storage_title': 'Vorschaubilder',
+        'storage_keep_short': 'Behaltene Galerien',
+        'storage_ordinary_detail': 'Vorschau-Cache: {count} · {used} / {limit}',
+        'storage_ordinary_unknown': 'Vorschau-Cache: nicht verfügbar',
+        'storage_keep_detail': 'Behaltene Galerien: {galleries}\nVorschaubilder: {thumbs} · {thumb_bytes}\nWeitere gespeicherte Medien: {others} · {other_bytes}',
+        'storage_keep_unknown': 'Behaltene Galerien: nicht verfügbar',
+        'storage_loading': 'Laden…',
+        'storage_unavailable': 'Nicht verfügbar',
+        'storage_scope': 'Fotospeicher',
+        'storage_scope_hint': (
+            'Die Summe umfasst normale und behaltene Vorschaubilder. Behaltene '
+            'Galerien zählen nicht zum Vorschaulimit. Weitere Medien können '
+            'Audio und ältere Vorschaubilder enthalten.'
+        ),
+        'storage_ram': 'App-RAM: {value}',
+        'storage_vram': 'Prozess-VRAM: nicht verfügbar',
+        'storage_limit': 'Vorschau-Limit (GiB) · Standard 4',
+        'storage_save': 'Limit speichern',
+        'storage_saved': 'Limit gespeichert',
+        'storage_save_failed': 'Limit nicht gespeichert. Erneut versuchen.',
         'keep_preloaded': 'Vorgeladen behalten',
         'keep_preloaded_hint': (
             'Diese Galerie bleibt außerhalb der automatischen Bereinigung und '
-            'des normalen Cache-Limits. Vorladen kann erlaubte, nicht als NSFW '
-            'markierte Admin-Fotos behalten; private Ansichten werden immer '
-            'live beim Server geprüft.'
+            'des normalen Cache-Limits. Zum Anzeigen ist eine aktive '
+            'Galerieverknüpfung erforderlich.'
         ),
         'preload_cancel': 'Vorladen abbrechen',
         'preload_close_status': 'Vorladestatus schließen',
@@ -2705,11 +2777,35 @@ _PHOTOS_PRELOAD_LABELS = {
         'cache_loaded_count': '{cached}/{total} kontrollerade foton',
         'cache_legend': '☁ online · ◐ delvis · ● lokalt · ◌ ej kontrollerat',
         'preload': 'Förladda galleri',
+        'preload_thumbnails': 'Förladda endast miniatyrer',
+        'preload_yielding': 'Väntar på bläddring…',
+        'preload_verifying': 'Verifierar miniatyrer…',
+        'preload_wait_metadata': 'Väntar på metadata…',
+        'preload_thumbnail_counts': '{done}/{total} · {hits} aktuella · {stored} sparade',
+        'storage_title': 'Miniatyrer',
+        'storage_keep_short': 'Sparade gallerier',
+        'storage_ordinary_detail': 'Miniatyrcache: {count} · {used} / {limit}',
+        'storage_ordinary_unknown': 'Miniatyrcache: inte tillgänglig',
+        'storage_keep_detail': 'Sparade gallerier: {galleries}\nMiniatyrer: {thumbs} · {thumb_bytes}\nÖvriga sparade medier: {others} · {other_bytes}',
+        'storage_keep_unknown': 'Sparade gallerier: inte tillgängligt',
+        'storage_loading': 'Läser in…',
+        'storage_unavailable': 'Inte tillgängligt',
+        'storage_scope': 'Fotolagring',
+        'storage_scope_hint': (
+            'Summan omfattar vanliga och sparade miniatyrer. Sparade gallerier '
+            'räknas inte mot miniatyrgränsen. Övriga medier kan innehålla ljud '
+            'och äldre miniatyrer.'
+        ),
+        'storage_ram': 'Appens RAM: {value}',
+        'storage_vram': 'Process-VRAM: inte tillgängligt',
+        'storage_limit': 'Miniatyrgräns (GiB) · standard 4',
+        'storage_save': 'Spara gräns',
+        'storage_saved': 'Gränsen sparad',
+        'storage_save_failed': 'Gränsen sparades inte. Försök igen.',
         'keep_preloaded': 'Behåll förladdat',
         'keep_preloaded_hint': (
             'Galleriet undantas från automatisk rensning och normal cachegräns. '
-            'Förladdning kan behålla tillåtna Admin-foton utan NSFW-markering; '
-            'privata visningar kontrolleras alltid mot servern.'
+            'En aktiv gallerilänk krävs för visning.'
         ),
         'preload_cancel': 'Avbryt förladdning',
         'preload_close_status': 'Stäng förladdningsstatus',

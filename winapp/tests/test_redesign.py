@@ -43,6 +43,7 @@ from uploader.discovery import ArchiveLimits, cleanup_stale_staging, discover_fo
 from uploader.flight_jobs import ImportBindings
 from uploader.media import detect_suffix_capabilities, probe_file
 from uploader.models import ImportItem, ImportJob, JsonValue, RECOVERABLE_ITEM_STATES
+from uploader import photos_workspace
 from uploader.state_store import (
     JobStateStore, atomic_write_json, default_upload_state, load_upload_state,
 )
@@ -139,7 +140,9 @@ class UiLayoutPreferenceTests(unittest.TestCase):
             document["other"] = {"keep": True}
             path.write_text(json.dumps(document), encoding="utf-8")
 
-            updated = MAIN.ViewLayoutState(1100, 760, 60, 65, "normal", 310)
+            updated = MAIN.ViewLayoutState(
+                1100, 760, 60, 65, "normal", 310, 447,
+            )
             MAIN._write_ui_layout(path, updated)
 
             self.assertEqual(
@@ -150,6 +153,38 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                 {"keep": True},
                 json.loads(path.read_text(encoding="utf-8"))["other"],
             )
+            self.assertEqual(
+                447,
+                json.loads(path.read_text(encoding="utf-8"))[
+                    "photos"]["info_width"],
+            )
+
+    def test_legacy_layout_defaults_and_clamps_inspector_width(self) -> None:
+        """Default older profiles and bound malformed inspector widths.
+
+        Returns:
+            None: Legacy documents use the compact default and oversized values
+                clamp to the saved-layout maximum.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ui-layout.json"
+            path.write_text(json.dumps({
+                "version": 1,
+                "window": {"width": 1000, "height": 700, "x": 0, "y": 0},
+                "photos": {"tree_width": 210},
+            }), encoding="utf-8")
+            legacy = MAIN._read_ui_layout(
+                path, (0, 0, 1600, 900), (840, 500),
+            )
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["photos"]["info_width"] = 9000
+            path.write_text(json.dumps(document), encoding="utf-8")
+            clamped = MAIN._read_ui_layout(
+                path, (0, 0, 1600, 900), (840, 500),
+            )
+
+        self.assertEqual(250, legacy.photos_info_width)
+        self.assertEqual(600, clamped.photos_info_width)
 
     def test_layout_load_clamps_monitor_and_invalid_values(self) -> None:
         """Clamp saved geometry to current bounds and reject booleans as ints.
@@ -176,6 +211,46 @@ class UiLayoutPreferenceTests(unittest.TestCase):
             MAIN.ViewLayoutState(1200, 500, -100, 320, "normal", 210),
             state,
         )
+
+    def test_window_save_captures_pending_inspector_preference(self) -> None:
+        """Save a right-sash drag even before its debounce callback fires.
+
+        Returns:
+            None: Closing or resizing the main window persists the desired
+                inspector preference instead of transient pane geometry.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ui-layout.json"
+            initial = MAIN.ViewLayoutState(1000, 700, 20, 30, "normal", 210)
+            MAIN._write_ui_layout(path, initial)
+            app = object.__new__(MAIN.WatcherApp)
+            app.root = types.SimpleNamespace(
+                state=lambda: "normal",
+                attributes=lambda *_args: False,
+                winfo_viewable=lambda: 1,
+                winfo_width=lambda: 1000,
+                winfo_height=lambda: 700,
+                winfo_x=lambda: 20,
+                winfo_y=lambda: 30,
+            )
+            app.exiting = False
+            app._ui_layout_save_after = None
+            app._ui_layout_path = path
+            app._ui_layout_state = initial
+            app.photos_workspace = types.SimpleNamespace(
+                current_tree_width=lambda: None,
+                current_info_width=lambda: 447,
+            )
+            with mock.patch.object(
+                MAIN, "_layout_display_bounds", return_value=(0, 0, 1600, 900),
+            ):
+                app._save_ui_layout_now()
+            loaded = MAIN._read_ui_layout(
+                path, (0, 0, 1600, 900), (840, 500),
+            )
+
+        self.assertEqual(447, loaded.photos_info_width)
+
 
     def test_window_saver_preserves_normal_rect_while_zoomed_or_hidden(self) -> None:
         """Save maximize state without replacing normal geometry with transient data.
@@ -254,6 +329,27 @@ class UiLayoutPreferenceTests(unittest.TestCase):
             )
 
 
+class PhotosInspectorPreferenceTests(unittest.TestCase):
+    """Keep desired right-pane width independent of temporary geometry."""
+
+    def test_current_width_prefers_a_pending_drag_value(self) -> None:
+        """Expose the captured drag width before delayed disk persistence.
+
+        Returns:
+            None: A pending value wins over the last settled preference, then
+                the saved desired value remains available when pending clears.
+        """
+        workspace = photos_workspace.PhotosWorkspace.__new__(
+            photos_workspace.PhotosWorkspace,
+        )
+        workspace._pending_info_width = 447
+        workspace._preferred_info_width = 250
+
+        self.assertEqual(447, workspace.current_info_width())
+        workspace._pending_info_width = None
+        self.assertEqual(250, workspace.current_info_width())
+
+
 class PhotosCatalogueHostTests(unittest.TestCase):
     """Keep host-owned Photos cache and selection callbacks connected."""
 
@@ -303,6 +399,7 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         )
         app.load_photos_tree_width = mock.Mock(return_value=210)
         app.save_photos_tree_width = mock.Mock()
+        app.save_photos_info_width = mock.Mock()
         app._sync_watcher_recording = mock.Mock()
         parent = mock.Mock()
         workspace = mock.Mock()
@@ -314,6 +411,8 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         kwargs = build.call_args.kwargs
         self.assertIs(app, kwargs['load_selected_gallery'].__self__)
         self.assertIs(app, kwargs['save_selected_gallery'].__self__)
+        self.assertEqual(250, kwargs['load_info_width']())
+        self.assertIs(app.save_photos_info_width, kwargs['save_info_width'])
         cache_factory = kwargs['catalogue_cache']
         cache = mock.Mock()
         session = mock.Mock()
@@ -1429,6 +1528,91 @@ class FrozenDependencyTests(unittest.TestCase):
 
 class ConfigStateTests(unittest.TestCase):
     """Configuration, persistence, migration, and redaction contracts."""
+
+    def test_finish_clears_only_confirmed_captured_key_through_real_owner(self) -> None:
+        """Hold revoke admission through the exact ConfigStore cleanup handoff.
+
+        Returns:
+            None: The saved key remains until server confirmation and GUI
+                persistence; stale events and failed saves never clear a new key.
+        """
+        for outcome in ('saved', 'save_failed', 'new_generation', 'new_operation'):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as directory:
+                store = MAIN.ConfigStore(Path(directory) / 'config.json')
+                config = store.load()
+                config.gallery_url = 'http://localhost:8888/Galerie'
+                config.api_key = 'pgu_finish_fixture'
+                store.save(config)
+                captured = MAIN.capture_worker_config(config)
+                vault = mock.MagicMock()
+                vault.transaction.return_value.__enter__.return_value.read.return_value = None
+                owner = MAIN.GuiModeOwner(store.mode_port(config), lambda: vault)
+                owner.initialize()
+                app = mock.Mock()
+                app.config = config
+                app.config_store = store
+                app.mode_owner = owner
+                app._save_owned_config.side_effect = (
+                    lambda proposed, **options: MAIN.WatcherApp._save_owned_config(
+                        app, proposed, **options,
+                    )
+                )
+                operation: MAIN.FinalizationWorker
+
+                def server_confirmed() -> None:
+                    """Model positive server response after the drain barrier.
+
+                    Returns:
+                        None: Records confirmation on this exact finalizer.
+                    """
+                    operation._gui_work.checkpoint()
+                    operation.confirm_server_revocation()
+
+                operation = MAIN.FinalizationWorker(
+                    [], MAIN.normalize_upload_url(captured.gallery_url), captured.api_key,
+                    lambda _cancel, _deadline: None, server_confirmed, True,
+                    gui_admission=(owner, store.mode_port(captured)),
+                    require_gui_admission=True,
+                    config_generation=config._snapshot_token,
+                )
+                # Synchronous worker execution isolates handoff from scheduling;
+                # production's callback-thread boundary has its own UI fixture.
+                operation.run()
+                self.addCleanup(operation._gui_work.close)
+                app.flights.operation = operation
+                self.assertEqual('saving_key', operation.snapshot().phase)
+                self.assertEqual(
+                    'pgu_finish_fixture',
+                    json.loads(store.path.read_text(encoding='utf-8'))['api_key'],
+                )
+                with self.assertRaises(MAIN.ModeCoordinatorError):
+                    owner.save(mock.Mock())
+                if outcome == 'new_operation':
+                    app.flights.operation = mock.Mock()
+                elif outcome == 'new_generation':
+                    replacement = store.load()
+                    replacement.api_key = 'pgu_replacement_fixture'
+                    store.save(replacement)
+                    app.config = replacement
+                elif outcome == 'save_failed':
+                    app._save_owned_config.side_effect = OSError('fixture disk failure')
+
+                MAIN.WatcherApp.complete_legacy_revocation(app, operation)
+
+                if outcome == 'saved':
+                    self.assertEqual('', app.config.api_key)
+                    self.assertEqual('', store.load().api_key)
+                    self.assertEqual('completed', operation.snapshot().phase)
+                elif outcome == 'new_operation':
+                    self.assertEqual('pgu_finish_fixture', app.config.api_key)
+                    app._save_owned_config.assert_not_called()
+                    self.assertEqual('saving_key', operation.snapshot().phase)
+                else:
+                    self.assertEqual(
+                        'pgu_replacement_fixture' if outcome == 'new_generation'
+                        else 'pgu_finish_fixture', app.config.api_key,
+                    )
+                    self.assertEqual('error', operation.snapshot().phase)
 
     def test_captured_worker_config_is_independent_and_owner_checked(self) -> None:
         """Bind the exact sealed worker copy to the real saved config owner.
@@ -3867,7 +4051,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         app.flights.session_state.return_value = "active"
         self.assertEqual("finish", app.flight_action_state())
         MAIN.WatcherApp.flight_action(app)
-        app.flights.finish_report.assert_called_once_with()
+        app.flights.finish_report.assert_called_once_with(revoke=True)
         app.flights.session_state.return_value = "working"
         self.assertEqual("progress", app.flight_action_state())
         MAIN.WatcherApp.flight_action(app)
@@ -4490,6 +4674,24 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
 
 class WatcherActionTests(unittest.TestCase):
     """Keep the primary watcher action aligned with worker state."""
+
+    def test_saved_key_primary_finish_revokes_while_stop_keeps_key(self) -> None:
+        """Route only explicit saved-key mission Finish to revocation consent.
+
+        Returns:
+            None: The primary Finish captures revoke=True and ordinary Stop
+                retains its separate non-revoking drain path.
+        """
+        app = mock.Mock()
+        app.updates.blocked.return_value = False
+        app._contextual_watch_target = None
+        app.flight_action_state.return_value = 'finish'
+
+        MAIN.WatcherApp.flight_action(app)
+        app.flights.finish_report.assert_called_once_with(revoke=True)
+        app.flights.begin.assert_not_called()
+        MAIN.WatcherApp.stop(app)
+        app.flights.begin.assert_called_once_with(False)
 
     def test_preparing_watcher_rejects_duplicate_start_action(self) -> None:
         """Keep repeated primary clicks from entering startup twice.

@@ -18,6 +18,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Callable
 from unittest.mock import Mock, patch
 
 import uploader.flight_ui as flight_ui
@@ -208,6 +209,17 @@ class FlightUITests(unittest.TestCase):
         ui.finish_report()
         ui.begin.assert_called_once_with(False, automatic=True)
 
+    def test_primary_mission_finish_requests_revoke_explicitly(self) -> None:
+        """Route only explicit primary mission Finish into key revocation.
+
+        Returns:
+            None: The report controls retain their default non-revoking path.
+        """
+        ui = self._ui(self._host())
+        ui.begin = Mock()
+        ui.finish_report(revoke=True)
+        ui.begin.assert_called_once_with(True, automatic=True)
+
     def test_abandon_dialog_uses_cached_game_or_flight_wording(self) -> None:
         """Pass contextual translated text through the real confirmation adapter.
 
@@ -373,13 +385,16 @@ class FlightUITests(unittest.TestCase):
             self.assertEqual("completed", worker.snapshot().phase)
             self.assertEqual(worker.snapshot().total, worker.snapshot().done)
 
-    def test_keep_local_does_not_resume_temporarily_unavailable_revoke(self) -> None:
-        """Keep the saved key when a retained revoke cannot yet be admitted.
+    def test_keep_local_retains_linked_mode_key_without_revoke_intent(self) -> None:
+        """Complete local retention without inventing linked revoke consent.
 
         Returns:
-            None: Local completion cannot silently resume a remote revoke.
+            None: Keep Local confirms, starts ordinary finalization and retains
+                the key; direct Revoke remains blocked by linked mode.
         """
-        ui = self._ui(self._host())
+        host = self._host()
+        host.linking_manager.linked_upload_mode_selected.return_value = True
+        ui = self._ui(host)
         worker = flight_workflow.FinalizationWorker(
             [], ui.host.config.gallery_url, ui.host.config.api_key,
             Mock(), Mock(), True,
@@ -390,17 +405,15 @@ class FlightUITests(unittest.TestCase):
         with patch.object(flight_ui.messagebox, "askyesno", return_value=True) as confirm, \
                 patch.object(flight_ui.messagebox, "showinfo") as unavailable:
             ui.keep_local()
-        ui.begin.assert_not_called()
-        confirm.assert_not_called()
-        unavailable.assert_called_once()
-        ui.begin = flight_ui.FlightUI.begin.__get__(ui, flight_ui.FlightUI)
-        with (
-            patch.object(flight_ui.messagebox, "askyesno") as confirm,
-            patch.object(flight_ui.messagebox, "showinfo") as unavailable,
-            patch.object(flight_ui, "FinalizationWorker") as factory,
-        ):
-            ui.begin(True)
-        confirm.assert_not_called()
+        confirm.assert_called_once()
+        unavailable.assert_not_called()
+        ui.begin.assert_called_once_with(False)
+        self.assertEqual("test-key", ui.host.config.api_key)
+
+        ui.operation = None
+        with patch.object(flight_ui.messagebox, "showinfo") as unavailable, \
+                patch.object(flight_ui, "FinalizationWorker") as factory:
+            flight_ui.FlightUI.begin(ui, True, automatic=True)
         factory.assert_not_called()
         unavailable.assert_called_once()
         self.assertEqual("test-key", ui.host.config.api_key)
@@ -489,24 +502,47 @@ class FlightUITests(unittest.TestCase):
         ui.begin.assert_called_with(False)
 
 
-    def test_automatic_finish_cannot_bypass_disabled_revoke(self) -> None:
-        """Keep direct revocation unavailable even for automatic Finish.
+    def test_automatic_finish_admits_fenced_legacy_revocation(self) -> None:
+        """Capture exact legacy admission even without remote report plans.
 
         Returns:
-            None: No confirmation, finalization worker or credential change.
+            None: Finish creates a revoke worker bound to captured config.
         """
-        ui = self._ui(self._host())
+        host = self._host()
+        host.config._snapshot_token = object()
+        ui = self._ui(host)
+        with patch.object(flight_ui, "FinalizationWorker") as worker_factory:
+            ui.begin(True, automatic=True)
+        self.assertTrue(worker_factory.call_args.args[5])
+        self.assertEqual(
+            host.capture_flight_admission.return_value[:2],
+            worker_factory.call_args.kwargs["gui_admission"],
+        )
+        self.assertTrue(worker_factory.call_args.kwargs["require_gui_admission"])
+        self.assertIs(host.config._snapshot_token,
+                      worker_factory.call_args.kwargs["config_generation"])
+        self.assertIs(ui.automatic_operation, ui.operation)
+
+    def test_automatic_finish_refuses_missing_legacy_admission(self) -> None:
+        """Require captured owner evidence before starting key revocation.
+
+        Returns:
+            None: Missing admission reports an error without creating a worker.
+        """
+        host = self._host()
+        host.capture_flight_admission.side_effect = RuntimeError(
+            "legacy admission unavailable",
+        )
+        ui = self._ui(host)
         with (
-            patch.object(flight_ui.messagebox, "askyesno") as confirm,
-            patch.object(flight_ui.messagebox, "showinfo") as notice,
+            patch.object(flight_ui.messagebox, "showerror") as error,
             patch.object(flight_ui, "FinalizationWorker") as worker_factory,
         ):
             ui.begin(True, automatic=True)
-        confirm.assert_not_called()
-        notice.assert_called_once()
+        error.assert_called_once()
         worker_factory.assert_not_called()
-        self.assertIsNone(ui.automatic_operation)
-        self.assertFalse(ui.host.api_key_revoke_running)
+        self.assertFalse(host.api_key_revoke_running)
+        self.assertIsNone(ui.operation)
 
     def test_automatic_progress_closes_only_after_successful_terminal_state(self) -> None:
         """Keep recovery visible while removing successful transient windows.
@@ -1041,12 +1077,13 @@ class FlightUITests(unittest.TestCase):
 
 
     def test_revoke_guard_does_not_interrupt_existing_producers(self) -> None:
-        """Refuse Revoke before changing any authenticated worker ownership.
+        """Refuse linked-mode Revoke before changing authenticated ownership.
 
         Returns:
             None: Existing producers remain uninterrupted by blocked revocation.
         """
         host = self._host()
+        host.linking_manager.linked_upload_mode_selected.return_value = True
         ui = self._ui(host)
         watcher = Mock()
         watcher.is_alive.return_value = True
@@ -1076,6 +1113,119 @@ class FlightUITests(unittest.TestCase):
         ui.wait_for_workers.assert_not_called()
         ui.submit_revoke.assert_not_called()
         ui.revoke_transport.assert_not_called()
+
+    def test_revoke_transport_uses_captured_fence_until_gui_acknowledges_cleanup(self) -> None:
+        """Retain exact revoke work until positive transport and local cleanup.
+
+        Returns:
+            None: The worker queues itself after checkpointed confirmation and
+                reaches completion only after the GUI cleanup acknowledgement.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        work = Mock()
+        work.kind = "legacy_revoke"
+        owner = Mock()
+        owner.acquire.return_value = work
+        ui.submit_revoke = flight_ui.FlightUI.submit_revoke.__get__(
+            ui, flight_ui.FlightUI,
+        )
+
+        def confirm_request(
+            upload_url: str, api_key: str, *, before_request: Callable[[], None],
+        ) -> dict[str, object]:
+            """Run the supplied work fence before simulating server success.
+
+            Args:
+                upload_url (str): Captured endpoint from the worker.
+                api_key (str): Captured credential from the worker.
+                before_request (Callable[[], None]): Exact work checkpoint.
+
+            Returns:
+                dict[str, object]: Positive revoke acknowledgement.
+            """
+            self.assertEqual(host.config.gallery_url, upload_url)
+            self.assertEqual(host.config.api_key, api_key)
+            before_request()
+            return {"ok": True, "action": "revoke"}
+
+        ui.revoke_transport.side_effect = confirm_request
+        worker = flight_workflow.FinalizationWorker(
+            [], host.config.gallery_url, host.config.api_key,
+            Mock(), ui.submit_revoke, True,
+            gui_admission=(owner, object()), require_gui_admission=True,
+        )
+        ui.operation = worker
+        worker.start()
+        worker.join(EVENT_WAIT_SECONDS)
+        self.assertFalse(worker.is_alive())
+        ui.revoke_transport.assert_called_once()
+        work.checkpoint.assert_called_once_with()
+        work.close.assert_not_called()
+        event = host.events.get_nowait()
+        self.assertEqual("api_key_revoked", event["kind"])
+        self.assertIs(worker, event["payload"]["operation"])
+        progress = worker.snapshot()
+        self.assertEqual("saving_key", progress.phase)
+        self.assertLess(progress.done, progress.total)
+        self.assertEqual("test-key", host.config.api_key)
+
+        worker.confirm_local_cleanup("fixture persistence failure", retryable=True)
+        self.assertTrue(worker.local_cleanup_pending)
+        self.assertEqual("fixture persistence failure", worker.snapshot().error)
+        work.close.assert_not_called()
+        ui.revoked()
+        self.assertEqual("completed", worker.snapshot().phase)
+        self.assertFalse(worker.local_cleanup_pending)
+        self.assertEqual(worker.snapshot().total, worker.snapshot().done)
+        work.close.assert_called_once_with()
+
+    def test_revoke_transport_refuses_unconfirmed_response_and_foreign_thread(self) -> None:
+        """Retain the key unless the exact worker thread gets a valid response.
+
+        Returns:
+            None: Invalid response fails the worker; a caller on Tk cannot send.
+        """
+        host = self._host()
+        ui = self._ui(host)
+        work = Mock()
+        work.kind = "legacy_revoke"
+        owner = Mock()
+        owner.acquire.return_value = work
+        ui.submit_revoke = flight_ui.FlightUI.submit_revoke.__get__(
+            ui, flight_ui.FlightUI,
+        )
+        ui.revoke_transport.return_value = {"ok": True, "action": "upload"}
+        worker = flight_workflow.FinalizationWorker(
+            [], host.config.gallery_url, host.config.api_key,
+            Mock(), ui.submit_revoke, True,
+            gui_admission=(owner, object()), require_gui_admission=True,
+        )
+        ui.operation = worker
+        worker.start()
+        worker.join(EVENT_WAIT_SECONDS)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual("error", worker.snapshot().phase)
+        self.assertFalse(worker.server_revocation_confirmed)
+        work.close.assert_called_once_with()
+        self.assertTrue(host.events.empty())
+        self.assertEqual("test-key", host.config.api_key)
+
+        foreign_work = Mock()
+        foreign_work.kind = "legacy_revoke"
+        foreign = flight_workflow.FinalizationWorker(
+            [], host.config.gallery_url, host.config.api_key,
+            Mock(), Mock(), True,
+        )
+        foreign._gui_work = foreign_work
+        foreign.server_request_sent = True
+        ui.operation = foreign
+        ui.revoke_transport.reset_mock()
+        with self.assertRaises(RuntimeError):
+            ui.submit_revoke()
+        ui.revoke_transport.assert_not_called()
+        self.assertTrue(host.events.empty())
+        self.assertEqual("test-key", host.config.api_key)
 
     def test_revoke_wait_adapter_observes_all_authenticated_blockers(self) -> None:
         """Wait for current auth blockers only when final revoke is requested.

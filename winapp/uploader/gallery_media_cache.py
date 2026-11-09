@@ -2,16 +2,18 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/uploader/gallery_media_cache.py
 # Module Type: Windows Client Cache
-# Purpose: Cache public media with bounded ordinary eviction per user.
+# Purpose: Cache server-approved media with per-user quotas and retention.
 # Responsibilities:
 #   - Key cached bytes by a digest of exact gallery and image identity.
 #   - Validate strong content hashes before returning cached media.
 #   - Bound ordinary entries and isolate explicit per-gallery retention pins.
+#   - Summarize ordinary and retained physical storage outside GUI work.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Quota-managed media cache with optional hashed gallery retention areas."""
 
 import hashlib
+import sqlite3
 import os
 import re
 import stat
@@ -21,6 +23,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from .thumbnail_cache_index import ThumbnailCacheIndex
 
 if os.name == 'nt':
     import msvcrt
@@ -55,14 +58,23 @@ MEDIA_CACHE_SCAN_MAX_ENTRIES = MEDIA_CACHE_MAX_ENTRIES * 2
 # Purpose: Bound ordinary thumbnail bytes independently from full media/audio.
 # Type: int. Units: bytes. Scope: one user's persistent thumbnail pool.
 # Consumers: GalleryMediaCache._make_room.
-# Rationale: 256 MiB retains broad grids without competing with originals.
-MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 256 * 1024 * 1024
+# Rationale: 4 GiB retains many large galleries independently of detail/audio
+# and the strictly bounded decoded/Tk image memory owners.
+MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 4 * 1024 * 1024 * 1024
 
 # Purpose: Bound the number of ordinary thumbnail files in the separate pool.
 # Type: int. Units: cache entries. Scope: one user's thumbnail cache.
 # Consumers: GalleryMediaCache._make_room.
-# Rationale: 16384 entries hold many galleries while keeping scans finite.
-MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES = 16384
+# Rationale: 262144 entries let 4 GiB hold many small thumbnails. Indexed
+# admission avoids filesystem work proportional to this cap on each write.
+MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES = 262_144
+
+# Purpose: Validate the shared per-user thumbnail storage preference.
+# Type: int. Units: bytes. Scope: all profiles sharing ordinary thumbnails.
+# Consumers: GalleryMediaCache.set_thumbnail_limit_bytes.
+# Rationale: 64 GiB permits large collections while rejecting accidental
+# arbitrary-precision quotas and SQLite integer overflow.
+MEDIA_THUMBNAIL_CACHE_LIMIT_MAX_BYTES = 64 * 1024 * 1024 * 1024
 
 # Purpose: Bound one thumbnail-pool eviction scan after interrupted writes.
 # Type: int. Units: directory entries. Scope: one thumbnail maintenance pass.
@@ -78,6 +90,33 @@ MEDIA_THUMBNAIL_CACHE_SCAN_MAX_ENTRIES = (
 # visits one gallery and admits two renditions for 100,000 photos plus 256
 # playlist and structural entries, independently of ordinary cache scans.
 MEDIA_CACHE_GALLERY_SCAN_MAX_ENTRIES = 200_256
+
+# Purpose: Bound retained gallery directories visited for one statistics scan.
+# Type: int. Units: directories. Scope: retained snapshot of one cache root.
+# Consumers: GalleryMediaCache.retained_storage_snapshot.
+# Rationale: 1024 galleries cap metadata work while covering broad Keep usage.
+MEDIA_RETAINED_STATS_MAX_GALLERIES = 1024
+
+# Purpose: Bound retained filesystem entries visited for one statistics scan.
+# Type: int. Units: files. Scope: retained snapshot of one cache root.
+# Consumers: GalleryMediaCache.retained_storage_snapshot.
+# Rationale: 524288 bounds cancellable off-GUI maintenance for large libraries.
+MEDIA_RETAINED_STATS_MAX_FILES = 524_288
+
+# Purpose: Bound unrelated root entries inspected during retained discovery.
+# Type: int. Units: entries. Scope: one retained-root directory scan.
+# Consumers: GalleryMediaCache.retained_storage_snapshot.
+# Rationale: The combined bound limits malformed entries while honoring the
+# separate retained-gallery and file caps.
+MEDIA_RETAINED_STATS_MAX_ROOT_ENTRIES = (
+    MEDIA_RETAINED_STATS_MAX_GALLERIES + MEDIA_RETAINED_STATS_MAX_FILES
+)
+
+# Purpose: Bound roots retained by the process-wide metadata snapshot cache.
+# Type: int. Units: cache roots. Scope: one uploader process.
+# Consumers: GalleryMediaCache.retained_storage_snapshot.
+# Rationale: Eight roots cover active and test profiles without path-state leaks.
+MEDIA_RETAINED_STATS_MAX_ROOTS = 8
 
 # Purpose: Keep cache metadata fixed-size and versioned independently of media.
 # Type: bytes. Units: header bytes. Scope: one cache file.
@@ -106,6 +145,53 @@ _THUMBNAIL_RETAINED_PREFIX = 't-'
 
 
 @dataclass(frozen=True)
+class _RetainedGalleryStats:
+    """Cache totals for one unchanged retained gallery directory.
+
+    Attributes:
+        identity (tuple[int, int, int, int]): Device, inode, modification and
+            change-time identity observed without opening media files.
+        thumbnail_count (int): Count of recognized ``t-<hash>.bin`` files.
+        thumbnail_bytes (int): Physical bytes of those files, including headers.
+        detail_count (int): Count of recognized unprefixed hash filenames.
+        detail_bytes (int): Physical bytes of those files, including headers.
+    """
+
+    identity: tuple[int, int, int, int]
+    thumbnail_count: int
+    thumbnail_bytes: int
+    detail_count: int
+    detail_bytes: int
+
+
+@dataclass(frozen=True)
+class _RetainedRootStats:
+    """Cache gallery identities and totals for one unchanged retained root.
+
+    Attributes:
+        identity (tuple[int, int, int, int]): Root device, inode, modification
+            and change-time identity.
+        galleries (dict[str, _RetainedGalleryStats]): Hashed directory names
+            mapped to their last stable metadata totals; removed names are
+            dropped.
+    """
+
+    identity: tuple[int, int, int, int]
+    galleries: dict[str, _RetainedGalleryStats]
+
+
+_RETAINED_STATS_LOCK = threading.Lock()
+
+# Purpose: Reuse stable directory-generation statistics across cache objects.
+# Type: dict[str, _RetainedRootStats]. Units: roots and retained galleries.
+# Scope: one uploader process; keys are exact configured cache-root spellings.
+# Consumers: GalleryMediaCache.retained_storage_snapshot.
+# Rationale: A tiny lock protects immutable-by-convention snapshot replacement;
+# file walks and metadata calls always happen outside this lock.
+_RETAINED_STATS_CACHE: dict[str, _RetainedRootStats] = {}
+
+
+@dataclass(frozen=True)
 class PhotoCacheEntry:
     """Hold one verified media body, validator, and backing file identity."""
 
@@ -115,6 +201,16 @@ class PhotoCacheEntry:
     stored_at: int
     file_info: os.stat_result
     path: Path
+
+
+@dataclass(frozen=True)
+class PhotoCacheReceipt:
+    """Describe a previously verified file for cheap identity revalidation."""
+
+    path: Path
+    file_info: os.stat_result
+    etag: str
+    mime: str
 
 
 class GalleryMediaCache:
@@ -138,6 +234,398 @@ class GalleryMediaCache:
         self._directory = directory
         self._max_body_bytes = max_body_bytes
         self._thumbnail_pool = thumbnails
+        self._thumbnail_stats = {
+            'inventory_scans': 0, 'stat_calls': 0, 'sorts': 0,
+            'evictions': 0, 'writes': 0, 'flushes': 0,
+            'hashes': 0, 'hash_bytes': 0, 'reads': 0,
+            'hash_ns': 0, 'inventory_ns': 0, 'eviction_ns': 0,
+            'write_ns': 0, 'flush_ns': 0, 'index_ns': 0, 'replace_ns': 0,
+        }
+        self._pending_thumbnail_index: ThumbnailCacheIndex | None = None
+
+    def set_thumbnail_limit_bytes(self, limit: int) -> bool:
+        """Persist the ordinary thumbnail quota shared by every local profile.
+
+        Args:
+            limit (int): Positive physical file-byte quota up to 64 GiB.
+
+        Returns:
+            bool: True when the requested quota is valid and stored.
+        """
+        if (type(limit) is not int
+                or not 0 < limit <= MEDIA_THUMBNAIL_CACHE_LIMIT_MAX_BYTES):
+            return False
+        try:
+            self._thumbnail_accounting(limit=limit)
+            return True
+        except (OSError, ValueError, sqlite3.Error):
+            return False
+
+    def thumbnail_storage_snapshot(
+        self, cancelled: threading.Event | None = None,
+    ) -> tuple[int | None, int | None, int | None, bool, str | None]:
+        """Return a privacy-safe thumbnail occupancy snapshot.
+
+        Args:
+            cancelled (threading.Event | None): Stop recovery during teardown.
+        Returns:
+            tuple[int | None, int | None, int | None, bool, str | None]: Ordinary
+                count, physical file bytes including headers, shared quota,
+                ready flag and fixed error; unknown values are never fake zero.
+                Call off Tk because missing/dirty indexes require recovery.
+        """
+        try:
+            count, used, limit = self._thumbnail_accounting(cancelled=cancelled)
+            return count, used, limit, True, None
+        except (OSError, ValueError, sqlite3.Error):
+            return None, None, None, False, 'unavailable'
+
+    def retained_storage_snapshot(
+        self, cancelled: threading.Event | None = None,
+    ) -> tuple[
+        int | None, int | None, int | None, int | None, int | None, bool,
+    ]:
+        """Summarize pinned gallery files without reading or hashing bodies.
+
+        Args:
+            cancelled (threading.Event | None): Stop directory discovery or
+                a changed-gallery scan; call this method off the GUI thread.
+
+        Returns:
+            tuple[int | None, int | None, int | None, int | None, int | None, bool]:
+                Safe retained gallery count, thumbnail count and bytes,
+                other-media count and bytes, then readiness. Other media may
+                include photos, audio and older untyped thumbnails; opaque
+                hashes cannot identify their rendition. All five counts are
+                None when the snapshot is unsafe, cancelled or changed mid-scan.
+                Only directories containing recognized media contribute to the
+                gallery count. Physical bytes include each cache header.
+        """
+        unknown = (None, None, None, None, None, False)
+        empty = (0, 0, 0, 0, 0, True)
+        if cancelled is not None and cancelled.is_set():
+            return unknown
+        root_key = str(self._directory)
+        retained_root = self._directory / _RETAINED_DIRECTORY
+        try:
+            base_info = self._directory.lstat()
+        except FileNotFoundError:
+            with _RETAINED_STATS_LOCK:
+                _RETAINED_STATS_CACHE.pop(root_key, None)
+            return empty
+        except OSError:
+            return unknown
+        if (not stat.S_ISDIR(base_info.st_mode)
+                or self._path_is_reparse(self._directory)):
+            return unknown
+        base_identity = (
+            base_info.st_dev, base_info.st_ino,
+            base_info.st_mtime_ns, base_info.st_ctime_ns,
+        )
+        try:
+            root_info = retained_root.lstat()
+        except FileNotFoundError:
+            with _RETAINED_STATS_LOCK:
+                _RETAINED_STATS_CACHE.pop(root_key, None)
+            return empty
+        except OSError:
+            return unknown
+        if (not stat.S_ISDIR(root_info.st_mode)
+                or self._path_is_reparse(retained_root)):
+            return unknown
+        root_identity = (
+            root_info.st_dev, root_info.st_ino,
+            root_info.st_mtime_ns, root_info.st_ctime_ns,
+        )
+        with _RETAINED_STATS_LOCK:
+            previous = _RETAINED_STATS_CACHE.get(root_key)
+            if previous is not None:
+                _RETAINED_STATS_CACHE.pop(root_key)
+                _RETAINED_STATS_CACHE[root_key] = previous
+
+        files_seen = 0
+        if previous is not None and previous.identity == root_identity:
+            gallery_names = tuple(previous.galleries)
+            previous_galleries = previous.galleries
+        else:
+            gallery_names_list: list[str] = []
+            root_entries_seen = 0
+            try:
+                with os.scandir(retained_root) as listing:
+                    for item in listing:
+                        if cancelled is not None and cancelled.is_set():
+                            return unknown
+                        root_entries_seen += 1
+                        if root_entries_seen > MEDIA_RETAINED_STATS_MAX_ROOT_ENTRIES:
+                            return unknown
+                        item_path = Path(item.path)
+                        info = item_path.lstat()
+                        if self._path_is_reparse(item_path):
+                            return unknown
+                        if stat.S_ISDIR(info.st_mode):
+                            if _CACHE_KEY_PATTERN.fullmatch(item.name) is None:
+                                continue
+                            gallery_names_list.append(item.name)
+                            if len(gallery_names_list) > MEDIA_RETAINED_STATS_MAX_GALLERIES:
+                                return unknown
+                        else:
+                            if not stat.S_ISREG(info.st_mode):
+                                return unknown
+                            files_seen += 1
+                            if files_seen > MEDIA_RETAINED_STATS_MAX_FILES:
+                                return unknown
+                gallery_names = tuple(gallery_names_list)
+                previous_galleries = (
+                    previous.galleries if previous is not None else {}
+                )
+            except OSError:
+                return unknown
+
+        current_galleries: dict[str, _RetainedGalleryStats] = {}
+        for gallery_name in gallery_names:
+            if cancelled is not None and cancelled.is_set():
+                return unknown
+            directory = retained_root / gallery_name
+            try:
+                before = directory.lstat()
+            except OSError:
+                return unknown
+            if (not stat.S_ISDIR(before.st_mode)
+                    or self._path_is_reparse(directory)):
+                return unknown
+            directory_identity = (
+                before.st_dev, before.st_ino,
+                before.st_mtime_ns, before.st_ctime_ns,
+            )
+            cached = previous_galleries.get(gallery_name)
+            if cached is not None and cached.identity == directory_identity:
+                current_galleries[gallery_name] = cached
+                continue
+
+            thumbnail_count = 0
+            thumbnail_bytes = 0
+            detail_count = 0
+            detail_bytes = 0
+            try:
+                with os.scandir(directory) as listing:
+                    for item in listing:
+                        if cancelled is not None and cancelled.is_set():
+                            return unknown
+                        files_seen += 1
+                        if files_seen > MEDIA_RETAINED_STATS_MAX_FILES:
+                            return unknown
+                        path = Path(item.path)
+                        info = path.lstat()
+                        if self._path_is_reparse(path):
+                            return unknown
+                        if not stat.S_ISREG(info.st_mode):
+                            return unknown
+                        if (item.name == _PIN_MARKER
+                                or item.name.startswith('.preload-')
+                                or ((item.name.startswith('.media-')
+                                     or item.name.startswith('.pin-'))
+                                    and item.name.endswith('.tmp'))):
+                            continue
+                        filename = item.name[:-4] if item.name.endswith('.bin') else ''
+                        if filename.startswith(_THUMBNAIL_RETAINED_PREFIX):
+                            key = filename[len(_THUMBNAIL_RETAINED_PREFIX):]
+                            if _CACHE_KEY_PATTERN.fullmatch(key) is None:
+                                continue
+                            thumbnail_count += 1
+                            thumbnail_bytes += info.st_size
+                        elif _CACHE_KEY_PATTERN.fullmatch(filename) is not None:
+                            detail_count += 1
+                            detail_bytes += info.st_size
+                after = directory.lstat()
+            except OSError:
+                return unknown
+            after_identity = (
+                after.st_dev, after.st_ino,
+                after.st_mtime_ns, after.st_ctime_ns,
+            )
+            if (not stat.S_ISDIR(after.st_mode)
+                    or self._path_is_reparse(directory)
+                    or after_identity != directory_identity):
+                return unknown
+            current_galleries[gallery_name] = _RetainedGalleryStats(
+                directory_identity, thumbnail_count, thumbnail_bytes,
+                detail_count, detail_bytes,
+            )
+
+        for gallery_name, stats in current_galleries.items():
+            if cancelled is not None and cancelled.is_set():
+                return unknown
+            directory = retained_root / gallery_name
+            try:
+                after = directory.lstat()
+            except OSError:
+                return unknown
+            after_identity = (
+                after.st_dev, after.st_ino,
+                after.st_mtime_ns, after.st_ctime_ns,
+            )
+            if (not stat.S_ISDIR(after.st_mode)
+                    or self._path_is_reparse(directory)
+                    or after_identity != stats.identity):
+                return unknown
+
+        if cancelled is not None and cancelled.is_set():
+            return unknown
+        try:
+            root_after = retained_root.lstat()
+            base_after = self._directory.lstat()
+        except OSError:
+            return unknown
+        after_root_identity = (
+            root_after.st_dev, root_after.st_ino,
+            root_after.st_mtime_ns, root_after.st_ctime_ns,
+        )
+        after_base_identity = (
+            base_after.st_dev, base_after.st_ino,
+            base_after.st_mtime_ns, base_after.st_ctime_ns,
+        )
+        if (not stat.S_ISDIR(root_after.st_mode)
+                or not stat.S_ISDIR(base_after.st_mode)
+                or self._path_is_reparse(self._directory)
+                or self._path_is_reparse(retained_root)
+                or after_root_identity != root_identity
+                or after_base_identity != base_identity):
+            return unknown
+
+        snapshot = _RetainedRootStats(root_identity, current_galleries)
+        with _RETAINED_STATS_LOCK:
+            _RETAINED_STATS_CACHE[root_key] = snapshot
+            while len(_RETAINED_STATS_CACHE) > MEDIA_RETAINED_STATS_MAX_ROOTS:
+                oldest_root = next(iter(_RETAINED_STATS_CACHE))
+                _RETAINED_STATS_CACHE.pop(oldest_root)
+
+        thumbnail_total = sum(
+            entry.thumbnail_count for entry in current_galleries.values()
+        )
+        thumbnail_byte_total = sum(
+            entry.thumbnail_bytes for entry in current_galleries.values()
+        )
+        detail_total = sum(
+            entry.detail_count for entry in current_galleries.values()
+        )
+        detail_byte_total = sum(
+            entry.detail_bytes for entry in current_galleries.values()
+        )
+        gallery_total = sum(
+            entry.thumbnail_count + entry.detail_count > 0
+            for entry in current_galleries.values()
+        )
+        return (
+            gallery_total, thumbnail_total, thumbnail_byte_total,
+            detail_total, detail_byte_total, True,
+        )
+
+    def _open_thumbnail_index(
+        self, cancelled: threading.Event | None = None,
+    ) -> ThumbnailCacheIndex:
+        """Open ordinary accounting while the caller owns the media lock.
+
+        Args:
+            cancelled (threading.Event | None): Optional recovery interruption.
+        Returns:
+            ThumbnailCacheIndex: Ready shared index; caller closes it.
+        """
+        self._ensure_pool_directory(True)
+        started = time.perf_counter_ns()
+        try:
+            return ThumbnailCacheIndex(
+                self._directory, self._directory / 'thumbnails',
+                MEDIA_THUMBNAIL_CACHE_MAX_BYTES, MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES,
+                lambda path: not self._path_is_reparse(path),
+                self._thumbnail_stats, self._unlink_if_matches, cancelled,
+            )
+        finally:
+            self._thumbnail_stats['index_ns'] += time.perf_counter_ns() - started
+
+    def operation_counts(self) -> dict[str, int]:
+        """Copy numeric work counters from this exact cache operation owner.
+
+        Returns:
+            dict[str, int]: Inventory scans, metadata stats, sorts, evictions,
+                writes, flushes, body reads, SHA-256 operations and hashed bytes.
+                Fields ending in _ns measure cumulative hash/inventory/eviction,
+                write/flush/replace/index nanoseconds. Index time contains
+                recovery and overlaps inventory time; never sum these as wall time.
+                Counters contain no filenames or authorization material.
+        """
+        return dict(self._thumbnail_stats)
+
+    def _thumbnail_accounting(
+        self, *, limit: int | None = None,
+        cancelled: threading.Event | None = None,
+    ) -> tuple[int, int, int]:
+        """Read or configure physical accounting under both existing locks.
+
+        Args:
+            limit (int | None): Validated shared quota update, or read only.
+            cancelled (threading.Event | None): Recovery cancellation signal.
+        Returns:
+            tuple[int, int, int]: Ready ordinary count, file bytes and byte quota.
+        """
+        with _CACHE_WRITE_LOCK:
+            self._ensure_directory()
+            lock_path = self._directory / '.media-lock'
+            if self._path_is_reparse(lock_path):
+                raise OSError('Unsafe media lock.')
+            with lock_path.open('a+b') as lock:
+                if os.name == 'nt':
+                    lock.seek(0)
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, _CACHE_LOCK_SPAN)
+                else:
+                    fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                index = self._open_thumbnail_index(cancelled)
+                try:
+                    if limit is not None:
+                        index.set_limit(limit)
+                    return index.snapshot()
+                finally:
+                    index.close()
+
+    def receipt_current(
+        self, receipt: PhotoCacheReceipt, *, key: str,
+        gallery_key: str | None = None,
+    ) -> bool:
+        """Check a verified cache receipt against the current no-follow file.
+
+        Args:
+            receipt (PhotoCacheReceipt): Identity captured during verified read.
+            key (str): Expected exact hash identity in this pool.
+            gallery_key (str | None): Expected exact retained-gallery identity.
+
+        Returns:
+            bool: True when stable file identity and mutation timestamps match.
+        """
+        try:
+            if (_CACHE_KEY_PATTERN.fullmatch(key) is None
+                    or not self._valid_gallery_key(gallery_key)
+                    or self._path_is_reparse(self._directory)):
+                return False
+            allowed = {self._entry_path(key)}
+            if gallery_key is not None and self._gallery_is_pinned(gallery_key):
+                retained = self._retained_entry_path(gallery_key, key)
+                if retained is not None:
+                    allowed.add(retained)
+            if (receipt.path not in allowed
+                    or not self._safe_entry_parent(receipt.path)
+                    or self._path_is_reparse(receipt.path)):
+                return False
+            info = receipt.path.lstat()
+            self._thumbnail_stats['stat_calls'] += 1
+            with receipt.path.open('rb') as stream:
+                opened = os.fstat(stream.fileno())
+                return (stat.S_ISREG(info.st_mode)
+                        and os.path.samestat(opened, info)
+                        and os.path.samestat(opened, receipt.file_info)
+                        and opened.st_size == receipt.file_info.st_size
+                        and opened.st_mtime_ns == receipt.file_info.st_mtime_ns
+                        and opened.st_ctime_ns == receipt.file_info.st_ctime_ns)
+        except OSError:
+            return False
 
     @staticmethod
     def key(
@@ -173,7 +661,7 @@ class GalleryMediaCache:
         issuer: str, user_id: int, gallery_id: int, image_id: int,
         thumbnail: bool,
     ) -> str:
-        """Hash an Admin-preload entry in an account-isolated namespace.
+        """Hash automatic thumbnails and opted-in full Admin media per account.
 
         Args:
             issuer (str): Canonical selected installation issuer.
@@ -316,7 +804,7 @@ class GalleryMediaCache:
                     if not self._marker_is_valid(marker):
                         return False
                     return self._unlink_if_matches(marker, info)
-        except (OSError, UnicodeError, ValueError, struct.error):
+        except (OSError, UnicodeError, ValueError, struct.error, sqlite3.Error):
             return False
 
     def set_gallery_pinned(
@@ -377,7 +865,7 @@ class GalleryMediaCache:
                         return False
                     self._remove_empty_gallery_directory(directory)
                     return True
-        except (OSError, UnicodeError, ValueError, struct.error):
+        except (OSError, UnicodeError, ValueError, struct.error, sqlite3.Error):
             return False
 
     @staticmethod
@@ -479,7 +967,7 @@ class GalleryMediaCache:
                         ) or entry
                     return entry
                 return None
-        except (OSError, ValueError, struct.error):
+        except (OSError, ValueError, struct.error, sqlite3.Error):
             return None
 
     def contains(
@@ -530,7 +1018,8 @@ class GalleryMediaCache:
     def revalidate(
         self, key: str, entry: PhotoCacheEntry, now: int | None = None, *,
         gallery_key: str | None = None,
-    ) -> None:
+        receipts: list[PhotoCacheReceipt] | None = None,
+    ) -> bool:
         """Refresh the validation stamp of the exact file accepted by a 304.
 
         Args:
@@ -539,13 +1028,15 @@ class GalleryMediaCache:
             now (int | None): Validation time in Unix seconds, or None for the clock.
             gallery_key (str | None): Exact hashed gallery identity, or None
                 for legacy flat-cache behavior.
+            receipts (list[PhotoCacheReceipt] | None): Optional confirmed
+                publication witnesses captured from the open verified file.
 
         Returns:
-            None: Updates metadata only if the same cache file remains present.
+            bool: True only when the exact file has the confirmed new stamp.
         """
         if (not self._valid_gallery_key(gallery_key)
                 or _CACHE_KEY_PATTERN.fullmatch(key) is None):
-            return
+            return False
         try:
             with _CACHE_WRITE_LOCK:
                 path = entry.path
@@ -560,21 +1051,37 @@ class GalleryMediaCache:
                     if legacy_retained is not None:
                         allowed_paths.add(legacy_retained)
                 if path not in allowed_paths:
-                    return
+                    return False
                 if (self._thumbnail_pool and self._thumbnail_pool_is_unsafe()):
-                    return
+                    return False
                 if self._path_is_reparse(self._directory):
-                    return
+                    return False
                 if not self._safe_entry_parent(path):
-                    return
+                    return False
                 info = path.lstat()
                 if not stat.S_ISREG(info.st_mode) or not os.path.samestat(info, entry.file_info):
-                    return
+                    return False
                 with path.open('rb') as stream:
+                    opened = os.fstat(stream.fileno())
+                    if (not os.path.samestat(opened, entry.file_info)
+                            or opened.st_size != entry.file_info.st_size
+                            or opened.st_mtime_ns != entry.file_info.st_mtime_ns
+                            or opened.st_ctime_ns != entry.file_info.st_ctime_ns):
+                        return False
                     current = int(time.time()) if now is None else now
                     self._stamp(path, stream.fileno(), entry.file_info, current, current)
+                    updated = os.fstat(stream.fileno())
+                    if (not os.path.samestat(updated, entry.file_info)
+                            or updated.st_size != entry.file_info.st_size
+                            or updated.st_mtime_ns != current * 10**9):
+                        return False
+                    if receipts is not None:
+                        receipts.append(PhotoCacheReceipt(
+                            path, updated, entry.etag, entry.mime,
+                        ))
+                    return True
         except (OSError, ValueError):
-            return
+            return False
 
     @staticmethod
     def _stamp(
@@ -615,6 +1122,7 @@ class GalleryMediaCache:
     def write(
         self, key: str, body: bytes, mime: str, etag: str,
         now: int | None = None, *, gallery_key: str | None = None,
+        receipts: list[PhotoCacheReceipt] | None = None,
     ) -> bool:
         """Atomically retain one opt-in response using its active cache policy.
 
@@ -626,16 +1134,25 @@ class GalleryMediaCache:
             now (int | None): Current Unix seconds, or None to use the system clock.
             gallery_key (str | None): Exact hashed gallery identity, or None
                 for legacy flat-cache behavior.
+            receipts (list[PhotoCacheReceipt] | None): Optional cache-confirmed
+                file witnesses captured before releasing the mutation lock.
 
         Returns:
             bool: True when the entry was atomically stored.
         """
+        body_digest = None
+        if isinstance(body, bytes) and 0 < len(body) <= self._max_body_bytes:
+            self._thumbnail_stats['hashes'] += 1
+            self._thumbnail_stats['hash_bytes'] += len(body)
+            hash_started = time.perf_counter_ns()
+            body_digest = '"' + hashlib.sha256(body).hexdigest() + '"'
+            self._thumbnail_stats['hash_ns'] += time.perf_counter_ns() - hash_started
         if (_CACHE_KEY_PATTERN.fullmatch(key) is None
                 or not self._valid_gallery_key(gallery_key)
                 or not isinstance(body, bytes)
                 or not 0 < len(body) <= self._max_body_bytes
                 or mime not in _MIME_TO_CODE
-                or etag != '"' + hashlib.sha256(body).hexdigest() + '"'):
+                or etag != body_digest):
             return False
         try:
             with _CACHE_WRITE_LOCK:
@@ -655,9 +1172,9 @@ class GalleryMediaCache:
                         and self._gallery_is_pinned(gallery_key) else None
                     )
                     return self._write_locked(
-                        key, body, mime, etag, now, pinned_key,
+                        key, body, mime, etag, now, pinned_key, receipts=receipts,
                     )
-        except (OSError, ValueError, struct.error):
+        except (OSError, ValueError, struct.error, sqlite3.Error):
             return False
 
     def _write_locked(
@@ -665,6 +1182,7 @@ class GalleryMediaCache:
         now: int | None, gallery_key: str | None = None, *,
         pool_thumbnail: bool | None = None,
         protected_keys: frozenset[str] = frozenset(),
+        receipts: list[PhotoCacheReceipt] | None = None,
     ) -> bool:
         """Atomically replace an ordinary or gallery-retained cache object.
 
@@ -679,6 +1197,8 @@ class GalleryMediaCache:
             pool_thumbnail (bool | None): Explicit destination pool for a
                 retained conversion, or None to use this instance's pool.
             protected_keys (frozenset[str]): Pool keys which eviction must keep.
+            receipts (list[PhotoCacheReceipt] | None): Optional confirmed file
+                witnesses; receives no receipt after a failed publication.
 
         Returns:
             bool: True when the complete cache object was committed.
@@ -696,11 +1216,21 @@ class GalleryMediaCache:
             _CACHE_MAGIC, current, _MIME_TO_CODE[mime], etag[1:-1].encode('ascii'),
         )
         if gallery_key is None:
-            if not self._make_room(
-                key, len(header) + len(body),
-                pool_thumbnail=thumbnail_pool,
-                protected_keys=protected_keys,
-            ):
+            try:
+                admitted = self._make_room(
+                    key, len(header) + len(body),
+                    pool_thumbnail=thumbnail_pool,
+                    protected_keys=protected_keys,
+                )
+            except BaseException:
+                if self._pending_thumbnail_index is not None:
+                    self._pending_thumbnail_index.close()
+                    self._pending_thumbnail_index = None
+                raise
+            if not admitted:
+                if self._pending_thumbnail_index is not None:
+                    self._pending_thumbnail_index.close()
+                    self._pending_thumbnail_index = None
                 return False
             destination = self._pool_entry_path(key, thumbnail_pool)
         else:
@@ -712,18 +1242,56 @@ class GalleryMediaCache:
             )
             if destination is None:
                 return False
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=_CACHE_TEMP_PREFIX, suffix='.tmp', dir=destination.parent,
-        )
+        try:
+            descriptor, temporary = tempfile.mkstemp(
+                prefix=_CACHE_TEMP_PREFIX, suffix='.tmp', dir=destination.parent,
+            )
+        except BaseException:
+            if self._pending_thumbnail_index is not None:
+                self._pending_thumbnail_index.close()
+                self._pending_thumbnail_index = None
+            raise
         try:
             with os.fdopen(descriptor, 'wb') as stream:
+                write_started = time.perf_counter_ns()
                 stream.write(header)
                 stream.write(body)
+                self._thumbnail_stats['write_ns'] += time.perf_counter_ns() - write_started
+                flush_started = time.perf_counter_ns()
+                stream.flush()
+                os.fsync(stream.fileno())
+                self._thumbnail_stats['flush_ns'] += time.perf_counter_ns() - flush_started
+                self._thumbnail_stats['flushes'] += 1
             # Initialize access and validation times with the same clock.
             os.utime(temporary, (current, current))
+            replace_started = time.perf_counter_ns()
             os.replace(temporary, destination)
+            self._thumbnail_stats['replace_ns'] += time.perf_counter_ns() - replace_started
+            self._thumbnail_stats['writes'] += 1
+            if self._pending_thumbnail_index is not None:
+                index_started = time.perf_counter_ns()
+                self._pending_thumbnail_index.publish(destination)
+                self._thumbnail_stats['index_ns'] += time.perf_counter_ns() - index_started
+            if receipts is not None:
+                info = destination.lstat()
+                if (not stat.S_ISREG(info.st_mode)
+                        or self._path_is_reparse(destination)):
+                    return False
+                # Capture mutation timestamps through the same opened-file API
+                # used by receipt_current. Windows path metadata may expose
+                # creation time where fstat reports the file change time.
+                with destination.open('rb') as published:
+                    opened = os.fstat(published.fileno())
+                if (not os.path.samestat(info, opened)
+                        or not stat.S_ISREG(opened.st_mode)
+                        or opened.st_size != len(header) + len(body)):
+                    return False
+                receipts.append(PhotoCacheReceipt(destination, opened, etag, mime))
         finally:
             self._unlink(Path(temporary))
+            if self._pending_thumbnail_index is not None:
+                self._pending_thumbnail_index.close()
+                self._pending_thumbnail_index = None
         return True
 
     def is_fresh(self, entry: PhotoCacheEntry, now: int | None = None) -> bool:
@@ -987,21 +1555,28 @@ class GalleryMediaCache:
                     return None
                 header = stream.read(_CACHE_HEADER.size)
                 body = stream.read(self._max_body_bytes + 1)
+                self._thumbnail_stats['reads'] += 1
                 if (len(header) != _CACHE_HEADER.size
                         or not 0 < len(body) <= self._max_body_bytes):
                     return None
                 magic, _written_at, mime_code, digest = _CACHE_HEADER.unpack(header)
                 mime = _CODE_TO_MIME.get(mime_code)
+                self._thumbnail_stats['hashes'] += 1
+                self._thumbnail_stats['hash_bytes'] += len(body)
+                hash_started = time.perf_counter_ns()
+                actual_digest = hashlib.sha256(body).hexdigest().encode('ascii')
+                self._thumbnail_stats['hash_ns'] += time.perf_counter_ns() - hash_started
                 if (magic != _CACHE_MAGIC or mime is None
-                        or hashlib.sha256(body).hexdigest().encode('ascii') != digest):
+                        or actual_digest != digest):
                     return None
                 current = int(time.time()) if now is None else now
                 self._stamp(path, stream.fileno(), opened, current)
+                opened = os.fstat(stream.fileno())
             return PhotoCacheEntry(
                 body, mime, '"' + digest.decode('ascii') + '"',
                 int(opened.st_mtime), opened, path,
             )
-        except (OSError, ValueError, struct.error):
+        except (OSError, ValueError, struct.error, sqlite3.Error):
             return None
 
     def _contains_path(self, path: Path, etag: str | None) -> bool:
@@ -1109,7 +1684,7 @@ class GalleryMediaCache:
                         or not self._unlink_if_matches(source, current.file_info)):
                     return None
                 return migrated
-        except (OSError, ValueError, struct.error):
+        except (OSError, ValueError, struct.error, sqlite3.Error):
             return None
 
     def _safe_entry_parent(self, path: Path) -> bool:
@@ -1217,7 +1792,7 @@ class GalleryMediaCache:
                     if not self._unlink_if_matches(flat_path, current.file_info):
                         return None
                     return retained
-        except (OSError, ValueError, struct.error):
+        except (OSError, ValueError, struct.error, sqlite3.Error):
             return None
 
     def _retained_entries(
@@ -1283,6 +1858,14 @@ class GalleryMediaCache:
                 shared mutation lock.
         """
         try:
+            flat_path = self._entry_path(key)
+            try:
+                # Most retained hits have no ordinary duplicate. This
+                # no-follow probe avoids lock and marker work; a present path
+                # still gets the original locked hash and identity checks.
+                flat_path.lstat()
+            except FileNotFoundError:
+                return
             with _CACHE_WRITE_LOCK:
                 lock_path = self._directory / '.media-lock'
                 if self._path_is_reparse(lock_path):
@@ -1299,13 +1882,12 @@ class GalleryMediaCache:
                         )
                     if not self._gallery_is_pinned(gallery_key):
                         return
-                    flat_path = self._entry_path(key)
                     flat = self._read_entry_path(flat_path, retained.stored_at)
                     if (flat is None or flat.etag != retained.etag
                             or flat.mime != retained.mime):
                         return
                     self._unlink_if_matches(flat_path, flat.file_info)
-        except (OSError, ValueError, struct.error):
+        except (OSError, ValueError, struct.error, sqlite3.Error):
             return
 
     def _copy_retained_to_ordinary(
@@ -1411,7 +1993,7 @@ class GalleryMediaCache:
                         or not os.path.samestat(source_now.file_info, expected)):
                     raise OSError('Unpin destination verification failed.')
             return True
-        except (OSError, ValueError, struct.error):
+        except (OSError, ValueError, struct.error, sqlite3.Error):
             for pool_cache, copied_path, copied_info in created:
                 pool_cache._unlink_if_matches(copied_path, copied_info)
             return False
@@ -1434,8 +2016,13 @@ class GalleryMediaCache:
         """
         try:
             self._ensure_pool_directory(thumbnail_pool)
-            max_bytes = (MEDIA_THUMBNAIL_CACHE_MAX_BYTES if thumbnail_pool
-                         else MEDIA_CACHE_MAX_BYTES)
+            max_bytes = MEDIA_CACHE_MAX_BYTES
+            if thumbnail_pool:
+                index = self._open_thumbnail_index()
+                try:
+                    max_bytes = index.snapshot()[2]
+                finally:
+                    index.close()
             max_entries = (MEDIA_THUMBNAIL_CACHE_MAX_ENTRIES if thumbnail_pool
                            else MEDIA_CACHE_MAX_ENTRIES)
             entries = self._inventory(thumbnail_pool)
@@ -1462,7 +2049,7 @@ class GalleryMediaCache:
                     or count + required_count > max_entries):
                 return None
             return victims
-        except (OSError, ValueError):
+        except (OSError, ValueError, sqlite3.Error):
             return None
 
     def _unlink_if_matches(
@@ -1691,6 +2278,12 @@ class GalleryMediaCache:
         thumbnail_pool = (
             self._thumbnail_pool if pool_thumbnail is None else pool_thumbnail
         )
+        if thumbnail_pool:
+            index = self._open_thumbnail_index()
+            self._pending_thumbnail_index = index
+            return index.make_room(
+                key + '.bin', new_size, protected_keys, self._unlink_if_matches,
+            )
         max_bytes = (
             MEDIA_THUMBNAIL_CACHE_MAX_BYTES if thumbnail_pool
             else MEDIA_CACHE_MAX_BYTES

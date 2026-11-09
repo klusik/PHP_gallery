@@ -39,9 +39,10 @@ _SAFE_PHOTOS_PHASES = frozenset({
 # Type: frozenset[str]. Units: operation labels. Scope: Photos diagnostics.
 # Consumers: format_safe_photos_failure. Rationale: Exclude titles and URLs.
 _SAFE_PHOTOS_DIAGNOSTIC_KINDS = frozenset({
-    "page", "more", "slide_more", "refresh", "revision", "thumbnail",
+    "page", "page_recent", "more", "slide_more", "refresh", "revision",
+    "thumbnail",
     "catalogue", "preload", "detail", "prefetch", "photo_info",
-    "audio_track", "other",
+    "audio_track", "presentation", "other",
 })
 
 # Purpose: Restrict traceback locations to known local Photos source owners.

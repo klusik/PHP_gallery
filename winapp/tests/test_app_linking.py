@@ -13,6 +13,7 @@
 import base64
 import hashlib
 import http.client
+import http.server
 import json
 import os
 import queue
@@ -98,6 +99,12 @@ TEST_GALLERY_TREE_OVER_LIMIT_BYTES = (
     linking.LINKING_GALLERY_TREE_RESPONSE_MAX_BYTES + 1
 )
 
+# Purpose: Prove sequential pool reuse across several independent GET owners.
+# Type: int. Units: GET responses. Scope: one controlled idle-pool fixture.
+# Consumers: NativeMediaTransportTests. Rationale: Three reads prove both
+# initial creation and repeated reuse without making the fixture unbounded.
+TEST_POOLED_GET_COUNT = 3
+
 
 def discovery_response(
     issuer: str, scope: str,
@@ -160,6 +167,60 @@ else:
 
 class LinkingTransportTests(unittest.TestCase):
     """Exercise linking transport boundaries without contacting a server."""
+
+    def test_serial_gate_admits_waiter_before_repeated_preload(self) -> None:
+        """Preserve FIFO opportunity for a queued Watcher or viewport request.
+
+        Returns:
+            None: Waiting calls acquire one serial slot in registration order;
+                nonblocking attempts cannot jump the queue or double-release.
+        """
+        gate = linking._FairRequestGate()
+        self.assertTrue(gate.acquire(blocking=False))
+        registered = [threading.Event(), threading.Event()]
+        order: list[int] = []
+        original_wait = gate._condition.wait
+
+        def observed_wait(timeout: float | None = None) -> bool:
+            """Signal actual queued condition waiting before releasing the lock.
+
+            Args:
+                timeout (float | None): Existing admission wait bound in seconds.
+            Returns:
+                bool: Result of the real condition wait.
+            """
+            registered[int(threading.current_thread().name)].set()
+            return original_wait(timeout)
+
+        def request(index: int) -> None:
+            """Acquire/release the serial gate for one synthetic caller.
+
+            Args:
+                index (int): Structural registration ordinal of this caller.
+            Returns:
+                None: Records admission order only after actual ownership.
+            """
+            if gate.acquire(timeout=TEST_WORKER_WAIT_SECONDS):
+                order.append(index)
+                gate.release()
+
+        workers: list[threading.Thread] = []
+        with mock.patch.object(gate._condition, 'wait', observed_wait):
+            try:
+                for index in (0, 1):
+                    worker = threading.Thread(target=request, args=(index,), name=str(index))
+                    worker.start()
+                    workers.append(worker)
+                    self.assertTrue(registered[index].wait(TEST_WORKER_WAIT_SECONDS))
+                self.assertFalse(gate.acquire(blocking=False))
+            finally:
+                gate.release()
+                for worker in workers:
+                    worker.join(TEST_WORKER_WAIT_SECONDS)
+        self.assertEqual([0, 1], order)
+        self.assertFalse(gate.locked())
+        with self.assertRaises(ValueError):
+            gate.release()
 
     def setUp(self) -> None:
         """Provide a local listener whose requests are supplied by each test.
@@ -703,18 +764,23 @@ class LinkingTransportTests(unittest.TestCase):
         class ObservedGate:
             """Expose when a second request has reached session admission."""
 
-            def acquire(self, timeout: float) -> bool:
+            def acquire(
+                self, timeout: float, *,
+                cancelled: threading.Event | None = None,
+            ) -> bool:
                 """Wait for the gate and announce a queued gallery operation.
 
                 Args:
                     timeout (float): Maximum gate wait in seconds.
+                    cancelled (threading.Event | None): Caller cancellation
+                        forwarded to the real request gate.
 
                 Returns:
                     bool: Whether the underlying gate was acquired.
                 """
                 if started.is_set():
                     waiting.set()
-                return gate.acquire(timeout=timeout)
+                return gate.acquire(timeout=timeout, cancelled=cancelled)
 
             def release(self) -> None:
                 """Release the acquired gate.
@@ -2489,7 +2555,485 @@ class VisibilitySessionTests(unittest.TestCase):
 
 
 class NativeMediaSessionTests(unittest.TestCase):
-    """Exercise native read scope and server-selected resource identities."""
+    """Verify authorized media scope, cache reads and resource identities."""
+
+    def test_cached_media_photo_returns_verified_hit_without_network(self) -> None:
+        """Expose a current local hit without entering authenticated transport.
+
+        Returns:
+            None: The verified body is returned and network admission is unused.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        photo = linking.LinkedPhoto(
+            image_id=7, title='photo', cache_eligible=True,
+        )
+        body = b'cached image bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        timings = linking.MediaReadTimings()
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            self.assertTrue(cache.write(
+                cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(session, '_media_read') as network, mock.patch.object(
+                session, '_request_gate',
+            ) as gate:
+                gate.acquire.side_effect = AssertionError('Unexpected request gate.')
+                self.assertEqual(
+                    (body, 'image/jpeg'),
+                    session.cached_media_photo(
+                        4, photo, thumbnail=True, timings=timings,
+                    ),
+                )
+                network.assert_not_called()
+                gate.acquire.assert_not_called()
+        self.assertEqual('disk', timings.source)
+        self.assertEqual('hit', timings.cache_state)
+
+    def test_cached_media_photo_returns_none_on_cache_miss(self) -> None:
+        """Return an explicit miss when the requested entry is absent.
+
+        Returns:
+            None: A missing disk entry returns None without network fallback.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        photo = linking.LinkedPhoto(
+            image_id=7, title='photo', cache_eligible=True,
+        )
+        timings = linking.MediaReadTimings()
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(cache, 'read', return_value=None):
+                self.assertIsNone(session.cached_media_photo(
+                    4, photo, timings=timings,
+                ))
+        self.assertEqual('miss', timings.cache_state)
+
+    def test_cached_media_photo_rejects_stale_and_changed_proofs(self) -> None:
+        """Require exact freshness and descriptor ETag proof for local hits.
+
+        Returns:
+            None: Stale entries and changed thumbnail validators are misses.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        body = b'retained thumbnail'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        changed_etag = '"' + hashlib.sha256(b'changed bytes').hexdigest() + '"'
+        descriptor = linking.LinkedPhoto(
+            7, 'photo', cache_eligible=True,
+            thumbnail_etag=changed_etag,
+            thumbnail_verified_at=time.monotonic(),
+        )
+        timings = linking.MediaReadTimings()
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            self.assertTrue(cache.write(
+                cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
+            ))
+            entry = cache.read(cache.key(issuer, 4, 7, True))
+            self.assertIsNotNone(entry)
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ):
+                self.assertIsNone(session.cached_media_photo(
+                    4, descriptor, timings=timings,
+                ))
+                self.assertEqual('changed', timings.cache_state)
+                stale_now = (
+                    entry.stored_at + linking.PHOTO_CACHE_FRESH_SECONDS + 1
+                )
+                with mock.patch.object(
+                    linking.time, 'time', return_value=stale_now,
+                ):
+                    self.assertIsNone(session.cached_media_photo(
+                        4,
+                        linking.LinkedPhoto(7, 'photo', cache_eligible=True),
+                        timings=timings,
+                    ))
+                self.assertEqual('revalidation', timings.cache_state)
+
+    def test_cached_media_photo_checks_exact_issuer_and_cancellation(self) -> None:
+        """Keep cache identities issuer-scoped and honor viewer cancellation.
+
+        Returns:
+            None: A different issuer misses and a canceled viewer gets no bytes.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        other_issuer = 'https://other.example/Galerie'
+        session = linking.LinkingSession(
+            other_issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        body = b'issuer-bound thumbnail'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        photo = linking.LinkedPhoto(7, 'photo', cache_eligible=True)
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            self.assertTrue(cache.write(
+                cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ):
+                self.assertIsNone(session.cached_media_photo(4, photo))
+                cancelled = threading.Event()
+                cancelled.set()
+                with self.assertRaises(linking.LinkingError):
+                    session.cached_media_photo(
+                        4, photo, cancelled=cancelled,
+                    )
+
+    def test_cached_media_photo_rejects_expired_session_and_private_preload(self) -> None:
+        """Do not expose expired or private preload bytes through local lookup.
+
+        Returns:
+            None: Renewal-capable expiry and private Admin entries remain misses.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        expired_at = time.monotonic() - TEST_WORKER_WAIT_SECONDS
+        renewed_until = time.monotonic() + TEST_WORKER_WAIT_SECONDS
+        rolling = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43, renewed_until,
+            linking.ROLLING_GALLERIES_SCOPE,
+            admin_preload_supported=True,
+        )
+        rolling._expires_at = expired_at
+        rolling.enable_renewal(lambda _cancel: (
+            'pgla_' + 'B' * 43, renewed_until,
+        ))
+        rolling_photo = linking.LinkedPhoto(7, 'photo', cache_eligible=True)
+        private = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+            admin_preload_supported=True,
+        )
+        private_photo = linking.LinkedPhoto(
+            7, 'photo', preload_eligible=True,
+        )
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            expired_body = b'current cached thumbnail'
+            expired_etag = '"' + hashlib.sha256(expired_body).hexdigest() + '"'
+            self.assertTrue(cache.write(
+                cache.key(issuer, 4, 7, True), expired_body,
+                'image/jpeg', expired_etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                linking.time, 'monotonic',
+                return_value=expired_at + TEST_WORKER_WAIT_SECONDS,
+            ):
+                expired_timings = linking.MediaReadTimings()
+                self.assertIsNone(rolling.cached_media_photo(
+                    4, rolling_photo, timings=expired_timings,
+                ))
+                self.assertEqual('expired', expired_timings.cache_state)
+                private_timings = linking.MediaReadTimings()
+                self.assertIsNone(private.cached_media_photo(
+                    4, private_photo, timings=private_timings,
+                ))
+                self.assertEqual('ineligible', private_timings.cache_state)
+
+    def test_media_timings_separate_verified_disk_hit_from_transport(self) -> None:
+        """Measure a verified disk hit without entering the session gate.
+
+        Returns:
+            None: A controlled two-millisecond lookup returns the authorized
+                bytes with zero transport, renewal or cache-write work.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        body = b'verified timing thumbnail'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        timings = linking.MediaReadTimings()
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            self.assertTrue(cache.write(
+                cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                session, '_request_gate',
+            ) as gate, mock.patch.object(
+                linking, '_run_linking_transport',
+            ) as transport, mock.patch.object(
+                linking.time, 'perf_counter', side_effect=(0.0, 0.002),
+            ):
+                # An exact cache hit must not wait for any other session read.
+                gate.acquire.side_effect = AssertionError('Unexpected gate.')
+                self.assertEqual(
+                    (body, 'image/jpeg'),
+                    session.media_photo(
+                        4, 7, True, cache_eligible=True,
+                        thumbnail_etag=etag,
+                        thumbnail_verified_at=time.monotonic(),
+                        timings=timings,
+                    ),
+                )
+                transport.assert_not_called()
+                gate.acquire.assert_not_called()
+        self.assertEqual('disk', timings.source)
+        self.assertAlmostEqual(2.0, timings.disk_read_ms)
+        self.assertEqual(0.0, timings.disk_write_ms)
+        self.assertEqual(0.0, timings.gate_wait_ms)
+        self.assertEqual(0.0, timings.renewal_ms)
+        self.assertEqual(0.0, timings.network_ms)
+        self.assertEqual(0, timings.network_reads)
+
+    def test_media_timings_separate_gate_renewal_and_network(self) -> None:
+        """Observe three transport phases without changing their gate owner.
+
+        Returns:
+            None: Controlled clocks report two, three and seven milliseconds
+                separately; transient bytes never create a disk cache entry.
+        """
+        session = linking.LinkingSession(
+            'https://gallery.example/Galerie', 'pgla_' + 'A' * 43,
+            time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        timings = linking.MediaReadTimings()
+        with mock.patch.object(
+            linking, '_run_linking_transport',
+            return_value=(b'transient', 'image/jpeg', None, False),
+        ) as transport, mock.patch.object(
+            session, '_renew_if_expired', wraps=session._renew_if_expired,
+        ) as renew, mock.patch.object(
+            linking.GalleryMediaCache, 'for_current_user',
+        ) as cache, mock.patch.object(
+            linking.time, 'perf_counter',
+            side_effect=(0.0, 0.002, 0.002, 0.005, 0.005, 0.012),
+        ):
+            self.assertEqual(
+                (b'transient', 'image/jpeg'),
+                session.media_photo(
+                    4, 7, True, cache_eligible=False, timings=timings,
+                ),
+            )
+            transport.assert_called_once()
+            renew.assert_called_once()
+            cache.assert_not_called()
+        self.assertEqual('network', timings.source)
+        self.assertAlmostEqual(2.0, timings.gate_wait_ms)
+        self.assertAlmostEqual(3.0, timings.renewal_ms)
+        self.assertAlmostEqual(7.0, timings.network_ms)
+        self.assertEqual(0.0, timings.disk_read_ms)
+        self.assertEqual(0.0, timings.disk_write_ms)
+        self.assertEqual(1, timings.network_reads)
+        self.assertFalse(session._request_gate.locked())
+        self.assertFalse(session._busy)
+
+    def test_media_timings_count_both_refused_304_transport_attempts(self) -> None:
+        """Include the authorized unconditional retry in one timing record.
+
+        Returns:
+            None: The refused 304 never supplies bytes; the fresh response
+                records two network attempts and one cache publication.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        stale_body, fresh_body = b'stale timing bytes', b'fresh timing bytes'
+        stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
+        fresh_etag = '"' + hashlib.sha256(fresh_body).hexdigest() + '"'
+        refusal = linking.LinkingResponseError(
+            'media', 'app_linking_media', 304, 'other', 'response_policy',
+            media_policy_facts=linking.MediaPolicyFacts(
+                'multiple', 'missing', True, True, None, True, False, False,
+                'not_requested', False, False,
+            ),
+        )
+        timings = linking.MediaReadTimings()
+        # Two cache clock pairs and two sets of three transport clock pairs.
+        ticks = tuple(step / 1000.0 for step in range(2 + 2 * 6 + 2))
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            key = cache.key(issuer, 4, 7, True)
+            self.assertTrue(cache.write(
+                key, stale_body, 'image/jpeg', stale_etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                cache, 'is_fresh', return_value=False,
+            ), mock.patch.object(
+                linking, '_run_linking_transport',
+                side_effect=(
+                    refusal, (fresh_body, 'image/jpeg', fresh_etag, True),
+                ),
+            ) as transport, mock.patch.object(
+                linking.time, 'perf_counter', side_effect=ticks,
+            ):
+                self.assertEqual(
+                    (fresh_body, 'image/jpeg'),
+                    session.media_photo(4, 7, True, timings=timings),
+                )
+            self.assertEqual(2, transport.call_count)
+            self.assertEqual(fresh_body, cache.read(key).body)
+        self.assertEqual('network', timings.source)
+        self.assertEqual(2, timings.network_reads)
+        self.assertAlmostEqual(1.0, timings.disk_read_ms)
+        self.assertAlmostEqual(1.0, timings.disk_write_ms)
+        self.assertAlmostEqual(2.0, timings.gate_wait_ms)
+        self.assertAlmostEqual(2.0, timings.renewal_ms)
+        self.assertAlmostEqual(2.0, timings.network_ms)
+
+    def test_media_timings_identify_authorized_304_revalidation(self) -> None:
+        """Distinguish live-authorized cached bytes from a fresh disk hit.
+
+        Returns:
+            None: A valid 304 records disk lookup, transport and metadata
+                revalidation, with no unconditional retry or new response body.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+            linking.GALLERIES_SCOPE,
+        )
+        body = b'revalidated timing bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        timings = linking.MediaReadTimings()
+        # Two cache pairs and the gate/renewal/transport pairs, one ms each.
+        ticks = tuple(step / 1000.0 for step in range(2 + 6 + 2))
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            self.assertTrue(cache.write(
+                cache.key(issuer, 4, 7, True), body, 'image/jpeg', etag,
+            ))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user',
+                return_value=cache,
+            ), mock.patch.object(
+                cache, 'is_fresh', return_value=False,
+            ), mock.patch.object(
+                linking, '_run_linking_transport',
+                return_value=(None, 'image/jpeg', etag, True),
+            ) as transport, mock.patch.object(
+                linking.time, 'perf_counter', side_effect=ticks,
+            ):
+                self.assertEqual(
+                    (body, 'image/jpeg'),
+                    session.media_photo(4, 7, True, timings=timings),
+                )
+                transport.assert_called_once()
+        self.assertEqual('revalidated', timings.source)
+        self.assertEqual(1, timings.network_reads)
+        self.assertAlmostEqual(1.0, timings.disk_read_ms)
+        self.assertAlmostEqual(1.0, timings.disk_write_ms)
+        self.assertAlmostEqual(1.0, timings.gate_wait_ms)
+        self.assertAlmostEqual(1.0, timings.renewal_ms)
+        self.assertAlmostEqual(1.0, timings.network_ms)
+
+    def test_media_timings_preserve_rejection_throttle_and_cancellation(self) -> None:
+        """Keep diagnostic observation passive on rejected and cancelled reads.
+
+        Returns:
+            None: Each adverse transport releases its gate, preserves unknown
+                byte source and cannot trigger a retry or cache publication.
+        """
+        for failure in (
+            linking.LinkingGrantRejected('Revoked.'),
+            linking.LinkingMediaThrottled(),
+            linking.LinkingError('Cancelled.'),
+        ):
+            with self.subTest(failure=type(failure).__name__):
+                session = linking.LinkingSession(
+                    'https://gallery.example/Galerie', 'pgla_' + 'A' * 43,
+                    time.monotonic() + linking.PHOTO_CACHE_FRESH_SECONDS,
+                    linking.GALLERIES_SCOPE,
+                )
+                cancelled = threading.Event()
+                timings = linking.MediaReadTimings()
+                # Model cancellation after a transport returns valid bytes;
+                # the real session must reject them at its own final fence.
+                transport_effect = (
+                    (lambda *_args, **_kwargs: (
+                        cancelled.set(),
+                        (b'late bytes', 'image/jpeg', None, False),
+                    )[1]) if type(failure) is linking.LinkingError else failure
+                )
+                with mock.patch.object(
+                    linking, '_run_linking_transport',
+                    side_effect=transport_effect,
+                ) as transport, mock.patch.object(
+                    linking.time, 'perf_counter',
+                    side_effect=(0.0, 0.001, 0.001, 0.002, 0.002, 0.003),
+                ):
+                    with self.assertRaises(type(failure)):
+                        session.media_photo(
+                            4, 7, True, cancelled, cache_eligible=False,
+                            timings=timings,
+                        )
+                    transport.assert_called_once()
+                self.assertEqual('unknown', timings.source)
+                self.assertEqual(1, timings.network_reads)
+                self.assertAlmostEqual(1.0, timings.network_ms)
+                self.assertFalse(session._request_gate.locked())
+                self.assertFalse(session._busy)
+                self.assertFalse(session._pending_gallery_cancels)
+                # Cancellation before dispatch cannot even start observation.
+                cancelled.set()
+                denied = linking.MediaReadTimings()
+                with self.assertRaises(linking.LinkingError):
+                    session.media_photo(
+                        4, 7, True, cancelled, cache_eligible=False,
+                        timings=denied,
+                    )
+                self.assertEqual(linking.MediaReadTimings(), denied)
 
     def test_gallery_preference_and_local_preparation_use_exact_issuer(self) -> None:
         """Persist a gallery pin and promote a current local byte on inspection.
@@ -2672,7 +3216,8 @@ class NativeMediaSessionTests(unittest.TestCase):
 
         Returns:
             None: A no-store conditional response receives one unconditional
-                transfer and does not write the resulting bytes to disk.
+                transfer and does not write the resulting bytes to disk;
+                passive timings classify the fresh body as network data.
         """
         issuer = 'https://gallery.example/Galerie'
         session = linking.LinkingSession(
@@ -2684,6 +3229,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         stale_etag = '"' + hashlib.sha256(stale_body).hexdigest() + '"'
         current_body = b'no-store current image bytes'
         current_etag = '"' + hashlib.sha256(current_body).hexdigest() + '"'
+        timings = linking.MediaReadTimings()
         with TemporaryDirectory() as directory:
             cache = linking.GalleryMediaCache(
                 Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
@@ -2702,13 +3248,18 @@ class NativeMediaSessionTests(unittest.TestCase):
                     (None, '', stale_etag, False),
                     (current_body, 'image/jpeg', current_etag, False),
                 ),
-            ) as read:
+            ) as read, mock.patch.object(cache, 'write') as write:
                 self.assertEqual(
                     (current_body, 'image/jpeg'),
-                    session.media_photo(4, 7, True),
+                    session.media_photo(4, 7, True, timings=timings),
                 )
+                write.assert_not_called()
             self.assertEqual(2, read.call_count)
-            self.assertEqual(mock.call(4, 'thumbnail', 7, None), read.call_args)
+            self.assertEqual(
+                mock.call(4, 'thumbnail', 7, None, timings=timings),
+                read.call_args,
+            )
+            self.assertEqual('network', timings.source)
 
     def test_conditional_304_retry_requires_exact_unencoded_refusal(self) -> None:
         """Retry only the exact safe 304 refusal without content encoding.
@@ -3126,7 +3677,8 @@ class NativeMediaSessionTests(unittest.TestCase):
         Returns:
             None: A verified private entry is reusable only with the negotiated
                 protocol, current eligible descriptor and exact account marker;
-                each use still performs a conditional server request.
+                each use still performs a conditional server request, including
+                when the caller supplies a passive timing record.
         """
         issuer = 'https://gallery.example/Galerie'
         gallery_id, photo_id, user_id = 4, 7, 42
@@ -3142,6 +3694,7 @@ class NativeMediaSessionTests(unittest.TestCase):
         photo = linking.LinkedPhoto(
             photo_id, 'Private', cache_eligible=False, preload_eligible=True,
         )
+        timings = linking.MediaReadTimings()
         with TemporaryDirectory() as directory:
             cache = linking.GalleryMediaCache(Path(directory), 1024)
             key = cache.private_key(issuer, user_id, gallery_id, photo_id, False)
@@ -3160,12 +3713,14 @@ class NativeMediaSessionTests(unittest.TestCase):
                     session.media_photo(
                         gallery_id, photo_id, False,
                         cache_eligible=False, preload_eligible=True,
+                        timings=timings,
                     ),
                 )
                 remote.assert_called_once_with(
                     gallery_id, 'photo', photo_id, None, etag,
-                    admin_preload=True,
+                    admin_preload=True, timings=timings,
                 )
+                self.assertEqual('revalidated', timings.source)
                 no_intent = linking.LinkingSession(
                     issuer, 'pgla_' + 'B' * 42 + 'A',
                     time.monotonic() + TEST_WORKER_WAIT_SECONDS,
@@ -3178,6 +3733,549 @@ class NativeMediaSessionTests(unittest.TestCase):
                 self.assertFalse(session.has_cached_photo(
                     gallery_id, dataclass_replace(photo, preload_eligible=False),
                 ))
+
+    def test_admin_first_view_caches_thumbnail_without_full_preload_intent(self) -> None:
+        """Cache a viewed thumbnail automatically in the bounded account pool.
+
+        Returns:
+            None: Viewed thumbnails persist and hit disk/RAM authority without
+                granting full-media intent or inheriting another account's pin.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+            admin_preload_supported=True,
+        )
+        session._bound_user_id = 42
+        body = b'first view verified image bytes'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
+            )
+            # A shared gallery pin must not move this account's automatic
+            # thumbnail outside the ordinary quota without its own opt-in.
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+            ), mock.patch.object(
+                session, '_media_read',
+                return_value=(body, 'image/jpeg', etag, True),
+            ) as remote:
+                result = session.media_photo(
+                    4, 7, True, cache_eligible=False, preload_eligible=True,
+                )
+                self.assertEqual((body, 'image/jpeg'), result)
+                remote.assert_called_once_with(
+                    4, 'thumbnail', 7, None, None, admin_preload=True,
+                )
+                self.assertFalse(session.gallery_preload_intent(4))
+                key = cache.private_key(issuer, 42, 4, 7, True)
+                self.assertIsNotNone(cache.read(key))
+                self.assertTrue(cache._entry_path(key).is_file())
+                count, used, _limit, ready, _error = cache.thumbnail_storage_snapshot()
+                self.assertTrue(ready)
+                self.assertEqual(1, count)
+                self.assertGreater(used, len(body))
+                verified_at = time.monotonic()
+                photo = linking.LinkedPhoto(
+                    7, 'Viewed photo', cache_eligible=False, nsfw=False,
+                    preload_eligible=True, preload_thumbnail_etag=etag,
+                    preload_verified_at=verified_at,
+                )
+                session._private_preload_proofs[4] = (
+                    42, verified_at, {7: (etag, verified_at, 1, None)}, False,
+                )
+                self.assertEqual(
+                    (body, 'image/jpeg'), session.cached_media_photo(4, photo),
+                )
+                self.assertTrue(session.has_cached_photo(4, photo, thumbnail=True))
+                self.assertTrue(session.prepare_cached_photo(4, photo, thumbnail=True))
+                self.assertIsNone(session.private_preload_cache_identity(4, photo))
+                self.assertIsNotNone(session.private_preload_cache_identity(
+                    4, photo, thumbnail=True,
+                ))
+                remote.assert_called_once()
+                remote.reset_mock()
+                self.assertEqual((body, 'image/jpeg'), session.media_photo(
+                    4, 7, False, cache_eligible=False, preload_eligible=True,
+                ))
+                full_key = cache.private_key(issuer, 42, 4, 7, False)
+                self.assertIsNone(cache.read(full_key))
+                self.assertFalse(session.gallery_preload_intent(4))
+                remote.return_value = (body, 'image/jpeg', etag, False)
+                session.media_photo(
+                    4, 8, True, cache_eligible=False, preload_eligible=True,
+                )
+                refused_key = cache.private_key(issuer, 42, 4, 8, True)
+                self.assertIsNone(cache.read(refused_key))
+
+    def test_cancelled_request_withdraws_while_another_owner_holds_gate(self) -> None:
+        """Remove an obsolete view's ticket before the active request finishes.
+
+        Returns:
+            None: Cancellation releases the waiting caller without admitting it
+                or requiring the current request to give up its serial slot.
+        """
+        gate = linking._FairRequestGate()
+        cancelled, finished = threading.Event(), threading.Event()
+        admitted: list[bool] = []
+        self.assertTrue(gate.acquire())
+
+        def wait_for_gate() -> None:
+            """Wait for serial admission until this obsolete view is cancelled.
+
+            Returns:
+                None: Records refusal and signals completion without owning a slot.
+            """
+            admitted.append(gate.acquire(cancelled=cancelled))
+            finished.set()
+
+        worker = threading.Thread(target=wait_for_gate, daemon=True)
+        worker.start()
+        try:
+            with gate._condition:
+                self.assertTrue(gate._condition.wait_for(
+                    lambda: bool(gate._waiters), TEST_WORKER_WAIT_SECONDS,
+                ))
+            cancelled.set()
+            self.assertTrue(finished.wait(TEST_WORKER_WAIT_SECONDS))
+            self.assertEqual([False], admitted)
+            self.assertTrue(gate.locked())
+        finally:
+            cancelled.set()
+            gate.release()
+            worker.join(TEST_WORKER_WAIT_SECONDS)
+
+    def test_newer_session_proof_reuses_full_body_for_older_view_descriptor(self) -> None:
+        """Reuse fresh full bytes after background metadata supersedes a view.
+
+        Returns:
+            None: A real newer ledger observation supplies authority and its
+                timestamp/epoch; stale, absent or changed proofs never do.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        # Purpose: Give the stale descriptor a positive monotonic timestamp
+        # even on a freshly booted VM with less than one proof window of uptime.
+        # Type: float. Units: seconds. Scope: this deterministic proof fixture.
+        # Consumers: session expiry and catalogue proof age checks below.
+        # Rationale: 120 seconds (two proof windows) leaves room for a stale
+        # positive observation without depending on host uptime or weakening
+        # the production fail-closed lower bound.
+        monotonic_clock = mock.patch.object(
+            linking.time, 'monotonic',
+            return_value=2.0 * linking.PHOTO_CACHE_FRESH_SECONDS,
+        )
+        monotonic_clock.start()
+        self.addCleanup(monotonic_clock.stop)
+        observed_at = time.monotonic()
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            observed_at + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+            admin_preload_supported=True,
+        )
+        session._bound_user_id = 42
+        thumbnail_etag = '"' + 'c' * 64 + '"'
+        # The mounted descriptor predates the freshness boundary. A subsequent
+        # authenticated page, represented by the ledger below, remains current.
+        descriptor_at = observed_at - linking.PHOTO_CACHE_FRESH_SECONDS - 1
+        photo = linking.LinkedPhoto(
+            7, 'Preloaded photo', cache_eligible=False, nsfw=False,
+            preload_eligible=True, preload_thumbnail_etag=thumbnail_etag,
+            preload_verified_at=descriptor_at,
+        )
+        body = b'verified full photo response'
+        full_etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            key = cache.private_key(issuer, 42, 4, 7, False)
+            self.assertTrue(cache.write(key, body, 'image/jpeg', full_etag))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+            ), mock.patch.object(session, '_media_read') as remote:
+                self.assertIsNone(session.cached_media_photo(4, photo, thumbnail=False))
+                session._private_preload_proofs[4] = (
+                    42, observed_at, {7: (thumbnail_etag, observed_at, 1, None)}, True,
+                )
+                self.assertEqual(
+                    (body, 'image/jpeg'),
+                    session.cached_media_photo(4, photo, thumbnail=False),
+                )
+                self.assertEqual(
+                    (42, thumbnail_etag, observed_at, 1),
+                    session.private_preload_cache_identity(4, photo),
+                )
+                session._private_preload_proofs[4] = (
+                    42, observed_at,
+                    {7: ('"' + 'd' * 64 + '"', observed_at, 2, None)}, True,
+                )
+                self.assertIsNone(session.cached_media_photo(4, photo, thumbnail=False))
+                session._private_preload_proofs[4] = (
+                    42, descriptor_at, {7: (thumbnail_etag, descriptor_at, 3, None)}, True,
+                )
+                self.assertIsNone(session.private_preload_cache_identity(4, photo))
+                remote.assert_not_called()
+
+    def test_preloaded_full_snapshots_skip_body_revalidation_in_the_viewer(self) -> None:
+        """Browse old downloaded full copies without refreshing their HTTP age.
+
+        Returns:
+            None: Four distinct saved photos use verified disk bytes, beyond the
+                viewer's three-image RAM bound. A normal preload-mode read still
+                revalidates the full representation through the server.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+            admin_preload_supported=True,
+        )
+        session._bound_user_id = 42
+        thumbnail_etag = '"' + 'c' * 64 + '"'
+        # Four separate bodies demonstrate disk reuse beyond the three-entry
+        # decoded detail cache. Epoch 100 deliberately predates HTTP freshness.
+        image_ids = (7, 8, 9, 10)
+        page_response = {
+            'gallery_id': 4, 'parent_id': None, 'next_after': None,
+            'photos': [{
+                'id': image_id, 'title': 'Downloaded photo',
+                'visibility': 'public', 'nsfw': False, 'cache_eligible': False,
+                'preload_eligible': True,
+                'preload_thumbnail_etag': thumbnail_etag,
+            } for image_id in image_ids],
+        }
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            gallery_key = cache.gallery_key(issuer, 4)
+            self.assertTrue(cache.set_gallery_pinned(issuer, 4, True))
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+            ), mock.patch.object(
+                linking, '_run_linking_transport', return_value=(
+                    json.dumps(page_response).encode(), 'application/json', None, False,
+                ),
+            ) as transport, mock.patch.object(
+                session, '_media_read', wraps=session._media_read,
+            ) as reads:
+                self.assertTrue(session.set_gallery_preload_intent(4, True))
+                page = session.media_page(4)
+                reads.reset_mock()
+                transport.reset_mock()
+                for photo in page.photos:
+                    body = f'downloaded full version {photo.image_id}'.encode()
+                    etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+                    key = cache.private_key(issuer, 42, 4, photo.image_id, False)
+                    self.assertTrue(cache.write(
+                        key, body, 'image/jpeg', etag, now=100,
+                        gallery_key=gallery_key,
+                    ))
+                    original = cache.read(key, gallery_key=gallery_key)
+                    self.assertFalse(cache.is_fresh(original))
+                    self.assertIsNone(session.cached_media_photo(
+                        4, photo, thumbnail=False,
+                    ))
+                    self.assertEqual((body, 'image/jpeg'), session.cached_media_photo(
+                        4, photo, thumbnail=False, use_preloaded_snapshot=True,
+                    ))
+                    timings = linking.MediaReadTimings()
+                    self.assertEqual((body, 'image/jpeg'), session.media_photo(
+                        4, photo.image_id, False,
+                        cache_eligible=photo.cache_eligible,
+                        preload_eligible=photo.preload_eligible,
+                        preload_thumbnail_etag=photo.preload_thumbnail_etag,
+                        preload_verified_at=photo.preload_verified_at,
+                        use_preloaded_snapshot=True, timings=timings,
+                    ))
+                    self.assertEqual('disk', timings.source)
+                    self.assertEqual(0, timings.network_reads)
+                    self.assertFalse(timings.cache_stored)
+                    after_read = cache.read(key, gallery_key=gallery_key)
+                    self.assertEqual(original.stored_at, after_read.stored_at)
+                    self.assertEqual(
+                        original.file_info.st_mtime_ns,
+                        after_read.file_info.st_mtime_ns,
+                    )
+                reads.assert_not_called()
+                transport.assert_not_called()
+
+                # Explicit Preload keeps the default HTTP mode, even though
+                # the viewer can display these same downloaded bytes directly.
+                photo = page.photos[-1]
+                transport.return_value = (None, '', etag, True)
+                timings = linking.MediaReadTimings()
+                self.assertEqual((body, 'image/jpeg'), session.media_photo(
+                    4, photo.image_id, False,
+                    cache_eligible=photo.cache_eligible,
+                    preload_eligible=photo.preload_eligible,
+                    preload_thumbnail_etag=photo.preload_thumbnail_etag,
+                    preload_verified_at=photo.preload_verified_at,
+                    timings=timings,
+                ))
+                self.assertEqual('photo', reads.call_args.args[1])
+                self.assertEqual(etag, reads.call_args.args[4])
+                self.assertEqual('revalidated', timings.source)
+                self.assertTrue(timings.cache_stored)
+                transport.assert_called_once()
+
+    def test_snapshot_refreshes_one_catalogue_page_for_neighboring_full_photos(self) -> None:
+        """Renew access metadata once while keeping downloaded full bodies local.
+
+        Returns:
+            None: Expired page authority refreshes its original cursor, then
+                neighboring images use that fresh page with no binary GET. An
+                older mounted descriptor cannot prevent the saved-version read.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+            admin_preload_supported=True,
+        )
+        session._bound_user_id = 42
+        thumbnail_etag = '"' + 'c' * 64 + '"'
+        page_response = {
+            'gallery_id': 4, 'parent_id': None, 'next_after': None,
+            'photos': [{
+                'id': image_id, 'title': 'Downloaded photo',
+                'visibility': 'private', 'nsfw': False, 'cache_eligible': False,
+                'preload_eligible': True,
+                'preload_thumbnail_etag': thumbnail_etag,
+            } for image_id in (7, 8)],
+        }
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            body = b'downloaded full version'
+            etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+            ), mock.patch.object(
+                linking, '_run_linking_transport', return_value=(
+                    json.dumps(page_response).encode(), 'application/json', None, False,
+                ),
+            ) as transport, mock.patch.object(
+                session, '_media_read', wraps=session._media_read,
+            ) as reads:
+                self.assertTrue(session.set_gallery_preload_intent(4, True))
+                # This page starts after another page. Its exact cursor must
+                # survive expiry rather than always refreshing the first page.
+                page = session.media_page(4, 5)
+                for photo in page.photos:
+                    self.assertTrue(cache.write(
+                        cache.private_key(issuer, 42, 4, photo.image_id, False),
+                        body, 'image/jpeg', etag, now=100,
+                    ))
+                proof = session._private_preload_proofs[4]
+                expired_at = time.monotonic() - linking.PHOTO_CACHE_FRESH_SECONDS - 1
+                session._private_preload_proofs[4] = (
+                    proof[0], expired_at,
+                    {image_id: (row[0], expired_at, row[2], row[3])
+                     for image_id, row in proof[2].items()},
+                    proof[3],
+                )
+                reads.reset_mock()
+                transport.reset_mock()
+                self.assertIsNone(session.cached_media_photo(
+                    4, page.photos[0], thumbnail=False, use_preloaded_snapshot=True,
+                ))
+                reads.assert_not_called()
+                # The current catalogue can describe a changed representation.
+                # Snapshot mode deliberately displays the downloaded version;
+                # explicit Preload is responsible for refreshing that content.
+                for row in page_response['photos']:
+                    row['preload_thumbnail_etag'] = '"' + 'd' * 64 + '"'
+                transport.return_value = (
+                    json.dumps(page_response).encode(), 'application/json', None, False,
+                )
+                for index, photo in enumerate(page.photos):
+                    timings = linking.MediaReadTimings()
+                    self.assertEqual((body, 'image/jpeg'), session.media_photo(
+                        4, photo.image_id, False,
+                        cache_eligible=photo.cache_eligible,
+                        preload_eligible=photo.preload_eligible,
+                        preload_thumbnail_etag=photo.preload_thumbnail_etag,
+                        preload_verified_at=photo.preload_verified_at,
+                        use_preloaded_snapshot=True, timings=timings,
+                    ))
+                    self.assertEqual('disk', timings.source)
+                    self.assertEqual(1 if index == 0 else 0, timings.network_reads)
+                    entry = cache.read(cache.private_key(
+                        issuer, 42, 4, photo.image_id, False,
+                    ))
+                    self.assertEqual(100, entry.stored_at)
+                self.assertEqual([('photos', 5)], [
+                    call.args[1:3] for call in reads.call_args_list
+                ])
+                transport.assert_called_once()
+
+    def test_full_snapshot_rejects_lost_authority_and_damaged_files(self) -> None:
+        """Preserve live access, account, opt-in and integrity gates for snapshots.
+
+        Returns:
+            None: Lost authorization or a damaged local body never returns the
+                saved bytes. Cache-only reads never repair authority over HTTP.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        body = b'saved full photo'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        page_response = {
+            'gallery_id': 4, 'parent_id': None, 'next_after': None,
+            'photos': [{
+                'id': 7, 'title': 'Downloaded photo', 'visibility': 'private',
+                'nsfw': False, 'cache_eligible': False,
+                'preload_eligible': True, 'preload_thumbnail_etag': etag,
+            }],
+        }
+        cases = (
+            'account', 'optout', 'missing_row', 'stale_page', 'nsfw',
+            'corrupt', 'cancelled', 'expired', 'closed',
+        )
+        for case in cases:
+            with self.subTest(case=case), TemporaryDirectory() as directory:
+                session = linking.LinkingSession(
+                    issuer, 'pgla_' + 'A' * 43,
+                    time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+                    linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+                    admin_preload_supported=True,
+                )
+                session._bound_user_id = 42
+                cache = linking.GalleryMediaCache(
+                    Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+                )
+                key = cache.private_key(issuer, 42, 4, 7, False)
+                cancelled = threading.Event()
+                with mock.patch.object(
+                    linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+                ), mock.patch.object(
+                    linking, '_run_linking_transport', return_value=(
+                        json.dumps(page_response).encode(), 'application/json', None, False,
+                    ),
+                ) as transport:
+                    self.assertTrue(session.set_gallery_preload_intent(4, True))
+                    photo = session.media_page(4).photos[0]
+                    self.assertTrue(cache.write(key, body, 'image/jpeg', etag, now=100))
+                    if case == 'account':
+                        session._bound_user_id = 43
+                    elif case == 'optout':
+                        self.assertTrue(session.set_gallery_preload_intent(4, False))
+                    elif case == 'missing_row':
+                        session._private_preload_proofs[4][2].pop(7)
+                    elif case == 'stale_page':
+                        row = session._private_preload_proofs[4][2][7]
+                        session._private_preload_proofs[4][2][7] = (
+                            row[0], row[1] - linking.PHOTO_CACHE_FRESH_SECONDS - 1,
+                            row[2], row[3],
+                        )
+                    elif case == 'nsfw':
+                        denied = {**page_response, 'photos': [{
+                            **page_response['photos'][0], 'nsfw': True,
+                            'preload_eligible': False, 'preload_thumbnail_etag': None,
+                        }]}
+                        transport.return_value = (
+                            json.dumps(denied).encode(), 'application/json', None, False,
+                        )
+                        session.media_page(4)
+                    elif case == 'corrupt':
+                        path = cache.read(key).path
+                        stored = path.read_bytes()
+                        path.write_bytes(stored[:-1] + bytes([stored[-1] ^ 1]))
+                    elif case == 'cancelled':
+                        cancelled.set()
+                    elif case == 'expired':
+                        session._expires_at = time.monotonic() - 1
+                    else:
+                        session.close()
+                    transport.reset_mock()
+                    options = {
+                        'thumbnail': False, 'use_preloaded_snapshot': True,
+                        'cancelled': cancelled,
+                    }
+                    if case in ('cancelled', 'expired', 'closed'):
+                        with self.assertRaises(linking.LinkingError):
+                            session.cached_media_photo(4, photo, **options)
+                    else:
+                        self.assertIsNone(session.cached_media_photo(4, photo, **options))
+                    transport.assert_not_called()
+
+    def test_full_snapshot_propagates_catalogue_refusal_without_stale_fallback(self) -> None:
+        """Reject a saved full copy when live catalogue authorization is refused.
+
+        Returns:
+            None: An authenticated 403 during page refresh invalidates the old
+                proof and never returns the stored body or starts a binary read.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        session = linking.LinkingSession(
+            issuer, 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS,
+            linking.GALLERIES_SCOPE + linking.ADMIN_MEDIA_SCOPE_SUFFIX,
+            admin_preload_supported=True,
+        )
+        session._bound_user_id = 42
+        body = b'previously downloaded full photo'
+        etag = '"' + hashlib.sha256(body).hexdigest() + '"'
+        with TemporaryDirectory() as directory:
+            cache = linking.GalleryMediaCache(
+                Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+            )
+            with mock.patch.object(
+                linking.GalleryMediaCache, 'for_current_user', return_value=cache,
+            ), mock.patch.object(
+                session, '_media_read', side_effect=linking.LinkingResponseError(
+                    'media', 'app_linking_media', 403, 'other', 'http_status',
+                ),
+            ) as reads:
+                self.assertTrue(session.set_gallery_preload_intent(4, True))
+                self.assertTrue(cache.write(
+                    cache.private_key(issuer, 42, 4, 7, False),
+                    body, 'image/jpeg', etag, now=100,
+                ))
+                expired_at = time.monotonic() - linking.PHOTO_CACHE_FRESH_SECONDS - 1
+                session._private_preload_proofs[4] = (
+                    42, expired_at, {7: (etag, expired_at, 1, None)}, True,
+                )
+                with self.assertRaises(linking.LinkingResponseError):
+                    session.media_photo(
+                        4, 7, False, cache_eligible=False, preload_eligible=True,
+                        preload_thumbnail_etag=etag, preload_verified_at=expired_at,
+                        use_preloaded_snapshot=True,
+                    )
+                self.assertNotIn(4, session._private_preload_proofs)
+                self.assertEqual(['photos'], [
+                    call.args[1] for call in reads.call_args_list
+                ])
+
+    def test_binary_refusal_diagnostic_retains_only_a_fixed_stage(self) -> None:
+        """Keep binary framing refusals distinguishable after transport wrapping.
+
+        Returns:
+            None: The summary preserves its fixed validator stage while arbitrary
+                diagnostic values are rejected before they can be retained.
+        """
+        headers = linking.http.client.HTTPMessage()
+        headers['Cache-Control'] = 'no-store'
+        facts = linking._native_media_policy_facts(
+            headers, 'X-PHP-Gallery-Photo-Cache',
+            'private, max-age=60, must-revalidate', False,
+            binary_check='validator',
+        )
+        error = linking.LinkingResponseError(
+            'media', 'app_linking_media', 200, 'other', 'response_policy',
+            media_policy_facts=facts,
+        )
+        self.assertIn('binary:validator', error.safe_summary)
+        with self.assertRaises(ValueError):
+            dataclass_replace(facts, binary_check='raw server secret')
 
     def test_current_catalogue_proof_reuses_an_expired_thumbnail(self) -> None:
         """Read a matching old thumbnail before starting binary transport.
@@ -3758,6 +4856,561 @@ class NativeMediaSessionTests(unittest.TestCase):
 
 class NativeMediaTransportTests(unittest.TestCase):
     """Verify opt-in binary cache headers and conditional response handling."""
+
+    def _pooled_response(
+        self, body: bytes = b'{}', *, will_close: bool = False,
+    ) -> mock.MagicMock:
+        """Build one fully consumed bounded JSON response for pool fixtures.
+
+        Args:
+            body (bytes): Exact JSON bytes returned by the fake response.
+            will_close (bool): Whether the peer requests connection closure.
+
+        Returns:
+            mock.MagicMock: HTTPResponse-shaped object with observable state.
+        """
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.version = 11
+        response.headers = Message()
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Content-Length'] = str(len(body))
+        response.read.return_value = body
+        response.will_close = will_close
+        response.isclosed.return_value = True
+        return response
+
+    def _pooled_connection(
+        self, control: linking._LinkingTransportControl,
+        responses: tuple[mock.MagicMock, ...],
+        request_failures: tuple[Exception | None, ...] = (),
+    ) -> tuple[mock.MagicMock, mock.MagicMock]:
+        """Make a fake HTTP connection and socket owned by one request.
+
+        Args:
+            control (linking._LinkingTransportControl): Initial socket owner.
+            responses (tuple[mock.MagicMock, ...]): Ordered response fixtures.
+            request_failures (tuple[Exception | None, ...]): Optional ordered
+                send outcomes; None represents a successful send.
+
+        Returns:
+            tuple[mock.MagicMock, mock.MagicMock]: Client and socket spies.
+        """
+        connection = mock.MagicMock()
+        sock = mock.MagicMock()
+        connection.sock = None
+        connection._linking_control = control
+
+        def connect() -> None:
+            """Attach the fake socket to its first transport control.
+
+            Returns:
+                None: The connection now has a control-owned socket.
+            """
+            connection.sock = sock
+            control.set_socket(sock)
+
+        connection.connect.side_effect = connect
+        connection.getresponse.side_effect = responses
+        if request_failures:
+            connection.request.side_effect = request_failures
+        return connection, sock
+
+    def test_pool_reuses_one_client_for_sequential_gets(self) -> None:
+        """Reuse one consumed HTTP/1.1 connection across sequential GETs.
+
+        Returns:
+            None: Counts show one setup and two reuses with three safe responses.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        pool = linking._MediaConnectionPool()
+        controls = tuple(
+            linking._LinkingTransportControl(
+                time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
+            )
+            for _ in range(TEST_POOLED_GET_COUNT)
+        )
+        timings = tuple(linking.MediaReadTimings() for _ in controls)
+        responses = tuple(self._pooled_response() for _ in controls)
+        created: list[mock.MagicMock] = []
+
+        def make_connection(
+            _issuer: linking.SplitResult,
+            control: linking._LinkingTransportControl,
+            *, context: linking.ssl.SSLContext | None = None,
+        ) -> mock.MagicMock:
+            """Create one fake TLS client using the pool's context.
+
+            Args:
+                _issuer (linking.SplitResult): Parsed installation issuer.
+                control (linking._LinkingTransportControl): Current socket owner.
+                context (linking.ssl.SSLContext | None): Certificate context
+                    supplied by the pool.
+
+            Returns:
+                mock.MagicMock: Client with one queued response per GET.
+            """
+            client, _sock = self._pooled_connection(control, responses)
+            created.append(client)
+            return client
+
+        with mock.patch.object(
+            linking.ssl, 'create_default_context', return_value=mock.Mock(),
+        ) as context_factory, mock.patch.object(
+            linking, '_linking_connection', side_effect=make_connection,
+        ):
+            for control, timing in zip(controls, timings, strict=True):
+                self.assertEqual(
+                    (b'{}', 'application/json', None, False),
+                    linking._native_media_read_once(
+                        issuer,
+                        'page=app_linking_media&gallery_id=4&kind=photos',
+                        'opaque-test-bearer', ('application/json',), control,
+                        pool=pool, timings=timing,
+                    ),
+                )
+
+        self.assertEqual(1, len(created))
+        self.assertEqual(1, context_factory.call_count)
+        self.assertIs(pool._context, context_factory.return_value)
+        self.assertEqual([0, 1, 1], [row.connection_reuses for row in timings])
+        self.assertEqual([1, 1, 1], [row.http_requests for row in timings])
+        self.assertEqual([0, 0, 0], [row.tls_handshakes for row in timings])
+        self.assertEqual(TEST_POOLED_GET_COUNT, sum(
+            row.http_requests for row in timings
+        ))
+        self.assertEqual(1, len(created))
+        measurement = {
+            'runtime': sys.version,
+            'platform': sys.platform,
+            'fixture': (
+                'Simulated HTTPS client and SSLContext; one fake connected '
+                'socket; no real TCP connection or TLS handshake.'
+            ),
+            'requests': sum(row.http_requests for row in timings),
+            'connections': len(created),
+            'tls_handshakes': sum(row.tls_handshakes for row in timings),
+            'connection_reuses': sum(
+                row.connection_reuses for row in timings
+            ),
+            'context_setup_calls': context_factory.call_count,
+            'phase_ms': {
+                'context': sum(row.context_ms for row in timings),
+                'dns': sum(row.dns_ms for row in timings),
+                'tcp': sum(row.tcp_ms for row in timings),
+                'tls': sum(row.tls_ms for row in timings),
+                'ttfb': sum(row.ttfb_ms for row in timings),
+                'body': sum(row.body_ms for row in timings),
+            },
+        }
+        measurement_path = (
+            WINAPP_DIR.parent / 'cache' / 'test-audit'
+            / 'photos-transport-measurement.json'
+        )
+        measurement_path.parent.mkdir(parents=True, exist_ok=True)
+        measurement_path.write_text(
+            json.dumps(measurement, indent=2) + '\n', encoding='utf-8',
+        )
+        pool.discard(close=True)
+
+    def test_loopback_server_observes_one_tcp_connection_for_three_gets(self) -> None:
+        """Measure real local HTTP/1.1 keepalive without external traffic.
+
+        Returns:
+            None: Three complete GETs use one accepted loopback socket; timing
+                values remain observations without a speed threshold.
+        """
+        class CountingServer(http.server.ThreadingHTTPServer):
+            """Count accepted TCP connections for this isolated fixture."""
+
+            daemon_threads = True
+
+            def __init__(
+                self, address: tuple[str, int],
+                handler: type[http.server.BaseHTTPRequestHandler],
+            ) -> None:
+                """Initialize synchronized fixture counters before serving.
+
+                Args:
+                    address (tuple[str, int]): Loopback host and ephemeral port.
+                    handler (type[http.server.BaseHTTPRequestHandler]): Fixture
+                        protocol handler.
+
+                Returns:
+                    None: Creates a threaded local-only HTTP server.
+                """
+                self.accepted_connections = 0
+                self.request_count = 0
+                self.counter_lock = threading.Lock()
+                super().__init__(address, handler)
+
+            def get_request(self) -> tuple[socket.socket, tuple[str, int]]:
+                """Count each accepted client socket before returning it.
+
+                Returns:
+                    tuple[socket.socket, tuple[str, int]]: Accepted connection
+                        and its numeric peer address.
+                """
+                request, peer = super().get_request()
+                with self.counter_lock:
+                    self.accepted_connections += 1
+                return request, peer
+
+        class JsonHandler(http.server.BaseHTTPRequestHandler):
+            """Serve one bounded no-store JSON body with HTTP/1.1 framing."""
+
+            protocol_version = 'HTTP/1.1'
+
+            def do_GET(self) -> None:
+                """Count one GET and return a complete persistent response.
+
+                Returns:
+                    None: Writes a two-byte no-store JSON object to the client.
+                """
+                server = self.server
+                with server.counter_lock:
+                    server.request_count += 1
+                body = b'{}'
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Cache-Control', 'no-store')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+        server = CountingServer(('127.0.0.1', 0), JsonHandler)
+        server.daemon_threads = True
+        serve_thread = threading.Thread(
+            target=server.serve_forever, name='LinkingPoolLoopbackFixture',
+            daemon=True,
+        )
+        serve_thread.start()
+        pool = linking._MediaConnectionPool()
+        timings = tuple(
+            linking.MediaReadTimings() for _ in range(TEST_POOLED_GET_COUNT)
+        )
+        issuer = f'http://localhost:{server.server_port}/Galerie'
+        native_getaddrinfo = socket.getaddrinfo
+
+        # Zero defaults mirror socket.getaddrinfo's unspecified family/type/
+        # protocol/flags. The fixture fixes only the IPv4 listener identity,
+        # avoiding an unrelated refused IPv6 peer on Windows.
+        def resolve_fixture_host(
+            host: str | bytes, port: int | str | None,
+            family: int = 0, type: int = 0, proto: int = 0, flags: int = 0,
+        ) -> list[tuple[int, int, int, str, tuple[str, int]]]:
+            """Resolve the expected fixture host through native IPv4 DNS logic.
+
+            Args:
+                host (str | bytes): Host requested by the production transport.
+                port (int | str | None): Requested local server port.
+                family (int): Address family requested by the transport.
+                type (int): Socket type requested by the transport.
+                proto (int): Protocol number requested by the transport.
+                flags (int): Resolver flags passed by the transport.
+
+            Returns:
+                list[tuple[int, int, int, str, tuple[str, int]]]: Native
+                    resolver answers constrained to the server's IPv4 family.
+
+            Raises:
+                AssertionError: The transport does not target this local fixture.
+            """
+            if (host != 'localhost' or port != server.server_port):
+                raise AssertionError('Unexpected loopback fixture resolver target.')
+            return native_getaddrinfo(
+                '127.0.0.1', port, family, type, proto, flags,
+            )
+
+        try:
+            with mock.patch.object(
+                linking.socket, 'getaddrinfo', side_effect=resolve_fixture_host,
+            ):
+                for timing in timings:
+                    result = linking._run_linking_transport(
+                        lambda control: linking._native_media_read_once(
+                            issuer,
+                            'page=app_linking_media&gallery_id=4&kind=photos',
+                            'opaque-test-bearer', ('application/json',), control,
+                            pool=pool, timings=timing,
+                        ),
+                        None,
+                        TEST_WORKER_WAIT_SECONDS,
+                        linking.LINKING_SOCKET_TIMEOUT_SECONDS,
+                        phase='media', route='app_linking_media',
+                    )
+                    self.assertEqual(
+                        (b'{}', 'application/json', None, False), result,
+                    )
+
+            self.assertEqual(1, server.accepted_connections)
+            self.assertEqual(TEST_POOLED_GET_COUNT, server.request_count)
+            self.assertEqual([1, 0, 0], [row.connections for row in timings])
+            self.assertEqual([0, 1, 1], [row.connection_reuses for row in timings])
+            self.assertEqual([0, 0, 0], [row.tls_handshakes for row in timings])
+            measurement = {
+                'runtime': sys.version,
+                'platform': sys.platform,
+                'fixture': (
+                    'Real disposable IPv4 loopback HTTP/1.1; accepted TCP socket '
+                    'counted by the fixture; native resolver constrained to '
+                    '127.0.0.1; no TLS or external network.'
+                ),
+                'requests': sum(row.http_requests for row in timings),
+                'connections': server.accepted_connections,
+                'tls_handshakes': sum(row.tls_handshakes for row in timings),
+                'connection_reuses': sum(
+                    row.connection_reuses for row in timings
+                ),
+                'context_setup_calls': 0,
+                'phase_ms': {
+                    'context': sum(row.context_ms for row in timings),
+                    'dns': sum(row.dns_ms for row in timings),
+                    'tcp': sum(row.tcp_ms for row in timings),
+                    'tls': sum(row.tls_ms for row in timings),
+                    'ttfb': sum(row.ttfb_ms for row in timings),
+                    'body': sum(row.body_ms for row in timings),
+                },
+            }
+            measurement_path = (
+                WINAPP_DIR.parent / 'cache' / 'test-audit'
+                / 'photos-loopback-measurement.json'
+            )
+            measurement_path.parent.mkdir(parents=True, exist_ok=True)
+            measurement_path.write_text(
+                json.dumps(measurement, indent=2) + '\n', encoding='utf-8',
+            )
+        finally:
+            pool.discard(close=True)
+            server.shutdown()
+            serve_thread.join(timeout=TEST_WORKER_WAIT_SECONDS)
+            server.server_close()
+
+    def test_close_header_forces_fresh_socket_but_reuses_context(self) -> None:
+        """Honor server close while reusing the session TLS configuration.
+
+        Returns:
+            None: The second GET has a fresh client and identical SSLContext.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        pool = linking._MediaConnectionPool()
+        context = mock.Mock()
+        controls = tuple(
+            linking._LinkingTransportControl(
+                time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
+            )
+            for _ in range(2)
+        )
+        responses = (
+            self._pooled_response(will_close=True), self._pooled_response(),
+        )
+        contexts: list[object] = []
+        response_index = 0
+
+        def make_connection(
+            _issuer: linking.SplitResult,
+            control: linking._LinkingTransportControl,
+            *, context: linking.ssl.SSLContext | None = None,
+        ) -> mock.MagicMock:
+            """Create a fake client and record its context identity.
+
+            Args:
+                _issuer (linking.SplitResult): Parsed installation issuer.
+                control (linking._LinkingTransportControl): Current socket owner.
+                context (linking.ssl.SSLContext | None): Shared verified context.
+
+            Returns:
+                mock.MagicMock: Fresh connection with a queued response.
+            """
+            nonlocal response_index
+            contexts.append(context)
+            response = responses[response_index]
+            response_index += 1
+            return self._pooled_connection(control, (response,))[0]
+
+        with mock.patch.object(
+            linking.ssl, 'create_default_context', return_value=context,
+        ) as context_factory, mock.patch.object(
+            linking, '_linking_connection', side_effect=make_connection,
+        ) as factory:
+            for control in controls:
+                linking._native_media_read_once(
+                    issuer,
+                    'page=app_linking_media&gallery_id=4&kind=photos',
+                    'opaque-test-bearer', ('application/json',), control,
+                    pool=pool,
+                )
+
+        self.assertEqual(2, factory.call_count)
+        self.assertEqual(1, context_factory.call_count)
+        self.assertEqual([context, context], contexts)
+        pool.discard(close=True)
+
+    def test_stale_borrow_retries_once_before_response(self) -> None:
+        """Retry a borrowed stale GET once while no response exists.
+
+        Returns:
+            None: One stale send is replaced by one new connection request.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        pool = linking._MediaConnectionPool()
+        first_control = linking._LinkingTransportControl(
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
+        )
+        first_client, _sock = self._pooled_connection(
+            first_control,
+            (self._pooled_response(), self._pooled_response()),
+            (None, http.client.RemoteDisconnected('stale socket')),
+        )
+        created: list[mock.MagicMock] = []
+        replacement_control: list[linking._LinkingTransportControl] = []
+        factory_calls = 0
+
+        def make_connection(
+            _issuer: linking.SplitResult,
+            control: linking._LinkingTransportControl,
+            *, context: linking.ssl.SSLContext | None = None,
+        ) -> mock.MagicMock:
+            """Create the replacement connection after stale detection.
+
+            Args:
+                _issuer (linking.SplitResult): Parsed installation issuer.
+                control (linking._LinkingTransportControl): Retry socket owner.
+                context (linking.ssl.SSLContext | None): Optional session context.
+
+            Returns:
+                mock.MagicMock: Replacement client with a complete response.
+            """
+            nonlocal factory_calls
+            factory_calls += 1
+            if factory_calls == 1:
+                created.append(first_client)
+                return first_client
+            replacement_control.append(control)
+            client, _sock = self._pooled_connection(
+                control, (self._pooled_response(),),
+            )
+            created.append(client)
+            return client
+
+        with mock.patch.object(
+            linking, '_linking_connection', side_effect=make_connection,
+        ):
+            linking._native_media_read_once(
+                issuer,
+                'page=app_linking_media&gallery_id=4&kind=photos',
+                'opaque-test-bearer', ('application/json',), first_control,
+                pool=pool,
+            )
+            retry_control = linking._LinkingTransportControl(
+                time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
+            )
+            timing = linking.MediaReadTimings()
+            result = linking._native_media_read_once(
+                issuer,
+                'page=app_linking_media&gallery_id=4&kind=photos',
+                'opaque-test-bearer', ('application/json',), retry_control,
+                pool=pool, timings=timing,
+            )
+
+        self.assertEqual((b'{}', 'application/json', None, False), result)
+        self.assertEqual(2, len(created))
+        self.assertEqual(2, first_client.request.call_count)
+        self.assertEqual(1, created[1].request.call_count)
+        self.assertEqual(2, timing.http_requests)
+        self.assertEqual(1, timing.connection_reuses)
+        self.assertEqual([retry_control], replacement_control)
+        self.assertIs(first_client._linking_control, retry_control)
+        pool.discard(close=True)
+
+    def test_incomplete_response_body_is_never_retried_or_retained(self) -> None:
+        """Discard an incomplete response instead of reusing or replaying it.
+
+        Returns:
+            None: One body read fails and leaves no idle pool connection.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        pool = linking._MediaConnectionPool()
+        control = linking._LinkingTransportControl(
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
+        )
+        response = self._pooled_response()
+        response.read.side_effect = http.client.IncompleteRead(b'{', 1)
+        connection, _sock = self._pooled_connection(control, (response,))
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            with self.assertRaises(http.client.IncompleteRead):
+                linking._native_media_read_once(
+                    issuer,
+                    'page=app_linking_media&gallery_id=4&kind=photos',
+                    'opaque-test-bearer', ('application/json',), control,
+                    pool=pool,
+                )
+        self.assertEqual(1, connection.request.call_count)
+        self.assertIsNone(pool._connection)
+        connection.close.assert_called_once()
+        pool.discard(close=True)
+
+    def test_late_old_control_cannot_close_socket_borrowed_by_new_control(self) -> None:
+        """Protect a successor's socket from late stop and finish calls.
+
+        Returns:
+            None: A released owner cannot close a socket borrowed by its successor.
+        """
+        issuer = linking.urlsplit('https://gallery.example/Galerie')
+        pool = linking._MediaConnectionPool()
+        old = linking._LinkingTransportControl(
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
+        )
+        sock = mock.MagicMock()
+        old.set_socket(sock)
+        connection = mock.MagicMock()
+        connection.sock = sock
+        self.assertTrue(pool.release(issuer, connection, old, 0))
+
+        current = linking._LinkingTransportControl(
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, None,
+        )
+        borrowed, reused, _epoch = pool.borrow(issuer, current)
+        self.assertIs(connection, borrowed)
+        self.assertTrue(reused)
+        old.stop()
+        old.finish()
+        sock.close.assert_not_called()
+        current.finish()
+        sock.close.assert_called_once()
+        pool.discard(close=True)
+
+    def test_pool_rejects_cancelled_expired_and_revoked_lease(self) -> None:
+        """Keep cancellation, expiry and epoch changes out of idle storage.
+
+        Returns:
+            None: No stale control can publish a connection into the pool.
+        """
+        issuer = linking.urlsplit('https://gallery.example/Galerie')
+        for mode in ('cancelled', 'expired', 'revoked'):
+            with self.subTest(mode=mode):
+                pool = linking._MediaConnectionPool()
+                deadline = (
+                    time.monotonic() - 1 if mode == 'expired'
+                    else time.monotonic() + TEST_WORKER_WAIT_SECONDS
+                )
+                control = linking._LinkingTransportControl(deadline, None)
+                sock = mock.MagicMock()
+                connection = mock.MagicMock()
+                connection.sock = sock
+                if mode == 'cancelled':
+                    control.set_socket(sock)
+                    control.stop()
+                elif mode == 'revoked':
+                    control.set_socket(sock)
+                    pool.discard()
+                self.assertFalse(pool.release(issuer, connection, control, 0))
+                self.assertIsNone(pool._connection)
+                pool.discard(close=True)
 
     def _response(
         self, status: int, headers: Message, body: bytes = b'',

@@ -484,6 +484,108 @@ class ModeCoordinatorTests(unittest.TestCase):
                 with self.assertRaises(ModeCoordinatorError):
                     self.owner.acquire_work(view, 'legacy')
 
+    def test_confirmed_revoke_work_hands_off_atomically_to_save(self) -> None:
+        """Keep admission closed from completed revoke through config readback.
+
+        Returns:
+            None: Only exact revoke work can authorize the exceptional save path.
+        """
+        view = self.owner.refresh()
+        completed = self.owner.acquire_work(view, 'legacy_revoke', self.config)
+        writes = []
+
+        def save() -> _ConfigPort:
+            """Save one fixture generation while admission is reserved.
+
+            Returns:
+                _ConfigPort: The same config owner at its next generation.
+            """
+            writes.append(True)
+            self.config.generation += 1
+            with self.assertRaises(ModeCoordinatorError):
+                self.owner.acquire_work(view, 'legacy', self.config)
+            return self.config
+
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.save_and_rebind(view, lambda: self.config)
+        self.assertEqual([], writes)
+        current = self.owner.save_and_rebind(
+            view, save, completed_work=completed,
+        )
+        self.assertEqual([True], writes)
+        self.assertEqual('legacy_unmigrated', current.state)
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.acquire_work(view, 'legacy', self.config)
+        with self.owner.acquire_work(current, 'legacy', self.config):
+            pass
+
+    def test_revoke_handoff_rejects_nonsole_and_stale_work(self) -> None:
+        """Require current revoke work with no child or peer at handoff.
+
+        Returns:
+            None: Failed handoff leaves the old lease active for cleanup.
+        """
+        view = self.owner.refresh()
+        ordinary = self.owner.acquire_work(view, 'legacy', self.config)
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.save_and_rebind(
+                view, lambda: self.config, completed_work=ordinary,
+            )
+        ordinary.close()
+
+        revoke = self.owner.acquire_work(view, 'legacy_revoke', self.config)
+        child = revoke.child()
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.save_and_rebind(
+                view, lambda: self.config, completed_work=revoke,
+            )
+        child.close()
+        peer = self.owner.acquire_work(view, 'legacy_revoke', self.config)
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.save_and_rebind(
+                view, lambda: self.config, completed_work=revoke,
+            )
+        peer.close()
+        revoke.close()
+
+        stale = self.owner.acquire_work(view, 'legacy_revoke', self.config)
+        stale.close()
+        current = self.owner.refresh()
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.save_and_rebind(
+                current, lambda: self.config, completed_work=stale,
+            )
+
+    def test_revoke_handoff_uncertain_save_stays_unavailable(self) -> None:
+        """Do not restore legacy admission after an uncertain revoke save.
+
+        Returns:
+            None: Failed save invalidates both the handed lease and old view.
+        """
+        view = self.owner.refresh()
+        completed = self.owner.acquire_work(view, 'legacy_revoke', self.config)
+
+        def fail_after_change() -> _ConfigPort:
+            """Make fixture persistence uncertain after changing generation.
+
+            Returns:
+                _ConfigPort: Unreachable because the callback raises.
+
+            Raises:
+                OSError: The fixture simulates uncertain persistence.
+            """
+            self.config.generation += 1
+            raise OSError('fixture save outcome unknown')
+
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.save_and_rebind(
+                view, fail_after_change, completed_work=completed,
+            )
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.view()
+        with self.assertRaises(ModeCoordinatorError):
+            self.owner.acquire_work(view, 'legacy', self.config)
+
     def test_rebind_preserves_active_linked_mode(self) -> None:
         """Preserve an already verified live mode across an idle config save.
 

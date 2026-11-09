@@ -2196,16 +2196,107 @@ Windows-Vollbildkürzel funktionieren auch mit NumLock, CapsLock und ScrollLock
 oder ohne Ziffernblock. Control/Alt-Kombinationen und Texteingabe bleiben
 erhalten. Große JPEG/MPO-Details verwenden vor der RGB-Zuweisung ein verkleinertes
 Dekoderraster bei demselben Limit von 36~Millionen Pixeln und derselben
-Anzeigegrenze. Überschreitet ein Detail weiterhin das Limit, kann eine
+Anzeigegrenze. Das gilt auch unterhalb der Pixelgrenze, wenn die Quelle größer
+als die Anzeige ist; unterstützte JPEG-Skalierung verkleinert vor der Konvertierung.
+Überschreitet ein Detail weiterhin das Limit, kann eine
 autorisierte Miniatur eine begrenzte Vorschau liefern, auch mit älteren
 Webversionen. Berechtigungsfehler, Abbruch, Drosselung und beschädigte Daten
 nutzen diesen Ersatz nicht. Kopierte Diagnostik enthält sichere Gründe,
 Abmessungen und Grenzen sowie eine getrennte begrenzte F/F11-Spur.
+Die erste autorisierte Fotoseite erscheint vor optionalen
+Präsentationseinstellungen über denselben Worker. Grün bedeutet verifizierte
+kodierte Dateien; Detaildekodierung und nötige private Serverprüfungen bleiben.
+Windows und macOS teilen diese Wege; installierte Latenz braucht einen Live-Test.
+Aktuelle Albumsnapshots derselben Sitzung erscheinen sofort, während der Server
+sie erneuert, ohne zusätzliche Sichtbarkeitsfilter im Client. Gleiche Zeilen
+behalten Kacheln und erhalten aktuelle Prüfzeiten. Große JPEG-Miniaturen
+verkleinern das Dekoderraster ebenfalls vor der RGB-Zuweisung.
+Das beschriftete Element links neben dem Watcher-Status zeigt alle typisierten
+gespeicherten Miniaturen und deren Bytes. Details trennen normale Quote und
+\ui{Keep preloaded} und führen aufbewahrte
+Miniaturen, andere Medien und Galerien getrennt auf. RAM bezeichnet nur Working Set
+dieses Windows-Prozesses oder Resident Set unter macOS; VRAM bleibt unbekannt.
+Das Fotoraster fasst wiederholte Scroll- und Layoutsignale in einer geplanten
+Ansichtsaktualisierung zusammen. Sichtbare Miniaturen haben Vorrang; ein
+begrenzter Puffer benachbarter Zeilen erleichtert schnelle Richtungswechsel.
+Dekodierung bleibt im Arbeits-Thread, Tk-Bildänderungen im GUI-Thread.
+Kopierte Diagnostik enthält Ereignis- und Aktualisierungszahlen, erzeugte und
+freigegebene Bilder, Cache-Treffer und die längste Ansichtsaktualisierung.
+Dies sind lokale Beobachtungen; flüssiges Scrollen bleibt manuell zu prüfen.
+Ein Worker übergibt fertige Miniaturen in begrenzten seriellen Gruppen ohne
+separates GUI-Polling zwischen Fotos. Fertige Ergebnisse und Treffer im
+dekodierten Cache werden in kleinen GUI-Schritten angewendet; vorrangige
+Aktionen und Ansichtswechsel unterbrechen verbleibende Lesevorgänge.
+Das Request-Gate der Sitzung steuert weiterhin authentifizierte Übertragungen.
+Die Diagnostik trennt Festplatte, Gate-Wartezeit, Anmeldeerneuerung,
+Medientransport, Dekodierung, Warteschlange und Tk-Anwendung. Kalte und warme
+Aufrufe getrennt vergleichen; diese Messungen belegen keine FPS.
+Aktuelle autorisierte Festplattentreffer verarbeitet ein eigener
+Disk-/Dekodier-Worker mit vier Ergebnisplätzen; Admin-Wiederverwendung benötigt
+einen frischen kontogebundenen Katalognachweis. Die dekodierte LRU zählt vier
+Bytes je Pixel
+innerhalb von 16~MiB und~256 Einträgen. Sichtbare Einträge haben Vorrang;
+Overscan verdrängt bei vollem Cache keine jüngste Historie. Tk-Bilder bleiben
+auf das zugelassene Zeilenband begrenzt.
+Serielle Medien-GETs können eine HTTP/1.1-Verbindung und einen verifizierenden
+SSLContext wiederverwenden; beide Serialisierungssperren bleiben erhalten.
+Nur vollständig gelesene und geprüfte Antworten erlauben Wiederverwendung.
+Serverseitiges Schließen, unvollständige Daten, Abbruch und Erneuerung
+verwerfen den Socket. Ein veralteter geliehener Socket darf vor einer Antwort
+einmal innerhalb seiner Frist neu verbinden. Die anfängliche Leerlaufgrenze
+beträgt 15~Sekunden; reale Hosting-Unterstützung und Latenz sind noch zu messen.
+Diagnostik trennt Requests, Verbindungen, TLS-Handshakes und verworfene Arbeit
+sowie Kontext, DNS, TCP, TLS, Header und Body.
+Das Cache-Menü bietet \textbf{Nur Vorschaubilder vorladen} für die ausgewählte
+direkte Galerie. Es setzt aktuelle autorisierte Cachedaten fort, gibt dem
+Durchsuchen Vorrang, beachtet Retry-After und lädt weder volle Fotos noch
+Untergalerien. Abschluss bedeutet keine vollständigen Lightbox-Dateien;
+\textbf{Galerie vorladen} behält seine bisherige Bedeutung mit beiden Varianten.
+Die erste Ansicht nutzt direkt das ausgehandelte verifizierte Admin-Protokoll;
+private Vollbilder benötigen weiterhin die ausdrückliche lokale Vorladeauswahl.
+Eine neuere autorisierte Seite mit gleichem Foto und starkem Validator kann
+einen älteren sichtbaren Datensatz mit ihrer tatsächlichen Prüfzeit bestätigen.
+Vollständiges Vorladen prüft alte gespeicherte Vollbilder erneut, statt sie nur
+wegen vorhandener Dateien zu überspringen. Eine gültige 304 erneuert das Alter
+ohne erneuten Body-Download; vollständige Dateien haben keine gemeinsame Frist.
+Aktuelles Foto oder Seite gehen Hintergrundaktualisierung vor. Überholte
+Bildabrufe werden abgebrochen; benachbarte Lightbox-Bilder gehen Rasterminiaturen
+vor. Verlassene Ansichten ziehen abgebrochene Tickets aus dem seriellen Gate.
+Beide Vorlademodi geben der aktuellen Ansicht vor Katalogseiten und Bildern Vorrang.
+Gesehene Miniaturen werden automatisch im kontogetrennten normalen Cache mit
+gemeinsamem Standardlimit 4~GiB gespeichert; fremde Galerie-Pins umgehen es nicht.
+Cache-Ereignisse erneuern die gemessene Anzahl vor langsameren Retained-/RAM-Werten.
+Vollständiges Vorladen zählt bestätigte Fotos bereits während der Übertragung
+und gleicht am Ende ab. Die Auswahl eines bereits vorgeladenen Nachbarbildes
+übernimmt dessen Ergebnis statt denselben Abruf neu zu starten. Die Diagnostik
+trennt Detail/Prefetch nach Disk, Netzwerk, 304, Bytes und RAM/Übernahme.
+Ein isolierter Windows-Pixelvergleich prüft die ruhende Ansicht nach Scrollen;
+er belegt weder beseitigte vorübergehende Streifen noch höhere FPS.
 Ein gemeinsamer Cache pro Benutzer speichert freigegebene Fotos und Titel mit
 verifizierten Inhaltsprüfsummen. Normale Vorschaubilder haben einen eigenen
-Bereich mit~256~MiB und~16\,384~Einträgen. Große Fotos und~Audio behalten
-1~GiB und~4\,096~Einträge. Jeder Bereich entfernt nur~seine ältesten Zugriffe;
-große Fotos verdrängen keine Vorschaubilder. Galerie-Aufbewahrung und~private
+Bereich mit standardmäßig 4~GiB und~262\,144~Einträgen. Große Fotos und~Audio behalten
+1~GiB und~4\,096~Einträge. Jeder Bereich entfernt nur~seine ältesten Zugriffe.
+
+Die kompakte Anzeige neben Watcher öffnet das gemeinsame Benutzerlimit
+1/2/4/8/16/32/64~GiB. Anzahl und Bytes umfassen normale und typisierte behaltene
+Miniaturen. Belegt/Limit im Detail zählt nur normale Dateien mit Headern;
+angeheftete Galerien, Detail/Audio und~decoded/Tk-Speicher
+bleiben getrennt. Laden oder unbekannt bedeutet weder null noch Offline-Zugriff.
+SQLite führt Summen unter dem vorhandenen Lock per Differenz nach. Unterbrochene
+Änderungen oder eine neue Verzeichnisgeneration verlangen begrenzten,
+abbrechbaren Metadatenabgleich außerhalb Tk; der Index ersetzt weder Zugriff
+noch SHA-256. Vorladen zeigt sofort Aktivität, auch bei Prüfungen,
+Foreground-Warten und~Retry-After. Verarbeitet, aktuelle Treffer und bestätigte
+Schreibvorgänge werden getrennt. Die Endprüfung nutzt nur exakt unveränderte
+verifizierte Dateiidentitäten. Fehlgeschlagene Writes und~no-store bestätigen
+keine Vollständigkeit. Serielles FIFO erhält Viewport/Watcher-Zugriff;
+spekulative Warm-Queues blockieren explizites Vorladen nicht dauerhaft.
+Hostingtempo und echte Variante verlangen einen vereinbarten Live-Test.
+Der rechte Inspector speichert seine eigene gewünschte Breite bei Ausblenden,
+Neustart und Resize. RAM ist nur der Working Set dieses Windows-Prozesses
+oder RSS unter macOS ohne Kindprozesse; Prozess-VRAM bleibt unbekannt.
+Decoded-Speicher bleibt auf~16~MiB begrenzt.
+Große Fotos verdrängen keine Vorschaubilder. Galerie-Aufbewahrung und~private
 Vorladeoptionen bleiben gemeinsam. Beim Aufheben der~Aufbewahrung wird zuerst
 Platz für~alle Zielkopien geprüft. Alte Vorschaubilder werden anhand ihrer
 exakten Variantenidentität ohne erneuerte Frische übernommen. Ein~passender Prüfwert aus
@@ -2232,8 +2323,24 @@ Ausdrückliches Vorladen mit einer Admin-Photos-Verknüpfung kann auf
 unterstützten Servern auch private Fotos und Entwürfe speichern. Foto,
 Galerie und sämtliche Vorfahren müssen nachweislich ohne NSFW-Beschränkung
 sein. Einstellung und private Dateien gehören zur Installation und zum
-verifizierten Konto. Vor jeder Anzeige prüft der Live-Server private Daten
-erneut, auch nach einem Neustart. Ältere Server und gewöhnliches geschütztes
+verifizierten Konto. Ein aktueller autorisierter Katalognachweis erlaubt für
+höchstens 60~Sekunden gleiche Miniaturen ohne weiteren Binärabruf. Normale
+HTTP-Abrufe von Vollbildern und ausdrückliches Vorladen erfordern weiterhin
+einen eigenen geprüften Inhalt innerhalb des 60-Sekunden-Frischefensters sowie
+die übliche 200/304-Prüfung. Der Vollbildbetrachter darf separat einen
+ausdrücklich heruntergeladenen Stand verwenden, wenn gespeicherte
+Vollbild-Vorladeabsicht, exakter Aussteller, verifiziertes Konto, Galerie und
+Foto, eine hashgeprüfte Datei sowie ein höchstens 60~Sekunden alter aktueller
+Katalognachweis übereinstimmen. Das ursprüngliche HTTP-Alter des geladenen
+Inhalts begrenzt diesen reinen Betrachterpfad nicht und wird nie umgeschrieben.
+Nach Ablauf des Seitennachweises wird die kleine Foto-Metadatenseite für die
+Gruppe erneuert, nicht jeder Bildinhalt. Fehlende oder beschädigte Dateien
+nutzen den normalen Serverabruf. Vorbereitete Details behalten 15~Sekunden;
+Anmeldung, Kontowechsel, Abbruch, bekannte Ablehnung und deaktivierte Auswahl
+blockieren die Wiederverwendung weiterhin. Fehlender Nachweis und
+Sitzungserneuerung nutzen sonst den normalen Serverweg. Spätere Änderungen
+werden beim nächsten autorisierten Abruf erkannt.
+Ältere Server und gewöhnliches geschütztes
 Browsing bleiben temporär. Eine serverseitige Wartezeit zeigt einen
 abbrechbaren Countdown; nach ausgeschöpften Versuchen bleiben fertige Dateien
 erhalten. Null gespeicherte Fotos zeigen einen sicheren Grund statt Teilerfolg.
@@ -2913,6 +3020,13 @@ Stoppen beendet die Überwachung, die zugehörige UTC-Synchronisierung und die
 Flugaufzeichnung, schließt danach angenommene Fotos und erforderliche
 Berichtübertragungen ab; nicht zugehörige KI-, manuelle Import- und
 Vorprüfungs-Worker laufen weiter. Stoppen lässt den Schlüssel bestehen.
+Explizites Flug/Spiel abschließen im Modus mit gespeichertem API-Schlüssel
+autorisiert zusätzlich den abschließenden Widerruf nach angenommener Arbeit.
+Das erfasste Revoke-Ticket bleibt bis zur Serverantwort aktiv und wird atomisch
+in die Konfigurationsreservierung überführt. Nur dieselbe Operation,
+Endpoint/Schlüssel und Konfigurationsgeneration dürfen ihn löschen; verspätete
+Ereignisse oder Schreibfehler löschen keinen neuen Schlüssel und melden keinen
+Erfolg. Ein laufendes gewöhnliches Stop muss vor einem neuen Finish enden.
 Ein bestätigter Widerruf führt dasselbe Stoppen aus, beendet zusätzlich andere
 authentisierte Produzenten, schließt angenommene Arbeit ab und fordert den
 galeriegebundenen Serverwiderruf erst nach den erforderlichen Bestätigungen an.
