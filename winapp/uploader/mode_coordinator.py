@@ -387,6 +387,7 @@ class ModeCoordinator:
     def save_and_rebind(
         self, expected: ModeView, save: Callable[[], ModeConfigPort],
         *, first_setup: bool = False,
+        completed_work: CoordinatedWork | None = None,
     ) -> ModeView:
         """Reserve admission across an explicit config save and its readback.
 
@@ -400,6 +401,9 @@ class ModeCoordinator:
             save (Callable[[], ModeConfigPort]): One config-owner save and
                 returned port for its accepted live configuration object.
             first_setup (bool): Permit missing-to-valid only on explicit setup.
+            completed_work (CoordinatedWork | None): Exact server-confirmed
+                legacy_revoke lifetime to exchange atomically for this save.
+                Ordinary saves omit it and still require fully idle admission.
 
         Returns:
             ModeView: New decision after complete config and vault readback.
@@ -413,7 +417,15 @@ class ModeCoordinator:
                     or (expected.state == 'first_setup' and not first_setup)):
                 raise ModeCoordinatorError('Upload mode evidence is unavailable.')
             try:
-                reservation = self._admission.begin_transition(expected)
+                if completed_work is None:
+                    reservation = self._admission.begin_transition(expected)
+                else:
+                    if completed_work._owner is not self or completed_work.view is not expected:
+                        raise ModeCoordinatorError('Revocation cleanup is unavailable.')
+                    self._checkpoint(completed_work)
+                    reservation = self._admission.begin_transition_from_work(
+                        completed_work._lease,
+                    )
             except RuntimeError:
                 raise ModeCoordinatorError('Upload mode work is active or stale.') from None
             self._healthy = False
@@ -856,13 +868,16 @@ class GuiModeOwner:
             return self._coordinator.acquire_work(self._view, kind, config)
 
     def save(self, save: Callable[[], ModeConfigPort], *,
-             first_setup: bool = False) -> None:
+             first_setup: bool = False,
+             completed_work: CoordinatedWork | None = None) -> None:
         """Serialize a GUI configuration save against all admitted work.
 
         Args:
             save (Callable[[], ModeConfigPort]): Sole-owner config write and
                 port bound to its successfully saved replacement object.
             first_setup (bool): True only for an explicit first setup save.
+            completed_work (CoordinatedWork | None): Exact confirmed revocation
+                lifetime handed atomically to the configuration save, or None.
 
         Returns:
             None: Keeps the same coordinator with a fresh owner-issued view.
@@ -874,8 +889,13 @@ class GuiModeOwner:
             if self._coordinator is None or self._view is None:
                 raise ModeCoordinatorError('Upload mode is unavailable.')
             try:
+                options = (
+                    {'completed_work': completed_work}
+                    if completed_work is not None else {}
+                )
                 self._view = self._coordinator.save_and_rebind(
                     self._view, save, first_setup=first_setup,
+                    **options,
                 )
             except Exception:
                 try:

@@ -164,3 +164,41 @@ class ModeAdmissionTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         with owner.begin_transition(view) as transition:
             self.assertEqual('unknown', transition.commit('unknown').state)
+
+    def test_revocation_handoff_requires_the_exact_sole_revoke_lease(self) -> None:
+        """Exchange only a sole current revoke lease for a transition.
+
+        Returns:
+            None: Foreign, stale, ordinary, child and peer leases are rejected.
+        """
+        owner = ModeAdmission('legacy_unmigrated')
+        view = owner.view()
+        ordinary = owner.acquire_work(view, 'legacy')
+        with self.assertRaises(ModeAdmissionError):
+            owner.begin_transition_from_work(ordinary)
+        ordinary.close()
+
+        revoke = owner.acquire_work(view, 'legacy_revoke')
+        child = revoke.child()
+        with self.assertRaises(ModeAdmissionError):
+            owner.begin_transition_from_work(revoke)
+        child.close()
+        peer = owner.acquire_work(view, 'legacy_revoke')
+        with self.assertRaises(ModeAdmissionError):
+            owner.begin_transition_from_work(revoke)
+        peer.close()
+
+        foreign_owner = ModeAdmission('legacy_unmigrated')
+        foreign = foreign_owner.acquire_work(
+            foreign_owner.view(), 'legacy_revoke',
+        )
+        with self.assertRaises(ModeAdmissionError):
+            owner.begin_transition_from_work(foreign)
+        foreign.close()
+
+        transition = owner.begin_transition_from_work(revoke)
+        with self.assertRaises(ModeAdmissionError):
+            owner.begin_transition_from_work(revoke)
+        self.assertEqual('unknown', transition.commit('unknown').state)
+        with self.assertRaises(ModeAdmissionError):
+            owner.acquire_work(view, 'legacy')

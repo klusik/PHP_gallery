@@ -15,6 +15,7 @@ import ctypes
 import gc
 import hashlib
 import io
+import json
 import queue
 import sys
 import threading
@@ -34,16 +35,21 @@ if str(WINAPP_DIR) not in sys.path:
 from uploader.app_linking import (
     LinkedGallery,
     LinkedGalleryPage,
+    LinkedGalleryTree,
     LinkedMediaPage,
     LinkedPhoto,
     LinkedPresentation,
     LinkedTrack,
+    LinkingMediaThrottled,
     LinkingMediaUnavailable,
     LinkingResponseError,
     LinkingSession,
+    MediaReadTimings,
+    NATIVE_MEDIA_DELETE_BATCH_MAX,
 )
 from uploader.flight_report_translations import tr
 from uploader.linked_create import BoundCreateReceipt, CreateJournalSnapshot
+from uploader.gallery_catalogue_cache import GalleryCatalogueSnapshot
 
 try:
     import tkinter as tk
@@ -91,6 +97,42 @@ TEST_GUI_POLL_SECONDS = 0.01
 # Rationale: 1.5 approximates a common high-DPI desktop scale.
 TEST_TK_SCALING = 1.5
 
+# Purpose: Keep the batch boundary regression just above one production slice.
+# Type: int. Units: gallery rows. Scope: cached catalogue rendering fixture.
+# Consumers: NativeGalleryViewerTests cached-tree UI regressions.
+# Rationale: One extra row proves later tree work yields to Tk.
+TEST_CATALOGUE_CACHE_ROWS = 65
+
+# Purpose: Give generated button clicks deterministic Windows event times.
+# Type: tuple[int, int]. Units: milliseconds. Scope: double-click Tk fixture.
+# Consumers: NativeGalleryViewerTests.test_grid_single_click_selects_and_double_click_opens_lightbox.
+# Rationale: Two presses 100 ms apart are inside ordinary Tk double-click timing.
+TEST_DOUBLE_CLICK_TIMES_MS = (3000, 3100)
+
+# Purpose: Place the independent single click outside the double-click pair.
+# Type: int. Units: milliseconds. Scope: one generated single-button click.
+# Consumers: NativeGalleryViewerTests.test_grid_single_click_selects_and_double_click_opens_lightbox.
+# Rationale: A two-second gap exceeds ordinary double-click recognition.
+TEST_SINGLE_CLICK_TIME_MS = 1000
+
+# Purpose: Exercise a real viewer whose visible band exceeds the old cache cap.
+# Type: tuple[int, int]. Units: pixels. Scope: large viewport regression root.
+# Consumers: test_large_viewport_return_reuses_decoded_visible_band.
+# Rationale: 1800 by 1200 exposes more than 48 fixed-size thumbnail tiles.
+TEST_WIDE_VIEWPORT_SIZE = (1800, 1200)
+
+# Purpose: Keep both ends of the large fixture vertically scrollable.
+# Type: int. Units: photos. Scope: one synthetic catalogue page.
+# Consumers: test_large_viewport_return_reuses_decoded_visible_band.
+# Rationale: 120 tiles exceed the chosen viewport while fitting RGB channels.
+TEST_WIDE_VIEWPORT_PHOTO_COUNT = 120
+
+# Purpose: Exercise viewport event coalescing without relying on machine speed.
+# Type: int. Units: synthetic Tk signals. Scope: one burst regression.
+# Consumers: test_thumbnails_follow_bounded_admitted_band.
+# Rationale: Twelve signals in one Tk turn must share one owned callback.
+TEST_VIEWPORT_EVENT_BURST = 12
+
 # Purpose: Bound the join of the cancellation-aware synthetic media worker.
 # Type: float. Units: seconds. Scope: parent-destruction cleanup test.
 # Consumers: NativeGalleryViewerTests.test_parent_destroy_cancels_pending_read.
@@ -128,10 +170,9 @@ TEST_WIDE_GRID_COLUMNS_MINIMUM = 4
 # Rationale: Narrow mode must retain a photo tile instead of clipping the grid.
 TEST_NARROW_GRID_COLUMNS_MINIMUM = 1
 
-# Purpose: Keep enough rows to measure mapped grid movement in pixels.
-# Type: int. Units: unique photos. Scope: mapped scroll test.
-# Consumers:
-#   NativeGalleryViewerTests.test_real_touchpad_packet_scrolls_grid_and_zoom.
+# Purpose: Keep enough rows to exercise viewport and thumbnail scheduling.
+# Type: int. Units: unique photos. Scope: native grid and pipeline fixtures.
+# Consumers: NativeGalleryViewerTests scroll and thumbnail batch regressions.
 # Rationale: Twenty-four photos exceed the viewport at the minimum test size.
 TEST_SCROLL_PHOTO_COUNT = 24
 
@@ -148,6 +189,12 @@ TEST_WHEEL_DELTA_UNITS = 120
 #   NativeGalleryViewerTests.test_real_touchpad_packet_scrolls_grid_and_zoom.
 # Rationale: 24 pixels is observable while still exposing proportional overscroll.
 TEST_TOUCHPAD_SCROLL_PIXELS = 24
+
+# Purpose: Keep a warm-cache slice fixture above one production GUI slice.
+# Type: int. Units: extra photos. Scope: isolated GUI-slice regression.
+# Consumers: test_warm_thumbnail_cache_copies_use_bounded_gui_slices.
+# Rationale: Two extra entries prove continuation without enlarging production.
+TEST_WARM_SLICE_EXTRA_PHOTOS = 2
 
 # Purpose: Allow pixel rounding when measuring normalized canvas movement.
 # Type: int. Units: pixels. Scope: precise scroll assertion.
@@ -174,6 +221,31 @@ TEST_PHOTO_LOCATION = (48.123456, 16.654321)
 # Consumers: NativeGalleryViewerTests._png.
 # Rationale: A small image verifies actual decode without unnecessary payload.
 TEST_SYNTHETIC_IMAGE_SIZE = (24, 16)
+
+# Purpose: Exercise draft decoding with a mocked 48 MP camera raster.
+# Type: tuple[int, int]. Units: source pixels. Scope: safe JPEG draft fixture.
+# Consumers: mocked and real oversized-JPEG decode regressions.
+# Rationale: 8000 by 6000 exceeds policy; only the real fixture allocates RGB.
+TEST_LARGE_JPEG_SOURCE_SIZE = (8000, 6000)
+
+# Purpose: Exercise a real JPEG above output bounds but below pixel policy.
+# Type: tuple[int, int]. Units: source pixels. Scope: detail draft regression.
+# Consumers: NativeGalleryViewerTests.test_medium_jpeg_drafts_before_rgb_conversion.
+# Rationale: 4096 by 3072 is twice each output dimension, allowing real JPEG
+# decoder half-scaling while remaining below the unchanged 36 MP policy.
+TEST_MEDIUM_JPEG_SOURCE_SIZE = (4096, 3072)
+
+# Purpose: Inject a compact threshold for a real Pillow JPEG draft regression.
+# Type: int. Units: pixels. Scope: small synthetic JPEG boundary test only.
+# Consumers: test_real_jpeg_draft_uses_reduced_decoder_raster.
+# Rationale: 100 by 80 is over this limit and draft can reduce it before RGB.
+TEST_DECODE_PIXEL_BOUNDARY = 5000
+
+# Purpose: Request decoder downsampling for the small real-JPEG test boundary.
+# Type: tuple[int, int]. Units: pixels. Scope: synthetic JPEG draft test only.
+# Consumers: test_real_jpeg_draft_uses_reduced_decoder_raster.
+# Rationale: Pillow's 1/4 JPEG draft fits this target and pixel boundary.
+TEST_DECODE_DRAFT_TARGET = (20, 16)
 
 # Purpose: Represent a wide photo surrounded by removable black side mattes.
 # Type: tuple[int, int]. Units: pixels. Scope: thumbnail framing regression.
@@ -237,6 +309,16 @@ class NativeGalleryViewerTests(unittest.TestCase):
         Returns:
             None: A mapped root is available to each native viewer test.
         """
+        # These widget tests inject storage observations explicitly. Avoid
+        # starting the background reader against the runner's real profile.
+        storage_poll = mock.patch.object(
+            photos_workspace.PhotosWorkspace, '_poll_storage', autospec=True,
+        )
+        self._storage_poll_callback = (
+            photos_workspace.PhotosWorkspace._poll_storage
+        )
+        storage_poll.start()
+        self.addCleanup(storage_poll.stop)
         self.root = tk.Tk()
         self.root.tk.call('tk', 'scaling', TEST_TK_SCALING)
         self.root.geometry('840x620')
@@ -275,6 +357,23 @@ class NativeGalleryViewerTests(unittest.TestCase):
             time.sleep(TEST_GUI_POLL_SECONDS)
         self.fail(message)
 
+    def _double_click_tile(self, tile: 'tk.Widget') -> None:
+        """Open a tile through two complete, timed Tk clicks.
+
+        Args:
+            tile (tk.Widget): Mounted gallery button receiving both clicks.
+
+        Returns:
+            None: The second click activates the existing lightbox binding.
+        """
+        for click_time in TEST_DOUBLE_CLICK_TIMES_MS:
+            tile.event_generate(
+                '<ButtonPress-1>', x=4, y=4, time=click_time,
+            )
+            tile.event_generate(
+                '<ButtonRelease-1>', x=4, y=4, time=click_time,
+            )
+
     def test_media_failure_log_omits_exception_message(self) -> None:
         """Keep sensitive exception text out of Photos diagnostics.
 
@@ -298,7 +397,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
 
         Returns:
             None: A media HTTP refusal keeps status and reason, while a local
-                decode error gets its own phase; neither retains secret text.
+                decode error gets its own phase and controlled timing; neither
+                retains secret text.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -321,7 +421,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         with self.assertLogs(
             native_gallery_viewer.__name__, level='WARNING',
         ) as captured:
-            self.assertEqual((0, None), viewer._load_thumbnails(page.photos, 0))
+            self.assertEqual((0, None, 0.0), viewer._load_thumbnails(page.photos, 0))
 
         self.assertIn('phase=media-fetch kind=thumbnail', captured.output[0])
         self.assertIn('http=504', summaries[0])
@@ -333,8 +433,13 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._prepare_thumbnail = mock.Mock(side_effect=ValueError(secret))
         with self.assertLogs(
             native_gallery_viewer.__name__, level='WARNING',
-        ) as captured:
-            self.assertEqual((0, None), viewer._load_thumbnails(page.photos, 0))
+        ) as captured, mock.patch.object(
+            native_gallery_viewer.time, 'perf_counter',
+            side_effect=(0.0, 0.003),
+        ):
+            result = viewer._load_thumbnails(page.photos, 0)
+            self.assertEqual((0, None), result[:2])
+            self.assertAlmostEqual(3.0, result[2])
 
         self.assertIn('phase=media-decode kind=thumbnail', captured.output[0])
         self.assertNotIn(secret, summaries[-1])
@@ -355,11 +460,549 @@ class NativeGalleryViewerTests(unittest.TestCase):
         with self.assertLogs(
             native_gallery_viewer.__name__, level='WARNING',
         ) as captured:
-            self.assertEqual((0, None), viewer._load_thumbnails(page.photos, 0))
+            self.assertEqual((0, None, 0.0), viewer._load_thumbnails(page.photos, 0))
         output = '\n'.join(captured.output)
         self.assertIn('error_type=RuntimeError', output)
         self.assertIn('diagnostic retention callback failed', output)
         self.assertNotIn(secret, output)
+
+    def test_full_detail_requests_saved_snapshot_but_thumbnail_does_not(self) -> None:
+        """Use the saved full-body mode only for native detail reads.
+
+        Returns:
+            None: A snapshot-backed detail records a disk source without HTTP;
+                the thumbnail request keeps the default network read mode.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        viewer.session = session
+        viewer.gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Snapshot detail')
+        viewer._cancelled = threading.Event()
+        photo = page.photos[0]
+        requested_modes: list[tuple[bool, bool]] = []
+
+        def read_snapshot_or_thumbnail(
+            gallery_id: int,
+            image_id: int,
+            thumbnail: bool,
+            cancelled: threading.Event | None = None,
+            *,
+            cache_eligible: bool | None = None,
+            thumbnail_etag: str | None = None,
+            thumbnail_verified_at: float | None = None,
+            preload_eligible: bool | None = None,
+            preload_thumbnail_etag: str | None = None,
+            preload_verified_at: float | None = None,
+            timings: MediaReadTimings | None = None,
+            use_preloaded_snapshot: bool = False,
+        ) -> tuple[bytes, str]:
+            """Return a verified saved body or a synthetic thumbnail response.
+
+            Args:
+                gallery_id (int): Requested physical gallery ID.
+                image_id (int): Requested synthetic photo ID.
+                thumbnail (bool): Whether the bounded preview was requested.
+                cancelled (threading.Event | None): Optional read cancellation.
+                cache_eligible (bool | None): Public cache admission metadata.
+                thumbnail_etag (str | None): Current thumbnail validator.
+                thumbnail_verified_at (float | None): Catalogue proof time.
+                preload_eligible (bool | None): Full-preload admission metadata.
+                preload_thumbnail_etag (str | None): Full-preload validator.
+                preload_verified_at (float | None): Full-preload proof time.
+                timings (MediaReadTimings | None): Mutable source observation.
+                use_preloaded_snapshot (bool): Whether an authorized full copy may
+                    be returned without a transport request.
+
+            Returns:
+                tuple[bytes, str]: Controlled synthetic PNG and media type.
+            """
+            self.assertEqual(TEST_GALLERY_ID, gallery_id)
+            self.assertEqual(photo.image_id, image_id)
+            requested_modes.append((thumbnail, use_preloaded_snapshot))
+            if timings is not None:
+                if use_preloaded_snapshot and not thumbnail:
+                    timings.source = 'disk'
+                    timings.cache_state = 'hit'
+                else:
+                    timings.source = 'network'
+                    timings.http_requests += 1
+                    timings.encoded_bytes += len(image_bytes[image_id])
+            return image_bytes[image_id], 'image/png'
+
+        session.media_photo.side_effect = read_snapshot_or_thumbnail
+        full_timings = MediaReadTimings()
+        body, _mime = viewer._read_photo_body(
+            photo, thumbnail=False, timings=full_timings,
+        )
+        self.assertEqual(image_bytes[photo.image_id], body)
+        self.assertEqual('disk', full_timings.source)
+        self.assertEqual(0, full_timings.http_requests)
+        self.assertEqual(0, full_timings.encoded_bytes)
+
+        thumbnail_timings = MediaReadTimings()
+        viewer._read_photo_body(
+            photo, thumbnail=True, timings=thumbnail_timings,
+        )
+        self.assertEqual([(False, True), (True, False)], requested_modes)
+        self.assertEqual('network', thumbnail_timings.source)
+        self.assertEqual(1, thumbnail_timings.http_requests)
+        self.assertGreater(thumbnail_timings.encoded_bytes, 0)
+
+    def test_large_jpeg_drafts_before_rgb_conversion(self) -> None:
+        """Draft oversized JPEG data before Pillow creates the RGB raster.
+
+        Returns:
+            None: The mocked 48 MP header is reduced below policy before the
+                conversion step and only bounded numeric facts are retained.
+        """
+        events: list[tuple[str, tuple[int, int]]] = []
+        source = mock.MagicMock()
+        source.__enter__.return_value = source
+        source.__exit__.return_value = False
+        source.format = 'JPEG'
+        source.size = TEST_LARGE_JPEG_SOURCE_SIZE
+        source.width, source.height = TEST_LARGE_JPEG_SOURCE_SIZE
+        converted = Image.new('RGB', (48, 36), (30, 50, 70))
+        self.addCleanup(converted.close)
+        summaries: list[str] = []
+
+        def draft(mode: str, target: tuple[int, int]) -> None:
+            """Apply the simulated decoder reduction before conversion.
+
+            Args:
+                mode (str): Pillow target mode requested by the viewer.
+                target (tuple[int, int]): Existing normalized detail bounds.
+
+            Returns:
+                None: The mocked decoder reports a 3 MP source raster.
+            """
+            self.assertEqual('RGB', mode)
+            self.assertEqual(native_gallery_viewer.MEDIA_IMAGE_MAX_SIZE, target)
+            events.append(('draft', source.size))
+            source.size = (2000, 1500)
+            source.width, source.height = source.size
+
+        def convert(mode: str) -> 'Image.Image':
+            """Return a small real raster after the mocked draft event.
+
+            Args:
+                mode (str): RGB conversion requested by the decoder owner.
+
+            Returns:
+                Image.Image: Small in-memory image used only by this fixture.
+            """
+            events.append(('convert', source.size))
+            return converted.copy()
+
+        source.draft.side_effect = draft
+        source.convert.side_effect = convert
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        viewer._observation_callback = summaries.append
+        with mock.patch.object(native_gallery_viewer.Image, 'open', return_value=source):
+            image = viewer._prepare_detail(b'bounded synthetic JPEG body')
+        image.close()
+
+        self.assertEqual(
+            [('draft', TEST_LARGE_JPEG_SOURCE_SIZE),
+             ('convert', (2000, 1500))],
+            events,
+        )
+        self.assertIn('source=8000x6000 decoded=2000x1500', summaries[0])
+        self.assertIn('max_pixels=36000000', summaries[0])
+        self.assertNotIn('JPEG body', summaries[0])
+
+    def test_real_48mp_jpeg_is_reduced_before_rgb_conversion(self) -> None:
+        """Decode a real 48 MP JPEG through Pillow's bounded draft path.
+
+        Returns:
+            None: The actual source is reduced before RGB conversion and the
+                resulting image remains within the existing output bounds.
+        """
+        source_image = Image.new(
+            'RGB', TEST_LARGE_JPEG_SOURCE_SIZE, (40, 70, 100),
+        )
+        body_stream = io.BytesIO()
+        source_image.save(body_stream, format='JPEG', quality=70)
+        source_image.close()
+        observed_sizes: list[tuple[int, int]] = []
+        summaries: list[str] = []
+        original_convert = Image.Image.convert
+
+        def record_convert(
+            image: 'Image.Image', mode: str,
+        ) -> 'Image.Image':
+            """Record Pillow's decoder raster before real RGB conversion.
+
+            Args:
+                image (Image.Image): Open JPEG source image.
+                mode (str): RGB mode requested by the detail decoder.
+
+            Returns:
+                Image.Image: Real Pillow RGB conversion result.
+            """
+            observed_sizes.append(image.size)
+            return original_convert(image, mode)
+
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        viewer._observation_callback = summaries.append
+        with mock.patch.object(Image.Image, 'convert', record_convert):
+            image = viewer._prepare_detail(body_stream.getvalue())
+        output_size = image.size
+        image.close()
+
+        self.assertEqual(1, len(observed_sizes))
+        self.assertLessEqual(
+            observed_sizes[0][0] * observed_sizes[0][1],
+            native_gallery_viewer.MEDIA_IMAGE_MAX_PIXELS,
+        )
+        self.assertLessEqual(output_size[0], 2048)
+        self.assertLessEqual(output_size[1], 1536)
+        self.assertIn('source=8000x6000', summaries[0])
+        self.assertNotIn('40, 70, 100', summaries[0])
+
+    def test_medium_jpeg_drafts_before_rgb_conversion(self) -> None:
+        """Downsample a sub-policy JPEG before allocating its RGB raster.
+
+        Returns:
+            None: The real 12 MP source is reduced by Pillow draft before
+                convert, with unchanged output bounds and safe size facts.
+        """
+        source_image = Image.new(
+            'RGB', TEST_MEDIUM_JPEG_SOURCE_SIZE, (65, 85, 105),
+        )
+        body_stream = io.BytesIO()
+        source_image.save(body_stream, format='JPEG', quality=75)
+        source_image.close()
+        observed_sizes: list[tuple[int, int]] = []
+        summaries: list[str] = []
+        original_convert = Image.Image.convert
+
+        def record_convert(
+            image: 'Image.Image', mode: str,
+        ) -> 'Image.Image':
+            """Capture the decoder dimensions immediately before conversion.
+
+            Args:
+                image (Image.Image): Open JPEG source after draft processing.
+                mode (str): RGB mode requested by detail decoding.
+
+            Returns:
+                Image.Image: The actual Pillow RGB conversion result.
+            """
+            observed_sizes.append(image.size)
+            return original_convert(image, mode)
+
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        viewer._observation_callback = summaries.append
+        started = time.perf_counter()
+        with mock.patch.object(Image.Image, 'convert', record_convert):
+            image = viewer._prepare_detail(body_stream.getvalue())
+        preparation_ms = (time.perf_counter() - started) * 1000.0
+        output_size = image.size
+        image.close()
+
+        self.assertEqual(1, len(observed_sizes))
+        decoded_size = observed_sizes[0]
+        self.assertLess(
+            decoded_size[0] * decoded_size[1],
+            TEST_MEDIUM_JPEG_SOURCE_SIZE[0] * TEST_MEDIUM_JPEG_SOURCE_SIZE[1],
+        )
+        self.assertLessEqual(
+            decoded_size[0] * decoded_size[1],
+            native_gallery_viewer.MEDIA_IMAGE_MAX_PIXELS,
+        )
+        self.assertLessEqual(output_size[0], 2048)
+        self.assertLessEqual(output_size[1], 1536)
+        self.assertTrue(any(
+            'decode stage=draft reason=reduced format=JPEG' in summary
+            and 'source=4096x3072' in summary
+            for summary in summaries
+        ))
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+        evidence.mkdir(parents=True, exist_ok=True)
+        (evidence / 'photos-detail-decode-measurement.json').write_text(
+            json.dumps({
+                'data_source': 'isolated synthetic JPEG in memory',
+                'source_size': TEST_MEDIUM_JPEG_SOURCE_SIZE,
+                'rgb_input_size': decoded_size,
+                'output_size': output_size,
+                'encoded_bytes': len(body_stream.getvalue()),
+                'preparation_ms': preparation_ms,
+                'network_requests': 0,
+                'previous_rgb_input_pixels': (
+                    TEST_MEDIUM_JPEG_SOURCE_SIZE[0]
+                    * TEST_MEDIUM_JPEG_SOURCE_SIZE[1]
+                ),
+            }, indent=2) + '\n', encoding='utf-8',
+        )
+
+    def test_real_jpeg_draft_uses_reduced_decoder_raster(self) -> None:
+        """Exercise Pillow's real JPEG draft with a compact injected boundary.
+
+        Returns:
+            None: A real source larger than the test boundary decodes through
+                JPEG subsampling and returns a bounded RGB image.
+        """
+        source_image = Image.new('RGB', (100, 80), (70, 90, 110))
+        body_stream = io.BytesIO()
+        source_image.save(body_stream, format='JPEG')
+        source_image.close()
+        summaries: list[str] = []
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        viewer._observation_callback = summaries.append
+        with (
+            mock.patch.object(
+                native_gallery_viewer, 'MEDIA_IMAGE_MAX_PIXELS',
+                TEST_DECODE_PIXEL_BOUNDARY,
+            ),
+            mock.patch.object(
+                native_gallery_viewer, 'MEDIA_IMAGE_MAX_SIZE',
+                TEST_DECODE_DRAFT_TARGET,
+            ),
+        ):
+            image = viewer._prepare_detail(body_stream.getvalue())
+        self.addCleanup(image.close)
+
+        self.assertLessEqual(
+            image.width * image.height, TEST_DECODE_PIXEL_BOUNDARY,
+        )
+        self.assertLessEqual(image.width, TEST_DECODE_DRAFT_TARGET[0])
+        self.assertLessEqual(image.height, TEST_DECODE_DRAFT_TARGET[1])
+        self.assertTrue(any(
+            'decode stage=draft reason=reduced format=JPEG' in summary
+            for summary in summaries
+        ))
+
+    def test_oversized_non_jpeg_refuses_before_full_conversion(self) -> None:
+        """Refuse oversized unsupported rasters before RGB allocation.
+
+        Returns:
+            None: The typed pixel refusal contains numeric facts and the decoder
+                never calls the full-raster conversion method.
+        """
+        source = mock.MagicMock()
+        source.__enter__.return_value = source
+        source.__exit__.return_value = False
+        source.format = 'PNG'
+        source.size = TEST_LARGE_JPEG_SOURCE_SIZE
+        source.width, source.height = TEST_LARGE_JPEG_SOURCE_SIZE
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        with mock.patch.object(native_gallery_viewer.Image, 'open', return_value=source):
+            with self.assertRaises(native_gallery_viewer.PhotosDecodeError) as raised:
+                viewer._prepare_detail(b'oversized PNG fixture')
+
+        source.convert.assert_not_called()
+        self.assertEqual('pixel-limit', raised.exception.facts.reason)
+        self.assertEqual(TEST_LARGE_JPEG_SOURCE_SIZE, raised.exception.facts.source_size)
+
+    def test_decode_refusal_facts_are_safe_and_render_a_specific_reason(self) -> None:
+        """Keep malformed decoder details numeric and the UI explanation clear.
+
+        Returns:
+            None: Logs omit source bytes, while the lightbox receives a localized
+                safe decode-specific message rather than the generic fetch error.
+        """
+        secret = 'private path C:\\photos\\secret.jpg token=private'
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        with self.assertRaises(native_gallery_viewer.PhotosDecodeError) as raised:
+            viewer._prepare_detail(secret.encode('utf-8'))
+        with self.assertLogs(
+            native_gallery_viewer.__name__, level='WARNING',
+        ) as captured:
+            summary = native_gallery_viewer._log_safe_media_failure(
+                'media-decode', 'detail', raised.exception,
+            )
+        output = '\n'.join(captured.output) + summary
+        self.assertIn('phase=media-decode kind=detail', output)
+        self.assertIn('decode stage=source-open reason=decode-failed', output)
+        self.assertIn('body_bytes=', output)
+        self.assertNotIn(secret, output)
+
+        viewer._detail_serial = 5
+        viewer._lightbox = mock.Mock()
+        viewer._slideshow_running = False
+        viewer._show_detail(5, 7, None, None, None, 'pixel-limit')
+        viewer._lightbox.show_error.assert_called_once_with(
+            viewer._text('linking_media_decode_error'),
+        )
+
+    def test_pixel_limit_fallback_uses_only_authorized_thumbnail_once(self) -> None:
+        """Use one normal session-gated thumbnail read after pixel refusal.
+
+        Returns:
+            None: Transport/auth/cancel/corruption failures do not trigger a
+                fallback, and a preview is never retained as original detail.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Preview fallback'),
+        )
+        observations: list[str] = []
+        viewer._observation_callback = observations.append
+        self._wait_until(
+            lambda: viewer._worker is None,
+            'The fixture viewer did not finish its initial page and thumbnails.',
+        )
+        session.media_photo.reset_mock()
+        session.media_photo.side_effect = None
+        session.media_photo.return_value = (b'authorized image body', 'image/jpeg')
+        preview = Image.new('RGB', (16, 12), (10, 30, 50))
+        self.addCleanup(preview.close)
+        refusal = native_gallery_viewer.PhotosDecodeError(
+            native_gallery_viewer.PhotosDecodeFacts(
+                'pixel-check', 'pixel-limit', 'PNG',
+                TEST_LARGE_JPEG_SOURCE_SIZE, TEST_LARGE_JPEG_SOURCE_SIZE,
+                1024, native_gallery_viewer.MEDIA_IMAGE_MAX_PIXELS,
+                native_gallery_viewer.MEDIA_IMAGE_MAX_SIZE,
+            ),
+        )
+        with mock.patch.object(
+            viewer, '_prepare_detail', side_effect=[refusal, preview],
+        ):
+            image, encoded = viewer._read_prepared_detail(page.photos[0])
+        self.assertIs(preview, image)
+        self.assertIsNone(encoded)
+        self.assertTrue(any(
+            'decode stage=pixel-check reason=pixel-limit' in item
+            for item in observations
+        ))
+        self.assertTrue(any(
+            'reason=preview-fallback' in item for item in observations
+        ))
+        self.assertEqual(2, session.media_photo.call_count)
+        full_call, preview_call = session.media_photo.call_args_list
+        self.assertEqual(full_call.args, preview_call.args)
+        self.assertIs(full_call.kwargs['cancelled'], viewer._cancelled)
+        self.assertIs(preview_call.kwargs['cancelled'], viewer._cancelled)
+        self.assertFalse(full_call.kwargs['thumbnail'])
+        self.assertTrue(preview_call.kwargs['thumbnail'])
+        full_policy = dict(full_call.kwargs)
+        preview_policy = dict(preview_call.kwargs)
+        full_policy.pop('thumbnail')
+        preview_policy.pop('thumbnail')
+        self.assertEqual(full_policy, preview_policy)
+
+        session.media_photo.reset_mock()
+        session.media_photo.side_effect = LinkingMediaThrottled()
+        with self.assertRaises(LinkingMediaThrottled):
+            viewer._read_prepared_detail(page.photos[0])
+        session.media_photo.assert_called_once()
+
+        session.media_photo.reset_mock()
+        session.media_photo.side_effect = LinkingResponseError(
+            'media', 'app_linking_media', 401, 'json', 'http_status',
+        )
+        with self.assertRaises(LinkingResponseError):
+            viewer._read_prepared_detail(page.photos[0])
+        session.media_photo.assert_called_once()
+
+        session.media_photo.reset_mock()
+        session.media_photo.side_effect = None
+        with mock.patch.object(
+            viewer, '_prepare_detail', side_effect=ValueError('corrupt image'),
+        ):
+            with self.assertRaises(ValueError):
+                viewer._read_prepared_detail(page.photos[0])
+        session.media_photo.assert_called_once()
+
+        session.media_photo.reset_mock()
+        viewer._cancelled.clear()
+
+        def cancel_during_decode(_body: bytes) -> 'Image.Image':
+            """Cancel before refusing pixels to block the preview retry.
+
+            Args:
+                _body (bytes): First authorized full-photo body.
+
+            Returns:
+                Image.Image: Unreachable because a typed refusal is raised.
+
+            Raises:
+                PhotosDecodeError: The fixture's deterministic pixel refusal.
+            """
+            viewer._cancelled.set()
+            raise refusal
+
+        with mock.patch.object(
+            viewer, '_prepare_detail', side_effect=cancel_during_decode,
+        ):
+            with self.assertRaises(native_gallery_viewer.PhotosDecodeError):
+                viewer._read_prepared_detail(page.photos[0])
+        session.media_photo.assert_called_once()
+        viewer.close()
+
+    def test_unavailable_preview_shows_lightbox_error_and_retry(self) -> None:
+        """Surface a denied fallback and ignore a stale unavailable result.
+
+        Returns:
+            None: The selected lightbox shows a safe error with Retry, while an
+                older detail serial cannot replace its current image state.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Denied preview'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None,
+            'The fixture viewer did not finish its initial page and thumbnails.',
+        )
+        refusal = native_gallery_viewer.PhotosDecodeError(
+            native_gallery_viewer.PhotosDecodeFacts(
+                'pixel-check', 'pixel-limit', 'PNG',
+                TEST_LARGE_JPEG_SOURCE_SIZE, TEST_LARGE_JPEG_SOURCE_SIZE,
+                1024, native_gallery_viewer.MEDIA_IMAGE_MAX_PIXELS,
+                native_gallery_viewer.MEDIA_IMAGE_MAX_SIZE,
+            ),
+        )
+
+        # The original read succeeds; its one authorized preview is unavailable.
+        session.media_photo.side_effect = [
+            (image_bytes[TEST_FIRST_IMAGE_ID], 'image/png'),
+            LinkingMediaUnavailable(),
+        ]
+        with mock.patch.object(viewer, '_prepare_detail', side_effect=refusal):
+            viewer._load_detail(0)
+            original_show_error = viewer._lightbox.show_error
+            viewer._lightbox.show_error = mock.Mock(
+                wraps=original_show_error,
+            )
+            self._wait_until(
+                lambda: viewer._worker is None
+                and viewer.retry_button.winfo_manager() != '',
+                'The unavailable preview did not finish with a retry action.',
+            )
+        viewer._lightbox.show_error.assert_called_once_with(
+            viewer._text('linking_media_image_error'),
+        )
+        self.assertEqual('detail', viewer._retry_kind)
+
+        visible_error_count = viewer._lightbox.show_error.call_count
+        viewer._events.put((
+            viewer._generation, 'detail_unavailable',
+            (viewer._detail_serial - 1, TEST_FIRST_IMAGE_ID, None, None, None),
+        ))
+        viewer._poll_queue()
+        self.assertEqual(
+            visible_error_count, viewer._lightbox.show_error.call_count,
+        )
+        viewer.close()
 
     def test_catalogue_failure_reaches_current_session_snapshot(self) -> None:
         """Retain safe catalogue failures for the existing copy action.
@@ -394,6 +1037,312 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertNotIn('gallery title', snapshot)
         workspace.destroy()
 
+    def test_cached_catalogue_displays_before_old_server_page_fallback(self) -> None:
+        """Show a saved preferred row while an old server pages the tree.
+
+        Returns:
+            None: A complete fresh page removes the absent saved row and keeps
+                the normal first-gallery fallback and revisionless snapshot.
+        """
+        first = LinkedGallery(1, None, 'Fresh first')
+        added = LinkedGallery(3, None, 'Fresh added')
+        cached = GalleryCatalogueSnapshot((
+            LinkedGallery(1, None, 'Cached first'),
+            LinkedGallery(2, None, 'Saved preferred'),
+        ), 'a' * 64)
+        page_started = threading.Event()
+        release_page = threading.Event()
+        requested_cursors: list[int | None] = []
+        self.addCleanup(release_page.set)
+        provider: list[LinkingSession | None] = [None]
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.supports_gallery_tree.return_value = False
+        session.media_page.return_value = LinkedMediaPage(
+            1, None, (page.photos[0],), None,
+        )
+        session.media_photo.side_effect = None
+        session.media_photo.return_value = (
+            image_bytes[page.photos[0].image_id], 'image/png',
+        )
+
+        def read_page(
+            after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> LinkedGalleryPage:
+            """Hold one legacy page so the cache display can be observed first.
+
+            Args:
+                after_id (int | None): Expected initial page cursor.
+                cancelled (threading.Event | None): Session cancellation token.
+
+            Returns:
+                LinkedGalleryPage: One complete fresh page after the test releases it.
+            """
+            requested_cursors.append(after_id)
+            page_started.set()
+            if not release_page.wait(TEST_GUI_WAIT_SECONDS):
+                raise TimeoutError('Test did not release the old-server page.')
+            if cancelled is not None and cancelled.is_set():
+                raise RuntimeError('Old-server page was cancelled.')
+            return LinkedGalleryPage((first, added), None)
+
+        session.gallery_page.side_effect = read_page
+        cache = mock.Mock()
+        cache.load.return_value = cached
+        cache.save.return_value = True
+        saved_selection: list[int] = []
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+            catalogue_cache=lambda _session: cache,
+            load_selected_gallery=lambda _session: 2,
+            save_selected_gallery=lambda _session, gallery_id: (
+                saved_selection.append(gallery_id)
+            ),
+        )
+        workspace.pack(fill='both', expand=True)
+        provider[0] = session
+        workspace.refresh_session()
+        self.assertTrue(page_started.wait(TEST_GUI_WAIT_SECONDS))
+        self._wait_until(
+            lambda: workspace.tree.exists('2')
+            and workspace._selected_gallery_id == 2,
+            'The cached preferred gallery did not mount before page completion.',
+        )
+        self.assertEqual('Saved preferred', workspace._galleries[2].title)
+        session.gallery_tree.assert_not_called()
+        self.assertEqual([None], requested_cursors)
+
+        release_page.set()
+        self._wait_until(
+            lambda: workspace._selected_gallery_id == 1
+            and workspace.tree.exists('3')
+            and not workspace.tree.exists('2')
+            and cache.save.call_count == 1,
+            'Fresh paging did not prune the old tree and choose a safe fallback.',
+        )
+        self.assertEqual('Fresh first', workspace._galleries[1].title)
+        self.assertIsNone(cache.save.call_args.args[0].revision)
+        self.assertEqual([], saved_selection)
+        workspace.destroy()
+
+    def test_failed_catalogue_walk_retains_prior_complete_snapshot(self) -> None:
+        """Keep cached rows and snapshot intact when fresh paging fails early.
+
+        Returns:
+            None: An old complete cache survives the error path without a save.
+        """
+        cached = GalleryCatalogueSnapshot((
+            LinkedGallery(1, None, 'Saved first'),
+            LinkedGallery(2, 1, 'Saved child'),
+        ), 'b' * 64)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._accept_cached_catalogue(cached)
+        workspace._ensure_initial_gallery = mock.Mock()
+        workspace._accept_page(LinkedGalleryPage((
+            LinkedGallery(1, None, 'Fresh first page row'),
+        ), TEST_GALLERY_ID))
+        workspace._accept_page(None)
+        self.assertTrue(workspace.tree.exists('1'))
+        self.assertTrue(workspace.tree.exists('2'))
+        self.assertIs(workspace._catalogue_cache_snapshot, cached)
+        self.assertEqual('Saved child', workspace._galleries[2].title)
+        workspace.destroy()
+
+    def test_unchanged_catalogue_confirms_cached_rows_without_rerender(self) -> None:
+        """Confirm a matching unchanged tree without repainting or saving.
+
+        Returns:
+            None: Mounted rows remain untouched and become fresh for this
+                session without queuing another snapshot write.
+        """
+        revision = 'e' * 64
+        cached = GalleryCatalogueSnapshot((
+            LinkedGallery(1, None, 'Saved first'),
+            LinkedGallery(2, 1, 'Saved child'),
+        ), revision)
+        provider: list[LinkingSession | None] = [None]
+        session = self._session(*self._gallery_data())
+        cache = mock.Mock()
+        cache.save.return_value = True
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._ensure_initial_gallery = mock.Mock()
+        provider[0] = session
+        workspace._session = session
+        workspace._catalogue_cache = cache
+        workspace._accept_cached_catalogue(cached)
+        render = mock.Mock(wraps=workspace._render_tree)
+        workspace._render_tree = render
+
+        workspace._accept_complete_catalogue(
+            LinkedGalleryTree((), revision, unchanged=True),
+        )
+
+        self.assertEqual(set((1, 2)), workspace._fresh_catalogue_ids)
+        render.assert_not_called()
+        self.assertTrue(workspace.tree.exists('1'))
+        self.assertTrue(workspace.tree.exists('2'))
+        cache.save.assert_not_called()
+        workspace.destroy()
+
+    def test_selected_cached_gallery_persists_only_after_fresh_confirmation(self) -> None:
+        """Persist an explicit cached choice only after a fresh page confirms it.
+
+        Returns:
+            None: Cache-only selection is not saved; a later fresh row saves
+                once and keeps the user's choice over the older preference.
+        """
+        selected = LinkedGallery(2, None, 'Cached user choice')
+        provider: list[LinkingSession | None] = [None]
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        saved: list[int] = []
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+            load_selected_gallery=lambda _session: 1,
+            save_selected_gallery=lambda _session, gallery_id: saved.append(
+                gallery_id,
+            ),
+        )
+        workspace.pack(fill='both', expand=True)
+        provider[0] = session
+        workspace._session = session
+        workspace._preferred_gallery_id = 1
+        workspace._accept_cached_catalogue(
+            GalleryCatalogueSnapshot((
+                LinkedGallery(1, None, 'Saved preference'),
+                selected,
+            ), '9' * 64),
+        )
+        with mock.patch.object(
+            photos_workspace, 'mount_native_gallery_view',
+            return_value=mock.Mock(),
+        ):
+            workspace._select_gallery(selected)
+            self.assertEqual(2, workspace._selected_gallery_id)
+            workspace._persist_selected_gallery_if_fresh((2,))
+            self.assertEqual([], saved)
+
+            workspace._accept_page(LinkedGalleryPage((selected,), None))
+
+        self.assertEqual([2], saved)
+        self.assertEqual(2, workspace._selected_gallery_id)
+        workspace.destroy()
+
+    def test_fresh_tree_response_is_saved_with_its_server_revision(self) -> None:
+        """Persist only a complete tree-v1 response and its exact revision.
+
+        Returns:
+            None: Tree-v1 completes without page fallback and the serialized
+                writer receives only the complete fresh metadata snapshot.
+        """
+        gallery = LinkedGallery(5, None, 'Fresh revision row')
+        revision = 'f' * 64
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.supports_gallery_tree.return_value = True
+        session.gallery_tree.return_value = LinkedGalleryTree(
+            (gallery,), revision,
+        )
+        provider: list[LinkingSession | None] = [None]
+        cache = mock.Mock()
+        cache.load.return_value = None
+        cache.save.return_value = True
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+            catalogue_cache=lambda _session: cache,
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._ensure_initial_gallery = mock.Mock()
+        provider[0] = session
+        workspace.refresh_session()
+        self._wait_until(
+            lambda: workspace.tree.exists('5')
+            and workspace._complete_catalogue_tree is None
+            and cache.save.call_count == 1,
+            'The fresh complete tree was not saved after bounded rendering.',
+        )
+        session.gallery_tree.assert_called_once_with(
+            None, cancelled=mock.ANY,
+        )
+        session.gallery_page.assert_not_called()
+        stored = cache.save.call_args.args[0]
+        self.assertEqual(revision, stored.revision)
+        self.assertEqual((gallery,), stored.galleries)
+        workspace.destroy()
+
+    def test_cancelled_cache_batch_cannot_overwrite_fresh_page(self) -> None:
+        """Fence a late cached row callback after a fresh complete page.
+
+        Returns:
+            None: New title remains visible and stale cached rows stay removed.
+        """
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._ensure_initial_gallery = mock.Mock()
+        rows = tuple(
+            LinkedGallery(index, None, f'Cached {index}')
+            for index in range(1, TEST_CATALOGUE_CACHE_ROWS + 1)
+        )
+        scheduled: list[Callable[[], None]] = []
+        workspace.after = mock.Mock(
+            side_effect=lambda _delay, callback: (
+                scheduled.append(callback) or f'after#{len(scheduled)}'
+            ),
+        )
+        workspace.after_cancel = mock.Mock()
+        workspace._accept_cached_catalogue(GalleryCatalogueSnapshot(rows, 'c' * 64))
+        self.assertTrue(workspace.tree.exists('1'))
+        self.assertFalse(workspace.tree.exists(str(TEST_CATALOGUE_CACHE_ROWS)))
+        self.assertEqual(1, len(scheduled))
+
+        fresh = LinkedGallery(1, None, 'Fresh title')
+        workspace._accept_page(LinkedGalleryPage((fresh,), None))
+        scheduled[0]()
+        self.assertEqual('Fresh title', workspace._galleries[1].title)
+        self.assertIn('Fresh title', workspace.tree.item('1', 'text'))
+        self.assertFalse(workspace.tree.exists('2'))
+        workspace.destroy()
+
+    def test_fresh_complete_tree_mounts_in_bounded_ui_batches(self) -> None:
+        """Yield between complete-tree slices instead of mounting all at once.
+
+        Returns:
+            None: The final IDs become visible through the owned timer callback.
+        """
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._ensure_initial_gallery = mock.Mock()
+        galleries = tuple(
+            LinkedGallery(index, None, f'Fresh {index}')
+            for index in range(1, TEST_CATALOGUE_CACHE_ROWS + 1)
+        )
+        workspace._accept_complete_catalogue(
+            LinkedGalleryTree(galleries, 'd' * 64),
+        )
+        self.assertTrue(workspace.tree.exists('1'))
+        self.assertFalse(
+            workspace.tree.exists(str(TEST_CATALOGUE_CACHE_ROWS)),
+        )
+        self.assertIsNotNone(workspace._cached_mount_after)
+        self._wait_until(
+            lambda: workspace.tree.exists(str(TEST_CATALOGUE_CACHE_ROWS))
+            and workspace._complete_catalogue_tree is None,
+            'The bounded tree renderer did not finish its later batch.',
+        )
+        self.assertEqual(TEST_CATALOGUE_CACHE_ROWS, len(workspace._galleries))
+        workspace.destroy()
+
     def test_preload_diagnostic_reaches_copy_and_log_for_exact_session(self) -> None:
         """Forward safe worker facts to copied support and the host log queue.
 
@@ -422,6 +1371,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._photo_diagnostic_latest = None
         workspace._photo_diagnostic_recent = deque(
             maxlen=photos_workspace.PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
+        )
+        workspace._photo_observation_recent = deque(
+            maxlen=photos_workspace.PHOTOS_OBSERVATION_RECENT_LIMIT,
         )
         workspace._diagnostic_callback = lambda summary: host_events.put(
             ('warning', '[Photos] ' + summary),
@@ -467,6 +1419,44 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         self.assertIn('No Photos failure', workspace.diagnostics_snapshot())
         self.assertTrue(host_events.empty())
+
+    def test_shortcut_observations_copy_without_replacing_failure(self) -> None:
+        """Copy bounded shortcut traces separately from the failure summary.
+
+        Returns:
+            None: Current traces are copyable, stale generations and arbitrary
+                text are rejected, and Latest failure remains unchanged.
+        """
+        from uploader.diagnostics import format_safe_photos_shortcut
+
+        workspace = photos_workspace.PhotosWorkspace.__new__(
+            photos_workspace.PhotosWorkspace,
+        )
+        workspace._photo_diagnostic_lock = threading.Lock()
+        workspace._photo_diagnostic_latest = None
+        workspace._photo_diagnostic_recent = deque(
+            maxlen=photos_workspace.PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
+        )
+        workspace._photo_observation_recent = deque(
+            maxlen=photos_workspace.PHOTOS_OBSERVATION_RECENT_LIMIT,
+        )
+        workspace._generation = 9
+        summary = format_safe_photos_shortcut(
+            'f', 0x0008, 'canvas', True, False, True, 'toggled',
+        )
+        self.assertIsNotNone(summary)
+        workspace._record_photo_observation(9, summary)
+        workspace._record_photo_observation(8, summary)
+        workspace._record_photo_observation(
+            9, 'shortcut key=f path=C:\\private\\album',
+        )
+
+        snapshot = workspace.diagnostics_snapshot()
+        self.assertIn('No Photos failure recorded', snapshot)
+        self.assertIn('Recent observations:', snapshot)
+        self.assertIn(summary, snapshot)
+        self.assertNotIn('Latest failure:', snapshot)
+        self.assertNotIn('private\\album', snapshot)
 
     def test_smooth_icon_button_updates_text_state_and_arrow_direction(self) -> None:
         """Keep accessible text while redrawing dynamic and disabled icons.
@@ -670,18 +1660,19 @@ class NativeGalleryViewerTests(unittest.TestCase):
             )
         expected.close()
 
-    def test_thumbnails_follow_only_the_current_viewport(self) -> None:
-        """Fetch and retain thumbnail widgets only while their tiles are visible.
+    def test_thumbnails_follow_bounded_admitted_band(self) -> None:
+        """Coalesce scrolling and retain one bounded row around visible tiles.
 
         Returns:
-            None: Scrolling moves the bounded Tk image set to the new viewport.
+            None: Small scrolls reuse Tk images, distant rows are evicted, and
+                only thumbnail renditions are requested by grid navigation.
         """
         page, presentation, image_bytes = self._gallery_data()
         # Twenty-four rows force a scrollable album while staying below the
         # protocol's 64-photo maximum page size.
         photos = tuple(
             LinkedPhoto(TEST_FIRST_IMAGE_ID + index, f'Photo {index + 1}')
-            for index in range(24)
+            for index in range(TEST_SCROLL_PHOTO_COUNT)
         )
         for index, photo in enumerate(photos):
             image_bytes[photo.image_id] = self._png((index, 80, 160))
@@ -696,8 +1687,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self._wait_until(
             lambda: bool(viewer._visible_thumbnail_indices)
             and all(viewer._photo_images[index]
-                    for index in viewer._visible_thumbnail_indices),
-            'The visible album tiles did not receive their thumbnails.',
+                    for index in viewer._admitted_thumbnail_indices)
+            and viewer._viewport_after_id is None,
+            'The admitted album tiles did not receive their thumbnails.',
         )
         first_visible = set(viewer._visible_thumbnail_indices)
         canvas_top = viewer.grid_canvas.winfo_rooty()
@@ -709,14 +1701,85 @@ class NativeGalleryViewerTests(unittest.TestCase):
         }
         self.assertEqual(actual_first_visible, first_visible)
         self.assertLess(len(first_visible), len(photos))
-        self.assertEqual(first_visible, viewer._thumbnail_loaded)
+        first_admitted = set(viewer._admitted_thumbnail_indices)
+        self.assertEqual(first_admitted, viewer._thumbnail_loaded)
+        self.assertTrue(first_visible <= first_admitted)
+        self.assertLessEqual(
+            len(first_admitted),
+            len(first_visible)
+            + 2 * native_gallery_viewer.MEDIA_THUMBNAIL_OVERSCAN_ROWS
+            * viewer._grid_columns,
+        )
+        image_refs = {
+            index: viewer._photo_images[index]
+            for index in first_admitted
+        }
+
+        previous_update_count = viewer._viewport_update_count
+        previous_event_count = viewer._viewport_event_count
+        for _ in range(TEST_VIEWPORT_EVENT_BURST):
+            viewer._on_grid_viewport(None)
+        burst_callback_id = viewer._viewport_after_id
+        self.assertIsNotNone(burst_callback_id)
+        self.assertEqual(
+            previous_event_count + TEST_VIEWPORT_EVENT_BURST,
+            viewer._viewport_event_count,
+        )
+        self.assertEqual(burst_callback_id, viewer._viewport_after_id)
+        self._wait_until(
+            lambda: viewer._viewport_update_count == previous_update_count + 1
+            and viewer._viewport_after_id is None,
+            'A viewport burst was not handled by exactly one Tk update.',
+        )
+
+        previous_update_count = viewer._viewport_update_count
+        row_one_index = viewer._grid_columns
+        content_bounds = viewer.grid_canvas.bbox('all')
+        self.assertIsNotNone(content_bounds)
+        content_height = content_bounds[3] - content_bounds[1]
+        row_one_y = viewer._tile_buttons[row_one_index].winfo_y()
+        viewer.grid_canvas.yview_moveto(row_one_y / content_height)
+        viewer._on_grid_viewport(None)
+        self._wait_until(
+            lambda: viewer._viewport_update_count > previous_update_count
+            and all(viewer._photo_images[index]
+                    for index in viewer._admitted_thumbnail_indices)
+            and viewer._viewport_after_id is None,
+            'A small scroll did not settle its visible thumbnail band.',
+        )
+        self.assertNotIn(0, viewer._visible_thumbnail_indices)
+        self.assertIn(0, viewer._admitted_thumbnail_indices)
+        self.assertIs(image_refs[0], viewer._photo_images[0])
+        self.assertTrue(
+            viewer._visible_thumbnail_indices
+            <= viewer._admitted_thumbnail_indices,
+        )
+        shared_indices = first_admitted & viewer._admitted_thumbnail_indices
+        self.assertTrue(shared_indices)
+        for index in shared_indices:
+            self.assertIs(image_refs[index], viewer._photo_images[index])
+
+        calls_before_reversal = session.media_photo.call_count
+        previous_update_count = viewer._viewport_update_count
+        viewer.grid_canvas.yview_moveto(0.0)
+        viewer._on_grid_viewport(None)
+        self._wait_until(
+            lambda: viewer._viewport_update_count > previous_update_count
+            and all(viewer._photo_images[index]
+                    for index in viewer._admitted_thumbnail_indices)
+            and viewer._viewport_after_id is None,
+            'Returning one row to the top did not settle its admitted band.',
+        )
+        self.assertIs(image_refs[0], viewer._photo_images[0])
+        self.assertEqual(calls_before_reversal, session.media_photo.call_count)
 
         viewer.grid_canvas.yview_moveto(1.0)
         viewer._on_grid_viewport(None)
         self._wait_until(
             lambda: bool(viewer._visible_thumbnail_indices)
             and all(viewer._photo_images[index]
-                    for index in viewer._visible_thumbnail_indices),
+                    for index in viewer._admitted_thumbnail_indices)
+            and viewer._viewport_after_id is None,
             'The newly visible album tiles did not receive thumbnails.',
         )
         canvas_top = viewer.grid_canvas.winfo_rooty()
@@ -730,13 +1793,1126 @@ class NativeGalleryViewerTests(unittest.TestCase):
             actual_bottom_visible, viewer._visible_thumbnail_indices,
         )
         self.assertEqual(
-            actual_bottom_visible, viewer._thumbnail_loaded,
+            viewer._admitted_thumbnail_indices, viewer._thumbnail_loaded,
         )
         self.assertEqual(
-            actual_bottom_visible,
+            viewer._admitted_thumbnail_indices,
             {index for index, image in enumerate(viewer._photo_images)
              if image is not None},
         )
+        self.assertNotIn(0, viewer._admitted_thumbnail_indices)
+        self.assertIsNone(viewer._photo_images[0])
+        self.assertLessEqual(
+            len(viewer._admitted_thumbnail_indices),
+            len(viewer._visible_thumbnail_indices)
+            + 2 * native_gallery_viewer.MEDIA_THUMBNAIL_OVERSCAN_ROWS
+            * viewer._grid_columns,
+        )
+
+        previous_update_count = viewer._viewport_update_count
+        viewer.grid_canvas.yview_moveto(0.0)
+        viewer._on_grid_viewport(None)
+        self._wait_until(
+            lambda: viewer._viewport_update_count > previous_update_count
+            and all(viewer._photo_images[index]
+                    for index in viewer._visible_thumbnail_indices)
+            and viewer._viewport_after_id is None,
+            'Returning to the first rows did not restore their thumbnails.',
+        )
+        self.assertGreater(viewer._thumbnail_warm_cache_hit_count, 0)
+        self.assertTrue(all(
+            call.kwargs.get('thumbnail') is True
+            for call in session.media_photo.call_args_list
+        ))
+
+        viewer._on_grid_viewport(None)
+        stale_callback_id = viewer._viewport_after_id
+        changed_page = LinkedMediaPage(
+            page.gallery_id, page.parent_id, page.photos, 99,
+        )
+        viewer._accept_refresh((changed_page,))
+        self.root.update_idletasks()
+        replacement_callback_id = viewer._viewport_after_id
+        self.assertIsNotNone(stale_callback_id)
+        self.assertIsNotNone(replacement_callback_id)
+        self.assertNotEqual(stale_callback_id, replacement_callback_id)
+        update_count = viewer._viewport_update_count
+        viewer._apply_grid_viewport(stale_callback_id)
+        self.assertEqual(update_count, viewer._viewport_update_count)
+        self.assertEqual(replacement_callback_id, viewer._viewport_after_id)
+        viewer.close()
+        self.assertIsNone(viewer._viewport_after_id)
+        viewer._apply_grid_viewport(replacement_callback_id)
+        self.assertEqual(update_count, viewer._viewport_update_count)
+        diagnostics = viewer.render_diagnostics()
+        self.assertIn('viewport_events=', diagnostics)
+        self.assertIn('viewport_updates=', diagnostics)
+        self.assertIn('tk_images_created=', diagnostics)
+        self.assertIn('tk_images_released=', diagnostics)
+        self.assertIn('warm_cache_hits=', diagnostics)
+        self.assertIn('peak_update_ms=', diagnostics)
+        self.assertIn('retained=0', diagnostics)
+        self.assertNotIn('Photo 1', diagnostics)
+        viewer.close()
+
+    def test_thumbnail_batch_reads_serially_before_gui_poll(self) -> None:
+        """Fetch the bounded thumbnail batch before servicing Tk results.
+
+        Returns:
+            None: Several serial transport reads complete without a per-item
+                Tk poll, while all resulting decoded images remain queued.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        photos = tuple(
+            LinkedPhoto(TEST_FIRST_IMAGE_ID + index, f'Batch {index}')
+            for index in range(TEST_SCROLL_PHOTO_COUNT)
+        )
+        for index, photo in enumerate(photos):
+            image_bytes[photo.image_id] = self._png((index, 90, 150))
+        page = LinkedMediaPage(page.gallery_id, page.parent_id, photos, None)
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session,
+            LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Batch'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None
+            and bool(viewer._admitted_thumbnail_indices)
+            and all(viewer._photo_images[index]
+                    for index in viewer._admitted_thumbnail_indices),
+            'The thumbnail fixture did not reach its idle viewport.',
+        )
+
+        batch_ready = threading.Event()
+        original_read = session.media_photo.side_effect
+        target_reads = (
+            session.media_photo.call_count
+            + native_gallery_viewer.MEDIA_THUMBNAIL_BATCH_SIZE
+        )
+
+        def read_and_count(
+            gallery_id: int,
+            image_id: int,
+            thumbnail: bool,
+            cancelled: threading.Event | None = None,
+            *,
+            cache_eligible: bool | None = None,
+            thumbnail_etag: str | None = None,
+            thumbnail_verified_at: float | None = None,
+            preload_eligible: bool | None = None,
+            preload_thumbnail_etag: str | None = None,
+            preload_verified_at: float | None = None,
+            timings: MediaReadTimings | None = None,
+            use_preloaded_snapshot: bool = False,
+        ) -> tuple[bytes, str]:
+            """Count completed fixture reads without involving Tk.
+
+            Args:
+                gallery_id (int): Gallery identity passed to the session.
+                image_id (int): Photo identity passed to the session.
+                thumbnail (bool): Whether this is a thumbnail request.
+                cancelled (threading.Event | None): Viewer read cancellation.
+                cache_eligible (bool | None): Public cache admission.
+                thumbnail_etag (str | None): Current thumbnail validator.
+                thumbnail_verified_at (float | None): Catalogue proof time.
+                preload_eligible (bool | None): Admin preload admission.
+                preload_thumbnail_etag (str | None): Admin thumbnail validator.
+                preload_verified_at (float | None): Admin proof time.
+                timings (MediaReadTimings | None): Optional transport timings.
+                use_preloaded_snapshot (bool): Full-read saved-snapshot request.
+
+            Returns:
+                tuple[bytes, str]: Existing deterministic PNG media response.
+            """
+            result = original_read(
+                gallery_id, image_id, thumbnail, cancelled,
+                cache_eligible=cache_eligible,
+                thumbnail_etag=thumbnail_etag,
+                thumbnail_verified_at=thumbnail_verified_at,
+                preload_eligible=preload_eligible,
+                preload_thumbnail_etag=preload_thumbnail_etag,
+                preload_verified_at=preload_verified_at,
+                timings=timings,
+                use_preloaded_snapshot=use_preloaded_snapshot,
+            )
+            if session.media_photo.call_count >= target_reads:
+                batch_ready.set()
+            return result
+
+        session.media_photo.side_effect = read_and_count
+        viewer._thumbnail_loaded.clear()
+        viewer._thumbnail_pending = sorted(viewer._admitted_thumbnail_indices)
+        viewer._load_next_thumbnail()
+        self.assertTrue(
+            batch_ready.wait(TEST_GUI_WAIT_SECONDS),
+            'The worker did not fetch multiple thumbnails before a GUI poll.',
+        )
+        self.assertEqual(
+            target_reads,
+            session.media_photo.call_count,
+        )
+        worker = viewer._worker
+        self.assertIsNotNone(worker)
+        worker.join(TEST_WORKER_JOIN_SECONDS)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(
+            viewer._events.qsize(),
+            native_gallery_viewer.MEDIA_THUMBNAIL_BATCH_SIZE,
+        )
+        with mock.patch.object(
+            native_gallery_viewer, '_log_safe_media_failure',
+        ) as apply_failure:
+            viewer._poll_queue()
+            apply_failure.assert_not_called()
+        self._wait_until(
+            lambda: viewer._worker is None
+            and all(viewer._photo_images[index]
+                    for index in viewer._admitted_thumbnail_indices),
+            'The queued thumbnail batch was not attached to the admitted grid.',
+        )
+        viewer.close()
+
+    def test_warm_thumbnail_cache_copies_use_bounded_gui_slices(self) -> None:
+        """Copy and attach warm rasters within one named Tk slice at a time.
+
+        Returns:
+            None: The first callback attaches at most the slice limit and the
+                next timer continuation handles the remaining cached photos.
+        """
+        viewer = object.__new__(native_gallery_viewer._NativeGalleryViewer)
+        photos = tuple(
+            LinkedPhoto(TEST_FIRST_IMAGE_ID + index, f'Warm {index}')
+            for index in range(
+                native_gallery_viewer.MEDIA_THUMBNAIL_GUI_SLICE_SIZE
+                + TEST_WARM_SLICE_EXTRA_PHOTOS
+            )
+        )
+        viewer._closed = False
+        viewer.window = self.root
+        viewer.gallery = LinkedGallery(
+            TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Warm slice',
+        )
+        viewer._photos = photos
+        viewer._admitted_thumbnail_indices = set(range(len(photos)))
+        viewer._visible_thumbnail_indices = set(range(len(photos)))
+        viewer._thumbnail_pending = []
+        viewer._thumbnail_gui_after_id = None
+        viewer._warm_thumbnail_pending = [
+            (TEST_GALLERY_ID, index, photo)
+            for index, photo in enumerate(photos)
+        ]
+        viewer._thumbnail_tk_ms = 0.0
+        viewer._thumbnail_warm_cache_hit_count = 0
+
+        def make_copy(_photo: LinkedPhoto) -> 'Image.Image':
+            """Return a separate tiny raster for one simulated cache hit.
+
+            Args:
+                _photo (LinkedPhoto): Descriptor looked up by the warm slice.
+
+            Returns:
+                Image.Image: Independent RGB copy owned by the GUI slice.
+            """
+            return Image.new('RGB', (2, 2), (20, 40, 60))
+
+        def attach(
+            _index: int,
+            image: 'Image.Image | None',
+            *,
+            remember: bool = True,
+        ) -> None:
+            """Release the fake attached raster after counting its admission.
+
+            Args:
+                _index (int): Zero-based tile supplied by the warm slice.
+                image (Image.Image | None): Simulated decoded cache copy.
+                remember (bool): Whether a fresh read should update the cache.
+
+            Returns:
+                None: The fixture retains no fake Pillow resource.
+            """
+            self.assertFalse(remember)
+            if image is not None:
+                image.close()
+
+        viewer._cached_thumbnail = mock.Mock(side_effect=make_copy)
+        viewer._show_thumbnail = mock.Mock(side_effect=attach)
+        with mock.patch.object(
+            native_gallery_viewer.time, 'perf_counter', return_value=0.0,
+        ):
+            viewer._drain_warm_thumbnail_slice()
+        self.assertEqual(
+            native_gallery_viewer.MEDIA_THUMBNAIL_GUI_SLICE_SIZE,
+            viewer._show_thumbnail.call_count,
+        )
+        self.assertIsNotNone(viewer._thumbnail_gui_after_id)
+        self.assertEqual(
+            TEST_WARM_SLICE_EXTRA_PHOTOS,
+            len(viewer._warm_thumbnail_pending),
+        )
+
+        continuation_id = viewer._thumbnail_gui_after_id
+        self.root.after_cancel(continuation_id)
+        viewer._thumbnail_gui_after_id = None
+        with mock.patch.object(
+            native_gallery_viewer.time, 'perf_counter', return_value=0.0,
+        ):
+            viewer._drain_warm_thumbnail_slice()
+        self.assertEqual(len(photos), viewer._show_thumbnail.call_count)
+        self.assertEqual([], viewer._warm_thumbnail_pending)
+
+        # One simulated attachment costs 20 ms, above the cooperative 8-ms
+        # budget. Complete it, then defer the second item to a new callback.
+        viewer._warm_thumbnail_pending = [
+            (TEST_GALLERY_ID, index, photos[index])
+            for index in range(TEST_WARM_SLICE_EXTRA_PHOTOS)
+        ]
+        before = viewer._show_thumbnail.call_count
+        with mock.patch.object(
+            native_gallery_viewer.time, 'perf_counter',
+            side_effect=(0.0, 0.0, 0.020, 0.020),
+        ):
+            viewer._drain_warm_thumbnail_slice()
+        self.assertEqual(before + 1, viewer._show_thumbnail.call_count)
+        self.assertEqual(1, len(viewer._warm_thumbnail_pending))
+        viewer._cancel_thumbnail_gui_slice()
+
+    def test_departed_thumbnail_batch_yields_to_new_visible_indices(self) -> None:
+        """Cancel an entirely departed batch and prioritize new visible tiles.
+
+        Returns:
+            None: A deterministic viewport jump cancels old reads, removes
+                departed pending indices and orders visible warm work first.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        photos = tuple(
+            LinkedPhoto(TEST_FIRST_IMAGE_ID + index, f'Viewport {index}')
+            for index in range(TEST_SCROLL_PHOTO_COUNT)
+        )
+        for index, photo in enumerate(photos):
+            image_bytes[photo.image_id] = self._png((index, 70, 100))
+        page = LinkedMediaPage(page.gallery_id, page.parent_id, photos, None)
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Viewport jump'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None
+            and bool(viewer._admitted_thumbnail_indices)
+            and all(viewer._photo_images[index]
+                    for index in viewer._admitted_thumbnail_indices),
+            'The viewport fixture did not finish its first admitted band.',
+        )
+        columns = viewer._grid_columns
+        visible = tuple(range(len(photos) - columns, len(photos)))
+        previous_row = visible[0] - columns
+        batch = tuple(range(native_gallery_viewer.MEDIA_THUMBNAIL_BATCH_SIZE))
+        for index in (*batch, *visible, previous_row):
+            viewer._release_thumbnail_image(index)
+        viewer._thumbnail_pending = list(batch)
+        viewer._thumbnail_batch_indices = batch
+        viewer._worker_kind = 'thumbnail_batch'
+        viewer._worker = mock.Mock()
+        viewer._thumbnail_cancelled.clear()
+        viewer._warm_thumbnail_pending = [
+            (TEST_GALLERY_ID, previous_row, photos[previous_row]),
+        ]
+        viewer._cancel_grid_viewport_callback()
+        timer_identity = 'test-departed-viewport'
+        viewer._viewport_after_id = timer_identity
+        with mock.patch.object(
+            viewer, '_visible_photo_indices', return_value=visible,
+        ), mock.patch.object(
+            viewer, '_drain_warm_thumbnail_slice',
+        ), mock.patch.object(viewer, '_dispatch_pending_work'):
+            viewer._apply_grid_viewport(timer_identity)
+        self.assertTrue(viewer._thumbnail_cancelled.is_set())
+        self.assertTrue(set(batch).isdisjoint(viewer._thumbnail_pending))
+        self.assertEqual(
+            visible,
+            tuple(item[1] for item in viewer._warm_thumbnail_pending[:columns]),
+        )
+        viewer._worker = None
+        viewer._worker_kind = None
+        viewer.close()
+
+    def test_equal_and_failed_refresh_restore_interrupted_warm_work(self) -> None:
+        """Resume pending cache admission after equal or failed refresh replies.
+
+        Returns:
+            None: Interrupted tiles recover without a scroll event, rebuilding
+                widgets or requesting another thumbnail from the transport.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Refresh warm work'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and all(viewer._photo_images),
+            'The refresh fixture did not finish its initial thumbnails.',
+        )
+        tiles = tuple(viewer._tile_buttons)
+        retained = viewer._photo_images[0]
+        reads = session.media_photo.call_count
+        for failure in (False, True):
+            with self.subTest(failed_refresh=failure):
+                viewer._release_thumbnail_image(1)
+                viewer._warm_thumbnail_pending = [
+                    (TEST_GALLERY_ID, 1, page.photos[1]),
+                ]
+                session.media_page.side_effect = (
+                    native_gallery_viewer.LinkingError('Fixture refusal.')
+                    if failure else None
+                )
+                viewer.refresh_photos()
+                self._wait_until(
+                    lambda: viewer._worker is None
+                    and viewer._photo_images[1] is not None,
+                    'An interrupted warm tile did not resume after refresh.',
+                )
+                self.assertEqual(tiles, tuple(viewer._tile_buttons))
+                self.assertIs(retained, viewer._photo_images[0])
+                self.assertEqual(reads, session.media_photo.call_count)
+        viewer.close()
+
+    def test_worker_exit_cannot_strand_its_last_queued_thumbnail(self) -> None:
+        """Deliver a result published between queue inspection and worker exit.
+
+        Returns:
+            None: A controlled interleaving preserves the generation and worker
+                until its final image has a scheduled Tk delivery.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Queue exit race'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and all(viewer._photo_images),
+            'The queue fixture did not finish its initial thumbnails.',
+        )
+        generation = viewer._generation
+        retained = viewer._photo_images[0]
+        result = native_gallery_viewer._ThumbnailResult(
+            TEST_GALLERY_ID, 0, page.photos[0], Image.new('RGB', (1, 1)),
+            MediaReadTimings(), 0.0, time.perf_counter(),
+        )
+        worker = mock.Mock()
+
+        def exit_after_publication() -> bool:
+            """Publish precisely after the poll's first empty-queue check.
+
+            Returns:
+                bool: False, modeling a producer that has now fully exited.
+            """
+            viewer._events.put((generation, 'thumbnail_batch_item', result))
+            worker.is_alive.side_effect = None
+            worker.is_alive.return_value = False
+            return False
+
+        worker.is_alive.side_effect = exit_after_publication
+        viewer._worker = worker
+        viewer._worker_kind = 'thumbnail_batch'
+        viewer._poll_queue()
+        self.assertEqual(generation, viewer._generation)
+        self.assertIs(worker, viewer._worker)
+        self.assertEqual(1, viewer._events.qsize())
+        self.assertIsNotNone(viewer._after_id)
+        self.root.after_cancel(viewer._after_id)
+        viewer._after_id = None
+        viewer._poll_queue()
+        self.assertTrue(viewer._events.empty())
+        self.assertIsNone(viewer._worker)
+        self.assertIsNot(retained, viewer._photo_images[0])
+        viewer.close()
+
+    def test_stale_and_closed_thumbnail_results_release_rasters(self) -> None:
+        """Close image results rejected by generation and viewer teardown.
+
+        Returns:
+            None: Neither an obsolete descriptor result nor a queued close-time
+                raster remains owned by the result queue.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session,
+            LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Stale'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and all(viewer._photo_images),
+            'The stale-result fixture did not finish its initial thumbnails.',
+        )
+        stale_image = Image.new('RGB', (3, 3), (10, 20, 30))
+        stale = native_gallery_viewer._ThumbnailResult(
+            TEST_GALLERY_ID, 0, page.photos[0], stale_image,
+            MediaReadTimings(), 0.0, time.perf_counter(),
+        )
+        viewer._events.put((viewer._generation - 1, 'thumbnail_batch_item', stale))
+        viewer._poll_queue()
+        with self.assertRaises(ValueError):
+            stale_image.getpixel((0, 0))
+
+        retained = viewer._photo_images[0]
+        for gallery_id, descriptor in (
+            (TEST_GALLERY_ID, LinkedPhoto(page.photos[0].image_id, 'Old title')),
+            (TEST_PARENT_GALLERY_ID, page.photos[0]),
+        ):
+            with self.subTest(gallery_id=gallery_id):
+                rejected = Image.new('RGB', (1, 1))
+                result = native_gallery_viewer._ThumbnailResult(
+                    gallery_id, 0, descriptor, rejected,
+                    MediaReadTimings(), 0.0, time.perf_counter(),
+                )
+                viewer._events.put((
+                    viewer._generation, 'thumbnail_batch_item', result,
+                ))
+                viewer._poll_queue()
+                with self.assertRaises(ValueError):
+                    rejected.getpixel((0, 0))
+                self.assertIs(retained, viewer._photo_images[0])
+
+        queued_image = Image.new('RGB', (3, 3), (30, 20, 10))
+        queued = native_gallery_viewer._ThumbnailResult(
+            TEST_GALLERY_ID, 0, page.photos[0], queued_image,
+            MediaReadTimings(), 0.0, time.perf_counter(),
+        )
+        viewer._events.put((viewer._generation, 'thumbnail_batch_item', queued))
+        viewer.close()
+        self.assertTrue(viewer._events.empty())
+        with self.assertRaises(ValueError):
+            queued_image.getpixel((0, 0))
+
+    def test_warm_hit_during_transport_and_close_during_decode(self) -> None:
+        """Apply a warm hit during blocked I/O and release a late decode on close.
+
+        Returns:
+            None: Warm Tk attachment needs no transport completion, and a
+                decoded raster finishing after close never enters the queue.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Controlled close'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and all(viewer._photo_images),
+            'The close fixture did not finish its initial thumbnails.',
+        )
+        read_started, release_read = threading.Event(), threading.Event()
+        decode_started, release_decode = threading.Event(), threading.Event()
+        self.addCleanup(release_read.set)
+        self.addCleanup(release_decode.set)
+        decoded: list['Image.Image'] = []
+        original_read = session.media_photo.side_effect
+
+        def hold_transport() -> None:
+            """Hold the fake byte source until Tk has exercised its warm path.
+
+            Returns:
+                None: The controlled transport resumes after explicit release.
+            """
+            read_started.set()
+            if not release_read.wait(TEST_GUI_WAIT_SECONDS):
+                raise TimeoutError('The controlled read was not released.')
+
+        def hold_decode(_body: bytes) -> 'Image.Image':
+            """Keep a worker-owned raster until viewer teardown has completed.
+
+            Args:
+                _body (bytes): Bounded synthetic thumbnail response bytes.
+
+            Returns:
+                Image.Image: One independent RGB pixel transferred to the worker.
+            """
+            image = Image.new('RGB', (1, 1))
+            decoded.append(image)
+            decode_started.set()
+            if not release_decode.wait(TEST_GUI_WAIT_SECONDS):
+                image.close()
+                raise TimeoutError('The controlled decoder was not released.')
+            return image
+
+        session.media_photo.side_effect = lambda *args, **kwargs: (
+            hold_transport(), original_read(*args, **kwargs),
+        )[1]
+        viewer._release_thumbnail_image(0)
+        viewer._release_thumbnail_image(1)
+        viewer._thumbnail_pending = [0]
+        viewer._warm_thumbnail_pending = []
+        cancelled_before = viewer._thumbnail_cancelled_read_count
+        with mock.patch.object(viewer, '_prepare_thumbnail', side_effect=hold_decode):
+            viewer._load_next_thumbnail()
+            worker = viewer._worker
+            self.assertIsNotNone(worker)
+            self.assertTrue(read_started.wait(TEST_GUI_WAIT_SECONDS))
+            reads = session.media_photo.call_count
+            viewer._warm_thumbnail_pending = [
+                (TEST_GALLERY_ID, 1, page.photos[1]),
+            ]
+            viewer._drain_warm_thumbnail_slice()
+            self.assertIsNotNone(viewer._photo_images[1])
+            self.assertEqual(reads, session.media_photo.call_count)
+            release_read.set()
+            self.assertTrue(decode_started.wait(TEST_GUI_WAIT_SECONDS))
+            viewer.close()
+            release_decode.set()
+            worker.join(TEST_WORKER_JOIN_SECONDS)
+            self.assertFalse(worker.is_alive())
+        self.assertTrue(viewer._events.empty())
+        self.assertEqual(
+            cancelled_before + 1, viewer._thumbnail_cancelled_read_count,
+        )
+        self.assertEqual(1, len(decoded))
+        with self.assertRaises(ValueError):
+            decoded[0].getpixel((0, 0))
+
+    def test_thumbnail_batch_stops_at_throttle_and_retries_explicitly(self) -> None:
+        """Stop a serial batch at HTTP 429 and resume after Retry.
+
+        Returns:
+            None: The initial batch issues one throttled read; explicit retry
+                resumes bounded thumbnail loading with the same descriptors.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        photos = tuple(
+            LinkedPhoto(TEST_FIRST_IMAGE_ID + index, f'Throttle {index}')
+            for index in range(TEST_SCROLL_PHOTO_COUNT)
+        )
+        for index, photo in enumerate(photos):
+            image_bytes[photo.image_id] = self._png((index, 50, 100))
+        page = LinkedMediaPage(page.gallery_id, page.parent_id, photos, None)
+        session = self._session(page, presentation, image_bytes)
+        session.media_photo.side_effect = LinkingMediaThrottled()
+        viewer = self._open_viewer(
+            session,
+            LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, '429 batch'),
+        )
+        self._wait_until(
+            lambda: viewer._media_throttled
+            and viewer.retry_button.winfo_manager() != '',
+            'The thumbnail batch did not expose an explicit throttle retry.',
+        )
+        self.assertEqual(1, session.media_photo.call_count)
+        self.assertEqual('thumbnail', viewer._retry_kind)
+
+        session.media_photo.side_effect = None
+        session.media_photo.return_value = (image_bytes[photos[0].image_id], 'image/png')
+        viewer.retry_button.invoke()
+        self._wait_until(
+            lambda: viewer._worker is None
+            and all(viewer._photo_images[index]
+                    for index in viewer._admitted_thumbnail_indices),
+            'Explicit retry did not resume the admitted thumbnail batch.',
+        )
+        self.assertGreater(session.media_photo.call_count, 1)
+        self.assertFalse(viewer._media_throttled)
+        viewer.close()
+
+    def test_foreground_photo_selection_interrupts_thumbnail_batch(self) -> None:
+        """Interrupt queued thumbnail reads when a detail becomes foreground.
+
+        Returns:
+            None: The in-flight thumbnail is followed immediately by the
+                selected detail; remaining grid reads cannot precede it.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        photos = tuple(
+            LinkedPhoto(TEST_FIRST_IMAGE_ID + index, f'Foreground {index}')
+            for index in range(TEST_SCROLL_PHOTO_COUNT)
+        )
+        for index, photo in enumerate(photos):
+            image_bytes[photo.image_id] = self._png((index, 70, 110))
+        page = LinkedMediaPage(page.gallery_id, page.parent_id, photos, None)
+        session = self._session(page, presentation, image_bytes)
+        original_read = session.media_photo.side_effect
+        first_thumbnail_started = threading.Event()
+        release_thumbnail = threading.Event()
+        self.addCleanup(release_thumbnail.set)
+
+        def hold_first_thumbnail(
+            gallery_id: int,
+            image_id: int,
+            thumbnail: bool,
+            cancelled: threading.Event | None = None,
+            *,
+            cache_eligible: bool | None = None,
+            thumbnail_etag: str | None = None,
+            thumbnail_verified_at: float | None = None,
+            preload_eligible: bool | None = None,
+            preload_thumbnail_etag: str | None = None,
+            preload_verified_at: float | None = None,
+            timings: MediaReadTimings | None = None,
+            use_preloaded_snapshot: bool = False,
+        ) -> tuple[bytes, str]:
+            """Hold one thumbnail transport while foreground selection arrives.
+
+            Args:
+                gallery_id (int): Requested gallery identity.
+                image_id (int): Requested photo identity.
+                thumbnail (bool): Whether the read is a thumbnail.
+                cancelled (threading.Event | None): Viewer-owned cancellation.
+                cache_eligible (bool | None): Public cache admission.
+                thumbnail_etag (str | None): Current rendition validator.
+                thumbnail_verified_at (float | None): Catalogue proof time.
+                preload_eligible (bool | None): Admin preload admission.
+                preload_thumbnail_etag (str | None): Admin validator.
+                preload_verified_at (float | None): Admin proof time.
+                timings (MediaReadTimings | None): Optional timing record.
+                use_preloaded_snapshot (bool): Full-read saved-snapshot request.
+
+            Returns:
+                tuple[bytes, str]: Existing synthetic image and its media type.
+            """
+            if thumbnail and not first_thumbnail_started.is_set():
+                first_thumbnail_started.set()
+                if not release_thumbnail.wait(TEST_GUI_WAIT_SECONDS):
+                    raise TimeoutError('Foreground test did not release its read')
+            return original_read(
+                gallery_id, image_id, thumbnail, cancelled,
+                cache_eligible=cache_eligible,
+                thumbnail_etag=thumbnail_etag,
+                thumbnail_verified_at=thumbnail_verified_at,
+                preload_eligible=preload_eligible,
+                preload_thumbnail_etag=preload_thumbnail_etag,
+                preload_verified_at=preload_verified_at,
+                timings=timings,
+                use_preloaded_snapshot=use_preloaded_snapshot,
+            )
+
+        session.media_photo.side_effect = hold_first_thumbnail
+        viewer = self._open_viewer(
+            session,
+            LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Foreground'),
+        )
+        self._wait_until(
+            first_thumbnail_started.is_set,
+            'The initial thumbnail read did not start.',
+        )
+        viewer._select_photo(0)
+        release_thumbnail.set()
+        self._wait_until(
+            lambda: viewer._worker is None
+            and viewer._pending_detail_index is None
+            and any(not call.kwargs.get('thumbnail', False)
+                    for call in session.media_photo.call_args_list),
+            'The selected detail did not receive the next serialized read.',
+        )
+        self.assertEqual(
+            1, sum(bool(call.kwargs.get('thumbnail'))
+                   for call in session.media_photo.call_args_list),
+        )
+        self.assertTrue(session.media_photo.call_args_list[0].kwargs['thumbnail'])
+        self.assertFalse(session.media_photo.call_args_list[1].kwargs['thumbnail'])
+        viewer.close()
+
+    def test_disk_lane_reuses_inflight_identity_after_departure(self) -> None:
+        """Re-admit one in-flight disk lookup without a duplicate decode.
+
+        Returns:
+            None: The returned tile has one local read and one owned result.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        started = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
+        photo = page.photos[0]
+        body = image_bytes[photo.image_id]
+
+        def read_cached(
+            gallery_id: int, descriptor: LinkedPhoto, *, thumbnail: bool,
+            cancelled: threading.Event, timings: MediaReadTimings,
+        ) -> tuple[bytes, str]:
+            """Hold the original lookup across a departure and return.
+
+            Args:
+                gallery_id (int): Physical gallery whose tile was admitted.
+                descriptor (LinkedPhoto): Exact photo descriptor being read.
+                thumbnail (bool): Whether the cached rendition is a thumbnail.
+                cancelled (threading.Event): Owned worker shutdown signal.
+                timings (MediaReadTimings): Mutable local read observations.
+            Returns:
+                tuple[bytes, str]: Synthetic PNG bytes and their media type.
+            """
+            started.set()
+            if not release.wait(TEST_GUI_WAIT_SECONDS):
+                raise TimeoutError('The controlled disk read was not released.')
+            return body, 'image/png'
+
+        session.cached_media_photo.side_effect = read_cached
+        lane = native_gallery_viewer._ThumbnailDiskLane(
+            session, lambda data: Image.open(io.BytesIO(data)).convert('RGB'),
+            lambda timings, elapsed: None,
+        )
+        self.addCleanup(lambda: lane.invalidate(close=True))
+        lane.submit(TEST_GALLERY_ID, 0, photo)
+        self.assertTrue(started.wait(TEST_GUI_WAIT_SECONDS))
+        lane.retain(TEST_GALLERY_ID, page.photos, ())
+        lane.retain(TEST_GALLERY_ID, page.photos, (0,))
+        lane.submit(TEST_GALLERY_ID, 0, photo)
+        release.set()
+        received: list['native_gallery_viewer._ThumbnailResult'] = []
+
+        def completed() -> bool:
+            """Drain owned local results until the lane has no remaining work.
+
+            Returns:
+                bool: Whether the returned identity has settled completely.
+            """
+            result = lane.pop_ready()
+            if result is not None:
+                received.append(result)
+            return bool(received) and not lane.busy()
+
+        self._wait_until(completed, 'The re-admitted disk lookup did not settle.')
+        self.assertEqual(1, session.cached_media_photo.call_count)
+        self.assertEqual(1, len(received))
+        self.assertEqual(photo, received[0].photo)
+        self.assertIsNotNone(received[0].image)
+        received[0].image.close()
+
+    def test_large_viewport_return_reuses_decoded_visible_band(self) -> None:
+        """Return over 48 visible tiles from bounded memory without new reads.
+
+        Returns:
+            None: The original visible tiles reuse memory and Tk retains only
+                the current viewport and its configured overscan rows.
+        """
+        self.root.overrideredirect(True)
+        self.root.maxsize(*TEST_WIDE_VIEWPORT_SIZE)
+        self.root.minsize(*TEST_WIDE_VIEWPORT_SIZE)
+        width, height = TEST_WIDE_VIEWPORT_SIZE
+        self.root.geometry(f'{width}x{height}')
+        page, presentation, image_bytes = self._gallery_data()
+        photos = tuple(
+            LinkedPhoto(TEST_FIRST_IMAGE_ID + index, f'Wide photo {index}')
+            for index in range(TEST_WIDE_VIEWPORT_PHOTO_COUNT)
+        )
+        for index, photo in enumerate(photos):
+            with Image.new(
+                'RGB', native_gallery_viewer.MEDIA_THUMBNAIL_SIZE,
+                (index, 80, 160),
+            ) as raster:
+                encoded = io.BytesIO()
+                raster.save(encoded, format='PNG')
+                image_bytes[photo.image_id] = encoded.getvalue()
+        # Preserve the production metadata cap: this wide viewport spans two
+        # real native pages, rather than bypassing the page-size validator.
+        page_size = native_gallery_viewer.NATIVE_MEDIA_PAGE_SIZE
+        first_page = LinkedMediaPage(
+            page.gallery_id, page.parent_id, photos[:page_size],
+            photos[page_size - 1].image_id,
+        )
+        last_page = LinkedMediaPage(
+            page.gallery_id, page.parent_id, photos[page_size:], None,
+        )
+        session = self._session(first_page, presentation, image_bytes)
+        session.media_page.side_effect = (first_page, last_page)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Wide viewport'),
+        )
+        try:
+            self._wait_until(
+                lambda: len(viewer._photos) == len(photos)
+                and len(viewer._visible_thumbnail_indices) > 48
+                and viewer._admitted_thumbnail_indices <= viewer._thumbnail_loaded
+                and viewer._worker is None and not viewer._thumbnail_disk_lane.busy()
+                and not viewer._warm_thumbnail_pending
+                and viewer._thumbnail_gui_after_id is None
+                and viewer._viewport_after_id is None,
+                'The wide viewport did not settle with more than 48 visible tiles.',
+            )
+        except AssertionError as exc:
+            self.fail(
+                f'{exc} root={self.root.winfo_width()}x{self.root.winfo_height()} '
+                f'canvas={viewer.grid_canvas.winfo_width()}x'
+                f'{viewer.grid_canvas.winfo_height()} '
+                f'columns={viewer._grid_columns} '
+                f'loaded={len(viewer._thumbnail_loaded)} '
+                f'pending={len(viewer._thumbnail_pending)} '
+                f'warm_pending={len(viewer._warm_thumbnail_pending)} '
+                f'disk_busy={viewer._thumbnail_disk_lane.busy()} '
+                f'worker_active={viewer._worker is not None} '
+                f'worker_alive={viewer._worker is not None and viewer._worker.is_alive()} '
+                f'worker_kind={viewer._worker_kind} '
+                f'gui_timer={viewer._thumbnail_gui_after_id is not None} '
+                f'viewport_timer={viewer._viewport_after_id is not None} '
+                f'{viewer.render_diagnostics()}'
+            )
+        first_visible = set(viewer._visible_thumbnail_indices)
+        # Two legal pages cover all 120 descriptors; no repeated cursor reads.
+        self.assertEqual(2, session.media_page.call_count)
+        initial_reads = session.media_photo.call_count
+        viewer.grid_canvas.yview_moveto(1.0)
+        viewer._on_grid_viewport(None)
+        self._wait_until(
+            lambda: bool(viewer._visible_thumbnail_indices - first_visible)
+            and viewer._admitted_thumbnail_indices <= viewer._thumbnail_loaded
+            and viewer._worker is None and not viewer._thumbnail_disk_lane.busy()
+            and not viewer._warm_thumbnail_pending
+            and viewer._thumbnail_gui_after_id is None
+            and viewer._viewport_after_id is None,
+            'The lower viewport did not settle.',
+        )
+        reads = session.media_photo.call_count
+        memory_hits = viewer._thumbnail_warm_cache_hit_count
+        created_images = viewer._thumbnail_image_create_count
+        viewer.grid_canvas.yview_moveto(0.0)
+        viewer._on_grid_viewport(None)
+        self._wait_until(
+            lambda: viewer._visible_thumbnail_indices == first_visible
+            and viewer._admitted_thumbnail_indices <= viewer._thumbnail_loaded
+            and viewer._worker is None and not viewer._thumbnail_disk_lane.busy()
+            and not viewer._warm_thumbnail_pending
+            and viewer._thumbnail_gui_after_id is None
+            and viewer._viewport_after_id is None,
+            'The first visible band did not return from memory.',
+        )
+        self.assertEqual(reads, session.media_photo.call_count)
+        retained = sum(image is not None for image in viewer._photo_images)
+        self.assertLessEqual(retained, len(viewer._admitted_thumbnail_indices))
+        self.assertLessEqual(
+            viewer._thumbnail_memory.size_bytes,
+            native_gallery_viewer.MEDIA_THUMBNAIL_CACHE_MAX_BYTES,
+        )
+        measurement = {
+            'python_version': sys.version,
+            'platform': sys.platform,
+            'requested_window_width': width,
+            'requested_window_height': height,
+            'actual_canvas_width': viewer.grid_canvas.winfo_width(),
+            'actual_canvas_height': viewer.grid_canvas.winfo_height(),
+            'visible_count': len(first_visible),
+            'admitted_count': len(viewer._admitted_thumbnail_indices),
+            'initial_total_requests': initial_reads,
+            'lower_total_requests': reads,
+            'return_requests_delta': session.media_photo.call_count - reads,
+            'return_memory_hits_delta': (
+                viewer._thumbnail_warm_cache_hit_count - memory_hits
+            ),
+            'return_created_images_delta': (
+                viewer._thumbnail_image_create_count - created_images
+            ),
+            'memory_bytes': viewer._thumbnail_memory.size_bytes,
+            'memory_bytes_limit': native_gallery_viewer.MEDIA_THUMBNAIL_CACHE_MAX_BYTES,
+            'data_source': 'synthetic in-memory PNG responses',
+        }
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+        evidence.mkdir(parents=True, exist_ok=True)
+        (evidence / 'photos-viewer-measurement.json').write_text(
+            json.dumps(measurement, indent=2) + '\n', encoding='utf-8',
+        )
+        print(
+            f'wide viewport: visible={len(first_visible)} '
+            f'admitted={len(viewer._admitted_thumbnail_indices)} '
+            f'tk_images={retained} memory_bytes={viewer._thumbnail_memory.size_bytes}'
+        )
+        viewer.close()
+
+    def test_disk_hits_attach_while_unrelated_transport_is_blocked(self) -> None:
+        """Deliver disk hits without using the occupied network worker.
+
+        Returns:
+            None: Every visible disk hit attaches on Tk without a duplicate
+                media request; decoding stays on the local worker thread.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        started = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
+        decode_threads: list[int] = []
+        gui_thread = threading.get_ident()
+        session.cached_media_photo.side_effect = lambda gallery_id, photo, **kwargs: (
+            image_bytes[photo.image_id], 'image/png'
+        )
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Disk hits'),
+        )
+        self._wait_until(
+            lambda: viewer._visible_thumbnail_indices <= viewer._thumbnail_loaded
+            and bool(viewer._visible_thumbnail_indices)
+            and viewer._worker is None and not viewer._thumbnail_disk_lane.busy(),
+            'Initial disk-backed thumbnails did not attach.',
+        )
+        for index in tuple(viewer._thumbnail_loaded):
+            viewer._release_thumbnail_image(index)
+        viewer._thumbnail_memory.clear()
+        original_prepare = viewer._thumbnail_disk_lane._prepare
+
+        def prepare(body: bytes) -> 'Image.Image':
+            """Record the decoder thread for one disk-owned PNG body.
+
+            Args:
+                body (bytes): Encoded synthetic PNG from the local cache.
+            Returns:
+                Image.Image: Independent decoded thumbnail owned by the lane.
+            """
+            decode_threads.append(threading.get_ident())
+            return original_prepare(body)
+
+        def block_transport() -> None:
+            """Hold unrelated work until the disk path has delivered its hits.
+
+            Returns:
+                None: The test releases the worker using its owned event.
+            """
+            started.set()
+            if not release.wait(TEST_GUI_WAIT_SECONDS):
+                raise TimeoutError('The controlled transport was not released.')
+
+        viewer._thumbnail_disk_lane._prepare = prepare
+        viewer._worker = threading.Thread(target=block_transport, daemon=True)
+        viewer._worker_kind = 'detail'
+        viewer._worker.start()
+        self.assertTrue(started.wait(TEST_GUI_WAIT_SECONDS))
+        reads = session.media_photo.call_count
+        attach_threads: list[int] = []
+        original_photo_image = native_gallery_viewer.ImageTk.PhotoImage
+
+        def attach(
+            image: 'Image.Image', *, master: 'tk.Misc',
+        ) -> 'ImageTk.PhotoImage':
+            """Record the Tk owner before creating one actual image.
+
+            Args:
+                image (Image.Image): Decoded synthetic thumbnail raster.
+                master (tk.Misc): Tk owner for the created image.
+            Returns:
+                ImageTk.PhotoImage: Real Tk image created for this tile.
+            """
+            attach_threads.append(threading.get_ident())
+            return original_photo_image(image, master=master)
+
+        with mock.patch.object(
+            native_gallery_viewer.ImageTk, 'PhotoImage', side_effect=attach,
+        ) as photo_image:
+            viewer._on_grid_viewport(None)
+            self._wait_until(
+                lambda: viewer._visible_thumbnail_indices <= viewer._thumbnail_loaded
+                and not viewer._thumbnail_disk_lane.busy(),
+                'Local hits did not attach while the transport was held.',
+            )
+            self.assertGreater(photo_image.call_count, 0)
+        self.assertTrue(attach_threads)
+        self.assertTrue(all(thread == gui_thread for thread in attach_threads))
+        self.assertTrue(decode_threads)
+        self.assertTrue(all(thread != gui_thread for thread in decode_threads))
+        self.assertEqual(reads, session.media_photo.call_count)
+        release.set()
+        viewer.close()
+
+    def test_stable_viewport_keeps_network_read_behind_local_pending_tile(self) -> None:
+        """Keep an admitted network read when an earlier tile is disk-owned.
+
+        Returns:
+            None: An unchanged viewport does not cancel the current network
+                batch merely because an independent local result is pending.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Stable viewport'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and all(viewer._photo_images),
+            'The stable-viewport fixture did not finish its initial thumbnails.',
+        )
+        for index in range(len(page.photos)):
+            viewer._release_thumbnail_image(index)
+        # Tile zero is reserved by the independent disk lane. Tile one is the
+        # already admitted network operation; both remain visible and wanted.
+        viewer._thumbnail_pending = [1]
+        viewer._thumbnail_batch_indices = (1,)
+        viewer._worker_kind = 'thumbnail_batch'
+        viewer._worker = mock.Mock()
+        viewer._thumbnail_cancelled.clear()
+        viewer._cancel_grid_viewport_callback()
+        identity = 'controlled-stable-viewport'
+        viewer._viewport_after_id = identity
+        with mock.patch.object(
+            viewer._thumbnail_disk_lane, 'contains',
+            side_effect=lambda gallery_id, index, photo: index == 0,
+        ):
+            viewer._apply_grid_viewport(identity)
+        self.assertFalse(viewer._thumbnail_cancelled.is_set())
+        self.assertEqual([1], viewer._thumbnail_pending)
+        viewer._worker = None
+        viewer._worker_kind = None
+        viewer.close()
+
+    def test_decoded_cache_bounds_prioritize_visible_over_overscan(self) -> None:
+        """Bound full-sized decoded pixels and reject speculative displacement.
+
+        Returns:
+            None: Visible admission evicts oldest history within the byte cap;
+                overscan, expiry and validator replacement release ownership.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Byte-bound cache'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and all(viewer._photo_images),
+            'The byte-bound fixture did not finish its initial thumbnails.',
+        )
+        extra = LinkedPhoto(TEST_NEXT_PAGE_IMAGE_ID, 'Third descriptor')
+        viewer._photos = (*page.photos, extra)
+        memory = viewer._thumbnail_memory
+        memory.clear()
+        # Exactly two maximum-size RGB entries exercise the byte boundary
+        # independently of the production entry-count ceiling.
+        one_entry_bytes = (
+            native_gallery_viewer.MEDIA_THUMBNAIL_SIZE[0]
+            * native_gallery_viewer.MEDIA_THUMBNAIL_SIZE[1] * 4
+        )
+        with mock.patch.object(
+            native_gallery_viewer, 'MEDIA_THUMBNAIL_CACHE_MAX_BYTES',
+            one_entry_bytes * 2,
+        ), mock.patch.object(
+            native_gallery_viewer.time, 'monotonic', return_value=0.0,
+        ):
+            for index in (0, 1):
+                viewer._visible_thumbnail_indices = {index}
+                viewer._remember_thumbnail(
+                    viewer._photos[index],
+                    Image.new('RGB', native_gallery_viewer.MEDIA_THUMBNAIL_SIZE),
+                )
+            self.assertEqual(one_entry_bytes * 2, memory.size_bytes)
+            viewer._visible_thumbnail_indices = {0}
+            speculative = Image.new(
+                'RGB', native_gallery_viewer.MEDIA_THUMBNAIL_SIZE,
+            )
+            viewer._remember_thumbnail(extra, speculative)
+            self.assertEqual(1, memory.admission_refusals)
+            self.assertEqual(0, memory.evictions)
+            with self.assertRaises(ValueError):
+                speculative.getpixel((0, 0))
+            viewer._visible_thumbnail_indices = {2}
+            viewer._remember_thumbnail(
+                extra, Image.new('RGB', native_gallery_viewer.MEDIA_THUMBNAIL_SIZE),
+            )
+            self.assertEqual(1, memory.evictions)
+            self.assertEqual(one_entry_bytes * 2, memory.size_bytes)
+            self.assertIsNone(viewer._cached_thumbnail(page.photos[0]))
+            changed = LinkedPhoto(extra.image_id, extra.title, thumbnail_etag='"' + 'a' * 64 + '"')
+            viewer._photos = (*page.photos, changed)
+            viewer._remember_thumbnail(
+                changed, Image.new('RGB', native_gallery_viewer.MEDIA_THUMBNAIL_SIZE),
+            )
+            self.assertEqual(1, memory.validator_changes)
+        with mock.patch.object(
+            native_gallery_viewer.time, 'monotonic',
+            return_value=(
+                native_gallery_viewer.MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS + 1
+            ),
+        ):
+            self.assertIsNone(viewer._cached_thumbnail(changed))
+        self.assertEqual(1, memory.expirations)
+        self.assertEqual(one_entry_bytes, memory.size_bytes)
         viewer.close()
 
     def test_decoded_thumbnail_cache_reuses_verified_album_previews(self) -> None:
@@ -810,6 +2986,67 @@ class NativeGalleryViewerTests(unittest.TestCase):
         third.close()
         memory.clear()
 
+    def test_private_thumbnail_ram_uses_thumbnail_identity_scope(self) -> None:
+        """Use thumbnail proof scope for RAM tiles and default scope for detail.
+
+        Returns:
+            None: Thumbnail operations opt into thumbnail metadata while detail
+                cache identity calls preserve the original default behavior.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Thumbnail identity'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and all(viewer._photo_images),
+            'Initial thumbnails did not settle before identity checks.',
+        )
+        verified_at = time.monotonic()
+        photo = LinkedPhoto(
+            page.photos[0].image_id,
+            page.photos[0].title,
+            nsfw=False,
+            cache_eligible=False,
+            preload_eligible=True,
+            preload_thumbnail_etag='"' + 'a' * 64 + '"',
+            preload_verified_at=verified_at,
+        )
+        viewer._photos = (photo, *page.photos[1:])
+        viewer._visible_thumbnail_indices = {0}
+        session.can_read_admin_media.return_value = True
+        session.private_preload_cache_identity.return_value = (
+            42, photo.preload_thumbnail_etag, verified_at, 7,
+        )
+
+        viewer._remember_thumbnail(photo, Image.new('RGB', (12, 12)))
+        self.assertTrue(session.private_preload_cache_identity.called)
+        self.assertTrue(all(
+            call.kwargs.get('thumbnail') is True
+            for call in session.private_preload_cache_identity.call_args_list
+        ))
+        cached_thumbnail = viewer._cached_thumbnail(photo)
+        self.assertIsNotNone(cached_thumbnail)
+        cached_thumbnail.close()
+
+        session.private_preload_cache_identity.reset_mock()
+        viewer._remember_detail(
+            photo.image_id, Image.new('RGB', (12, 12)), b'original-body',
+        )
+        self.assertEqual(1, session.private_preload_cache_identity.call_count)
+        self.assertNotIn(
+            'thumbnail',
+            session.private_preload_cache_identity.call_args.kwargs,
+        )
+        cached_detail = viewer._cached_detail(photo.image_id)
+        self.assertIsNotNone(cached_detail)
+        self.assertEqual(2, session.private_preload_cache_identity.call_count)
+        self.assertTrue(all(
+            'thumbnail' not in call.kwargs
+            for call in session.private_preload_cache_identity.call_args_list
+        ))
+        viewer.close()
+
     def _fullscreen_enabled(self, window: 'tk.Misc') -> bool:
         """Interpret Tk's platform-dependent fullscreen attribute result.
 
@@ -838,7 +3075,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         presentation: LinkedPresentation,
         image_bytes: dict[int, bytes],
     ) -> mock.Mock:
-        """Build an autospecced LinkingSession fake with in-memory media.
+        """Build an autospecced older-server session with in-memory media.
 
         Args:
             page (LinkedMediaPage): Validated synthetic first page.
@@ -854,8 +3091,13 @@ class NativeGalleryViewerTests(unittest.TestCase):
             spec_set=True,
         )
         session.can_read_media.return_value = True
+        session.can_reuse_cached_media.return_value = True
         session.can_read_admin_media.return_value = False
+        session.private_preload_user_id.return_value = None
+        session.private_preload_cache_identity.return_value = None
         session.can_read_presentation.return_value = True
+        session.supports_gallery_tree.return_value = False
+        session.cached_media_photo.return_value = None
         session.media_page.return_value = page
         session.media_presentation.return_value = presentation
 
@@ -871,6 +3113,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             preload_eligible: bool | None = None,
             preload_thumbnail_etag: str | None = None,
             preload_verified_at: float | None = None,
+            timings: MediaReadTimings | None = None,
+            use_preloaded_snapshot: bool = False,
         ) -> tuple[bytes, str]:
             """Return one synthetic photo through the real viewer worker.
 
@@ -885,6 +3129,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 preload_eligible (bool | None): Current Admin preload admission.
                 preload_thumbnail_etag (str | None): Admin thumbnail validator.
                 preload_verified_at (float | None): Admin proof time.
+                timings (MediaReadTimings | None): Optional read timing record.
+                use_preloaded_snapshot (bool): Whether the full-read caller
+                    authorizes same-account use of its verified saved snapshot.
 
             Returns:
                 tuple[bytes, str]: In-memory PNG body and its image media type.
@@ -966,6 +3213,52 @@ class NativeGalleryViewerTests(unittest.TestCase):
         event.y_root = workspace.tree.winfo_rooty() + 20
         card = workspace._open_context(event)
         return workspace, session, card
+
+    def test_first_page_and_tiles_precede_slow_optional_presentation(self) -> None:
+        """Publish authorized photos before an optional presentation returns.
+
+        Returns:
+            None: A blocked presentation cannot delay the initial page or its
+                first thumbnail; it is applied only after the worker resumes.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        entered = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def delayed_presentation(
+            gallery_id: int, cancelled: threading.Event | None = None,
+        ) -> LinkedPresentation:
+            """Hold the optional response until the test observes the page.
+
+            Args:
+                gallery_id (int): Exact physical gallery requested.
+                cancelled (threading.Event | None): Viewer cancellation event.
+
+            Returns:
+                LinkedPresentation: The synthetic scoped presentation.
+            """
+            self.assertEqual(TEST_GALLERY_ID, gallery_id)
+            entered.set()
+            release.wait(TEST_GUI_WAIT_SECONDS)
+            return presentation
+
+        session.media_presentation.side_effect = delayed_presentation
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Slow presentation')
+        viewer = self._open_viewer(session, gallery)
+        self._wait_until(
+            lambda: entered.is_set(),
+            'The optional presentation request did not start.',
+        )
+        self.assertEqual(page.photos, viewer._photos)
+        self.assertTrue(any(image is not None for image in viewer._photo_images))
+        self.assertIsNone(viewer._presentation)
+        release.set()
+        self._wait_until(
+            lambda: viewer._presentation is presentation,
+            'The optional presentation was not applied after release.',
+        )
 
     def _open_viewer(
         self,
@@ -1329,11 +3622,12 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._pages_this_pass = (
             photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT
         )
-        scheduled: list[tuple[int, Callable[[], None]]] = []
+        scheduled: list[tuple[str, int, Callable[[], None]]] = []
         workspace.after = mock.Mock(
             side_effect=lambda delay, callback: (
-                scheduled.append((delay, callback))
-                or f'after#{len(scheduled)}'
+                scheduled.append((
+                    f'after#{len(scheduled) + 1}', delay, callback,
+                )) or scheduled[-1][0]
             ),
         )
         workspace.after_cancel = mock.Mock()
@@ -1341,18 +3635,24 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._request_page = request_page
         workspace._continue_catalogue()
         workspace._continue_catalogue()
-        self.assertEqual(len(scheduled), 1)
+        paced = [
+            item for item in scheduled
+            if item[1]
+            == photos_workspace.PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS
+        ]
+        self.assertEqual(len(paced), 1)
         self.assertEqual(
-            scheduled[0][0],
+            paced[0][1],
             photos_workspace.PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS,
         )
-        self.assertEqual(workspace._catalogue_after, 'after#1')
+        first_after_id = paced[0][0]
+        self.assertEqual(workspace._catalogue_after, first_after_id)
         self.assertEqual(workspace.load_more_button.winfo_manager(), '')
         self.assertEqual(
             workspace._pages_this_pass,
             photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT,
         )
-        scheduled[0][1]()
+        paced[0][2]()
         self.assertEqual(
             request_page.call_args_list,
             [mock.call(TEST_GALLERY_ID)],
@@ -1362,15 +3662,23 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._next_after = TEST_GALLERY_ID + 1
         workspace._pages_this_pass += 1
         workspace._continue_catalogue()
-        self.assertEqual(len(scheduled), 2)
-        self.assertEqual(workspace._catalogue_after, 'after#2')
+        paced = [
+            item for item in scheduled
+            if item[1]
+            == photos_workspace.PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS
+        ]
+        self.assertEqual(len(paced), 2)
+        second_after_id = paced[1][0]
+        self.assertEqual(workspace._catalogue_after, second_after_id)
         self.assertEqual(
             workspace._pages_this_pass,
             photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT + 1,
         )
         workspace._accept_page(None)
-        workspace.after_cancel.assert_called_once_with('after#2')
-        scheduled[1][1]()
+        self.assertIn(
+            mock.call(second_after_id), workspace.after_cancel.call_args_list,
+        )
+        paced[1][2]()
         self.assertEqual(
             request_page.call_args_list,
             [mock.call(TEST_GALLERY_ID)],
@@ -1406,10 +3714,12 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._pages_this_pass = (
             photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT
         )
-        scheduled: list[Callable[[], None]] = []
+        scheduled: list[tuple[str, int, Callable[[], None]]] = []
         workspace.after = mock.Mock(
-            side_effect=lambda _delay, callback: (
-                scheduled.append(callback) or f'after#{len(scheduled)}'
+            side_effect=lambda delay, callback: (
+                scheduled.append((
+                    f'after#{len(scheduled) + 1}', delay, callback,
+                )) or scheduled[-1][0]
             ),
         )
         workspace.after_cancel = mock.Mock()
@@ -1417,29 +3727,59 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._request_page = request_page
 
         workspace._continue_catalogue()
+        paced = [
+            item for item in scheduled
+            if item[1]
+            == photos_workspace.PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS
+        ]
+        first_after_id = paced[0][0]
         workspace._cancel_catalogue_continuation()
         workspace._next_after += 1
         workspace._continue_catalogue()
-        self.assertEqual(workspace._catalogue_after, 'after#2')
-        scheduled[0]()
-        self.assertEqual(workspace._catalogue_after, 'after#2')
+        paced = [
+            item for item in scheduled
+            if item[1]
+            == photos_workspace.PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS
+        ]
+        second_after_id = paced[1][0]
+        self.assertIn(
+            mock.call(first_after_id), workspace.after_cancel.call_args_list,
+        )
+        self.assertEqual(workspace._catalogue_after, second_after_id)
+        paced[0][2]()
+        self.assertEqual(workspace._catalogue_after, second_after_id)
         request_page.assert_not_called()
 
         workspace._cancel_catalogue_continuation()
         workspace._next_after += 1
         workspace._continue_catalogue()
-        self.assertEqual(workspace._catalogue_after, 'after#3')
+        paced = [
+            item for item in scheduled
+            if item[1]
+            == photos_workspace.PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS
+        ]
+        third_after_id = paced[2][0]
+        self.assertEqual(workspace._catalogue_after, third_after_id)
         workspace._session_provider = lambda: cast(LinkingSession, mock.Mock())
-        scheduled[2]()
+        paced[2][2]()
         self.assertIsNone(workspace._catalogue_after)
         request_page.assert_not_called()
 
         workspace._session_provider = lambda: session
         workspace._continue_catalogue()
-        self.assertEqual(workspace._catalogue_after, 'after#4')
+        paced = [
+            item for item in scheduled
+            if item[1]
+            == photos_workspace.PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS
+        ]
+        fourth_after_id = paced[3][0]
+        self.assertEqual(workspace._catalogue_after, fourth_after_id)
         workspace.destroy()
         self.assertIsNone(workspace._catalogue_after)
-        scheduled[3]()
+        self.assertIn(
+            mock.call(fourth_after_id), workspace.after_cancel.call_args_list,
+        )
+        paced[3][2]()
         request_page.assert_not_called()
 
     def test_gallery_context_opens_editor_only_for_gallery_rows(self) -> None:
@@ -1920,8 +4260,12 @@ class NativeGalleryViewerTests(unittest.TestCase):
         event.widget = workspace.tree
         event.x_root = workspace.tree.winfo_rootx() + 20
         event.y_root = workspace.tree.winfo_rooty() + 20
-        for pinned in (None, True):
+        for pinned, thumbnails_only in ((None, False), (True, False), (None, True)):
             workspace._preload_worker = None
+            if thumbnails_only:
+                narrow_width, narrow_height = TEST_VIEWER_MINIMUM_SIZE
+                self.root.geometry(f'{narrow_width}x{narrow_height}')
+                self.root.update()
             workspace._gallery_context(TEST_GALLERY_ID, event)
             with mock.patch.object(
                 photos_workspace, 'GalleryPreloadWorker', return_value=worker,
@@ -1932,19 +4276,33 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     preload = next(
                         widget for widget in workspace._context_card.winfo_children()
                         if widget.winfo_class() == 'TButton'
-                        and widget.cget('text') == workspace._text('preload')
+                        and widget.cget('text') == workspace._text(
+                            'preload_thumbnails' if thumbnails_only else 'preload',
+                        )
+                    )
+                    self.root.update_idletasks()
+                    self.assertGreater(preload.winfo_width(), 1)
+                    self.assertLessEqual(
+                        workspace._context_card.winfo_width(), workspace.winfo_width(),
                     )
                     preload.invoke()
                 factory.assert_called_once()
                 args, kwargs = factory.call_args
                 self.assertEqual((session, TEST_GALLERY_ID), args)
                 self.assertEqual(
-                    {'pinned': pinned, 'download': True},
+                    {
+                        'pinned': pinned, 'download': True,
+                        'thumbnails_only': thumbnails_only,
+                        'yield_to_foreground': workspace._preload_foreground.is_set,
+                    },
                     {
                         key: value for key, value in kwargs.items()
-                        if key != 'diagnostic_callback'
+                        if key not in ('diagnostic_callback', 'foreground_reason')
                     },
                 )
+                foreground_reason = kwargs.get('foreground_reason')
+                self.assertTrue(callable(foreground_reason))
+                self.assertIsInstance(foreground_reason(), str)
                 diagnostic_callback = kwargs.get('diagnostic_callback')
                 self.assertTrue(callable(diagnostic_callback))
                 diagnostic_callback('phase=preload-fetch accepted-session')
@@ -1953,9 +4311,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 )
             self.assertIsNone(workspace._context_card)
             self.assertEqual('grid', workspace._preload_strip.winfo_manager())
+            self.assertIsNotNone(workspace._preload_activity_after)
             workspace._cancel_preload()
-        self.assertEqual(2, worker.start.call_count)
-        self.assertEqual(2, worker.stop.call_count)
+        # Three distinct explicit actions: full preload, pin and thumbnails.
+        self.assertEqual(3, worker.start.call_count)
+        self.assertEqual(3, worker.stop.call_count)
         with workspace._photo_diagnostic_lock:
             workspace._session = mock.Mock(spec=LinkingSession)
         diagnostic_callback('phase=preload-fetch stale-session')
@@ -1994,7 +4354,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._selected_gallery_id = TEST_GALLERY_ID
         workspace._show_preload_progress(progress)
         self.assertEqual('grid', workspace._preload_strip.winfo_manager())
-        self.assertIn('First album', workspace._preload_text.get())
+        self.assertIn(workspace._text('preload_error'), workspace._preload_text.get())
 
         workspace._selected_gallery_id = TEST_PARENT_GALLERY_ID
         workspace._show_preload_progress(progress)
@@ -2003,7 +4363,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._selected_gallery_id = TEST_GALLERY_ID
         workspace._show_preload_progress(progress)
         self.assertEqual('grid', workspace._preload_strip.winfo_manager())
-        self.assertIn('First album', workspace._preload_text.get())
+        self.assertIn(workspace._text('preload_error'), workspace._preload_text.get())
 
         workspace._cancel_preload()
         self.assertIsNone(workspace._preload_last)
@@ -2012,6 +4372,384 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._selected_gallery_id = TEST_GALLERY_ID
         self.assertEqual('', workspace._preload_strip.winfo_manager())
         workspace.destroy()
+
+    def test_inspector_sash_restores_independently_across_recreation(self) -> None:
+        """Preserve each Photos sash through inspector hiding and recreation.
+
+        Returns:
+            None: A right-sash drag persists its width without changing the
+                tree preference, including after a narrow temporary resize.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Inspector album')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        preferences = {'tree': 210, 'info': 250}
+        saved_tree: list[int] = []
+        saved_info: list[int] = []
+
+        def save_tree(width: int) -> None:
+            """Record the tree sash selected by a user.
+
+            Args:
+                width (int): Tree sash position in Tk pixels.
+
+            Returns:
+                None: Updates the synthetic profile and its write log.
+            """
+            preferences['tree'] = width
+            saved_tree.append(width)
+
+        def save_info(width: int) -> None:
+            """Record the independent inspector width selected by a user.
+
+            Args:
+                width (int): Inspector width in Tk pixels.
+
+            Returns:
+                None: Updates the synthetic profile and its write log.
+            """
+            preferences['info'] = width
+            saved_info.append(width)
+
+        def mount() -> 'photos_workspace.PhotosWorkspace':
+            """Mount a workspace reading the same synthetic profile.
+
+            Returns:
+                photos_workspace.PhotosWorkspace: Real mapped Photos owner.
+            """
+            workspace = photos_workspace.PhotosWorkspace(
+                self.root, lambda: session, mock.Mock(), lambda: 'en',
+                load_tree_width=lambda: preferences['tree'],
+                save_tree_width=save_tree,
+                load_info_width=lambda: preferences['info'],
+                save_info_width=save_info,
+            )
+            workspace.pack(fill='both', expand=True)
+            self._wait_until(
+                lambda: workspace.current_tree_width() is not None
+                and workspace._selected_gallery_id == TEST_GALLERY_ID
+                and workspace._viewer is not None
+                and bool(workspace._viewer._gallery_viewer_controller._photos),
+                'The tree and selected gallery were not mapped.',
+            )
+            workspace._show_photo_inspector_pane()
+            self._wait_until(
+                lambda: workspace._info_width_restored
+                and len(workspace.panes.panes()) == 3
+                and abs(
+                    workspace.panes.winfo_width()
+                    - workspace.panes.sashpos(1) - preferences['info']
+                ) <= 2,
+                'The inspector sash was not restored.',
+            )
+            return workspace
+
+        workspace = mount()
+        initial_tree = workspace.current_tree_width()
+        sash_y = max(1, workspace.panes.winfo_height() // 2)
+        sash_x = int(workspace.panes.sashpos(1))
+        workspace.panes.event_generate('<ButtonPress-1>', x=sash_x, y=sash_y)
+        self.assertTrue(workspace._info_width_dragging)
+        desired = 280
+        sash_x = workspace.panes.winfo_width() - desired
+        workspace.panes.sashpos(1, sash_x)
+        workspace.panes.event_generate('<ButtonRelease-1>', x=sash_x, y=sash_y)
+        self._wait_until(lambda: bool(saved_info), 'Inspector width was not saved.')
+        self.assertEqual(initial_tree, workspace.current_tree_width())
+        self.assertFalse(saved_tree)
+        desired = saved_info[-1]
+        workspace._clear_photo_inspector()
+        workspace._show_photo_inspector_pane()
+        self.root.update()
+        self.assertEqual(3, len(workspace.panes.panes()),
+                         f'visible={workspace._photo_inspector_visible}')
+        self._wait_until(
+            lambda: workspace._info_width_restored and abs(
+                workspace.panes.winfo_width() - workspace.panes.sashpos(1)
+                - desired
+            ) <= 2,
+            'Inspector width did not return after hiding.',
+        )
+        self.assertAlmostEqual(
+            desired, workspace.panes.winfo_width() - workspace.panes.sashpos(1),
+            delta=2,
+            msg=f'pane={workspace.panes.winfo_width()} tree={workspace.panes.sashpos(0)} '
+                f'right={workspace.panes.sashpos(1)} viewer_req={workspace.viewer_pane.winfo_reqwidth()} '
+                f'info={workspace.info_pane.winfo_width()} restored={workspace._info_width_restored}',
+        )
+        narrow_width, narrow_height = TEST_VIEWER_MINIMUM_SIZE
+        self.root.geometry(f'{narrow_width}x{narrow_height}')
+        self.root.update()
+        self.assertEqual(desired, preferences['info'])
+        workspace.destroy()
+        self.root.geometry('840x620')
+        self.root.update()
+        restarted = mount()
+        self.assertEqual(initial_tree, restarted.current_tree_width())
+        self.assertAlmostEqual(
+            desired, restarted.panes.winfo_width() - restarted.panes.sashpos(1),
+            delta=2,
+        )
+        restarted.destroy()
+
+    def test_preload_progress_geometry_and_activity_in_real_heading(self) -> None:
+        """Render determinate progress and activity at desktop and narrow sizes.
+
+        Returns:
+            None: The complete bar fits its heading and uses the real 118/265
+                fraction while waiting remains cancellable and animated.
+        """
+        from PIL import ImageGrab
+
+        ui_theme.configure_theme(self.root)
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Progress album')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self._wait_until(
+            lambda: TEST_GALLERY_ID in workspace._galleries,
+            'The progress gallery did not load.',
+        )
+        workspace._selected_gallery_id = TEST_GALLERY_ID
+        # Synthetic physical occupancy exercises the real compact byte/count
+        # layout; no profile storage is consulted by this mapped fixture.
+        workspace._storage_snapshot = (12, 2 * 1024**2, 4 * 1024**3, True, None)
+        workspace._retained_storage_snapshot = (0, 0, 0, 0, 0, True)
+        workspace._show_storage_snapshot()
+        worker = mock.Mock(spec=photos_workspace.GalleryPreloadWorker)
+        worker.is_alive.return_value = True
+        workspace._preload_worker = worker
+        progress = photos_workspace.PreloadProgress(
+            'preloading', TEST_GALLERY_ID, 265, 118, 0, 0, 0, False, '',
+            thumbnails_only=True,
+            current_hits=72, stored=46, stored_bytes=46 * 1024,
+        )
+        for label, size in (
+            ('desktop', (840, 620)), ('narrow', TEST_VIEWER_MINIMUM_SIZE),
+        ):
+            with self.subTest(size=label):
+                self.root.geometry(f'{size[0]}x{size[1]}')
+                workspace._show_preload_progress(progress)
+                self.root.update()
+                bar = workspace._preload_bar
+                heading = workspace._gallery_heading
+                self.assertEqual('determinate', str(bar.cget('mode')))
+                self.assertEqual(118.0, float(bar.cget('value')))
+                self.assertEqual(265.0, float(bar.cget('maximum')))
+                self.assertGreater(bar.winfo_width(), 1)
+                self.assertGreaterEqual(bar.winfo_rootx(), heading.winfo_rootx())
+                self.assertLessEqual(
+                    bar.winfo_rootx() + bar.winfo_width(),
+                    heading.winfo_rootx() + heading.winfo_width(),
+                )
+                title = workspace._heading_title
+                controls = workspace._heading_controls
+                title_bottom = title.winfo_rooty() + title.winfo_height()
+                controls_bottom = controls.winfo_rooty() + controls.winfo_height()
+                separated = (
+                    title.winfo_rootx() + title.winfo_width()
+                    <= controls.winfo_rootx()
+                    or title_bottom <= controls.winfo_rooty()
+                    or controls_bottom <= title.winfo_rooty()
+                )
+                self.assertTrue(separated, 'Heading controls overlap the title.')
+                # The central Windows owner uploads this existing audit tree.
+                bounds = (
+                    self.root.winfo_rootx(), self.root.winfo_rooty(),
+                    self.root.winfo_rootx() + self.root.winfo_width(),
+                    self.root.winfo_rooty() + self.root.winfo_height(),
+                )
+                try:
+                    captured = ImageGrab.grab(bbox=bounds)
+                except OSError:
+                    captured = None
+                if captured is not None:
+                    evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+                    evidence.mkdir(parents=True, exist_ok=True)
+                    captured.save(evidence / f'photos-progress-{label}.png')
+                    captured.close()
+        for phase in ('listing', 'yielding', 'checking', 'verifying', 'waiting'):
+            with self.subTest(phase=phase):
+                current = photos_workspace.PreloadProgress(
+                    phase, TEST_GALLERY_ID, 265, 118, 0, 0, 0, False, '',
+                    thumbnails_only=True,
+                )
+                workspace._show_preload_progress(current)
+                self.root.update_idletasks()
+                self.assertTrue(workspace._preload_activity.winfo_viewable())
+                self.assertIsNotNone(workspace._preload_activity_after)
+                self.assertEqual('grid', workspace._preload_bar.winfo_manager())
+                self.assertEqual('determinate', str(bar.cget('mode')))
+                self.assertFalse(workspace._preload_cancel.instate(('disabled',)))
+        listing = photos_workspace.PreloadProgress(
+            'listing', TEST_GALLERY_ID, None, 0, 0, 0, 0, False, '',
+            thumbnails_only=True,
+        )
+        workspace._show_preload_progress(listing)
+        self.assertEqual('indeterminate', str(bar.cget('mode')))
+        self.assertIsNotNone(workspace._preload_activity_after)
+        workspace._selected_gallery_id = TEST_PARENT_GALLERY_ID
+        workspace._show_preload_progress(progress)
+        self.assertEqual('grid', workspace._preload_strip.winfo_manager())
+        self.assertIn('Progress album', workspace._preload_text.get())
+        workspace._cancel_preload()
+        worker.stop.assert_called_once()
+        workspace.destroy()
+
+    def test_storage_control_opens_anchored_keyboard_context(self) -> None:
+        """Count both thumbnail pools and restore focus from storage detail.
+
+        Returns:
+            None: Counts and bytes share the same thumbnail scope; unknown
+                storage stays distinct and the anchored quota card restores focus.
+        """
+        ui_theme.configure_theme(self.root)
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Storage album')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        )
+        self.assertEqual((None, None, None, False, None), workspace._storage_snapshot)
+        self.assertNotIn('0 /', workspace._storage_text.get())
+        self.assertIsNotNone(workspace._storage_activity_after)
+        self.assertTrue(workspace._storage_hint.get())
+        workspace._storage_snapshot = (12, 2 * 1024**2, 4 * 1024**3, True, None)
+        workspace._retained_storage_snapshot = (0, 0, 0, 0, 0, True)
+        workspace._show_storage_snapshot()
+        self.assertIn('12', workspace._storage_text.get())
+        self.assertIn('2.0 MiB', workspace._storage_text.get())
+        self.assertNotIn('4.0 GiB', workspace._storage_text.get())
+        self.assertIsNone(workspace._storage_activity_after)
+        # The reported album has 29 retained thumbnails. Other retained media
+        # must not inflate either the thumbnail count or its matching byte total.
+        workspace._retained_storage_snapshot = (
+            1, 29, 5 * 1024**2, 1, 128 * 1024**2, True,
+        )
+        workspace._show_storage_snapshot()
+        self.assertIn('41 · 7.0 MiB', workspace._storage_text.get())
+        workspace._storage_snapshot = (None, None, None, False, 'unavailable')
+        workspace._show_storage_snapshot()
+        self.assertIn(workspace._text('storage_title'), workspace._storage_text.get())
+        self.assertIn(workspace._text('storage_unavailable'), workspace._storage_text.get())
+        for language in ('en', 'cs', 'de', 'sv'):
+            workspace._language = lambda: language
+            workspace._show_storage_snapshot()
+            self.assertTrue(workspace._storage_text.get())
+            self.assertNotEqual(
+                'photos_workspace_storage_unavailable', workspace._storage_text.get(),
+            )
+        workspace._language = lambda: 'en'
+        workspace.pack(fill='both', expand=True)
+        self._wait_until(
+            lambda: workspace._storage_button.winfo_viewable(),
+            'The storage control was not visible.',
+        )
+        workspace._storage_button.focus_force()
+        workspace._storage_button.invoke()
+        self.root.update()
+        card = workspace._context_card
+        self.assertIsNotNone(card)
+        self.assertTrue(card.winfo_viewable())
+        self.assertGreaterEqual(card.winfo_rootx(), workspace.winfo_rootx())
+        self.assertLessEqual(
+            card.winfo_rootx() + card.winfo_width(),
+            workspace.winfo_rootx() + workspace.winfo_width(),
+        )
+        self.assertLessEqual(
+            card.winfo_rooty(),
+            workspace._storage_button.winfo_rooty()
+            + workspace._storage_button.winfo_height(),
+        )
+        self.assertTrue(any(
+            widget.winfo_class() == 'TCombobox'
+            for widget in card.winfo_children()
+        ))
+        card.event_generate('<Escape>')
+        self.root.update()
+        self.assertIsNone(workspace._context_card)
+        self.assertIs(workspace._storage_button, self.root.focus_get())
+        workspace.destroy()
+
+    def test_storage_refresh_coalesces_and_preserves_ready_retained_snapshot(self) -> None:
+        """Refresh live occupancy without replacing known retained totals early.
+
+        Returns:
+            None: Cache events coalesce onto the bounded observer, and an
+                ordinary-only publication preserves the last ready kept pool.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.gallery_page.return_value = LinkedGalleryPage((
+            LinkedGallery(TEST_GALLERY_ID, None, 'Live storage'),
+        ), None)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        )
+        retained_ready = (1, 29, 5 * 1024**2, 1, 128 * 1024**2, True)
+        workspace._retained_storage_snapshot = retained_ready
+        workspace._storage_ram = 64 * 1024**2
+        worker = mock.Mock()
+        worker.is_alive.return_value = True
+        workspace._storage_worker = worker
+        workspace._storage_after = 'existing-storage-poll'
+
+        with (mock.patch.object(workspace, 'after_cancel') as cancel_timer,
+              mock.patch.object(
+                  workspace, 'after', return_value='short-storage-poll',
+              ) as schedule_timer):
+            workspace._request_storage_refresh()
+            workspace._request_storage_refresh()
+        cancel_timer.assert_called_once_with('existing-storage-poll')
+        schedule_timer.assert_called_once_with(
+            photos_workspace.PHOTOS_STORAGE_ACTIVE_POLL_MS,
+            workspace._poll_storage,
+        )
+
+        ordinary = (41, 7 * 1024**2, 4 * 1024**3, True, None)
+        workspace._storage_results.put((
+            ordinary, (None, None, None, None, None, False), None, False,
+        ))
+        self._storage_poll_callback(workspace)
+        self.assertEqual(ordinary, workspace._storage_snapshot)
+        self.assertEqual(retained_ready, workspace._retained_storage_snapshot)
+        self.assertEqual(64 * 1024**2, workspace._storage_ram)
+        self.assertTrue(workspace._storage_refresh_requested)
+        self.assertTrue(workspace._storage_refresh_waiting)
+        worker.is_alive.return_value = False
+        follow_up = mock.Mock()
+        with mock.patch.object(
+            photos_workspace.threading, 'Thread', return_value=follow_up,
+        ):
+            self._storage_poll_callback(workspace)
+        follow_up.start.assert_called_once_with()
+        self.assertFalse(workspace._storage_refresh_requested)
+        self.assertTrue(workspace._storage_worker_requested)
+        workspace.destroy()
+
+    def test_storage_activity_does_not_start_during_failed_construction(self) -> None:
+        """Keep a failed Photos constructor from leaving an owned Tk timer.
+
+        Returns:
+            None: A later widget failure is propagated before animation starts.
+        """
+        with mock.patch.object(
+            photos_workspace, 'GalleryFolderShelf',
+            side_effect=RuntimeError('Synthetic widget construction failure'),
+        ), mock.patch.object(
+            photos_workspace.PhotosWorkspace, '_animate_storage_activity',
+        ) as animate:
+            with self.assertRaisesRegex(RuntimeError, 'Synthetic widget'):
+                photos_workspace.PhotosWorkspace(
+                    self.root, lambda: None, mock.Mock(), lambda: 'en',
+                )
+            animate.assert_not_called()
 
     def test_photos_information_is_explicit_grouped_and_scope_filtered(self) -> None:
         """Fetch rich information only on demand and suppress public GPS rows.
@@ -2152,6 +4890,147 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'Photo information did not refresh for the public-only scope.',
         )
         self.assertFalse(any('Latitude' in text for text in labels()))
+        self.assertEqual(1, session.media_photo_info.call_count)
+        workspace._dismiss_context(restore=False)
+        workspace._inspect_photo(page.photos[0])
+        self.assertTrue(workspace._photo_inspector_visible)
+        self.assertIn(
+            'Camera model: Fixture Camera',
+            [
+                str(child.cget('text'))
+                for child in workspace._photo_inspector_content.winfo_children()
+                if child.winfo_class() == 'TLabel'
+            ],
+        )
+        self.assertFalse(any(
+            'Latitude' in str(child.cget('text'))
+            for child in workspace._photo_inspector_content.winfo_children()
+            if child.winfo_class() == 'TLabel'
+        ))
+        self.assertEqual(1, session.media_photo_info.call_count)
+        workspace.destroy()
+
+    def test_photo_info_cache_is_fresh_bounded_and_session_scoped(self) -> None:
+        """Bound metadata reuse by session, entry count and freshness time.
+
+        Returns:
+            None: Cached values are copied, old entries evict and expired rows miss.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        provider: list[LinkingSession | None] = [None]
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+        )
+        provider[0] = session
+        workspace._session = session
+        workspace._session_provider = lambda: session
+        workspace._selected_gallery_id = TEST_GALLERY_ID
+        for image_id in range(
+            1, photos_workspace.PHOTOS_INFO_CACHE_ENTRY_LIMIT + 2,
+        ):
+            workspace._remember_photo_info(
+                session, TEST_GALLERY_ID, image_id,
+                {'title': f'Photo {image_id}'},
+            )
+        self.assertEqual(
+            photos_workspace.PHOTOS_INFO_CACHE_ENTRY_LIMIT,
+            len(workspace._photo_info_cache),
+        )
+        first_key = (id(session), TEST_GALLERY_ID, 1)
+        self.assertNotIn(first_key, workspace._photo_info_cache)
+        latest_id = photos_workspace.PHOTOS_INFO_CACHE_ENTRY_LIMIT + 1
+        latest = workspace._cached_photo_info(
+            session, TEST_GALLERY_ID, latest_id,
+        )
+        self.assertEqual(f'Photo {latest_id}', latest['title'])
+        latest['title'] = 'Mutated caller copy'
+        self.assertEqual(
+            f'Photo {latest_id}',
+            workspace._photo_info_cache[
+                (id(session), TEST_GALLERY_ID, latest_id)
+            ][1]['title'],
+        )
+        expired_key = (id(session), TEST_GALLERY_ID, 99999)
+        workspace._photo_info_cache[expired_key] = (
+            time.monotonic() - photos_workspace.PHOTOS_INFO_CACHE_FRESH_SECONDS,
+            {'title': 'Expired'},
+        )
+        self.assertIsNone(workspace._cached_photo_info(
+            session, TEST_GALLERY_ID, 99999,
+        ))
+        self.assertNotIn(expired_key, workspace._photo_info_cache)
+        replacement_session = self._session(page, presentation, image_bytes)
+        self.assertIsNone(workspace._cached_photo_info(
+            replacement_session, TEST_GALLERY_ID, latest_id,
+        ))
+        workspace.destroy()
+
+    def test_late_inspector_result_cannot_replace_new_photo_context(self) -> None:
+        """Fence an earlier metadata response while the latest choice waits.
+
+        Returns:
+            None: One reader slot serializes both reads and only the new photo
+                populates visible details and the current-session cache.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        first_started = threading.Event()
+        release_first = threading.Event()
+        self.addCleanup(release_first.set)
+
+        def read_info(
+            gallery_id: int, image_id: int,
+            cancelled: threading.Event | None = None,
+        ) -> dict[str, str]:
+            """Hold the first metadata response after cancellation.
+
+            Args:
+                gallery_id (int): Current physical gallery ID.
+                image_id (int): Exact metadata target photo.
+                cancelled (threading.Event | None): Request cancellation signal.
+
+            Returns:
+                dict[str, str]: Synthetic safe metadata values for one target.
+            """
+            self.assertEqual(TEST_GALLERY_ID, gallery_id)
+            if image_id == TEST_FIRST_IMAGE_ID:
+                first_started.set()
+                if not release_first.wait(TEST_GUI_WAIT_SECONDS):
+                    raise TimeoutError('The fixture did not release its first read.')
+                return {'title': 'Stale first details'}
+            return {'title': 'Newest second details'}
+
+        session.media_photo_info.side_effect = read_info
+        provider: list[LinkingSession | None] = [None]
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+        )
+        provider[0] = session
+        workspace._session = session
+        workspace._session_provider = lambda: session
+        workspace._selected_gallery_id = TEST_GALLERY_ID
+        workspace._inspect_photo(page.photos[0])
+        self.assertTrue(first_started.wait(TEST_GUI_WAIT_SECONDS))
+        workspace._inspect_photo(page.photos[1])
+        release_first.set()
+        self._wait_until(
+            lambda: workspace._inspector_worker is None
+            and (id(session), TEST_GALLERY_ID, TEST_SECOND_IMAGE_ID)
+                in workspace._photo_info_cache,
+            'The queued latest photo metadata did not finish after the first read.',
+        )
+        rendered = [
+            str(child.cget('text'))
+            for child in workspace._photo_inspector_content.winfo_children()
+            if child.winfo_class() == 'TLabel'
+        ]
+        self.assertTrue(any('Newest second details' in text for text in rendered))
+        self.assertFalse(any('Stale first details' in text for text in rendered))
+        self.assertNotIn(
+            (id(session), TEST_GALLERY_ID, TEST_FIRST_IMAGE_ID),
+            workspace._photo_info_cache,
+        )
         workspace.destroy()
 
     def test_context_dismissal_keeps_outside_click_actions(self) -> None:
@@ -2296,6 +5175,359 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'The first revision did not reconcile the newly uploaded photo.',
         )
         session.media_revision.assert_called()
+        viewer.close()
+
+    def test_initial_revision_budget_counts_thumbnail_reads_not_batches(self) -> None:
+        """Keep the initial revision probe within its existing read budget.
+
+        Returns:
+            None: A larger admitted grid cannot multiply the initial thumbnail
+                priority limit by the number of items in a worker batch.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        photos = tuple(
+            LinkedPhoto(TEST_FIRST_IMAGE_ID + index, f'Revision {index}')
+            for index in range(TEST_SCROLL_PHOTO_COUNT)
+        )
+        for index, photo in enumerate(photos):
+            image_bytes[photo.image_id] = self._png((index, 90, 100))
+        page = LinkedMediaPage(page.gallery_id, page.parent_id, photos, None)
+        session = self._session(page, presentation, image_bytes)
+        session.can_read_admin_media.return_value = True
+        reads_at_probe: list[int] = []
+
+        def observe_revision(
+            _gallery_id: int, cancelled: threading.Event | None = None,
+        ) -> str:
+            """Capture completed media admissions when revision gets its turn.
+
+            Args:
+                _gallery_id (int): Physical gallery requested by the viewer.
+                cancelled (threading.Event | None): Current viewer cancellation.
+
+            Returns:
+                str: Stable synthetic server revision for the existing page.
+            """
+            reads_at_probe.append(session.media_photo.call_count)
+            return 'a' * 64
+
+        session.media_revision.side_effect = observe_revision
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Revision budget'),
+        )
+        self._wait_until(
+            lambda: bool(reads_at_probe),
+            'The initial revision never received its bounded turn.',
+        )
+        self.assertLessEqual(
+            reads_at_probe[0],
+            native_gallery_viewer.MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT,
+        )
+        viewer.close()
+
+    def test_lightbox_prefetch_precedes_grid_thumbnail_work(self) -> None:
+        """Keep adjacent detail work ahead of grid reads, after foreground/audio.
+
+        Returns:
+            None: Foreground selection and audio keep their lead; a visible
+                lightbox's adjacent detail request then runs before thumbnails.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Prefetch priority'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and not viewer._presentation_pending,
+            'Initial viewer work did not settle before priority checks.',
+        )
+        viewer._lightbox = mock.Mock(visible=True)
+        viewer._pending_prefetch_ids = [page.photos[1].image_id]
+        viewer._thumbnail_pending = [0]
+        calls: list[str] = []
+
+        def record_foreground(index: int) -> bool:
+            """Record the selected detail before background work.
+
+            Args:
+                index (int): Current selected photo index.
+
+            Returns:
+                bool: The foreground detail request was accepted.
+            """
+            calls.append(f'foreground:{index}')
+            return True
+
+        def record_prefetch() -> bool:
+            """Record the next adjacent lightbox detail request.
+
+            Returns:
+                bool: The prefetch request was accepted.
+            """
+            calls.append('prefetch')
+            return True
+
+        def record_thumbnail(_limit: int = 0) -> None:
+            """Record the grid thumbnail batch request.
+
+            Args:
+                _limit (int): Optional capped batch size.
+
+            Returns:
+                None: The fixture does not start background work.
+            """
+            calls.append('thumbnail')
+
+        with (mock.patch.object(viewer, '_load_detail', side_effect=record_foreground),
+              mock.patch.object(viewer, '_load_next_prefetch', side_effect=record_prefetch),
+              mock.patch.object(viewer, '_load_next_thumbnail', side_effect=record_thumbnail),
+              mock.patch.object(viewer, '_dispatch_audio_prefetch', return_value=False)):
+            viewer._pending_detail_index = 0
+            viewer._dispatch_pending_work()
+            self.assertEqual(['foreground:0'], calls)
+            viewer._dispatch_pending_work()
+            self.assertEqual(['foreground:0', 'prefetch'], calls)
+
+        calls.clear()
+        with (mock.patch.object(viewer, '_load_next_prefetch', side_effect=record_prefetch),
+              mock.patch.object(viewer, '_load_next_thumbnail', side_effect=record_thumbnail),
+              mock.patch.object(
+                  viewer, '_dispatch_audio_prefetch',
+                  side_effect=lambda: calls.append('audio') or True,
+              )):
+            viewer._dispatch_pending_work()
+        self.assertEqual(['audio'], calls)
+        viewer.close()
+
+    def test_foreground_detail_precedes_queued_refresh(self) -> None:
+        """Dispatch the selected photo before stale background refresh work.
+
+        Returns:
+            None: The current selection starts before a queued catalogue refresh.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Foreground priority'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and not viewer._presentation_pending,
+            'Initial viewer work did not settle before priority checks.',
+        )
+        calls: list[str] = []
+        viewer._pending_detail_index = 1
+        viewer._refresh_pending = True
+        with (mock.patch.object(
+                  viewer, '_load_detail',
+                  side_effect=lambda index: calls.append(f'detail:{index}') or True,
+              ),
+              mock.patch.object(
+                  viewer, '_start_refresh',
+                  side_effect=lambda: calls.append('refresh'),
+              )):
+            viewer._dispatch_pending_work()
+        self.assertEqual(['detail:1'], calls)
+        viewer.close()
+
+    def test_selected_detail_cancels_prefetch_with_fresh_operation_event(self) -> None:
+        """Never reuse a cancelled prefetch event for the selected photo.
+
+        Returns:
+            None: Superseded work stays cancelled while the foreground gets a
+                distinct live cancellation signal.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Cancel prefetch'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and not viewer._presentation_pending,
+            'Initial viewer work did not settle before cancellation checks.',
+        )
+        old_cancelled = threading.Event()
+        viewer._worker = mock.Mock()
+        viewer._worker_kind = 'prefetch'
+        viewer._active_media_cancelled = old_cancelled
+        viewer._active_media_photo_id = page.photos[1].image_id
+
+        self.assertTrue(viewer._load_detail(0))
+        self.assertTrue(old_cancelled.is_set())
+        self.assertEqual(0, viewer._pending_detail_index)
+
+        viewer._worker = None
+        viewer._worker_kind = None
+        started_events: list[threading.Event | None] = []
+
+        def capture_launch(
+            _kind: str,
+            _operation: Callable[
+                [], tuple[
+                    int, int, 'Image.Image', 'Image.Image | None', bytes | None,
+                ],
+            ],
+            *,
+            error_payload: tuple[int, int, None, None, None] | None = None,
+            operation_cancelled: threading.Event | None = None,
+        ) -> bool:
+            """Capture the cancellation signal for the foreground launch.
+
+            Args:
+                _kind (str): Worker category.
+                _operation (Callable[[], tuple[int, int, Image.Image, Image.Image | None, bytes | None]]):
+                    Selected detail callback not executed by this fixture.
+                error_payload (tuple[int, int, None, None, None] | None):
+                    Optional unused failure identity.
+                operation_cancelled (threading.Event | None): Per-operation stop signal.
+
+            Returns:
+                bool: The mocked worker accepts the request.
+            """
+            started_events.append(operation_cancelled)
+            return True
+
+        with mock.patch.object(viewer, '_launch', side_effect=capture_launch):
+            viewer._dispatch_pending_work()
+        self.assertEqual(1, len(started_events))
+        self.assertIsNotNone(started_events[0])
+        self.assertIsNot(started_events[0], old_cancelled)
+        self.assertFalse(started_events[0].is_set())
+        self.assertIs(viewer._active_media_cancelled, started_events[0])
+
+        active_detail = started_events[0]
+        viewer._worker = mock.Mock()
+        viewer._worker_kind = 'detail'
+        self.assertTrue(viewer._load_detail(1))
+        self.assertTrue(active_detail.is_set())
+        self.assertEqual(1, viewer._pending_detail_index)
+        viewer.close()
+        self.assertTrue(active_detail.is_set())
+
+    def test_selected_prefetch_is_adopted_without_second_media_read(self) -> None:
+        """Show a matching in-flight prefetch as foreground detail directly.
+
+        Returns:
+            None: Selecting the prefetched photo keeps its worker and adopts
+                its result without issuing another media request.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Adopt prefetch'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and not viewer._presentation_pending,
+            'Initial viewer work did not settle before adoption checks.',
+        )
+        photo = page.photos[0]
+        operation_cancelled = threading.Event()
+        viewer._worker = mock.Mock()
+        viewer._worker_kind = 'prefetch'
+        viewer._active_media_cancelled = operation_cancelled
+        viewer._active_media_photo_id = photo.image_id
+        request_count = session.media_photo.call_count
+
+        self.assertTrue(viewer._load_detail(0))
+        self.assertFalse(operation_cancelled.is_set())
+        self.assertEqual(0, viewer._pending_detail_index)
+        self.assertEqual(request_count, session.media_photo.call_count)
+
+        image = Image.new('RGB', (16, 16))
+        adopted: list[tuple[
+            int, int, 'Image.Image | None', 'Image.Image | None',
+            bytes | None,
+        ]] = []
+
+        def capture_detail(
+            detail_serial: int,
+            image_id: int,
+            display_image: 'Image.Image | None',
+            cached_image: 'Image.Image | None',
+            encoded: bytes | None,
+            decode_reason: str | None = None,
+        ) -> None:
+            """Capture the adopted raster without invoking Tk rendering.
+
+            Args:
+                detail_serial (int): Current foreground selection serial.
+                image_id (int): Photo ID carried by the prefetched result.
+                display_image (Image.Image | None): Transferred display raster.
+                cached_image (Image.Image | None): Optional private cache copy.
+                encoded (bytes | None): Cacheable encoded response body.
+                decode_reason (str | None): Optional controlled decode outcome.
+
+            Returns:
+                None: The caller retains and closes the captured rasters.
+            """
+            adopted.append((
+                detail_serial, image_id, display_image, cached_image, encoded,
+            ))
+
+        with (mock.patch.object(viewer, '_show_detail', side_effect=capture_detail),
+              mock.patch.object(viewer, '_dispatch_pending_work'),
+              mock.patch.object(viewer, '_schedule_queue_poll')):
+            viewer._events.put((
+                viewer._generation, 'prefetch', (photo.image_id, image, None),
+            ))
+            viewer._poll_queue()
+
+        self.assertEqual(1, len(adopted))
+        self.assertEqual(viewer._detail_serial, adopted[0][0])
+        self.assertEqual(photo.image_id, adopted[0][1])
+        self.assertIs(image, adopted[0][2])
+        self.assertIsNone(adopted[0][3])
+        self.assertIsNone(adopted[0][4])
+        self.assertEqual(request_count, session.media_photo.call_count)
+        image.close()
+
+        active_detail = threading.Event()
+        viewer._worker_kind = 'detail'
+        viewer._active_media_cancelled = active_detail
+        viewer._active_media_photo_id = photo.image_id
+        viewer._pending_detail_index = None
+        detail_serial = viewer._detail_serial
+        generation = viewer._generation
+        self.assertTrue(viewer._load_detail(0))
+        self.assertFalse(active_detail.is_set())
+        self.assertEqual(detail_serial, viewer._detail_serial)
+        self.assertEqual(generation, viewer._generation)
+        self.assertIsNone(viewer._pending_detail_index)
+        self.assertEqual(request_count, session.media_photo.call_count)
+        viewer.close()
+
+    def test_lightbox_close_cancels_active_detail_and_background_refresh_yields(self) -> None:
+        """Release hidden image work and interrupt refresh for a new selection.
+
+        Returns:
+            None: Returning to the grid cancels its old prefetch; a selected
+                photo also cancels background refresh and keeps that refresh queued.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Responsive selection'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None and not viewer._presentation_pending,
+            'Initial viewer work did not settle before cancellation checks.',
+        )
+        prefetched = threading.Event()
+        viewer._worker = mock.Mock()
+        viewer._worker_kind = 'prefetch'
+        viewer._active_media_cancelled = prefetched
+        previous_generation = viewer._generation
+        viewer._close_lightbox()
+        self.assertTrue(prefetched.is_set())
+        self.assertGreater(viewer._generation, previous_generation)
+
+        refreshed = threading.Event()
+        viewer._worker_kind = 'refresh'
+        viewer._active_media_cancelled = refreshed
+        self.assertTrue(viewer._load_detail(0))
+        self.assertTrue(refreshed.is_set())
+        self.assertEqual(0, viewer._pending_detail_index)
+        self.assertTrue(viewer._refresh_pending)
+        self.assertFalse(viewer._refresh_manual_pending)
         viewer.close()
 
     def test_queued_refresh_survives_a_busy_worker(self) -> None:
@@ -2703,24 +5935,29 @@ class NativeGalleryViewerTests(unittest.TestCase):
                           thumbnail=True, cancelled=mock.ANY,
                           cache_eligible=None, thumbnail_etag=None,
                           thumbnail_verified_at=None, preload_eligible=None,
-                          preload_thumbnail_etag=None, preload_verified_at=None),
+                          preload_thumbnail_etag=None, preload_verified_at=None,
+                          timings=mock.ANY),
                 mock.call(TEST_GALLERY_ID, TEST_SECOND_IMAGE_ID,
                           thumbnail=True, cancelled=mock.ANY,
                           cache_eligible=None, thumbnail_etag=None,
                           thumbnail_verified_at=None, preload_eligible=None,
-                          preload_thumbnail_etag=None, preload_verified_at=None),
+                          preload_thumbnail_etag=None, preload_verified_at=None,
+                          timings=mock.ANY),
                 mock.call(TEST_GALLERY_ID, TEST_NEXT_PAGE_IMAGE_ID,
                           thumbnail=True, cancelled=mock.ANY,
                           cache_eligible=None, thumbnail_etag=None,
                           thumbnail_verified_at=None, preload_eligible=None,
-                          preload_thumbnail_etag=None, preload_verified_at=None),
+                          preload_thumbnail_etag=None, preload_verified_at=None,
+                          timings=mock.ANY),
             ],
             session.media_photo.call_args_list,
         )
+        for call in session.media_photo.call_args_list:
+            self.assertIsInstance(call.kwargs['timings'], MediaReadTimings)
         self.assertNotEqual('', viewer._tile_buttons[0].cget('image'))
         self.assertNotEqual('', viewer._tile_buttons[1].cget('image'))
         content_geometry = dict(viewer._main_content.pack_info())
-        viewer._tile_buttons[0].invoke()
+        self._double_click_tile(viewer._tile_buttons[0])
         self._wait_until(
             lambda: viewer._lightbox is not None
             and viewer._lightbox.visible
@@ -2933,7 +6170,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         self._wait_until(
             lambda: len(viewer._photos) == len(page.photos)
-            and viewer._worker is None,
+            and viewer._presentation is configured and viewer._worker is None,
             'The configured slideshow album did not finish loading.',
         )
         dispatch = mock.Mock(return_value=True)
@@ -2969,6 +6206,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             preload_eligible: bool | None = None,
             preload_thumbnail_etag: str | None = None,
             preload_verified_at: float | None = None,
+            timings: MediaReadTimings | None = None,
+            use_preloaded_snapshot: bool = False,
         ) -> tuple[bytes, str]:
             """Fail only the second original while retaining its thumbnail.
 
@@ -2983,6 +6222,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 preload_eligible (bool | None): Current Admin preload admission.
                 preload_thumbnail_etag (str | None): Admin thumbnail validator.
                 preload_verified_at (float | None): Admin proof time.
+                timings (MediaReadTimings | None): Optional read timing record.
+                use_preloaded_snapshot (bool): Full-read saved-snapshot request.
             Returns:
                 tuple[bytes, str]: Normal fixture bytes for successful reads.
             """
@@ -2996,6 +6237,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 preload_eligible=preload_eligible,
                 preload_thumbnail_etag=preload_thumbnail_etag,
                 preload_verified_at=preload_verified_at,
+                timings=timings,
+                use_preloaded_snapshot=use_preloaded_snapshot,
             )
 
         session.media_photo.side_effect = read_photo
@@ -3080,7 +6323,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             and viewer._tile_buttons[0].cget('image') != '',
             'The located photo tile did not finish rendering.',
         )
-        viewer._tile_buttons[0].invoke()
+        self._double_click_tile(viewer._tile_buttons[0])
         self._wait_until(
             lambda: viewer._lightbox is not None
             and viewer._lightbox._photo is not None
@@ -3258,6 +6501,257 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         viewer.close()
 
+    def test_lightbox_f_fullscreen_keys_and_command_text_guards(self) -> None:
+        """Toggle fullscreen once from the focused overlay and preserve text.
+
+        Returns:
+            None: F, shifted F and F11 work; modifiers and text inputs do not.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Fullscreen keys'),
+        )
+        self._wait_until(
+            lambda: len(viewer._tile_buttons) == 2 and viewer._worker is None,
+            'Grid tiles did not finish before fullscreen-key checks.',
+        )
+        viewer._open_grid_photo(0)
+        self._wait_until(
+            lambda: viewer._lightbox is not None and viewer._lightbox.visible
+            and viewer._lightbox._photo is not None,
+            'The test could not activate the lightbox overlay.',
+        )
+        lightbox = viewer._lightbox
+        assert lightbox is not None
+        observations: list[str] = []
+        viewer._observation_callback = observations.append
+        lightbox._canvas.focus_force()
+        lightbox._canvas.event_generate('<KeyPress-f>')
+        self._wait_until(
+            lambda: lightbox._fullscreen,
+            'Focused lowercase f did not enter fullscreen.',
+        )
+        lightbox._canvas.event_generate('<KeyPress-F>')
+        self._wait_until(
+            lambda: not lightbox._fullscreen,
+            'Focused uppercase F did not leave fullscreen.',
+        )
+        lightbox._canvas.event_generate('<KeyPress-F11>')
+        self._wait_until(
+            lambda: lightbox._fullscreen,
+            'Focused F11 did not enter fullscreen.',
+        )
+        # Windows maps NumLock to Mod1 and Alt to Mod2; other Tk backends
+        # retain their command masks. Four lock toggles preserve fullscreen.
+        lock_states = (
+            (0x0008, 0x0020, 0x0002, 0x002B)
+            if sys.platform == 'win32' else (0, 0x0002, 0x0001, 0x0003)
+        )
+        command_states = (
+            (0x0004, 0x0010, 0x20000)
+            if sys.platform == 'win32' else (0x0004, 0x0008, 0x0040)
+        )
+        for state in lock_states:
+            before = lightbox._fullscreen
+            lightbox._canvas.event_generate(
+                '<KeyPress-f>', state=state,
+            )
+            self._wait_until(
+                lambda before=before: lightbox._fullscreen is not before,
+                f'Lock-state bits 0x{state:x} blocked the F shortcut.',
+            )
+        for state in command_states:
+            before = lightbox._fullscreen
+            lightbox._canvas.event_generate(
+                '<KeyPress-f>', state=state,
+            )
+            self.root.update()
+            self.assertEqual(before, lightbox._fullscreen)
+        if sys.platform == 'win32':
+            self.assertTrue(any(
+                summary.startswith('shortcut key=f state=0x8')
+                and 'reason=toggled' in summary
+                for summary in observations
+            ))
+        self.assertTrue(any(
+            'reason=command-modifier' in summary
+            for summary in observations
+        ))
+        command_event = mock.Mock()
+        command_event.widget = lightbox._canvas
+        command_event.state = 0x0004
+        self.assertIsNone(viewer._on_fullscreen(command_event))
+        self.assertTrue(lightbox._fullscreen)
+        entry = ttk.Entry(lightbox._overlay)
+        entry.place(x=8, y=8)
+        entry.insert(0, 'draft')
+        viewer._bind_lightbox_shortcuts(lightbox._overlay)
+        self.root.update_idletasks()
+        entry.focus_force()
+        self._wait_until(
+            lambda: self.root.focus_get() is entry,
+            'The text entry did not receive focus before the key event.',
+        )
+        entry.event_generate('<KeyPress-f>')
+        self.root.update()
+        self.assertTrue(lightbox._fullscreen)
+        self.assertEqual('draftf', entry.get())
+        self.assertTrue(any(
+            'widget=text-entry' in summary and 'reason=text-input' in summary
+            for summary in observations
+        ))
+        text_event = mock.Mock()
+        text_event.widget = entry
+        text_event.state = 0
+        self.assertIsNone(viewer._on_fullscreen(text_event))
+        self.assertTrue(lightbox._fullscreen)
+        self.assertEqual('draftf', entry.get())
+        entry.destroy()
+        lightbox._canvas.event_generate('<KeyPress-Escape>')
+        self._wait_until(
+            lambda: not lightbox._fullscreen and lightbox.visible,
+            'Escape did not leave fullscreen without dismissing the overlay.',
+        )
+        viewer.close()
+
+    def test_grid_single_click_selects_and_double_click_opens_lightbox(self) -> None:
+        """Keep ordinary grid selection separate from detail loading.
+
+        Returns:
+            None: One click requests no full photo; explicit double-click opens it.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Click behavior'),
+        )
+        self._wait_until(
+            lambda: len(viewer._tile_buttons) == len(page.photos)
+            and viewer._worker is None,
+            'The initial grid thumbnails did not finish before click checks.',
+        )
+        initial_reads = session.media_photo.call_count
+        viewer._tile_buttons[0].event_generate(
+            '<ButtonPress-1>', x=4, y=4, time=TEST_SINGLE_CLICK_TIME_MS,
+        )
+        viewer._tile_buttons[0].event_generate(
+            '<ButtonRelease-1>', x=4, y=4, time=TEST_SINGLE_CLICK_TIME_MS,
+        )
+        self.root.update()
+        self.assertEqual((TEST_FIRST_IMAGE_ID,), viewer.selected_photo_ids())
+        self.assertIsNone(viewer._lightbox)
+        self.assertEqual(initial_reads, session.media_photo.call_count)
+        self.assertTrue(all(
+            call.kwargs.get('thumbnail') is True
+            for call in session.media_photo.call_args_list
+        ))
+
+        for click_time in TEST_DOUBLE_CLICK_TIMES_MS:
+            viewer._tile_buttons[0].event_generate(
+                '<ButtonPress-1>', x=4, y=4, time=click_time,
+            )
+            viewer._tile_buttons[0].event_generate(
+                '<ButtonRelease-1>', x=4, y=4, time=click_time,
+            )
+        self._wait_until(
+            lambda: viewer._lightbox is not None
+            and viewer._lightbox.visible
+            and viewer._lightbox._photo is not None,
+            'Explicit double-click did not open the selected full photo.',
+        )
+        self.assertTrue(any(
+            call.kwargs.get('thumbnail') is False
+            for call in session.media_photo.call_args_list
+        ))
+        viewer.close()
+
+    def test_grid_modifier_and_keyboard_selection_preserve_loaded_ids(self) -> None:
+        """Exercise Ctrl, Shift, Space and modified-arrow selection behavior.
+
+        Returns:
+            None: Modifier actions stay in the grid and preserve the anchor set.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        third = LinkedPhoto(TEST_NEXT_PAGE_IMAGE_ID, 'Third selection photo')
+        page = LinkedMediaPage(
+            page.gallery_id, page.parent_id, page.photos + (third,), None,
+        )
+        image_bytes[third.image_id] = self._png((90, 80, 70))
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Modifiers'),
+        )
+        self._wait_until(
+            lambda: len(viewer._tile_buttons) == 3 and viewer._worker is None,
+            'All three selection tiles did not finish rendering.',
+        )
+        viewer._tile_buttons[0].event_generate('<Button-1>')
+        viewer._tile_buttons[2].event_generate('<Shift-Button-1>')
+        self.root.update()
+        self.assertEqual(
+            (TEST_FIRST_IMAGE_ID, TEST_SECOND_IMAGE_ID, TEST_NEXT_PAGE_IMAGE_ID),
+            viewer.selected_photo_ids(),
+        )
+        viewer._tile_buttons[1].event_generate('<Control-Button-1>')
+        self.root.update()
+        self.assertEqual(
+            (TEST_FIRST_IMAGE_ID, TEST_NEXT_PAGE_IMAGE_ID),
+            viewer.selected_photo_ids(),
+        )
+        viewer._tile_buttons[1].focus_force()
+        viewer._tile_buttons[1].event_generate('<KeyPress-space>')
+        self.root.update()
+        self.assertEqual(
+            (TEST_FIRST_IMAGE_ID, TEST_SECOND_IMAGE_ID, TEST_NEXT_PAGE_IMAGE_ID),
+            viewer.selected_photo_ids(),
+        )
+        event = mock.Mock()
+        event.keysym = 'Right'
+        event.state = 0x0004
+        self.assertEqual('break', viewer._tile_key(0, event))
+        self.assertEqual(
+            (TEST_FIRST_IMAGE_ID, TEST_SECOND_IMAGE_ID, TEST_NEXT_PAGE_IMAGE_ID),
+            viewer.selected_photo_ids(),
+        )
+        self.assertEqual(
+            str(viewer._tile_buttons[1]), str(self.root.focus_get()),
+        )
+        self.assertIsNone(viewer._lightbox)
+        viewer.close()
+
+    def test_shift_range_refuses_more_than_delete_batch_limit(self) -> None:
+        """Refuse an oversized range without changing selected identities.
+
+        Returns:
+            None: The existing deletion cap also bounds visual range selection.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Range limit'),
+        )
+        self._wait_until(
+            lambda: viewer._worker is None,
+            'The selection viewer did not become idle.',
+        )
+        viewer._photos = tuple(
+            LinkedPhoto(image_id, f'Range item {image_id}')
+            for image_id in range(
+                1, NATIVE_MEDIA_DELETE_BATCH_MAX + 2,
+            )
+        )
+        viewer._selected_photo_ids = {1}
+        viewer._selection_anchor_index = 0
+        viewer._focus_tile = mock.Mock()
+        viewer._render_photo_selection = mock.Mock()
+        self.assertFalse(viewer.select_photo_range(NATIVE_MEDIA_DELETE_BATCH_MAX))
+        self.assertEqual({1}, viewer._selected_photo_ids)
+        self.assertIn(
+            str(NATIVE_MEDIA_DELETE_BATCH_MAX), viewer.status.cget('text'),
+        )
+        viewer.close()
+
     def test_rapid_detail_selection_discards_stale_result(self) -> None:
         """Keep the newest selected photo after an earlier read completes.
 
@@ -3282,6 +6776,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             preload_eligible: bool | None = None,
             preload_thumbnail_etag: str | None = None,
             preload_verified_at: float | None = None,
+            timings: MediaReadTimings | None = None,
+            use_preloaded_snapshot: bool = False,
         ) -> tuple[bytes, str]:
             """Hold the first detail response while a newer selection arrives.
 
@@ -3296,6 +6792,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 preload_eligible (bool | None): Current Admin preload admission.
                 preload_thumbnail_etag (str | None): Admin thumbnail validator.
                 preload_verified_at (float | None): Admin proof time.
+                timings (MediaReadTimings | None): Optional read timing record.
+                use_preloaded_snapshot (bool): Full-read saved-snapshot request.
             Returns:
                 tuple[bytes, str]: Fixture PNG body with its image media type.
             """
@@ -3415,7 +6913,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             page_read_started.is_set,
             'The underfilled viewport did not request its next metadata page.',
         )
-        viewer._tile_buttons[-1].invoke()
+        self._double_click_tile(viewer._tile_buttons[-1])
         lightbox = viewer._lightbox
         self.assertIsNotNone(lightbox)
         self._wait_until(
@@ -3440,7 +6938,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             and not lightbox.visible,
             'The late page reply reopened the dismissed lightbox.',
         )
-        viewer._tile_buttons[0].invoke()
+        self._double_click_tile(viewer._tile_buttons[0])
         self._wait_until(
             lambda: lightbox.visible and lightbox._photo is not None,
             'The refreshed grid tile could not open a new detail lightbox.',
@@ -3508,7 +7006,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             and all(viewer._photo_images),
             'The continuous slideshow album did not finish rendering.',
         )
-        viewer._tile_buttons[len(first_page.photos) - 1].invoke()
+        self._double_click_tile(
+            viewer._tile_buttons[len(first_page.photos) - 1],
+        )
         self._wait_until(
             lambda: viewer._lightbox is not None
             and viewer._lightbox._photo is not None

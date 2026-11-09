@@ -679,6 +679,49 @@ class FlightWorkflowTests(unittest.TestCase):
             self.assertEqual(worker.snapshot().done, worker.snapshot().total)
             self.assertEqual(worker.snapshot().phase, "completed")
 
+    def test_gui_revoke_retains_lease_until_confirmed_cleanup(self) -> None:
+        """Keep the captured GUI revoke ticket alive through asynchronous save.
+
+        Returns:
+            None: Server confirmation alone cannot close admission or reach
+                completion; ordinary Stop and failed requests release normally.
+        """
+        for intent, fail in ((True, False), (False, False), (True, True)):
+            with self.subTest(intent=intent, fail=fail):
+                owner, port, work = Mock(), Mock(), Mock()
+                work.kind = 'legacy_revoke' if intent else 'legacy'
+                owner.acquire.return_value = work
+                worker: workflow.FinalizationWorker
+
+                def revoke() -> None:
+                    """Simulate a request result while the captured fence is live.
+
+                    Returns:
+                        None: Records positive server confirmation or fails.
+                    """
+                    work.checkpoint()
+                    if fail:
+                        raise RuntimeError('fixture transport failure')
+                    worker.confirm_server_revocation()
+
+                worker = workflow.FinalizationWorker(
+                    [], 'https://gallery.test/api', 'test-key', Mock(), revoke,
+                    intent, gui_admission=(owner, port), require_gui_admission=True,
+                    config_generation=object(),
+                )
+                worker.run()
+                owner.acquire.assert_called_once_with(work.kind, port)
+                if intent and not fail:
+                    self.assertEqual('saving_key', worker.snapshot().phase)
+                    self.assertIs(work, worker.revocation_work())
+                    work.close.assert_not_called()
+                    worker.confirm_local_cleanup()
+                    self.assertEqual('completed', worker.snapshot().phase)
+                    work.close.assert_called_once()
+                else:
+                    work.close.assert_called_once()
+                    self.assertEqual('error' if fail else 'completed', worker.snapshot().phase)
+
     def test_stop_without_revoke_completes_work_and_never_calls_revoke(self) -> None:
         """Keep ordinary Stop separate from the optional revoke final step.
 

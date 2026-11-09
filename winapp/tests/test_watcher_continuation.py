@@ -37,6 +37,7 @@ from uploader.linked_upload import LinkedUploadTarget, linked_target_binding
 from uploader.app_linking_ui import LinkingManager
 from uploader.photos_workspace import (
     PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
+    PHOTOS_OBSERVATION_RECENT_LIMIT,
     PhotosWorkspace,
 )
 from uploader.update_ui import (
@@ -85,6 +86,29 @@ def load_main_module() -> ModuleType:
 
 
 MAIN = load_main_module()
+
+
+def initialize_event_pump_fixture(app: MAIN.WatcherApp) -> None:
+    """Bind constructor-bypassed tests to the real bounded event dispatcher.
+
+    Args:
+        app (MAIN.WatcherApp): Host fixture for event delivery or diagnostics.
+
+    Returns:
+        None: Pump counters are initialized and production batch dispatch is bound.
+    """
+    app._drain_running = False
+    app._drain_after_id = None
+    app._event_drain_last_count = 0
+    app._event_drain_total_count = 0
+    app._event_drain_yield_count = 0
+    app._event_drain_last_ms = 0.0
+    app._event_drain_max_ms = 0.0
+    app._activity_drawer_flush_count = 0
+    app._drain_event_batch = MAIN.WatcherApp._drain_event_batch.__get__(
+        app, MAIN.WatcherApp,
+    )
+    app.refresh_contextual_watcher_copy = mock.Mock()
 
 
 def wait_for_event_kind(
@@ -407,6 +431,7 @@ class WatcherContinuationTests(unittest.TestCase):
         app.worker = worker
         app._set_watch_start_activity = mock.Mock()
         app.write_log = mock.Mock()
+        initialize_event_pump_fixture(app)
         return app
 
     def test_dispatch_waits_for_consumed_marker_and_keeps_original_boundary(self) -> None:
@@ -1025,6 +1050,7 @@ class WatcherContinuationTests(unittest.TestCase):
             app.refresh_activity_monitor_state = mock.Mock()
             app.refresh_revoke_button_state = mock.Mock()
             app.root = SimpleNamespace(after=mock.Mock())
+            initialize_event_pump_fixture(app)
             return app
 
         legacy_host = make_event_host(False)
@@ -1302,11 +1328,12 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertEqual(1, manager._commit_linked_target.call_count)
 
     def test_diagnostics_keep_safe_browser_runtime_and_update_context(self) -> None:
-        """Copy updater and host context while retaining no raw API secret.
+        """Copy safe updater, rendering and host context without API secrets.
 
         Returns:
-            None: Browser, retained updater failure, runtime and Tk summaries
-                are copied while configured credentials remain redacted.
+            None: Browser, retained updater failure, numeric rendering facts,
+                runtime and Tk summaries are copied with redacted credentials.
+                A failed render-counter getter preserves the media failure.
         """
         app = object.__new__(MAIN.WatcherApp)
         app.root = mock.Mock()
@@ -1345,13 +1372,36 @@ class WatcherContinuationTests(unittest.TestCase):
         photos._photo_diagnostic_recent = deque(
             maxlen=PHOTOS_DIAGNOSTIC_RECENT_LIMIT,
         )
+        photos._photo_observation_recent = deque(
+            maxlen=PHOTOS_OBSERVATION_RECENT_LIMIT,
+        )
         photos._diagnostic_callback = None
         photos._generation = 1
         photos._record_photo_diagnostic(
             1,
             'phase=media-fetch kind=thumbnail http=504 reason=http_status',
         )
+        photos._record_photo_observation(
+            1,
+            'shortcut key=f state=0x8 widget=canvas visible=1 '
+            'fullscreen=0->1 reason=toggled',
+        )
+        render_summary = (
+            'Photos grid: viewport_events=20 viewport_updates=2 '
+            'tk_images_created=8 tk_images_released=0 warm_cache_hits=8 '
+            'batches=2 source_disk=4 source_network=4 source_revalidated=0 '
+            'disk_ms=2.00 disk_write_ms=1.00 gate_wait_ms=0.50 '
+            'renewal_ms=0.25 network_ms=15.00 network_reads=4 '
+            'decode_ms=3.00 queue_wait_ms=1.00 tk_ms=2.00 '
+            'peak_update_ms=3.25 visible=8 admitted=12 retained=8'
+        )
+        photos._viewer = SimpleNamespace(
+            _gallery_viewer_controller=SimpleNamespace(
+                render_diagnostics=lambda: render_summary,
+            ),
+        )
         app.photos_workspace = photos
+        initialize_event_pump_fixture(app)
         app._update_resume_status = "stage=resume; reason=continuation_unverified"
         app.gallery_url_var = SimpleNamespace(get=lambda: "https://gallery.example.test")
         api_secret = "fixture-secret-key"
@@ -1372,10 +1422,22 @@ class WatcherContinuationTests(unittest.TestCase):
             "http_status=504",
             "Photos diagnostics:\nLatest failure: phase=media-fetch",
             "http=504 reason=http_status",
+            "Recent observations:",
+            "shortcut key=f state=0x8",
+            render_summary,
             "Update continuation: stage=resume; reason=continuation_unverified",
             "Runtime: source",
             "Tk: 8.6.15",
+            "Pillow:",
         ):
             self.assertIn(expected, copied)
         self.assertNotIn(api_secret, copied)
+        photos._viewer._gallery_viewer_controller.render_diagnostics = mock.Mock(
+            side_effect=ValueError('token=private-render-fixture'),
+        )
+        with self.assertLogs('uploader.photos_workspace', level='WARNING') as logs:
+            snapshot = photos.diagnostics_snapshot()
+        self.assertIn('Latest failure: phase=media-fetch', snapshot)
+        self.assertIn('error_type=ValueError', '\n'.join(logs.output))
+        self.assertNotIn('private-render-fixture', '\n'.join(logs.output))
 

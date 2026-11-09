@@ -51,7 +51,10 @@ languages use the existing `flights/preferences.json` in the same app profile.
 Saving feature preferences never resets unrelated settings.
 
 The main window remembers its normal size and position, maximized state and
-Photos tree width automatically. Minimizing, fullscreen and hiding to the tray
+Photos tree and right information-pane widths automatically. The independent
+`photos.info_width` in `ui-layout.json` stores a preferred width rather than
+a sash coordinate; older files use 250 pixels. Temporary narrow/unmapped
+layouts preserve that preference. Minimizing, fullscreen and hiding to the tray
 do not overwrite the last normal rectangle. On a changed display layout, the
 restored rectangle and divider are clamped to usable current bounds. These
 view-only preferences are separate from upload configuration and credentials.
@@ -236,6 +239,11 @@ fallback without admin rights. Microsoft Flight Simulator processes retain
 flight wording. Cyberpunk 2077, the Mass Effect trilogy, Skyrim and Dragon Age
 have localized Begin/Finish easter eggs; unknown/ambiguous games retain general
 wording.
+Current capture controls and progress use neutral session wording outside a
+detected flight. Prepar3D and X-Plane join the Microsoft simulator process
+fallbacks. Flight detection restores the simulator controls and wording;
+hidden UTC controls preserve the saved preference. Saved flight reports keep
+their actual flight-specific identity, and custom game action phrases remain.
 The SimBrief Load/Unload button, its settings icon and status appear only for
 a detected flight; changing context hides/restores them without unloading a
 plan.
@@ -265,9 +273,18 @@ The heading and tooltip follow connection changes; the full identity remains
 available to flight records and import history.
 
 **Stop Watcher** finishes accepted work using the saved report preferences.
-**Finish flight…** also requests all available PDF editions. Both keep the
-current upload connection. Linked reports stay on the computer. Manage
-server-side API key revocation separately in PHP Gallery Admin.
+The main Watcher/Import **Finish flight/game…** action also requests all PDF editions and, in
+saved API-key mode, revokes the exact captured gallery key after accepted work
+and required receipts finish. The key is cleared locally only after positive
+server confirmation and an atomic mode-owner handoff to ConfigStore. Ordinary
+Stop keeps the key. A changed configuration, failed save or stale asynchronous
+completion cannot clear another key or report successful cleanup. Finish must
+wait for an already running ordinary Stop to complete; Stop cannot gain
+revocation authority by changing its active worker. Use the separate confirmed
+Revoke action when only ending that saved connection afterward. Linked reports
+stay local
+and their temporary Photos credential has its separate lifecycle.
+Separate Finish/create-PDF controls retain the saved key.
 
 | Watcher state | How it starts | Next action |
 | --- | --- | --- |
@@ -662,6 +679,12 @@ failure even after a later successful check. It also includes current-session
 Photos failures, distinguishing catalogue reads, thumbnail transport and image
 decoding. Switching albums keeps those facts; switching the approved live
 session resets the Photos snapshot. Full records remain in the log.
+Decode refusals include a fixed reason, decoder stage, recognized format,
+encoded byte count, source and reduced dimensions, and the unchanged byte/pixel
+budgets. Copied support text also includes the Pillow version. Fullscreen
+shortcuts have a separate bounded trace of F/F11 handling, lock/modifier bits,
+focus category and fullscreen state; successful shortcuts do not replace the
+last media failure. These records contain no typed text or widget paths.
 The background preload worker uses the same safe diagnostic formatter for
 listing, cache checks, transfers and final verification. Its first and later
 distinct failures appear immediately in the ordinary log, the visible Log and
@@ -672,6 +695,11 @@ Rejected native-media responses include bounded cache-policy facts: which
 cache marker and cache-control contract matched, the parsed age and required
 Vary/encoding conditions. Raw headers are not copied. These facts explain a
 refusal without relaxing media admission or permitting an unapproved disk copy.
+The media transport accepts equivalent repeated, split or reordered cache
+directives while retaining exact marker, authorization and Vary checks.
+Photo responses still require private revalidation and an explicit 60-second
+age; additional longer ages do not extend the local 60-second cap. Conflicting
+or unknown directives do not grant storage. No-store browsing stays transient.
 
 Discovery examines paginated releases for the highest newer
 `PHPGalleryUploader-X.Y.Z-Setup.exe` asset. CMS release tags are not the
@@ -896,21 +924,45 @@ tool remains a source-only utility.
 
 A normal launch opens **Photos**, the first task in the navigation order:
 **Photos**, **Watcher**, **Import**, **Activity**, **AI**, and **Settings**.
-With an active gallery link, Photos loads a gallery tree on the left and a
-photo grid on the right. It opens an initial gallery automatically. Expand or
+With an active gallery link, Photos shows its last complete saved tree on the
+left while checking current server data. It restores the last explicitly
+selected gallery for that site and account; otherwise it chooses an initial
+gallery automatically. Saved rows are navigation hints: photo requests still
+require current server authorization, and upload/create actions wait for fresh
+gallery confirmation. Expand or
 collapse a branch or the whole tree and click a gallery to show its photos in
 the same window. When disconnected, **Connect** opens the existing address
 dialog and browser approval flow. An active listing link can browse public
-photos directly after approval. Large trees first load up to 500 entries, then
-continue automatically from the saved cursor, one page every five seconds.
-Loaded galleries remain usable while the loading status indicates more work.
+photos directly after approval. Servers advertising `galleries:tree-v1` can
+return one bounded complete JSON tree or confirm its saved revision. An older
+web, including 1.0.3, uses the original API: first up to 500 entries, then one
+page every five seconds. Unsupported, malformed, oversized or unavailable
+optional tree replies use that same paged path. Authorization refusals,
+cancellation and rate limits stop the read instead of downgrading it.
+Both cached and complete trees mount in short UI batches; existing rows change
+only when their metadata differs. A failed or incomplete pass retains the prior
+complete snapshot. Rows absent from the new catalogue disappear only when a
+complete result or the last successful page confirms their absence.
+Loaded galleries remain usable while the loading status above the tree and a
+small smooth spinning ring beside it indicate more work. The indicator covers
+initial reads and paced continuation, then stops on completion, error or
+disconnection. It does not estimate a completion percentage.
+The optional local snapshot contains only gallery IDs, parent IDs, titles and
+revision, separated by verified installation, account and approved scope.
+Windows protects it with user-scoped DPAPI in a local profile; unsafe storage
+or a corrupt file is a cache miss. File reads and serialized atomic writes run
+off the Tk thread. This metadata cache provides no offline photo permission.
 An error stops continuation and offers an explicit retry; normal browsing needs
 no **Load more** click. Choose the upload target in
 Watcher or Import using **Use for uploads**. A logon `--startup` launch stays
 in the system tray until restored. An approved saved link can resume on
 startup.
 
-The Watcher view shows the gallery target. The persistent API-key connection
+The Watcher view shows the gallery target. A verified API-mode title remains
+visible across refreshes of the same saved connection, including resumed
+capture. Credential or upload-mode changes invalidate that identity; merely
+selecting another album in Photos cannot replace the upload title.
+The persistent API-key connection
 control opens the compact key dialog from every view. The separate ordinary
 header **Link gallery** flow remains the upload/search path. The app header
 also has Settings, updates, and help controls. Icon controls have
@@ -947,6 +999,26 @@ shows the filtered recent-event list, retry controls, redacted diagnostics, and
 the log panel. A compact footer on each screen shows the latest event; selecting
 it opens Activity. AI metadata remains optional and disabled
 by default. The app header keeps the connection and watcher states visible.
+
+### GUI event processing
+
+Worker messages remain in their original FIFO order. The Tk owner processes
+at most 64 messages or eight milliseconds of work between complete event
+handlers, then yields and continues after 16 ms. An empty queue retains its
+200 ms idle poll. A slow individual handler can exceed that cooperative budget;
+the dispatcher does not interrupt accepted operations.
+
+Activity messages still update the footer, retained history and persistence
+queue immediately. Only the recent-activity table redraw is deferred and
+combined into one pending GUI callback. A filter change renders the latest
+history directly. Application shutdown cancels pending callbacks; deferred
+shutdown resumes one dispatcher. No additional worker thread or process is
+created.
+
+Copied diagnostics include numeric dispatcher counters and callback durations.
+These describe this process's observed work, not a screen-response percentile
+or a performance guarantee. Manual acceptance checks responsiveness under an
+event burst and preserved upload, recovery and revocation behavior.
 
 ## Setup
 
@@ -1091,25 +1163,152 @@ WinApp uses the same verified link, Pillow for photos and native audio on
 Windows and macOS.
 For a source launch, use the Python interpreter where `requirements.txt` was
 installed so its Pillow decoder can display thumbnails and detail images.
-The responsive grid scrolls continuously and loads thumbnails in the viewport.
+The responsive grid scrolls continuously and requests thumbnails for the
+viewport and one adjacent row on each side. It does not request detail photos
+or start adjacent-photo prefetch while browsing the grid. Opening a photo
+starts its detail request; neighboring
+details are prepared only while the lightbox remains open. Explicit **Preload
+gallery** separately downloads both thumbnails and lightbox renditions.
+Thumbnail preparation decodes and resizes directly to a bounded RGB raster,
+without an intermediate PNG encode/decode round trip.
+Larger JPEG thumbnail variants request decoder subsampling before RGB
+allocation, retaining a 288-pixel preparation target for matte detection and
+the same final tile and original-source safety bounds.
+Recently visited albums reuse a bounded first-page snapshot from the same live
+session immediately, then refresh on the existing worker. All returned rows are
+kept; this adds no visibility filter. Original proof ages are preserved, and
+unchanged refreshes replace old proof timestamps without rebuilding the tiles.
+The initial authorized photo page is published before optional presentation
+settings are fetched. Visible thumbnails receive a bounded initial turn before
+presentation and the background revision probe. Explicit photo/page requests
+and active music keep priority; continuous scrolling cannot indefinitely
+postpone the initial probe.
+The existing serialized session transport remains the network owner.
+First viewing does not require a manual preload: eligible Admin renditions use
+the already negotiated verified binary protocol directly. Viewed thumbnails
+are saved automatically in the account-bound ordinary thumbnail pool. Full
+private media still requires the account's explicit saved opt-in. A switched-away
+view withdraws cancelled admission tickets; obsolete detail/prefetch reads are
+cancelled when a new selection takes priority. Foreground photo/page requests
+lead background refresh and adjacent lightbox preparation leads grid thumbnails.
+The gallery's cache menu also offers **Preload thumbnails only**. This explicit,
+cancellable action lists only the selected gallery's direct photos, resumes
+from current authorized cache proofs and requests only thumbnail renditions. It
+does not traverse subgalleries or mark lightbox renditions fully preloaded.
+It yields between requests for urgent metadata, detail, paging or audio work;
+speculative decoded/disk/overscan queues do not reserve the transport. FIFO
+session/transport admission gives queued viewport and Watcher work a turn,
+retaining one active media GET. An admitted bounded request may finish. The original
+**Preload gallery** still prepares both renditions. Both modes respect the
+server's HTTP 429 and Retry-After limits; thumbnail-only is not a bulk endpoint.
+Both modes yield between catalogue pages and image reads when the current view
+needs metadata, a selected image, audio or adjacent lightbox preparation.
+Explicit full preload checks current authorized cache hits before skipping a
+rendition. An existing full file whose response age has expired goes through
+normal ETag revalidation; a valid 304 refreshes its age without downloading the
+body again. Final coverage still counts verified files, so a long preload does
+not promise that every file's short freshness window ends simultaneously.
+During full transfer, the stored count advances as both renditions of each
+photo are confirmed on disk. Transient or failed publications do not count;
+final verification reconciles current coverage without resetting progress to zero.
+Selecting the photo already being prefetched adopts its prepared result rather
+than cancelling and restarting that same request. Copied diagnostics separate
+detail/prefetch disk, network, 304, byte and RAM/adoption counters.
+The smooth activity ring appears before listing and stays active during cache
+checks, foreground waits, Retry-After and final verification. Processed photos,
+current disk hits and cache-confirmed publications have separate counters.
+Final availability reuses same-operation verified file witnesses only while
+key, pool, safe ancestry, identity, size and mutation timestamps match.
+No-store responses and failed cache writes cannot supply these witnesses.
+Completion is not a 10–20-second hosting guarantee: the serial API still needs
+one request per missing thumbnail and may serve a larger display rendition.
+Diagnostics separate metadata/preload work, foreground wait, transport phases,
+bytes and cache operations; cumulative overlapping times are not wall-time sums.
 The default-on **Subgalleries**
 switch shows direct child folder cards above the selected gallery's photos.
 Each folder uses its first authorized direct thumbnail as a cover. When no
 eligible image is available, the card shows a neutral folder. Photos keeps
 listings in memory and uses the current link grant. If the smallest thumbnail
 is missing, the server can use another existing rendition or the existing
-public display file within the same byte limit. Click a thumbnail or focus it and
-press Enter to open the inline lightbox. Left and Right wrap across the whole
+public display file within the same byte limit. Click a thumbnail to select it
+and show its information in an adjustable right-hand pane. Double-click or
+press Enter to open the inline lightbox. Arrow keys move through the grid;
+Space toggles the focused photo. Control-click on Windows/Linux or Command-click
+on macOS toggles individual selections. Shift-click or Shift-arrow selects a
+contiguous range from the anchor, within the existing 64-photo limit.
+Control-arrow (Command-arrow on macOS) moves focus while keeping the selection.
+Selected photos have a small rounded outline; a separate dotted focus frame is
+not drawn. Filename hints use a compact contrasting, wrapped tooltip.
+The information pane and the context-menu **Photo information** action share
+the same authorized metadata groups, formatter and bounded session cache.
+Metadata is reused for up to one minute, with at most 32 entries, and is cleared
+after relevant mutations or refresh. Rapid selection keeps one metadata reader
+and only the latest pending photo; old replies cannot repaint another gallery.
+These information reads do not request the full photo. Left and Right in the
+lightbox wrap across the whole
 album. F or F11 toggles fullscreen. Pointer motion briefly reveals controls
 including the music transport for an authorized playlist.
+On Windows, NumLock, CapsLock and ScrollLock do not block the shortcut. It also
+works without a numeric keypad. Control/Alt shortcuts and text-entry focus keep
+their ordinary behavior; other platforms retain their own modifier mapping.
 Escape exits fullscreen before closing the lightbox. Closing the lightbox or
 pressing Escape restores the tree and grid, including after an image error.
 Use the mouse wheel or two-finger scrolling to move through the photo grid.
+Repeated scroll/layout signals share one scheduled viewport update. Visible
+thumbnails load first, with a bounded adjacent-row buffer that keeps nearby Tk
+images ready for a small scroll reversal. Scrolling requests thumbnails only.
+The same live session, cache admission and cancellation rules still apply.
+The single thumbnail worker passes each completed result to a small bounded
+queue and continues its serial batch without waiting for a separate GUI poll
+per photo. The session request gate still serializes authenticated transport.
+One batch holds at most four thumbnails. GUI slices attempt at most four
+attachments and yield after an observed eight-millisecond budget; an attachment
+already in progress can exceed that budget. These are initial scheduling
+policies, not a measured optimum.
+Foreground work and changed viewports interrupt the remaining batch. Ready
+results and decoded-memory hits attach in bounded GUI slices, with visible
+tiles first, so a warm image does not wait behind another network request.
+Verified public disk hits have one separate, persistent disk/decode lane that
+cannot issue HTTP requests. Its ready queue holds at most four results, plus
+one in-flight decode. A miss returns to the existing serialized network owner;
+pending identities prevent duplicate admission. Private Admin cache bytes still
+require live server revalidation and cannot use this disk-only shortcut.
+The shared decoded LRU has a 16 MiB byte cap, accounting four bytes per pixel,
+and a secondary 256-entry cap. This covers two 84-item bands at the maximum
+144-by-144 raster size. Visible entries take eviction priority; when full,
+speculative overscan is refused rather than displacing recent history.
+Expired session/proof data and changed validators cannot authorize a warm hit.
+Tk images remain limited to the visible and adjacent-row band. Releasing an
+image restores the placeholder; that feedback change is not a speed claim.
+Sequential media GETs may reuse one HTTP/1.1 connection and one verifying
+SSLContext per session. Both transport serialization gates remain in force.
+Only fully consumed, validated, unambiguously framed responses permit reuse.
+Server closure, errors, cancellation, renewal and session closure discard the
+socket. One stale borrowed socket may reconnect before a response arrives,
+within the same deadline; response/body failures and mutations are not replayed.
+The initial idle retention is 15 seconds, not a measured hosting optimum.
+Copied Photos diagnostics include viewport signals versus applied updates,
+Tk image creations/releases, cache hits, retained image counts and the longest
+viewport callback. They also separate verified disk hits, received/revalidated
+bytes, disk lookup/publication, session-gate wait, credential renewal, media
+transport, decoding, queue wait and Tk application. Transport time includes its
+own admission, transfer and validation; it is not server response time alone.
+Request attempts, new TCP connections, attempted TLS handshakes and socket
+reuse are separate counts. SSLContext, DNS, TCP, TLS, request/header wait and
+body/validation have separate observations; the encompassing transport total
+must not be added to its own component times. Work is counted before GUI
+admission, including results later discarded by cancellation or identity fences.
+Cancelled completed reads and discarded disk results have distinct counters;
+these dispositions never imply that their earlier I/O did not happen.
+These are cumulative local observations, not an FPS benchmark. Compare cold
+and warm browsing separately, using the same gallery, window size and runtime.
 The same gestures and + and − zoom in either lightbox mode. Press 0 to reset
 the view and drag to pan. When the server permits a
 photo's GPS location, its anchored pin offers **Open in OpenStreetMap**, which
 opens the system browser. The lightbox prepares the previous and next photos
-in bounded memory, including at the wrap points. Thumbnails trim detected
+in bounded memory while open, including at the wrap points. Closing it clears
+queued detail prefetch; an already running bounded request may finish.
+Thumbnails trim detected
 black bars and show the entire remaining scene at its own aspect ratio.
 Photo and thumbnail downloads have a separate five-minute
 quota of 600 requests per IP and 3,600 globally. If the server returns HTTP 429, Photos
@@ -1126,10 +1325,79 @@ PyObjC and a Tk build with the AppKit window bridge. Tk 9 was exercised.
 Pillow/Tk provides 8-bit SDR on other configurations, including Windows.
 Thumbnails use SDR.
 
-One per-user disk cache stores opted-in photo and audio bytes with their
-verified content digests. Its ordinary area keeps up to 4,096 entries or
-1 GiB and evicts the
-least recently accessed entries under storage pressure. A bounded decoded
+JPEG/MPO details larger than the display bound request a reduced decoder
+raster before allocating RGB pixels, including ordinary camera photos below
+the 36-million-pixel ceiling. Decoder-supported scaling reduces work when
+possible. The same pixel guard is checked before conversion, and output stays
+within 2,048 by 1,536 pixels. The 16-MiB transfer limit and Pillow's own image
+protection remain active. If a detail still exceeds the pixel budget, WinApp
+can request its existing authorized thumbnail once as a limited preview. This
+uses the current media endpoint on older webs too; failed authorization,
+cancellation, throttling or corrupt content do not use that fallback. The
+original photo is unchanged, and a remaining refusal includes a safe cause.
+These paths are shared by Windows and macOS. A green preload indicator means
+verified encoded files, not a gallery of decoded images or Tk textures. Returning
+to an album still obtains current authorized metadata, then reuses the bounded
+thumbnail memory/disk paths. Detail display still decodes cached bodies;
+stale or missing Admin reuse proof follows the normal server path. Fullscreen HDR
+may additionally use the existing native renderer. Installed MacBook latency
+requires a separately agreed measurement.
+
+If a conditional photo read returns HTTP 304 without the required cache
+metadata, WinApp makes one new authorized read without the validator. It does
+not display stale bytes on the strength of the rejected response. The fresh
+response must pass the normal policy, size and content checks; cancellation,
+authorization errors, throttling and content encoding do not enter this retry.
+
+The per-user disk cache stores opted-in bytes with verified content digests.
+Ordinary thumbnails use their own `photo-cache/thumbnails` area, capped at
+4 GiB by default or 262,144 entries. The labelled storage control sits directly
+left of Watcher status in the shared header, available on every tab. Its contrast
+and explicit text identify thumbnails without relying on a background-coloured
+icon. It opens shared per-user settings with 1/2/4/8/16/32/64 GiB choices.
+All profiles use the same persisted quota. Full/detail photos and audio keep the separate
+1 GiB or 4,096-entry main pool. Each pool evicts its own least recently accessed
+entries; large photo/audio downloads cannot displace ordinary thumbnails.
+Both share the existing lock, gallery retention and account-specific private
+preload settings. Pinned thumbnails and details stay outside ordinary quotas.
+Unpinning first checks that every converted item fits its destination pool and
+verifies all copies before deleting retained files. Failure keeps the existing
+retention recovery state. Older cached thumbnails migrate lazily by their exact
+rendition key, without refreshing their validation age.
+A SQLite index beside the pool maintains physical file count/bytes and indexed
+eviction order under the existing process/file lock. Ordinary writes update
+totals by delta instead of scanning/statting/sorting the whole pool per write.
+A durable dirty marker precedes replacement/eviction; restart, incomplete work
+or a changed directory generation requires bounded cancelable metadata
+reconciliation on a worker before further quota admission. Existing media and
+legacy migration remain intact. The index is accounting, never authorization
+or content-integrity evidence. Corrupt/unreadable accounting yields unavailable
+storage and refuses ordinary publication. Arbitrary external in-place edits
+are unsupported; cooperating writers use atomic replacement and the shared
+lock. Lowering the quota preserves data until bounded eviction on later
+admissions; a failed admission can remain partial.
+An activity ring marks the initial accounting wait. The widget refreshes
+coalesced snapshots off Tk, including other-process writes,
+pin/unpin and recovery. The main thumbnail count and bytes include ordinary
+and typed retained thumbnail files, with matching scope. The anchored detail
+separates ordinary used/limit, which includes only ordinary files and headers.
+**Keep preloaded** has its own retained count/bytes, outside that
+quota, with separate thumbnail and other-media counts in the anchored detail.
+Other media includes photos, audio and older untyped thumbnail files.
+Browsing/cache events and preload progress request a fresh observation through
+the same single worker. Ordinary indexed totals can appear before retained/RAM
+accounting finishes; partial observations preserve already known retained data.
+An unchanged ordinary number does not imply that kept galleries are missing.
+Retained accounting initially scans bounded safe metadata off Tk, then reuses
+per-gallery totals until directory generations change. It never reads or hashes
+bodies for the widget and never holds image-read locks during a walk.
+Used/limit uses KiB/MiB/GiB. Loading/unavailable never means measured zero or
+authorized offline coverage. RAM is explicitly current-process resident memory:
+Windows working set or macOS RSS, excluding children. VRAM stays unavailable; no GPU/game
+memory is attributed to the uploader. Decoded 16 MiB/256-item bounds remain.
+Retained reads skip duplicate-cleanup locking when the exact ordinary candidate
+does not exist. Existing candidates still receive the full locked checks.
+A bounded decoded
 thumbnail cache accelerates return visits during the current session. A
 current catalogue validator lets WinApp read matching disk thumbnails before
 making a binary request. Older servers use photo freshness and authorized
@@ -1178,15 +1446,42 @@ consume neither the ordinary entry count nor its byte quota. Disabling this
 preference returns that gallery to ordinary LRU policy, which can evict excess
 entries. Cancelling an unfinished preload keeps its completed entries and pin
 preference; it does not mark the whole gallery complete.
-An explicit preload with an Admin Photos link can also retain private or draft
-photos when the server advertises the Admin preload capability. The gallery,
+Viewed Admin thumbnails are cached automatically when the server advertises
+the verified media capability and accepts that rendition for caching. They use
+the shared thumbnail quota and the verified account namespace. Without that
+account's saved preload intent, an unrelated gallery pin cannot move them into
+retained storage outside the quota. Explicit preload can additionally retain
+full private or draft photos on a supporting server. The gallery,
 its complete ancestry and each photo must be verified as non-NSFW. The saved
 opt-in and private entries are separated by installation, verified account and
-gallery. Later thumbnail and lightbox reads revalidate private entries through
-the live server before returning their bytes. Ordinary restricted browsing,
-older servers, NSFW media and other `no-store` responses remain transient.
-Preloading uses current gallery permissions; local files do not grant offline
-or expired-link access. Zero stored photos are reported as unavailable for
+gallery. A fresh authorized catalogue proof can reuse exact matching thumbnail
+bytes from that account's cache and decoded LRU without another binary request.
+The original observation is valid for at most 60 seconds and is tied to the
+current session generation. A full photo displayed from an explicitly
+downloaded preload may reuse its hash-verified file while the live catalogue
+proof still matches the issuer, verified account, gallery and photo. The full
+file's original HTTP response age does not limit this viewer-only snapshot path.
+If its proof expires, WinApp refreshes the small metadata page for that photo
+group before reuse; it does not fetch the full binary again. Missing or corrupt
+files use the normal server read. Authentication, account changes, cancellation,
+known refusal and saved-intent opt-out still block reuse. Normal HTTP reads and
+explicit preload keep the 60-second body-freshness policy and authorized 200/304
+revalidation; the snapshot option is disabled by default outside full viewer
+reads. The thumbnail validator never substitutes for the full-image digest.
+Same-view prepared details retain their existing 15-second bound. Remote changes
+made after the latest page are observed on the next authenticated read, not
+immediately during that bounded reuse interval. Full restricted browsing
+without saved intent, older servers, NSFW media and other `no-store` responses
+remain transient. This uses the existing linking API and grant; it adds no web
+capability, offline access or server API change.
+A newer authenticated page may confirm the same photo and strong
+thumbnail validator while the mounted viewer still holds an older descriptor.
+Reuse then uses the actual newer ledger timestamp and epoch; the old descriptor
+cannot create or extend authority. Missing, changed or stale ledger rows still
+require the server path. This also covers metadata reads performed by background
+cache checks and preload workers.
+Preloading uses current gallery permissions and never grants offline or
+expired-link access. Zero stored photos are reported as unavailable for
 preload, with a safe reason, rather than as a partly successful download.
 One explicit preload accepts up to 100,000 direct photos as a bounded work
 operation; this is separate from the ordinary cache quota.
@@ -1206,8 +1501,8 @@ every 30 seconds and refreshes when it changes. The current scroll position
 and unchanged thumbnail data are retained. Older servers support manual
 refresh.
 
-Select photos with Control-click on Windows or Command-click on macOS, or use
-the photo context menu. Open the context menu to delete one photo or the
+Select photos using the grid controls above or the photo context menu.
+Open the context menu to delete one photo or the
 selection using the current Admin Photos link. Confirm each batch of up to
 64 photos in WinApp. Deletion uses the same permanent file and index
 operation as web Admin. If

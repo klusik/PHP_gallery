@@ -21,6 +21,29 @@ Versioned configuration migration and normalization for the Windows uploader.
 
 from typing import Any, Dict, Tuple
 
+# Purpose: Offer a compact set of shared thumbnail quota choices.
+# Type: tuple[int, ...]. Units: GiB. Scope: per-user ordinary thumbnail storage.
+# Consumers: Photos storage settings. Rationale: 1–64 GiB covers small disks
+# and large collections; 4 GiB is the cache owner's factory default.
+THUMBNAIL_CACHE_LIMIT_CHOICES_GIB = (1, 2, 4, 8, 16, 32, 64)
+
+
+def set_thumbnail_cache_limit_gib(value: int) -> bool:
+    """Save one per-user cache preference through the shared storage owner.
+
+    Args:
+        value (int): One advertised ordinary thumbnail quota in GiB.
+    Returns:
+        bool: True only after shared persistence confirms the update. Profile
+            configuration is untouched because the physical pool is shared.
+    """
+    if type(value) is not int or value not in THUMBNAIL_CACHE_LIMIT_CHOICES_GIB:
+        return False
+    from .gallery_media_cache import GalleryMediaCache, MEDIA_CACHE_MAX_BYTES
+    return GalleryMediaCache.for_current_user(
+        MEDIA_CACHE_MAX_BYTES, thumbnails=True,
+    ).set_thumbnail_limit_bytes(value * 1024**3)
+
 CONFIG_SCHEMA_VERSION = 2
 
 DEFAULTS: Dict[str, Any] = {

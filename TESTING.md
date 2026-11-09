@@ -850,6 +850,160 @@ Load more click. Controlled timer fixtures verify pacing, session/destruction
 fences and error-to-manual-retry behavior; switching A to B and back
 scopes each gallery's preload status. These assertions complement manual
 rendering checks; they do not establish every DPI or desktop composition.
+Manual acceptance for catalogue activity must check its placement above the
+tree, smooth ring beside the localized text and animation during initial and
+paced reads, stopping at a terminal result. Clear, restart, disconnect and
+destroy during animation; stale timers must not update the replacement state.
+The text must remain usable when icon rendering is unavailable. Verify the
+saved upload title across refreshes, clearing after a
+credential/mode change, generic capture wording, simulator controls and custom
+game phrases without modifying recording/UTC preferences. Confirm this visible
+behavior before expanding the corresponding widget regression expectations.
+Media transport coverage must include equivalent repeated/split/reordered
+cache headers on 200 and 304 responses, preserving exact marker and Vary
+refusals. Additional longer ages must retain the local 60-second cap; shorter,
+malformed, missing or conflicting directives must not authorize storage.
+Retain legacy no-store display and private audio revalidation assertions.
+Conditional-photo recovery fixtures exercise a rejected 304 with a missing
+cache marker followed by a fresh authorized response. They must never return
+the stale body, retry a failed unconditional request, exceed the shared
+no-store retry budget, or retry encoding, authorization, throttling, unrelated
+transport failures or cancellation. Retain the original strict 304 header
+admission tests; recovery does not authorize the rejected cache response.
+GUI performance acceptance must preserve mixed tuple/control event order across
+bounded drain turns and confirm that each event completes before yielding.
+Use controlled clocks for budget boundaries rather than machine-speed timing
+assertions. Verify one scheduled dispatcher through reentrance, exit and a
+deferred close, and one recent-activity redraw for an event burst. Filtering
+must show current history without losing footer or writer submissions. Numeric
+diagnostic counters are observations, not an installed latency benchmark.
+For thumbnail-first browsing, record rendition requests: grid navigation must
+request thumbnails without detail or adjacent-photo reads. Opening a photo
+permits its detail and bounded neighbors; closing it must prevent further
+speculative reads, including a delayed page-edge completion. An in-flight
+bounded read may complete without reopening the lightbox. Explicit preload
+must still fetch both rendition types. Direct RGB thumbnail preparation must
+retain existing source byte/pixel limits, matte crop, aspect ratio and maximum
+dimensions. Verify foreground detail/page requests and active music retain
+priority, while a changing viewport cannot indefinitely defer revision checks.
+These are acceptance requirements, not claims of installed performance results.
+
+For grid scrolling, send a burst of viewport signals before Tk dispatch and
+verify one scheduled update applies the final position. A small reversal must
+reuse the same nearby Tk images without redundant reads; a large jump must
+release images outside the bounded visible/adjacent band. Visible thumbnails
+retain priority and scrolling must never request full photos. Exercise width
+changes, appended pages, metadata refresh, closing and late worker replies.
+Pending viewport timers must be cancelled or invalidated during teardown and
+rebuild. Copy numeric render counters without replacing the last Photos error.
+Compare operation counts and image identity; avoid machine-speed pass limits.
+The existing Windows diagnostic owner additionally exercises a viewport with
+more than 48 visible tiles, its overscan, a lower-band visit and a return with
+no additional thumbnail reads. Independent public disk hits must fill available
+tiles while unrelated transport work is blocked, with disk/decode off Tk and
+image attachment on Tk. Exercise in-flight departure/re-admission, byte-bound
+eviction, speculative overscan refusal, proof expiry, changed validators,
+refresh/close and discarded-result I/O accounting. Deterministic observations
+are retained as `photos-viewer-measurement.json` in the existing audit artifacts.
+Its explicit 1800-by-1200 Tk window may exceed the runner's physical monitor;
+recorded canvas geometry establishes the functional viewport, not display FPS.
+Transport fixtures check sequential reuse, verifying context identity, server
+closure, incomplete body refusal, one stale-socket reconnect and old-control
+stop/finish after a new owner borrows the socket. Existing renewal, revocation,
+private cache, rejected 304, HTTP 429 and strict cursor/read-count assertions
+remain required. Simulated transport measurements are explicitly labelled in
+`photos-transport-measurement.json`; they do not prove real hosting keep-alive,
+TCP/TLS latency or installed performance.
+The real loopback measurement uses one disposable IPv4 HTTP/1.1 listener and
+native resolution constrained to that same numeric peer; it does not include
+external DNS or TLS. Deadlines and operation-count assertions remain unchanged.
+Thumbnail-only preload must issue no full-photo requests, yield to foreground
+demand, resume only current public data and retain its distinct completion scope.
+Actual Windows render coverage uses an isolated hosted Canvas/ttk grid and
+screen pixels before/after scroll. Unavailable desktop/capture is an explicit
+skip. A settled-pixel comparison cannot prove absence of transient strips during
+motion, identify the video build or establish application FPS.
+The isolated capture keeps pointer, hover, press and keyboard focus outside the
+tile states being compared. A mismatch retains synthetic before/after/diff PNGs
+and numeric geometry/state facts in the same audit artifact for inspection.
+Agree a live test
+before starting the user's app; verify process/runtime/source SHA and tray/mutex
+handoff, use the unchanged web 1.0.3, record cold and warm sources separately.
+
+Photos selection acceptance must distinguish single-click metadata selection
+from double-click/Enter detail reads. Verify Control/Command toggling, anchored
+Shift ranges including the unchanged selection limit, arrows, focus-only
+Control/Command arrows, Space toggling and focus return after lightbox close.
+Selection must not resize tiles or show an additional dotted focus rectangle.
+Inspect one photo, then open its context information: groups, formatting and
+GPS restrictions must match without duplicating the metadata implementation.
+Change photos rapidly, close/switch galleries and expire the metadata cache;
+stale replies must not repaint the current pane. Check f/F/F11 exactly once
+with focus on image and toolbar, preserving text fields and command modifiers.
+Check tooltip contrast, wrapping and viewport clamping at narrow widths.
+Fullscreen regressions must also supply real Windows NumLock/ScrollLock state
+bits, combinations with CapsLock/Shift and state zero for a keyboard without a
+numeric keypad. Real and generated Alt/Control states remain unhandled, and
+text entry retains the typed letter. Separate shortcut observations must be
+bounded and copied without replacing the retained media failure; keys outside
+F/F11 and text/widget paths must never appear.
+The initial-page fixture holds optional presentation behind an event and
+requires the authorized page and first thumbnail to render before release.
+The presentation still uses the single worker; an already running bounded
+optional request may delay a later click. Closing/session changes fence its
+late result. This does not establish installed MacBook latency.
+Decode fixtures exercise an oversized JPEG reduced before RGB conversion,
+and a real 4096-by-3072 JPEG below the pixel ceiling whose decoder dimensions
+must shrink before RGB allocation. Its safe raster/encoded-byte/timing facts
+are retained in `photos-detail-decode-measurement.json` without a wall-time
+pass threshold. The former path would convert the full source raster.
+Other cases retain unchanged byte/pixel caps, an unsafe or ineffective draft,
+and a non-JPEG that must not allocate its oversized raster. Typed facts expose numeric policy
+reasons after revalidation, including corrupted diagnostic fields. Only a
+pixel-budget refusal may request one authorized thumbnail preview; auth,
+throttling, cancellation and corrupt bytes must not cause it. Apply the same
+reader to selected and adjacent details and retain late-selection fencing.
+
+`app_linking_gallery_tree_test.php` exercises the real complete-tree service
+with controlled model/schema boundaries: complete/unchanged/empty results,
+creation/rename/move/deletion revision changes, account/scope/issuer isolation,
+post-read revocation, and independent row/encoded-byte refusal. It does not
+prove HTTP or SQL behavior. The existing gallery-detail database fixture also
+reads the complete private identity through the actual model and refuses a
+foreign issuer and revoked grant. The central PHP audit discovers the new
+fixture through its existing `*_test.php` glob. Manual protocol qualification
+must check no-store headers, exclusive query modes, missing capability,
+unsupported/invalid/oversized/unavailable optional replies and the original
+paged fallback against an unchanged older web. Never report partial trees as
+complete or remove missing cached rows before a successful final page.
+
+The WinApp tree protocol fixtures reject invalid versions, duplicate/unordered
+IDs, bad parents/titles/revisions and unsolicited unchanged replies. Missing
+capability must send no tree request. Unsupported/invalid/oversized/unavailable
+tree data must use the original pages; grant/authentication failure,
+cancellation and HTTP 429 must stop without fallback. Workspace fixtures cover
+cached-first display, saved selection versus explicit user choice, fresh-only
+preference writes, unchanged difference-only updates, bounded mounting and
+generation/session cancellation. Failed intermediate pages preserve the saved
+complete tree; final-page success prunes only absent IDs.
+`test_gallery_catalogue_cache.py` exercises real snapshot round trips,
+issuer/account/scope isolation, corrupt and redirected storage refusal,
+cancellation/size/shape bounds and failed atomic publication retaining the
+previous snapshot. Windows runs exercise user-scoped DPAPI rather than a
+mock encryption marker. These fixtures do not prove installed responsiveness.
+Manual old-web acceptance uses the unchanged online 1.0.3 endpoint. Verify new
+tree-v1 replies on localhost separately, without deploying this web source.
+
+The media-cache fixtures separate thumbnail pressure from detail/audio
+pressure and verify quota accounting, typed retention, current public/private
+admission and exact-key legacy migration. The pinned-legacy case must preserve
+the original validation time, produce a typed thumbnail entry and subsequently
+unpin into the thumbnail pool. Unsafe child directories must reject reads,
+presence checks and writes. Revalidation must stamp the actual file identity
+read. Unpin fixtures must retain all originals when the whole target set cannot
+fit at once and prevent one copied target from evicting an earlier target.
+Physical symlink qualification can report a specific platform privilege skip;
+that is not equivalent to passing a real redirected-path test.
 
 The isolated linking security fixture keeps `SCRIPT_NAME` independent of
 `REQUEST_URI` and verifies root and subdirectory public mounts through internal
@@ -1434,7 +1588,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.0.3. Release verification uses the
+This guide applies to PHP Gallery Version 1.0.4. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -8657,6 +8811,97 @@ login. An older server may show its ordinary full-page editor.
 
 Gallery preload fixtures exercise ordered pagination, local-body reuse,
 eligibility/no-store handling, cancellation, throttling and a final cache check.
+Thumbnail-only fixtures cover 265/564 photos on valid 64-row and legacy 8-row
+pages, current/warm/missing cache, blocked listing feedback, failed-write
+receipts, foreground interruption and retry. File witnesses preserve exact
+key/pool/identity/size/timestamp checks. Publication and verification both
+capture mutation timestamps through opened descriptors: Windows path metadata
+can expose a different creation/change-time field. The real-cache and receipt
+fixtures require a positive unchanged witness before testing replacement or
+same-size corruption. No-store and failed writes cannot claim
+completion. Phase/counter benchmarks are synthetic, with no runner-speed
+assertion or claim about deployed hosting. Cache operation fixtures compare
+265 writes over small and multi-thousand preexisting pools using exact
+scan/stat/hash/sort counts. Recovery, replacement, shared quotas, pin/unpin and
+reparse refusal use disposable directories. `thumbnail-cache-measurement.json`
+records the real runner-disk batch and its explicit redundant-scan comparison;
+actual no-follow path calls are counted separately from index accounting and
+directory-entry observations, with a nonzero instrumentation assertion;
+`thumbnail-preload-measurement.json` records real session/cache paths with a
+stubbed authorized transport. The latter cannot measure TCP/TLS or hosting
+latency. Native Tk checks inspect the full
+progress geometry/value/maximum on desktop/narrow layouts, activity during
+waits, anchored storage settings, focus/Escape and independent inspector width
+through hide/resize/restart. Windows screenshots use existing test artifacts
+when desktop capture is available. Installed performance, hosting rendition,
+transient motion artifacts and real Watcher concurrency remain agreed live tests.
+The shared-header implementation additionally requires an installed narrow
+layout check immediately left of Watcher status with ordinary and Keep preloaded
+data present, visible foreground
+contrast, an anchored card on every tab, and clear separate current-process RAM.
+Exercise a recent album return while metadata transport is blocked: its session
+snapshot should render first, then reconcile all server-returned rows without
+rebuilding equal tiles. Refreshed proof times must replace old times. Observe
+large JPEG fallback thumbnails before RGB conversion and retained reads without
+an ordinary duplicate. Retained accounting must count legacy media honestly,
+reuse unchanged directory totals and remain unknown on incomplete scans.
+These later paths and macOS RSS have not received a fresh runtime qualification.
+The user reported that two photos felt fast while the rest remained slow; this
+is a symptom report, not a controlled performance result. macOS acceptance of
+the downloaded-full-snapshot path remains open and must verify the same-account
+metadata refresh and no-full-binary-request behavior before claiming benefit.
+Admin preload reuse must exercise an actual authorized metadata page followed
+by cached private-key thumbnail bytes, without a binary request while the exact
+proof is current. Normal full HTTP/cache reads and explicit preload retain their
+own 60-second body-age policy and authorized 200/304 revalidation. Separately,
+the full viewer may explicitly request a downloaded snapshot: after a fresh
+authenticated catalogue proof, verify the same issuer, account, gallery and
+photo, saved full-media intent and the file's body digest, then prove that a
+body older than 60 seconds displays without a full binary GET. When catalogue
+proof expires, refresh the metadata page for the photo group without fetching
+the full body. Missing or corrupt files return to the ordinary server read.
+Do not change `stored_at` or HTTP freshness. Keep the snapshot option disabled
+by default, off for thumbnails and off in the full-preload worker. Session
+renewal, known rejection, local opt-out, wrong account, stale authorization,
+absent capability and NSFW-ineligible rows must refuse the shortcut. A changed
+thumbnail validator must still refuse ordinary thumbnail reuse; the saved full
+version has its own body digest and may remain older until explicit Preload.
+Native decoded keys and visible-priority keys must use the same private account,
+validator, metadata time and row proof epoch. No stale private entry may fall
+back to its raster storage timestamp. This uses the existing grant/API and adds
+no offline access or web capability.
+Cached return must not perform marker I/O on Tk. Compare cold requests with
+the supplied 29-tile macOS snapshot's 58 requests; do not call the two duplicate
+diagnostic reports independent before/after measurements.
+Known catalogue 401/403/404 responses must clear both the prior gallery proof
+and its recent-page snapshot. A new first page must not retain proof for rows
+deleted from the refreshed listing.
+Cold-view coverage must request the negotiated Admin binary representation
+and persist ordinary account-bound thumbnails without granting full-media
+intent. An unrelated gallery pin must not bypass the ordinary quota; no-store
+responses and full images without opt-in must not be persisted. Validate binary
+length/framing/validator/body refusal stages as fixed safe facts. A newer actual
+ledger proof with the same strong validator must permit an older mounted
+descriptor to use fresh full bytes; absent, changed or stale ledger data must
+refuse reuse. Full preload must revalidate an existing stale detail rather than
+treat physical existence as a current hit. Final physical coverage stays separate.
+Selection must supersede active detail/prefetch work and queued refresh; adjacent
+lightbox prefetch must lead remaining grid work after foreground/audio. Closing
+or switching views must withdraw cancelled session-gate tickets while an active
+request remains admitted. These follow-up cases have not been runtime-executed.
+Cover matching active prefetch adoption with a single media request, repeated
+selection of a live detail, and different-target cancellation. Full preload
+must publish confirmed cached photos during transfer, with zero for bodies
+whose publication was not confirmed. The storage worker must coalesce cache
+events, publish ordinary totals early, preserve known retained totals through
+partial results and keep its original idle cadence. Detail/prefetch diagnostics
+separate disk, network, 304 reuse, encoded bytes, RAM hits and prefetch adoption.
+Saved-key lifecycle fixtures separately assert Stop retains the key and explicit
+Finish captures revoke authority, checks each network attempt and retains its
+lease until exact operation/config-generation acknowledgement. Real ConfigStore
+tests cover atomic sole-work handoff, stale events/new credentials, outstanding
+peers/children and failed persistence. Server-confirmed revocation with uncertain
+local cleanup remains an error; no live gallery key is revoked by these fixtures.
 Admin preload coverage must include a real persisted private-body round trip,
 the separate issuer/verified-account namespace and saved intent, conditional
 revalidation before private display, expired/revoked links, ordinary no-store
@@ -8795,6 +9040,26 @@ panel and the exact OpenStreetMap URL after explicit activation. Connection
 coverage keeps closing the upload picker independent of the active Photos
 reader. Installed Windows click-through and audible playback require separate
 verification.
+
+Thumbnail pipeline regressions use controlled transports, clocks and the
+existing native Tk owner. They check completed thumbnail reads before a GUI
+poll, bounded ready rasters and GUI attachment slices, decoded-memory reuse
+during an active network read, foreground interruption, viewport repriority,
+refresh identity, stale raster release, HTTP 429 and close. Scheduling/count
+assertions are independent of runner speed; they do not measure installed FPS.
+The passive media-timing fixtures distinguish a verified disk hit from session
+gate wait, credential renewal and media transfer, including both attempts of
+the narrow refused-304 retry. Rejection, cancellation and throttling retain
+their existing authority and release the session gate.
+For manual Windows comparison, keep the gallery, window geometry and runtime
+fixed. Record separate cold and warm passes: scroll several rows, reverse,
+jump farther, open a detail during loading, return and switch albums. Copy
+Photos diagnostics before and after each pass and compare source counts,
+phase totals and peak GUI work. Confirm selection, the information pane,
+F/fullscreen and cache behavior. Record pending tiles and edge clipping
+separately from actual stale pixels or corrupted drawing; a video sampling
+rate is not the application's FPS. Running user WinApp/Watcher processes must
+be left untouched until a live test is agreed with the user.
 
 The issue #345 feature diagnostic also prepares runtime artifacts in an
 ephemeral checkout and delegates PHP regression to the existing disposable

@@ -78,6 +78,7 @@ class FinalizationWorker(threading.Thread):
         gui_admission: tuple[GuiModeOwner, ModeConfigPort] | None = None,
         require_gui_admission: bool = False,
         abandon_local: bool = False,
+        config_generation: object | None = None,
     ) -> None:
         """Capture connection-bound finalization or one independent local source.
 
@@ -112,6 +113,10 @@ class FinalizationWorker(threading.Thread):
                 host admission was supplied; local-only callers may omit it.
             abandon_local (bool): Close accepted local work after producers
                 stop, retaining photos, reports and all credentials.
+            config_generation (object{} | None): ConfigStore generation token
+                with no inspected attributes; compare object identity only.
+                Captured on Tk for exact post-revocation cleanup, or None for
+                non-GUI workers and operations without key cleanup.
 
         Returns:
             None: Initializes an idle, cancellable finalization thread.
@@ -128,6 +133,9 @@ class FinalizationWorker(threading.Thread):
         self.gui_admission = gui_admission
         self.require_gui_admission = require_gui_admission
         self._gui_work: CoordinatedWork | None = None
+        self._revocation_cleanup_pending = False
+        self.server_revocation_confirmed = False
+        self.config_generation = config_generation
         self.wait_for_workers = wait_for_workers
         self.revoke = revoke
         self.wants_revoke = wants_revoke
@@ -224,6 +232,7 @@ class FinalizationWorker(threading.Thread):
         with self._lock:
             if (
                 self.local_reports or self.saved_upload or self.abandonment
+                or (self.gui_admission is not None and not self.wants_revoke)
                 or not self.is_alive()
                 or self._progress.phase in {"completed", "error", "cancelled", "saving_key"}
             ):
@@ -297,7 +306,9 @@ class FinalizationWorker(threading.Thread):
         try:
             if self.gui_admission is not None:
                 owner, port = self.gui_admission
-                self._gui_work = owner.acquire('legacy', port)
+                self._gui_work = owner.acquire(
+                    'legacy_revoke' if self.wants_revoke else 'legacy', port,
+                )
             elif self.require_gui_admission:
                 raise RuntimeError('Flight report connection could not be verified.')
             if self.abandonment:
@@ -372,6 +383,7 @@ class FinalizationWorker(threading.Thread):
                     break
             if submit:
                 # Native/network waits never hold the snapshot/Tk polling lock.
+                self._revocation_cleanup_pending = self._gui_work is not None
                 self.revoke()
                 with self._lock:
                     # A fast GUI acknowledgement may already have completed
@@ -379,9 +391,13 @@ class FinalizationWorker(threading.Thread):
                     if self._progress.phase == "revoking":
                         self.update("saving_key")
         except InterruptedError as exc:
+            if not self.server_revocation_confirmed:
+                self._revocation_cleanup_pending = False
             self.save_local_result("cancelled", str(exc))
             self.update("cancelled", str(exc))
         except Exception as exc:
+            if not self.server_revocation_confirmed:
+                self._revocation_cleanup_pending = False
             detail = str(exc)
             if isinstance(exc, ModuleNotFoundError) and exc.name in {
                 "reportlab", "pypdf", "PIL",
@@ -395,8 +411,48 @@ class FinalizationWorker(threading.Thread):
                 self.update("error", detail)
                 self._progress.error = detail
         finally:
-            if self._gui_work is not None:
+            if self._gui_work is not None and not self._revocation_cleanup_pending:
                 self._gui_work.close()
+
+    def confirm_server_revocation(self) -> None:
+        """Retain positive server confirmation before queuing local cleanup.
+
+        Returns:
+            None: Records the response only for an already submitted revoke.
+        Raises:
+            RuntimeError: This operation did not submit revocation.
+        """
+        with self._lock:
+            if not self.wants_revoke or not self.server_request_sent:
+                raise RuntimeError('Revocation confirmation is unavailable.')
+            self.server_revocation_confirmed = True
+
+    def revocation_work(self) -> CoordinatedWork:
+        """Expose the exact live work ticket for atomic GUI cleanup handoff.
+
+        Returns:
+            CoordinatedWork: Server-confirmed legacy_revoke lifetime belonging
+                to this operation, never a newly acquired replacement ticket.
+        Raises:
+            RuntimeError: Confirmation, ownership or the retained fence is absent.
+        """
+        with self._lock:
+            if (not self.server_revocation_confirmed
+                    or not self._revocation_cleanup_pending
+                    or self._gui_work is None
+                    or self._gui_work.kind != 'legacy_revoke'):
+                raise RuntimeError('Revocation cleanup is unavailable.')
+            return self._gui_work
+
+    @property
+    def local_cleanup_pending(self) -> bool:
+        """Observe a confirmed cleanup still owning its original work fence.
+
+        Returns:
+            bool: True only while retryable local cleanup retains its ticket.
+        """
+        with self._lock:
+            return self.server_revocation_confirmed and self._revocation_cleanup_pending
 
     def _request_options(self) -> dict[str, Callable[[], None]]:
         """Return the live host checkpoint for a report HTTP attempt.
@@ -737,17 +793,27 @@ class FinalizationWorker(threading.Thread):
         plan.error = ""
         plan.save()
 
-    def confirm_local_cleanup(self, error: str = "") -> None:
+    def confirm_local_cleanup(
+        self, error: str = "", *, retryable: bool = False,
+    ) -> None:
         """Acknowledge credential persistence after revoke or local abandonment.
 
         Args:
             error (str): Empty after durable cleanup; otherwise recovery reason.
+            retryable (bool): Retain the original ticket after a reversible
+                pre-handoff refusal, without repeating server revocation.
 
         Returns:
             None: Reaches 100 percent only after the local key is cleared safely.
         """
         with self._lock:
+            if self._revocation_cleanup_pending and not self.server_revocation_confirmed:
+                raise RuntimeError('Server revocation is not confirmed.')
             self.update("error" if error else "completed", error)
             self._progress.error = error
             if not error:
                 self._progress.done = self._progress.total
+            keep_fence = bool(error and retryable and self._revocation_cleanup_pending)
+            self._revocation_cleanup_pending = keep_fence
+            if self._gui_work is not None and not keep_fence:
+                self._gui_work.close()

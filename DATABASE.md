@@ -114,7 +114,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 1.0.3. Version 0.97 adds the recoverable gallery-trash
+application version 1.0.4. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -1260,6 +1260,12 @@ migration and validates it again afterward. Data-only migration statements keep
 the cache because they cannot change table, column, or index availability.
 
 ### Phase 9 security/authentication schema capabilities
+
+The optional complete native catalogue uses the existing grant/user/gallery
+schema and the same authorized model query as paged listing. It adds no
+migration, persistent revision counter or table. Its revision is computed from
+the current ordered identity projection and verified issuer/account/scope;
+current authority is checked again before an unchanged response is returned.
 
 The experimental browser-approved native client stores consented grants and
 hashed access credentials in `app_link_grants`. An explicitly approved offline

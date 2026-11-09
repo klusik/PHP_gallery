@@ -296,6 +296,29 @@ class ModeAdmission:
             self._transition = reservation._ticket
             return reservation
 
+    def begin_transition_from_work(self, work: WorkLease) -> ModeTransition:
+        """Exchange the sole captured revocation lifetime for a save reservation.
+
+        Args:
+            work (WorkLease): Exact current legacy_revoke work whose server
+                response has been confirmed by its owning operation.
+        Returns:
+            ModeTransition: Exclusive reservation with no idle admission gap.
+        Raises:
+            ModeAdmissionError: Work is foreign, stale, ordinary legacy, closed,
+                has outstanding children/peers, or another transition exists.
+        """
+        with self._lock:
+            if (work._owner is not self or work.view is not self._view
+                    or work.kind != 'legacy_revoke'
+                    or self._active != {work._ticket}
+                    or self._transition is not None):
+                raise ModeAdmissionError('Revocation cleanup is unavailable.')
+            reservation = ModeTransition(self, self._view)
+            self._transition = reservation._ticket
+            self._active.remove(work._ticket)
+            return reservation
+
     def acquire_work(self, expected: ModeView, kind: WorkKind) -> WorkLease:
         """Admit one operation without interpreting a missing target as legacy.
 

@@ -168,6 +168,19 @@ _PANEL_BORDER = 12
 # Rationale: 6 px softens the rectangle while retaining compact toolbars.
 _BUTTON_CORNER_RADIUS = 6
 
+# Purpose: Keep selected gallery image outlines softly rounded and compact.
+# Type: int; Units: pixels; Scope: gallery tile selection artwork.
+# Consumers: _install_glossy_elements.
+# Rationale: 4 px rounds corners without changing any tile geometry.
+_GALLERY_SELECTION_CORNER_RADIUS = 4
+
+# Purpose: Reserve the same compact rim around every gallery tile.
+# Type: int; Units: pixels per edge; Scope: gallery tile image element.
+# Consumers: Gallery.tile artwork and native gallery grid geometry.
+# Rationale: Four pixels preserve the small radius without inheriting the
+# larger toolbar-button insets or shifting tiles when selected.
+GALLERY_TILE_BORDER_INSET = 4
+
 # Purpose: Give cards a softer silhouette than standard ttk frames.
 # Type: int; Units: pixels; Scope: generated frosted panel artwork.
 # Consumers: Pillow rounded rectangle drawing.
@@ -390,6 +403,7 @@ def create_smooth_icon(
     recording: bool = False,
     hollow: bool = False,
     pulse: bool = True,
+    angle: int = 0,
     cover: bytes | None = None,
     tone: str = "ink",
 ) -> ThemeImage | None:
@@ -403,6 +417,7 @@ def create_smooth_icon(
         recording (bool): Whether to overlay the Watcher recording marker.
         hollow (bool): Whether recording marks a collapsed ancestor.
         pulse (bool): Whether the recording marker uses its bright phase.
+        angle (int): Rotation in degrees for the ``loading_spinner`` arc.
         cover (bytes | None): Optional normalized PNG for folder artwork.
         tone (str): Palette key or current ttk foreground color for its strokes.
 
@@ -552,6 +567,14 @@ def create_smooth_icon(
             draw.polygon(((cx + 6 * scale, cy - 6 * scale),
                           (cx + 7 * scale, cy),
                           (cx + scale, cy - 2 * scale)), fill=color)
+        elif key == "loading_spinner":
+            draw.ellipse(
+                bounds, outline=_PALETTE["line"], width=stroke,
+            )
+            draw.arc(
+                bounds, angle % 360, angle % 360 + 105,
+                fill=_PALETTE["primary"], width=stroke,
+            )
         elif key == "stop":
             draw.rectangle((cx - 4 * scale, cy - 4 * scale,
                             cx + 4 * scale, cy + 4 * scale), fill=color)
@@ -838,9 +861,11 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("Muted.TLabel", background=colors["card_surface"],
                     foreground=colors["muted"])
     style.configure("Inline.Tooltip.TLabel",
-                    background=colors["card_surface"],
+                    background=colors["surface_alt"],
                     foreground=colors["ink"],
-                    padding=_INLINE_TOOLTIP_PADDING)
+                    padding=_INLINE_TOOLTIP_PADDING,
+                    relief="solid", borderwidth=1,
+                    bordercolor=colors["line"])
     style.configure("Photos.Status.TLabel",
                     background=colors["card_surface"],
                     foreground=colors["ink"],
@@ -1185,6 +1210,16 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         "button_focus": (("#2B4051", "#263A4B"), _PALETTE["card_surface"],
                          _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                          _BUTTON_IMAGE_SIZE),
+        "button_selection": ((_PALETTE["card_surface"],
+                              _PALETTE["card_surface"]),
+                              _PALETTE["card_surface"],
+                              GALLERY_TILE_BORDER_INSET,
+                              _GALLERY_SELECTION_CORNER_RADIUS,
+                              _BUTTON_IMAGE_SIZE),
+        "gallery_tile": ((_PALETTE["card_surface"], _PALETTE["card_surface"]),
+                         _PALETTE["card_surface"], GALLERY_TILE_BORDER_INSET,
+                         _GALLERY_SELECTION_CORNER_RADIUS,
+                         _BUTTON_IMAGE_SIZE),
         "button_disabled": (("#2B3742", "#26333E"), _PALETTE["card_surface"],
                              _BUTTON_BORDER, _BUTTON_CORNER_RADIUS,
                              _BUTTON_IMAGE_SIZE),
@@ -1302,23 +1337,27 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
             )
         artwork.paste(gradient_image, mask=mask)
         draw = ImageDraw.Draw(artwork)
-        draw.rounded_rectangle(
-            (scale, scale, scaled_size[0] - scale - 1,
-             scaled_size[1] - scale - 1),
-            radius=scaled_radius,
-            outline=_hex_rgb(_PALETTE["line"]),
-            width=max(1, scale),
-        )
+        if name not in ("gallery_tile", "button_selection"):
+            draw.rounded_rectangle(
+                (scale, scale, scaled_size[0] - scale - 1,
+                 scaled_size[1] - scale - 1),
+                radius=scaled_radius,
+                outline=_hex_rgb(_PALETTE["line"]),
+                width=max(1, scale),
+            )
         # The quiet slate edge supplies the rounded rim. Keep every
         # stretchable slice uniform to avoid dashed highlights from tiling.
         if name in (
             "button_focus", "primary_focus", "icon_focus",
-            "icon_primary_focus",
+            "icon_primary_focus", "button_selection",
         ):
             draw.rounded_rectangle(
                 (0, 0, scaled_size[0] - 1, scaled_size[1] - 1),
                 radius=scaled_radius,
-                outline=_hex_rgb(_PALETTE["focus"]),
+                outline=_hex_rgb(
+                    _PALETTE["primary"] if name == "button_selection"
+                    else _PALETTE["focus"]
+                ),
                 width=scale * 2,
             )
         artwork = artwork.resize(size, Image.Resampling.LANCZOS)
@@ -1342,6 +1381,15 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         ("pressed", _THEME_IMAGES["button_pressed"]),
         ("active", _THEME_IMAGES["button_active"]),
         ("focus", _THEME_IMAGES["button_focus"]), **button_options,
+    )
+    style.element_create(
+        "Gallery.tile", "image", _THEME_IMAGES["gallery_tile"],
+        ("selected", _THEME_IMAGES["button_selection"]),
+        border=(
+            GALLERY_TILE_BORDER_INSET, GALLERY_TILE_BORDER_INSET,
+            GALLERY_TILE_BORDER_INSET, GALLERY_TILE_BORDER_INSET,
+        ),
+        sticky="nsew",
     )
     style.element_create(
         "Gloss.primary", "image", _THEME_IMAGES["primary"],
@@ -1907,11 +1955,12 @@ class GalleryIdentityLabel(ttk.Label):
         """
         value = self._source.get().removeprefix("Target gallery: ")
         parts = [part for part in value.replace("\\", "/").split("/") if part]
-        if not parts or value == "unknown":
-            self._display_name.set("Upload gallery: not set")
-            self._hierarchy.set("Upload gallery: not set")
-            return
         title = self._title.get().strip() if self._title is not None else ""
+        if not parts or value == "unknown":
+            heading = "Upload gallery: " + title if title else "Upload gallery: not set"
+            self._display_name.set(heading)
+            self._hierarchy.set(heading)
+            return
         # Older inventory APIs omit the title. Keep their folder leaf usable;
         # this presentation fallback never rewrites the authoritative identity.
         heading = "Upload gallery: " + (title or parts[-1])
@@ -2045,10 +2094,16 @@ def attach_inline_tooltip(
             surface.update_idletasks()
             gap = _INLINE_TOOLTIP_GAP
             label.configure(
-                wraplength=max(1, surface.winfo_width() - 2 * gap),
+                wraplength=min(
+                    _HELP_TEXT_WRAP,
+                    max(1, surface.winfo_width() - 2 * gap),
+                ),
             )
             label.update_idletasks()
-            width = min(label.winfo_reqwidth(), surface.winfo_width())
+            width = min(
+                label.winfo_reqwidth(),
+                max(1, surface.winfo_width() - 2 * gap),
+            )
             height = min(label.winfo_reqheight(), surface.winfo_height())
             x = widget.winfo_rootx() - surface.winfo_rootx() + gap
             y = (widget.winfo_rooty() - surface.winfo_rooty()

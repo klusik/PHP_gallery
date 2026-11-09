@@ -606,10 +606,12 @@ tag controller through the pagination and description-layout services.
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
 | Windows watcher | `winapp/gallery_watch_upload.pyw` |
 | WinApp Photos tree, contextual management and folder cards | `winapp/uploader/photos_workspace.py`, `winapp/uploader/gallery_folders.py` |
+| WinApp optional complete catalogue snapshot and last-gallery restoration | `winapp/uploader/gallery_catalogue_cache.py`, `winapp/uploader/photos_workspace.py`, preference owner in `winapp/gallery_watch_upload.pyw` |
 | WinApp browser link and startup resume | `winapp/uploader/app_linking_ui.py`, `winapp/uploader/session_resume.py`, `winapp/uploader/offline_linking.py` |
 | App Linking rolling expiry and refresh replay | `app/services/app_linking.php`, `app/services/app_linking_refresh.php`, `app/models/app_linking_refresh.php`, `tests/app_linking_database_test.php` |
 | Linked binary media rate limits | `app/controllers/app_linking/media.php`, `app/services/app_linking_rate_limits.php` |
 | WinApp Photos, local playback and media cache | `winapp/uploader/native_gallery_viewer.py`, `winapp/uploader/gallery_lightbox.py`, `winapp/uploader/gallery_media_cache.py` |
+| WinApp thumbnail accounting and process RAM | `winapp/uploader/thumbnail_cache_index.py`, `winapp/uploader/process_memory.py`; shared quota via `winapp/uploader/config.py`, snapshot/UI in `winapp/uploader/photos_workspace.py` |
 | WinApp gallery preload, retained bytes and Admin private-media opt-in | `winapp/uploader/gallery_preload.py`, `winapp/uploader/gallery_media_cache.py`, `winapp/uploader/app_linking.py`; server media owner in `app/services/app_linking_media.php` and ancestry policy in `app/services/gallery_access.php` |
 | WinApp window/divider view state and background activity persistence | `winapp/gallery_watch_upload.pyw`, `winapp/uploader/photos_workspace.py`, `winapp/uploader/state_store.py` |
 | WinApp installed fonts, generated icons and Windows DPI bootstrap | `winapp/uploader/ui_theme.py`, `winapp/uploader/windows_display.py` |

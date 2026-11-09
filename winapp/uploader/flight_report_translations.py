@@ -53,6 +53,9 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "confidence_low": "Low",
         "confidence_uncertain": "Uncertain",
         "record_flight": "Record flight",
+        "record_session": "Record activity",
+        "session_progress": "Capture progress",
+        "session_settings": "Capture settings",
         "auto_report": "Create report automatically",
         "ui_language": "Language",
         "flight_progress": "Flight and report",
@@ -319,6 +322,9 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "confidence_low": "Nízká",
         "confidence_uncertain": "Nejistá",
         "record_flight": "Zaznamenávat let",
+        "record_session": "Zaznamenávat činnost",
+        "session_progress": "Průběh záznamu",
+        "session_settings": "Nastavení záznamu",
         "auto_report": "Automaticky vytvořit zprávu",
         "ui_language": "Jazyk",
         "flight_progress": "Let a zpráva",
@@ -585,6 +591,9 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "confidence_low": "Niedrig",
         "confidence_uncertain": "Unsicher",
         "record_flight": "Flug aufzeichnen",
+        "record_session": "Aktivität aufzeichnen",
+        "session_progress": "Aufzeichnungsfortschritt",
+        "session_settings": "Aufzeichnungseinstellungen",
         "auto_report": "Bericht automatisch erstellen",
         "ui_language": "Sprache",
         "flight_progress": "Flug und Bericht",
@@ -851,6 +860,9 @@ _TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "confidence_low": "Låg",
         "confidence_uncertain": "Osäker",
         "record_flight": "Spela in flygning",
+        "record_session": "Spela in aktivitet",
+        "session_progress": "Inspelningsförlopp",
+        "session_settings": "Inspelningsinställningar",
         "auto_report": "Skapa rapport automatiskt",
         "ui_language": "Språk",
         "flight_progress": "Flygning och rapport",
@@ -1949,6 +1961,8 @@ _TRANSLATIONS["en"].update({
     "photos_workspace_subgallery_menu": "Subgallery",
     "photos_workspace_gallery_info": "Gallery information",
     "photos_workspace_photo_info": "Photo information",
+    "photos_workspace_select_photo_hint": "Select a photo to see its details.",
+    "photos_workspace_photo_info_ready": "Details loaded",
     "photos_workspace_select_photo": "Select photo",
     "photos_workspace_deselect_photo": "Deselect photo",
     "photos_workspace_delete_photo": "Delete photo…",
@@ -2009,6 +2023,7 @@ _TRANSLATIONS["en"].update({
     "linking_media_error": "Gallery content is unavailable.",
     "linking_media_gallery_unavailable": "Photos are unavailable for this gallery.",
     "linking_media_image_error": "Could not load this image.",
+    "linking_media_decode_error": "This image is too large or cannot be safely reduced.",
     "linking_media_throttled": "Photo requests are limited. Try again shortly.",
     "linking_media_slideshow_start": "Start slideshow",
     "linking_media_slideshow_stop": "Stop slideshow",
@@ -2058,6 +2073,8 @@ _TRANSLATIONS["cs"].update({
     "photos_workspace_subgallery_menu": "Podgalerie",
     "photos_workspace_gallery_info": "Informace o galerii",
     "photos_workspace_photo_info": "Informace o fotce",
+    "photos_workspace_select_photo_hint": "Vyberte fotku pro zobrazení podrobností.",
+    "photos_workspace_photo_info_ready": "Podrobnosti načteny",
     "photos_workspace_select_photo": "Vybrat fotku",
     "photos_workspace_deselect_photo": "Zrušit výběr fotky",
     "photos_workspace_delete_photo": "Smazat fotku…",
@@ -2118,6 +2135,7 @@ _TRANSLATIONS["cs"].update({
     "linking_media_error": "Obsah galerie není dostupný.",
     "linking_media_gallery_unavailable": "Fotky nejsou pro tuto galerii dostupné.",
     "linking_media_image_error": "Fotku se nepodařilo načíst.",
+    "linking_media_decode_error": "Fotka je příliš velká nebo ji nelze bezpečně zmenšit.",
     "linking_media_throttled": "Počet požadavků na fotky je omezen. Zkuste to za chvíli.",
     "linking_media_slideshow_start": "Spustit prezentaci",
     "linking_media_slideshow_stop": "Zastavit prezentaci",
@@ -2167,6 +2185,8 @@ _TRANSLATIONS["de"].update({
     "photos_workspace_subgallery_menu": "Untergalerie",
     "photos_workspace_gallery_info": "Galerieinformationen",
     "photos_workspace_photo_info": "Fotoinformationen",
+    "photos_workspace_select_photo_hint": "Wählen Sie ein Foto für Details aus.",
+    "photos_workspace_photo_info_ready": "Details geladen",
     "photos_workspace_select_photo": "Foto auswählen",
     "photos_workspace_deselect_photo": "Foto abwählen",
     "photos_workspace_delete_photo": "Foto löschen…",
@@ -2227,6 +2247,7 @@ _TRANSLATIONS["de"].update({
     "linking_media_error": "Der Galerieinhalt ist nicht verfügbar.",
     "linking_media_gallery_unavailable": "Fotos sind für diese Galerie nicht verfügbar.",
     "linking_media_image_error": "Das Foto konnte nicht geladen werden.",
+    "linking_media_decode_error": "Das Foto ist zu groß oder kann nicht sicher verkleinert werden.",
     "linking_media_throttled": "Fotoanfragen sind begrenzt. Bitte versuchen Sie es gleich erneut.",
     "linking_media_slideshow_start": "Diashow starten",
     "linking_media_slideshow_stop": "Diashow stoppen",
@@ -2276,6 +2297,8 @@ _TRANSLATIONS["sv"].update({
     "photos_workspace_subgallery_menu": "Undergalleri",
     "photos_workspace_gallery_info": "Galleriinformation",
     "photos_workspace_photo_info": "Fotoinformation",
+    "photos_workspace_select_photo_hint": "Välj ett foto för att visa detaljer.",
+    "photos_workspace_photo_info_ready": "Detaljer inlästa",
     "photos_workspace_select_photo": "Välj foto",
     "photos_workspace_deselect_photo": "Avmarkera foto",
     "photos_workspace_delete_photo": "Ta bort foto…",
@@ -2336,6 +2359,7 @@ _TRANSLATIONS["sv"].update({
     "linking_media_error": "Galleriinnehållet är inte tillgängligt.",
     "linking_media_gallery_unavailable": "Foton är inte tillgängliga för det här galleriet.",
     "linking_media_image_error": "Bilden kunde inte laddas.",
+    "linking_media_decode_error": "Bilden är för stor eller kan inte skalas ned säkert.",
     "linking_media_throttled": "Fotoförfrågningar är begränsade. Försök igen om en stund.",
     "linking_media_slideshow_start": "Starta bildspel",
     "linking_media_slideshow_stop": "Stoppa bildspel",
@@ -2581,11 +2605,35 @@ _PHOTOS_PRELOAD_LABELS = {
         'cache_loaded_count': '{cached}/{total} checked photos',
         'cache_legend': '☁ online · ◐ partial · ● local · ◌ unchecked',
         'preload': 'Preload gallery',
+        'preload_thumbnails': 'Preload thumbnails only',
+        'preload_yielding': 'Waiting for browsing…',
+        'preload_verifying': 'Verifying thumbnails…',
+        'preload_wait_metadata': 'Waiting for metadata…',
+        'preload_thumbnail_counts': '{done}/{total} · {hits} current · {stored} saved',
+        'storage_title': 'Thumbnails',
+        'storage_keep_short': 'Kept galleries',
+        'storage_ordinary_detail': 'Thumbnail cache: {count} · {used} / {limit}',
+        'storage_ordinary_unknown': 'Thumbnail cache: unavailable',
+        'storage_keep_detail': 'Kept galleries: {galleries}\nThumbnails: {thumbs} · {thumb_bytes}\nOther stored media: {others} · {other_bytes}',
+        'storage_keep_unknown': 'Kept galleries: unavailable',
+        'storage_loading': 'Loading…',
+        'storage_unavailable': 'Unavailable',
+        'storage_scope': 'Photo storage',
+        'storage_scope_hint': (
+            'The total includes ordinary and kept thumbnails. Kept galleries '
+            'are outside the thumbnail limit. Other stored media can include '
+            'audio and older thumbnails.'
+        ),
+        'storage_ram': 'App RAM: {value}',
+        'storage_vram': 'Process VRAM: unavailable',
+        'storage_limit': 'Thumbnail limit (GiB) · default 4',
+        'storage_save': 'Save limit',
+        'storage_saved': 'Limit saved',
+        'storage_save_failed': 'Limit was not saved. Try again.',
         'keep_preloaded': 'Keep preloaded',
         'keep_preloaded_hint': (
             'Keep this gallery outside automatic cleanup and the normal cache '
-            'limit. Preload can retain eligible non-NSFW Admin photos; every '
-            'private view still requires a live server check.'
+            'limit. An active gallery link is required for viewing.'
         ),
         'preload_cancel': 'Cancel preload',
         'preload_close_status': 'Close preload status',
@@ -2614,11 +2662,35 @@ _PHOTOS_PRELOAD_LABELS = {
         'cache_loaded_count': '{cached}/{total} ověřených fotek',
         'cache_legend': '☁ online · ◐ částečně · ● místně · ◌ neověřeno',
         'preload': 'Přednačíst galerii',
+        'preload_thumbnails': 'Přednačíst pouze náhledy',
+        'preload_yielding': 'Čekám na procházení…',
+        'preload_verifying': 'Ověřuji náhledy…',
+        'preload_wait_metadata': 'Čekám na metadata…',
+        'preload_thumbnail_counts': '{done}/{total} · {hits} aktuálních · {stored} uloženo',
+        'storage_title': 'Náhledy',
+        'storage_keep_short': 'Uchované galerie',
+        'storage_ordinary_detail': 'Cache náhledů: {count} · {used} / {limit}',
+        'storage_ordinary_unknown': 'Cache náhledů: nedostupná',
+        'storage_keep_detail': 'Uchované galerie: {galleries}\nNáhledy: {thumbs} · {thumb_bytes}\nFotky a další soubory: {others} · {other_bytes}',
+        'storage_keep_unknown': 'Uchované galerie: nedostupné',
+        'storage_loading': 'Načítání…',
+        'storage_unavailable': 'Nedostupné',
+        'storage_scope': 'Úložiště fotek',
+        'storage_scope_hint': (
+            'Součet zahrnuje běžné i uchované náhledy. Uchované galerie jsou '
+            'mimo limit náhledů. Další soubory mohou zahrnovat audio '
+            'a starší náhledy.'
+        ),
+        'storage_ram': 'RAM aplikace: {value}',
+        'storage_vram': 'VRAM procesu: nedostupná',
+        'storage_limit': 'Limit náhledů (GiB) · výchozí 4',
+        'storage_save': 'Uložit limit',
+        'storage_saved': 'Limit uložen',
+        'storage_save_failed': 'Limit nebyl uložen. Zkuste to znovu.',
         'keep_preloaded': 'Uchovat přednačtenou',
         'keep_preloaded_hint': (
             'Galerie zůstane mimo automatické čištění a běžný limit cache. '
-            'Přednačtení může uchovat povolené fotky bez označení NSFW; '
-            'soukromé zobrazení vždy znovu ověří server.'
+            'K prohlížení potřebujete aktivní propojení galerie.'
         ),
         'preload_cancel': 'Zrušit přednačítání',
         'preload_close_status': 'Zavřít stav přednačítání',
@@ -2647,12 +2719,36 @@ _PHOTOS_PRELOAD_LABELS = {
         'cache_loaded_count': '{cached}/{total} geprüfte Fotos',
         'cache_legend': '☁ online · ◐ teilweise · ● lokal · ◌ ungeprüft',
         'preload': 'Galerie vorladen',
+        'preload_thumbnails': 'Nur Vorschaubilder vorladen',
+        'preload_yielding': 'Warten auf das Durchsuchen…',
+        'preload_verifying': 'Vorschaubilder werden geprüft…',
+        'preload_wait_metadata': 'Warten auf Metadaten…',
+        'preload_thumbnail_counts': '{done}/{total} · {hits} aktuell · {stored} gespeichert',
+        'storage_title': 'Vorschaubilder',
+        'storage_keep_short': 'Behaltene Galerien',
+        'storage_ordinary_detail': 'Vorschau-Cache: {count} · {used} / {limit}',
+        'storage_ordinary_unknown': 'Vorschau-Cache: nicht verfügbar',
+        'storage_keep_detail': 'Behaltene Galerien: {galleries}\nVorschaubilder: {thumbs} · {thumb_bytes}\nWeitere gespeicherte Medien: {others} · {other_bytes}',
+        'storage_keep_unknown': 'Behaltene Galerien: nicht verfügbar',
+        'storage_loading': 'Laden…',
+        'storage_unavailable': 'Nicht verfügbar',
+        'storage_scope': 'Fotospeicher',
+        'storage_scope_hint': (
+            'Die Summe umfasst normale und behaltene Vorschaubilder. Behaltene '
+            'Galerien zählen nicht zum Vorschaulimit. Weitere Medien können '
+            'Audio und ältere Vorschaubilder enthalten.'
+        ),
+        'storage_ram': 'App-RAM: {value}',
+        'storage_vram': 'Prozess-VRAM: nicht verfügbar',
+        'storage_limit': 'Vorschau-Limit (GiB) · Standard 4',
+        'storage_save': 'Limit speichern',
+        'storage_saved': 'Limit gespeichert',
+        'storage_save_failed': 'Limit nicht gespeichert. Erneut versuchen.',
         'keep_preloaded': 'Vorgeladen behalten',
         'keep_preloaded_hint': (
             'Diese Galerie bleibt außerhalb der automatischen Bereinigung und '
-            'des normalen Cache-Limits. Vorladen kann erlaubte, nicht als NSFW '
-            'markierte Admin-Fotos behalten; private Ansichten werden immer '
-            'live beim Server geprüft.'
+            'des normalen Cache-Limits. Zum Anzeigen ist eine aktive '
+            'Galerieverknüpfung erforderlich.'
         ),
         'preload_cancel': 'Vorladen abbrechen',
         'preload_close_status': 'Vorladestatus schließen',
@@ -2681,11 +2777,35 @@ _PHOTOS_PRELOAD_LABELS = {
         'cache_loaded_count': '{cached}/{total} kontrollerade foton',
         'cache_legend': '☁ online · ◐ delvis · ● lokalt · ◌ ej kontrollerat',
         'preload': 'Förladda galleri',
+        'preload_thumbnails': 'Förladda endast miniatyrer',
+        'preload_yielding': 'Väntar på bläddring…',
+        'preload_verifying': 'Verifierar miniatyrer…',
+        'preload_wait_metadata': 'Väntar på metadata…',
+        'preload_thumbnail_counts': '{done}/{total} · {hits} aktuella · {stored} sparade',
+        'storage_title': 'Miniatyrer',
+        'storage_keep_short': 'Sparade gallerier',
+        'storage_ordinary_detail': 'Miniatyrcache: {count} · {used} / {limit}',
+        'storage_ordinary_unknown': 'Miniatyrcache: inte tillgänglig',
+        'storage_keep_detail': 'Sparade gallerier: {galleries}\nMiniatyrer: {thumbs} · {thumb_bytes}\nÖvriga sparade medier: {others} · {other_bytes}',
+        'storage_keep_unknown': 'Sparade gallerier: inte tillgängligt',
+        'storage_loading': 'Läser in…',
+        'storage_unavailable': 'Inte tillgängligt',
+        'storage_scope': 'Fotolagring',
+        'storage_scope_hint': (
+            'Summan omfattar vanliga och sparade miniatyrer. Sparade gallerier '
+            'räknas inte mot miniatyrgränsen. Övriga medier kan innehålla ljud '
+            'och äldre miniatyrer.'
+        ),
+        'storage_ram': 'Appens RAM: {value}',
+        'storage_vram': 'Process-VRAM: inte tillgängligt',
+        'storage_limit': 'Miniatyrgräns (GiB) · standard 4',
+        'storage_save': 'Spara gräns',
+        'storage_saved': 'Gränsen sparad',
+        'storage_save_failed': 'Gränsen sparades inte. Försök igen.',
         'keep_preloaded': 'Behåll förladdat',
         'keep_preloaded_hint': (
             'Galleriet undantas från automatisk rensning och normal cachegräns. '
-            'Förladdning kan behålla tillåtna Admin-foton utan NSFW-markering; '
-            'privata visningar kontrolleras alltid mot servern.'
+            'En aktiv gallerilänk krävs för visning.'
         ),
         'preload_cancel': 'Avbryt förladdning',
         'preload_close_status': 'Stäng förladdningsstatus',

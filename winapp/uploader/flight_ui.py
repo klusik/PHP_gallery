@@ -95,6 +95,27 @@ SIMBRIEF_IDENTITY_COLUMNS = 40
 SessionState = Literal["idle", "active", "working", "pending", "blocked"]
 
 
+class RevocationTransport(Protocol):
+    """Describe scoped revocation with a checkpoint before every HTTP attempt."""
+
+    def __call__(
+        self, upload_url: str, api_key: str, *,
+        before_request: Callable[[], None] | None = None,
+    ) -> dict[str, JsonValue]:
+        """Revoke the captured key using its original admitted configuration.
+
+        Args:
+            upload_url (str): Canonical captured automation endpoint.
+            api_key (str): Captured gallery-scoped credential, never logged.
+            before_request (Callable[[], None] | None): Revalidate work before
+                every route/retry request, or None for established direct callers.
+        Returns:
+            dict[str, JsonValue]: Positive ok/action=revoke result and optional
+                message/reconciled_after_gateway_error fields.
+        """
+        ...
+
+
 class ConnectionConfig(Protocol):
     """Expose only saved connection and simulator settings to the adapter."""
 
@@ -201,6 +222,17 @@ class FlightHost(Protocol):
         """
         ...
 
+    def complete_legacy_revocation(self, operation: FinalizationWorker) -> None:
+        """Acknowledge only the captured operation's server-confirmed cleanup.
+
+        Args:
+            operation (FinalizationWorker): Exact worker retaining revoke work
+                and the captured endpoint/key/config-generation identity.
+        Returns:
+            None: Performs the atomic sole-work to configuration-save handoff.
+        """
+        ...
+
     def api_key_request_blockers(self) -> list[str]:
         """List existing authenticated workers without adding this coordinator.
 
@@ -266,7 +298,7 @@ class FlightUI:
         host: FlightHost,
         directory: Path,
         normalize: Callable[[str], str],
-        revoke: Callable[[str, str], dict[str, JsonValue]],
+        revoke: RevocationTransport,
         resume_photos: Callable[[Path], threading.Thread | None],
     ) -> None:
         """Restore preferences and exclusive workspace ownership before actions.
@@ -275,8 +307,8 @@ class FlightUI:
             host (FlightHost): Existing Tk app and worker lifecycle owner.
             directory (Path): Per-user private flight workspace.
             normalize (Callable[[str], str]): Existing canonical endpoint policy.
-            revoke (Callable[[str, str], dict[str, JsonValue]]): Existing
-                URL/key revocation transport returning the JSON response.
+            revoke (RevocationTransport): Existing captured URL/key transport
+                with request checkpoints and a positive revocation response.
             resume_photos (Callable[[Path], threading.Thread | None]): Restart
                 only pending photographs from one durable session queue.
 
@@ -316,6 +348,7 @@ class FlightUI:
         self.report_group_files: dict[str, list[str]] = {}
         self.report_file_sort_keys: dict[str, ReportFileDetails] = {}
         self.report_button: ttk.Button | None = None
+        self.record_button: ttk.Checkbutton | None = None
         self.progress_actions: ttk.Frame | None = None
         self.progress_buttons: dict[str, ttk.Button] = {}
         self.progress_detail_label: ttk.Label | None = None
@@ -364,6 +397,40 @@ class FlightUI:
                 wording whenever no flight context is detected.
         """
         return self.host.simulator_presence.text(key, self.ui_language.get())
+
+    def capture_text(self, key: str) -> str:
+        """Choose neutral capture wording outside a detected flight context.
+
+        Args:
+            key (str): Capture control or progress title translation key.
+
+        Returns:
+            str: Flight-specific wording for flight contexts and neutral
+                activity wording otherwise; saved report names are untouched.
+        """
+        if not self.host.simulator_presence.flight_detected:
+            key = {
+                "record_flight": "record_session",
+                "flight_progress": "session_progress",
+                "flight_settings": "session_settings",
+            }.get(key, key)
+        return self.text(key)
+
+    def refresh_contextual_labels(self) -> None:
+        """Refresh visible capture labels after cached game detection changes.
+
+        Returns:
+            None: Recording preferences and worker state are not modified.
+        """
+        if self.record_button is not None:
+            self.record_button.configure(
+                text=self.capture_text("record_flight"),
+            )
+        if self.dialog is not None and self.dialog.winfo_exists():
+            title = self.capture_text("flight_progress")
+            self.dialog.title(title)
+            if self.task_tree is not None:
+                self.task_tree.heading("#0", text=title)
 
     def dialog_owner(self) -> tk.Misc:
         """Find the invoking window so related dialogs stay together.
@@ -713,12 +780,14 @@ class FlightUI:
         """
         frame = ttk.Frame(parent, style="Card.TFrame")
         frame.grid(row=7, column=0, sticky="ew", pady=(4, 0))
-        ttk.Checkbutton(
-            frame, text=self.text("record_flight"), variable=self.record_var,
+        self.record_button = ttk.Checkbutton(
+            frame, text=self.capture_text("record_flight"), variable=self.record_var,
             command=self.save_preferences,
-        ).grid(row=0, column=0, sticky="w")
+        )
+        self.record_button.grid(row=0, column=0, sticky="w")
         icon_button(
-            frame, "settings", self.open_settings, self.text("flight_settings"),
+            frame, "settings", self.open_settings,
+            self.capture_text("flight_settings"),
         ).grid(row=0, column=1, padx=(6, 0))
         frame.columnconfigure(2, weight=1)
         ttk.Label(
@@ -743,14 +812,15 @@ class FlightUI:
         dialog = tk.Toplevel(owner)
         dialog.withdraw()
         self.settings_dialog = dialog
-        dialog.title(self.text("flight_settings"))
+        dialog.title(self.capture_text("flight_settings"))
         dialog.transient(self.host.root)
         dialog.configure(background="#131B26")
         dialog.resizable(False, False)
         panel = GlassCard(dialog, padding=(24, 20))
         panel.pack(fill="both", expand=True, padx=12, pady=12)
         ttk.Label(
-            panel, text=self.text("flight_settings"), style="Section.TLabel",
+            panel, text=self.capture_text("flight_settings"),
+            style="Section.TLabel",
         ).grid(row=0, column=0, sticky="w")
         icon_button(
             panel, "close", dialog.destroy, self.text("hide"),
@@ -783,7 +853,7 @@ class FlightUI:
         actions = ttk.Frame(panel, style="Card.TFrame")
         actions.grid(row=6, column=0, columnspan=2, sticky="w", pady=(20, 0))
         icon_button(
-            actions, "≡", self.show_progress, self.text("flight_progress"),
+            actions, "≡", self.show_progress, self.capture_text("flight_progress"),
         ).pack(side="left")
         icon_button(
             actions, "↗", self.open_reports, self.text("open_reports"),
@@ -825,13 +895,18 @@ class FlightUI:
             f"IAS {ias_text} kt · ALT {altitude_text} ft · V/S {vertical_text} fpm"
         )
 
-    def finish_report(self) -> None:
+    def finish_report(self, *, revoke: bool = False) -> None:
         """Finish the active Watcher session and its available flight reports.
+
+        Args:
+            revoke (bool): Explicit primary mission Finish requests saved-key
+                revocation; report/PDF controls and ordinary Stop leave false.
 
         Returns:
             None: Uses a loaded OFP and all editions for explicit flight
-                completion. Finishes accepted work with the current connection
-                and closes progress after success. A contextual Watcher key
+                completion. Explicit saved-key mission Finish revokes its key after
+                accepted work and fenced local cleanup; ordinary Stop retains
+                that key. A contextual Watcher key
                 is released only after the shared operation completes.
         """
         if self.busy():
@@ -852,7 +927,10 @@ class FlightUI:
                 plan.languages = languages
                 plan.reports_enabled = True
                 plan.save()
-            self.begin(False, automatic=True)
+            self.begin(
+                revoke and not self.host.linking_manager.linked_upload_mode_selected(),
+                automatic=True,
+            )
         except (OSError, ValueError) as exc:
             self._dismiss_progress_preparation()
             messagebox.showerror(self.text("finish_pdf"), str(exc), parent=self.dialog_owner())
@@ -1540,7 +1618,7 @@ class FlightUI:
         except (OSError, ValueError) as exc:
             self.restore_preferences()
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )
@@ -1866,6 +1944,12 @@ class FlightUI:
             None: Reuses in-memory consent; never restores consent from disk.
                 Failed local abandonment requires its explicit confirmation again.
         """
+        if self.operation is not None and self.operation.server_revocation_confirmed:
+            if self.operation.local_cleanup_pending:
+                self.host.complete_legacy_revocation(self.operation)
+            else:
+                self.show_progress()
+            return
         if self.busy() or self.host.api_key_revoke_running:
             return
         if self.operation is not None and self.operation.abandonment is True:
@@ -1930,7 +2014,7 @@ class FlightUI:
         self, revoke: bool = False, *, automatic: bool = False,
         photos_only: bool = False,
     ) -> None:
-        """Start or join Stop; refuse Revoke until its cleanup is fenced.
+        """Start drained Stop or an explicitly authorized captured-key Finish.
 
         Args:
             revoke (bool): Whether this explicit action should finally revoke.
@@ -1940,20 +2024,23 @@ class FlightUI:
                 game capture before draining, including later recovery.
 
         Returns:
-            None: Shows progress for Stop, or explains that remote revocation
-                is unavailable while its local acknowledgement is not fenced.
+            None: Starts admitted work and progress. Linked-mode revocation is
+                separate; an active ordinary Stop cannot gain revoke authority.
         """
         linked = self.host.linking_manager.linked_upload_mode_selected()
-        if revoke:
+        if self.host.api_key_revoke_running and not self.busy():
+            self.show_progress()
+            return
+        if revoke and linked:
             messagebox.showinfo(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 self.text("revoke_temporarily_unavailable"),
                 parent=self.dialog_owner(),
             )
             return
         if self.load_error:
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 self.load_error,
                 parent=self.dialog_owner(),
             )
@@ -1986,9 +2073,9 @@ class FlightUI:
             ):
                 return
         if self.busy():
-            if revoke and self.operation is not None:
-                self.stop_other_workers()
-                self.operation.request_revoke()
+            # An ordinary Stop owns a legacy ticket. It cannot acquire revoke
+            # authority by changing a flag while that ticket remains admitted.
+            # Finish can be selected explicitly after its drain has completed.
             self.show_progress()
             return
         self._prepare_progress_view()
@@ -2016,7 +2103,7 @@ class FlightUI:
             gui_admission = None
             upload_url = ''
             api_key = ''
-            if remote_reports:
+            if remote_reports or revoke:
                 owner, port, upload_url, api_key = self.host.capture_flight_admission()
                 binding = connection_binding(upload_url, api_key)
                 if any(plan.binding != binding for plan in plans):
@@ -2048,7 +2135,12 @@ class FlightUI:
                 plans, upload_url, api_key, self.wait_for_workers,
                 self.submit_revoke, revoke,
                 emit=lambda level, message: self.host.events.put((level, message)),
-                gui_admission=gui_admission, require_gui_admission=remote_reports,
+                gui_admission=gui_admission,
+                require_gui_admission=remote_reports or revoke,
+                config_generation=(
+                    getattr(self.host.config, '_snapshot_token', None)
+                    if revoke else None
+                ),
             )
             if automatic:
                 self.automatic_operation = self.operation
@@ -2065,7 +2157,7 @@ class FlightUI:
             self.host.api_key_revoke_running = False
             self._dismiss_progress_preparation()
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )
@@ -2167,15 +2259,32 @@ class FlightUI:
             self.import_bindings.resolve(job_id)
 
     def submit_revoke(self) -> None:
-        """Refuse remote revocation until its asynchronous cleanup is fenced.
+        """Revoke only this worker's admitted key and queue its exact cleanup.
 
         Returns:
-            None: This temporary guard never submits a server request.
+            None: Positive server confirmation queues an operation-bound event;
+                the worker retains its work ticket through GUI persistence.
 
         Raises:
-            RuntimeError: Revocation is unavailable; the key remains retained.
+            RuntimeError: This is not the exact submitted GUI revoke operation,
+                or the response does not positively confirm the requested action.
         """
-        raise RuntimeError('API-key revocation is temporarily unavailable.')
+        operation = self.operation
+        if (operation is None or threading.current_thread() is not operation
+                or operation._gui_work is None
+                or operation._gui_work.kind != 'legacy_revoke'
+                or not operation.wants_revoke or not operation.server_request_sent):
+            raise RuntimeError('Revocation ownership is unavailable.')
+        response = self.revoke_transport(
+            operation.upload_url, operation.api_key,
+            before_request=operation._gui_work.checkpoint,
+        )
+        if response.get('ok') is not True or response.get('action') != 'revoke':
+            raise RuntimeError('Server revocation is unconfirmed.')
+        operation.confirm_server_revocation()
+        self.host.events.put({
+            'kind': 'api_key_revoked', 'payload': {'operation': operation},
+        })
 
     def revoked(self, error: str = "") -> None:
         """Acknowledge GUI-owned local credential persistence.
@@ -2289,7 +2398,7 @@ class FlightUI:
         self.dialog = tk.Toplevel(owner)
         self.dialog.withdraw()
         self.dialog.configure(background=self.host.root.cget("background"))
-        self.dialog.title(self.text("flight_progress"))
+        self.dialog.title(self.capture_text("flight_progress"))
         self.dialog.transient(self.host.root)
         frame = GlassCard(self.dialog, padding=(16, 12))
         frame.pack(fill="both", expand=True, padx=8, pady=8)
@@ -2305,7 +2414,7 @@ class FlightUI:
         self.task_tree = ttk.Treeview(
             frame, columns=("state",), show="tree headings", height=6
         )
-        self.task_tree.heading("#0", text=self.text("flight_progress"))
+        self.task_tree.heading("#0", text=self.capture_text("flight_progress"))
         self.task_tree.heading("state", text=self.text("phase_idle"))
         self.task_tree.column("#0", width=250)
         self.task_tree.column("state", width=230)
@@ -2474,7 +2583,7 @@ class FlightUI:
         else:
             for plan in operation.plans:
                 if not plan.reports_enabled and operation.local_reports is not True:
-                    rows.append((plan.session_id, self.text("record_flight"),
+                    rows.append((plan.session_id, self.capture_text("record_flight"),
                                  self.text("phase_completed" if plan.completed else "phase_draining")))
                     continue
                 current = progress.render_session == plan.session_id
@@ -2520,9 +2629,9 @@ class FlightUI:
                 refuses a still-pending revocation without changing the plan.
         """
         revoke = self.pending_revoke_intent()
-        if revoke:
+        if revoke and self.host.linking_manager.linked_upload_mode_selected():
             messagebox.showinfo(
-                self.text('flight_progress'),
+                self.capture_text('flight_progress'),
                 self.text('revoke_temporarily_unavailable'),
                 parent=self.dialog_owner(),
             )
@@ -2546,7 +2655,7 @@ class FlightUI:
                 self.begin(revoke)
         except (OSError, ValueError) as exc:
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )
@@ -2614,7 +2723,7 @@ class FlightUI:
         except (OSError, ValueError, RuntimeError) as exc:
             self.host.api_key_revoke_running = False
             messagebox.showerror(
-                self.text("flight_progress"),
+                self.capture_text("flight_progress"),
                 str(exc),
                 parent=self.dialog_owner(),
             )
@@ -2770,8 +2879,12 @@ class FlightUI:
                 self._last_terminal = progress.phase
                 if not self.independent_operation():
                     self._recovery_state = None
-                    self.host.api_key_revoke_running = False
-                    self.host.api_key_revoke_thread = None
+                    pending_cleanup = (
+                        isinstance(operation, FinalizationWorker)
+                        and operation.local_cleanup_pending
+                    )
+                    self.host.api_key_revoke_running = pending_cleanup
+                    self.host.api_key_revoke_thread = operation if pending_cleanup else None
                     self.host.status_var.set(self.text(
                         "watched_files_kept"
                         if (progress.phase == "completed"
