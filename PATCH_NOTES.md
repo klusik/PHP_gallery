@@ -1,5 +1,75 @@
 # Patch notes
 
+## Version 1.0.5
+
+PHP Gallery 1.0.5 documented the gallery-scoped API and shipped WinApp 1.0.5
+with more reliable gallery navigation and simulator detection.
+
+### Highlights
+
+#### Gallery navigation and Watcher
+
+- Made newly created or recovered galleries immediately available for explicit
+  Watcher selection after a current server confirmation. Displayed a refusal
+  when the session or gallery authority was no longer current.
+- Saved known gallery structure progressively and added a refresh that
+  reconciled server changes while retaining the visible tree and selection.
+- Limited inline tooltips to actual pointer hover and dismissed them when the
+  pointer left the control.
+
+#### Simulator connections
+
+- Restricted SimConnect connection attempts to a running MSFS 2020 or 2024
+  process belonging to the current Windows account. Other games continued
+  without simulator connections and without interrupting uploads.
+
+#### API documentation
+
+- Documented the gallery-scoped API in `docs/API.MD`, the entrypoint reference
+  and all four manual editions ([PR #352](https://github.com/klusik/PHP_gallery/pull/352)).
+
+### Technical Details
+
+#### WinApp and compatibility
+
+- Updated `winapp/uploader/photos_workspace.py` to admit current creation
+  receipts, fence stale catalogue responses and retain navigation state during
+  refresh. Cached gallery rows remained subject to fresh server authorization.
+- Updated `winapp/uploader/gallery_catalogue_cache.py` and
+  `winapp/uploader/ui_theme.py` for progressive catalogue persistence and
+  pointer-based tooltip lifecycle.
+- Shared current-account MSFS process checks across presence, photo GPS,
+  flight recording and UTC synchronization. Existing flight storage remained
+  unchanged and no database migration was added.
+- Set the independent WinApp version to 1.0.5. Updated compatibility guidance
+  and the English, Czech, German and Swedish manual sources.
+
+- Fixed the English manual's table alignment dependency so its PDF could
+  compile with the existing RaggedRight columns.
+
+#### Tests
+
+- Added and updated WinApp regressions for gallery creation, refresh, catalogue
+  persistence, tooltip behavior and simulator admission. Updated scoped native
+  diagnostics and audit reporting.
+
+### User Impact
+
+#### For visitors
+
+- Public gallery viewing behavior did not change.
+
+#### For administrators and companion users
+
+- Newly confirmed galleries could be selected for Watcher immediately, while
+  navigation refresh retained the existing tree and selection.
+- SimConnect waited for a supported running simulator; ordinary game uploads
+  remained available.
+
+#### For maintainers
+
+- Added a gallery-scoped API reference and expanded WinApp diagnostic coverage.
+
 ## Version 1.0.4
 
 PHP Gallery 1.0.4 added an optional complete gallery-tree API and shipped the
