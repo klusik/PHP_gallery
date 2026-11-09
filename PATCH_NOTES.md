@@ -1,5 +1,35 @@
 # Patch notes
 
+## Version 1.0.6
+
+PHP Gallery 1.0.6 updated the Windows companion to show Watcher activity
+directly in its tray icon.
+
+### Highlights
+
+#### Watcher tray indicator
+
+- Added a pulsing red Watcher marker to the tray icon, synchronized with the
+  in-app indicator. Kept the update badge independent.
+
+### Technical Details
+
+#### WinApp and documentation
+
+- Updated `winapp/gallery_watch_upload.pyw` and documented the tray indicator
+  in `winapp/README.md`.
+- Updated the English, Czech, German, and Swedish manual sources.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Public gallery viewing and administrator behavior did not change.
+
+#### For companion users
+
+- Could see Watcher activity in the tray icon as well as in the app.
+
 ## Version 1.0.5
 
 PHP Gallery 1.0.5 documented the gallery-scoped API and shipped WinApp 1.0.5

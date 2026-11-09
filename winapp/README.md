@@ -92,7 +92,9 @@ Logon starts with the window withdrawn before painting and exposes the tray
 icon. A missing, failed or stalled tray restores the window within five seconds
 so the app remains accessible. Import-recovery prompts wait until the user opens
 the window. Watching/importing still requires its existing explicit Start
-action.
+action. While Watcher capture is active, a red dot pulses
+on the tray icon in step with the in-app indicator. The update badge remains
+visible independently.
 Source/Python runs never add an OS startup entry; their startup switch is
 disabled.
 
