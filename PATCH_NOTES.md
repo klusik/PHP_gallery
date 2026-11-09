@@ -1,5 +1,65 @@
 # Patch notes
 
+## Version 1.0.8
+
+Fixed repeated thumbnail loading in the Windows companion and made the storage
+indicator more compact, with graphical details and immediate quota changes.
+
+### Highlights
+
+#### Thumbnail cache reuse
+
+- Reused unchanged decoded thumbnails across renewed catalogue proofs while
+  checking current session, account, policy, and content identity on every read.
+- Refreshed expired thumbnail proofs through bounded catalogue reads before
+  retrying individual images, allowing eligible preloaded thumbnails to come
+  from verified disk files rather than repeated binary requests.
+- Delivered completed disk-cache batches promptly while keeping GUI work
+  bounded and retaining normal polling for unfinished I/O.
+- Reconciled visible tile bounds after an image replaced its placeholder so
+  the viewport kept accurate thumbnail admission at its edges.
+
+#### Compact storage controls
+
+- Matched the storage indicator to the Watcher panel with a compact glass
+  surface, icon, and short count and size values.
+- Replaced long detail labels with icon rows, tooltips, and a small quota bar.
+  Kept process RAM explicit and unavailable VRAM distinct from measured zero.
+- Applied quota selections immediately through a background write without a
+  Save button or confirmation. Prevented competing writes and restored the
+  previous selection with an inline message when persistence failed.
+
+### Technical Details
+
+#### Windows companion
+
+- Updated `winapp/uploader/native_gallery_viewer.py` to separate thumbnail
+  content identity from proof timestamps and epochs while preserving live
+  authorization gates, cache limits, and verified disk reads.
+- Updated `winapp/uploader/photos_workspace.py`,
+  `winapp/uploader/ui_theme.py`, and process-memory tooltips in all four
+  interface languages.
+- Raised the independent `winapp/VERSION` to `1.0.8` and synchronized the
+  companion guide, compatibility reference, and all four manual sources.
+
+#### Tests
+
+- Added `winapp/tests/test_thumbnail_cache_return.py` for proof renewal,
+  account and validator changes, missing authority, real persistent cache
+  writes, reopened readers, corrupt and missing files, and no-store responses.
+- Extended native Tk coverage with 240 preloaded 21:9 thumbnails, expired proof
+  renewal, forced RAM eviction, and zero additional binary requests on return.
+- Added quota success and failure checks, duplicate-write prevention, and
+  desktop and narrow screenshots of the compact storage panel.
+
+### User Impact
+
+- Windows companion users gained faster return visits to cached gallery rows
+  and compact storage controls with immediately saved quota selections.
+- Cached media continued to require current authorized access; missing or
+  corrupt files and unsupported caching policies retained the server-read path.
+- Public web visitor and administrator interfaces did not change.
+
 ## Version 1.0.7
 
 Improved the Windows companion with compact Watcher controls, configurable
