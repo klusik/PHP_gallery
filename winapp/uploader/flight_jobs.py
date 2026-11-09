@@ -6,6 +6,7 @@
 # Responsibilities:
 #   - Keep recoverable session tasks separate from credentials and telemetry.
 #   - Hold one cross-process owner for the flight workspace.
+#   - Keep ordinary restart consent separate from updater continuation metadata.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Durable flight task plans, preferences and exclusive workspace ownership."""
@@ -860,15 +861,18 @@ class WorkspaceLease:
 
 @dataclass(frozen=True)
 class WatcherContinuation:
-    """Bind one update restart to an existing session without credentials.
+    """Bind ordinary or updater restarts without credentials.
 
     Args:
         session_id (str): Existing opaque session directory name.
         binding (str): Exact non-secret upload-target fingerprint.
         profile_hash (str): Digest of the original flight workspace spelling.
-        source_version (str): Version preparing the update checkpoint.
-        target_version (str): Version explicitly selected for installation.
-        update_session (str): Helper nonce, empty only while preparing.
+        source_version (str): Version preparing the admitted checkpoint.
+        target_version (str): Authorized restart version; equal to the source
+            for ordinary Quit, or selected for an updater installation.
+        update_session (str): Helper nonce for updater flow; empty only while
+            preparing. Ordinary Quit uses its own one-use restart nonce under
+            the same schema and an isolated checkpoint filename.
         mode (Literal['legacy', 'linked']): Original admitted upload mode.
         contextual (bool): Whether the original capture used a Watcher key.
         created (float): Unix time of the explicit continuation decision.
@@ -1005,11 +1009,15 @@ class WatcherContinuation:
         )
 
     @classmethod
-    def load(cls, lease: WorkspaceLease) -> 'WatcherContinuation | None':
-        """Read a bounded checkpoint while retaining native profile ownership.
+    def load(
+        cls, lease: WorkspaceLease, *, ordinary_restart: bool = False,
+    ) -> 'WatcherContinuation | None':
+        """Read one bounded restart checkpoint under native profile ownership.
 
         Args:
             lease (WorkspaceLease): Current exclusive flight workspace lease.
+            ordinary_restart (bool): Select the ordinary-restart checkpoint
+                instead of the updater continuation file.
 
         Returns:
             WatcherContinuation | None: Verified checkpoint, or None if absent.
@@ -1019,7 +1027,11 @@ class WatcherContinuation:
             OSError: Its physical identity or bytes cannot be read safely.
         """
         lease.verify()
-        path = lease.root / 'watcher-continuation.json'
+        filename = (
+            'watcher-restart.json' if ordinary_restart
+            else 'watcher-continuation.json'
+        )
+        path = lease.root / filename
         try:
             named = path.lstat()
         except FileNotFoundError:
@@ -1059,11 +1071,15 @@ class WatcherContinuation:
         lease.verify()
         return result
 
-    def save(self, lease: WorkspaceLease) -> None:
-        """Publish the complete checkpoint through the existing atomic writer.
+    def save(
+        self, lease: WorkspaceLease, *, ordinary_restart: bool = False,
+    ) -> None:
+        """Publish one restart checkpoint through the existing atomic writer.
 
         Args:
             lease (WorkspaceLease): Current exclusive flight workspace lease.
+            ordinary_restart (bool): Select the ordinary-restart checkpoint
+                instead of the updater continuation file.
 
         Returns:
             None: Publishes and verifies a non-secret, profile-bound checkpoint.
@@ -1075,7 +1091,11 @@ class WatcherContinuation:
         lease.verify()
         payload = self.payload()
         self.from_payload(payload, lease.root)
-        path = lease.root / 'watcher-continuation.json'
+        filename = (
+            'watcher-restart.json' if ordinary_restart
+            else 'watcher-continuation.json'
+        )
+        path = lease.root / filename
         try:
             existing = path.lstat()
         except FileNotFoundError:
@@ -1088,7 +1108,11 @@ class WatcherContinuation:
             raise ValueError('Update continuation metadata is redirected.')
         atomic_write_json(path, payload)
         lease.verify()
-        if self.load(lease) != self:
+        verified = (
+            self.load(lease, ordinary_restart=True)
+            if ordinary_restart else self.load(lease)
+        )
+        if verified != self:
             raise ValueError('Update continuation could not be verified.')
 
 

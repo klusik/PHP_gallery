@@ -195,6 +195,9 @@ from uploader.app_linking import (
     LINKING_GALLERY_ID_MAX, LinkedGallery, LinkingError, LinkingSession,
 )
 from uploader.gallery_catalogue_cache import GalleryCatalogueCache
+from uploader.gallery_view_preferences import (
+    load_gallery_card_format, save_gallery_card_format,
+)
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS, FinalizationWorker
 from uploader.flight_recorder import FlightRecorder
 from uploader.windows_file_identity import assert_local_windows_profile
@@ -231,8 +234,11 @@ if tk is not None:
     from uploader.ui_theme import (
         GalleryIdentityLabel,
         GlassCard,
+        ThemeImage,
         _PALETTE,
+        attach_inline_tooltip,
         configure_theme,
+        create_smooth_icon,
         help_button,
         icon_button,
         paint_backdrop,
@@ -256,6 +262,11 @@ except ImportError:  # pragma: no cover
 
 APP_NAME = "PHPGalleryUploader"
 APP_DISPLAY_NAME = "PHP Gallery uploader"
+# Purpose: Keep the three watcher status glyphs aligned with compact controls.
+# Type: tuple[int, int]. Units: pixels. Scope: Watcher header artwork.
+# Consumers: WatcherApp.build_ui and WatcherApp.refresh_watcher_header.
+# Rationale: 16 by 16 pixels matches the existing header status indicator.
+WATCHER_HEADER_ICON_SIZE = (16, 16)
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 STATE_PATH = CONFIG_DIR / "upload_state.json"
@@ -5203,11 +5214,25 @@ class WatcherThread(threading.Thread):
             path (Path): Accepted local photograph with confirmed disposition.
 
         Returns:
-            None: Atomically advances the recoverable photograph queue.
+            None: Advances the recoverable queue and reports its size.
         """
         with self._admission_lock:
             self.accepted_paths.discard(path)
             self.persist_drain()
+        self.emit_queue_snapshot()
+
+    def emit_queue_snapshot(self) -> None:
+        """Publish the current accepted-photo count from its owning lock.
+
+        Returns:
+            None: Queues a Watcher-only count snapshot for the Tk event owner.
+        """
+        with self._admission_lock:
+            queued_count = len(self.accepted_paths)
+        self.events.put({
+            "kind": "watch_queue",
+            "payload": {"worker": self, "queued_count": queued_count},
+        })
 
     def request_drain(self) -> None:
         """Stop discovery and safely finish photographs accepted by the boundary.
@@ -5451,8 +5476,15 @@ class WatcherThread(threading.Thread):
                     self.persist_drain()
             self._diagnostic_phase = 'scan'
             self.scan_once(folder, upload_url)
+            with self._admission_lock:
+                queued_count = len(self.accepted_paths)
             self.events.put({
-                "kind": "watch_scan", "payload": {"timestamp": time.time()}
+                "kind": "watch_scan",
+                "payload": {
+                    "worker": self,
+                    "timestamp": time.time(),
+                    "queued_count": queued_count,
+                },
             })
             if self.drain_only:
                 if not self.accepted_paths:
@@ -5521,6 +5553,7 @@ class WatcherThread(threading.Thread):
                 admitted.append(path)
             self.accepted_paths.update(admitted)
             self.persist_drain()
+        self.emit_queue_snapshot()
         for path in admitted:
             if self.stop_event.is_set() or self._update_pause_requested():
                 return
@@ -7421,6 +7454,10 @@ class WatcherApp:
         self._update_resume_context_key_closing = False
         self._update_resume_context_key_worker: Optional[threading.Thread] = None
         self._update_resume_preparing = False
+        self._ordinary_restart_closing = False
+        self._ordinary_restart_prepared = False
+        self._ordinary_restart_resuming = False
+        self._ordinary_restart_thread: Optional[threading.Thread] = None
         self._discard_update_resume_intent()
         self._resume_retry_available = False
         self.manual_worker: Optional[ManualUploadThread] = None
@@ -7544,6 +7581,11 @@ class WatcherApp:
         self.gallery_label_var = tk.StringVar(value="Target gallery: unknown")
         self.gallery_title_var = tk.StringVar(value="")
         self.watcher_activity_var = tk.StringVar(value="Watch: stopped")
+        self.watcher_header_count_var = tk.StringVar(value="–")
+        self.watcher_header_time_var = tk.StringVar(value="–:–")
+        self._watcher_queued_count: Optional[int] = None
+        self._watcher_queue_worker: Optional[WatcherThread] = None
+        self._watcher_last_scan_at: Optional[float] = None
         self.import_activity_var = tk.StringVar(value="Import: idle")
         self.ai_activity_var = tk.StringVar(value="AI: stopped")
         self.activity_filter_var = tk.StringVar(value="all")
@@ -7661,6 +7703,10 @@ class WatcherApp:
             Photos is selected by default; startup mode remains withdrawn.
         """
         configure_theme(self.root)
+        self.gallery_title_var.trace_add(
+            "write",
+            lambda *_trace_info: self.refresh_watcher_header(),
+        )
         ttk.Style(self.root).configure(
             "Footer.Warning.TLabel",
             foreground="#F2C581",
@@ -7704,7 +7750,7 @@ class WatcherApp:
             style="App.Eyebrow.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
         status = ttk.Frame(header, style="App.TFrame")
-        status.grid(row=0, column=1, rowspan=2, sticky="e")
+        status.grid(row=0, column=2, rowspan=2, sticky="e")
         self._storage_header = ttk.Frame(status, style="App.TFrame")
         self._storage_header.pack(side="left", padx=(0, 10))
         self._storage_context_surface = outer
@@ -7717,7 +7763,66 @@ class WatcherApp:
             background="#131B26",
         )
         self.monitor_light.pack(side="left", padx=(0, 6))
-        ttk.Label(status, textvariable=self.watcher_activity_var, style="App.Status.TLabel").pack(side="left", padx=(0, 12))
+        watcher_display = GlassCard(header, padding=(8, 4))
+        watcher_display.grid(
+            row=0, column=1, rowspan=2, sticky="e", padx=(12, 10),
+        )
+        self._watcher_header_icon_cache: Dict[str, ThemeImage] = {}
+        self._watcher_header_status_icon = ttk.Label(
+            watcher_display, style="Card.TLabel",
+        )
+        self._watcher_header_status_icon.pack(side="left", padx=(0, 8))
+        self._watcher_header_queue_image = create_smooth_icon(
+            watcher_display, "queue", WATCHER_HEADER_ICON_SIZE,
+        )
+        self._watcher_header_queue_icon = ttk.Label(
+            watcher_display,
+            image=self._watcher_header_queue_image or "",
+            text="▧" if self._watcher_header_queue_image is None else "",
+            style="Card.TLabel",
+        )
+        self._watcher_header_queue_icon.pack(side="left", padx=(0, 3))
+        self.watcher_header_count_label = ttk.Label(
+            watcher_display,
+            textvariable=self.watcher_header_count_var,
+            style="Card.TLabel",
+        )
+        self.watcher_header_count_label.pack(side="left", padx=(0, 8))
+        self._watcher_header_clock_image = create_smooth_icon(
+            watcher_display, "clock", WATCHER_HEADER_ICON_SIZE,
+        )
+        self._watcher_header_clock_icon = ttk.Label(
+            watcher_display,
+            image=self._watcher_header_clock_image or "",
+            text="◷" if self._watcher_header_clock_image is None else "",
+            style="Card.TLabel",
+        )
+        self._watcher_header_clock_icon.pack(side="left", padx=(0, 3))
+        self.watcher_header_time_label = ttk.Label(
+            watcher_display,
+            textvariable=self.watcher_header_time_var,
+            style="Card.TLabel",
+        )
+        self.watcher_header_time_label.pack(side="left")
+        self._watcher_header_stop_hint = tk.StringVar(
+            self.root,
+            tr(self.flights.ui_language.get(), "watcher_header_stop"),
+        )
+        self._watcher_header_stop_button = icon_button(
+            watcher_display, "stop", self.stop,
+            self._watcher_header_stop_hint, tooltip_surface=outer,
+            style_override="Photos.Icon.TButton",
+        )
+        self._watcher_header_hint = tk.StringVar(self.root)
+        for trigger in (
+            self._watcher_header_status_icon,
+            self._watcher_header_queue_icon,
+            self.watcher_header_count_label,
+            self._watcher_header_clock_icon,
+            self.watcher_header_time_label,
+        ):
+            attach_inline_tooltip(trigger, self._watcher_header_hint, outer)
+        self.refresh_watcher_header()
         self.build_gallery_link_bar(header)
         self.check_updates_button = icon_button(
             header,
@@ -8172,10 +8277,10 @@ class WatcherApp:
         )
 
     def _render_watcher_recording(self) -> None:
-        """Paint the rail and tray markers and forward Photos target state.
+        """Paint rail, tray and header markers and forward Photos target state.
 
         Returns:
-            None: Updates the rail, tray and one workspace from the shared pulse.
+            None: Updates rail, tray, header and Photos from the shared pulse.
         """
         button = getattr(self, "navigation_buttons", {}).get("watch")
         if button is not None:
@@ -8211,6 +8316,7 @@ class WatcherApp:
                 tray_icon.icon = self.make_tray_icon_image()
             except Exception:  # noqa: BLE001
                 logging.debug("Could not refresh tray Watcher marker.", exc_info=True)
+        self.refresh_watcher_header()
 
 
     def configure_window_icon(self) -> None:
@@ -8666,6 +8772,8 @@ class WatcherApp:
             save_tree_state=self.save_photos_tree_state,
             load_selected_gallery=self.load_photos_selected_gallery,
             save_selected_gallery=self.save_photos_selected_gallery,
+            load_card_format=self.load_photos_card_format,
+            save_card_format=self.save_photos_card_format,
             catalogue_cache=self.photos_catalogue_cache,
             load_tree_width=lambda: preferred_tree_width,
             save_tree_width=self.save_photos_tree_width,
@@ -8734,6 +8842,42 @@ class WatcherApp:
             )
         except (OSError, TypeError, ValueError, LinkingError):
             return None
+
+    def load_photos_card_format(
+        self, session: LinkingSession, gallery_id: int,
+    ) -> str:
+        """Load a local grid preference for the verified Photos identity.
+
+        Args:
+            session (LinkingSession): Current approved site/account session.
+            gallery_id (int): Selected gallery's positive identity.
+        Returns:
+            str: Supported saved format, or default without verified local state.
+        """
+        account_path = self._photos_tree_state_path(session)
+        if account_path is None:
+            return "default"
+        view_path = account_path.with_name(account_path.stem + ".view.json")
+        return load_gallery_card_format(view_path, gallery_id)
+
+    def save_photos_card_format(
+        self, session: LinkingSession, gallery_id: int, card_format: str,
+    ) -> bool:
+        """Persist a WinApp-only grid choice without touching upload settings.
+
+        Args:
+            session (LinkingSession): Current approved site/account session.
+            gallery_id (int): Selected gallery's positive identity.
+            card_format (str): Supported local card-format key.
+        Returns:
+            bool: True only after the verified account's atomic local write;
+                False when identity or persistence cannot be confirmed.
+        """
+        account_path = self._photos_tree_state_path(session)
+        if account_path is None:
+            return False
+        view_path = account_path.with_name(account_path.stem + ".view.json")
+        return save_gallery_card_format(view_path, gallery_id, card_format)
 
     def _schedule_ui_layout_save(self, event: "tk.Event") -> None:
         """Debounce visible main-window geometry updates on the Tk owner.
@@ -10537,6 +10681,8 @@ class WatcherApp:
             str | None: Short reason for refusal, or None when the mode
                 and existing work permit the change.
         """
+        if getattr(self, '_ordinary_restart_closing', False) is True:
+            return 'Wait for the Watcher restart checkpoint to finish.'
         if isinstance(getattr(self, "_contextual_watch_target", None), LinkedUploadTarget):
             return 'Finish the current Watcher capture before changing its gallery.'
         if self.background_work_active() or self.flights.is_alive() or self.flights.busy():
@@ -10803,17 +10949,25 @@ class WatcherApp:
         Returns:
             None: Reports unavailable evidence without opening a fallback mode.
         """
-        self.events.put({"kind": "linking_resume_startup"})
         try:
             self.mode_owner.initialize()
         except ModeCoordinatorError:
+            self.events.put({
+                "kind": "linking_resume_startup",
+                "payload": {"issuer": None},
+            })
             self.events.put(('warning', 'Upload mode needs verification before API-key work.'))
             self.events.put({
                 'kind': 'gui_mode_initialized', 'payload': {'verified': False},
             })
         else:
-            if self.saved_linked_upload_identity() is not None:
+            identity = self.saved_linked_upload_identity()
+            if identity is not None:
                 self.events.put({"kind": "saved_linked_mode_ready"})
+            self.events.put({
+                "kind": "linking_resume_startup",
+                "payload": {"issuer": identity[0] if identity else None},
+            })
             self.events.put({
                 'kind': 'gui_mode_initialized', 'payload': {'verified': True},
             })
@@ -10842,14 +10996,27 @@ class WatcherApp:
                 if lease is None:
                     raise ValueError('The flight workspace is unavailable.')
                 saved = WatcherContinuation.load(lease)
-                if saved is not None:
-                    if (requested is None or saved.update_session != requested
+                ordinary_restart = False
+                if requested is not None:
+                    if (saved is None or saved.update_session != requested
                             or saved.phase not in ('prepared', 'claimed')
                             or APP_VERSION not in (
                                 saved.source_version, saved.target_version,
                             )):
-                        if requested is not None:
-                            raise ValueError('No matching update continuation.')
+                        raise ValueError('No matching update continuation.')
+                elif saved is not None:
+                    ordinary = WatcherContinuation.load(
+                        lease, ordinary_restart=True,
+                    )
+                    if ordinary is not None and (
+                        replace(ordinary, phase=saved.phase) == saved
+                        and ordinary.phase in ('prepared', 'claimed')
+                        and ordinary.source_version == APP_VERSION
+                        and ordinary.target_version == APP_VERSION
+                        and saved.phase in ('prepared', 'claimed')
+                    ):
+                        ordinary_restart = True
+                    else:
                         return
                 elif requested is not None:
                     raise ValueError('The update continuation is missing.')
@@ -10891,9 +11058,41 @@ class WatcherApp:
                         ticket.session_id, 'legacy', False, time.time(), 'prepared',
                     )
                     saved.save(lease)
+                if ordinary_restart:
+                    pending = self.flights.pending(binding=saved.binding)
+                    if len(pending) != 1 or pending[0].session_id != saved.session_id:
+                        return
+                    plan = pending[0]
+                    queue_row = read_document(plan.directory / 'watch-drain.json')
+                    mode_view = self.mode_owner.view()
+                    mode_record = mode_view.record
+                    if (plan.completed or plan.abandoned
+                            or plan.local_only != (saved.mode == 'linked')
+                            or queue_row.get('initial_captured') is not True
+                            or queue_row.get('frozen') is not False
+                            or queue_row.get('cutoff') != 0 or queue_row.get('error')):
+                        return
+                    if saved.mode == 'linked':
+                        if (mode_record is None or mode_record.mode != 'linked'
+                                or mode_record.scope != saved.approved_scope
+                                or linked_target_binding(
+                                    mode_record.issuer, mode_record.account_id,
+                                    mode_record.gallery_id,
+                                ) != saved.binding):
+                            return
+                    elif (saved.mode != 'legacy' or mode_view.state != 'legacy'
+                          or saved.binding != connection_binding(
+                              normalize_upload_url(self.config.gallery_url),
+                              self.config.api_key,
+                          )):
+                        return
+                    automatic = True
                 self.events.put({
                     'kind': 'watcher_resume_available',
-                    'payload': {'continuation': saved, 'automatic': automatic},
+                    'payload': {
+                        'continuation': saved, 'automatic': automatic,
+                        'ordinary_restart': ordinary_restart,
+                    },
                 })
             except (OSError, ValueError, RuntimeError):
                 self.events.put({
@@ -11184,6 +11383,15 @@ class WatcherApp:
                     )):
                 raise ValueError('The accepted session could not be verified.')
             claimed = replace(record, phase='claimed')
+            if getattr(self, '_ordinary_restart_resuming', False) is True:
+                ordinary = WatcherContinuation.load(
+                    lease, ordinary_restart=True,
+                )
+                if (ordinary is None
+                        or ordinary.phase not in ('prepared', 'claimed')
+                        or replace(ordinary, phase=current.phase) != current):
+                    raise ValueError('The ordinary restart consent changed.')
+                claimed.save(lease, ordinary_restart=True)
             claimed.save(lease)
             self._resume_continuation = claimed
             config = capture_worker_config(self.config)
@@ -11402,23 +11610,29 @@ class WatcherApp:
         try:
             if lease is None or WatcherContinuation.load(lease) != record:
                 raise ValueError('The continuation checkpoint changed.')
+            if getattr(self, '_ordinary_restart_resuming', False) is True:
+                ordinary = WatcherContinuation.load(
+                    lease, ordinary_restart=True,
+                )
+                if (ordinary is None
+                        or ordinary.phase not in ('prepared', 'claimed')
+                        or replace(ordinary, phase=record.phase) != record):
+                    raise ValueError('The ordinary restart consent changed.')
+                consumed.save(lease, ordinary_restart=True)
             consumed.save(lease)
         except (OSError, ValueError, RuntimeError):
             if self.worker is not None:
                 self.worker.request_update_pause()
             self.flights.stop()
+            if getattr(self, '_ordinary_restart_resuming', False) is True:
+                self._restore_unadmitted_continuation(record, consumed)
             self._update_resume_failed('continuation_consumption_unverified')
             return False
         if self.worker is None or not self.worker.admit_continuation():
             # The worker's gate has not opened, so restore the exact claimed
             # checkpoint. This makes a Stop or timeout during the durable save
             # retryable without risking a duplicate dispatch.
-            try:
-                current = WatcherContinuation.load(lease)
-                if current != consumed:
-                    raise ValueError('The consumed checkpoint changed.')
-                record.save(lease)
-            except (OSError, ValueError, RuntimeError):
+            if not self._restore_unadmitted_continuation(record, consumed):
                 self.flights.stop()
                 self._update_resume_failed('continuation_consumption_unverified')
                 return False
@@ -11431,6 +11645,7 @@ class WatcherApp:
             self._update_resume_failed(reason)
             return False
         self._resume_continuation = None
+        self._ordinary_restart_resuming = False
         if record.contextual:
             self._contextual_watch_target = self._update_resume_context_target
             plan = getattr(self.flights, 'plan', None)
@@ -11442,8 +11657,44 @@ class WatcherApp:
         self._update_resume_preparing = False
         self._resume_retry_available = False
         self._update_resume_status = 'stage=resume; reason=watcher_running'
-        self.write_log('Watcher resumed after update using its original session.', 'success')
+        self.write_log('Watcher resumed using its original session.', 'success')
         return True
+
+    def _restore_unadmitted_continuation(
+        self, record: WatcherContinuation, consumed: WatcherContinuation,
+    ) -> bool:
+        """Reconcile an owned checkpoint pair before any resumed dispatch.
+
+        Args:
+            record (WatcherContinuation): Exact claimed state before consumption.
+            consumed (WatcherContinuation): Same owned state marked consumed.
+        Returns:
+            bool: True after the unchanged records are verified as claimed;
+                False for changed, cancelled or unreadable state. Callers keep
+                the worker gate closed, so this never reverses an admitted run.
+        """
+        try:
+            lease = self.flights.lease
+            if lease is None:
+                return False
+            lease.verify()
+            current = WatcherContinuation.load(lease)
+            if current not in (record, consumed):
+                return False
+            ordinary = None
+            if getattr(self, '_ordinary_restart_resuming', False) is True:
+                ordinary = WatcherContinuation.load(lease, ordinary_restart=True)
+                if ordinary not in (record, consumed):
+                    return False
+            # A failed readback may follow an already-committed local replace.
+            # Restore only exact snapshots owned by this still-closed gate.
+            if current != record:
+                record.save(lease)
+            if ordinary is not None and ordinary != record:
+                record.save(lease, ordinary_restart=True)
+            return True
+        except (OSError, ValueError, RuntimeError):
+            return False
 
     def _save_owned_config(self, config: WatcherConfig, *,
                            first_setup: bool = False,
@@ -11671,6 +11922,7 @@ class WatcherApp:
                 text="Starting Watcher…" if active else "▶  Start Watcher",
                 state="disabled" if active else "normal",
             )
+        self.refresh_watcher_header()
         if active:
             # Paint the phase before synchronous local ownership checks. The
             # potentially long folder scan itself runs on the watcher thread.
@@ -11690,18 +11942,18 @@ class WatcherApp:
     def open_gallery_watcher(
         self, session: LinkingSession, gallery: LinkedGallery,
     ) -> None:
-        """Open Watcher for the exact gallery selected in the Photos workspace.
+        """Start Watcher for the selected gallery while retaining the Photos view.
 
         Args:
             session (LinkingSession): Current explicitly approved Photos link.
             gallery (LinkedGallery): Physical gallery selected for screenshots.
 
         Returns:
-            None: Opens existing progress or requests temporary Watcher authority.
+            None: Requests temporary Watcher authority without changing tabs;
+                existing progress and recovery actions retain their behavior.
         """
         if self.updates.blocked() or getattr(self, "_watch_start_pending", False) is True:
             return
-        self.select_tab("watch")
         self._set_watch_start_activity(True, "Checking the Watcher connection…")
         state = self.flights.session_state()
         if state == "working":
@@ -11802,6 +12054,8 @@ class WatcherApp:
         Returns:
             None: Accepts startup once; REC waits for the initial folder boundary.
         """
+        if getattr(self, '_ordinary_restart_closing', False) is True:
+            return
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if (getattr(self, "_watch_start_pending", False) is True
@@ -11830,6 +12084,8 @@ class WatcherApp:
         Returns:
             None: Starts watching and admits UTC work only when selected.
         """
+        if getattr(self, '_ordinary_restart_closing', False) is True:
+            return
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.api_key_revoke_running:
@@ -11928,6 +12184,9 @@ class WatcherApp:
         Returns:
             None: Routes ordinary and contextual captures through shared drain.
         """
+        if getattr(self, '_ordinary_restart_closing', False) is True:
+            return
+        self._cancel_ordinary_restart_for_action()
         self._resume_retry_available = False
         self._set_watcher_recording(False)
         if not isinstance(getattr(self, "_contextual_watch_target", None), LinkedUploadTarget):
@@ -11936,6 +12195,48 @@ class WatcherApp:
             self.flights.finish_report()
         else:
             self.flights.begin(False, photos_only=True)
+
+    def _cancel_ordinary_restart_intent(self) -> None:
+        """Revoke ordinary restart consent without changing retained queue data.
+
+        Returns:
+            None: Marks only this profile's alternate restart record cancelled.
+        """
+        # Like finalization admission, this bounded local metadata cancellation
+        # completes before returning to Tk: a queued resume callback must never
+        # observe still-active consent after the user has pressed Stop.
+        try:
+            lease = self.flights.lease
+            if lease is None:
+                return
+            record = WatcherContinuation.load(lease, ordinary_restart=True)
+            if record is not None and record.phase in (
+                    'preparing', 'prepared', 'claimed'):
+                replace(record, phase='cancelled').save(
+                    lease, ordinary_restart=True,
+                )
+        except (OSError, ValueError, RuntimeError):
+            self.write_log(
+                '[watcher-resume] stage=stop; reason=ordinary_consent_cancel_failed',
+                'warning',
+            )
+
+    def _cancel_ordinary_restart_for_action(self) -> None:
+        """Cancel both restart records before an explicit Stop, Finish or unlink.
+
+        Returns:
+            None: Revokes ordinary consent while leaving session data intact.
+        """
+        try:
+            lease = self.flights.lease
+            ordinary = (WatcherContinuation.load(lease, ordinary_restart=True)
+                        if lease is not None else None)
+        except (OSError, ValueError, RuntimeError):
+            ordinary = None
+        if ordinary is not None and ordinary.phase in (
+                'preparing', 'prepared', 'claimed'):
+            self._discard_update_resume_intent()
+        self._cancel_ordinary_restart_intent()
 
     def resume_flight_photos(self, directory: Path) -> Optional[WatcherThread]:
         """Resume only unfinished photographs from the bound session queue.
@@ -12079,6 +12380,8 @@ class WatcherApp:
         Returns:
             None: Applies this action only after lifecycle admission succeeds.
         """
+        if getattr(self, '_ordinary_restart_closing', False) is True:
+            return
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.api_key_revoke_running:
@@ -12180,6 +12483,8 @@ class WatcherApp:
         Returns:
             None: Applies this action only after lifecycle admission succeeds.
         """
+        if getattr(self, '_ordinary_restart_closing', False) is True:
+            return
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         if self.linking_manager.linked_upload_mode_selected():
@@ -12401,6 +12706,7 @@ class WatcherApp:
         """
         if not self.updates.blocked():
             if self.linking_manager.linked_address.get():
+                self._cancel_ordinary_restart_for_action()
                 self.linking_manager.unlink()
             else:
                 self.linking_manager.open_address_dialog()
@@ -12631,12 +12937,15 @@ class WatcherApp:
             None: Finishes capture, opens progress or recovery, or offers the
                 appropriate connection setup before any work is accepted.
         """
+        if getattr(self, '_ordinary_restart_closing', False) is True:
+            return
         if self.updates.blocked():
             return
         action = self.flight_action_state()
         if action == "begin":
             self.open_connection_dialog()
         elif action == "finish":
+            self._cancel_ordinary_restart_for_action()
             if (isinstance(getattr(self, "_contextual_watch_target", None),
                            LinkedUploadTarget)
                     and not self.contextual_watcher_is_flight()):
@@ -12786,6 +13095,8 @@ class WatcherApp:
             ValueError: The active session or mode cannot be verified.
             OSError: A durable checkpoint cannot be prepared.
         """
+        if getattr(self, '_ordinary_restart_closing', False) is True:
+            raise RuntimeError('The Watcher is already preparing to close.')
         if (self.flights.busy() or self.api_key_revoke_running
                 or any(worker is not None and worker.is_alive() for worker in (
                     self.manual_worker, self.ai_worker,
@@ -13024,6 +13335,8 @@ class WatcherApp:
                 canceled, and clears it only before confirmed app teardown.
                 Confirmed teardown also stops the simulator-presence observer
                 and forgets any in-memory linked identity.
+                A clean quit checkpoints an active Watcher asynchronously and
+                preserves only its exact profile-bound restart consent.
                 Update shutdown requires the pre-handoff checkpoint; its existing
                 immediate exit happens only after accepted writers have settled.
         """
@@ -13050,8 +13363,6 @@ class WatcherApp:
                 # Exit all threads together, including optional observers and
                 # non-daemon work. Do not enter Python's thread/atexit joins.
                 os._exit(0)
-        self.flights.stop()
-        self.utc_sync.stop()
         if getattr(self, "updates", None) is not None and self.updates.request_close():
             return
         if self.api_key_revoke_running:
@@ -13063,7 +13374,56 @@ class WatcherApp:
             return
         if self.exiting:
             return
-        self._discard_update_resume_intent()
+        active_worker = self.worker
+        active_capture = bool(
+            active_worker is not None and active_worker.is_alive()
+            and active_worker.initial_captured
+            and not active_worker.stop_event.is_set()
+            and not active_worker.drain_event.is_set()
+            and getattr(active_worker, 'drain_only', False) is not True
+        )
+        ordinary_prepared = (
+            getattr(self, '_ordinary_restart_prepared', False) is True
+        )
+        if (not for_update and not ordinary_prepared
+                and active_capture
+                and (self.worker.linked_target is not None
+                     or self.mode_owner.view().state == 'legacy')):
+            if getattr(self, '_ordinary_restart_closing', False) is True:
+                return
+            try:
+                self.prepare_update_checkpoint(APP_VERSION)
+            except (OSError, RuntimeError, ValueError):
+                messagebox.showwarning(
+                    "Watcher is still running",
+                    "The active Watcher could not be safely prepared for restart. "
+                    "Keep the app open and finish or stop Watcher first.",
+                )
+                return
+            self._ordinary_restart_closing = True
+            self.watcher_activity_var.set('Watch: finishing')
+            self.status_var.set('Saving the Watcher session before closing…')
+            self.refresh_watcher_header()
+            self._ordinary_restart_thread = threading.Thread(
+                target=self._prepare_ordinary_restart_close,
+                name='PHPGalleryOrdinaryRestartCheckpoint', daemon=True,
+            )
+            try:
+                self._ordinary_restart_thread.start()
+            except RuntimeError:
+                self._ordinary_restart_closing = False
+                self._ordinary_restart_thread = None
+                self.write_log(
+                    '[watcher-resume] stage=close; reason=checkpoint_worker_unavailable',
+                    'warning',
+                )
+                self.cancel_update_checkpoint()
+            return
+        self.flights.stop()
+        self.utc_sync.stop()
+        if (not ordinary_prepared
+                and getattr(self, '_ordinary_restart_resuming', False) is not True):
+            self._discard_update_resume_intent()
         self.exiting = True
         self._cancel_event_ui_callbacks()
         self._set_watcher_recording(False)
@@ -13133,6 +13493,33 @@ class WatcherApp:
         self.linking_manager.close()
         self._cancel_event_ui_callbacks()
         self.root.destroy()
+
+    def _prepare_ordinary_restart_close(self) -> None:
+        """Persist clean restart consent after the active Watcher checkpoints.
+
+        Returns:
+            None: Queues either a safe close event or a recoverable failure.
+        """
+        try:
+            self.wait_for_update_checkpoint()
+            record = self._update_continuation
+            lease = self.flights.lease
+            if (record is None or lease is None
+                    or record.mode not in ('linked', 'legacy')):
+                raise ValueError('The Watcher checkpoint is incomplete.')
+            prepared = replace(
+                record, source_version=APP_VERSION, target_version=APP_VERSION,
+                update_session=os.urandom(16).hex(), phase='prepared',
+            )
+            lease.verify()
+            # Recovery must retain this exact nonce even if only the first
+            # atomic replacement commits before the alternate write fails.
+            self._update_continuation = prepared
+            prepared.save(lease)
+            prepared.save(lease, ordinary_restart=True)
+            self.events.put({'kind': 'ordinary_restart_ready'})
+        except (OSError, RuntimeError, TimeoutError, ValueError):
+            self.events.put({'kind': 'ordinary_restart_failed'})
 
     def open_config_folder(self) -> None:
         """
@@ -13841,6 +14228,115 @@ class WatcherApp:
         self.root.clipboard_append(safe)
         self.write_log("Redacted diagnostic details copied to clipboard.", "system")
 
+    def refresh_watcher_header(self) -> None:
+        """Show compact Watcher state, queue size and last scan artwork.
+
+        Returns:
+            None: Updates three icon groups and keeps full context in the hover
+                tooltip without adding visible captions to the header.
+        """
+        status_icon = getattr(self, "_watcher_header_status_icon", None)
+        count_var = getattr(self, "watcher_header_count_var", None)
+        time_var = getattr(self, "watcher_header_time_var", None)
+        if status_icon is None or count_var is None or time_var is None:
+            return
+        language = self.flights.ui_language.get()
+        gallery_name = " ".join(self.gallery_title_var.get().split())
+        queued = (
+            str(self._watcher_queued_count)
+            if self._watcher_queued_count is not None
+            else "–"
+        )
+        state = self.watcher_activity_var.get().removeprefix("Watch: ")
+        if getattr(self, "_watch_start_pending", False) is True:
+            state = "starting"
+        activity_key = {
+            "running": "running", "starting": "starting",
+            "resuming": "starting", "finishing": "finishing",
+            "uploads pending": "pending", "stopped": "stopped",
+        }.get(state, "stopped")
+        activity = tr(language, "watcher_header_" + activity_key)
+        worker = getattr(self, "worker", None)
+        worker_active = bool(
+            worker is not None and worker.is_alive()
+            and not worker.stop_event.is_set()
+            and not worker.drain_only and not worker.drain_event.is_set()
+            and not worker._update_pause_requested()
+        )
+        preparing = activity_key in {"starting", "finishing", "pending"}
+        if preparing:
+            tone = "warning"
+            hollow = True
+            pulse = False
+        elif worker_active:
+            tone = "ink"
+            hollow = False
+            pulse = bool(getattr(self, "_watcher_recording_pulse", False))
+        else:
+            tone = "muted"
+            hollow = True
+            pulse = False
+        cache_key = f"{tone}:{int(hollow)}:{int(pulse)}"
+        icon_cache = getattr(self, "_watcher_header_icon_cache", None)
+        icon = None
+        if isinstance(icon_cache, dict):
+            icon = icon_cache.get(cache_key)
+            if icon is None:
+                icon = create_smooth_icon(
+                    status_icon,
+                    "recording",
+                    WATCHER_HEADER_ICON_SIZE,
+                    tone=tone,
+                    hollow=hollow,
+                    pulse=pulse,
+                )
+                if icon is not None:
+                    icon_cache[cache_key] = icon
+        if icon is not None:
+            status_icon.configure(image=icon)
+            self._watcher_header_status_image = icon
+        else:
+            # The theme owns permanent optional-Pillow support for source-mode
+            # repair. Native glyphs retain status meaning in that environment;
+            # normal installed/source runs use the supersampled artwork above.
+            status_icon.configure(
+                image="", text="◌" if hollow else "●",
+                foreground=_PALETTE[
+                    "recording" if tone == "ink" else tone
+                ],
+            )
+        count_var.set(queued)
+        scanned_at = getattr(self, "_watcher_last_scan_at", None)
+        scan_clock = (
+            time.strftime("%H:%M", time.localtime(scanned_at))
+            if scanned_at is not None else "–:–"
+        )
+        time_var.set(scan_clock)
+        stop_button = getattr(self, "_watcher_header_stop_button", None)
+        if stop_button is not None:
+            if worker_active and not preparing:
+                stop_button.configure(state="normal")
+                if not stop_button.winfo_manager():
+                    stop_button.pack(side="left", padx=(8, 0))
+            else:
+                stop_button.pack_forget()
+        stop_hint = getattr(self, "_watcher_header_stop_hint", None)
+        if stop_hint is not None:
+            stop_hint.set(tr(language, "watcher_header_stop"))
+        hint = getattr(self, "_watcher_header_hint", None)
+        if hint is not None:
+            queue_caption = tr(language, "watcher_header_queue")
+            scan_caption = tr(language, "watcher_header_last_scan")
+            missing_gallery = tr(
+                language, "watcher_header_gallery_unavailable",
+            )
+            photos_caption = tr(language, "photos_pane_title")
+            hint.set(
+                f"{gallery_name or missing_gallery} · {activity}\n"
+                f"{queue_caption}: {queued} {photos_caption}\n"
+                f"{scan_caption}: {scan_clock}"
+            )
+
     def refresh_activity_monitor_state(self) -> None:
         """
         Refresh independent watcher, import, AI, connection, and tray indicators.
@@ -13849,6 +14345,10 @@ class WatcherApp:
             None: Synchronizes visible worker captions and status indicators.
         """
         watcher_running = bool(self.worker and self.worker.is_alive())
+        if self.worker is not getattr(self, "_watcher_queue_worker", None):
+            self._watcher_queued_count = None
+            self._watcher_last_scan_at = None
+            self._watcher_queue_worker = self.worker
         self.refresh_watcher_action()
         manual_running = bool(self.manual_worker and self.manual_worker.is_alive())
         ai_running = bool(self.ai_worker and self.ai_worker.is_alive() and not self.ai_worker_stop_requested)
@@ -13863,6 +14363,7 @@ class WatcherApp:
             self.watcher_activity_var.set("Watch: uploads pending")
         else:
             self.watcher_activity_var.set("Watch: stopped")
+        self.refresh_watcher_header()
         if preflight_running:
             self.import_activity_var.set("Import: preflight")
         elif manual_running:
@@ -14003,10 +14504,29 @@ class WatcherApp:
                     else:
                         self._update_resume_status = 'stage=resume; reason=mode_unverified'
                     continue
+                if kind == 'ordinary_restart_ready':
+                    self._ordinary_restart_prepared = True
+                    self._ordinary_restart_closing = False
+                    self.close()
+                    continue
+                if kind == 'ordinary_restart_failed':
+                    self._ordinary_restart_closing = False
+                    self._ordinary_restart_thread = None
+                    self._cancel_ordinary_restart_intent()
+                    self.cancel_update_checkpoint()
+                    messagebox.showwarning(
+                        'Watcher remains open',
+                        'The active Watcher could not be safely checkpointed. '
+                        'Its queue is retained; wait for recovery, then stop or retry.',
+                    )
+                    continue
                 if kind == 'watcher_resume_available':
                     record = payload.get('continuation')
                     if isinstance(record, WatcherContinuation):
                         self._resume_continuation = record
+                        self._ordinary_restart_resuming = (
+                            payload.get('ordinary_restart') is True
+                        )
                         self._resume_retry_available = True
                         self._update_resume_deadline = (
                             time.monotonic() + UPDATE_CONTINUATION_LINK_SECONDS
@@ -14148,9 +14668,22 @@ class WatcherApp:
                     self.preflight_worker = None
                     self.manual_status_var.set("Preflight cancelled")
                     self.import_activity_var.set("Import: idle")
-                elif kind == "watch_scan":
-                    timestamp = float(payload.get("timestamp", time.time()) or time.time())
-                    self.watch_last_scan_var.set("Last successful scan: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp)))
+                elif kind in ("watch_scan", "watch_queue"):
+                    if payload.get("worker") is self.worker:
+                        if self._watcher_queue_worker is not self.worker:
+                            self._watcher_queued_count = None
+                            self._watcher_last_scan_at = None
+                        self._watcher_queue_worker = self.worker
+                        count = payload.get("queued_count")
+                        if type(count) is int and count >= 0:
+                            self._watcher_queued_count = count
+                            self.refresh_activity_monitor_state()
+                    if kind == "watch_scan":
+                        if payload.get("worker") is self.worker:
+                            timestamp = float(payload.get("timestamp", time.time()) or time.time())
+                            self._watcher_last_scan_at = timestamp
+                            self.watch_last_scan_var.set("Last successful scan: " + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp)))
+                            self.refresh_watcher_header()
                 elif kind in {"connection_ready", "connection_warning", "connection_error"}:
                     explicit = bool(payload.get("explicit_test", False))
                     if explicit:
@@ -14253,7 +14786,12 @@ class WatcherApp:
                 elif kind == "saved_linked_mode_ready":
                     self.linked_target_changed()
                 elif kind == "linking_resume_startup":
-                    self.linking_manager.resume_recent_links()
+                    payload = event.get("payload", {})
+                    issuer = payload.get("issuer") if isinstance(payload, dict) else None
+                    if isinstance(issuer, str) and issuer:
+                        self.linking_manager.resume_saved_link(issuer)
+                    else:
+                        self.linking_manager.resume_recent_links()
                 elif kind == "api_key_revoked":
                     operation = payload.get('operation')
                     if isinstance(operation, FinalizationWorker):

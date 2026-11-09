@@ -64,6 +64,7 @@ from .gallery_lightbox import (
 )
 from .ui_theme import GALLERY_TILE_BORDER_INSET, _attach_tooltip, icon_button
 from .tk_scroll_input import vertical_scroll_delta
+from .gallery_view_preferences import normalize_card_format
 
 try:
     from PIL import Image, ImageTk
@@ -202,11 +203,11 @@ MEDIA_THUMBNAIL_PLACEHOLDER = '▧'
 # Rationale: 30 pt reads as an image status mark at ordinary desktop scaling.
 MEDIA_THUMBNAIL_PLACEHOLDER_FONT_SIZE = 30
 
-# Purpose: Keep the photo tile grid dense while retaining clear separation.
-# Type: int. Units: pixels. Scope: horizontal and vertical tile gutters.
-# Consumers: _NativeGalleryViewer._build_widgets.
-# Rationale: 12 px reads clearly without wasting a narrow viewer viewport.
-MEDIA_GRID_GUTTER = 12
+# Purpose: Keep adjacent photo cards close while preserving a visible gap.
+# Type: int. Units: pixels. Scope: horizontal and vertical photo-grid gutters.
+# Consumers: _NativeGalleryViewer._on_grid_resize and _accept_page.
+# Rationale: 6 px separates selection rims without spreading the grid.
+MEDIA_GRID_GUTTER = 6
 
 # Purpose: Keep row geometry steady as viewport thumbnails are released.
 # Type: int. Units: pixels. Scope: one photo row in the scrollable album.
@@ -736,6 +737,7 @@ class _NativeGalleryViewer:
         self._diagnostic_callback = diagnostic_callback
         self._on_photo_selected = photo_selected
         self._observation_callback = observation_callback
+        self._card_format = 'default'
         self.on_photos_changed: Callable[[], None] | None = None
         self.on_cache_changed: Callable[
             [tuple[LinkedPhoto, ...], bool], None
@@ -835,6 +837,10 @@ class _NativeGalleryViewer:
         self._winmm: object | None = None
         self._mci: _MciSender | None = None
         self._photo_images: list[object | None] = []
+        # Keep natural pixels only beside currently admitted Tk images. The
+        # existing visible/overscan band owns admission and releases both copies;
+        # formatting therefore needs no shared-cache proof or extra media reads.
+        self._canonical_thumbnail_images: dict[int, 'Image.Image'] = {}
         self._detail_cache: OrderedDict[
             int, tuple[
                 float, 'Image.Image', bytes, int,
@@ -1529,6 +1535,9 @@ class _NativeGalleryViewer:
         if not 0 <= index < len(self._photo_images):
             self._thumbnail_loaded.discard(index)
             return
+        canonical = self._canonical_thumbnail_images.pop(index, None)
+        if canonical is not None:
+            canonical.close()
         image = self._photo_images[index]
         if image is not None:
             self._thumbnail_image_release_count += 1
@@ -1536,7 +1545,7 @@ class _NativeGalleryViewer:
         self._thumbnail_loaded.discard(index)
         if index < len(self._tile_buttons):
             self._tile_buttons[index].configure(
-                image='', text=MEDIA_THUMBNAIL_PLACEHOLDER,
+                image='', text=MEDIA_THUMBNAIL_PLACEHOLDER, compound='none',
                 style='LinkedPhotoPlaceholder.TButton',
             )
 
@@ -1656,37 +1665,143 @@ class _NativeGalleryViewer:
             f'retained={retained}'
         )
 
-    def _on_grid_resize(self, event: tk.Event) -> None:
+    def _on_grid_resize(
+        self, event: tk.Event, *, force: bool = False,
+    ) -> None:
         """Resize the embedded grid and recompute its responsive columns.
 
         Args:
             event (tk.Event): Canvas resize event with its current pixel width.
+            force (bool): Reapply row and column geometry after format change.
 
         Returns:
-            None: Tiles use all available width with even gutters.
+            None: Fixed cells keep the selected card size and compact gutters;
+                any remaining horizontal space stays after the final column.
         """
         self.grid_canvas.itemconfigure(self.grid_window, width=event.width)
+        tile_width, tile_height = self._card_dimensions()
         columns = max(1, event.width
-                      // (MEDIA_THUMBNAIL_SIZE[0] + MEDIA_GRID_GUTTER
+                      // (tile_width + MEDIA_GRID_GUTTER
                           + 2 * GALLERY_TILE_BORDER_INSET))
-        if columns == self._grid_columns:
+        if columns == self._grid_columns and not force:
             return
         for column in range(getattr(self, '_grid_columns', 1)):
-            self.grid_frame.columnconfigure(column, weight=0, uniform='')
+            self.grid_frame.columnconfigure(
+                column, weight=0, uniform='', minsize=0,
+            )
+        column_minimum = tile_width + MEDIA_GRID_GUTTER + 2 * GALLERY_TILE_BORDER_INSET
         for column in range(columns):
-            self.grid_frame.columnconfigure(column, weight=1, uniform='photo')
+            self.grid_frame.columnconfigure(
+                column, weight=0, uniform='', minsize=column_minimum,
+            )
         self._grid_columns = columns
+        for row in range(self.grid_frame.grid_size()[1]):
+            self.grid_frame.grid_rowconfigure(row, minsize=0)
+        row_minimum = tile_height + MEDIA_GRID_GUTTER + 2 * GALLERY_TILE_BORDER_INSET
         for index, button in enumerate(self._tile_buttons):
             row = index // columns
             self.grid_frame.grid_rowconfigure(
-                row, minsize=MEDIA_GRID_ROW_MINIMUM_HEIGHT,
+                row, minsize=row_minimum,
             )
             button.grid_configure(
                 row=row,
                 column=index % columns,
-                sticky='nsew',
+                # Extra space stays outside the image and its selection rim.
+                sticky='',
             )
         self._on_grid_viewport(None)
+
+    def _card_dimensions(self) -> tuple[int, int]:
+        """Return the selected aspect's bounded image dimensions.
+
+        Returns:
+            tuple[int, int]: Image width and height in pixels.
+        """
+        if getattr(self, '_card_format', 'default') == 'default':
+            return MEDIA_THUMBNAIL_SIZE
+        numerator, denominator = self._card_format.split(':', 1)
+        ratio = int(numerator) / int(denominator)
+        if ratio >= 1:
+            return (
+                MEDIA_THUMBNAIL_SIZE[0],
+                max(1, round(MEDIA_THUMBNAIL_SIZE[0] / ratio)),
+            )
+        return (
+            max(1, round(MEDIA_THUMBNAIL_SIZE[1] * ratio)),
+            MEDIA_THUMBNAIL_SIZE[1],
+        )
+
+    def set_card_format(self, card_format: str) -> None:
+        """Apply an allowlisted display aspect without fetching thumbnails.
+
+        Args:
+            card_format (str): One supported aspect key or ``default``.
+
+        Returns:
+            None: Existing tile widgets retain their selection and focus state.
+        """
+        normalized = normalize_card_format(card_format)
+        if normalized != card_format or normalized == self._card_format:
+            return
+        self._card_format = normalized
+        resize = tk.Event()
+        resize.width = self.grid_canvas.winfo_width()
+        self._on_grid_resize(resize, force=True)
+        self._render_card_format_images()
+
+    def _present_thumbnail(self, canonical: 'Image.Image') -> 'Image.Image':
+        """Return an owned display raster cropped from a canonical preview.
+
+        Args:
+            canonical (Image.Image): Retained natural-aspect thumbnail raster.
+
+        Returns:
+            Image.Image: Independent raster matching the selected card aspect;
+                Default returns an unchanged pixel copy.
+        """
+        width, height = self._card_dimensions()
+        if getattr(self, '_card_format', 'default') == 'default':
+            return canonical.copy()
+        target = width / height
+        source = canonical.width / canonical.height
+        if source > target:
+            crop_width = max(1, round(canonical.height * target))
+            left = (canonical.width - crop_width) // 2
+            cropped = canonical.crop((left, 0, left + crop_width, canonical.height))
+        elif source < target:
+            crop_height = max(1, round(canonical.width / target))
+            top = (canonical.height - crop_height) // 2
+            cropped = canonical.crop((0, top, canonical.width, top + crop_height))
+        else:
+            cropped = canonical.copy()
+        try:
+            return cropped.resize((width, height), Image.Resampling.LANCZOS)
+        finally:
+            cropped.close()
+
+    def _render_card_format_images(self) -> None:
+        """Crop retained canonical previews for the current display aspect.
+
+        Returns:
+            None: No media request is made and cache entries remain canonical.
+        """
+        if Image is None or ImageTk is None:
+            return
+        for index, canonical in tuple(self._canonical_thumbnail_images.items()):
+            if index >= len(self._tile_buttons):
+                continue
+            presented = self._present_thumbnail(canonical)
+            try:
+                image = ImageTk.PhotoImage(presented, master=self.frame)
+                self._thumbnail_image_create_count += 1
+                if self._photo_images[index] is not None:
+                    self._thumbnail_image_release_count += 1
+                self._photo_images[index] = image
+                self._tile_buttons[index].configure(
+                    image=image, text='', compound='image',
+                )
+            finally:
+                presented.close()
 
     def _on_grid_wheel(self, event: tk.Event) -> None:
         """Scroll the photo grid while the pointer is over its canvas.
@@ -2436,7 +2551,8 @@ class _NativeGalleryViewer:
             if old is not None and old[0] == comparable(photo):
                 self._photo_images[index] = old[1]
                 self._tile_buttons[index].configure(
-                    image=old[1], text='', style='LinkedPhoto.TButton',
+                    image=old[1], text='', compound='image',
+                    style='LinkedPhoto.TButton',
                 )
                 self._thumbnail_loaded.add(index)
                 if index in self._thumbnail_pending:
@@ -2625,6 +2741,9 @@ class _NativeGalleryViewer:
         self._refresh_audio_button()
         self._empty_page = not bool(self._photos)
         if old_count == 0:
+            for canonical in self._canonical_thumbnail_images.values():
+                canonical.close()
+            self._canonical_thumbnail_images.clear()
             self._tile_buttons.clear()
             self._photo_images.clear()
             self._tile_tooltips.clear()
@@ -2639,19 +2758,23 @@ class _NativeGalleryViewer:
                 self.grid_frame,
                 text=MEDIA_THUMBNAIL_PLACEHOLDER,
                 image='',
-                compound='top',
+                compound='none',
+                width=-1,
                 style='LinkedPhotoPlaceholder.TButton',
                 command=lambda selected=index: self.select_photo(selected),
                 takefocus=True,
             )
             row = index // max(1, getattr(self, '_grid_columns', 1))
+            tile_height = self._card_dimensions()[1]
             self.grid_frame.grid_rowconfigure(
-                row, minsize=MEDIA_GRID_ROW_MINIMUM_HEIGHT,
+                row, minsize=(tile_height + MEDIA_GRID_GUTTER
+                              + 2 * GALLERY_TILE_BORDER_INSET),
             )
             tile.grid(
                 row=row,
                 column=index % max(1, getattr(self, '_grid_columns', 1)),
-                sticky='nsew',
+                # Keep unused row and column space outside the image rim.
+                sticky='',
                 padx=MEDIA_GRID_GUTTER // 2,
                 pady=MEDIA_GRID_GUTTER // 2,
             )
@@ -3908,17 +4031,24 @@ class _NativeGalleryViewer:
             return
         if data is not None and ImageTk is not None:
             image: object | None = None
+            presented: 'Image.Image | None' = None
             try:
-                image = ImageTk.PhotoImage(data, master=self.frame)
+                presented = self._present_thumbnail(data)
+                image = ImageTk.PhotoImage(presented, master=self.frame)
                 self._thumbnail_image_create_count += 1
                 if remember:
                     self._remember_thumbnail(self._photos[index], data.copy())
+                previous = self._canonical_thumbnail_images.pop(index, None)
+                if previous is not None:
+                    previous.close()
+                self._canonical_thumbnail_images[index] = data.copy()
                 data.close()
                 if self._photo_images[index] is not None:
                     self._thumbnail_image_release_count += 1
                 self._photo_images[index] = image
                 self._tile_buttons[index].configure(
-                    image=image, text='', style='LinkedPhoto.TButton',
+                    image=image, text='', compound='image',
+                    style='LinkedPhoto.TButton',
                 )
             except Exception:
                 if image is not None:
@@ -3927,11 +4057,14 @@ class _NativeGalleryViewer:
                         self._photo_images[index] = None
                 data.close()
                 data = None
+            finally:
+                if presented is not None:
+                    presented.close()
         if data is None or ImageTk is None:
             if data is not None:
                 data.close()
             self._tile_buttons[index].configure(
-                image='', text=MEDIA_THUMBNAIL_PLACEHOLDER,
+                image='', text=MEDIA_THUMBNAIL_PLACEHOLDER, compound='none',
                 style='LinkedPhotoPlaceholder.TButton',
             )
             if index < len(self._tile_tooltips):
@@ -5268,6 +5401,9 @@ class _NativeGalleryViewer:
         self._detail_cache_bytes = 0
         if self._owns_thumbnail_memory:
             self._thumbnail_memory.clear()
+        for canonical in self._canonical_thumbnail_images.values():
+            canonical.close()
+        self._canonical_thumbnail_images.clear()
         self._thumbnail_image_release_count += sum(
             image is not None for image in self._photo_images
         )

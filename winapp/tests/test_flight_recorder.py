@@ -207,7 +207,7 @@ class FlightAnalysisReplayTests(unittest.TestCase):
             self.assertEqual(prior_bytes.decode("utf-8").strip(), rows[0])
             appended = json.loads(rows[1])["sample"]
             self.assertEqual(
-                "application resumed after update",
+                "application resumed after restart",
                 appended["discontinuity_before"],
             )
             self.assertGreater(appended["session_elapsed_seconds"], 12.0)

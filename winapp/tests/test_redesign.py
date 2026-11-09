@@ -559,6 +559,8 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         kwargs = build.call_args.kwargs
         self.assertIs(app, kwargs['load_selected_gallery'].__self__)
         self.assertIs(app, kwargs['save_selected_gallery'].__self__)
+        self.assertIs(app, kwargs['load_card_format'].__self__)
+        self.assertIs(app, kwargs['save_card_format'].__self__)
         self.assertEqual(250, kwargs['load_info_width']())
         self.assertIs(app.save_photos_info_width, kwargs['save_info_width'])
         cache_factory = kwargs['catalogue_cache']
@@ -575,6 +577,106 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         )
         workspace.grid.assert_called_once_with(row=0, column=0, sticky='nsew')
         app._sync_watcher_recording.assert_called_once_with()
+
+
+class WatcherGalleryDisplayTests(unittest.TestCase):
+    """Verify Photos navigation and the worker-owned header display headlessly."""
+
+    def test_gallery_watcher_start_keeps_the_photos_tab(self) -> None:
+        """Prepare capture through the existing owner without selecting Watcher.
+
+        Returns:
+            None: The exact session/gallery is handed off and no tab is changed.
+        """
+        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app.updates = mock.Mock(blocked=mock.Mock(return_value=False))
+        app._watch_start_pending = False
+        app._contextual_watch_target = None
+        app.flights = mock.Mock(session_state=mock.Mock(return_value="idle"))
+        app._set_watch_start_activity = mock.Mock()
+        app.status_var = mock.Mock()
+        app.select_tab = mock.Mock()
+        app.linking_manager = mock.Mock()
+        session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
+        gallery = LinkedGallery(1, None, "Capture gallery")
+        with tempfile.TemporaryDirectory() as directory:
+            app.watched_folder_var = mock.Mock(get=mock.Mock(return_value=directory))
+            app.open_gallery_watcher(session, gallery)
+        app.select_tab.assert_not_called()
+        self.assertEqual(
+            (session, gallery),
+            app.linking_manager.start_photos_watcher.call_args.args[:2],
+        )
+
+    def test_queue_snapshots_count_admitted_photos_after_acknowledgement(self) -> None:
+        """Publish only accepted-photo observations from the worker's lock.
+
+        Returns:
+            None: Acknowledgement reduces the reported count without scanning.
+        """
+        worker = MAIN.WatcherThread.__new__(MAIN.WatcherThread)
+        threading.Thread.__init__(worker)
+        worker._admission_lock = threading.RLock()
+        worker.events = MAIN.queue.Queue()
+        worker.accepted_paths = {Path("first.png"), Path("second.png")}
+        worker.persist_drain = mock.Mock()
+        worker.emit_queue_snapshot()
+        first = worker.events.get_nowait()
+        self.assertIs(worker, first["payload"]["worker"])
+        self.assertEqual(2, first["payload"]["queued_count"])
+        worker.acknowledge_photo(Path("first.png"))
+        second = worker.events.get_nowait()
+        self.assertEqual(1, second["payload"]["queued_count"])
+        worker.persist_drain.assert_called_once_with()
+
+    def test_header_shows_numeric_groups_and_full_hover_description(self) -> None:
+        """Keep visible Watcher state graphical and explanation on hover.
+
+        Returns:
+            None: Header exposes only the queue count and scan time as text.
+        """
+        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app.flights = types.SimpleNamespace(
+            ui_language=mock.Mock(get=mock.Mock(return_value="en")),
+        )
+        app.gallery_title_var = mock.Mock(get=mock.Mock(return_value="Long gallery title"))
+        app.watcher_activity_var = mock.Mock(get=mock.Mock(return_value="Watch: running"))
+        app.watcher_header_count_var = mock.Mock()
+        app.watcher_header_time_var = mock.Mock()
+        app._watcher_queued_count = 3
+        app._watcher_last_scan_at = None
+        app._watch_start_pending = False
+        app._watcher_header_hint = mock.Mock()
+        app.worker = types.SimpleNamespace(
+            is_alive=mock.Mock(return_value=True),
+            stop_event=types.SimpleNamespace(is_set=mock.Mock(return_value=False)),
+            drain_only=False,
+            drain_event=types.SimpleNamespace(is_set=mock.Mock(return_value=False)),
+            _update_pause_requested=mock.Mock(return_value=False),
+        )
+        status_image = object()
+        app._watcher_header_status_icon = mock.Mock()
+        app._watcher_header_status_icon.winfo_fpixels.return_value = 96.0
+        app._watcher_header_icon_cache = {"ink:0:0": status_image}
+        app._watcher_recording_pulse = False
+        app._watcher_header_stop_button = mock.Mock()
+        app._watcher_header_stop_button.winfo_manager.return_value = ""
+        app.refresh_watcher_header()
+        app.watcher_header_count_var.set.assert_called_with("3")
+        app.watcher_header_time_var.set.assert_called_with("–:–")
+        app._watcher_header_status_icon.configure.assert_called_with(
+            image=status_image,
+        )
+        app._watcher_header_hint.set.assert_called_with(
+            "Long gallery title · Watching\nQueued: 3 Photos\nLast scan: –:–",
+        )
+        app._watcher_header_stop_button.configure.assert_called_with(state="normal")
+        app._watcher_header_stop_button.pack.assert_called_once_with(
+            side="left", padx=(8, 0),
+        )
+        app.worker.drain_only = True
+        app.refresh_watcher_header()
+        app._watcher_header_stop_button.pack_forget.assert_called_once_with()
 
 
 class PhotosWatcherHandoffTests(unittest.TestCase):
@@ -1771,6 +1873,7 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 watcher.accepted_paths = {source}
                 watcher.initial_paths = set()
                 watcher._admission_lock = threading.RLock()
+                watcher.events = MAIN.queue.Queue()
                 watcher.drain_event = threading.Event()
                 watcher.stop_event = threading.Event()
                 watcher.stability = mock.Mock()
@@ -5005,6 +5108,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             worker.accepted_paths = {source}
             worker.initial_paths = set()
             worker._admission_lock = threading.RLock()
+            worker.events = MAIN.queue.Queue()
             worker.drain_event = threading.Event()
             worker.stop_event = threading.Event()
             worker.stability = mock.Mock()
@@ -5057,6 +5161,8 @@ class WatcherActionTests(unittest.TestCase):
         app.updates.blocked.return_value = False
         app._contextual_watch_target = None
         app.flight_action_state.return_value = 'finish'
+        app._ordinary_restart_closing = False
+        app.flights.lease = None
 
         MAIN.WatcherApp.flight_action(app)
         app.flights.finish_report.assert_called_once_with(revoke=True)
@@ -5088,6 +5194,8 @@ class WatcherActionTests(unittest.TestCase):
             "synthetic watcher key",
         )
         app._contextual_watch_is_flight = False
+        app._ordinary_restart_closing = False
+        app.flights.lease = None
         app.updates.blocked.return_value = False
         app.flight_action_state.return_value = "finish"
         app.contextual_watcher_is_flight = (
@@ -5600,10 +5708,10 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         self.assertEqual("Update 0.4.1", app.tray_icon.title)
 
     def test_close_blocked_by_key_revocation_keeps_update_offer(self) -> None:
-        """Keep the verified update visible when key revocation blocks exit.
+        """Keep recording and the update offer intact when revocation blocks exit.
 
         Returns:
-            None: Confirms a rejected close retains the available version.
+            None: A rejected close does not stop recording or clear the offer.
         """
         app = object.__new__(MAIN.WatcherApp)
         app.simulator_presence = mock.Mock()
@@ -5622,7 +5730,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
 
         with mock.patch.object(MAIN, "messagebox") as dialogs:
             MAIN.WatcherApp.close(app)
-        app.flights.stop.assert_called_once_with()
+        app.flights.stop.assert_not_called()
+        app.utc_sync.stop.assert_not_called()
 
         self.assertFalse(app.exiting)
         app.simulator_presence.stop.assert_not_called()
@@ -5645,6 +5754,13 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.updates.request_close.return_value = False
         app.api_key_revoke_running = False
         app.exiting = False
+        app._ordinary_restart_prepared = False
+        app._ordinary_restart_closing = False
+        # An unverified mode cannot acquire restart consent; retain the existing
+        # timeout/tray path while its already-running network operation returns.
+        app.mode_owner = types.SimpleNamespace(
+            view=mock.Mock(return_value=types.SimpleNamespace(state="blocked")),
+        )
         app.update_available_version = "0.4.1"
         app._save_ui_layout_now = mock.Mock()
         app.preflight_worker = None
@@ -5778,6 +5894,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.updates.request_close.return_value = False
         app.api_key_revoke_running = False
         app.exiting = False
+        app._ordinary_restart_prepared = False
+        app._ordinary_restart_closing = False
         app._save_ui_layout_now = mock.Mock()
         app.update_available_version = "0.4.1"
         app.check_updates_button = None

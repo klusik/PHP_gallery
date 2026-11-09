@@ -543,6 +543,72 @@ class FlightJobsTests(unittest.TestCase):
             finally:
                 lease.release()
 
+    def test_ordinary_restart_checkpoint_is_independent_and_profile_bound(self) -> None:
+        """Isolate ordinary restart intent from the updater nonce file.
+
+        Returns:
+            None: Both fixed files round-trip their phases independently,
+                reject a mismatched profile, and retain no credentials.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lease = WorkspaceLease(root)
+            try:
+                updater = WatcherContinuation(
+                    session_id="c" * 32,
+                    binding="a" * 64,
+                    profile_hash=WatcherContinuation.profile_digest(root),
+                    source_version="1.0.0",
+                    target_version="1.0.1",
+                    update_session="d" * 32,
+                    mode="legacy",
+                    contextual=False,
+                    created=time.time(),
+                    phase="cancelled",
+                )
+                ordinary = WatcherContinuation(
+                    session_id="e" * 32,
+                    binding="f" * 64,
+                    profile_hash=WatcherContinuation.profile_digest(root),
+                    source_version="1.0.0",
+                    target_version="1.0.0",
+                    update_session="9" * 32,
+                    mode="linked",
+                    contextual=True,
+                    created=time.time(),
+                    phase="consumed",
+                    approved_scope=UPLOAD_SCOPE,
+                )
+                updater.save(lease)
+                ordinary.save(lease, ordinary_restart=True)
+                self.assertEqual(updater, WatcherContinuation.load(lease))
+                self.assertEqual(
+                    ordinary,
+                    WatcherContinuation.load(lease, ordinary_restart=True),
+                )
+                self.assertEqual("d" * 32, WatcherContinuation.load(lease).update_session)
+                self.assertEqual(
+                    "9" * 32,
+                    WatcherContinuation.load(
+                        lease, ordinary_restart=True,
+                    ).update_session,
+                )
+                ordinary_path = root / "watcher-restart.json"
+                encoded = ordinary_path.read_text(encoding="utf-8")
+                self.assertNotIn("api_key", encoded.lower())
+                self.assertNotIn("credential", encoded.lower())
+                ordinary_path.write_text(
+                    json.dumps({
+                        **ordinary.payload(), "profile_hash": "b" * 64,
+                    }),
+                    encoding="utf-8",
+                )
+                with self.assertRaises(ValueError):
+                    WatcherContinuation.load(lease, ordinary_restart=True)
+                self.assertEqual(updater, WatcherContinuation.load(lease))
+            finally:
+                lease.release()
+
     def test_watcher_continuation_refuses_reparse_checkpoint(self) -> None:
         """Do not follow a checkpoint redirected outside the owned workspace.
 

@@ -2,7 +2,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/tests/test_watcher_continuation.py
 # Module Type: Windows Tooling Regression Test
-# Purpose: Verify explicit and nonce-bound Watcher recovery across updates.
+# Purpose: Verify safe Watcher continuation after updates and clean restarts.
 # Responsibilities:
 #   - Exercise the continuation host without starting Tk or network requests.
 #   - Prove resumed dispatch waits for durable one-use consumption.
@@ -252,6 +252,170 @@ class WatcherContinuationTests(unittest.TestCase):
             self.session_directory, (), resume=True, continuation=True,
         )
         return worker, events, dispatched
+
+    def test_clean_ordinary_restart_marker_admits_only_matching_legacy_session(self) -> None:
+        """Only a live mirror and its exact unfinished plan admit restart.
+
+        Returns:
+            None: Cancelled, mismatched and frozen candidates stay unoffered.
+        """
+        binding = MAIN.connection_binding(
+            MAIN.normalize_upload_url('https://gallery.example.test'),
+            'fixture-api-key',
+        )
+        self.plan = SessionPlan(
+            directory=self.session_directory, binding=binding, languages=(),
+            reports_enabled=False,
+        )
+        self.plan.save()
+        record = replace(
+            self.record, binding=binding, source_version=MAIN.APP_VERSION,
+            target_version=MAIN.APP_VERSION, phase='prepared',
+        )
+
+        def inspect_marker(
+            marker: WatcherContinuation, *, frozen: bool = False,
+        ) -> queue.Queue[Any]:
+            """Run inspection inline for one exact disk marker combination.
+
+            Args:
+                marker (WatcherContinuation): Ordinary mirror to inspect.
+                frozen (bool): Whether the durable queue has closed admission.
+
+            Returns:
+                queue.Queue[Any]: Events emitted by the isolated inspection.
+            """
+            record.save(self.lease)
+            marker.save(self.lease, ordinary_restart=True)
+            queue_row = json.loads(
+                (self.session_directory / 'watch-drain.json').read_text(
+                    encoding='utf-8',
+                ),
+            )
+            queue_row['frozen'] = frozen
+            MAIN.atomic_write_json(
+                self.session_directory / 'watch-drain.json', queue_row,
+            )
+            app = object.__new__(MAIN.WatcherApp)
+            app._update_resume_attempted = False
+            app._gui_mode_ready = True
+            app._after_update_nonce = None
+            app.events = queue.Queue()
+            app.flights = SimpleNamespace(
+                lease=self.lease, directory=self.flight_root,
+                pending=mock.Mock(return_value=[self.plan]),
+            )
+            app.mode_owner = SimpleNamespace(view=mock.Mock(return_value=SimpleNamespace(
+                state='legacy', record=None,
+            )))
+            app.config = SimpleNamespace(
+                gallery_url='https://gallery.example.test',
+                api_key='fixture-api-key',
+            )
+            app.updates = SimpleNamespace(previous_version=MAIN.APP_VERSION)
+            with mock.patch.object(
+                    MAIN.threading, 'Thread',
+                    side_effect=lambda **kwargs: SimpleNamespace(
+                        start=lambda: kwargs['target'](),
+                    )):
+                MAIN.WatcherApp._inspect_update_continuation(app)
+            return app.events
+
+        events = inspect_marker(record)
+        event = events.get_nowait()
+        self.assertTrue(event['payload']['automatic'])
+        self.assertTrue(event['payload']['ordinary_restart'])
+        self.assertEqual(record, event['payload']['continuation'])
+        self.assertTrue(inspect_marker(replace(record, phase='cancelled')).empty())
+        self.assertTrue(inspect_marker(replace(
+            record, update_session='e' * 32,
+        )).empty())
+        self.assertTrue(inspect_marker(record, frozen=True).empty())
+
+    def test_ordinary_close_publishes_same_version_primary_and_mirror(self) -> None:
+        """A safe checkpoint publishes matching one-use restart records.
+
+        Returns:
+            None: Both records carry the current version and a fresh nonce.
+        """
+        record = replace(
+            self.record, source_version=MAIN.APP_VERSION,
+            target_version=MAIN.APP_VERSION, update_session='',
+            phase='preparing',
+        )
+        app = object.__new__(MAIN.WatcherApp)
+        app.wait_for_update_checkpoint = mock.Mock()
+        app._update_continuation = record
+        app.flights = SimpleNamespace(lease=self.lease)
+        app.events = queue.Queue()
+
+        MAIN.WatcherApp._prepare_ordinary_restart_close(app)
+
+        primary = WatcherContinuation.load(self.lease)
+        ordinary = WatcherContinuation.load(self.lease, ordinary_restart=True)
+        self.assertIsNotNone(primary)
+        self.assertEqual(primary, ordinary)
+        self.assertEqual(MAIN.APP_VERSION, primary.source_version)
+        self.assertEqual(MAIN.APP_VERSION, primary.target_version)
+        self.assertEqual('prepared', primary.phase)
+        self.assertNotEqual('', primary.update_session)
+        self.assertEqual('ordinary_restart_ready', app.events.get_nowait()['kind'])
+
+    def test_partial_ordinary_consumption_restores_both_unadmitted_markers(self) -> None:
+        """Keep safe retry usable after only the mirror consumption commits.
+
+        Returns:
+            None: A transient primary-write failure restores both exact claims,
+                keeps the gate closed and dispatches no accepted photograph.
+        """
+        record = replace(
+            self.record, source_version=MAIN.APP_VERSION,
+            target_version=MAIN.APP_VERSION,
+        )
+        record.save(self.lease)
+        record.save(self.lease, ordinary_restart=True)
+        worker, _events, dispatched = self.make_watcher()
+        app = self.make_host(worker)
+        app._resume_continuation = record
+        app._ordinary_restart_resuming = True
+        original_save = WatcherContinuation.save
+        failure = {'injected': False}
+
+        def save_once(
+            candidate: WatcherContinuation, lease: WorkspaceLease,
+            *, ordinary_restart: bool = False,
+        ) -> None:
+            """Refuse only the first primary consumption publication.
+
+            Args:
+                candidate (WatcherContinuation): Exact state being published.
+                lease (WorkspaceLease): Existing fixture's exclusive workspace.
+                ordinary_restart (bool): Whether this is the alternate mirror.
+            Returns:
+                None: Other writes use the real atomic persistence owner.
+            Raises:
+                OSError: The one injected primary-consumption write fails.
+            """
+            if (candidate.phase == 'consumed' and not ordinary_restart
+                    and not failure['injected']):
+                failure['injected'] = True
+                raise OSError('fixture primary publication refusal')
+            original_save(candidate, lease, ordinary_restart=ordinary_restart)
+
+        with mock.patch.object(
+            WatcherContinuation, 'save', autospec=True, side_effect=save_once,
+        ), mock.patch.object(MAIN.WatcherApp, '_update_resume_failed') as failed:
+            self.assertFalse(MAIN.WatcherApp._complete_update_resume(app))
+
+        self.assertTrue(failure['injected'])
+        failed.assert_called_once_with('continuation_consumption_unverified')
+        self.assertEqual(record, WatcherContinuation.load(self.lease))
+        self.assertEqual(
+            record, WatcherContinuation.load(self.lease, ordinary_restart=True),
+        )
+        self.assertFalse(worker._continuation_gate.is_set())
+        self.assertEqual([], dispatched)
+        self.assertEqual({self.pending_photo}, worker.accepted_paths)
 
     def test_host_preparation_restores_native_slash_spelling(self) -> None:
         """Prepare the original worker and recorder from equivalent Windows paths.
@@ -1017,17 +1181,22 @@ class WatcherContinuationTests(unittest.TestCase):
             MAIN.parse_args(["--once", "--after-update", nonce])
 
     def test_legacy_bridge_waits_for_explicit_resume_but_nonce_is_automatic(self) -> None:
-        """Only the old-helper bridge needs a user confirmation after restart.
+        """Only old-helper intent needs confirmation after restart.
 
         Returns:
             None: A legacy candidate exposes retry without starting it; a
                 current nonce-bound update begins its verified resume path.
         """
-        def make_event_host(automatic: bool) -> MAIN.WatcherApp:
+        def make_event_host(
+            automatic: bool, ordinary_restart: bool = False,
+        ) -> MAIN.WatcherApp:
             """Create the small event-drain surface used by this policy check.
 
             Args:
-                automatic (bool): Whether the updater supplied its exact nonce.
+                automatic (bool): Whether explicit nonce or ordinary consent
+                    admits automatic continuation.
+                ordinary_restart (bool): Whether clean Quit consent admitted this
+                    same-version continuation.
 
             Returns:
                 MAIN.WatcherApp: Constructor-bypassed host with only the
@@ -1038,9 +1207,13 @@ class WatcherContinuationTests(unittest.TestCase):
             app.events = queue.Queue()
             app.events.put({
                 "kind": "watcher_resume_available",
-                "payload": {"continuation": self.record, "automatic": automatic},
+                "payload": {
+                    "continuation": self.record, "automatic": automatic,
+                    "ordinary_restart": ordinary_restart,
+                },
             })
             app._resume_continuation = None
+            app._ordinary_restart_resuming = False
             app._resume_retry_available = False
             app._continue_update_resume = mock.Mock()
             app.status_var = mock.Mock()
@@ -1067,6 +1240,11 @@ class WatcherContinuationTests(unittest.TestCase):
         automatic_host = make_event_host(True)
         MAIN.WatcherApp.drain_events(automatic_host)
         automatic_host._continue_update_resume.assert_called_once_with()
+
+        ordinary_host = make_event_host(True, ordinary_restart=True)
+        MAIN.WatcherApp.drain_events(ordinary_host)
+        ordinary_host._continue_update_resume.assert_called_once_with()
+        self.assertTrue(ordinary_host._ordinary_restart_resuming)
 
     def test_linked_resume_refuses_a_changed_approved_scope_before_verification(self) -> None:
         """A live account with a different consent scope cannot resume the target.

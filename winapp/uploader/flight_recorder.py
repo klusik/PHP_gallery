@@ -514,7 +514,7 @@ class FlightRecorder(threading.Thread):
                 (datetime.now(timezone.utc) - recorder._last_utc).total_seconds(),
             )
             recorder._elapsed_offset = last_sample.session_elapsed_seconds + utc_gap
-            recorder._pending_discontinuity = "application resumed after update"
+            recorder._pending_discontinuity = "application resumed after restart"
         return recorder
 
     def stop(self) -> None:

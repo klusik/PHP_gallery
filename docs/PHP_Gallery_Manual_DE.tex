@@ -2168,7 +2168,16 @@ des Limits liefern. Fotobereich und Lightbox bleiben im Hauptfenster.
 Eine unvollständige HTTP~304-Antwort löst höchstens eine neue autorisierte
 Abfrage aus; die abgelehnte Antwort erlaubt keine veralteten Bilddaten.
 Vorschaubilder schneiden erkannte schwarze Balken ab und zeigen die ganze
-verbleibende Szene im eigenen Seitenverhältnis. Für Fotos und Vorschaubilder gilt ein
+verbleibende Szene im eigenen Seitenverhältnis. Sieben sichtbare Formtasten
+in der Albumleiste übernehmen Standard, 16:9, 21:9, 4:3, 1:1, 4:5 oder 9:16
+sofort, ohne Speichern-Schaltfläche. Rechtecke zeigen die Seitenverhältnisse;
+ein dezenter Akzent markiert die aktive Wahl. Feste Formate beschneiden
+die Rastervorschau mittig; Originale und Lightbox behalten ihre Darstellung.
+Die Wahl bleibt lokal in WinApp, getrennt nach Galerie und bestätigter
+Website/Konto. Web- und Upload-Einstellungen bleiben unabhängig.
+Ein kleines \textbf{!} meldet einen lokalen Speicherfehler; die Ansicht bleibt
+angewendet und der Tooltip erklärt den neuen Versuch. Der Wechsel nutzt
+bereits geladene Vorschaubilder. Für Fotos und Vorschaubilder gilt ein
 separates Limit von 600 Anfragen je IP und 3\,600 insgesamt in fünf Minuten.
 Bei HTTP~429 zeigt Photos die Begrenzung an und pausiert das Vorabladen
 bis zur Auswahl von \ui{Retry}.
@@ -2181,7 +2190,11 @@ die~Leertaste schaltet ein~Foto um. Control-Klick (Command-Klick unter macOS)
 schaltet einzelne Auswahlen um; Shift-Klick oder Shift-Pfeil wählt einen
 verankerten Bereich innerhalb des~Limits von~64~Fotos.
 Control-Pfeil (Command-Pfeil unter macOS) bewegt den~Fokus ohne Auswahlverlust.
-Nur~ausgewählte Fotos erhalten einen leicht gerundeten Umriss. Dateinamen
+Nur~ausgewählte Fotos erhalten einen leicht gerundeten Umriss direkt um die
+tatsächliche Vorschau und ihren gemeinsamen Rand, ohne leeren Beschriftungsraum
+unter dem Bild. Gewählte Formate haben horizontal und vertikal einen kompakten
+Abstand von 6~Pixeln zwischen den Rändern; Restbreite bleibt nach der letzten
+Spalte. Standard behält die stabile Zeilenhöhe natürlicher Vorschauen. Dateinamen
 erscheinen in~einem kompakten kontrastierenden Tooltip. Bereich und~Kontextinfo
 teilen berechtigungsgeprüfte Metadaten, Formatierung und~einen kurzen
 begrenzten Sitzungscache.
@@ -2224,7 +2237,7 @@ Aktuelle Albumsnapshots derselben Sitzung erscheinen sofort, während der Server
 sie erneuert, ohne zusätzliche Sichtbarkeitsfilter im Client. Gleiche Zeilen
 behalten Kacheln und erhalten aktuelle Prüfzeiten. Große JPEG-Miniaturen
 verkleinern das Dekoderraster ebenfalls vor der RGB-Zuweisung.
-Das beschriftete Element links neben dem Watcher-Status zeigt alle typisierten
+Das beschriftete Element in der gemeinsamen Kopfzeile zeigt alle typisierten
 gespeicherten Miniaturen und deren Bytes. Details trennen normale Quote und
 \ui{Keep preloaded} und führen aufbewahrte
 Miniaturen, andere Medien und Galerien getrennt auf. RAM bezeichnet nur Working Set
@@ -2389,7 +2402,17 @@ jeweils bis zu 64~Fotos. WinApp verwendet dieselbe endgültige
 Löschoperation wie die Web-Administration. Aktualisieren und prüfen Sie das
 Album nach einer unterbrochenen Antwort vor einer weiteren Bestätigung.
 Über das Galeriekontextmenü oder das Watcher-Menü starten Sie die Überwachung mit einem
-temporären Schlüssel und roter REC-Anzeige. Das Watcher-Symbol pulsiert auf
+temporären Schlüssel und roter REC-Anzeige. Fotos bleibt ausgewählt.
+Eine kleine Symbolanzeige in der Kopfzeile zeigt den Watcher-Status, die
+beobachtete Zahl angenommener Fotos in der Warteschlange und die letzte
+Prüfzeit; ein Strich bedeutet einen unbekannten Wert. Der Tooltip enthält
+das Zielalbum und die vollständige Status- und Warteschlangenbeschreibung.
+Die Anzeige steht direkt links von \ui{Thumbnails}. Ihr Stop-Symbol nutzt die
+bisherige sichere Warteschlangen- und Berichtsfertigstellung; für normale
+Erfassung ist kein Wechsel zur Watcher-Registerkarte nötig.
+Die Registerkarte Watcher mit allen
+Bedienelementen bleibt über die Seitenleiste erreichbar.
+Das Watcher-Symbol pulsiert auf
 allen Registerkarten rot. Ein ausgefüllter roter Punkt markiert das Zielalbum
 und seinen Titel. Ein roter Ring markiert einen geschlossenen Zweig, der das
 Album verdeckt. Bei erkanntem Flugsimulator
@@ -2570,7 +2593,7 @@ senden keine KI-Aufträge oder PDFs automatisch mit einem alten Schlüssel.
 Begrenzen Sie Anfragen in Proxy, Webserver und PHP: Multipart-Verarbeitung
 kann vor der Anwendungskontrolle Ressourcen verbrauchen.
 
-\ui{Start Watcher} startet erst nach ausdrücklichem Klick; während des Betriebs
+Ein inaktiver Watcher startet nach ausdrücklichem Klick auf \ui{Start Watcher}; während des Betriebs
 heißt dieselbe kontextabhängige Schaltfläche \ui{Stop Watcher}.
 Beim Abschluss öffnet \ui{Show progress} den Fortschritt. Nach einer
 Unterbrechung öffnet \ui{Review pending uploads} die ursprüngliche
@@ -2645,7 +2668,19 @@ wird \ui{Start with Windows (minimized to tray)} sofort gespeichert. Ausschalten
 entfernt den benutzereigenen Autostarteintrag; Updates behalten diese Wahl.
 Setup wendet die Einstellung auch bei abgewähltem abschließendem Programmstart
 an. Python-/Quellcode-Ausführungen ändern den Windows-Autostart nicht.
-Beobachtung und Import benötigen weiterhin ihren ausdrücklichen Start.
+Ein inaktiver Watcher und manuelle Importe benötigen einen ausdrücklichen Start.
+Ein aktiver Watcher kann nach normalem Quit und Neustart fortfahren. Beenden
+wartet auf angenommene Schreibvorgänge, prüft die ursprüngliche Sitzung und
+Warteschlange und bestätigt die Schließung des alten temporären Watcher-Schlüssels,
+bevor ein separater Neustart-Checkpoint ohne Zugangsdaten gespeichert wird.
+Innerhalb seiner bestehenden Lebensdauer von 24~Stunden werden das genaue
+gespeicherte Konto und Galerie sowie die Rechte erneut geprüft; dieselbe
+Warteschlange und Aufzeichnung erhalten frischen temporären Zugriff.
+Stop, Finish und Trennen verwerfen diesen Wunsch; gestoppte Erfassung bleibt aus.
+Erforderlich sind eine sicher gespeicherte Galerieverknüpfung oder der unveränderte
+gespeicherte API-Schlüssel. Abgelaufene, widerrufene oder nicht gespeicherte
+temporäre Verknüpfungen benötigen die normale Anmeldung; ungewisse Übertragungen
+und erzwungenes Beenden behalten die ausdrückliche Wiederherstellung.
 
 Ein erneuter Programmstart öffnet das vorhandene Fenster und erhält laufende
 Arbeit. Nur ein Windows-Prozess verwendet das gemeinsame App-Profil, auch bei

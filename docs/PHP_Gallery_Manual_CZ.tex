@@ -1952,13 +1952,25 @@ Dvojklik nebo Enter otevře lightbox. Šipky procházejí mřížku; mezerník v
 a~odvybírá. Control-click (Command-click na~macOS) přepíná jednotlivé výběry;
 Shift-click nebo Shift-šipka vybere rozsah od~kotvy v~rámci limitu 64~fotek.
 Control-šipka (Command-šipka na~macOS) přesune zaměření bez zrušení výběru.
-Jen vybrané fotky mají mírně zaoblený obrys. Název souboru ukáže kompaktní
+Jen vybrané fotky mají mírně zaoblený obrys přiléhající ke skutečnému náhledu
+a~jeho společnému lemu, bez prázdného pásu pro popisek pod obrázkem. Zvolené
+poměry mají mezi obrysy kompaktní mezeru 6~pixelů vodorovně i~svisle;
+zbývající šířka zůstává za posledním sloupcem. Výchozí zobrazení zachovává
+stabilní výšku řádku pro přirozené náhledy. Název souboru ukáže kompaktní
 kontrastní tooltip. Panel a~kontextové informace sdílejí autorizovaná metadata,
 formátování a~krátkou omezenou cache aktuálního propojení.
 Šipkami vlevo a~vpravo procházíte celé album ve smyčce.
 Zavření lightboxu nebo klávesa Escape obnoví strom a~mřížku
 i~po chybě obrázku. Náhledy oříznou rozpoznané černé pruhy a~zobrazí celou scénu
-v~jejím poměru stran. Fotografie a~náhledy mají
+v~jejím poměru stran. Sedm viditelných tvarových tlačítek v~liště alba ihned
+přepne výchozí zobrazení nebo poměr 16:9, 21:9, 4:3, 1:1, 4:5 či 9:16, bez
+ukládacího tlačítka. Obdélníky znázorňují poměry a~aktivní volbu označuje
+jemné zvýraznění. Konkrétní poměry oříznou náhled na střed; originály a~lightbox
+zachovají své zobrazení. Volba se ukládá pouze místně ve WinApp, samostatně
+pro každou galerii a~ověřený web/účet. Nastavení webu ani nahrávání nemění.
+Malé \textbf{!} označuje chybu místního uložení; zvolený pohled zůstává použitý
+a~tooltip vysvětlí opakování. Změna využívá již načtené náhledy.
+Fotografie a~náhledy mají
 samostatný limit 600 požadavků na IP a~3\,600 celkem za pět minut.
 Při HTTP~429 aplikace zobrazí upozornění a~pozastaví načítání dopředu do
 volby \ui{Retry}. Při spuštění ze zdrojů musí být Pillow ve stejném
@@ -1996,7 +2008,7 @@ Nedávná metadata alba se zobrazí ihned ze stejné živé session a~současně
 obnoví ze serveru, bez dalšího filtrování viditelnosti v~klientovi. Nezměněná
 obnova zachová dlaždice a~aktualizuje stáří ověření. Velké varianty náhledů JPEG
 také zmenší dekódovaný rastr před alokací RGB.
-Popsaný ovladač vlevo vedle stavu Watcheru ukazuje všechny typované uložené
+Popsaný ovladač ve společné hlavičce ukazuje všechny typované uložené
 náhledy a~jejich velikost. Detail odděluje běžnou kvótu od \ui{Keep preloaded}
 a~uvádí uchované náhledy, další média a~galerie.
 RAM znamená working set tohoto procesu ve Windows nebo resident set v~macOS;
@@ -2143,7 +2155,15 @@ nejvýše 64~fotek. Trvalé smazání proběhne stejnou operací jako ve webové
 Adminu. Po přerušené odpovědi album obnovte a~zkontrolujte před potvrzením
 dalšího mazání.
 V~nabídce galerie nebo Watcheru zvolte použití této galerie pro sledování.
-WinApp spustí záznam s~dočasným klíčem a~zobrazí červené REC. Ikona Watcheru
+WinApp spustí záznam s~dočasným klíčem a~zobrazí červené REC. Zůstane přitom
+v~zobrazení Fotky. Malý displej v~hlavičce používá ikony pro stav Watcheru,
+zjištěný počet přijatých fotek ve frontě a~čas poslední kontroly.
+Pomlčka znamená dosud neznámou hodnotu. Název galerie a~úplné vysvětlení
+stavu i~fronty zobrazí tooltip po najetí. Displej je vpravo těsně před
+\ui{Thumbnails}. Jeho ikonka Stop používá stávající bezpečné dokončení fronty
+a~reportů, takže běžné sledování nevyžaduje přepnutí na kartu Watcher.
+Na kartu Watcher s~úplným ovládáním lze kdykoli přejít z~levé navigace.
+Ikona Watcheru
 červeně pulzuje ve všech kartách. Plné červené světlo označuje cílové album
 a~jeho nadpis. Duté kolečko označuje sbalenou větev, která cíl skrývá.
 U~rozpoznaného
@@ -2299,7 +2319,7 @@ ověřeny. Propojené letové údaje zůstávají místní a~neodesílají autom
 a~PHP: zpracování multipart může spotřebovat prostředky ještě před kontrolou
 aplikace.
 
-\ui{Start Watcher} začne pracovat až po výslovném kliknutí; při běhu stejné
+Nečinný Watcher spustí výslovné kliknutí na \ui{Start Watcher}; při běhu stejné
 kontextové tlačítko nabízí \ui{Stop Watcher}. Během dokončování otevře
 \ui{Show progress}. Po~přerušení otevře \ui{Review pending uploads} původní
 frontu. Znovu připojte a~vyberte stejnou galerii, poté zvolte \ui{Retry}.
@@ -2365,7 +2385,17 @@ integrations}
 se uloží okamžitě. Vypnutí odstraní autostart aktuálního uživatele; aktualizace
 volbu zachovají. Instalátor nastavení použije i~při zrušeném závěrečném spuštění
 aplikace. Zdrojové spuštění přes Python autostart Windows nemění. Sledování
-a~import nadále vyžadují běžné výslovné spuštění.
+a~ruční import z~nečinného stavu vyžadují výslovné spuštění.
+Aktivní Watcher může pokračovat po běžném Quit a~novém spuštění. Ukončení
+nejprve dokončí práci přijatých zapisujících vláken, ověří původní relaci
+a~frontu a~potvrdí uzavření starého dočasného klíče. Teprve pak uloží samostatný
+obnovovací záznam bez přihlašovacích údajů. Během jeho stávající platnosti
+24~hodin aplikace obnoví přesný web/účet/galerii, ověří oprávnění a~naváže
+na stejnou frontu a~záznam s~novým dočasným přístupem. Stop, Finish a~odpojení
+tento záměr zruší; zastavené sledování se samo nespustí.
+Je nutné bezpečně uložené propojení galerie nebo nezměněný uložený API klíč.
+Vypršelé, odvolané nebo neuložené dočasné propojení vyžaduje běžné připojení;
+nejisté přenosy a~násilné ukončení ponechávají výslovnou obnovu.
 
 Další spuštění otevře původní okno a~zachová běžící práci. Jeden proces Windows
 vlastní společný profil aplikace i~při spuštění více kopií programu; instanci

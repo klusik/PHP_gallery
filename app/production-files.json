@@ -1196,6 +1196,7 @@
         "winapp/uploader/gallery_lightbox.py",
         "winapp/uploader/gallery_media_cache.py",
         "winapp/uploader/gallery_preload.py",
+        "winapp/uploader/gallery_view_preferences.py",
         "winapp/uploader/game_context.py",
         "winapp/uploader/game_presence.py",
         "winapp/uploader/linked_create.py",

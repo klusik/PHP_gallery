@@ -4784,9 +4784,15 @@ class NativeGalleryViewerTests(unittest.TestCase):
             0, 0, TEST_PRELOAD_STATUS_PHOTO_COUNT, 0, False, 'unavailable',
         )
         workspace._preload_last = progress
-        status_row = 2 if workspace._heading_stacked else 1
+        status_row = 1 + max(
+            int(group.grid_info()['row']) for group in (
+                workspace._heading_title,
+                workspace._card_format_controls,
+                workspace._heading_controls,
+            )
+        )
         workspace._preload_strip.grid(
-            row=status_row, column=0, columnspan=2, sticky='ew',
+            row=status_row, column=0, columnspan=3, sticky='ew',
         )
 
         workspace._selected_gallery_id = TEST_GALLERY_ID
@@ -7844,6 +7850,159 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer.clear_photo_selection((TEST_FIRST_IMAGE_ID,))
         self.assertEqual((), viewer.selected_photo_ids())
         viewer.close()
+
+    def test_selected_tile_rim_tracks_rendered_photo_across_formats(self) -> None:
+        """Keep real selected tiles snug and close at different viewport widths.
+
+        Returns:
+            None: Every rendered aspect, including natural Default, has only
+                the shared rim outside its image at two viewport widths.
+        """
+        from uploader.ui_theme import configure_theme
+
+        configure_theme(self.root)
+        page, presentation, image_bytes = self._gallery_data()
+        # The natural image exceeds the themed element's minimum artwork size.
+        stream = io.BytesIO()
+        Image.new('RGB', (180, 120), '#527184').save(stream, format='PNG')
+        # Eight cards ensure a second row even at the wider viewport.
+        photos = tuple(LinkedPhoto(TEST_FIRST_IMAGE_ID + index, 'Geometry')
+                       for index in range(8))
+        page = LinkedMediaPage(page.gallery_id, page.parent_id, photos, None)
+        image_bytes = {photo.image_id: stream.getvalue() for photo in photos}
+        session = self._session(page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session,
+            LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Geometry'),
+        )
+        self._wait_until(
+            lambda: len(viewer._photo_images) == 8
+            and all(image is not None for image in viewer._photo_images),
+            'The synthetic thumbnails did not render.',
+        )
+        viewer.toggle_photo_selection(TEST_FIRST_IMAGE_ID)
+        tile = viewer._tile_buttons[0]
+        tile.focus_set()
+        # Two widths leave different residual space after the fixed columns.
+        for window_width in (840, 1031):
+            self.root.geometry(f'{window_width}x620')
+            self.root.update()
+            for key in ('default', '16:9', '21:9', '4:3', '1:1', '4:5', '9:16'):
+                with self.subTest(width=window_width, format=key):
+                    viewer.set_card_format(key)
+                    self.root.update_idletasks()
+                    image = viewer._photo_images[0]
+                    self.assertIsNotNone(image)
+                    self.assertEqual('image', str(tile.cget('compound')))
+                    self.assertEqual('', str(tile.cget('text')))
+                    if key == '21:9':
+                        self.assertEqual((144, 62), (image.width(), image.height()))
+                        next_tile = viewer._tile_buttons[1]
+                        next_row = viewer._tile_buttons[viewer._grid_columns]
+                        self.assertEqual(
+                            native_gallery_viewer.MEDIA_GRID_GUTTER,
+                            next_tile.winfo_x() - tile.winfo_x() - tile.winfo_width(),
+                        )
+                        self.assertEqual(
+                            native_gallery_viewer.MEDIA_GRID_GUTTER,
+                            next_row.winfo_y() - tile.winfo_y() - tile.winfo_height(),
+                        )
+                    rim = 2 * native_gallery_viewer.GALLERY_TILE_BORDER_INSET
+                    self.assertEqual(image.width() + rim, tile.winfo_width())
+                    self.assertEqual(image.height() + rim, tile.winfo_height())
+                    self.assertEqual('LinkedPhotoSelected.TButton', tile.cget('style'))
+                    self.assertEqual((TEST_FIRST_IMAGE_ID,), viewer.selected_photo_ids())
+        viewer.close()
+
+    def test_card_format_updates_in_place_and_rejects_unknown_key(self) -> None:
+        """Reflow real geometry even when the number of columns stays unchanged.
+
+        Returns:
+            None: Short rows replace old tall rows, obsolete rows lose their
+                height, selections remain intact and unknown choices do nothing.
+        """
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        viewer._card_format = 'default'
+        viewer._grid_columns = 2
+        viewer.grid_canvas = mock.Mock()
+        # A 400 px canvas keeps two columns in both Default and 16:9. The
+        # third old row represents space left by an earlier larger page.
+        viewer.grid_canvas.winfo_width.return_value = 400
+        viewer.grid_frame = mock.Mock()
+        viewer.grid_frame.grid_size.return_value = (2, 3)
+        viewer.grid_window = 'photo-grid'
+        viewer._tile_buttons = [mock.Mock(), mock.Mock(), mock.Mock()]
+        viewer._canonical_thumbnail_images = {}
+        viewer._selected_photo_ids = {TEST_FIRST_IMAGE_ID}
+        viewer._on_grid_viewport = mock.Mock()
+        viewer.set_card_format('16:9')
+        self.assertEqual('16:9', viewer._card_format)
+        self.assertEqual(2, viewer._grid_columns)
+        viewer.grid_frame.grid_rowconfigure.assert_any_call(2, minsize=0)
+        # 81 px is the exact integer height of a 144 px-wide 16:9 card.
+        short_row = (
+            81 + native_gallery_viewer.MEDIA_GRID_GUTTER
+            + 2 * native_gallery_viewer.GALLERY_TILE_BORDER_INSET
+        )
+        viewer.grid_frame.grid_rowconfigure.assert_any_call(0, minsize=short_row)
+        self.assertEqual({TEST_FIRST_IMAGE_ID}, viewer._selected_photo_ids)
+        viewer.set_card_format('default')
+        viewer.grid_frame.grid_rowconfigure.assert_any_call(
+            0, minsize=native_gallery_viewer.MEDIA_GRID_ROW_MINIMUM_HEIGHT,
+        )
+        before = viewer.grid_canvas.itemconfigure.call_count
+        viewer.set_card_format('wide-invalid')
+        self.assertEqual('default', viewer._card_format)
+        self.assertEqual(before, viewer.grid_canvas.itemconfigure.call_count)
+
+    def test_card_dimensions_cover_landscape_portrait_and_default(self) -> None:
+        """Bound every selected image aspect within the existing tile limit.
+
+        Returns:
+            None: Each format keeps at least one pixel per dimension.
+        """
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        for format_key in ('default', '16:9', '21:9', '4:3', '1:1', '4:5', '9:16'):
+            viewer._card_format = format_key
+            width, height = viewer._card_dimensions()
+            self.assertGreater(width, 0, format_key)
+            self.assertGreater(height, 0, format_key)
+            self.assertLessEqual(width, native_gallery_viewer.MEDIA_THUMBNAIL_SIZE[0])
+            self.assertLessEqual(height, native_gallery_viewer.MEDIA_THUMBNAIL_SIZE[1])
+        viewer._card_format = 'default'
+        self.assertEqual(
+            native_gallery_viewer.MEDIA_THUMBNAIL_SIZE,
+            viewer._card_dimensions(),
+        )
+
+    def test_card_crop_preserves_default_and_crops_selected_preview(self) -> None:
+        """Keep canonical pixels unchanged while deriving a selected crop.
+
+        Returns:
+            None: Default pixels match the source and 16:9 crops its height.
+        """
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        # A 144 by 100 source with a ten-pixel red rim makes center-crop pixel
+        # retention observable while fitting the production thumbnail bound.
+        canonical = Image.new('RGB', (144, 100), color='black')
+        ImageDraw.Draw(canonical).rectangle((0, 0, 143, 9), fill='red')
+        viewer._card_format = 'default'
+        natural = viewer._present_thumbnail(canonical)
+        self.assertEqual(canonical.size, natural.size)
+        self.assertEqual(canonical.tobytes(), natural.tobytes())
+        natural.close()
+        viewer._card_format = '16:9'
+        cropped = viewer._present_thumbnail(canonical)
+        self.assertEqual((144, 81), cropped.size)
+        self.assertEqual(canonical.getpixel((72, 50)), cropped.getpixel((72, 40)))
+        cropped.close()
+        canonical.close()
 
 
 if __name__ == '__main__':
