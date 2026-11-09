@@ -25,7 +25,9 @@ import types
 import unittest
 import wave
 from collections import deque
+from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Callable, cast
 from unittest import mock
 
@@ -47,10 +49,12 @@ from uploader.app_linking import (
     LinkingSession,
     MediaReadTimings,
     NATIVE_MEDIA_DELETE_BATCH_MAX,
+    READ_SCOPE,
 )
 from uploader.flight_report_translations import tr
 from uploader.linked_create import BoundCreateReceipt, CreateJournalSnapshot
 from uploader.gallery_catalogue_cache import GalleryCatalogueSnapshot
+from uploader.gallery_media_cache import GalleryMediaCache
 
 try:
     import tkinter as tk
@@ -142,6 +146,19 @@ TEST_WIDE_VIEWPORT_SIZE = (1800, 1200)
 # Consumers: test_large_viewport_return_reuses_decoded_visible_band.
 # Rationale: 120 tiles exceed the chosen viewport while fitting RGB channels.
 TEST_WIDE_VIEWPORT_PHOTO_COUNT = 120
+
+# Purpose: Exercise dense 21:9 rows over four real metadata pages.
+# Type: int. Units: photos. Scope: dense cache-return Windows fixture.
+# Consumers: test_dense_return_renews_catalogue_and_reuses_disk.
+# Rationale: 240 entries exceed one wide viewport while fitting the unchanged
+# 256-entry decoded limit, so renewal and forced RAM eviction are independent.
+TEST_DENSE_CACHE_PHOTO_COUNT = 240
+
+# Purpose: Keep the isolated media session alive during native cache assertions.
+# Type: float. Units: seconds. Scope: dense cache-return Windows fixture.
+# Consumers: test_dense_return_renews_catalogue_and_reuses_disk.
+# Rationale: Five minutes covers real Tk scheduling without altering proof TTL.
+TEST_CACHE_SESSION_SECONDS = 300.0
 
 # Purpose: Exercise viewport event coalescing without relying on machine speed.
 # Type: int. Units: synthetic Tk signals. Scope: one burst regression.
@@ -2274,7 +2291,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
             lambda: viewer._worker is None
             and bool(viewer._admitted_thumbnail_indices)
             and all(viewer._photo_images[index]
-                    for index in viewer._admitted_thumbnail_indices),
+                    for index in viewer._admitted_thumbnail_indices)
+            and not viewer._thumbnail_disk_lane.busy()
+            and not viewer._warm_thumbnail_pending
+            and viewer._thumbnail_gui_after_id is None
+            and viewer._viewport_after_id is None,
             'The viewport fixture did not finish its first admitted band.',
         )
         columns = viewer._grid_columns
@@ -2884,6 +2905,229 @@ class NativeGalleryViewerTests(unittest.TestCase):
             f'tk_images={retained} memory_bytes={viewer._thumbnail_memory.size_bytes}'
         )
         viewer.close()
+
+    def test_dense_return_renews_catalogue_and_reuses_disk(self) -> None:
+        """Reuse real disk files after dense scrolling and proof expiration.
+
+        Returns:
+            None: Returning uses RAM after metadata renewal, then hash-verified
+                disk after RAM eviction, with no additional binary requests.
+        """
+        self.root.overrideredirect(True)
+        self.root.maxsize(*TEST_WIDE_VIEWPORT_SIZE)
+        self.root.minsize(*TEST_WIDE_VIEWPORT_SIZE)
+        self.root.geometry('{}x{}'.format(*TEST_WIDE_VIEWPORT_SIZE))
+        page, presentation, image_bytes = self._gallery_data()
+        photos = tuple(
+            LinkedPhoto(
+                TEST_FIRST_IMAGE_ID + index, f'Dense cached photo {index}',
+                cache_eligible=True,
+            )
+            for index in range(TEST_DENSE_CACHE_PHOTO_COUNT)
+        )
+        for index, photo in enumerate(photos):
+            # 144 by 62 models the natural ultrawide screenshots in this case.
+            with Image.new('RGB', (144, 62), (index, 80, 160)) as raster:
+                encoded = io.BytesIO()
+                raster.save(encoded, format='PNG')
+                image_bytes[photo.image_id] = encoded.getvalue()
+        photos = tuple(
+            replace(photo, thumbnail_etag=(
+                '"' + hashlib.sha256(image_bytes[photo.image_id]).hexdigest()
+                + '"'
+            )) for photo in photos
+        )
+        session = self._session(page, presentation, image_bytes)
+        real_session = LinkingSession(
+            'https://gallery.example/Galerie', 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_CACHE_SESSION_SECONDS, READ_SCOPE,
+        )
+        self.addCleanup(real_session.close)
+
+        def catalogue(
+            gallery_id: int, after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> LinkedMediaPage:
+            """Return a real-sized page with freshly authorized validators.
+
+            Args:
+                gallery_id (int): Exact synthetic gallery requested.
+                after_id (int | None): Last photo ID of the preceding page.
+                cancelled (threading.Event | None): Operation cancellation.
+
+            Returns:
+                LinkedMediaPage: Ordered descriptors with a fresh proof time.
+            """
+            self.assertEqual(TEST_GALLERY_ID, gallery_id)
+            self.assertFalse(cancelled is not None and cancelled.is_set())
+            start = 0 if after_id is None else (
+                after_id - TEST_FIRST_IMAGE_ID + 1
+            )
+            rows = tuple(
+                replace(photo, thumbnail_verified_at=time.monotonic())
+                for photo in photos[
+                    start:start + native_gallery_viewer.NATIVE_MEDIA_PAGE_SIZE
+                ]
+            )
+            cursor = (
+                rows[-1].image_id if rows
+                and start + len(rows) < len(photos) else None
+            )
+            return LinkedMediaPage(TEST_GALLERY_ID, None, rows, cursor)
+
+        def network(
+            gallery_id: int, kind: str, image_id: int,
+            cancelled: threading.Event | None = None,
+            if_none_match: str | None = None, *,
+            timings: MediaReadTimings | None = None,
+        ) -> tuple[bytes, str, str, bool]:
+            """Provide bytes only for a genuine cache miss through transport.
+
+            Args:
+                gallery_id (int): Exact synthetic gallery requested.
+                kind (str): Thumbnail rendition requested by the real session.
+                image_id (int): Synthetic media identity.
+                cancelled (threading.Event | None): Operation cancellation.
+                if_none_match (str | None): Conditional strong validator.
+                timings (MediaReadTimings | None): Optional transport metrics
+                    supplied by the actual thumbnail read owner.
+
+            Returns:
+                tuple[bytes, str, str, bool]: PNG bytes, type, validator and
+                    explicit cache permission for the isolated response.
+            """
+            self.assertEqual(TEST_GALLERY_ID, gallery_id)
+            self.assertEqual('thumbnail', kind)
+            body = image_bytes[image_id]
+            return body, 'image/png', '"' + hashlib.sha256(body).hexdigest() + '"', True
+
+        session.media_page.side_effect = catalogue
+        session.media_photo.side_effect = real_session.media_photo
+        session.cached_media_photo.side_effect = real_session.cached_media_photo
+        with TemporaryDirectory(prefix='phpgallery-dense-return-') as directory:
+            cache = GalleryMediaCache(
+                Path(directory), native_gallery_viewer.NATIVE_MEDIA_MAX_BYTES,
+                thumbnails=True,
+            )
+            with mock.patch.object(
+                GalleryMediaCache, 'for_current_user', return_value=cache,
+            ), mock.patch.object(real_session, '_media_read', side_effect=network) as transport:
+                # Model completed thumbnail preload with real durable writes.
+                # Seeding disk is setup, outside the unchanged six-second GUI
+                # deadline; the measured scroll paths must only reuse it.
+                for photo in photos:
+                    self.assertEqual(
+                        (image_bytes[photo.image_id], 'image/png'),
+                        real_session.media_photo(
+                            TEST_GALLERY_ID, photo.image_id, thumbnail=True,
+                            cache_eligible=True, thumbnail_etag=photo.thumbnail_etag,
+                            thumbnail_verified_at=time.monotonic(),
+                        ),
+                    )
+                initial_transfers = transport.call_count
+                viewer = self._open_viewer(
+                    session, LinkedGallery(TEST_GALLERY_ID, None, 'Dense cache'),
+                )
+                self.addCleanup(viewer.close)
+                viewer.set_card_format('21:9')
+
+                def settled() -> bool:
+                    """Wait for visible admission and every owned worker slice.
+
+                    Returns:
+                        bool: True only when all admitted tiles have settled.
+                    """
+                    return bool(
+                        viewer._visible_thumbnail_indices
+                        and viewer._admitted_thumbnail_indices
+                        <= viewer._thumbnail_loaded
+                        and viewer._worker is None
+                        and not viewer._thumbnail_disk_lane.busy()
+                        and not viewer._warm_thumbnail_pending
+                        and viewer._thumbnail_gui_after_id is None
+                        and viewer._viewport_after_id is None
+                    )
+
+                self._wait_until(settled, 'Dense top thumbnails did not settle.')
+                self.assertEqual(initial_transfers, transport.call_count)
+                first_visible = set(viewer._visible_thumbnail_indices)
+                self.assertGreater(len(first_visible), 48)
+                viewer.grid_canvas.yview_moveto(1.0)
+                viewer._on_grid_viewport(None)
+                self._wait_until(
+                    lambda: settled() and viewer._next_after is None,
+                    'Dense bottom thumbnails did not settle.',
+                )
+                self.assertEqual(len(photos), len(viewer._photos))
+                self.assertTrue(first_visible - viewer._visible_thumbnail_indices)
+                transfers = transport.call_count
+                page_reads = session.media_page.call_count
+                hits = viewer._thumbnail_warm_cache_hit_count
+                expired_at = (
+                    time.monotonic()
+                    - native_gallery_viewer.MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS
+                    - 1.0
+                )
+                viewer._photos = tuple(
+                    replace(photo, thumbnail_verified_at=expired_at)
+                    for photo in viewer._photos
+                )
+                # Expire the stored observations as well: refreshing the page
+                # must authorize the original bytes, not restart their age.
+                memory = viewer._thumbnail_memory
+                with memory.lock:
+                    for key, (image, size, _stored_at) in tuple(memory.entries.items()):
+                        memory.entries[key] = image, size, expired_at
+                started = time.perf_counter()
+                viewer.grid_canvas.yview_moveto(0.0)
+                viewer._on_grid_viewport(None)
+                self._wait_until(
+                    lambda: settled() and viewer._visible_thumbnail_indices == first_visible,
+                    'Expired top thumbnails did not return after catalogue renewal.',
+                )
+                warm_ms = (time.perf_counter() - started) * 1000.0
+                self.assertEqual(transfers, transport.call_count)
+                self.assertEqual(1, viewer._thumbnail_proof_refresh_count)
+                self.assertGreater(session.media_page.call_count, page_reads)
+                self.assertGreater(viewer._thumbnail_warm_cache_hit_count, hits)
+                writes = cache.operation_counts()['writes']
+                self.assertGreater(writes, 0)
+                # Reopen the real cache owner and force a complete RAM miss.
+                cache = GalleryMediaCache(
+                    Path(directory), native_gallery_viewer.NATIVE_MEDIA_MAX_BYTES,
+                    thumbnails=True,
+                )
+                with mock.patch.object(GalleryMediaCache, 'for_current_user', return_value=cache):
+                    memory.clear()
+                    for index in tuple(viewer._thumbnail_loaded):
+                        viewer._release_thumbnail_image(index)
+                    disk_hits = viewer._thumbnail_source_disk_count
+                    started = time.perf_counter()
+                    viewer._on_grid_viewport(None)
+                    self._wait_until(settled, 'Persisted thumbnails did not return from disk.')
+                    disk_ms = (time.perf_counter() - started) * 1000.0
+                self.assertEqual(transfers, transport.call_count)
+                self.assertGreater(viewer._thumbnail_source_disk_count, disk_hits)
+                evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+                evidence.mkdir(parents=True, exist_ok=True)
+                (evidence / 'thumbnail-cache-return.json').write_text(
+                    json.dumps({
+                        'photos': len(photos), 'format': '21:9',
+                        'visible': len(first_visible),
+                        'persistent_writes': writes,
+                        'return_binary_requests': transport.call_count - transfers,
+                        'proof_refreshes': viewer._thumbnail_proof_refresh_count,
+                        'return_memory_hits': viewer._thumbnail_warm_cache_hit_count - hits,
+                        'return_disk_hits': viewer._thumbnail_source_disk_count - disk_hits,
+                        'warm_return_ms': warm_ms, 'disk_return_ms': disk_ms,
+                        'disk_read_ms': viewer._thumbnail_disk_ms,
+                        'decode_ms': viewer._thumbnail_decode_ms,
+                        'tk_attach_ms': viewer._thumbnail_tk_ms,
+                        'queue_wait_ms': viewer._thumbnail_queue_wait_ms,
+                        'source': 'real Tk, temporary cache, synthetic PNG transport',
+                    }, indent=2) + '\n', encoding='utf-8',
+                )
+                viewer.close()
 
     def test_disk_hits_attach_while_unrelated_transport_is_blocked(self) -> None:
         """Deliver disk hits without using the occupied network worker.
@@ -5080,8 +5324,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertIn('41 · 7.0 MiB', workspace._storage_text.get())
         workspace._storage_snapshot = (None, None, None, False, 'unavailable')
         workspace._show_storage_snapshot()
-        self.assertIn(workspace._text('storage_title'), workspace._storage_text.get())
-        self.assertIn(workspace._text('storage_unavailable'), workspace._storage_text.get())
+        self.assertEqual('—', workspace._storage_text.get())
+        self.assertIn(
+            workspace._text('storage_unavailable'), workspace._storage_hint.get(),
+        )
         for language in ('en', 'cs', 'de', 'sv'):
             workspace._language = lambda: language
             workspace._show_storage_snapshot()
@@ -5111,15 +5357,131 @@ class NativeGalleryViewerTests(unittest.TestCase):
             workspace._storage_button.winfo_rooty()
             + workspace._storage_button.winfo_height(),
         )
-        self.assertTrue(any(
-            widget.winfo_class() == 'TCombobox'
-            for widget in card.winfo_children()
+        widgets = list(card.winfo_children())
+        for widget in widgets:
+            widgets.extend(widget.winfo_children())
+        self.assertTrue(any(widget.winfo_class() == 'TCombobox' for widget in widgets))
+        self.assertFalse(any(
+            widget.winfo_class() == 'TButton'
+            and 'save' in str(widget.cget('text')).lower()
+            for widget in widgets
         ))
         card.event_generate('<Escape>')
         self.root.update()
         self.assertIsNone(workspace._context_card)
         self.assertIs(workspace._storage_button, self.root.focus_get())
         workspace.destroy()
+
+    def test_storage_quota_applies_on_selection_without_save(self) -> None:
+        """Persist quota selection directly and keep failures in the same card.
+
+        Returns:
+            None: One background write owns the disabled selector, success
+                updates the observed limit, and failure restores its value.
+        """
+        from PIL import ImageGrab
+
+        ui_theme.configure_theme(self.root)
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Storage graphics')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.addCleanup(workspace.destroy)
+        self._wait_until(
+            lambda: workspace._session is session,
+            'Storage fixture did not mount its isolated session.',
+        )
+        # Four, eight and sixteen are real adjacent quota menu choices.
+        workspace._storage_snapshot = (650, 6 * 1024**2, 4 * 1024**3, True, None)
+        workspace._retained_storage_snapshot = (4, 579, 3 * 1024**2, 62, 160 * 1024**2, True)
+        workspace._storage_ram = 292 * 1024**2
+        workspace._show_storage_snapshot()
+        entered = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def persist(value: int) -> bool:
+            """Hold the first save to prove the selector cannot race writes.
+
+            Args:
+                value (int): Selected quota in GiB from the real combobox.
+
+            Returns:
+                bool: True for eight GiB; False models a failed later write.
+            """
+            entered.set()
+            if not release.wait(TEST_GUI_WAIT_SECONDS):
+                raise TimeoutError('The controlled quota write was not released.')
+            return value == 8
+
+        with mock.patch.object(
+            photos_workspace, 'set_thumbnail_cache_limit_gib', side_effect=persist,
+        ) as save:
+            workspace._storage_button.invoke()
+            self.root.update()
+            card = workspace._context_card
+            self.assertIsNotNone(card)
+            widgets = list(card.winfo_children())
+            for widget in widgets:
+                widgets.extend(widget.winfo_children())
+            selector = next(widget for widget in widgets if widget.winfo_class() == 'TCombobox')
+            self.assertFalse(any(
+                widget.winfo_class() == 'TButton'
+                and 'save' in str(widget.cget('text')).lower()
+                for widget in widgets
+            ))
+            selector.set('8')
+            selector.event_generate('<<ComboboxSelected>>')
+            self._wait_until(entered.is_set, 'Quota selection did not start persistence.')
+            self.assertEqual('disabled', str(selector.cget('state')))
+            save.assert_called_once_with(8)
+            release.set()
+            self._wait_until(
+                lambda: str(selector.cget('state')) == 'readonly'
+                and not workspace._context_busy,
+                'Quota persistence did not restore the live selector.',
+            )
+            self.assertEqual(8 * 1024**3, workspace._storage_snapshot[2])
+            selector.event_generate('<<ComboboxSelected>>')
+            self.root.update()
+            save.assert_called_once_with(8)
+            selector.set('16')
+            selector.event_generate('<<ComboboxSelected>>')
+            self._wait_until(
+                lambda: str(selector.cget('state')) == 'readonly'
+                and save.call_count == 2 and not workspace._context_busy,
+                'A failed quota write did not reconcile in place.',
+            )
+            self.assertEqual('8', selector.get())
+            self.assertEqual(8 * 1024**3, workspace._storage_snapshot[2])
+            self.assertIs(card, workspace._context_card)
+        workspace._dismiss_context(restore=False)
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+        evidence.mkdir(parents=True, exist_ok=True)
+        for width in (1180, 720):
+            # Existing desktop and narrow contexts must remain within the root.
+            self.root.geometry(f'{width}x620+0+0')
+            self.root.update()
+            workspace._storage_button.invoke()
+            self.root.update()
+            card = workspace._context_card
+            self.assertGreaterEqual(card.winfo_rootx(), workspace.winfo_rootx())
+            self.assertLessEqual(
+                card.winfo_rootx() + card.winfo_width(),
+                workspace.winfo_rootx() + workspace.winfo_width(),
+            )
+            bounds = (
+                self.root.winfo_rootx(), self.root.winfo_rooty(),
+                self.root.winfo_rootx() + self.root.winfo_width(),
+                self.root.winfo_rooty() + self.root.winfo_height(),
+            )
+            with ImageGrab.grab(bbox=bounds) as captured:
+                captured.save(evidence / f'photos-storage-compact-{width}.png')
+            workspace._dismiss_context(restore=False)
 
     def test_storage_refresh_coalesces_and_preserves_ready_retained_snapshot(self) -> None:
         """Refresh live occupancy without replacing known retained totals early.

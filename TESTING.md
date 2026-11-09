@@ -8916,6 +8916,14 @@ Selection must supersede active detail/prefetch work and queued refresh; adjacen
 lightbox prefetch must lead remaining grid work after foreground/audio. Closing
 or switching views must withdraw cancelled session-gate tickets while an active
 request remains admitted. These follow-up cases have not been runtime-executed.
+The thumbnail return-cache fixture must read persisted bodies through the new
+cache reader and cover missing/corrupt bodies, revoked access, changed content
+and account mismatch. The Windows dense 21:9 scroll fixture renews expired
+proof, confirms no additional media reads, forces RAM eviction, then confirms
+the same content is read from disk. Its retained JSON records actual writes,
+binary requests, RAM/disk hits and return durations on the hosted Windows
+runner. Synthetic media and temporary storage do not establish acceptance in
+the user's installed runtime.
 Cover matching active prefetch adoption with a single media request, repeated
 selection of a live detail, and different-target cancellation. Full preload
 must publish confirmed cached photos during transfer, with zero for bodies
@@ -8944,7 +8952,10 @@ when an unpin copy fails. Retained files do not consume ordinary inventory work.
 The Windows identity regression models a directory-entry stat with inode zero;
 retained cleanup captures direct no-follow path identities and preserves the
 same-file comparison against opened handles.
-Native UI coverage must observe icons without opening Information, preload
+Native UI test test_storage_quota_applies_on_selection_without_save covers
+immediate successful selection, save failure retaining the prior value with an
+inline error, and the disabled serial selector. Native UI coverage must observe
+icons without opening Information, preload
 progress/cancel, persisted Keep preloaded, and returning an album to normal
 cache policy. Use an existing test gallery and avoid unrelated cache deletion.
 

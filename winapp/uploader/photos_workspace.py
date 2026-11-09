@@ -257,6 +257,13 @@ PHOTOS_STORAGE_REFRESH_MS = 2000
 # Consumers: _request_storage_refresh and _poll_storage.
 # Rationale: 80 ms exposes ready totals promptly; polls never perform disk I/O.
 PHOTOS_STORAGE_ACTIVE_POLL_MS = 80
+
+# Purpose: Show quota use as a compact visual beside the measured values.
+# Type: int; Units: pixels; Scope: one Photos storage context.
+# Consumers: PhotosWorkspace._open_storage_context. Rationale: 48 by 4 px
+# provides a legible cue without expanding the compact storage row.
+PHOTOS_STORAGE_BAR_WIDTH = 48
+PHOTOS_STORAGE_BAR_HEIGHT = 4
 # Purpose: Keep progress text clear of the activity ring and cancel action.
 # Type: int. Units: pixels. Scope: one responsive preload status row.
 # Consumers: PhotosWorkspace._on_heading_resize. Rationale: 16 px covers the
@@ -894,16 +901,20 @@ class PhotosWorkspace(ttk.Frame):
         for sequence in ("<Button-3>", "<Button-2>", "<Control-Button-1>"):
             self.tree.bind(sequence, self._tree_context)
         storage_parent = self._storage_parent or self.viewer_pane
-        self._storage_heading = ttk.Frame(storage_parent, style='Card.TFrame')
-        self._storage_heading.pack(fill='x')
+        self._storage_heading = GlassCard(storage_parent, padding=(8, 4))
+        self._storage_heading.pack(anchor='e')
         self._storage_text = tk.StringVar(self, self._text('storage_loading'))
         self._storage_button = ttk.Button(
             self._storage_heading, textvariable=self._storage_text,
-            command=self._open_storage_context, style='Compact.TButton',
+            command=self._open_storage_context, style='Storage.Metric.TButton',
             takefocus=True,
         )
         self._storage_button.pack(side='right')
-        self._storage_icon = None
+        self._storage_icon = create_smooth_icon(
+            self._storage_button, 'local', (16, 16), tone='primary',
+        )
+        if self._storage_icon is not None:
+            self._storage_button.configure(image=self._storage_icon, compound='left')
         self._storage_hint = tk.StringVar(self, self._text('storage_scope_hint'))
         attach_inline_tooltip(
             self._storage_button, self._storage_hint,
@@ -5031,12 +5042,16 @@ class PhotosWorkspace(ttk.Frame):
         total_bytes = (
             self._storage_bytes(used + kept_bytes)
             if ready and used is not None and kept_ready and kept_bytes is not None
-            else self._text('storage_unavailable') if error
             else '—'
         )
         self._storage_text.set(
-            '▧ ' + self._text('storage_title') + ' ' + total_count
-            + ' · ' + total_bytes,
+            '—' if total_count == '—' or total_bytes == '—' else
+            ('' if self._storage_icon is not None else '▧ ')
+            + total_count + ' · ' + total_bytes,
+        )
+        self._storage_hint.set(
+            self._text('storage_scope_hint')
+            + ('\n' + self._text('storage_unavailable') if error else ''),
         )
 
     def _animate_storage_activity(self) -> None:
@@ -5221,83 +5236,176 @@ class PhotosWorkspace(ttk.Frame):
         )
         self._context_content(card, self._text('storage_scope'))
         count, used, limit, ready, _error = self._storage_snapshot
-        ordinary = (
-            self._text('storage_ordinary_detail').format(
-                count=f'{count:,}', used=self._storage_bytes(used),
-                limit=self._storage_bytes(limit),
-            ) if ready and count is not None and used is not None and limit is not None
-            else self._text('storage_ordinary_unknown')
-        )
         galleries, thumbs, thumb_bytes, others, other_bytes, kept_ready = (
             self._retained_storage_snapshot
         )
-        kept = (
+        ordinary_ready = (
+            ready and count is not None and used is not None and limit is not None
+        )
+        kept_complete = kept_ready and all(value is not None for value in (
+            galleries, thumbs, thumb_bytes, others, other_bytes,
+        ))
+        ordinary_hint = (
+            self._text('storage_ordinary_detail').format(
+                count=f'{count:,}', used=self._storage_bytes(used),
+                limit=self._storage_bytes(limit),
+            ) if ordinary_ready else self._text('storage_ordinary_unknown')
+        )
+        kept_hint = (
             self._text('storage_keep_detail').format(
                 galleries=f'{galleries:,}', thumbs=f'{thumbs:,}',
                 thumb_bytes=self._storage_bytes(thumb_bytes),
                 others=f'{others:,}', other_bytes=self._storage_bytes(other_bytes),
-            ) if kept_ready and all(value is not None for value in (
-                galleries, thumbs, thumb_bytes, others, other_bytes,
-            )) else self._text('storage_keep_unknown')
+            ) if kept_complete else self._text('storage_keep_unknown')
         )
-        for description in (ordinary, kept):
-            ttk.Label(
-                card, text=description, style='Card.TLabel', justify='left',
-                wraplength=PHOTOS_INFO_CARD_MAX_WIDTH,
-            ).pack(anchor='w', fill='x', pady=(4, 0))
+        ordinary_value = (
+            f'{count:,} · {self._storage_bytes(used)} / {self._storage_bytes(limit)}'
+            if ordinary_ready else '—'
+        )
+        kept_value = (
+            f'{galleries:,} · {thumbs:,} · {self._storage_bytes(thumb_bytes)}'
+            f'  /  {others:,} · {self._storage_bytes(other_bytes)}'
+            if kept_complete else '—'
+        )
         ram = '—' if self._storage_ram is None else self._storage_bytes(self._storage_ram)
-        ttk.Label(
-            card, text=self._text('storage_ram').format(value=ram),
-            style='Card.TLabel', wraplength=PHOTOS_INFO_CARD_MAX_WIDTH,
-        ).pack(anchor='w', pady=(4, 0))
-        ttk.Label(
-            card, text=self._text('storage_vram'), style='Muted.TLabel',
-        ).pack(anchor='w')
-        ttk.Label(
-            card, text=self._text('storage_limit'), style='Card.TLabel',
-        ).pack(anchor='w', pady=(6, 0))
+        rows = (
+            ('local', '▧', ordinary_value, ordinary_hint),
+            ('pin', '⌖', kept_value, kept_hint),
+            ('list', '≡', ram, self._text('storage_ram').format(value=ram)),
+            ('info', 'ⓘ', '—', self._text('storage_vram')),
+        )
+        for icon, fallback, value, hint in rows:
+            row = ttk.Frame(card, style='Card.TFrame')
+            row.pack(anchor='w', fill='x', pady=(3, 0))
+            artwork = create_smooth_icon(row, icon, (16, 16), tone='primary')
+            mark = ttk.Label(
+                row, image=artwork or '', text='' if artwork else fallback,
+                style='Card.TLabel',
+            )
+            mark.image = artwork
+            mark.pack(side='left', padx=(0, 5))
+            label = ttk.Label(row, text=value, style='Card.TLabel')
+            label.pack(side='left')
+            hint_var = tk.StringVar(row, hint)
+            row.storage_hint = hint_var
+            for widget in (mark, label):
+                attach_inline_tooltip(widget, hint_var, self._storage_surface or self.viewer_pane)
+            if icon == 'local' and ordinary_ready and limit > 0:
+                # A small quota proportion is visual only; accounting remains in
+                # the storage observer and retained files remain outside the limit.
+                bar = tk.Canvas(
+                    row, width=PHOTOS_STORAGE_BAR_WIDTH,
+                    height=PHOTOS_STORAGE_BAR_HEIGHT, highlightthickness=0,
+                    background=_PALETTE['line'],
+                )
+                bar.pack(side='left', padx=(6, 0))
+                bar.create_rectangle(
+                    0, 0, round(PHOTOS_STORAGE_BAR_WIDTH * min(1.0, used / limit)),
+                    PHOTOS_STORAGE_BAR_HEIGHT,
+                    fill=_PALETTE['primary'], outline='',
+                )
+                attach_inline_tooltip(bar, hint_var, self._storage_surface or self.viewer_pane)
+        quota_row = ttk.Frame(card, style='Card.TFrame')
+        quota_row.pack(anchor='w', fill='x', pady=(6, 0))
+        quota_icon = create_smooth_icon(quota_row, 'settings', (16, 16), tone='primary')
+        quota_label = ttk.Label(
+            quota_row, image=quota_icon or '', text='' if quota_icon else '⚙',
+            style='Card.TLabel',
+        )
+        quota_label.image = quota_icon
+        quota_label.pack(side='left', padx=(0, 5))
+        quota_hint = tk.StringVar(quota_row, self._text('storage_limit'))
+        quota_row.storage_hint = quota_hint
+        attach_inline_tooltip(quota_label, quota_hint, self._storage_surface or self.viewer_pane)
         quota = tk.StringVar(card)
         current_limit = self._storage_snapshot[2]
         quota.set(str((current_limit or THUMBNAIL_DISK_DEFAULT_BYTES) // 1024**3))
-        ttk.Combobox(
-            card, textvariable=quota, state='readonly', width=8,
+        selector = ttk.Combobox(
+            quota_row, textvariable=quota, state='readonly', width=4,
             values=[str(value) for value in THUMBNAIL_CACHE_LIMIT_CHOICES_GIB],
-        ).pack(anchor='w')
-        self._context_action(
-            card, self._text('storage_save'),
-            lambda: self._save_storage_limit(card, quota),
         )
+        selector.pack(side='left')
+        ttk.Label(quota_row, text='GiB', style='Muted.TLabel').pack(side='left', padx=(4, 0))
+        attach_inline_tooltip(selector, quota_hint, self._storage_surface or self.viewer_pane)
+        status = ttk.Label(card, text='', style='Muted.TLabel')
+        selector.bind(
+            '<<ComboboxSelected>>',
+            lambda _event: self._save_storage_limit(quota, selector, status),
+        )
+        selector.bind(
+            '<Return>',
+            lambda _event: self._save_storage_limit(quota, selector, status),
+        )
+        self._tag_context_widget(selector)
         self._place_context(card)
 
-    def _save_storage_limit(self, card: GlassCard, quota: tk.StringVar) -> None:
-        """Persist the explicitly selected shared quota without blocking Tk.
+    def _save_storage_limit(
+        self, quota: tk.StringVar, selector: ttk.Combobox, status: ttk.Label,
+    ) -> None:
+        """Persist one selected quota off Tk while preventing competing writes.
 
         Args:
-            card (GlassCard): Exact originating settings context.
             quota (tk.StringVar): Selected ordinary thumbnail limit in GiB.
+            selector (ttk.Combobox): Read-only selector disabled during the write.
+            status (ttk.Label): Inline error destination in the originating card.
         Returns:
-            None: Shows success only after the config owner confirms persistence.
+            None: Restores the previous selection on failure and refreshes the
+                observation after a successful configuration write.
         """
+        previous = (self._storage_snapshot[2] or THUMBNAIL_DISK_DEFAULT_BYTES) // 1024**3
         try:
             value = int(quota.get())
         except ValueError:
+            quota.set(str(previous))
             return
+        if value not in THUMBNAIL_CACHE_LIMIT_CHOICES_GIB or self._context_busy:
+            quota.set(str(previous))
+            return
+        if value == previous:
+            return
+        selector.configure(state='disabled')
+        status.configure(text='')
+        status.pack_forget()
+        self._context_busy = True
 
-        def save() -> Callable[[], None]:
-            """Publish the shared quota through the existing config owner.
+        def finish(success: bool) -> None:
+            """Reconcile the saved quota and restore the still-visible control.
+
+            Args:
+                success (bool): Whether the configuration owner saved the value.
+            Returns:
+                None: Publishes a fresh observation or an inline failure.
+            """
+            if success:
+                count, used, _limit, ready, error = self._storage_snapshot
+                self._storage_snapshot = (count, used, value * 1024**3, ready, error)
+                self._request_storage_refresh()
+            if selector.winfo_exists():
+                if not success:
+                    quota.set(str(previous))
+                    status.configure(text=self._text('storage_save_failed'))
+                    status.pack(anchor='w')
+                selector.configure(state='readonly')
+
+        def save() -> None:
+            """Write one quota on a worker and deliver its result to Tk.
 
             Returns:
-                Callable[[], None]: Tk callback showing the confirmed outcome.
+                None: Enqueues exactly one success or failure callback.
             """
-            success = set_thumbnail_cache_limit_gib(value)
-            return lambda: self._context_content(
-                card, self._text('storage_saved' if success else 'storage_save_failed'),
-            )
+            try:
+                success = set_thumbnail_cache_limit_gib(value)
+            except Exception:
+                success = False
+            self._context_results.put((None, lambda: finish(success)))
 
-        self._run_context(
-            card, save,
-            lambda: self._context_content(card, self._text('storage_save_failed')),
-        )
+        try:
+            threading.Thread(target=save, name='photos-storage-quota', daemon=True).start()
+        except RuntimeError:
+            self._context_busy = False
+            finish(False)
+            return
+        self._schedule_poll()
 
     def _cancel_preload(self) -> None:
         """Cancel new reads, or dismiss a completed preload status strip.

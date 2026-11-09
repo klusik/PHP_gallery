@@ -2008,11 +2008,15 @@ Nedávná metadata alba se zobrazí ihned ze stejné živé session a~současně
 obnoví ze serveru, bez dalšího filtrování viditelnosti v~klientovi. Nezměněná
 obnova zachová dlaždice a~aktualizuje stáří ověření. Velké varianty náhledů JPEG
 také zmenší dekódovaný rastr před alokací RGB.
-Popsaný ovladač ve společné hlavičce ukazuje všechny typované uložené
-náhledy a~jejich velikost. Detail odděluje běžnou kvótu od \ui{Keep preloaded}
-a~uvádí uchované náhledy, další média a~galerie.
-RAM znamená working set tohoto procesu ve Windows nebo resident set v~macOS;
-neznámá VRAM zůstává neznámá.
+Indikátor \ui{Thumbnails} a~ovladač \ui{Photo storage} ve společné hlavičce
+mají kompaktní podobu pilulky Watcheru: ikony, krátké počty a~jednoduché pruhy,
+bez dlouhých popisků. Kontextové okno detailů se otevírá na vyžádání u~ovladače.
+Ukazuje všechny typované uložené náhledy a~jejich velikost; detail odděluje
+běžnou kvótu od \ui{Keep preloaded} a~uvádí uchované náhledy, další média
+a~galerie. RAM znamená working set tohoto procesu ve Windows nebo resident set
+v~macOS; neznámá VRAM zůstává neznámá. Výběr kvóty se uloží ihned, bez tlačítka
+Uložit a~potvrzení. Při chybě ukládání zůstane původní hodnota a~chyba se
+zobrazí přímo. Rozsah účtování se nemění.
 Mřížka fotek slučuje opakované signály posunu a~rozložení do jedné plánované
 aktualizace. Viditelné náhledy mají přednost, omezený buffer sousedních řádků
 usnadňuje rychlý návrat. Dekódování zůstává v~pracovním vlákně, aktualizace
@@ -4440,6 +4444,17 @@ na PC pomocí pracovních procesů, nebo požádat server galerie o~jejich vytvo
 Práce s~náhledy a~síťové nahrávání probíhají souběžně v~navazujících fázích
 místo předchozí přípravy celého velkého výběru. Podpora oznamovací oblasti
 umožňuje pokračování sledování nebo ruční úlohy se skrytým hlavním oknem.
+
+Ve~Fotkách používá posouvání omezenou paměť RAM a~ověřenou trvalou diskovou
+mezipaměť náhledů. Identita náhledu je~vázána na~vydavatele a~relaci, galerii,
+fotografii, veřejnou způsobilost, silný validátor a~soukromý účet. Opětovné
+využití povolují pouze důkazy platné pro současnou relaci; obnovení důkazu může
+zachovat nezměněný obsah, ale po vypršení nebo zamítnutí přístupu nelze náhled
+znovu použít. Před čtením jednotlivých fotografií klient slučuje obnovu důkazů
+viditelných náhledů přes stávající omezenou aktualizaci katalogu. Platí pro
+veřejná a~způsobilá ne-NSFW média správce. Starší servery a~odpovědi no-store
+zachovávají dosavadní autorizované čtení. Jedno opakování za~stávající interval
+revize omezuje opakovanou aktualizaci.
 
 Stejná aplikace Windows může volitelně provozovat pracovní proces metadat AI
 s~nízkou prioritou. Převezme jednu ověřenou analytickou úlohu, stáhne pouze

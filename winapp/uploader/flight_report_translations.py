@@ -2697,7 +2697,7 @@ _PHOTOS_PRELOAD_LABELS = {
             'are outside the thumbnail limit. Other stored media can include '
             'audio and older thumbnails.'
         ),
-        'storage_ram': 'App RAM: {value}',
+        'storage_ram': 'Process RAM: {value}',
         'storage_vram': 'Process VRAM: unavailable',
         'storage_limit': 'Thumbnail limit (GiB) · default 4',
         'storage_save': 'Save limit',
@@ -2754,7 +2754,7 @@ _PHOTOS_PRELOAD_LABELS = {
             'mimo limit náhledů. Další soubory mohou zahrnovat audio '
             'a starší náhledy.'
         ),
-        'storage_ram': 'RAM aplikace: {value}',
+        'storage_ram': 'RAM procesu: {value}',
         'storage_vram': 'VRAM procesu: nedostupná',
         'storage_limit': 'Limit náhledů (GiB) · výchozí 4',
         'storage_save': 'Uložit limit',
@@ -2811,7 +2811,7 @@ _PHOTOS_PRELOAD_LABELS = {
             'Galerien zählen nicht zum Vorschaulimit. Weitere Medien können '
             'Audio und ältere Vorschaubilder enthalten.'
         ),
-        'storage_ram': 'App-RAM: {value}',
+        'storage_ram': 'Prozess-RAM: {value}',
         'storage_vram': 'Prozess-VRAM: nicht verfügbar',
         'storage_limit': 'Vorschau-Limit (GiB) · Standard 4',
         'storage_save': 'Limit speichern',
@@ -2869,7 +2869,7 @@ _PHOTOS_PRELOAD_LABELS = {
             'räknas inte mot miniatyrgränsen. Övriga medier kan innehålla ljud '
             'och äldre miniatyrer.'
         ),
-        'storage_ram': 'Appens RAM: {value}',
+        'storage_ram': 'Processens RAM: {value}',
         'storage_vram': 'Process-VRAM: inte tillgängligt',
         'storage_limit': 'Miniatyrgräns (GiB) · standard 4',
         'storage_save': 'Spara gräns',

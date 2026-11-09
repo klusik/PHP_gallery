@@ -2015,11 +2015,15 @@ Recent album metadata appears immediately from the~same live session while
 a~fresh server read follows, without client visibility filtering. Unchanged
 refreshes keep tiles and~update their verification ages. Large JPEG thumbnail
 variants also reduce the~decoder raster before RGB allocation.
-The~labelled control in~the~shared header shows all~stored typed thumbnails
-and~their bytes. Its~detail separates ordinary quota and~\ui{Keep preloaded},
-listing retained
-thumbnails, other media and~galleries separately. RAM means this process's Windows
-working set or~macOS resident set; unknown VRAM remains unknown.
+The~shared-header \ui{Thumbnails} indicator and~\ui{Photo storage} control use
+the~compact Watcher-pill style: icons, short counts and~simple bars, without
+long labels. The~storage popup opens on~demand, anchored to~its control. It~shows
+all~stored typed thumbnails and~their bytes; its~detail separates ordinary quota
+and~\ui{Keep preloaded}, listing retained thumbnails, other media and~galleries
+separately. RAM means this process's Windows working set or~macOS resident set;
+unknown VRAM remains unknown. Selecting a~quota saves it~immediately, without
+a~Save button or~confirmation. A~save failure keeps the~previous value and
+shows the~error inline. Accounting scopes do~not~change.
 The~photo grid combines repeated scroll/layout signals into one scheduled
 viewport update. Visible thumbnails load first, with a~bounded neighboring-row
 buffer for~quick reversals. Decoding stays in~a~worker and~Tk image updates
@@ -2159,6 +2163,15 @@ The~tree restores expanded and~collapsed branches for each linked site and
 account. Use the~circular arrow beside the~album title to~refresh its photos.
 WinApp checks the~visible Admin album's index about every 30~seconds and
 reuses unchanged thumbnails. Older servers support manual refresh.
+Scrolling uses bounded RAM and~the~verified persistent disk cache. Thumbnail
+reuse is~bound to~the~issuer, session, gallery, photo, public eligibility,
+strong validator and~private account. Current proof timestamps and~row epochs
+authorize reuse; proof renewal may retain unchanged content, while expired or
+denied access cannot reuse it. Before per-photo reads, WinApp coalesces expired
+visible-thumbnail proof renewal through the~existing bounded catalogue refresh.
+This supports public and~eligible non-NSFW Admin media; older servers and
+no-store responses keep their existing authorized reads. One retry per~existing
+revision interval bounds repeated refresh.
 Select photos with~Control-click on~Windows, Command-click on~macOS or
 the~photo menu. The~context menu can delete one photo or~the~selection.
 WinApp uses the~current Admin Photos link. Confirm each batch of~up

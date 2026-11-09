@@ -2237,11 +2237,17 @@ Aktuelle Albumsnapshots derselben Sitzung erscheinen sofort, während der Server
 sie erneuert, ohne zusätzliche Sichtbarkeitsfilter im Client. Gleiche Zeilen
 behalten Kacheln und erhalten aktuelle Prüfzeiten. Große JPEG-Miniaturen
 verkleinern das Dekoderraster ebenfalls vor der RGB-Zuweisung.
-Das beschriftete Element in der gemeinsamen Kopfzeile zeigt alle typisierten
-gespeicherten Miniaturen und deren Bytes. Details trennen normale Quote und
-\ui{Keep preloaded} und führen aufbewahrte
-Miniaturen, andere Medien und Galerien getrennt auf. RAM bezeichnet nur Working Set
-dieses Windows-Prozesses oder Resident Set unter macOS; VRAM bleibt unbekannt.
+Der Indikator \ui{Thumbnails} und das Element \ui{Photo storage} in der
+gemeinsamen Kopfzeile verwenden den kompakten Watcher-Pillenstil: Symbole, kurze
+Zahlen und einfache Balken ohne lange Beschriftungen. Das Detail-Popup öffnet
+sich bei Bedarf am Bedienelement. Es zeigt alle typisierten gespeicherten
+Miniaturen und deren Bytes; Details trennen normale Quote und \ui{Keep preloaded}
+und führen aufbewahrte Miniaturen, andere Medien und Galerien getrennt auf. RAM
+bezeichnet nur Working Set dieses Windows-Prozesses oder Resident Set unter
+macOS; VRAM bleibt unbekannt. Die Auswahl einer Quote wird sofort gespeichert,
+ohne Speichern-Schaltfläche oder Bestätigung. Bei einem Speicherfehler bleibt
+der vorherige Wert erhalten und der Fehler wird direkt angezeigt. Der
+Abrechnungsumfang bleibt unverändert.
 Das Fotoraster fasst wiederholte Scroll- und Layoutsignale in einer geplanten
 Ansichtsaktualisierung zusammen. Sichtbare Miniaturen haben Vorrang; ein
 begrenzter Puffer benachbarter Zeilen erleichtert schnelle Richtungswechsel.
@@ -2395,6 +2401,17 @@ und Konto. Der runde Pfeil neben dem Albumtitel aktualisiert die Fotos.
 WinApp prüft den Index des sichtbaren Admin-Albums etwa alle 30~Sekunden
 und verwendet unveränderte Miniaturen erneut. Ältere Server unterstützen
 die manuelle Aktualisierung.
+Beim Scrollen nutzt Photos begrenzten RAM und den verifizierten dauerhaften
+Festplatten-Cache. Die Identität einer Miniatur ist an Issuer und Sitzung,
+Galerie, Foto, öffentliche Berechtigung, starken Validator und privates Konto
+gebunden. Nur aktuelle Sitzungsnachweise erlauben die Wiederverwendung; eine
+Nachweiserneuerung kann unveränderte Inhalte behalten, abgelaufener oder
+verweigerter Zugriff jedoch nicht. Vor einzelnen Fotoabrufen bündelt WinApp
+die Erneuerung abgelaufener Nachweise sichtbarer Miniaturen über die bestehende
+begrenzte Katalogaktualisierung. Dies gilt für öffentliche und zulässige
+NSFW-freie Admin-Medien. Ältere Server und no-store-Antworten behalten ihre
+bisherigen autorisierten Abrufe. Ein Wiederholungsversuch pro bestehendem
+Revisionsintervall begrenzt wiederholte Aktualisierungen.
 Wählen Sie Fotos per Strg-Klick unter Windows, Command-Klick unter macOS
 oder im Fotomenü. Das Kontextmenü löscht ein Foto oder die Auswahl.
 WinApp nutzt die aktuelle Admin-Verknüpfung. Bestätigen Sie in der Anwendung

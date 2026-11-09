@@ -443,6 +443,19 @@ cleanup failure keeps the existing marker and remaining retained files for
 recovery. Disk layout compatibility remains supported while prior caches exist;
 usage is unknown and no older cache file is guessed from its opaque hash.
 
+The Photos viewer uses bounded thumbnail RAM and the verified persistent disk
+cache during scrolling. Its thumbnail identity is owned by the issuer/session,
+gallery, photo, public eligibility, strong validator and private account.
+Proof timestamps and row epochs authorize reuse only under the current session
+proof; renewal preserves unchanged content while replacing that proof, and
+expired or denied access cannot reuse the entry. Before individual photo reads,
+the viewer coalesces expired visible-thumbnail renewal through the existing
+bounded metadata-catalogue refresh. Public and eligible non-NSFW Admin media
+use this path. Older servers and no-store responses retain their existing
+authorized reads, with the existing single revision-interval retry bound
+preventing refresh storms. Regression evidence uses synthetic media and isolated
+temporary caches; installed-runtime acceptance remains a separate observation.
+
 Preload diagnostics now share the pure Photos formatter with the native viewer.
 Listing, local-cache, transfer and verification failures retain safe source and
 response facts, and terminal events retain the actual counts. Background
