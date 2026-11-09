@@ -1,5 +1,53 @@
 # Patch notes
 
+## Version 1.0.7
+
+Improved the Windows companion with compact Watcher controls, configurable
+photo cards, and safer restoration of active capture after a normal restart.
+
+### Highlights
+
+#### Watcher in Photos
+
+- Added a compact capture display with status, queued count, last scan, and a
+  Stop action while keeping the gallery visible.
+- Restored eligible active capture after normal application exit using the
+  saved gallery, account, queue, and recorder state after validation.
+- Cancelled ordinary restart intent when capture is stopped, finished, or
+  unlinked; sessions that cannot be verified remain available for recovery.
+
+#### Photo card display
+
+- Added Default, 16:9, 21:9, 4:3, 1:1, 4:5, and 9:16 card formats with
+  immediate local preferences for each account and gallery.
+- Improved preview cropping, selection outlines, and spacing while preserving
+  original images and the full-size viewer.
+
+### Technical Details
+
+#### Windows companion
+
+- Updated `winapp/gallery_watch_upload.pyw` and
+  `winapp/uploader/photos_workspace.py` for capture status, safe stopping, and
+  guarded restart continuation.
+- Added `winapp/uploader/gallery_view_preferences.py` and updated
+  `winapp/uploader/native_gallery_viewer.py` for local card preferences and
+  responsive preview geometry.
+- Updated recorder coordination, interface translations, compatibility
+  guidance, and all four manual sources.
+- Raised the independent `winapp/VERSION` to `1.0.7`.
+
+#### Tests
+
+- Added and updated WinApp regression coverage for card formats, selection
+  geometry, capture controls, restart validation, and queue recovery.
+
+### User Impact
+
+- Windows companion users gained compact capture controls and per-gallery card
+  layouts without changing the web gallery display.
+- Public visitor and administrator web behavior did not change.
+
 ## Version 1.0.6
 
 PHP Gallery 1.0.6 updated the Windows companion to show Watcher activity

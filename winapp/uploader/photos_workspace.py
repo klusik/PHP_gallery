@@ -46,6 +46,7 @@ from .gallery_media_cache import (
     GalleryMediaCache,
     MEDIA_THUMBNAIL_CACHE_MAX_BYTES as THUMBNAIL_DISK_DEFAULT_BYTES,
 )
+from .gallery_view_preferences import PHOTO_CARD_FORMATS, normalize_card_format
 from .config import (
     THUMBNAIL_CACHE_LIMIT_CHOICES_GIB, set_thumbnail_cache_limit_gib,
 )
@@ -186,6 +187,19 @@ PHOTOS_INFO_PANE_ROW_INSET = 24
 # Consumers: PhotosWorkspace._on_heading_resize.
 # Rationale: 440 pixels gives the localized switch and title useful space.
 PHOTOS_HEADING_STACK_WIDTH = 440
+
+# Purpose: Reserve readable title space beside both desktop toolbar groups.
+# Type: int. Units: pixels. Scope: selected-gallery heading.
+# Consumers: PhotosWorkspace._on_heading_resize.
+# Rationale: 120 pixels avoids collapsing the gallery name to a sliver.
+PHOTOS_HEADING_TITLE_MINIMUM = 120
+
+# Purpose: Size compact photo-format silhouettes in the gallery heading.
+# Type: tuple[int, int]. Units: logical pixels. Scope: one format button.
+# Consumers: PhotosWorkspace._build_widgets.
+# Rationale: 28 by 18 keeps portrait silhouettes legible while the icon and
+# short ratio label still fit together in one compact toolbar control.
+PHOTOS_CARD_FORMAT_ICON_SIZE = (28, 18)
 
 # Purpose: Keep the recording dot compact beside a gallery name.
 # Type: int. Units: pixels. Scope: one tree or heading indicator.
@@ -355,6 +369,10 @@ class PhotosWorkspace(ttk.Frame):
             Load the saved explicit gallery ID for the current account.
         save_selected_gallery (Callable[[LinkingSession, int], None] | None):
             Save an explicit selection that came from a fresh server row.
+        load_card_format (Callable[[LinkingSession, int], str] | None):
+            Load a local format for this verified account and gallery.
+        save_card_format (Callable[[LinkingSession, int, str], bool] | None):
+            Save a local format; True confirms persistence and False refuses it.
         catalogue_cache (_CatalogueCacheFactory | None): Create the account-and-
             scope-bound structure cache, or omit optional local persistence.
         load_tree_width (Callable[[], int | None] | None):
@@ -367,6 +385,8 @@ class PhotosWorkspace(ttk.Frame):
             Persist a settled inspector width.
         storage_parent (tk.Misc | None): Optional global header for storage.
         storage_surface (tk.Misc | None): Global context-card placement surface.
+        diagnostic_callback (Callable[[str], None] | None): Optional receiver
+            for sanitized Photos failures.
     """
 
     def __init__(
@@ -386,6 +406,8 @@ class PhotosWorkspace(ttk.Frame):
         save_tree_state: Callable[[LinkingSession, dict[int, bool]], None] | None = None,
         load_selected_gallery: Callable[[LinkingSession], int | None] | None = None,
         save_selected_gallery: Callable[[LinkingSession, int], None] | None = None,
+        load_card_format: Callable[[LinkingSession, int], str] | None = None,
+        save_card_format: Callable[[LinkingSession, int, str], bool] | None = None,
         catalogue_cache: _CatalogueCacheFactory | None = None,
         load_tree_width: Callable[[], int | None] | None = None,
         save_tree_width: Callable[[int], None] | None = None,
@@ -420,6 +442,10 @@ class PhotosWorkspace(ttk.Frame):
                 Optional account-scoped preferred gallery reader.
             save_selected_gallery (Callable[[LinkingSession, int], None] | None):
                 Optional account-scoped explicit-selection writer.
+            load_card_format (Callable[[LinkingSession, int], str] | None):
+                Optional reader for the gallery's local card-format key.
+            save_card_format (Callable[[LinkingSession, int, str], bool] | None):
+                Optional writer returning True only after local persistence.
             catalogue_cache (_CatalogueCacheFactory | None): Optional verified
                 identity cache factory; file access
                 occurs only on background workers.
@@ -455,6 +481,10 @@ class PhotosWorkspace(ttk.Frame):
         self._save_tree_state = save_tree_state
         self._load_selected_gallery = load_selected_gallery
         self._save_selected_gallery = save_selected_gallery
+        self._load_card_format = load_card_format
+        self._save_card_format = save_card_format
+        self._card_format_overrides: dict[int, str] = {}
+        self._card_format_unsaved: set[int] = set()
         self._catalogue_cache_factory = catalogue_cache
         self._load_tree_width = load_tree_width
         self._save_tree_width = save_tree_width
@@ -884,10 +914,13 @@ class PhotosWorkspace(ttk.Frame):
         self._gallery_heading.pack(fill="x", padx=8, pady=(4, 6))
         self._gallery_heading.columnconfigure(0, weight=1)
         self._heading_stacked: bool | None = None
+        # The progress strip follows the occupied heading rows: one desktop
+        # row, two rows with paired controls, or three when groups cannot fit.
+        self._heading_preload_row = 1
         self._heading_title = ttk.Frame(self._gallery_heading, style="Card.TFrame")
         self._heading_controls = ttk.Frame(self._gallery_heading, style="Card.TFrame")
         self._heading_title.grid(row=0, column=0, sticky="ew")
-        self._heading_controls.grid(row=0, column=1, sticky="e")
+        self._heading_controls.grid(row=0, column=2, sticky="e")
         self._cache_tooltip = tk.StringVar(self, self._text('cache_unknown'))
         self._cache_button = icon_button(
             self._heading_controls, '◌', self._open_cache_context,
@@ -917,6 +950,40 @@ class PhotosWorkspace(ttk.Frame):
             command=self._sync_subgalleries,
         )
         self._subgallery_switch.pack(side="right")
+        self._card_format_controls = ttk.Frame(
+            self._gallery_heading, style="Card.TFrame",
+        )
+        self._card_format_controls.grid(row=0, column=1, sticky="w")
+        self._card_format_buttons: dict[str, ttk.Button] = {}
+        self._card_format_images: dict[tuple[str, bool], ThemeImage | None] = {}
+        self._card_format_hint = tk.StringVar(self, self._text("card_format_hint"))
+        for index, key in enumerate(PHOTO_CARD_FORMATS):
+            caption = self._text("card_format_default") if key == "default" else key
+            for selected in (False, True):
+                self._card_format_images[(key, selected)] = create_smooth_icon(
+                    self, "aspect_" + key, PHOTOS_CARD_FORMAT_ICON_SIZE,
+                    tone="primary" if selected else "muted",
+                )
+            artwork = self._card_format_images[(key, False)]
+            button = ttk.Button(
+                self._card_format_controls, text=caption,
+                image=artwork if artwork is not None else "", compound="top",
+                style="Format.Photos.Icon.TButton", state="disabled",
+                takefocus=True, width=-1,
+                command=lambda value=key: self._activate_card_format(value),
+            )
+            button.grid(row=0, column=index, sticky="ew")
+            attach_inline_tooltip(button, self._card_format_hint, self.viewer_pane)
+            self._card_format_buttons[key] = button
+        self._card_format_notice = tk.StringVar(self, "")
+        notice = ttk.Label(
+            self._card_format_controls, textvariable=self._card_format_notice,
+            style="Card.TLabel",
+        )
+        notice.grid(row=0, column=len(PHOTO_CARD_FORMATS))
+        self._card_format_notice_label = notice
+        self._card_format_columns = len(PHOTO_CARD_FORMATS)
+        attach_inline_tooltip(notice, self._card_format_hint, self.viewer_pane)
         self._recording_heading = ttk.Label(
             self._heading_title, text="", style="Card.TLabel",
         )
@@ -1228,25 +1295,63 @@ class PhotosWorkspace(ttk.Frame):
             event (tk.Event): Heading width change from Tk geometry management.
 
         Returns:
-            None: Wraps the title and keeps preload progress below both control
-                rows without changing layout during recording pulses.
+            None: Keeps one row on desktop and pairs the control groups below
+                the title when they fit, stacking each only when necessary.
+                Preload progress remains below every occupied heading row.
         """
-        stacked = event.width < PHOTOS_HEADING_STACK_WIDTH
-        if stacked != self._heading_stacked:
+        buttons = list(self._card_format_buttons.values())
+        columns = len(buttons)
+        while columns > 1:
+            needed = sum(
+                max(button.winfo_reqwidth() for button in buttons[column::columns])
+                for column in range(columns)
+            ) + self._card_format_notice_label.winfo_reqwidth()
+            if needed <= event.width:
+                break
+            columns -= 1
+        if columns != self._card_format_columns:
+            self._card_format_columns = columns
+            for index, button in enumerate(buttons):
+                button.grid_configure(row=index // columns, column=index % columns)
+            self._card_format_notice_label.grid_configure(
+                row=(len(buttons) - 1) // columns, column=columns,
+            )
+        groups_width = (
+            self._heading_controls.winfo_reqwidth()
+            + self._card_format_controls.winfo_reqwidth()
+        )
+        stacked = (
+            event.width < PHOTOS_HEADING_STACK_WIDTH
+            or groups_width + PHOTOS_HEADING_TITLE_MINIMUM > event.width
+        )
+        paired = stacked and groups_width <= event.width
+        preload_row = 2 if paired else 3 if stacked else 1
+        if (stacked != self._heading_stacked
+                or preload_row != self._heading_preload_row):
             self._heading_stacked = stacked
-            self._heading_controls.grid(
+            self._heading_preload_row = preload_row
+            self._heading_title.grid_configure(columnspan=3 if stacked else 1)
+            self._card_format_controls.grid(
                 row=1 if stacked else 0, column=0 if stacked else 1,
-                sticky="w" if stacked else "e", pady=(4, 0) if stacked else 0,
+                columnspan=2 if paired else 3 if stacked else 1, sticky="w",
+            )
+            self._heading_controls.grid(
+                row=1 if paired else 2 if stacked else 0,
+                column=0 if stacked and not paired else 2,
+                columnspan=3 if stacked and not paired else 1,
+                sticky="w" if stacked and not paired else "e",
+                pady=(4, 0) if stacked and not paired else 0,
             )
             if self._preload_strip.winfo_manager() == 'grid':
-                self._preload_strip.grid_configure(row=2 if stacked else 1)
+                self._preload_strip.grid_configure(row=preload_row)
         self._preload_label.configure(wraplength=max(
             1, event.width - self._preload_cancel.winfo_reqwidth()
             - self._preload_activity.winfo_reqwidth() - PHOTOS_PRELOAD_CONTROL_GAP,
         ))
         available = event.width
         if not stacked:
-            available -= self._heading_controls.winfo_reqwidth()
+            available -= (self._heading_controls.winfo_reqwidth()
+                          + self._card_format_controls.winfo_reqwidth())
         self._gallery_title_label.configure(wraplength=max(1, available - 16))
 
     def _on_viewer_resize(self, event: tk.Event) -> None:
@@ -1425,6 +1530,8 @@ class PhotosWorkspace(ttk.Frame):
         self._cancel_catalogue_continuation()
         with self._photo_diagnostic_lock:
             self._session = session
+        self._card_format_overrides.clear()
+        self._card_format_unsaved.clear()
         self._tree_state = (
             self._load_tree_state(session)
             if session is not None and self._load_tree_state is not None else {}
@@ -1501,6 +1608,9 @@ class PhotosWorkspace(ttk.Frame):
         self._children_by_parent.clear()
         self._selected_gallery_id = None
         self.add_child_button.configure(state="disabled")
+        for button in self._card_format_buttons.values():
+            button.configure(state="disabled")
+        self._card_format_notice.set("")
         self._gallery_title.set("")
         self._recording_heading.configure(image="")
         self._recording_rows.clear()
@@ -2861,6 +2971,7 @@ class PhotosWorkspace(ttk.Frame):
         if session is None:
             return
         self._selected_gallery_id = gallery.gallery_id
+        self._restore_card_format(session, gallery.gallery_id)
         if not implicit and not restore:
             self._user_selected_gallery = True
             self._selection_saved = False
@@ -2917,6 +3028,7 @@ class PhotosWorkspace(ttk.Frame):
                 ) if implicit else None,
             )
             controller = self._viewer._gallery_viewer_controller
+            controller.set_card_format(self._card_format_overrides[gallery.gallery_id])
             controller.on_photos_changed = lambda: self._photos_changed(
                 gallery.gallery_id,
             )
@@ -2933,6 +3045,86 @@ class PhotosWorkspace(ttk.Frame):
         self._refresh_cache_widgets(gallery.gallery_id)
         if self._preload_last is not None:
             self._show_preload_progress(self._preload_last)
+
+    def _restore_card_format(
+        self, session: LinkingSession, gallery_id: int,
+    ) -> None:
+        """Restore the gallery choice without issuing a write on navigation.
+
+        Args:
+            session (LinkingSession): Current Photos account/session identity.
+            gallery_id (int): Gallery whose local preview format is selected.
+        Returns:
+            None: The compact selector reflects saved or session-local intent.
+        """
+        if gallery_id not in self._card_format_overrides:
+            value = "default"
+            if self._load_card_format is not None:
+                try:
+                    value = self._load_card_format(session, gallery_id)
+                except (OSError, TypeError, ValueError):
+                    pass
+            self._card_format_overrides[gallery_id] = normalize_card_format(value)
+        key = self._card_format_overrides[gallery_id]
+        for format_key, button in self._card_format_buttons.items():
+            selected = format_key == key
+            artwork = self._card_format_images[(format_key, selected)]
+            button.configure(
+                state="normal", image=artwork if artwork is not None else "",
+                style=("Selected.Format.Photos.Icon.TButton" if selected
+                       else "Format.Photos.Icon.TButton"),
+            )
+        unsaved = gallery_id in self._card_format_unsaved
+        self._card_format_notice.set("!" if unsaved else "")
+        self._card_format_hint.set(self._text(
+            "card_format_unsaved" if unsaved else "card_format_hint",
+        ))
+
+    def _activate_card_format(self, key: str) -> None:
+        """Apply a visible format choice to the currently selected gallery.
+
+        Args:
+            key (str): Supported local photo-card format selected by the user.
+
+        Returns:
+            None: A current session and gallery receive the immediate choice.
+        """
+        session = self._session
+        gallery_id = self._selected_gallery_id
+        if session is not None and gallery_id is not None:
+            self._choose_card_format(session, gallery_id, key)
+
+    def _choose_card_format(
+        self, session: LinkingSession, gallery_id: int, key: str,
+    ) -> None:
+        """Apply one photo-card format and save only its local gallery choice.
+
+        Args:
+            session (LinkingSession): Exact session captured when opening choices.
+            gallery_id (int): Exact gallery captured by the format action.
+            key (str): Supported key activated in the visible format strip.
+        Returns:
+            None: Existing thumbnails reflow immediately; persistence failure
+                leaves the displayed intent and a compact visible warning.
+        """
+        if (session is not self._session or session is not self._session_provider()
+                or gallery_id != self._selected_gallery_id
+                or key not in PHOTO_CARD_FORMATS):
+            return
+        self._card_format_overrides[gallery_id] = key
+        if self._viewer is not None:
+            self._viewer._gallery_viewer_controller.set_card_format(key)
+        saved = False
+        if self._save_card_format is not None:
+            try:
+                saved = self._save_card_format(session, gallery_id, key) is True
+            except (OSError, TypeError, ValueError):
+                pass
+        if saved:
+            self._card_format_unsaved.discard(gallery_id)
+        else:
+            self._card_format_unsaved.add(gallery_id)
+        self._restore_card_format(session, gallery_id)
 
     def _sync_subgalleries(self) -> None:
         """Refresh the selected title and project its direct child folder strip.
@@ -4579,8 +4771,8 @@ class PhotosWorkspace(ttk.Frame):
             return
         if self._preload_worker is not None and self._preload_worker.is_alive():
             self._preload_strip.grid(
-                row=2 if self._heading_stacked else 1,
-                column=0, columnspan=2, sticky='ew',
+                row=self._heading_preload_row,
+                column=0, columnspan=3, sticky='ew',
             )
             return
         diagnostic_generation = self._generation
@@ -4602,8 +4794,8 @@ class PhotosWorkspace(ttk.Frame):
         self._preload_unpin = pinned is False
         self._preload_text.set(self._text('preload_listing'))
         self._preload_strip.grid(
-            row=2 if self._heading_stacked else 1,
-            column=0, columnspan=2, sticky='ew', pady=(4, 0),
+            row=self._heading_preload_row,
+            column=0, columnspan=3, sticky='ew', pady=(4, 0),
         )
         self._preload_bar.configure(mode='indeterminate')
         self._preload_bar.grid()
@@ -4688,8 +4880,8 @@ class PhotosWorkspace(ttk.Frame):
             self._set_preload_activity(False)
             return
         self._preload_strip.grid(
-            row=2 if self._heading_stacked else 1,
-            column=0, columnspan=2, sticky='ew', pady=(4, 0),
+            row=self._heading_preload_row,
+            column=0, columnspan=3, sticky='ew', pady=(4, 0),
         )
         gallery = self._galleries.get(progress.gallery_id)
         title = gallery.title if gallery is not None else ''

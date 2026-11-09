@@ -67,9 +67,24 @@ Installed multi-link use is unknown.
 [Apple Keychain implementations](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains).
 
 Existing linked upload target selection is enabled for a verified local Windows
-profile after native mode/vault/restart qualification at `4fcdd4b5`. After
-restart, the saved linked mode is disconnected and needs explicit selection;
-only an explicit choice can return to the saved API key.
+profile after native mode/vault/restart qualification at `4fcdd4b5`. Without
+a separately verified active-capture restart checkpoint, the saved linked mode
+starts disconnected and needs explicit selection; only an explicit choice can
+return to the saved API key.
+An active Watcher may now retain ordinary-Quit intent in the separate
+credential-free `watcher-restart.json`, using the same strict profile/session,
+nonce, target, scope, 24-hour age and filesystem checks as the updater envelope.
+The updater payload remains unchanged. Ordinary shutdown first settles accepted
+writers and confirms closure of the exact old contextual key. Startup prioritizes
+the verified saved upload issuer, restores its OS-vault-backed grant and
+reverifies that account/gallery before issuing fresh contextual access and
+admitting the same queue/recorder. Partial record consumption can restore only
+the exact owned claims before the worker gate opens, never an admitted run.
+Stop, Finish and unlink cancel this intent;
+stopped, mismatched, expired or uncertain work never becomes fresh capture.
+Unsaved transient grants and forced termination retain explicit recovery.
+This is a new source contract with deterministic regression fixtures;
+installed Windows/macOS restart and live simulator acceptance remain unknown.
 On a verified first-run profile, explicit upload-target selection initializes
 local settings before publishing linked mode through the existing two owners.
 The API-key URL and credential stay separate. Pending flights are checked
@@ -115,8 +130,9 @@ drive or an owner-controlled local macOS volume and an unredirected profile.
 The macOS source launcher uses a private file and native workspace lock for
 the second non-secret mode record. Loss or mismatch of one record blocks
 upload work. Both files share the same profile, so loss or rollback of the
-whole profile cannot be detected. After restart, reapprove a live session
-and select its exact target. Older incompatible processes sharing that
+whole profile cannot be detected. After restart without a verified active-capture
+checkpoint, reapprove a live session when needed and select its exact target.
+Older incompatible processes sharing that
 profile must be closed. Point-in-time admission cannot fence external
 filesystem changes. Deployed macOS usage is unknown.
 

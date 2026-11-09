@@ -70,6 +70,12 @@ _PHOTOS_ICON_PADDING = (4, 4)
 # Rationale: 12 pt stays legible within the compact toolbar.
 _PHOTOS_ICON_FONT_SIZE = 12
 
+# Purpose: Keep ratio captions readable beneath their visible shape icons.
+# Type: int. Units: points. Scope: the seven photo-format toolbar choices.
+# Consumers: configure_theme format button styles. Rationale: 8 pt captions
+# fit with 18 px artwork in a compact row without competing with album titles.
+_PHOTO_FORMAT_LABEL_POINTS = 8
+
 # Purpose: Keep the drawn Photos toolbar symbol compact inside its button.
 # Type: int; Units: logical pixels; Scope: Photos icon button artwork.
 # Consumers: SmoothIconButton._refresh_icon.
@@ -462,7 +468,33 @@ def create_smooth_icon(
                   fill=color, width=width_px, joint="curve")
 
     # These simple logical coordinates define icon silhouettes, not sizing limits.
-    if key == "folder":
+    if key.startswith("aspect_"):
+        ratios = {
+            "aspect_default": (4, 3), "aspect_16:9": (16, 9),
+            "aspect_21:9": (21, 9), "aspect_4:3": (4, 3),
+            "aspect_1:1": (1, 1), "aspect_4:5": (4, 5),
+            "aspect_9:16": (9, 16),
+        }
+        ratio = ratios.get(key)
+        if ratio is None:
+            return None
+        available_width, available_height = width - 4, height - 4
+        factor = min(available_width / ratio[0], available_height / ratio[1])
+        box_width, box_height = ratio[0] * factor, ratio[1] * factor
+        left = (width - box_width) / 2
+        top = (height - box_height) / 2
+        draw.rectangle(
+            (round(left * scale), round(top * scale),
+             round((left + box_width) * scale),
+             round((top + box_height) * scale)),
+            outline=ink, width=stroke,
+        )
+        if key == "aspect_default":
+            line(((round(left) + 2, round(top) + 2),
+                  (round(left) + 4, round(top) + 2)))
+        if tone == "primary":
+            line(((2, height - 1), (width - 2, height - 1)))
+    elif key == "folder":
         color = _PALETTE["card_surface_alt"]
         draw.rounded_rectangle((scale, scale, 42 * scale, 15 * scale),
                                radius=5 * scale, fill=color)
@@ -582,6 +614,15 @@ def create_smooth_icon(
                 bounds, angle % 360, angle % 360 + 105,
                 fill=_PALETTE["primary"], width=stroke,
             )
+        elif key == "queue":
+            draw.rectangle((2 * scale, 2 * scale, 11 * scale, 11 * scale),
+                           outline=color, width=stroke)
+            draw.rectangle((5 * scale, 5 * scale, 14 * scale, 14 * scale),
+                           outline=color, width=stroke)
+        elif key == "clock":
+            draw.ellipse((2 * scale, 2 * scale, 14 * scale, 14 * scale),
+                         outline=color, width=stroke)
+            line(((8, 4), (8, 8), (11, 10)), color)
         elif key == "stop":
             draw.rectangle((cx - 4 * scale, cy - 4 * scale,
                             cx + 4 * scale, cy + 4 * scale), fill=color)
@@ -974,6 +1015,15 @@ def configure_theme(root: tk.Tk) -> None:
             ]}),
         ]},
     )])
+    style.configure("Format.Photos.Icon.TButton", padding=(3, 1),
+                    font=(_ui_font, _PHOTO_FORMAT_LABEL_POINTS), anchor="center")
+    style.configure("Selected.Format.Photos.Icon.TButton",
+                    padding=(3, 1), font=(_ui_font, _PHOTO_FORMAT_LABEL_POINTS),
+                    foreground=colors["primary"], anchor="center",
+                    background=colors["surface_alt"])
+    for format_style in ("Format.Photos.Icon.TButton",
+                         "Selected.Format.Photos.Icon.TButton"):
+        style.map(format_style, foreground=[("focus", colors["focus"])])
     style.configure("Action.Photos.Icon.TButton",
                     padding=(6, 3), font="TkDefaultFont", anchor="w")
     style.configure("IconPrimary.TButton", padding=(3, 3),

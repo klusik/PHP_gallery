@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.0.6}
+\newcommand{\version}{1.0.7}
 \newcommand{\manualdate}{9~november~2026}
 
 \hypersetup{
@@ -2014,14 +2014,27 @@ Dubbelklick eller Enter öppnar lightboxen. Pilar navigerar rutnätet;
 mellanslag markerar eller avmarkerar. Control-klick (Command-klick på~macOS)
 växlar enskilda markeringar; Shift-klick eller Shift-pil väljer ett~förankrat
 intervall inom gränsen på~64~foton. Control-pil (Command-pil på~macOS) flyttar
-fokus utan att~rensa markeringen. Bara valda foton får~en lätt rundad kontur.
+fokus utan att~rensa markeringen. Bara valda foton får~en lätt rundad kontur
+runt den faktiska förhandsvisningen och dess gemensamma kant, utan tomt
+textutrymme under bilden. Valda format har ett kompakt avstånd på 6~pixlar
+mellan kanterna både horisontellt och vertikalt; återstående bredd ligger efter
+sista kolumnen. Standard behåller stabil radhöjd för naturliga förhandsvisningar.
 Filnamn visas i~en kompakt kontrasterande tooltip. Panel och~kontextinformation
 delar behörighetskontrollerade metadata, formatering och~en kort begränsad
 sessionscache.
 Vänster och höger går runt hela albumet. Stäng lightboxen
 eller tryck Escape för att återställa trädet och rutnätet även vid bildfel.
 Miniatyrerna beskär upptäckta svarta fält och visar hela den återstående scenen
-i dess bildförhållande. Foton och miniatyrer har en separat gräns på 600
+i dess bildförhållande. Sju synliga formknappar i albumets verktygsfält
+byter direkt till Standard, 16:9, 21:9, 4:3, 1:1, 4:5 eller 9:16 utan någon
+Spara-knapp. Rektanglar visar bildförhållandena och en diskret accent markerar
+det aktiva valet. Fasta format beskär rutnätets förhandsvisning i mitten;
+original och lightbox behåller sin visning. Valet sparas endast lokalt
+i WinApp, separat för varje galleri och verifierad webbplats/konto.
+Webb- och uppladdningsinställningar är oberoende. Ett litet \textbf{!}
+visar ett lokalt sparfel; den valda vyn behålls och tooltipen förklarar
+ett nytt försök. Bytet använder redan laddade miniatyrer.
+Foton och miniatyrer har en separat gräns på 600
 begäranden per IP och 3\,600 totalt under fem minuter. Vid HTTP~429 visar
 Photos att gränsen har nåtts och pausar förhämtning tills du väljer
 \ui{Retry}. Vid start från källkod måste Pillow finnas i den Python-tolk som används.
@@ -2060,7 +2073,7 @@ Senaste albumdata från samma levande session visas direkt medan servern
 uppdaterar dem, utan extra synlighetsfilter i klienten. Oförändrade rader
 behåller rutorna och får aktuella kontrolltider. Stora JPEG-miniatyrvarianter
 minskar också avkodningsrastret före RGB-allokering.
-Den märkta kontrollen till vänster om Watcher-status visar alla typade sparade
+Den märkta kontrollen i den gemensamma rubriken visar alla typade sparade
 miniatyrer och deras byte. Detaljer skiljer vanlig kvot från \ui{Keep preloaded}
 och visar sparade miniatyrer, andra medier
 och gallerier separat. RAM avser bara denna Windows-process working set eller
@@ -2208,7 +2221,15 @@ den aktuella administratörslänken. Bekräfta varje grupp om högst 64~foton
 i~appen. WinApp använder samma permanenta radering som webbadministrationen.
 Uppdatera och granska albumet efter ett avbrutet svar före nästa bekräftelse.
 Starta Watcher för galleriet i~gallerimenyn eller Watcher-menyn. Inspelningen
-använder en tillfällig nyckel och visas med röd REC-markering. Watcher-ikonen
+använder en tillfällig nyckel och visas med röd REC-markering. Foton förblir
+valt. En liten symbolvisning i rubriken visar Watcher-status, det observerade
+antalet mottagna foton i kön och senaste kontrolltid; ett streck betyder
+ett okänt värde. Tooltipen visar målgalleriet och hela status- och
+köbeskrivningen. Visningen står direkt till vänster om \ui{Thumbnails}.
+Dess Stop-ikon använder den befintliga säkra tömningen av kön och rapporternas
+slutförande; vanlig bevakning kräver inget byte till Watcher-fliken.
+Öppna fliken Watcher i sidomenyn när de fullständiga reglagen
+behövs. Watcher-ikonen
 pulserar rött på alla flikar. En fylld röd punkt markerar målalbumet och dess
 rubrik. En röd ring markerar en stängd gren som döljer det. SimBrief är
 tillgängligt vid en upptäckt flygsimulator. Avslut skickar mottagna bilder,
@@ -2378,8 +2399,8 @@ webbserver och PHP: multipart-hantering kan använda resurser före programmets
 kontroll.
 
 Watcher-skärmen visar målgalleriet, den valda mappsökvägen, bevakningsstatus och
-varningen om källborttagning. \ui{Start Watcher} startar först efter ett
-uttryckligt klick;
+varningen om källborttagning. En inaktiv Watcher startar efter ett
+uttryckligt klick på \ui{Start Watcher};
 medan bevakningen pågår heter samma kontextknapp \ui{Stop Watcher}.
 Under slutförandet öppnar \ui{Show progress} förloppet. Efter ett avbrott
 öppnar \ui{Review pending uploads} den ursprungliga kön. Återanslut och
@@ -2445,8 +2466,18 @@ direkt minimerad till systemfältet. I \ui{Settings > App \& integrations}
 sparas \ui{Start with Windows (minimized to tray)} direkt. Avstängning tar bort
 användarens autostartpost och uppdateringar behåller valet. Installationen
 tillämpar inställningen även om den sista rutan för programstart avmarkeras.
-Python- och källkörningar ändrar inte Windows-autostart. Bevakning och import
-kräver fortfarande ett uttryckligt Start-val.
+Python- och källkörningar ändrar inte Windows-autostart. En inaktiv Watcher och
+manuell import kräver ett uttryckligt Start-val. En aktiv Watcher kan fortsätta
+efter normalt Quit och omstart. Avslut väntar på mottagna skrivningar, verifierar
+den ursprungliga sessionen och kön och bekräftar att den gamla tillfälliga
+Watcher-nyckeln stängts innan en separat omstartspost utan inloggningsuppgifter
+sparas. Inom dess befintliga livslängd på 24~timmar återställs exakt sparat
+konto och galleri och behörigheten kontrolleras före samma kö och inspelning
+får ny tillfällig åtkomst. Stop, Finish och frånkoppling tar bort avsikten;
+stoppad bevakning förblir stoppad. En säkert sparad gallerilänk eller oförändrad
+sparad API-nyckel krävs. Utgångna, återkallade eller osparade tillfälliga länkar
+behöver normal återanslutning; osäkra överföringar och tvingat avslut behåller
+uttrycklig återställning.
 
 En ny programstart öppnar det befintliga fönstret och bevarar pågående arbete.
 En Windows-process äger den gemensamma app-profilen, även mellan programkopior;

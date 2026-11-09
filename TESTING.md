@@ -841,6 +841,30 @@ and rejection of an old session's callback. A distinct failure after a
 transient throttle must remain observable. Header-policy fixtures retain the
 original refusal and storage assertions while checking finite safe facts;
 arbitrary header values, URLs, credentials and local paths must be absent.
+Local card-format fixtures cover immediate display-before-save ordering,
+independent gallery/account choices, natural Default previews, explicit crops,
+stale-action rejection and visible persistence failures. The preference files
+remain separate from tree expansion, upload configuration and website settings.
+Watcher display fixtures cover staying on Photos, worker-owned accepted-photo
+counts and the compact numeric/icon display with full hover descriptions.
+The header Stop action uses the existing drain owner and becomes unavailable
+while finalization proceeds. Native geometry fixtures compare selected tile
+bounds against the actual PhotoImage plus the shared rim at two widths for all
+formats; any spare row or column space stays outside the selection outline.
+Image-bearing tiles must reserve no caption line. At two viewport widths,
+adjacent 21:9 card rims have the same compact six-pixel horizontal and vertical
+gap; stale column minimum widths must not survive format changes.
+These tests belong to the central WinApp owner; ordinary feature BASIC
+does not execute them. Manual acceptance must check the compact header and
+visible shape choices at desktop/narrow widths, keyboard focus and all ratios.
+Ordinary-restart fixtures keep their checkpoint file independent of updater
+intent, preserve exact nonces/profile bindings and reject stopped or changed
+sessions. A partial two-file consumption failure restores the exact claimed
+records only while the worker gate remains closed. They cover accepted-queue
+retention, old contextual-key closure,
+exact saved-issuer startup and original-session admission. Manual qualification
+must still verify a real Quit/relaunch with a securely saved gallery grant,
+pending uploads, Stop/Finish, expired access and no unexpected browser prompt.
 Watcher action fixtures verify idle Begin with saved or absent API credentials,
 with no detected game and with a Photos browsing link. They retain linked-mode
 reconnection and active, pending, draining and manual-import state precedence;
@@ -1591,7 +1615,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.0.6. Release verification uses the
+This guide applies to PHP Gallery Version 1.0.7. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

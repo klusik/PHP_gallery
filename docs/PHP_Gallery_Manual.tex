@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.0.6}
+\newcommand{\version}{1.0.7}
 \newcommand{\manualdate}{9 November 2026}
 
 \hypersetup{
@@ -1961,12 +1961,25 @@ to~open the~lightbox. Arrows navigate the~grid; Space toggles a~photo.
 Control-click (Command-click on~macOS) toggles individual selections;
 Shift-click or~Shift-arrow selects an~anchored range within the~64-photo limit.
 Control-arrow (Command-arrow on~macOS) moves focus without clearing selection.
-Only selected photos have a~small rounded outline. Filename hints use a~compact
+Only selected photos have a~small rounded outline fitted to~the~actual preview
+and~its~shared rim, without an~empty caption area below the~image. Selected
+formats keep a~compact 6-pixel gap between card rims in~both directions;
+remaining viewport width stays after the~last column. Default retains its
+stable natural-preview row reservation.
+Filename hints use a~compact
 contrasting tooltip. The~pane and~context information share authorized metadata
 and~formatting, with a~short bounded session cache. Left/Right loops through
 the~whole album. Close the
 lightbox or~press Escape to~restore the~tree and~grid, including after an~image
-error. Thumbnails trim detected black bands and~fit the~whole remaining scene.
+error. By~default, thumbnails trim detected black bands and~fit the~whole
+remaining scene. Seven visible shape buttons in~the~album toolbar apply
+Default, 16:9, 21:9, 4:3, 1:1, 4:5 or~9:16 immediately, without a~Save step.
+Each rectangle illustrates its~ratio; a~quiet accent marks the~active choice.
+Explicit ratios center-crop grid previews; originals and~the~lightbox retain
+their existing presentation. Choices stay local to~WinApp, separately for~each
+gallery and~verified site/account. Website and~upload settings stay independent.
+A~small \textbf{!} indicates a~local save failure; the~chosen view remains
+applied and~the~tooltip explains how to~retry. Switching uses retained previews.
 Photos and~thumbnails have a~separate
 five-minute limit of~600 requests per IP and~3,600 globally. On~HTTP~429,
 Photos displays the~limit and~pauses speculative requests until \ui{Retry}. Source launches use Pillow
@@ -2002,7 +2015,7 @@ Recent album metadata appears immediately from the~same live session while
 a~fresh server read follows, without client visibility filtering. Unchanged
 refreshes keep tiles and~update their verification ages. Large JPEG thumbnail
 variants also reduce the~decoder raster before RGB allocation.
-The~labelled control left of~Watcher status shows all~stored typed thumbnails
+The~labelled control in~the~shared header shows all~stored typed thumbnails
 and~their bytes. Its~detail separates ordinary quota and~\ui{Keep preloaded},
 listing retained
 thumbnails, other media and~galleries separately. RAM means this process's Windows
@@ -2154,7 +2167,13 @@ operation as~web Admin. Refresh and~review the~album after an~interrupted
 response before confirming another deletion.
 Use \textbf{Use this gallery for Watcher} in~a gallery context or~the~Watcher
 rail menu. WinApp starts capture with a~temporary gallery key and~shows a~red
-REC indicator. The~Watcher rail icon pulses red on~every tab. A~filled red
+REC indicator. Photos remains selected. A~small header display uses icons for
+Watcher state, the~observed accepted-photo count and~the~last scan time.
+A~dash means the~value is~not~yet available. Hover for~the~full gallery,
+state and~queue description. This display sits just left of~\ui{Thumbnails}.
+Its~Stop icon uses the~existing safe queue drain and~report finalization,
+so~ordinary capture needs no~visit to~the~Watcher tab. Open that tab whenever
+its~full controls are~needed. The~Watcher rail icon pulses red on~every tab. A~filled red
 light marks the~capture album and~its heading. A~hollow light marks
 a~collapsed branch that hides it.
 SimBrief is available for a~detected flight simulator. Finish
@@ -2310,7 +2329,7 @@ local and~does not~implicitly send AI work or~PDFs with a~saved legacy key.
 Configure proxy, web-server and~PHP request limits because multipart parsing
 can~consume resources before the~application checks the~request.
 
-\ui{Start Watcher} starts only after an~explicit click; while active the~same
+An~idle Watcher starts after an~explicit \ui{Start Watcher} click; while active the~same
 contextual control is~\ui{Stop Watcher}. While accepted work finishes, it
 opens \ui{Show progress}. After an~interruption, \ui{Review pending uploads}
 opens the~original queue. Reconnect and~select the~same upload gallery before
@@ -2392,8 +2411,17 @@ directly into the~system tray. In~\ui{Settings > App \& integrations},
 \ui{Start with Windows (minimized to tray)} saves immediately; switching it~off
 removes this user's startup entry, and~updates retain that choice. Setup applies
 the~preference even if~the~final application-launch checkbox is~cleared.
-Source/Python runs leave Windows startup unchanged. Watching and~imports still
-need their usual explicit Start action.
+Source/Python runs leave Windows startup unchanged. An~idle Watcher and~manual
+imports need explicit Start. An~active Watcher can~continue after normal Quit
+and~restart: Exit settles accepted writers, verifies the~original session/queue
+and~confirms closure of~the~old temporary Watcher key before saving a~separate
+credential-free restart checkpoint. Within its~existing 24-hour lifetime,
+startup restores the~exact saved gallery/account and~rechecks access before
+admitting the~same queue and~recorder with fresh contextual authority.
+Stop, Finish and~unlink cancel this intent; stopped capture stays stopped.
+A~securely saved gallery grant or~unchanged saved API key is~required.
+Expired/revoked or~unsaved transient links need normal reconnection;
+uncertain uploads and~forced termination retain explicit recovery.
 
 Opening the~app again restores the~existing window and~keeps current work.
 One Windows process owns the~shared app profile, including executable copies;

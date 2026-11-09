@@ -774,7 +774,11 @@ class UpdateControllerTests(unittest.TestCase):
                 controller.app.close.assert_not_called()
 
     def test_launcher_admission_guards_preserve_method_docstrings(self) -> None:
-        """Every work-entry handler refuses new work during installation drain."""
+        """Every work-entry handler refuses new work during installation drain.
+
+        Returns:
+            None: Each entry point checks the update guard before work.
+        """
         import ast
         source = (Path(__file__).resolve().parents[1] / 'gallery_watch_upload.pyw').read_text(encoding='utf-8')
         tree = ast.parse(source)
@@ -783,11 +787,29 @@ class UpdateControllerTests(unittest.TestCase):
         for name in names:
             method = next(node for node in app.body if isinstance(node, ast.FunctionDef) and node.name == name)
             self.assertIsNotNone(ast.get_docstring(method), name)
-            self.assertIsInstance(method.body[1], ast.If, name)
-            self.assertIn('self.updates.blocked()', ast.unparse(method.body[1].test), name)
+            leading_admission_tests = []
+            for statement in method.body[1:]:
+                if not isinstance(statement, ast.If):
+                    break
+                leading_admission_tests.append(ast.unparse(statement.test))
+            self.assertTrue(
+                any(
+                    'self.updates.blocked()' in test
+                    for test in leading_admission_tests
+                ),
+                name,
+            )
         connection = next(node for node in app.body if isinstance(node, ast.FunctionDef) and node.name == 'open_connection_dialog')
         callback = next(node for node in connection.body if isinstance(node, ast.FunctionDef) and node.name == 'apply_values')
-        self.assertIn('self.updates.blocked()', ast.unparse(callback.body[1].test))
+        callback_admission_tests = []
+        for statement in callback.body[1:]:
+            if not isinstance(statement, ast.If):
+                break
+            callback_admission_tests.append(ast.unparse(statement.test))
+        self.assertTrue(any(
+            'self.updates.blocked()' in test
+            for test in callback_admission_tests
+        ))
 
     def test_nonfinite_and_oversized_throttle_state_recovers(self) -> None:
         """NaN/infinity and oversized caches cannot suppress future automatic checks."""

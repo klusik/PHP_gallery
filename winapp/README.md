@@ -91,8 +91,18 @@ the next ordinary app launch also reconciles the signed-in user's preference.
 Logon starts with the window withdrawn before painting and exposes the tray
 icon. A missing, failed or stalled tray restores the window within five seconds
 so the app remains accessible. Import-recovery prompts wait until the user opens
-the window. Watching/importing still requires its existing explicit Start
-action. While Watcher capture is active, a red dot pulses
+the window. An idle Watcher and manual imports require explicit Start.
+An active Watcher can continue after a normal **Quit** and restart: Exit waits
+for accepted writers, verifies its original queue/session and closes the old
+temporary Watcher key before saving a separate credential-free restart intent.
+Within the existing 24-hour checkpoint lifetime, startup restores the exact
+saved gallery/account, rechecks permissions and obtains fresh contextual access
+before admitting the original queue and recorder. A stopped Watcher stays
+stopped; **Stop**, **Finish** and unlink cancel automatic continuation.
+This requires an available securely saved gallery grant, or the unchanged
+saved API-key mode. Expired/revoked or unsaved transient links need normal
+reconnection; uncertain uploads and forced termination retain manual recovery.
+While Watcher capture is active, a red dot pulses
 on the tray icon in step with the in-app indicator. The update badge remains
 visible independently.
 Source/Python runs never add an OS startup entry; their startup switch is
@@ -787,14 +797,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 1.0.3)
+## Windows installer (next version: 1.0.7)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **1.0.3**; this source version
+Gallery CMS release. The current source targets **1.0.7**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/1.0.3/`. Existing version outputs and other version folders remain
+`winapp/dist/1.0.7/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -1260,8 +1270,14 @@ Space toggles the focused photo. Control-click on Windows/Linux or Command-click
 on macOS toggles individual selections. Shift-click or Shift-arrow selects a
 contiguous range from the anchor, within the existing 64-photo limit.
 Control-arrow (Command-arrow on macOS) moves focus while keeping the selection.
-Selected photos have a small rounded outline; a separate dotted focus frame is
-not drawn. Filename hints use a compact contrasting, wrapped tooltip.
+Selected photos have a small rounded outline fitted to the actual preview
+dimensions and its shared rim, without an empty caption area beneath the image.
+Selected formats use a compact 6-pixel gap between card rims horizontally and
+vertically; spare viewport width stays after the last column rather than
+stretching gaps. Default retains its stable natural-preview row reservation.
+A separate
+dotted focus frame is not drawn. Filename hints use a compact contrasting,
+wrapped tooltip.
 The information pane and the context-menu **Photo information** action share
 the same authorized metadata groups, formatter and bounded session cache.
 Metadata is reused for up to one minute, with at most 32 entries, and is cleared
@@ -1331,8 +1347,17 @@ photo's GPS location, its anchored pin offers **Open in OpenStreetMap**, which
 opens the system browser. The lightbox prepares the previous and next photos
 in bounded memory while open, including at the wrap points. Closing it clears
 queued detail prefetch; an already running bounded request may finish.
-Thumbnails trim detected
-black bars and show the entire remaining scene at its own aspect ratio.
+By default, thumbnails trim detected black bars and show the entire remaining
+scene at its own aspect ratio. Seven visible shape buttons in the album toolbar
+apply **Default**, **16:9**, **21:9**, **4:3**, **1:1**, **4:5** or **9:16**
+immediately. Each rectangle illustrates its ratio; a quiet accent marks the
+active choice. Explicit ratios center-crop the grid preview; originals
+and the lightbox keep their existing presentation. Choices are stored locally
+per gallery and verified site/account, independently of website settings and
+upload configuration. There is no Save step. A small **!** reports a local
+save failure; the chosen view remains applied and its tooltip explains retry.
+Changing the format reuses retained previews without requesting their media
+again. The default preserves the existing natural-preview grid.
 Photo and thumbnail downloads have a separate five-minute
 quota of 600 requests per IP and 3,600 globally. If the server returns HTTP 429, Photos
 shows the limit and pauses speculative requests until **Retry**.
@@ -1375,7 +1400,7 @@ authorization errors, throttling and content encoding do not enter this retry.
 The per-user disk cache stores opted-in bytes with verified content digests.
 Ordinary thumbnails use their own `photo-cache/thumbnails` area, capped at
 4 GiB by default or 262,144 entries. The labelled storage control sits directly
-left of Watcher status in the shared header, available on every tab. Its contrast
+in the shared header near the update controls, available on every tab. Its contrast
 and explicit text identify thumbnails without relying on a background-coloured
 icon. It opens shared per-user settings with 1/2/4/8/16/32/64 GiB choices.
 All profiles use the same persisted quota. Full/detail photos and audio keep the separate
@@ -1541,8 +1566,17 @@ require separate evidence.
 With upload permission, use **Use this gallery for Watcher** from a gallery
 context or the Watcher rail menu while Photos is open. WinApp verifies the
 exact gallery and uses the existing Watcher folder, local thumbnail pipeline
-and finish controls. The Watcher panel shows preparation or refusal for that
-request. A gallery confirmed by creation or a recovered creation-status response
+and finish controls. Photos remains selected; choosing this action does not
+switch to Watcher. A small icon display in the shared header shows Watcher
+state, the observed accepted-photo count beside a stack-of-photos icon, and
+the last scan time beside a clock. A dash means the value has not yet been
+observed. Hover for the full gallery, state and queue explanation; no long
+status sentence occupies the header. The display sits immediately left of
+**Thumbnails**. Its compact **Stop** icon uses the existing safe drain and
+report/finalization action, so ordinary capture needs no visit to Watcher.
+The Watcher tab remains available through the rail,
+with its full controls and preparation/refusal details.
+A gallery confirmed by creation or a recovered creation-status response
 can use this action immediately, without reloading Photos. A display-only cached
 row still needs live confirmation. If the gallery, connection or upload access
 changes while its menu is open, Photos keeps an explanation in the anchored
