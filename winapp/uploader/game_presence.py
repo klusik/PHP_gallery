@@ -19,7 +19,7 @@ from typing import Callable
 
 from uploader.flight_report_translations import tr
 from uploader.game_context import GameCatalog, GameContext
-from uploader.windows_game_processes import current_user_game_processes
+from uploader.windows_game_processes import current_user_game_processes, msfs_running
 from uploader.simconnect_location import (
     SimConnectLocationClient,
     simconnect_hresult_failed,
@@ -53,13 +53,13 @@ class GamePresence(threading.Thread):
         self.cancelled = threading.Event()
 
     def probe(self) -> bool:
-        """Open and close one native handle without requesting simulator data.
+        """Probe only a running MSFS 2020/2024 without requesting simulator data.
 
         Returns:
             bool: True only for a successful open with a nonempty handle;
-                False on unsupported hosts or unavailable/broken runtimes.
+                False without a supported process or usable native runtime.
         """
-        if os.name != "nt":
+        if os.name != "nt" or not msfs_running():
             return False
         try:
             path, _tried = SimConnectLocationClient(

@@ -470,18 +470,44 @@ headroom. No server limit or protocol changes. Session changes and destruction
 cancel scheduled work; errors stop automatic continuation until explicit retry.
 Catalogue fixtures own those timer and identity boundaries. Live production
 catalogue size and traffic are unknown. The client first mounts an optional
-last-complete local snapshot, bound to verified issuer, account and exact
+last-known local snapshot, bound to verified issuer, account and exact
 approved scope. Windows uses user-scoped DPAPI and refuses redirected/nonlocal
 profile storage; POSIX uses private owned files. Integrity failure, corruption
 or unavailable storage is a miss. One background reader and a serialized
-latest-pending writer keep this optional I/O outside Tk. Only complete results
-replace the atomic snapshot; partial/failing pages never prune cached-only rows.
+latest-pending writer keep this optional I/O outside Tk. Each successful page
+and confirmed creation merges known rows into an atomic snapshot, retaining
+unmounted cached rows. Partial snapshots clear the optional complete-tree
+revision; only a complete successful pass proves absence and prunes old rows.
+Already accepted immutable metadata writes drain on normal exit independently
+of network cancellation, using their original account/scope-bound cache.
+The encrypted format and existing complete snapshots remain readable unchanged.
+The tree toolbar refresh starts a new catalogue pass without resetting the
+selected viewer or expansion. Independent catalogue cancellation and generation
+fence late results; current responses update titles and parent relationships.
+Source regressions cover interrupted paging, retained disk metadata, writer
+teardown and repeated refreshes. Installed performance and crash/power-loss
+durability remain unknown; no server or credential format changes are required.
 Cached and complete-tree UI updates yield in short batches and retain unchanged
 rows. The account-scoped last explicit gallery preference reuses existing
 versioned tree preferences; version 1 expansion states remain supported.
 Cached navigation still performs independent live media authorization; new
 upload and create actions require fresh gallery confirmation. Cached metadata
 never grants media, upload or mutation access.
+Source review of the reported new-gallery Watcher no-op found that `5406d8a0`
+added fresh-row admission to the action while confirmed creation only inserted
+the display row. The current-session create and recovered-status paths now
+admit that exact confirmed row before rendering and selection. The action
+retains freshness, current descriptor, live-session and upload-scope checks;
+refusal stays visible in Photos instead of silently dismissing its context.
+Cached-only rows and stale or expired creation results remain ineligible.
+Native fixtures cover the creation-to-button transition and its negative
+boundaries. Installed Windows and mixed-version deployment acceptance of this
+repair remain unverified; no schema, server endpoint or credential format changes.
+Focused Windows diagnosis also observed obsolete cache-probe Tcl callbacks after
+workspace teardown. An immediate probe now cancels its pending delayed callback
+before clearing that timer reference. A native lifecycle fixture checks removal
+from Tk's pending queue. This observation does not establish the cause of a
+separate whole-suite hosted timeout or installed prevalence.
 An additive `galleries:tree-v1` server capability exposes a bounded complete
 tree and an account/scope-bound revision on the existing listing route.
 Current authority is rechecked before an unchanged envelope can omit rows.
@@ -502,6 +528,13 @@ deployed adoption and current installed performance are unknown.
 The catalogue activity label and smooth spinning ring appear above the tree and
 share the existing initial/read/continuation lifecycle. They do not estimate
 completion and stop on completion, failure, disconnection or destruction.
+Shared inline tooltips now require actual pointer hover before delayed display
+and monitor the pointer while visible, including missed Leave events. Keyboard
+focus alone cannot activate them. Surface dismissal cancels pending help as well
+as visible labels. Focus and keyboard actions remain available. Portable fixtures
+cover stale delays and missed Leave; installed Windows window-switch behavior
+still requires manual verification. The shared theme owns this permanent UI
+behavior; no compatibility fallback or new dependency is introduced.
 
 Ordinary Photos grid reads request thumbnail renditions only. Selected detail
 and adjacent-photo reads belong to the open lightbox; explicit gallery preload
@@ -1103,12 +1136,21 @@ changes, public-page scraping or additional network requests are introduced.
 
 ## WinApp optional game context
 
-`game_presence.py` owns label selection: SimConnect first, then offline exact
+`game_presence.py` owns label selection: SimConnect first only with a running
+current-account MSFS 2020/2024 process, then offline exact
 process rules restricted by `windows_game_processes.py` to the current account's
 SID and existing limited query rights. Missing/denied APIs, catalogs or
 identities,
 unknown games and ambiguous matches permanently retain general game wording;
-they never gate watching, recording, reports or key handling. The bundled
+they never gate watching, reports or key handling. The shared
+`windows_game_processes.msfs_running` gate restricts new presence, photo GPS,
+recorder and UTC connections to `FlightSimulator.exe` and
+`FlightSimulator2024.exe`; denied inspection skips native work silently.
+This intentionally excludes other SimConnect-compatible games. Established
+recorder/UTC handles keep their native exit handling. The maintainer reported
+unwanted SimConnect warnings while playing Mass Effect on 2026-11-09;
+live MSFS start/exit and target-PC warning absence remain unverified.
+The bundled
 Discord snapshot is incomplete; profile JSON additions require no app rebuild.
 These fallbacks support ordinary games and PCs without SimConnect. No usage
 evidence justifies retirement. Hosted fixtures own deterministic behavior;

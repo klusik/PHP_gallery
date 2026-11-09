@@ -2,14 +2,15 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/uploader/gallery_catalogue_cache.py
 # Module Type: Client Persistence Service
-# Purpose: Retain a bounded last-complete gallery catalogue for one account.
+# Purpose: Retain bounded last-known gallery structure for one account.
 # Responsibilities:
 #   - Isolate snapshots by verified issuer, account and exact approved scope.
 #   - Validate local integrity and every saved gallery descriptor.
 #   - Protect Windows titles with user-scoped DPAPI and replace files atomically.
+#   - Drain accepted local metadata independently of Tk and network teardown.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
-"""Optional local catalogue snapshots; saved rows never grant server access."""
+"""Last-known local gallery structure; saved rows never grant server access."""
 
 import ctypes
 from dataclasses import dataclass
@@ -33,7 +34,7 @@ from .windows_file_identity import (
 )
 
 
-# Purpose: Bound the retained complete catalogue independently of network pages.
+# Purpose: Bound the retained known catalogue independently of network pages.
 # Type: int. Units: gallery rows. Scope: one verified account/scope snapshot.
 # Consumers: GalleryCatalogueCache._validate_galleries.
 # Rationale: 10,000 matches the optional tree protocol and existing preferences.
@@ -64,11 +65,13 @@ _CRYPTPROTECT_UI_FORBIDDEN = 0x1
 
 @dataclass(frozen=True)
 class GalleryCatalogueSnapshot:
-    """Hold a complete prior tree and its optional server revision.
+    """Hold known gallery descriptors and an optional complete-tree revision.
 
     Args:
-        galleries (tuple[LinkedGallery, ...]): Ordered complete identities.
-        revision (str | None): Server tree-v1 revision, or None after paging.
+        galleries (tuple[LinkedGallery, ...]): ID-ordered known identities,
+            including prior rows not yet confirmed by a current partial pass.
+        revision (str | None): Server revision only for a complete tree-v1
+            result; None for partial or completed paged observations.
     """
 
     galleries: tuple[LinkedGallery, ...]
@@ -169,7 +172,7 @@ def _catalogue_json_object(
 
 
 class GalleryCatalogueCache:
-    """Store only complete display metadata, independently of upload state."""
+    """Store known display metadata independently of current remote authority."""
 
     def __init__(self, directory: Path, binding: str) -> None:
         """Select one account's hash-only snapshot path without performing I/O.
@@ -231,7 +234,7 @@ class GalleryCatalogueCache:
     def load(
         self, cancelled: threading.Event | None = None,
     ) -> GalleryCatalogueSnapshot | None:
-        """Read and validate a complete snapshot on a background worker.
+        """Read and validate last-known structure on a background worker.
 
         Args:
             cancelled (threading.Event | None): Current session cancellation.
@@ -294,10 +297,10 @@ class GalleryCatalogueCache:
         self, snapshot: GalleryCatalogueSnapshot,
         cancelled: threading.Event | None = None,
     ) -> bool:
-        """Atomically publish a completed snapshot from a serialized writer.
+        """Atomically publish known structure from a serialized writer.
 
         Args:
-            snapshot (GalleryCatalogueSnapshot): Immutable complete catalogue.
+            snapshot (GalleryCatalogueSnapshot): Immutable last-known metadata.
             cancelled (threading.Event | None): Captured session cancellation.
 
         Returns:
@@ -394,13 +397,13 @@ class GalleryCatalogueCache:
         ).encode('utf-8')
 
     def _decode(self, data: bytes) -> GalleryCatalogueSnapshot:
-        """Validate a protected payload, binding and complete descriptor set.
+        """Validate a protected payload, binding and known descriptor set.
 
         Args:
             data (bytes): Bounded recovered JSON bytes.
 
         Returns:
-            GalleryCatalogueSnapshot: Validated complete local display metadata.
+            GalleryCatalogueSnapshot: Validated last-known display metadata.
 
         Raises:
             ValueError: The envelope, integrity or any descriptor is invalid.
@@ -438,7 +441,7 @@ class GalleryCatalogueCache:
             rows (JsonValue): Candidate list of id, parent_id and title objects.
 
         Returns:
-            tuple[LinkedGallery, ...]: Strictly ordered complete descriptors.
+            tuple[LinkedGallery, ...]: Strictly ordered known descriptors.
 
         Raises:
             ValueError: Count, shape, identity, order or title bounds fail.
@@ -543,3 +546,72 @@ class GalleryCatalogueCache:
         return (stat.S_ISLNK(information.st_mode)
                 or bool(getattr(information, 'st_file_attributes', 0)
                         & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x0400)))
+
+
+class GalleryCatalogueWriter:
+    """Drain accepted display metadata without retaining any Tk objects."""
+
+    def __init__(self) -> None:
+        """Prepare one serialized writer and one newest pending snapshot slot.
+
+        Returns:
+            None: No thread or file access starts until metadata is submitted.
+        """
+        self._lock = threading.Lock()
+        self._worker: threading.Thread | None = None
+        self._pending: tuple[
+            GalleryCatalogueCache, GalleryCatalogueSnapshot,
+        ] | None = None
+
+    def submit(
+        self, cache: GalleryCatalogueCache, snapshot: GalleryCatalogueSnapshot,
+    ) -> None:
+        """Accept immutable metadata for an already verified cache binding.
+
+        Args:
+            cache (GalleryCatalogueCache): Original account/scope-bound storage.
+            snapshot (GalleryCatalogueSnapshot): Known navigation hints accepted
+                by the UI while its originating session was current.
+        Returns:
+            None: One local writer drains the latest accepted metadata even
+                after the originating UI closes, without accessing Tk or HTTP.
+        """
+        with self._lock:
+            if self._worker is not None:
+                self._pending = (cache, snapshot)
+                return
+            self._worker = threading.Thread(
+                target=self._write,
+                args=(cache, snapshot),
+                name='photos-catalogue-cache',
+                # Normal process exit must finish accepted local metadata;
+                # network cancellation cannot erase already visible galleries.
+                daemon=False,
+            )
+            try:
+                self._worker.start()
+            except RuntimeError:
+                self._worker = None
+
+    def _write(
+        self, cache: GalleryCatalogueCache, snapshot: GalleryCatalogueSnapshot,
+    ) -> None:
+        """Save accepted snapshots serially, retaining only the newest wait.
+
+        Args:
+            cache (GalleryCatalogueCache): Bound storage for the first write.
+            snapshot (GalleryCatalogueSnapshot): First immutable accepted tree.
+        Returns:
+            None: Atomic saves drain without retaining the UI or its session.
+        """
+        current: tuple[GalleryCatalogueCache, GalleryCatalogueSnapshot] | None = (
+            cache, snapshot,
+        )
+        while current is not None:
+            current_cache, current_snapshot = current
+            current_cache.save(current_snapshot)
+            with self._lock:
+                current = self._pending
+                self._pending = None
+                if current is None:
+                    self._worker = None

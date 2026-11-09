@@ -1946,6 +1946,7 @@ _TRANSLATIONS["sv"].update({
 _TRANSLATIONS["en"].update({
     "photos_pane_title": "Photos",
     "photos_workspace_expand_all": "Expand all",
+    "photos_workspace_refresh_galleries": "Refresh galleries",
     "photos_workspace_collapse_all": "Collapse all",
     "photos_workspace_load_more": "Load more",
     "photos_workspace_loading": "Loading galleries…",
@@ -2058,6 +2059,7 @@ _TRANSLATIONS["en"].update({
 _TRANSLATIONS["cs"].update({
     "photos_pane_title": "Fotky",
     "photos_workspace_expand_all": "Rozbalit vše",
+    "photos_workspace_refresh_galleries": "Obnovit galerie",
     "photos_workspace_collapse_all": "Sbalit vše",
     "photos_workspace_load_more": "Načíst další",
     "photos_workspace_loading": "Načítám galerie…",
@@ -2170,6 +2172,7 @@ _TRANSLATIONS["cs"].update({
 _TRANSLATIONS["de"].update({
     "photos_pane_title": "Fotos",
     "photos_workspace_expand_all": "Alle erweitern",
+    "photos_workspace_refresh_galleries": "Galerien aktualisieren",
     "photos_workspace_collapse_all": "Alle reduzieren",
     "photos_workspace_load_more": "Mehr laden",
     "photos_workspace_loading": "Galerien werden geladen…",
@@ -2282,6 +2285,7 @@ _TRANSLATIONS["de"].update({
 _TRANSLATIONS["sv"].update({
     "photos_pane_title": "Foton",
     "photos_workspace_expand_all": "Expandera alla",
+    "photos_workspace_refresh_galleries": "Uppdatera gallerier",
     "photos_workspace_collapse_all": "Fäll ihop alla",
     "photos_workspace_load_more": "Visa fler",
     "photos_workspace_loading": "Laddar gallerier…",
@@ -2396,6 +2400,10 @@ _PHOTOS_DETAIL_LABELS = {
         "watcher_menu": "Gallery actions",
         "refresh": "Refresh photos",
         "start_watcher": "Use this gallery for Watcher",
+        "watcher_unavailable": (
+            "This gallery or its upload access is no longer current. "
+            "Reconnect or refresh Photos, then reopen the gallery action."
+        ),
         "simbrief": "Open SimBrief",
         "group_inventory": "Inventory",
         "group_gallery": "Gallery",
@@ -2446,6 +2454,10 @@ _PHOTOS_DETAIL_LABELS = {
         "watcher_menu": "Akce galerie",
         "refresh": "Obnovit fotky",
         "start_watcher": "Spustit watcher pro tuto galerii",
+        "watcher_unavailable": (
+            "Galerie nebo oprávnění k nahrávání už nejsou aktuální. "
+            "Obnovte propojení nebo Fotky a znovu otevřete akci galerie."
+        ),
         "simbrief": "Otevřít SimBrief",
         "group_inventory": "Obsah",
         "group_gallery": "Galerie",
@@ -2496,6 +2508,11 @@ _PHOTOS_DETAIL_LABELS = {
         "watcher_menu": "Galerieaktionen",
         "refresh": "Fotos aktualisieren",
         "start_watcher": "Watcher für diese Galerie starten",
+        "watcher_unavailable": (
+            "Diese Galerie oder ihre Uploadberechtigung ist nicht mehr "
+            "aktuell. Verbinden oder laden Sie Fotos neu und öffnen Sie "
+            "die Galerieaktion erneut."
+        ),
         "simbrief": "SimBrief öffnen",
         "group_inventory": "Bestand",
         "group_gallery": "Galerie",
@@ -2546,6 +2563,10 @@ _PHOTOS_DETAIL_LABELS = {
         "watcher_menu": "Galleriåtgärder",
         "refresh": "Uppdatera foton",
         "start_watcher": "Starta Watcher för det här galleriet",
+        "watcher_unavailable": (
+            "Galleriet eller dess uppladdningsbehörighet är inte längre aktuellt. "
+            "Anslut eller uppdatera Foton och öppna sedan galleriåtgärden igen."
+        ),
         "simbrief": "Öppna SimBrief",
         "group_inventory": "Innehåll",
         "group_gallery": "Galleri",

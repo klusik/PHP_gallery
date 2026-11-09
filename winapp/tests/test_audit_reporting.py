@@ -13,6 +13,7 @@
 import io
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parents[2]
@@ -20,10 +21,38 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from scripts.audit_winapp_report import AuditReport, report_suite
+from scripts.audit_winapp_report import discover_canonical_suite, main
 
 
 class AuditReportingTests(unittest.TestCase):
     """Protect structured WinApp unittest outcomes and report accounting."""
+
+    def test_native_diagnostic_is_explicit_and_preserves_full_discovery(self) -> None:
+        """Bind diagnostic reports to their exact selected native fixture.
+
+        Returns:
+            None: Defaults keep full discovery, the native flag records its
+                narrower pattern, and unrecognized selectors are refused.
+        """
+        with mock.patch.object(unittest.defaultTestLoader, 'discover') as discover:
+            discover_canonical_suite()
+            self.assertEqual('test_*.py', discover.call_args.kwargs['pattern'])
+            discover_canonical_suite(native_only=True)
+            self.assertEqual(
+                'test_native_gallery_viewer.py',
+                discover.call_args.kwargs['pattern'],
+            )
+        # An intentionally empty supplied suite records selection metadata;
+        # it still cannot become successful evidence without any actual test.
+        report = report_suite(
+            unittest.TestSuite(), io.StringIO(), native_only=True,
+        )
+        self.assertFalse(report['successful'])
+        self.assertEqual(
+            'test_native_gallery_viewer.py',
+            report['runtime']['suite_settings']['pattern'],
+        )
+        self.assertEqual(2, main(['unused-output.json', '--other-selection']))
 
     def report_case(self, case_type: type[unittest.TestCase]) -> AuditReport:
         """Run one local fixture case through the public structured report seam.

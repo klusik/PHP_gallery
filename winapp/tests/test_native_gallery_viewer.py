@@ -7,6 +7,7 @@
 #   - Verify grid tiles, bounded thumbnails, lightbox details and photo paging.
 #   - Verify GPS actions, zoom, slideshow and foreground-result fencing.
 #   - Verify closing the viewer or its parent cancels owned work.
+#   - Verify confirmed gallery creation reaches the real Watcher action.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Windows-only Tk regression coverage for the linked-gallery viewer."""
@@ -72,6 +73,7 @@ if sys.platform == 'win32' and tk is not None and Image is not None:
         gallery_lightbox, native_gallery_viewer, photos_workspace, ui_theme,
     )
     from uploader.gallery_preload import GalleryPreloadWorker
+    from uploader.windows_display import prepare_windows_display
 else:
     gallery_lightbox = None
     native_gallery_viewer = None
@@ -102,6 +104,20 @@ TEST_TK_SCALING = 1.5
 # Consumers: NativeGalleryViewerTests cached-tree UI regressions.
 # Rationale: One extra row proves later tree work yields to Tk.
 TEST_CATALOGUE_CACHE_ROWS = 65
+
+# Purpose: Verify the gallery refresh action in normal and compact native views.
+# Type: tuple[tuple[int, int], ...]. Units: Tk pixels, width and height.
+# Scope: one native gallery refresh fixture. Consumers: tree refresh regression.
+# Rationale: 1180 by 760 represents a desktop window; 720 by 620 exercises the
+# compact layout while retaining the fixed-width gallery navigation pane.
+TEST_TREE_REFRESH_VIEWPORTS = ((1180, 760), (720, 620))
+
+# Purpose: Keep captured fixture windows inside the hosted desktop work area.
+# Type: int. Units: Tk pixels. Scope: tree refresh screenshot viewports.
+# Consumers: NativeGalleryViewerTests tree refresh regression.
+# Rationale: 80 px leaves room for native title bars and the runner's taskbar;
+# target viewports are clamped instead of capturing off-screen black pixels.
+TEST_TREE_REFRESH_SCREEN_MARGIN = 80
 
 # Purpose: Give generated button clicks deterministic Windows event times.
 # Type: tuple[int, int]. Units: milliseconds. Scope: double-click Tk fixture.
@@ -304,10 +320,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
     """Exercise mounted Tk frames and synthetic media responses."""
 
     def setUp(self) -> None:
-        """Create a real Tk root with a high-DPI test scale.
+        """Use the app's Windows display bootstrap before a high-DPI Tk root.
 
         Returns:
-            None: A mapped root is available to each native viewer test.
+            None: A mapped root with native display coordinates is available
+                to each native viewer test and its screenshots.
         """
         # These widget tests inject storage observations explicitly. Avoid
         # starting the background reader against the runner's real profile.
@@ -319,6 +336,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         storage_poll.start()
         self.addCleanup(storage_poll.stop)
+        prepare_windows_display()
         self.root = tk.Tk()
         self.root.tk.call('tk', 'scaling', TEST_TK_SCALING)
         self.root.geometry('840x620')
@@ -847,6 +865,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         Returns:
             None: Transport/auth/cancel/corruption failures do not trigger a
                 fallback, and a preview is never retained as original detail.
+                Saved full-version intent differs by rendition while all
+                authorization, cancellation and catalogue proof inputs match.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -896,6 +916,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         preview_policy = dict(preview_call.kwargs)
         full_policy.pop('thumbnail')
         preview_policy.pop('thumbnail')
+        self.assertTrue(full_policy.pop('use_preloaded_snapshot'))
+        self.assertFalse(preview_policy.pop('use_preloaded_snapshot'))
         self.assertEqual(full_policy, preview_policy)
 
         session.media_photo.reset_mock()
@@ -1127,10 +1149,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace.destroy()
 
     def test_failed_catalogue_walk_retains_prior_complete_snapshot(self) -> None:
-        """Keep cached rows and snapshot intact when fresh paging fails early.
+        """Keep saved rows and successful updates when fresh paging fails early.
 
         Returns:
-            None: An old complete cache survives the error path without a save.
+            None: The latest known tree retains prior children and a renamed
+                first page, without treating the partial walk as a full revision.
         """
         cached = GalleryCatalogueSnapshot((
             LinkedGallery(1, None, 'Saved first'),
@@ -1148,8 +1171,155 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._accept_page(None)
         self.assertTrue(workspace.tree.exists('1'))
         self.assertTrue(workspace.tree.exists('2'))
-        self.assertIs(workspace._catalogue_cache_snapshot, cached)
+        self.assertEqual(
+            'Fresh first page row',
+            workspace._catalogue_cache_snapshot.galleries[0].title,
+        )
+        self.assertIsNone(workspace._catalogue_cache_snapshot.revision)
         self.assertEqual('Saved child', workspace._galleries[2].title)
+        workspace.destroy()
+
+    def test_tree_refresh_keeps_selection_and_rejects_superseded_results(self) -> None:
+        """Refresh names and hierarchy without clearing the current photo view.
+
+        Returns:
+            None: Repeated toolbar refreshes serialize requests, ignore the old
+                pass, preserve expansion and selection, and save changed names.
+                Desktop and narrow screenshots retain the actual toolbar layout.
+        """
+        from PIL import ImageGrab
+
+        original = (
+            LinkedGallery(1, None, 'Original parent'),
+            LinkedGallery(2, 1, 'Selected before refresh'),
+            LinkedGallery(3, None, 'Removed on server'),
+        )
+        renamed = LinkedGallery(2, 4, 'Renamed on server')
+        replacement = (original[0], renamed, LinkedGallery(4, None, 'New parent'))
+        provider: list[LinkingSession | None] = [None]
+        session = self._session(*self._gallery_data())
+        session.supports_gallery_tree.return_value = False
+        session.gallery_page.return_value = LinkedGalleryPage(original, None)
+        cache = mock.Mock()
+        cache.load.return_value = None
+        cache.save.return_value = True
+        ui_theme.configure_theme(self.root)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+            catalogue_cache=lambda _session: cache,
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._ensure_initial_gallery = mock.Mock()
+        provider[0] = session
+        workspace.refresh_session()
+        self._wait_until(
+            lambda: workspace._worker is None and workspace.tree.exists('3'),
+            'Initial refresh fixture did not finish its gallery tree.',
+        )
+        with mock.patch.object(
+            photos_workspace, 'mount_native_gallery_view',
+            return_value=mock.Mock(),
+        ):
+            workspace._select_gallery(original[1])
+        viewer = workspace._viewer
+        workspace.tree.item('1', open=True)
+        workspace.tree.focus('2')
+        session_cancel = workspace._cancel
+        workspace_generation = workspace._generation
+        started = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
+        refresh_calls: list[int | None] = []
+
+        def read_page(
+            after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> LinkedGalleryPage:
+            """Hold the obsolete read while the next refresh is requested.
+
+            Args:
+                after_id (int | None): Initial cursor for each refreshed pass.
+                cancelled (threading.Event | None): Pass-specific cancellation.
+            Returns:
+                LinkedGalleryPage: Old descriptors first, then renamed metadata.
+            """
+            refresh_calls.append(after_id)
+            if len(refresh_calls) == 1:
+                started.set()
+                if not release.wait(TEST_GUI_WAIT_SECONDS):
+                    raise TimeoutError('Refresh fixture was not released.')
+                return LinkedGalleryPage(original, None)
+            return LinkedGalleryPage(replacement, None)
+
+        session.gallery_page.side_effect = read_page
+        workspace.tree_refresh_button.invoke()
+        self.assertTrue(started.wait(TEST_GUI_WAIT_SECONDS))
+        old_generation = workspace._catalogue_generation
+        old_cancel = workspace._catalogue_cancel
+        self.assertEqual('2', workspace.tree.selection()[0])
+        self.assertTrue(workspace.tree.exists('3'))
+        workspace.tree_refresh_button.invoke()
+        self.assertTrue(old_cancel.is_set())
+        self.assertIs(session_cancel, workspace._cancel)
+        self.assertFalse(session_cancel.is_set())
+        self.assertEqual(workspace_generation, workspace._generation)
+        # A response already queued before cancellation must also be fenced.
+        workspace._events.put(photos_workspace._CataloguePageResult(
+            old_generation, LinkedGalleryPage((), None),
+        ))
+        self._wait_until(
+            workspace._events.empty,
+            'The obsolete queued refresh result was not examined.',
+        )
+        self.assertTrue(workspace.tree.exists('3'))
+        self.assertIs(viewer, workspace._viewer)
+        release.set()
+        self._wait_until(
+            lambda: workspace._worker is None
+            and workspace._galleries.get(2) == renamed
+            and not workspace.tree.exists('3')
+            and cache.save.call_args is not None
+            and cache.save.call_args.args[0].galleries == replacement,
+            'Refresh did not reconcile renamed, moved and removed galleries.',
+        )
+        self.assertEqual([None, None], refresh_calls)
+        self.assertEqual(('2',), workspace.tree.selection())
+        self.assertEqual('4', workspace.tree.parent('2'))
+        self.assertTrue(workspace.tree.item('1', 'open'))
+        self.assertTrue(workspace.tree.item('4', 'open'))
+        self.assertEqual('Renamed on server', workspace._gallery_title.get())
+        self.assertIn('Renamed on server', workspace.tree.item('2', 'text'))
+        self.assertIs(viewer, workspace._viewer)
+        viewer.destroy.assert_not_called()
+        for width, height in TEST_TREE_REFRESH_VIEWPORTS:
+            with self.subTest(width=width):
+                visible_width = min(
+                    width,
+                    self.root.winfo_screenwidth() - TEST_TREE_REFRESH_SCREEN_MARGIN,
+                )
+                visible_height = min(
+                    height,
+                    self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN,
+                )
+                self.root.geometry(f'{visible_width}x{visible_height}+0+0')
+                self.root.update()
+                self.assertTrue(workspace.tree.bbox('2'))
+                button = workspace.tree_refresh_button
+                self.assertTrue(button.winfo_ismapped())
+                self.assertLessEqual(
+                    button.winfo_rootx() + button.winfo_width(),
+                    workspace.tree_pane.winfo_rootx()
+                    + workspace.tree_pane.winfo_width(),
+                )
+                bounds = (
+                    self.root.winfo_rootx(), self.root.winfo_rooty(),
+                    self.root.winfo_rootx() + self.root.winfo_width(),
+                    self.root.winfo_rooty() + self.root.winfo_height(),
+                )
+                evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+                evidence.mkdir(parents=True, exist_ok=True)
+                with ImageGrab.grab(bbox=bounds) as captured:
+                    captured.save(evidence / f'photos-tree-refresh-{width}.png')
         workspace.destroy()
 
     def test_unchanged_catalogue_confirms_cached_rows_without_rerender(self) -> None:
@@ -1316,7 +1486,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         """Yield between complete-tree slices instead of mounting all at once.
 
         Returns:
-            None: The final IDs become visible through the owned timer callback.
+            None: All metadata is retained before later IDs become visible
+                through the owned timer callback, so an early close can save it.
         """
         workspace = photos_workspace.PhotosWorkspace(
             self.root, lambda: None, mock.Mock(), lambda: 'en',
@@ -1335,6 +1506,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             workspace.tree.exists(str(TEST_CATALOGUE_CACHE_ROWS)),
         )
         self.assertIsNotNone(workspace._cached_mount_after)
+        self.assertEqual(
+            galleries, workspace._catalogue_cache_snapshot.galleries,
+        )
         self._wait_until(
             lambda: workspace.tree.exists(str(TEST_CATALOGUE_CACHE_ROWS))
             and workspace._complete_catalogue_tree is None,
@@ -3179,12 +3353,15 @@ class NativeGalleryViewerTests(unittest.TestCase):
 
     def _photos_create_context(
         self, manager: mock.Mock, parent: LinkedGallery,
+        start_watcher: Callable[[LinkingSession, LinkedGallery], None] | None = None,
     ) -> tuple['photos_workspace.PhotosWorkspace', mock.Mock, tk.Widget]:
         """Mount Photos with one exact direct parent and a live create grant.
 
         Args:
             manager (mock.Mock): Contextual gallery manager fake.
             parent (LinkedGallery): Direct parent offered in the visible tree.
+            start_watcher (Callable[[LinkingSession, LinkedGallery], None] | None):
+                Optional host receiver for the real contextual Watcher action.
 
         Returns:
             tuple[photos_workspace.PhotosWorkspace, mock.Mock, tk.Widget]: Workspace, session,
@@ -3195,12 +3372,18 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session.available.return_value = True
         session.can_create_gallery.return_value = True
         session.gallery_page.return_value = LinkedGalleryPage((parent,), None)
+        # Creation uses the offered parent's empty page, not the unrelated
+        # photo fixture's gallery ID. No media or presentation is needed here.
+        session.media_page.return_value = LinkedMediaPage(
+            parent.gallery_id, parent.parent_id, (), None,
+        )
+        session.can_read_presentation.return_value = False
         manager.photos_site_identity.return_value = (
             'https://current.example/photos', 7,
         )
         workspace = photos_workspace.PhotosWorkspace(
             self.root, lambda: session, mock.Mock(), lambda: 'en',
-            manager=manager,
+            manager=manager, start_watcher=start_watcher,
         )
         workspace.pack(fill='both', expand=True)
         self._wait_until(
@@ -3213,6 +3396,34 @@ class NativeGalleryViewerTests(unittest.TestCase):
         event.y_root = workspace.tree.winfo_rooty() + 20
         card = workspace._open_context(event)
         return workspace, session, card
+
+    def _watcher_action_button(
+        self, workspace: 'photos_workspace.PhotosWorkspace',
+        gallery: LinkedGallery, *, rail: bool = False,
+    ) -> ttk.Button:
+        """Open the real gallery or rail menu and return its Watcher button.
+
+        Args:
+            workspace (photos_workspace.PhotosWorkspace): Mounted Photos owner.
+            gallery (LinkedGallery): Exact row whose action should be offered.
+            rail (bool): Open the selected-gallery rail action when true.
+
+        Returns:
+            ttk.Button: Actual contextual action with its production command.
+        """
+        event = workspace._context_event(workspace.tree)
+        if rail:
+            workspace.open_selected_watcher_context(event)
+        else:
+            workspace._gallery_context(gallery.gallery_id, event)
+        card = workspace._context_card
+        self.assertIsNotNone(card)
+        assert card is not None
+        return next(
+            child for child in card.winfo_children()
+            if isinstance(child, ttk.Button)
+            and child.cget('text') == workspace._text('start_watcher')
+        )
 
     def test_first_page_and_tiles_precede_slow_optional_presentation(self) -> None:
         """Publish authorized photos before an optional presentation returns.
@@ -3905,11 +4116,225 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertNotIn(old_gallery.gallery_id, workspace._galleries)
         workspace.destroy()
 
+    def test_created_gallery_starts_watcher_without_catalogue_reload(self) -> None:
+        """Create root and child galleries, then invoke their real Watcher action.
+
+        Returns:
+            None: Acknowledged receipts work through gallery and rail menus
+                without another catalogue request or changing an existing selection.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        for parent_id in (None, parent.gallery_id):
+            with self.subTest(parent_id=parent_id):
+                # This distinct synthetic ID was absent from the initial page.
+                created = LinkedGallery(
+                    TEST_GALLERY_ID, parent_id, 'Fresh Watcher gallery',
+                )
+                receipt = BoundCreateReceipt(created, 'e' * 64)
+                manager = mock.Mock()
+                manager.inspect_photos_gallery_creation.return_value = (
+                    CreateJournalSnapshot(
+                        'empty', None, None, None, None, None, None,
+                    )
+                )
+                manager.create_photos_gallery.return_value = receipt
+                start = mock.Mock()
+                workspace, session, card = self._photos_create_context(
+                    manager, parent, start,
+                )
+                session.can_upload.return_value = True
+                session.can_read_presentation.return_value = False
+                session.media_page.return_value = LinkedMediaPage(
+                    created.gallery_id, parent_id, (), None,
+                )
+                if parent_id is None:
+                    workspace._clear_catalogue()
+                    card = workspace._open_context(
+                        workspace._context_event(workspace.tree),
+                    )
+                previous_selection = workspace._selected_gallery_id
+                catalogue_reads = session.gallery_page.call_count
+                workspace._create_gallery(
+                    card, session, parent_id, created.title,
+                )
+                self._wait_until(
+                    lambda: workspace.tree.exists(str(created.gallery_id)),
+                    'Creation did not mount the new gallery.',
+                )
+                self.assertIn(created.gallery_id, workspace._fresh_catalogue_ids)
+                self.assertEqual(
+                    created.gallery_id if parent_id is None else previous_selection,
+                    workspace._selected_gallery_id,
+                )
+                done = next(
+                    child for child in card.winfo_children()
+                    if isinstance(child, ttk.Button)
+                    and child.cget('text') == workspace._text('create_done')
+                )
+                done.invoke()
+                self._wait_until(
+                    lambda: workspace._create_receipt is None,
+                    'The creation receipt was not acknowledged.',
+                )
+                manager.acknowledge_photos_gallery.assert_called_once_with(
+                    session, receipt,
+                )
+                if parent_id is not None:
+                    workspace._select_gallery(created)
+                self._watcher_action_button(
+                    workspace, created, rail=parent_id is not None,
+                ).invoke()
+                start.assert_called_once_with(session, created)
+                self.assertIsNone(workspace._context_card)
+                self.assertEqual(catalogue_reads, session.gallery_page.call_count)
+                manager.create_photos_gallery.assert_called_once()
+                workspace.destroy()
+
+    def test_watcher_refusal_keeps_a_visible_explanation(self) -> None:
+        """Refuse stale or unavailable gallery actions without silently closing.
+
+        Returns:
+            None: No rejected click reaches the host; its contextual explanation
+                remains within the desktop and narrow Photos surfaces.
+        """
+        from PIL import ImageGrab
+
+        ui_theme.configure_theme(self.root)
+        gallery = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Watcher album')
+        for reason in (
+            'cached', 'removed', 'replaced', 'expired', 'permission',
+            'session', 'host',
+        ):
+            with self.subTest(reason=reason):
+                start = mock.Mock()
+                workspace, session, _card = self._photos_create_context(
+                    mock.Mock(), gallery, start,
+                )
+                session.can_upload.return_value = True
+                button = self._watcher_action_button(workspace, gallery)
+                card = workspace._context_card
+                if reason == 'cached':
+                    workspace._fresh_catalogue_ids.discard(gallery.gallery_id)
+                elif reason == 'removed':
+                    workspace._galleries.pop(gallery.gallery_id)
+                elif reason == 'replaced':
+                    workspace._galleries[gallery.gallery_id] = LinkedGallery(
+                        gallery.gallery_id, None, 'Changed album',
+                    )
+                elif reason == 'expired':
+                    session.available.return_value = False
+                elif reason == 'permission':
+                    session.can_upload.return_value = False
+                elif reason == 'session':
+                    replacement = mock.Mock()
+                    workspace._session_provider = lambda: replacement
+                else:
+                    workspace._start_watcher = None
+                button.invoke()
+                start.assert_not_called()
+                self.assertIs(card, workspace._context_card)
+                assert card is not None
+                expected = workspace._text('watcher_unavailable')
+                self.assertEqual(expected, workspace.tree_status.cget('text'))
+                self.assertEqual(
+                    [expected],
+                    [child.cget('text') for child in card.winfo_children()
+                     if isinstance(child, ttk.Label)],
+                )
+                if reason == 'cached':
+                    # Exercise the existing default and minimum fixture sizes.
+                    for width, height in ((840, 620), TEST_VIEWER_MINIMUM_SIZE):
+                        self.root.geometry(f'{width}x{height}')
+                        self.root.update()
+                        workspace._place_context(card)
+                        self.root.update_idletasks()
+                        self.assertTrue(card.winfo_ismapped())
+                        self.assertGreaterEqual(card.winfo_x(), 0)
+                        self.assertGreaterEqual(card.winfo_y(), 0)
+                        self.assertLessEqual(
+                            card.winfo_x() + card.winfo_width(),
+                            workspace.winfo_width(),
+                        )
+                        self.assertLessEqual(
+                            card.winfo_y() + card.winfo_height(),
+                            workspace.winfo_height(),
+                        )
+                        bounds = (
+                            self.root.winfo_rootx(), self.root.winfo_rooty(),
+                            self.root.winfo_rootx() + self.root.winfo_width(),
+                            self.root.winfo_rooty() + self.root.winfo_height(),
+                        )
+                        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+                        evidence.mkdir(parents=True, exist_ok=True)
+                        with ImageGrab.grab(bbox=bounds) as captured:
+                            captured.save(
+                                evidence / f'photos-watcher-refusal-{width}.png',
+                            )
+                    self.root.geometry('840x620')
+                workspace.destroy()
+
+    def test_immediate_cache_probe_cancels_its_pending_widget_timer(self) -> None:
+        """Retire a delayed cache callback when an immediate probe supersedes it.
+
+        Returns:
+            None: Widget teardown cannot leave the old Tcl command scheduled
+                after the Python timer owner has cleared its reference.
+        """
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.root.update()
+        workspace._cache_after = workspace.after(
+            photos_workspace.PHOTOS_CACHE_REFRESH_MS,
+            workspace._start_cache_probe,
+        )
+        pending = workspace._cache_after
+        self.assertIn(pending, self.root.tk.call('after', 'info'))
+        workspace._start_cache_probe()
+        self.assertIsNone(workspace._cache_after)
+        self.assertNotIn(pending, self.root.tk.call('after', 'info'))
+        workspace.destroy()
+        self.assertNotIn(pending, self.root.tk.call('after', 'info'))
+
+    def test_stale_creation_receipt_cannot_admit_a_watcher_gallery(self) -> None:
+        """Reject a late create receipt after its live connection changes.
+
+        Returns:
+            None: A stale or expired session cannot publish a gallery, fresh
+                membership or receipt into the current Photos workspace.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        created = LinkedGallery(TEST_GALLERY_ID, parent.gallery_id, 'Late child')
+        receipt = BoundCreateReceipt(created, 'f' * 64)
+        for reason in ('provider', 'workspace', 'expired'):
+            with self.subTest(reason=reason):
+                workspace, session, card = self._photos_create_context(
+                    mock.Mock(), parent,
+                )
+                if reason == 'provider':
+                    replacement = mock.Mock()
+                    workspace._session_provider = lambda: replacement
+                elif reason == 'workspace':
+                    workspace._session = mock.Mock()
+                else:
+                    session.available.return_value = False
+                workspace._creation_completed(card, session, receipt)
+                self.assertNotIn(created.gallery_id, workspace._galleries)
+                self.assertNotIn(
+                    created.gallery_id, workspace._fresh_catalogue_ids,
+                )
+                self.assertFalse(workspace.tree.exists(str(created.gallery_id)))
+                self.assertIsNone(workspace._create_receipt)
+                workspace.destroy()
+
     def test_same_account_completed_title_is_reconciled_without_new_post(self) -> None:
         """Show the existing same-account gallery instead of duplicating it.
 
         Returns:
-            None: A fresh status result is shown and create is never requested.
+            None: Fresh status makes the existing gallery usable for Watcher
+                without creating a duplicate or reloading the catalogue. An
+                equal replacement row cannot invalidate its open action.
         """
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
         existing = LinkedGallery(
@@ -3923,7 +4348,12 @@ class NativeGalleryViewerTests(unittest.TestCase):
         manager = mock.Mock()
         manager.inspect_photos_gallery_creation.return_value = snapshot
         manager.reconcile_photos_gallery_creation.return_value = receipt
-        workspace, session, card = self._photos_create_context(manager, parent)
+        start = mock.Mock()
+        workspace, session, card = self._photos_create_context(
+            manager, parent, start,
+        )
+        session.can_upload.return_value = True
+        catalogue_reads = session.gallery_page.call_count
         workspace._create_gallery(card, session, parent.gallery_id, 'Same title')
         self._wait_until(
             lambda: any(
@@ -3949,6 +4379,14 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 if isinstance(child, ttk.Label)
             ),
         )
+        button = self._watcher_action_button(workspace, existing)
+        # A catalogue refresh may recreate the same immutable descriptor.
+        workspace._galleries[existing.gallery_id] = LinkedGallery(
+            existing.gallery_id, existing.parent_id, existing.title,
+        )
+        button.invoke()
+        start.assert_called_once_with(session, existing)
+        self.assertEqual(catalogue_reads, session.gallery_page.call_count)
         workspace.destroy()
 
     def test_unknown_pending_photos_create_check_again_stays_read_only(self) -> None:
@@ -6756,7 +7194,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
         """Keep the newest selected photo after an earlier read completes.
 
         Returns:
-            None: The delayed first result cannot replace the second selection.
+            None: The delayed first result cannot replace the second selection
+                or enter its detail cache. Adjacent prefetch is observed at its
+                enqueue boundary; its transport has separate native coverage.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -6822,6 +7262,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             and viewer._worker is None,
             'The grid was not ready before the detail race started.',
         )
+        # Isolate foreground race requests from legitimate neighbor prefetch.
+        # The adjacent-prefetch fixture checks that independent transport path.
+        viewer._queue_adjacent_prefetch = mock.Mock()
         viewer._select_photo(0)
         self.assertTrue(first_detail_started.wait(TEST_GUI_WAIT_SECONDS))
         viewer._select_photo(1)
@@ -6842,6 +7285,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertEqual(
             [TEST_FIRST_IMAGE_ID, TEST_SECOND_IMAGE_ID], detail_ids,
         )
+        viewer._queue_adjacent_prefetch.assert_called_once_with(1)
+        self.assertNotIn(TEST_FIRST_IMAGE_ID, viewer._detail_cache)
         viewer.close()
 
     def test_escape_during_page_read_keeps_refreshed_grid(self) -> None:

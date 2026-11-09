@@ -207,5 +207,17 @@ def current_user_game_processes(candidates: set[str]) -> set[str]:
         return WindowsGameProcesses().names(candidates)
     except (OSError, AttributeError, ValueError):
         # Ordinary games remain supported without process-inspection access.
-        # This permanent optional adapter never controls lifecycle admission.
+        # This permanent optional adapter never controls the upload lifecycle.
         return set()
+
+
+def msfs_running() -> bool:
+    """Admit SimConnect only for this user's running MSFS 2020 or 2024.
+
+    Returns:
+        bool: True for FlightSimulator.exe or FlightSimulator2024.exe owned
+            by the current account; False for other games or denied inspection.
+    """
+    return bool(current_user_game_processes({
+        "flightsimulator.exe", "flightsimulator2024.exe",
+    }))

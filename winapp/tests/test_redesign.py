@@ -19,6 +19,7 @@
 
 import importlib.machinery
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -38,9 +39,15 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS, migrate_config_payload
+from uploader.app_linking import LinkedGallery, LinkingSession
+from uploader.app_linking import LinkedGalleryPage
+from uploader.gallery_catalogue_cache import (
+    GalleryCatalogueCache, GalleryCatalogueSnapshot, GalleryCatalogueWriter,
+)
 from uploader.diagnostics import redact_text
 from uploader.discovery import ArchiveLimits, cleanup_stale_staging, discover_folder, discover_selected_files, stage_zip_archive
 from uploader.flight_jobs import ImportBindings
+from uploader.linked_create import BoundCreateReceipt
 from uploader.media import detect_suffix_capabilities, probe_file
 from uploader.models import ImportItem, ImportJob, JsonValue, RECOVERABLE_ITEM_STATES
 from uploader import photos_workspace
@@ -351,7 +358,148 @@ class PhotosInspectorPreferenceTests(unittest.TestCase):
 
 
 class PhotosCatalogueHostTests(unittest.TestCase):
-    """Keep host-owned Photos cache and selection callbacks connected."""
+    """Keep Photos persistence, progress and host identity boundaries intact."""
+
+    def test_partial_pages_survive_restart_without_dropping_known_rows(self) -> None:
+        """Retain previous unmounted rows and new metadata before the last page.
+
+        Returns:
+            None: Restarted disk reads retain additions and renamed rows after
+                a later page fails; only a complete live pass prunes absence.
+        """
+        prior = GalleryCatalogueSnapshot((
+            LinkedGallery(1, None, 'Previous parent'),
+            LinkedGallery(2, 1, 'Previously visible child'),
+        ), 'a' * 64)
+        renamed = LinkedGallery(1, None, 'Renamed parent')
+        added = LinkedGallery(3, 1, 'New child')
+        workspace = mock.Mock()
+        workspace._catalogue_cache_snapshot = prior
+        # Only the parent has reached Tk's current mount slice. The saved child
+        # still belongs to the last-known tree and must survive the next save.
+        workspace._galleries = {1: prior.galleries[0]}
+        workspace._fresh_catalogue_ids = set()
+        workspace._children_by_parent = {}
+        workspace._pages_this_pass = 0
+        workspace._catalogue_paused_for_preview = True
+        workspace._remember_catalogue_progress.side_effect = lambda: (
+            photos_workspace.PhotosWorkspace._remember_catalogue_progress(
+                workspace,
+            )
+        )
+        photos_workspace.PhotosWorkspace._accept_page(
+            workspace, LinkedGalleryPage((renamed, added), 3),
+        )
+        snapshot = workspace._catalogue_cache_snapshot
+        self.assertEqual(
+            (renamed, prior.galleries[1], added), snapshot.galleries,
+        )
+        self.assertIsNone(snapshot.revision)
+        workspace._queue_catalogue_snapshot_save.assert_called_once_with(snapshot)
+        photos_workspace.PhotosWorkspace._accept_page(workspace, None)
+        self.assertIs(snapshot, workspace._catalogue_cache_snapshot)
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = GalleryCatalogueCache(
+                Path(directory) / 'catalogue',
+                hashlib.sha256(b'partial catalogue fixture').hexdigest(),
+            )
+            self.assertTrue(cache.save(snapshot))
+            reopened = GalleryCatalogueCache(cache._directory, cache._binding)
+            self.assertEqual(snapshot, reopened.load())
+
+    def test_progress_during_full_mount_keeps_confirmed_unmounted_rows(self) -> None:
+        """Keep full-response metadata when creation arrives during UI batches.
+
+        Returns:
+            None: A confirmed new child extends the snapshot without restoring
+                removed rows or replacing unmounted renamed descriptors.
+        """
+        confirmed = (
+            LinkedGallery(1, None, 'Confirmed new parent title'),
+            LinkedGallery(2, 1, 'Confirmed unmounted child'),
+        )
+        created = LinkedGallery(4, 1, 'Created during mounting')
+        workspace = mock.Mock()
+        workspace._catalogue_cache_snapshot = GalleryCatalogueSnapshot(
+            confirmed, 'c' * 64,
+        )
+        # These distinct IDs model an old row, an absent server row, and the
+        # confirmed creation. Only the creation has current live proof so far.
+        workspace._galleries = {
+            1: LinkedGallery(1, None, 'Old visible title'),
+            3: LinkedGallery(3, None, 'Removed on server'),
+            4: created,
+        }
+        workspace._fresh_catalogue_ids = {4}
+        photos_workspace.PhotosWorkspace._remember_catalogue_progress(workspace)
+        self.assertEqual(
+            (*confirmed, created),
+            workspace._catalogue_cache_snapshot.galleries,
+        )
+        self.assertIsNone(workspace._catalogue_cache_snapshot.revision)
+        workspace._queue_catalogue_snapshot_save.assert_called_once_with(
+            workspace._catalogue_cache_snapshot,
+        )
+
+    def test_accepted_catalogue_writes_finish_after_workspace_teardown(self) -> None:
+        """Drain the newest accepted metadata after session and UI cancellation.
+
+        Returns:
+            None: One non-daemon writer finishes both serialized snapshots;
+                cancellation of network work cannot discard already seen rows.
+        """
+        first = GalleryCatalogueSnapshot((LinkedGallery(1, None, 'First'),))
+        latest = GalleryCatalogueSnapshot((
+            LinkedGallery(1, None, 'Renamed'),
+            LinkedGallery(2, 1, 'Visible before closing'),
+        ))
+        started = threading.Event()
+        release = threading.Event()
+        workspace = mock.Mock()
+        workspace._catalogue_cache = mock.Mock()
+        workspace._session = object()
+        workspace._destroyed = False
+        workspace._cancel = threading.Event()
+        workspace._catalogue_cache_writer = GalleryCatalogueWriter()
+
+        def save(snapshot: GalleryCatalogueSnapshot) -> bool:
+            """Hold the first write while a newer snapshot is accepted.
+
+            Args:
+                snapshot (GalleryCatalogueSnapshot): Accepted display hints.
+            Returns:
+                bool: True after the controlled local writer is released.
+            """
+            if snapshot is first:
+                started.set()
+                if not release.wait(TEST_HEARTBEAT_WAIT_SECONDS):
+                    raise TimeoutError('Catalogue writer was not released.')
+            return True
+
+        workspace._catalogue_cache.save.side_effect = save
+        photos_workspace.PhotosWorkspace._queue_catalogue_snapshot_save(
+            workspace, first,
+        )
+        writer = workspace._catalogue_cache_writer._worker
+        try:
+            self.assertTrue(started.wait(TEST_HEARTBEAT_WAIT_SECONDS))
+            photos_workspace.PhotosWorkspace._queue_catalogue_snapshot_save(
+                workspace, latest,
+            )
+            workspace._destroyed = True
+            workspace._cancel.set()
+            workspace._session = None
+        finally:
+            release.set()
+            writer.join(TEST_HEARTBEAT_WAIT_SECONDS)
+        self.assertFalse(writer.is_alive())
+        self.assertFalse(writer.daemon)
+        self.assertEqual(
+            [mock.call(first), mock.call(latest)],
+            workspace._catalogue_cache.save.call_args_list,
+        )
+        self.assertIsNone(workspace._catalogue_cache_writer._pending)
 
     def test_photos_workspace_receives_account_bound_catalogue_owners(self) -> None:
         """Pass the host persistence owners without bypassing identity checks.
@@ -427,6 +575,160 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         )
         workspace.grid.assert_called_once_with(row=0, column=0, sticky='nsew')
         app._sync_watcher_recording.assert_called_once_with()
+
+
+class PhotosWatcherHandoffTests(unittest.TestCase):
+    """Guard the real Photos state transition on every portable WinApp run."""
+
+    def _workspace(self) -> tuple[mock.Mock, mock.Mock, object]:
+        """Prepare the complete state used by receipt and Watcher admission.
+
+        Returns:
+            tuple[mock.Mock, mock.Mock, object]: Workspace with concrete gallery,
+                freshness and parent indexes plus mocked widget boundaries;
+                spec-constrained live LinkingSession; current card identity.
+        """
+        session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
+        session.available.return_value = True
+        session.can_upload.return_value = True
+        card = object()
+        workspace = mock.Mock()
+        workspace._session = session
+        workspace._session_provider.return_value = session
+        workspace._context_card = card
+        workspace._create_receipt = None
+        workspace._selected_gallery_id = None
+        workspace._galleries = {}
+        workspace._fresh_catalogue_ids = set()
+        workspace._children_by_parent = {}
+        workspace._text.side_effect = lambda key: key
+        workspace._cache_after = None
+        workspace._cache_worker = None
+        workspace._cache_pending = {}
+        workspace._destroyed = False
+        return workspace, session, card
+
+    def test_confirmed_receipts_reach_watcher_without_catalogue_reload(self) -> None:
+        """Use production receipt and handoff methods for root and child results.
+
+        Returns:
+            None: New and recovered receipts admit only their exact gallery,
+                and only the later explicit Watcher action calls the host.
+        """
+        # Positive synthetic IDs distinguish a parent from its newly created row.
+        for parent_id in (None, 1):
+            for recovered in (False, True):
+                with self.subTest(parent_id=parent_id, recovered=recovered):
+                    workspace, session, card = self._workspace()
+                    gallery = LinkedGallery(2, parent_id, 'Confirmed capture')
+                    receipt = BoundCreateReceipt(gallery, 'a' * 64)
+                    if parent_id is not None:
+                        workspace._galleries[parent_id] = LinkedGallery(
+                            parent_id, None, 'Parent',
+                        )
+                        workspace._fresh_catalogue_ids.add(parent_id)
+                        workspace._selected_gallery_id = parent_id
+                    photos_workspace.PhotosWorkspace._creation_completed(
+                        workspace, card, session, receipt,
+                        already_exists=recovered,
+                    )
+                    self.assertIs(receipt, workspace._create_receipt)
+                    self.assertEqual(gallery, workspace._galleries[gallery.gallery_id])
+                    workspace._start_watcher.assert_not_called()
+                    photos_workspace.PhotosWorkspace._launch_watcher(
+                        workspace, card, session, gallery,
+                    )
+                    workspace._start_watcher.assert_called_once_with(session, gallery)
+                    workspace._dismiss_context.assert_called_once_with()
+                    workspace.refresh_session.assert_not_called()
+
+    def test_stale_receipts_never_publish_a_current_gallery(self) -> None:
+        """Reject receipt publication after session replacement or expiry.
+
+        Returns:
+            None: The catalogue, freshness set and pending receipt stay empty.
+        """
+        gallery = LinkedGallery(2, None, 'Late capture')
+        receipt = BoundCreateReceipt(gallery, 'b' * 64)
+        for reason in ('workspace', 'provider', 'expired'):
+            with self.subTest(reason=reason):
+                workspace, session, card = self._workspace()
+                if reason == 'workspace':
+                    workspace._session = mock.Mock()
+                elif reason == 'provider':
+                    workspace._session_provider.return_value = mock.Mock()
+                else:
+                    session.available.return_value = False
+                photos_workspace.PhotosWorkspace._creation_completed(
+                    workspace, card, session, receipt,
+                )
+                self.assertEqual({}, workspace._galleries)
+                self.assertEqual(set(), workspace._fresh_catalogue_ids)
+                self.assertIsNone(workspace._create_receipt)
+                workspace._render_tree.assert_not_called()
+
+    def test_open_watcher_action_requires_current_authority(self) -> None:
+        """Permit equal renewal and visibly refuse stale gallery authority.
+
+        Returns:
+            None: Cached, changed, absent or unauthorized rows never reach the
+                host; an equal immutable renewal remains usable.
+        """
+        gallery = LinkedGallery(2, None, 'Capture')
+        for reason in (
+            'equal', 'cached', 'changed', 'removed', 'expired', 'permission',
+            'provider', 'workspace', 'host',
+        ):
+            with self.subTest(reason=reason):
+                workspace, session, card = self._workspace()
+                start = workspace._start_watcher
+                workspace._galleries[gallery.gallery_id] = LinkedGallery(
+                    gallery.gallery_id, gallery.parent_id, gallery.title,
+                )
+                workspace._fresh_catalogue_ids.add(gallery.gallery_id)
+                if reason == 'cached':
+                    workspace._fresh_catalogue_ids.clear()
+                elif reason == 'changed':
+                    workspace._galleries[gallery.gallery_id] = LinkedGallery(
+                        gallery.gallery_id, None, 'Changed capture',
+                    )
+                elif reason == 'removed':
+                    workspace._galleries.clear()
+                elif reason == 'expired':
+                    session.available.return_value = False
+                elif reason == 'permission':
+                    session.can_upload.return_value = False
+                elif reason == 'provider':
+                    workspace._session_provider.return_value = mock.Mock()
+                elif reason == 'workspace':
+                    workspace._session = mock.Mock()
+                elif reason == 'host':
+                    workspace._start_watcher = None
+                photos_workspace.PhotosWorkspace._launch_watcher(
+                    workspace, card, session, gallery,
+                )
+                if reason == 'equal':
+                    start.assert_called_once_with(session, gallery)
+                    workspace._dismiss_context.assert_called_once_with()
+                else:
+                    start.assert_not_called()
+                    workspace._dismiss_context.assert_not_called()
+                    workspace._context_status.assert_called_once_with(
+                        card, 'watcher_unavailable',
+                    )
+
+    def test_immediate_cache_probe_retires_its_delayed_callback(self) -> None:
+        """Cancel the actual timer owner before leaving an idle cache probe.
+
+        Returns:
+            None: A portable run also detects a lost pending timer reference.
+        """
+        workspace, _session, _card = self._workspace()
+        workspace._session = None
+        workspace._cache_after = 'synthetic-cache-timer'
+        photos_workspace.PhotosWorkspace._start_cache_probe(workspace)
+        workspace.after_cancel.assert_called_once_with('synthetic-cache-timer')
+        self.assertIsNone(workspace._cache_after)
 
 
 class PhotoPresentationPolicyTests(unittest.TestCase):
@@ -611,6 +913,8 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         widget.winfo_rootx.return_value = 30
         widget.winfo_rooty.return_value = 40
         widget.winfo_height.return_value = 24
+        widget.winfo_pointerxy.return_value = (35, 45)
+        widget.winfo_containing.return_value = widget
         widget.after.return_value = "tooltip-timer"
         surface = mock.Mock()
         surface._inline_tooltip_state = None
@@ -680,6 +984,73 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         self.assertEqual(1, tooltip_style.kwargs["borderwidth"])
         self.assertEqual(ui_theme._INLINE_TOOLTIP_PADDING,
                          tooltip_style.kwargs["padding"])
+
+    def test_tooltip_requires_actual_hover_and_recovers_missed_leave(self) -> None:
+        """Refuse focus-only and stale delay activation, then track pointer exit.
+
+        Returns:
+            None: A missed Leave cannot retain a tooltip, and surface dismissal
+                cancels delayed help before a content transition.
+        """
+        from uploader import ui_theme
+
+        widget = mock.Mock()
+        widget.winfo_pointerxy.return_value = (35, 45)
+        widget.winfo_containing.return_value = widget
+        widget.winfo_exists.return_value = True
+        widget.winfo_ismapped.return_value = True
+        widget.winfo_rootx.return_value = 30
+        widget.winfo_rooty.return_value = 40
+        widget.winfo_height.return_value = 24
+        widget.after.side_effect = lambda _delay, _callback: (
+            f'tooltip-{widget.after.call_count}'
+        )
+        surface = mock.Mock()
+        surface._inline_tooltip_state = None
+        surface.winfo_exists.return_value = True
+        surface.winfo_ismapped.return_value = True
+        surface.winfo_rootx.return_value = 0
+        surface.winfo_rooty.return_value = 0
+        surface.winfo_width.return_value = 500
+        surface.winfo_height.return_value = 300
+        label = mock.Mock()
+        label.winfo_reqwidth.return_value = 100
+        label.winfo_reqheight.return_value = 30
+
+        with mock.patch.object(ui_theme.ttk, 'Label', return_value=label) as build:
+            ui_theme.attach_inline_tooltip(widget, 'Photos', surface)
+            bindings = {
+                call.args[0]: call.args[1]
+                for call in widget.bind.call_args_list
+            }
+            self.assertNotIn('<FocusIn>', bindings)
+            bindings['<Enter>']()
+            delayed = widget.after.call_args.args[1]
+            widget.winfo_containing.return_value = None
+            delayed()
+            build.assert_not_called()
+
+            widget.winfo_containing.return_value = widget
+            bindings['<Enter>']()
+            widget.after.call_args.args[1]()
+            label.place.assert_called_once()
+            self.assertEqual(
+                ui_theme._TOOLTIP_POINTER_CHECK_MS,
+                widget.after.call_args.args[0],
+            )
+            monitor = widget.after.call_args.args[1]
+            widget.winfo_containing.return_value = None
+            monitor()
+            label.place_forget.assert_called_once()
+            self.assertIsNone(surface._inline_tooltip_state)
+
+            widget.winfo_containing.return_value = widget
+            bindings['<Enter>']()
+            pending = widget.after.call_args.args[1]
+            ui_theme.hide_inline_tooltip(surface)
+            pending()
+            self.assertEqual(1, label.place.call_count)
+            self.assertIsNone(surface._inline_tooltip_state)
 
     def test_icon_button_accepts_scoped_photo_style_and_tooltip_surface(self) -> None:
         """Route Photos icon controls through the themed in-window help path.

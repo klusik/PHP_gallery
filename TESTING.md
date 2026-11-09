@@ -709,7 +709,10 @@ The primary Watcher/Import action fixtures cover localized Begin/Finish
 game/flight wording for both saved-key states in all four interface languages.
 Native presence fixtures cover simulator start/exit/restart, unavailable DLLs,
 empty handles, handle cleanup and observer cancellation without telemetry
-requests. `test_game_presence.py` covers SimConnect priority, process-only MSFS,
+requests. SimConnect presence and watched-upload fixtures also verify that
+absent MSFS skips DLL discovery/location without warnings; process fixtures
+restrict admission to the two MSFS 2020/2024 executable names.
+`test_game_presence.py` covers SimConnect priority, process-only MSFS,
 context replacement on game exit, four-language phrases, original/Legendary
 Mass Effect versus Andromeda, shared-name/multiple-game ambiguity, catalog
 provenance counts and profile additions/malformed rows. Native adapter fixtures
@@ -1588,7 +1591,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.0.4. Release verification uses the
+This guide applies to PHP Gallery Version 1.0.5. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -9041,6 +9044,51 @@ coverage keeps closing the upload picker independent of the active Photos
 reader. Installed Windows click-through and audible playback require separate
 verification.
 
+The native Photos owner also drives creation of a first root and a child through
+the real asynchronous context, acknowledges the receipt and invokes the actual
+gallery or Watcher-rail button without another catalogue request. A recovered
+same-account receipt must reach that action without another create request.
+An equal descriptor replaced during catalogue renewal keeps its open action
+usable; a descriptor whose values changed is refused.
+Negative cases cover cached-only, removed and replaced rows, expired or changed
+sessions, lost upload permission and an unavailable host callback. Refusals
+remain visible in the existing anchored card; desktop and narrow geometry and
+screenshots are retained in the Windows diagnostic artifact. Late creation
+receipts cannot publish rows or freshness into a different or expired session.
+These cases use synthetic server responses and a captured host callback. Hosted
+WinApp diagnostics execute them on Windows; BASIC checks only source contracts.
+Installed-client capture and a real screenshot upload remain separate acceptance.
+The same native owner checks that an immediate cache probe cancels its pending
+delayed callback before clearing the timer reference. Closing the workspace must
+leave no obsolete Tcl command scheduled on the surviving root.
+Catalogue progress fixtures retain renamed/new rows together with previously
+known unmounted children, round-trip that partial state through the real disk
+cache, and preserve it after a later page failure. A controlled serialized
+writer must finish its newest accepted snapshot after UI/session cancellation.
+Creation during full-tree mounting must preserve unmounted confirmed titles
+without restoring a row absent from that complete response.
+The native tree refresh fixture holds an obsolete request across repeated
+toolbar activation, injects a late queued result, then checks updated names,
+changed parents, complete-pass removal, preserved selection/expansion and the
+same photo viewer. Desktop and narrow toolbar screenshots are retained as
+`photos-tree-refresh-1180.png` and `photos-tree-refresh-720.png` in the Windows
+diagnostic artifact. Complete-tree metadata is retained before later Tk batches
+mount. Shared tooltip fixtures check pointer departure before the delay, missed
+Leave after display, focus-only refusal and pending-help cancellation on a
+surface transition. Installed restart/window-switch acceptance remains manual.
+Native capture uses the app's display bootstrap and theme, clamping target
+windows to the runner's screen. A moved selected row must open its new parent
+path. Detail fallback checks keep authorization/proof inputs equal while
+asserting full-version intent only on the full rendition. The rapid-selection
+fixture observes adjacent enqueue separately from its foreground transport;
+the dedicated adjacent-prefetch test retains real neighbor-read coverage.
+`winapp/tests/test_redesign.py` additionally invokes the production receipt,
+Watcher-admission and cache-timer methods with mocked widget boundaries. These
+portable regressions execute in the ordinary central WinApp owner on Linux as
+well as Windows, including new/recovered root and child receipts, unchanged
+renewal and refusal boundaries. Thus the creation-to-Watcher invariant does not
+depend on the Windows-only Tk class being selected for an extra diagnostic run.
+
 Thumbnail pipeline regressions use controlled transports, clocks and the
 existing native Tk owner. They check completed thumbnail reads before a GUI
 poll, bounded ready rasters and GUI attachment slices, decoded-memory reuse
@@ -9073,6 +9121,14 @@ qualification remains with its required FULL owner.
 These jobs prove only their exact-source diagnostics. They do not publish a
 release, qualify a prepared integration SHA, or replace the required FULL
 Chromium and installed GUI coverage.
+For focused Windows UI diagnosis, its optional `native_only` dispatch selects
+the central `winapp-native` suite and Windows runner only; unrelated jobs and
+installer assembly are omitted. The adapter records
+`test_native_gallery_viewer.py` as the actual discovery pattern. Its validator
+requires that explicit scope and refuses the same report as complete WinApp
+evidence. Default complete discovery and the 90-second child cap remain intact.
+This scope permits hosted native UI verification after a whole-suite timeout;
+it does not repair or qualify an incomplete full Windows run.
 
 The gallery writer fixture executes the real copy, Trash and restore wrappers
 against an injected linked-creation reservation refusal. It requires each guard

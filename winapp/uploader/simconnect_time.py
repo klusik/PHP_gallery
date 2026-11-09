@@ -20,6 +20,7 @@ import threading
 import time
 from typing import Callable, Optional
 
+from uploader.windows_game_processes import msfs_running
 from uploader.simconnect_location import (
     SimConnectLocationClient,
     _SimConnectRecv,
@@ -732,12 +733,15 @@ class UtcSyncWorker(threading.Thread):
             )
 
     def run(self) -> None:
-        """Reconnect softly and keep screenshot processing independent.
+        """Connect only with MSFS 2020/2024 running, independently of uploads.
 
         Returns:
             None: Exits after cancellation/watcher stop and closes its handle.
         """
         while not self.cancelled.is_set() and self.allowed():
+            if not msfs_running():
+                self.cancelled.wait(UTC_CHECK_INTERVAL_SECONDS)
+                continue
             client = SimConnectTimeClient(
                 self.dll_path, self.cancelled, self.allowed, self.write_lock,
                 self.monotonic,

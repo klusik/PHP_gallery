@@ -51,6 +51,19 @@ that serves it; stored gallery media is not intended to be served as an
 unchecked
 static tree.
 
+## Gallery-scoped API-key integrations
+
+See [the public gallery-key API reference](API.MD) for the existing `pgu_`
+authentication contract, portable `index.php?page=...` URLs, all supported
+key-authenticated operations, error semantics and complete client examples.
+The reference covers explicit uploads, candidate inventory comparisons,
+revocation, specialized AI/report operations and gallery migration. It does
+not expose automatic browsing, global gallery discovery, internal scan
+commands or browser-approved linking as public integration contracts.
+`docs/` remains HTTP-denied on installed sites; read the source documentation
+in the repository or the localized release manuals rather than exposing that
+private directory to serve this reference.
+
 ## Internal repository trees
 
 The following top-level trees are implementation, maintenance, generated data,

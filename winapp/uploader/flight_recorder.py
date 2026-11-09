@@ -35,6 +35,7 @@ from uploader.flight_data import (
     analyze_session,
 )
 from uploader.simconnect_flight import SimConnectFlightClient
+from uploader.windows_game_processes import msfs_running
 from uploader.windows_file_identity import FILE_ATTRIBUTE_REPARSE_POINT
 
 # Initial wait after a disconnected simulator or open failure.
@@ -817,7 +818,7 @@ class FlightRecorder(threading.Thread):
         return True
 
     def run(self) -> None:
-        """Acquire frame samples and checkpoint through soft native failures.
+        """Wait for MSFS 2020/2024, then acquire and checkpoint frame samples.
 
         Returns:
             None: Closes the connection and persists final session metadata.
@@ -837,6 +838,12 @@ class FlightRecorder(threading.Thread):
             while not self.stop_event.is_set():
                 if self.pause_event.is_set():
                     self.stop_event.wait(FLIGHT_SAMPLE_INTERVAL_SECONDS)
+                    continue
+                # Check only before opening; connected capture retains its
+                # native cadence and detects simulator exit through SimConnect.
+                if not client.handle.value and not msfs_running():
+                    self._latest_sample = None
+                    self.stop_event.wait(FLIGHT_RECONNECT_INITIAL_SECONDS)
                     continue
                 tick = time.monotonic()
                 try:

@@ -8,7 +8,12 @@ credentials, starts watching, records a flight or authorizes an operation.
 ## Detection order and account rights
 
 The background `GamePresence` observer tries a read-only SimConnect open/close
-first. Success selects the ordinary flight labels even when another game is
+only when this account runs `FlightSimulator.exe` (MSFS 2020) or
+`FlightSimulator2024.exe` (MSFS 2024). Photo GPS, recorder connection attempts
+and UTC sync use the same process gate. Without either process they wait or
+skip silently, without loading SimConnect or reporting connection warnings.
+An established recorder/UTC connection handles simulator exit natively.
+Success selects the ordinary flight labels even when another game is
 running. No telemetry, location request or simulator command is issued.
 
 When SimConnect is unavailable, `windows_game_processes.py` takes a process-name

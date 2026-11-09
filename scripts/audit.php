@@ -105,6 +105,16 @@ const AUDIT_READABILITY_REPORT_TIMEOUT_SECONDS = 240;
  */
 const AUDIT_READABILITY_CONTRACT_TIMEOUT_SECONDS = 90;
 
+/**
+ * Keep complete and explicitly scoped WinApp children within the existing cap.
+ * @var int
+ * Units: seconds. Scope: one complete WinApp or native diagnostic child.
+ * Consumers: audit_run_winapp() through the central process runner.
+ * Rationale: preserve the installed 90-second budget for both selections;
+ * diagnostic scope never extends or replaces mandatory complete execution.
+ */
+const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;
+
 $registryPath = __DIR__ . '/audit_registry.php';
 if (!is_file($registryPath)) {
     fwrite(STDERR, "Audit registry is missing: scripts/audit_registry.php\n");
@@ -222,6 +232,7 @@ $knownSuites = [
     'node-fast',
     'node-full',
     'winapp',
+    'winapp-native',
     'mutation-contracts',
     'version-audit',
     'php-lint',
@@ -1553,17 +1564,20 @@ function audit_run_node_suite(
  * Run the Windows companion unittest tree and validate its named outcome report.
  *
  * @param list<string>|null $python Python executable and option prefix, or null when no usable interpreter is configured.
- * @return array{id:'winapp',label:'WinApp regression',status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Normalized task result; a missing interpreter includes named problems, missing test source produces explicit SKIP, and a completed run includes the validated report and process evidence.
+ * @return array{id:'winapp'|'winapp-native',label:'WinApp regression'|'WinApp native viewer diagnostic',status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Normalized task result; a missing interpreter includes named problems, missing test source produces explicit SKIP, and a completed run includes the validated report and process evidence.
+ * @param bool $nativeOnly Run the explicitly labeled native-viewer diagnostic; false preserves complete discovery and its existing timeout.
  */
-function audit_run_winapp(?array $python): array
+function audit_run_winapp(?array $python, bool $nativeOnly = false): array
 {
     global $root, $runDirectory, $persistReports;
     $started = microtime(true);
     $testDirectory = $root . '/winapp/tests';
+    $taskId = $nativeOnly ? 'winapp-native' : 'winapp';
+    $label = $nativeOnly ? 'WinApp native viewer diagnostic' : 'WinApp regression';
     if (!is_dir($testDirectory)) {
         return task_result(
-            'winapp',
-            'WinApp regression',
+            $taskId,
+            $label,
             STATUS_SKIP,
             0.0,
             [],
@@ -1572,8 +1586,8 @@ function audit_run_winapp(?array $python): array
     }
     if ($python === null) {
         return task_result(
-            'winapp',
-            'WinApp regression',
+            $taskId,
+            $label,
             STATUS_BLOCKED,
             0.0,
             [],
@@ -1591,15 +1605,18 @@ function audit_run_winapp(?array $python): array
         'scripts.audit_winapp_report',
         $reportPath,
     ]);
+    if ($nativeOnly) {
+        $command[] = '--native-only';
+    }
     $reportExistedBeforeRun = file_exists($reportPath);
-    $process = run_process($command, $root, 90);
+    $process = run_process($command, $root, AUDIT_WINAPP_TIMEOUT_SECONDS);
     audit_record_slow_check(
         'Python WinApp unittest discovery',
         (float) $process['duration'],
     );
     $output = audit_process_output($process);
-    $logPath = audit_write_log('winapp', [
-        'WinApp unittest discovery',
+    $logPath = audit_write_log($taskId, [
+        $label,
         $output,
     ]);
     $reportProduced = !$reportExistedBeforeRun && is_file($reportPath);
@@ -1613,6 +1630,7 @@ function audit_run_winapp(?array $python): array
             'timed_out' => (bool) ($process['timed_out'] ?? false),
             'duration_seconds' => (float) ($process['duration'] ?? 0.0),
         ],
+        $nativeOnly,
     );
     $adapterReportPath = $persistReports && $reportProduced
         ? relative_path($reportPath, $root)
@@ -1659,8 +1677,8 @@ function audit_run_winapp(?array $python): array
         $summary = 'Structured WinApp report unavailable or invalid.';
     }
     return task_result(
-        'winapp',
-        'WinApp regression',
+        $taskId,
+        $label,
         $status,
         microtime(true) - $started,
         $counts,
@@ -2486,6 +2504,7 @@ function audit_suite_console_label(string $suiteId): string
         'browser-map' => 'Chromium browser integration',
         'website' => 'Static project website',
         'winapp' => 'WinApp regression',
+        'winapp-native' => 'WinApp native viewer diagnostic',
         'mutation-contracts' => 'Admin mutation contracts',
         'version-audit' => 'Runtime hardening audit',
         'php-lint' => 'PHP syntax',
@@ -2645,6 +2664,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
             30,
         ),
         'winapp' => audit_run_winapp($python),
+        'winapp-native' => audit_run_winapp($python, true),
         'mutation-contracts' => audit_run_php_command(
             'mutation-contracts',
             'Admin mutation contracts',

@@ -23,11 +23,14 @@ namespace PhpGallery\Audit;
  * The report records unittest callbacks; aggregate counts alone never establish
  * individual test coverage. Invalid or incomplete documents return no trusted
  * per-test counts and include a stable reason for the audit task.
+ * The default requires complete discovery; only an explicit diagnostic caller
+ * may require the narrower native-viewer pattern instead.
  *
- * @param array<string,mixed> $report Untrusted decoded JSON object; schema v1 requires exactly `schema_version:int`, `successful:bool`, `runtime:{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:{start_directory:'winapp/tests',pattern:'test_*.py',runner:'unittest.TextTestRunner',verbosity:1}}`, `counts:{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int}`, `tests:list<{id:string,status:'PASS'|'FAIL'|'ERROR'|'SKIP'|'EXPECTED_FAILURE'|'UNEXPECTED_SUCCESS',duration_seconds:int|float,reason:?string,subtests:list<{id:string,status:'FAIL'|'ERROR'|'SKIP',reason:string}>}>`, `fixture_errors:list<{phase:'setUpClass'|'tearDownClass'|'setUpModule'|'tearDownModule',id:string,reason:string}>`, and `fixture_skips` with the same fixture-entry shape.
+ * @param array<string,mixed> $report Untrusted decoded JSON object; schema v1 requires exactly `schema_version:int`, `successful:bool`, `runtime:{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:{start_directory:'winapp/tests',pattern:'test_*.py'|'test_native_gallery_viewer.py',runner:'unittest.TextTestRunner',verbosity:1}}`, `counts:{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int}`, `tests:list<{id:string,status:'PASS'|'FAIL'|'ERROR'|'SKIP'|'EXPECTED_FAILURE'|'UNEXPECTED_SUCCESS',duration_seconds:int|float,reason:?string,subtests:list<{id:string,status:'FAIL'|'ERROR'|'SKIP',reason:string}>}>`, `fixture_errors:list<{phase:'setUpClass'|'tearDownClass'|'setUpModule'|'tearDownModule',id:string,reason:string}>`, and `fixture_skips` with the same fixture-entry shape.
  * @return array{valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>} Validated results, or empty counts and details when validation fails.
+ * @param bool $nativeOnly Require the explicit native-viewer diagnostic pattern instead of complete discovery; default false never accepts a diagnostic as full evidence.
  */
-function audit_validate_winapp_report(array $report): array
+function audit_validate_winapp_report(array $report, bool $nativeOnly = false): array
 {
     $emptyCounts = [
         'total' => 0,
@@ -112,7 +115,7 @@ function audit_validate_winapp_report(array $report): array
     $suiteSettings = $runtime['suite_settings'];
     $expectedSuiteSettings = [
         'start_directory' => 'winapp/tests',
-        'pattern' => 'test_*.py',
+        'pattern' => $nativeOnly ? 'test_native_gallery_viewer.py' : 'test_*.py',
         'runner' => 'unittest.TextTestRunner',
         'verbosity' => 1,
     ];
@@ -503,13 +506,18 @@ function audit_validate_winapp_report(array $report): array
  * @param string|null $contents Exact saved adapter report bytes, or null when the output file is missing or unreadable.
  * @param array{exit_code:?int,timed_out:bool,duration_seconds:int|float} $process Bounded process result returned by the central audit runner.
  * @return array{status:string,valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},problems:list<string>} Normalized status and validated evidence.
+ * @param bool $nativeOnly Validate only explicitly requested native-viewer diagnostic evidence; default false retains complete-suite qualification.
  */
-function audit_evaluate_winapp_report(?string $contents, array $process): array
+function audit_evaluate_winapp_report(
+    ?string $contents,
+    array $process,
+    bool $nativeOnly = false,
+): array
 {
-    $empty = audit_validate_winapp_report([]);
+    $empty = audit_validate_winapp_report([], $nativeOnly);
     $decoded = $contents === null ? null : json_decode($contents, true);
     $validation = is_array($decoded)
-        ? audit_validate_winapp_report($decoded)
+        ? audit_validate_winapp_report($decoded, $nativeOnly)
         : $empty;
     if (!$validation['valid']) {
         $validation['reason'] = $contents === null

@@ -7,6 +7,7 @@
 # Responsibilities:
 #   - Preserve unittest outcomes, reasons, durations and fixture errors in one report.
 #   - Write a complete schema-versioned JSON report for the PHP audit owner.
+#   - Label explicitly scoped native diagnosis separately from full discovery.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 
@@ -59,7 +60,7 @@ class FixtureSkipReport(TypedDict):
 
 
 class SuiteSettingsReport(TypedDict):
-    """Record the fixed discovery directory, filename pattern and runner settings."""
+    """Record the selected discovery pattern and standard directory/runner."""
 
     start_directory: str
     pattern: str
@@ -364,12 +365,16 @@ class AuditTextTestResult(unittest.TextTestResult):
             record["reason"] = f"{current_reason}\n{status}: {reason}"
 
 
-def report_suite(suite: unittest.TestSuite, stream: TextIO) -> AuditReport:
+def report_suite(
+    suite: unittest.TestSuite, stream: TextIO, *, native_only: bool = False,
+) -> AuditReport:
     """Run one supplied suite and return its complete structured test report.
 
     Args:
         suite (unittest.TestSuite): Suite created by the caller's standard discovery.
         stream (TextIO): Private stream for unittest's human-readable summary.
+        native_only (bool): Label the explicitly selected native Tk diagnostic;
+            False retains canonical complete-suite evidence.
     Returns:
         AuditReport: Schema-1 runtime, counts, test outcomes, fixture errors and success state.
     """
@@ -401,7 +406,7 @@ def report_suite(suite: unittest.TestSuite, stream: TextIO) -> AuditReport:
     }
     suite_settings: SuiteSettingsReport = {
         "start_directory": "winapp/tests",
-        "pattern": "test_*.py",
+        "pattern": "test_native_gallery_viewer.py" if native_only else "test_*.py",
         "runner": "unittest.TextTestRunner",
         "verbosity": 1,
     }
@@ -432,15 +437,20 @@ def report_suite(suite: unittest.TestSuite, stream: TextIO) -> AuditReport:
     }
 
 
-def discover_canonical_suite() -> unittest.TestSuite:
-    """Discover only the repository's standard WinApp ``test_*.py`` suite.
+def discover_canonical_suite(*, native_only: bool = False) -> unittest.TestSuite:
+    """Discover the complete WinApp suite or its explicit native diagnostic.
+
+    Args:
+        native_only (bool): Select only the native viewer fixture for diagnosis;
+            False keeps the complete standard discovery used by mandatory CI.
 
     Returns:
         unittest.TestSuite: Standard-library discovery result for ``winapp/tests``.
     """
     project_root = Path(__file__).resolve().parents[1]
     test_directory = project_root / "winapp" / "tests"
-    return unittest.defaultTestLoader.discover(str(test_directory), pattern="test_*.py")
+    pattern = 'test_native_gallery_viewer.py' if native_only else 'test_*.py'
+    return unittest.defaultTestLoader.discover(str(test_directory), pattern=pattern)
 
 
 def write_complete_report(output_path: Path, report: AuditReport) -> None:
@@ -472,21 +482,23 @@ def write_complete_report(output_path: Path, report: AuditReport) -> None:
 
 
 def main(arguments: list[str]) -> int:
-    """Run canonical discovery and write its report using one output-path argument.
+    """Run owned discovery with an optional explicit native diagnostic selector.
 
     Args:
-        arguments (list[str]): Command-line arguments excluding the program name.
+        arguments (list[str]): Output path followed optionally by --native-only;
+            all other extra arguments are refused.
     Returns:
         int: Zero for a native successful suite, one for reported failures, or two for adapter errors.
     """
-    if len(arguments) != 1:
+    if not arguments or arguments[1:] not in ([], ['--native-only']):
         return 2
+    native_only = arguments[1:] == ['--native-only']
     output_path = Path(arguments[0]).expanduser().resolve()
     if output_path.exists():
         return 2
     try:
-        suite = discover_canonical_suite()
-        report = report_suite(suite, sys.stderr)
+        suite = discover_canonical_suite(native_only=native_only)
+        report = report_suite(suite, sys.stderr, native_only=native_only)
         write_complete_report(output_path, report)
     except Exception as error:
         print(f"WinApp report adapter failed: {type(error).__name__}: {error}", file=sys.stderr)

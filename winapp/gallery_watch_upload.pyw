@@ -181,6 +181,7 @@ from uploader.models import (
 from uploader.simconnect_location import SimCameraLocation, SimConnectCameraClient, SimulatorInfo
 from uploader.simconnect_time import UtcSyncManager
 from uploader.game_presence import GamePresence
+from uploader.windows_game_processes import msfs_running
 from uploader.flight_jobs import (
     SessionPlan, WatcherContinuation,
     WATCHER_CONTINUATION_LIFETIME_SECONDS,
@@ -5816,8 +5817,8 @@ class WatcherThread(threading.Thread):
         Return Flight Simulator camera metadata fields for one watched upload.
 
         The historical method/field names also cover aircraft-position results.
-        Acquire coordinates immediately before upload, publish the completed
-        diagnostic snapshot, and log the actual provider source. Any host/API
+        Acquire coordinates only while MSFS 2020/2024 is running, publish the
+        completed diagnostic snapshot, and log the actual provider source. Any host/API
         exception returns no extra form fields so optional GPS cannot block
         thumbnails, uploading, retry state or confirmed-source deletion.
 
@@ -5828,7 +5829,7 @@ class WatcherThread(threading.Thread):
             Dict[str, str]: Multipart form fields, or an empty dictionary when
                 unavailable.
         """
-        if not self.config.attach_sim_camera_metadata:
+        if not self.config.attach_sim_camera_metadata or not msfs_running():
             return {}
 
         try:
