@@ -102,6 +102,12 @@ stopped; **Stop**, **Finish** and unlink cancel automatic continuation.
 This requires an available securely saved gallery grant, or the unchanged
 saved API-key mode. Expired/revoked or unsaved transient links need normal
 reconnection; uncertain uploads and forced termination retain manual recovery.
+Startup waits for mode readiness before inspecting the checkpoint. Temporary
+checkpoint-read or gallery-verification failures retain the original restart
+intent for bounded retry; malformed state, changed target/scope and revoked
+access still block capture. Stop or unlink also cancels pending retries and
+late startup results. Continuation diagnostics name the failed phase and a
+fixed safe reason without exposing keys, checkpoint contents or local paths.
 While Watcher capture is active, a red dot pulses
 on the tray icon in step with the in-app indicator. The update badge remains
 visible independently.
@@ -1438,7 +1444,10 @@ admissions; a failed admission can remain partial.
 An activity ring marks the initial accounting wait. The shared-header
 **Thumbnails** indicator and the **Photo storage** control use the compact
 Watcher-pill treatment: icons, short counts and simple bars, without long
-labels. Storage details remain on demand in a popup anchored to the control.
+labels. Storage details remain on demand below the header control, aligned to
+the right edge of the visible main-window client area. Resizing the window or
+changing the displayed values repositions the whole panel and its final values
+inside that area, independently of the Photos workspace's requested width.
 The widget refreshes
 coalesced snapshots off Tk, including other-process writes,
 pin/unpin and recovery. The main thumbnail count and bytes include ordinary

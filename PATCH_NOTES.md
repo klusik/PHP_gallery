@@ -1,5 +1,40 @@
 # Patch notes
 
+## Version 1.0.9
+
+Improved safe Watcher continuation after restart and corrected the compact photo storage panel placement.
+
+### Highlights
+
+#### Watcher restart
+
+- Retried temporary checkpoint reads and original gallery verification while retaining the saved restart intent.
+- Kept changed identities, invalid checkpoints and refused permissions from admitting capture, and cancelled stale continuation results after Stop or unlink.
+- Added safe diagnostic phases and reasons for checkpoint validation and recovery.
+
+#### Photo storage
+
+- Kept the compact storage panel inside the visible main window as the window or its values changed.
+- Retained immediate quota saving and the existing compact controls.
+
+### Technical Details
+
+#### Windows companion
+
+- Updated the Watcher continuation owner and profile-bound checkpoint diagnostics, with bounded retries and one-use admission.
+- Corrected storage popup positioning against the main window client area and the placement surface.
+- Updated the companion guide and all four manual sources; raised the independent WinApp version to 1.0.9.
+
+#### Tests
+
+- Extended continuation fixtures for durable checkpoints, retry, cancellation and retained pending work.
+- Extended native Tk coverage for desktop and narrow layouts, resized content, keyboard dismissal and quota persistence.
+
+### User Impact
+
+- Companion users received more resilient restart recovery and a readable storage panel at narrow window widths.
+- Public visitor and web administrator interfaces did not change.
+
 ## Version 1.0.8
 
 Fixed repeated thumbnail loading in the Windows companion and made the storage

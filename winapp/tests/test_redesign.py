@@ -5747,7 +5747,12 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app = object.__new__(MAIN.WatcherApp)
         app.simulator_presence = mock.Mock()
         app.flights = mock.Mock()
+        app.flights.lease = None
         app.flights.is_alive.return_value = False
+        app._resume_continuation = None
+        app._update_continuation = None
+        app._resume_retry_available = False
+        app._after_update_nonce = None
         app.utc_sync = mock.Mock()
         app.utc_sync.is_alive.return_value = False
         app.updates = mock.Mock()
@@ -5887,7 +5892,12 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         app.linking_manager = mock.Mock()
         app.simulator_presence = mock.Mock()
         app.flights = mock.Mock()
+        app.flights.lease = None
         app.flights.is_alive.return_value = False
+        app._resume_continuation = None
+        app._update_continuation = None
+        app._resume_retry_available = False
+        app._after_update_nonce = None
         app.utc_sync = mock.Mock()
         app.utc_sync.is_alive.return_value = False
         app.updates = mock.Mock()

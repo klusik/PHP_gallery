@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.0.8}
+\newcommand{\version}{1.0.9}
 \newcommand{\manualdate}{9.~November~2026}
 
 \hypersetup{
@@ -2240,7 +2240,10 @@ verkleinern das Dekoderraster ebenfalls vor der RGB-Zuweisung.
 Der Indikator \ui{Thumbnails} und das Element \ui{Photo storage} in der
 gemeinsamen Kopfzeile verwenden den kompakten Watcher-Pillenstil: Symbole, kurze
 Zahlen und einfache Balken ohne lange Beschriftungen. Das Detail-Popup öffnet
-sich bei Bedarf am Bedienelement. Es zeigt alle typisierten gespeicherten
+sich bei Bedarf unter dem Bedienelement in der Kopfzeile und richtet sich am
+rechten Rand des sichtbaren Clientbereichs des Hauptfensters aus. Änderungen
+der Fenstergröße oder der Werte halten das ganze Popup innerhalb dieses Bereichs.
+Es zeigt alle typisierten gespeicherten
 Miniaturen und deren Bytes; Details trennen normale Quote und \ui{Keep preloaded}
 und führen aufbewahrte Miniaturen, andere Medien und Galerien getrennt auf. RAM
 bezeichnet nur Working Set dieses Windows-Prozesses oder Resident Set unter
@@ -2694,6 +2697,12 @@ Innerhalb seiner bestehenden Lebensdauer von 24~Stunden werden das genaue
 gespeicherte Konto und Galerie sowie die Rechte erneut geprüft; dieselbe
 Warteschlange und Aufzeichnung erhalten frischen temporären Zugriff.
 Stop, Finish und Trennen verwerfen diesen Wunsch; gestoppte Erfassung bleibt aus.
+Der Start wartet auf den bereiten Modus. Vorübergehende Fehler beim Lesen des
+Checkpoints oder Prüfen der Galerie behalten denselben Wunsch für begrenzte
+Wiederholungen. Ungültiger Zustand, geänderte Identität oder Scope und
+widerrufener Zugriff blockieren weiter. Stop oder Trennen verwerfen auch
+ausstehende Wiederholungen und späte Ergebnisse. Die Diagnose nennt Phase und
+festen sicheren Grund ohne Schlüssel, Checkpoint-Inhalt oder private Pfade.
 Erforderlich sind eine sicher gespeicherte Galerieverknüpfung oder der unveränderte
 gespeicherte API-Schlüssel. Abgelaufene, widerrufene oder nicht gespeicherte
 temporäre Verknüpfungen benötigen die normale Anmeldung; ungewisse Übertragungen

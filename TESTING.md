@@ -1053,6 +1053,19 @@ source SHA, stop and resume in a disposable local gallery, and inspect the log
 and delivered new photograph. A hosted fixture is not proof of a live installer
 upgrade or power-loss recovery.
 
+Ordinary-restart coverage writes both checkpoint records through their real
+owner, releases the old workspace lease and constructs a fresh `FlightUI`
+against temporary data before inspecting the saved plan and queue. Tk variables
+and external transport remain isolated fixture boundaries. Retry regressions
+cover delayed mode readiness, a temporary checkpoint read refusal followed by
+strict revalidation, temporary gallery failure versus revoked authorization,
+and cancellation of late startup results. Existing continuation tests retain
+nonce/profile/account/gallery/scope rejection, one-use consumption, pending
+photographs and recorder history. The checkpoint reader exposes fixed safe
+reasons for invalid shape, scope, profile, filesystem identity and expiry.
+The full registered WinApp owner also retains the thumbnail cache regressions;
+BASIC alone executes none of these behavioral fixtures.
+
 The WinApp linking fixture switches two approvals for distinct mounts on one
 host. It checks exact account selection, the existing upload guard, unlinking
 one parked session, and address-only history round trips and removal in an
@@ -1615,7 +1628,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.0.8. Release verification uses the
+This guide applies to PHP Gallery Version 1.0.9. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -9078,6 +9091,16 @@ panel and the exact OpenStreetMap URL after explicit activation. Connection
 coverage keeps closing the upload picker independent of the active Photos
 reader. Installed Windows click-through and audible playback require separate
 verification.
+
+The storage quota fixture uses the application's padded outer surface,
+header/status nesting and a separate Photos workspace. It keeps one storage
+panel open through desktop, narrow and restored desktop layouts, with long
+Czech values and content growth/shrinkage. It checks the panel's client-area
+right alignment, every mapped descendant's right edge, final displayed values,
+immediate quota persistence, Escape/focus return and outside-click dismissal.
+Windows captures remain in the existing `photos-storage-compact-*.png`
+diagnostic artifacts. These isolated Tk checks do not exercise an installed
+application or the user's cache.
 
 The native Photos owner also drives creation of a first root and a child through
 the real asynchronous context, acknowledges the receipt and invokes the actual

@@ -28,6 +28,7 @@ from uploader.flight_jobs import (
     SessionPlan,
     WorkspaceLease,
     WatcherContinuation,
+    WatcherContinuationError,
     WATCHER_CONTINUATION_LIFETIME_SECONDS,
     connection_binding,
     pending_sessions,
@@ -500,14 +501,18 @@ class FlightJobsTests(unittest.TestCase):
                     "uploader.flight_jobs.time.time",
                     return_value=(record.created
                                   + WATCHER_CONTINUATION_LIFETIME_SECONDS + 1.0),
-                ), self.assertRaises(ValueError):
+                ), self.assertRaises(WatcherContinuationError) as expired:
                     WatcherContinuation.load(lease)
+                self.assertEqual("expired", expired.exception.reason)
+                self.assertNotIn(str(root), str(expired.exception))
 
                 payload = record.payload()
-                with self.assertRaises(ValueError):
+                with self.assertRaises(WatcherContinuationError) as profile:
                     WatcherContinuation.from_payload(
                         {**payload, "profile_hash": "b" * 64}, root,
                     )
+                self.assertEqual("profile_mismatch", profile.exception.reason)
+                self.assertNotIn(str(root), str(profile.exception))
                 with self.assertRaises(ValueError):
                     WatcherContinuation.from_payload(
                         {**payload, "update_session": ""}, root,
@@ -530,8 +535,9 @@ class FlightJobsTests(unittest.TestCase):
                     serialized[:-1] + ',"phase":"cancelled"}',
                     encoding="utf-8",
                 )
-                with self.assertRaises(ValueError):
+                with self.assertRaises(WatcherContinuationError) as malformed:
                     WatcherContinuation.load(lease)
+                self.assertEqual("malformed_json", malformed.exception.reason)
 
                 path.write_text(
                     serialized.replace('"created":' + str(record.created),
@@ -603,8 +609,10 @@ class FlightJobsTests(unittest.TestCase):
                     }),
                     encoding="utf-8",
                 )
-                with self.assertRaises(ValueError):
+                with self.assertRaises(WatcherContinuationError) as profile:
                     WatcherContinuation.load(lease, ordinary_restart=True)
+                self.assertEqual("profile_mismatch", profile.exception.reason)
+                self.assertNotIn(str(root), str(profile.exception))
                 self.assertEqual(updater, WatcherContinuation.load(lease))
             finally:
                 lease.release()
@@ -628,8 +636,9 @@ class FlightJobsTests(unittest.TestCase):
                     path.symlink_to(outside)
                 except (OSError, NotImplementedError):
                     self.skipTest("The current account cannot create a checkpoint symlink")
-                with self.assertRaises(ValueError):
+                with self.assertRaises(WatcherContinuationError) as redirected:
                     WatcherContinuation.load(lease)
+                self.assertEqual("redirected", redirected.exception.reason)
             finally:
                 lease.release()
 

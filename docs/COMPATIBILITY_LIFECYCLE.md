@@ -83,8 +83,27 @@ the exact owned claims before the worker gate opens, never an admitted run.
 Stop, Finish and unlink cancel this intent;
 stopped, mismatched, expired or uncertain work never becomes fresh capture.
 Unsaved transient grants and forced termination retain explicit recovery.
+Inspection admits no capture before mode readiness. Temporary checkpoint reads
+and original-gallery verification failures retain the same intent for bounded
+retry, while malformed state, changed identity/scope and revoked authorization
+remain terminal. Explicit Stop/unlink and late asynchronous results must not
+revive cancelled intent. The continuation owner reports fixed phase/reason
+identifiers without private paths, checkpoint payloads or credentials.
+The supplied installed 1.0.8 diagnostic used a generic validation reason, so its
+specific failed check is unknown; Photos HTTP 503 does not establish causality.
+The source-level retry gap is independent of that unknown installed cause.
 This is a new source contract with deterministic regression fixtures;
 installed Windows/macOS restart and live simulator acceptance remain unknown.
+The storage popup uses the intersection of its placement surface and the actual
+main-window client bounds, with settled card/descendant geometry. This preserves
+the compact header treatment when parent layout requests exceed visible width.
+Placement explicitly uses the parent's outer coordinate origin: Tk's default
+inside-border placement otherwise adds the padded header surface's inset a
+second time. The native fixture observed that exact 16-pixel overflow before
+the origin correction; its strict client and descendant bounds remain required.
+The existing native Windows owner covers desktop/narrow resizing and localized
+values; installed display/DPI acceptance remains separate. Cache admission,
+authorization and quota policies are unchanged.
 On a verified first-run profile, explicit upload-target selection initializes
 local settings before publishing linked mode through the existing two owners.
 The API-key URL and credential stay separate. Pending flights are checked
