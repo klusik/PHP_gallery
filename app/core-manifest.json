@@ -1,11 +1,11 @@
 {
     "version": "1.0.4",
-    "generated_at": "2026-11-09T10:50:57+00:00",
+    "generated_at": "2026-11-09T11:32:46+00:00",
     "algorithm": "sha256",
     "hash_mode": "normalized-text-sha256",
     "files": {
         ".htaccess": "sha256:fc45f05fd94eada6e672e55e009d9620faed35c2943cce896f91e6277f9cd990",
-        "ARCHITECTURE.md": "sha256:323ac51b2147c9b0565a9e3b5a07770a0220706707e1e82847c184a3515c47de",
+        "ARCHITECTURE.md": "sha256:9b865bbb52bb624300213a584367e633f0ed24eae5f3cd304a4ee9a0179f2f46",
         "PATCH_NOTES.md": "sha256:03d3428d27919277b38dac36f4eeaf68c9c37d3e5848cddf3e87a4a212b7c18d",
         "README.md": "sha256:36525d487ab7ef07087b70a84ed6dedd4849cf41b718367b4cc307c0d10f148b",
         "app/.htaccess": "sha256:cce70f33421dfe50446174ff091977c2a967772eaa3a030b46a06d19c4ce7485",

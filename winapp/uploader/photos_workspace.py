@@ -3665,7 +3665,7 @@ class PhotosWorkspace(ttk.Frame):
     def _launch_watcher(
         self, card: GlassCard, session: LinkingSession, gallery: LinkedGallery,
     ) -> None:
-        """Dismiss the card and invoke the explicit gallery-scoped Watcher.
+        """Start the exact current gallery or explain its refusal in Photos.
 
         Args:
             card (GlassCard): Context card owning the action.
@@ -3673,13 +3673,21 @@ class PhotosWorkspace(ttk.Frame):
             gallery (LinkedGallery): Exact selected physical gallery.
 
         Returns:
-            None: The host receives the target only while it remains current.
+            None: A current target reaches the host; an unavailable target
+                keeps an actionable explanation in the originating card.
         """
+        if card is not self._context_card:
+            return
+        if (self._start_watcher is None or self._session is not session
+                or self._session_provider() is not session
+                or not session.available() or not session.can_upload()
+                or self._galleries.get(gallery.gallery_id) != gallery
+                or gallery.gallery_id not in self._fresh_catalogue_ids):
+            self.tree_status.configure(text=self._text("watcher_unavailable"))
+            self._context_status(card, "watcher_unavailable")
+            return
         self._dismiss_context()
-        if (self._start_watcher is not None and self._session is session
-                and gallery.gallery_id in self._fresh_catalogue_ids
-                and self._session_provider() is session and session.can_upload()):
-            self._start_watcher(session, gallery)
+        self._start_watcher(session, gallery)
 
     def _launch_simbrief(self, card: GlassCard) -> None:
         """Dismiss the card and invoke the current host SimBrief action.
@@ -4331,9 +4339,16 @@ class PhotosWorkspace(ttk.Frame):
         """Inspect one bounded batch of local headers and pin preferences.
 
         Returns:
-            None: One daemon reader publishes only current-generation results.
+            None: Cancels the pending delayed invocation before an immediate
+                probe; one daemon reader publishes current-generation results.
         """
+        after_id = self._cache_after
         self._cache_after = None
+        if after_id is not None:
+            # Catalogue and cache-result paths can request this probe before
+            # the coalesced timer fires. Retain no orphan Tcl callback when
+            # that immediate request replaces it or the workspace is closed.
+            self.after_cancel(after_id)
         session = self._session
         if (self._destroyed or session is None or self._cache_worker is not None
                 or not self._cache_pending):
@@ -6310,7 +6325,7 @@ class PhotosWorkspace(ttk.Frame):
         self, card: GlassCard, session: LinkingSession,
         receipt: BoundCreateReceipt, *, already_exists: bool = False,
     ) -> None:
-        """Insert the confirmed gallery and request explicit receipt acknowledgement.
+        """Admit the current confirmed gallery and offer receipt acknowledgement.
 
         Args:
             card (GlassCard): Originating context, if still open.
@@ -6320,12 +6335,23 @@ class PhotosWorkspace(ttk.Frame):
                 matching gallery, not as a creation from this click.
 
         Returns:
-            None: The first root becomes active; existing selection is preserved.
+            None: A current receipt makes its gallery immediately actionable.
+                The first root becomes active; existing selection is preserved.
+                Stale session results cannot change the catalogue.
         """
+        if (self._session is not session
+                or self._session_provider() is not session
+                or not session.available()):
+            self._creation_context_changed(card)
+            return
         self._create_receipt = receipt
         gallery = receipt.gallery
         had_selection = self._selected_gallery_id is not None
         self._galleries[gallery.gallery_id] = gallery
+        # Creation and recovered status receipts are fresh server responses,
+        # just like catalogue pages. Admit this exact row before rendering or
+        # selecting it; a display-only cached row must still remain blocked.
+        self._fresh_catalogue_ids.add(gallery.gallery_id)
         if gallery.parent_id is not None:
             self._children_by_parent.setdefault(
                 gallery.parent_id, set(),

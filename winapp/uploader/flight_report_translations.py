@@ -2396,6 +2396,10 @@ _PHOTOS_DETAIL_LABELS = {
         "watcher_menu": "Gallery actions",
         "refresh": "Refresh photos",
         "start_watcher": "Use this gallery for Watcher",
+        "watcher_unavailable": (
+            "This gallery or its upload access is no longer current. "
+            "Reconnect or refresh Photos, then reopen the gallery action."
+        ),
         "simbrief": "Open SimBrief",
         "group_inventory": "Inventory",
         "group_gallery": "Gallery",
@@ -2446,6 +2450,10 @@ _PHOTOS_DETAIL_LABELS = {
         "watcher_menu": "Akce galerie",
         "refresh": "Obnovit fotky",
         "start_watcher": "Spustit watcher pro tuto galerii",
+        "watcher_unavailable": (
+            "Galerie nebo oprávnění k nahrávání už nejsou aktuální. "
+            "Obnovte propojení nebo Fotky a znovu otevřete akci galerie."
+        ),
         "simbrief": "Otevřít SimBrief",
         "group_inventory": "Obsah",
         "group_gallery": "Galerie",
@@ -2496,6 +2504,11 @@ _PHOTOS_DETAIL_LABELS = {
         "watcher_menu": "Galerieaktionen",
         "refresh": "Fotos aktualisieren",
         "start_watcher": "Watcher für diese Galerie starten",
+        "watcher_unavailable": (
+            "Diese Galerie oder ihre Uploadberechtigung ist nicht mehr "
+            "aktuell. Verbinden oder laden Sie Fotos neu und öffnen Sie "
+            "die Galerieaktion erneut."
+        ),
         "simbrief": "SimBrief öffnen",
         "group_inventory": "Bestand",
         "group_gallery": "Galerie",
@@ -2546,6 +2559,10 @@ _PHOTOS_DETAIL_LABELS = {
         "watcher_menu": "Galleriåtgärder",
         "refresh": "Uppdatera foton",
         "start_watcher": "Starta Watcher för det här galleriet",
+        "watcher_unavailable": (
+            "Galleriet eller dess uppladdningsbehörighet är inte längre aktuellt. "
+            "Anslut eller uppdatera Foton och öppna sedan galleriåtgärden igen."
+        ),
         "simbrief": "Öppna SimBrief",
         "group_inventory": "Innehåll",
         "group_gallery": "Galleri",

@@ -133,8 +133,17 @@ before refreshing the live link's hierarchy. That persistence owner validates
 bounded IDs/parent IDs/titles/revision, isolates verified issuer/account/scope,
 uses user-scoped Windows DPAPI or private POSIX files, and publishes complete
 snapshots atomically. Photos performs file reads and serialized writes on
-workers. Cached rows confer no authorization: media always uses its current
+workers. An immediate cache-status probe cancels its coalesced delayed callback
+before releasing the timer reference, so widget teardown retains no orphaned
+Tcl command. Cached rows confer no authorization: media always uses its current
 server owner, while new upload/create actions require fresh gallery rows.
+The current session's confirmed create and recovered-status receipts also
+admit their exact gallery rows before rendering and selection. The Watcher
+action checks that same current descriptor, session and upload permission;
+an equal immutable replacement row remains eligible during catalogue renewal.
+A refusal stays visible in its anchored Photos context. Stale-session receipts
+cannot populate the current catalogue. Receipt acknowledgement alone does not
+select an upload target; the existing host still verifies it independently.
 An advertised `galleries:tree-v1` enables a complete JSON/revision read;
 unsupported or invalid optional data retains the snapshot and falls back to
 existing paged reads. Authentication/cancellation/throttling stop instead.

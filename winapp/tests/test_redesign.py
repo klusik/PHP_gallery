@@ -38,9 +38,11 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS, migrate_config_payload
+from uploader.app_linking import LinkedGallery, LinkingSession
 from uploader.diagnostics import redact_text
 from uploader.discovery import ArchiveLimits, cleanup_stale_staging, discover_folder, discover_selected_files, stage_zip_archive
 from uploader.flight_jobs import ImportBindings
+from uploader.linked_create import BoundCreateReceipt
 from uploader.media import detect_suffix_capabilities, probe_file
 from uploader.models import ImportItem, ImportJob, JsonValue, RECOVERABLE_ITEM_STATES
 from uploader import photos_workspace
@@ -427,6 +429,160 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         )
         workspace.grid.assert_called_once_with(row=0, column=0, sticky='nsew')
         app._sync_watcher_recording.assert_called_once_with()
+
+
+class PhotosWatcherHandoffTests(unittest.TestCase):
+    """Guard the real Photos state transition on every portable WinApp run."""
+
+    def _workspace(self) -> tuple[mock.Mock, mock.Mock, object]:
+        """Prepare the complete state used by receipt and Watcher admission.
+
+        Returns:
+            tuple[mock.Mock, mock.Mock, object]: Workspace with concrete gallery,
+                freshness and parent indexes plus mocked widget boundaries;
+                spec-constrained live LinkingSession; current card identity.
+        """
+        session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
+        session.available.return_value = True
+        session.can_upload.return_value = True
+        card = object()
+        workspace = mock.Mock()
+        workspace._session = session
+        workspace._session_provider.return_value = session
+        workspace._context_card = card
+        workspace._create_receipt = None
+        workspace._selected_gallery_id = None
+        workspace._galleries = {}
+        workspace._fresh_catalogue_ids = set()
+        workspace._children_by_parent = {}
+        workspace._text.side_effect = lambda key: key
+        workspace._cache_after = None
+        workspace._cache_worker = None
+        workspace._cache_pending = {}
+        workspace._destroyed = False
+        return workspace, session, card
+
+    def test_confirmed_receipts_reach_watcher_without_catalogue_reload(self) -> None:
+        """Use production receipt and handoff methods for root and child results.
+
+        Returns:
+            None: New and recovered receipts admit only their exact gallery,
+                and only the later explicit Watcher action calls the host.
+        """
+        # Positive synthetic IDs distinguish a parent from its newly created row.
+        for parent_id in (None, 1):
+            for recovered in (False, True):
+                with self.subTest(parent_id=parent_id, recovered=recovered):
+                    workspace, session, card = self._workspace()
+                    gallery = LinkedGallery(2, parent_id, 'Confirmed capture')
+                    receipt = BoundCreateReceipt(gallery, 'a' * 64)
+                    if parent_id is not None:
+                        workspace._galleries[parent_id] = LinkedGallery(
+                            parent_id, None, 'Parent',
+                        )
+                        workspace._fresh_catalogue_ids.add(parent_id)
+                        workspace._selected_gallery_id = parent_id
+                    photos_workspace.PhotosWorkspace._creation_completed(
+                        workspace, card, session, receipt,
+                        already_exists=recovered,
+                    )
+                    self.assertIs(receipt, workspace._create_receipt)
+                    self.assertEqual(gallery, workspace._galleries[gallery.gallery_id])
+                    workspace._start_watcher.assert_not_called()
+                    photos_workspace.PhotosWorkspace._launch_watcher(
+                        workspace, card, session, gallery,
+                    )
+                    workspace._start_watcher.assert_called_once_with(session, gallery)
+                    workspace._dismiss_context.assert_called_once_with()
+                    workspace.refresh_session.assert_not_called()
+
+    def test_stale_receipts_never_publish_a_current_gallery(self) -> None:
+        """Reject receipt publication after session replacement or expiry.
+
+        Returns:
+            None: The catalogue, freshness set and pending receipt stay empty.
+        """
+        gallery = LinkedGallery(2, None, 'Late capture')
+        receipt = BoundCreateReceipt(gallery, 'b' * 64)
+        for reason in ('workspace', 'provider', 'expired'):
+            with self.subTest(reason=reason):
+                workspace, session, card = self._workspace()
+                if reason == 'workspace':
+                    workspace._session = mock.Mock()
+                elif reason == 'provider':
+                    workspace._session_provider.return_value = mock.Mock()
+                else:
+                    session.available.return_value = False
+                photos_workspace.PhotosWorkspace._creation_completed(
+                    workspace, card, session, receipt,
+                )
+                self.assertEqual({}, workspace._galleries)
+                self.assertEqual(set(), workspace._fresh_catalogue_ids)
+                self.assertIsNone(workspace._create_receipt)
+                workspace._render_tree.assert_not_called()
+
+    def test_open_watcher_action_requires_current_authority(self) -> None:
+        """Permit equal renewal and visibly refuse stale gallery authority.
+
+        Returns:
+            None: Cached, changed, absent or unauthorized rows never reach the
+                host; an equal immutable renewal remains usable.
+        """
+        gallery = LinkedGallery(2, None, 'Capture')
+        for reason in (
+            'equal', 'cached', 'changed', 'removed', 'expired', 'permission',
+            'provider', 'workspace', 'host',
+        ):
+            with self.subTest(reason=reason):
+                workspace, session, card = self._workspace()
+                start = workspace._start_watcher
+                workspace._galleries[gallery.gallery_id] = LinkedGallery(
+                    gallery.gallery_id, gallery.parent_id, gallery.title,
+                )
+                workspace._fresh_catalogue_ids.add(gallery.gallery_id)
+                if reason == 'cached':
+                    workspace._fresh_catalogue_ids.clear()
+                elif reason == 'changed':
+                    workspace._galleries[gallery.gallery_id] = LinkedGallery(
+                        gallery.gallery_id, None, 'Changed capture',
+                    )
+                elif reason == 'removed':
+                    workspace._galleries.clear()
+                elif reason == 'expired':
+                    session.available.return_value = False
+                elif reason == 'permission':
+                    session.can_upload.return_value = False
+                elif reason == 'provider':
+                    workspace._session_provider.return_value = mock.Mock()
+                elif reason == 'workspace':
+                    workspace._session = mock.Mock()
+                elif reason == 'host':
+                    workspace._start_watcher = None
+                photos_workspace.PhotosWorkspace._launch_watcher(
+                    workspace, card, session, gallery,
+                )
+                if reason == 'equal':
+                    start.assert_called_once_with(session, gallery)
+                    workspace._dismiss_context.assert_called_once_with()
+                else:
+                    start.assert_not_called()
+                    workspace._dismiss_context.assert_not_called()
+                    workspace._context_status.assert_called_once_with(
+                        card, 'watcher_unavailable',
+                    )
+
+    def test_immediate_cache_probe_retires_its_delayed_callback(self) -> None:
+        """Cancel the actual timer owner before leaving an idle cache probe.
+
+        Returns:
+            None: A portable run also detects a lost pending timer reference.
+        """
+        workspace, _session, _card = self._workspace()
+        workspace._session = None
+        workspace._cache_after = 'synthetic-cache-timer'
+        photos_workspace.PhotosWorkspace._start_cache_probe(workspace)
+        workspace.after_cancel.assert_called_once_with('synthetic-cache-timer')
+        self.assertIsNone(workspace._cache_after)
 
 
 class PhotoPresentationPolicyTests(unittest.TestCase):

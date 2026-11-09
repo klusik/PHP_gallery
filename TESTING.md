@@ -9041,6 +9041,30 @@ coverage keeps closing the upload picker independent of the active Photos
 reader. Installed Windows click-through and audible playback require separate
 verification.
 
+The native Photos owner also drives creation of a first root and a child through
+the real asynchronous context, acknowledges the receipt and invokes the actual
+gallery or Watcher-rail button without another catalogue request. A recovered
+same-account receipt must reach that action without another create request.
+An equal descriptor replaced during catalogue renewal keeps its open action
+usable; a descriptor whose values changed is refused.
+Negative cases cover cached-only, removed and replaced rows, expired or changed
+sessions, lost upload permission and an unavailable host callback. Refusals
+remain visible in the existing anchored card; desktop and narrow geometry and
+screenshots are retained in the Windows diagnostic artifact. Late creation
+receipts cannot publish rows or freshness into a different or expired session.
+These cases use synthetic server responses and a captured host callback. Hosted
+WinApp diagnostics execute them on Windows; BASIC checks only source contracts.
+Installed-client capture and a real screenshot upload remain separate acceptance.
+The same native owner checks that an immediate cache probe cancels its pending
+delayed callback before clearing the timer reference. Closing the workspace must
+leave no obsolete Tcl command scheduled on the surviving root.
+`winapp/tests/test_redesign.py` additionally invokes the production receipt,
+Watcher-admission and cache-timer methods with mocked widget boundaries. These
+portable regressions execute in the ordinary central WinApp owner on Linux as
+well as Windows, including new/recovered root and child receipts, unchanged
+renewal and refusal boundaries. Thus the creation-to-Watcher invariant does not
+depend on the Windows-only Tk class being selected for an extra diagnostic run.
+
 Thumbnail pipeline regressions use controlled transports, clocks and the
 existing native Tk owner. They check completed thumbnail reads before a GUI
 poll, bounded ready rasters and GUI attachment slices, decoded-memory reuse

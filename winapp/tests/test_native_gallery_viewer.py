@@ -7,6 +7,7 @@
 #   - Verify grid tiles, bounded thumbnails, lightbox details and photo paging.
 #   - Verify GPS actions, zoom, slideshow and foreground-result fencing.
 #   - Verify closing the viewer or its parent cancels owned work.
+#   - Verify confirmed gallery creation reaches the real Watcher action.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Windows-only Tk regression coverage for the linked-gallery viewer."""
@@ -3179,12 +3180,15 @@ class NativeGalleryViewerTests(unittest.TestCase):
 
     def _photos_create_context(
         self, manager: mock.Mock, parent: LinkedGallery,
+        start_watcher: Callable[[LinkingSession, LinkedGallery], None] | None = None,
     ) -> tuple['photos_workspace.PhotosWorkspace', mock.Mock, tk.Widget]:
         """Mount Photos with one exact direct parent and a live create grant.
 
         Args:
             manager (mock.Mock): Contextual gallery manager fake.
             parent (LinkedGallery): Direct parent offered in the visible tree.
+            start_watcher (Callable[[LinkingSession, LinkedGallery], None] | None):
+                Optional host receiver for the real contextual Watcher action.
 
         Returns:
             tuple[photos_workspace.PhotosWorkspace, mock.Mock, tk.Widget]: Workspace, session,
@@ -3195,12 +3199,18 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session.available.return_value = True
         session.can_create_gallery.return_value = True
         session.gallery_page.return_value = LinkedGalleryPage((parent,), None)
+        # Creation uses the offered parent's empty page, not the unrelated
+        # photo fixture's gallery ID. No media or presentation is needed here.
+        session.media_page.return_value = LinkedMediaPage(
+            parent.gallery_id, parent.parent_id, (), None,
+        )
+        session.can_read_presentation.return_value = False
         manager.photos_site_identity.return_value = (
             'https://current.example/photos', 7,
         )
         workspace = photos_workspace.PhotosWorkspace(
             self.root, lambda: session, mock.Mock(), lambda: 'en',
-            manager=manager,
+            manager=manager, start_watcher=start_watcher,
         )
         workspace.pack(fill='both', expand=True)
         self._wait_until(
@@ -3213,6 +3223,34 @@ class NativeGalleryViewerTests(unittest.TestCase):
         event.y_root = workspace.tree.winfo_rooty() + 20
         card = workspace._open_context(event)
         return workspace, session, card
+
+    def _watcher_action_button(
+        self, workspace: 'photos_workspace.PhotosWorkspace',
+        gallery: LinkedGallery, *, rail: bool = False,
+    ) -> ttk.Button:
+        """Open the real gallery or rail menu and return its Watcher button.
+
+        Args:
+            workspace (photos_workspace.PhotosWorkspace): Mounted Photos owner.
+            gallery (LinkedGallery): Exact row whose action should be offered.
+            rail (bool): Open the selected-gallery rail action when true.
+
+        Returns:
+            ttk.Button: Actual contextual action with its production command.
+        """
+        event = workspace._context_event(workspace.tree)
+        if rail:
+            workspace.open_selected_watcher_context(event)
+        else:
+            workspace._gallery_context(gallery.gallery_id, event)
+        card = workspace._context_card
+        self.assertIsNotNone(card)
+        assert card is not None
+        return next(
+            child for child in card.winfo_children()
+            if isinstance(child, ttk.Button)
+            and child.cget('text') == workspace._text('start_watcher')
+        )
 
     def test_first_page_and_tiles_precede_slow_optional_presentation(self) -> None:
         """Publish authorized photos before an optional presentation returns.
@@ -3905,11 +3943,225 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertNotIn(old_gallery.gallery_id, workspace._galleries)
         workspace.destroy()
 
+    def test_created_gallery_starts_watcher_without_catalogue_reload(self) -> None:
+        """Create root and child galleries, then invoke their real Watcher action.
+
+        Returns:
+            None: Acknowledged receipts work through gallery and rail menus
+                without another catalogue request or changing an existing selection.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        for parent_id in (None, parent.gallery_id):
+            with self.subTest(parent_id=parent_id):
+                # This distinct synthetic ID was absent from the initial page.
+                created = LinkedGallery(
+                    TEST_GALLERY_ID, parent_id, 'Fresh Watcher gallery',
+                )
+                receipt = BoundCreateReceipt(created, 'e' * 64)
+                manager = mock.Mock()
+                manager.inspect_photos_gallery_creation.return_value = (
+                    CreateJournalSnapshot(
+                        'empty', None, None, None, None, None, None,
+                    )
+                )
+                manager.create_photos_gallery.return_value = receipt
+                start = mock.Mock()
+                workspace, session, card = self._photos_create_context(
+                    manager, parent, start,
+                )
+                session.can_upload.return_value = True
+                session.can_read_presentation.return_value = False
+                session.media_page.return_value = LinkedMediaPage(
+                    created.gallery_id, parent_id, (), None,
+                )
+                if parent_id is None:
+                    workspace._clear_catalogue()
+                    card = workspace._open_context(
+                        workspace._context_event(workspace.tree),
+                    )
+                previous_selection = workspace._selected_gallery_id
+                catalogue_reads = session.gallery_page.call_count
+                workspace._create_gallery(
+                    card, session, parent_id, created.title,
+                )
+                self._wait_until(
+                    lambda: workspace.tree.exists(str(created.gallery_id)),
+                    'Creation did not mount the new gallery.',
+                )
+                self.assertIn(created.gallery_id, workspace._fresh_catalogue_ids)
+                self.assertEqual(
+                    created.gallery_id if parent_id is None else previous_selection,
+                    workspace._selected_gallery_id,
+                )
+                done = next(
+                    child for child in card.winfo_children()
+                    if isinstance(child, ttk.Button)
+                    and child.cget('text') == workspace._text('create_done')
+                )
+                done.invoke()
+                self._wait_until(
+                    lambda: workspace._create_receipt is None,
+                    'The creation receipt was not acknowledged.',
+                )
+                manager.acknowledge_photos_gallery.assert_called_once_with(
+                    session, receipt,
+                )
+                if parent_id is not None:
+                    workspace._select_gallery(created)
+                self._watcher_action_button(
+                    workspace, created, rail=parent_id is not None,
+                ).invoke()
+                start.assert_called_once_with(session, created)
+                self.assertIsNone(workspace._context_card)
+                self.assertEqual(catalogue_reads, session.gallery_page.call_count)
+                manager.create_photos_gallery.assert_called_once()
+                workspace.destroy()
+
+    def test_watcher_refusal_keeps_a_visible_explanation(self) -> None:
+        """Refuse stale or unavailable gallery actions without silently closing.
+
+        Returns:
+            None: No rejected click reaches the host; its contextual explanation
+                remains within the desktop and narrow Photos surfaces.
+        """
+        from PIL import ImageGrab
+
+        ui_theme.configure_theme(self.root)
+        gallery = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Watcher album')
+        for reason in (
+            'cached', 'removed', 'replaced', 'expired', 'permission',
+            'session', 'host',
+        ):
+            with self.subTest(reason=reason):
+                start = mock.Mock()
+                workspace, session, _card = self._photos_create_context(
+                    mock.Mock(), gallery, start,
+                )
+                session.can_upload.return_value = True
+                button = self._watcher_action_button(workspace, gallery)
+                card = workspace._context_card
+                if reason == 'cached':
+                    workspace._fresh_catalogue_ids.discard(gallery.gallery_id)
+                elif reason == 'removed':
+                    workspace._galleries.pop(gallery.gallery_id)
+                elif reason == 'replaced':
+                    workspace._galleries[gallery.gallery_id] = LinkedGallery(
+                        gallery.gallery_id, None, 'Changed album',
+                    )
+                elif reason == 'expired':
+                    session.available.return_value = False
+                elif reason == 'permission':
+                    session.can_upload.return_value = False
+                elif reason == 'session':
+                    replacement = mock.Mock()
+                    workspace._session_provider = lambda: replacement
+                else:
+                    workspace._start_watcher = None
+                button.invoke()
+                start.assert_not_called()
+                self.assertIs(card, workspace._context_card)
+                assert card is not None
+                expected = workspace._text('watcher_unavailable')
+                self.assertEqual(expected, workspace.tree_status.cget('text'))
+                self.assertEqual(
+                    [expected],
+                    [child.cget('text') for child in card.winfo_children()
+                     if isinstance(child, ttk.Label)],
+                )
+                if reason == 'cached':
+                    # Exercise the existing default and minimum fixture sizes.
+                    for width, height in ((840, 620), TEST_VIEWER_MINIMUM_SIZE):
+                        self.root.geometry(f'{width}x{height}')
+                        self.root.update()
+                        workspace._place_context(card)
+                        self.root.update_idletasks()
+                        self.assertTrue(card.winfo_ismapped())
+                        self.assertGreaterEqual(card.winfo_x(), 0)
+                        self.assertGreaterEqual(card.winfo_y(), 0)
+                        self.assertLessEqual(
+                            card.winfo_x() + card.winfo_width(),
+                            workspace.winfo_width(),
+                        )
+                        self.assertLessEqual(
+                            card.winfo_y() + card.winfo_height(),
+                            workspace.winfo_height(),
+                        )
+                        bounds = (
+                            self.root.winfo_rootx(), self.root.winfo_rooty(),
+                            self.root.winfo_rootx() + self.root.winfo_width(),
+                            self.root.winfo_rooty() + self.root.winfo_height(),
+                        )
+                        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+                        evidence.mkdir(parents=True, exist_ok=True)
+                        with ImageGrab.grab(bbox=bounds) as captured:
+                            captured.save(
+                                evidence / f'photos-watcher-refusal-{width}.png',
+                            )
+                    self.root.geometry('840x620')
+                workspace.destroy()
+
+    def test_immediate_cache_probe_cancels_its_pending_widget_timer(self) -> None:
+        """Retire a delayed cache callback when an immediate probe supersedes it.
+
+        Returns:
+            None: Widget teardown cannot leave the old Tcl command scheduled
+                after the Python timer owner has cleared its reference.
+        """
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.root.update()
+        workspace._cache_after = workspace.after(
+            photos_workspace.PHOTOS_CACHE_REFRESH_MS,
+            workspace._start_cache_probe,
+        )
+        pending = workspace._cache_after
+        self.assertIn(pending, self.root.tk.call('after', 'info'))
+        workspace._start_cache_probe()
+        self.assertIsNone(workspace._cache_after)
+        self.assertNotIn(pending, self.root.tk.call('after', 'info'))
+        workspace.destroy()
+        self.assertNotIn(pending, self.root.tk.call('after', 'info'))
+
+    def test_stale_creation_receipt_cannot_admit_a_watcher_gallery(self) -> None:
+        """Reject a late create receipt after its live connection changes.
+
+        Returns:
+            None: A stale or expired session cannot publish a gallery, fresh
+                membership or receipt into the current Photos workspace.
+        """
+        parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
+        created = LinkedGallery(TEST_GALLERY_ID, parent.gallery_id, 'Late child')
+        receipt = BoundCreateReceipt(created, 'f' * 64)
+        for reason in ('provider', 'workspace', 'expired'):
+            with self.subTest(reason=reason):
+                workspace, session, card = self._photos_create_context(
+                    mock.Mock(), parent,
+                )
+                if reason == 'provider':
+                    replacement = mock.Mock()
+                    workspace._session_provider = lambda: replacement
+                elif reason == 'workspace':
+                    workspace._session = mock.Mock()
+                else:
+                    session.available.return_value = False
+                workspace._creation_completed(card, session, receipt)
+                self.assertNotIn(created.gallery_id, workspace._galleries)
+                self.assertNotIn(
+                    created.gallery_id, workspace._fresh_catalogue_ids,
+                )
+                self.assertFalse(workspace.tree.exists(str(created.gallery_id)))
+                self.assertIsNone(workspace._create_receipt)
+                workspace.destroy()
+
     def test_same_account_completed_title_is_reconciled_without_new_post(self) -> None:
         """Show the existing same-account gallery instead of duplicating it.
 
         Returns:
-            None: A fresh status result is shown and create is never requested.
+            None: Fresh status makes the existing gallery usable for Watcher
+                without creating a duplicate or reloading the catalogue. An
+                equal replacement row cannot invalidate its open action.
         """
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
         existing = LinkedGallery(
@@ -3923,7 +4175,12 @@ class NativeGalleryViewerTests(unittest.TestCase):
         manager = mock.Mock()
         manager.inspect_photos_gallery_creation.return_value = snapshot
         manager.reconcile_photos_gallery_creation.return_value = receipt
-        workspace, session, card = self._photos_create_context(manager, parent)
+        start = mock.Mock()
+        workspace, session, card = self._photos_create_context(
+            manager, parent, start,
+        )
+        session.can_upload.return_value = True
+        catalogue_reads = session.gallery_page.call_count
         workspace._create_gallery(card, session, parent.gallery_id, 'Same title')
         self._wait_until(
             lambda: any(
@@ -3949,6 +4206,14 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 if isinstance(child, ttk.Label)
             ),
         )
+        button = self._watcher_action_button(workspace, existing)
+        # A catalogue refresh may recreate the same immutable descriptor.
+        workspace._galleries[existing.gallery_id] = LinkedGallery(
+            existing.gallery_id, existing.parent_id, existing.title,
+        )
+        button.invoke()
+        start.assert_called_once_with(session, existing)
+        self.assertEqual(catalogue_reads, session.gallery_page.call_count)
         workspace.destroy()
 
     def test_unknown_pending_photos_create_check_again_stays_read_only(self) -> None:

@@ -1519,7 +1519,12 @@ With upload permission, use **Use this gallery for Watcher** from a gallery
 context or the Watcher rail menu while Photos is open. WinApp verifies the
 exact gallery and uses the existing Watcher folder, local thumbnail pipeline
 and finish controls. The Watcher panel shows preparation or refusal for that
-request. Before activating the destination, WinApp checks its accepted import
+request. A gallery confirmed by creation or a recovered creation-status response
+can use this action immediately, without reloading Photos. A display-only cached
+row still needs live confirmation. If the gallery, connection or upload access
+changes while its menu is open, Photos keeps an explanation in the anchored
+panel and asks you to reconnect or refresh before reopening the action.
+Before activating the destination, WinApp checks its accepted import
 work against the local upload history. A large existing Watcher history can
 be read within the same 256 MiB bound used for state updates. Unverifiable
 history or unfinished work for another destination still blocks a change.

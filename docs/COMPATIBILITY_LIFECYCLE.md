@@ -482,6 +482,21 @@ versioned tree preferences; version 1 expansion states remain supported.
 Cached navigation still performs independent live media authorization; new
 upload and create actions require fresh gallery confirmation. Cached metadata
 never grants media, upload or mutation access.
+Source review of the reported new-gallery Watcher no-op found that `5406d8a0`
+added fresh-row admission to the action while confirmed creation only inserted
+the display row. The current-session create and recovered-status paths now
+admit that exact confirmed row before rendering and selection. The action
+retains freshness, current descriptor, live-session and upload-scope checks;
+refusal stays visible in Photos instead of silently dismissing its context.
+Cached-only rows and stale or expired creation results remain ineligible.
+Native fixtures cover the creation-to-button transition and its negative
+boundaries. Installed Windows and mixed-version deployment acceptance of this
+repair remain unverified; no schema, server endpoint or credential format changes.
+Focused Windows diagnosis also observed obsolete cache-probe Tcl callbacks after
+workspace teardown. An immediate probe now cancels its pending delayed callback
+before clearing that timer reference. A native lifecycle fixture checks removal
+from Tk's pending queue. This observation does not establish the cause of a
+separate whole-suite hosted timeout or installed prevalence.
 An additive `galleries:tree-v1` server capability exposes a bounded complete
 tree and an account/scope-bound revision on the existing listing route.
 Current authority is rechecked before an unchanged envelope can omit rows.
