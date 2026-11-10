@@ -1961,6 +1961,56 @@ Schema verweigert Freigaben und Änderungen. Betriebsgrenzen beschreibt
 \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \section{Windows-Uploader}
+\subsection{Dauerhafte Capture-Warteschlange und Wiederherstellung}
+
+Einmal verbinden, Capture starten und am Ende einmal \ui{Finish} wählen.
+Ein eigener lokaler Producer erfasst Screenshots während Upload,
+Token-Erneuerung, Netzausfall und Rate-Limit-Wartezeit. Windows-Ereignisse
+werden jede Sekunde abgeglichen. Jede Quellgeneration erhält eine dauerhafte
+ID und unveränderliche FIFO-Position vor dem Hash. Nur der älteste ungelöste
+Eintrag darf Inventar, Verbindung oder Upload beginnen. Instabile, fehlende,
+wartende, unautorisierte und unbekannte Köpfe blockieren neuere Dateien.
+Import verwendet denselben Consumer. ZIP wird lokal entpackt; jeder Request
+enthält ein Original und optionale Vorschaubilder.
+
+Neue Gruppen verwenden erkannte Steam-Aufnahmezeit, sonst Erstellungszeit
+oder erste Beobachtung, mit deterministischen Gleichständen. Mtime ordnet
+akzeptierte Arbeit nicht neu. Später gefundene alte Dateien ändern keine
+vergangenen Übertragungen. Neue Sitzungen schließen historische Bilder aus.
+Bestätigte wiederhergestellte Bytes werden je Ziel dedupliziert. Geänderte
+historische Quellen ohne Fingerprint und alte ungeordnete Warteschlangen mit
+mehreren offenen Pfaden erfordern Prüfung statt erfundener Reihenfolge.
+
+Das kompakte Symbol \ui{Warteschlange aktualisieren} gleicht dieselbe Sitzung
+ab und setzt sicher fort. Wiederholungen werden zusammengefasst. Ein aktiver
+Request behält seinen Eigentümer bis zum tatsächlichen Ende. FIFO, Ziel/Scope,
+Retry-Termin, Unsicherheit und Finish-Grenze bleiben erhalten. Finish speichert
+die erste Grenze, wartet auf zulässige unfertige Quellen und verlangt einen
+neuen Abschluss-Scan nach letzter Bestätigung. Fotowarteschlangen können länger als fünf
+Minuten warten. Verifiziertes Foto-Finish desselben Ziels wird nach Neustart
+fortgesetzt; Legacy-Schlüsselwiderruf verlangt weiterhin gesonderte neue
+Bestätigung. Linked-Flugberichte bleiben lokal.
+
+Inventar/Upload teilen nicht mehr 60 Requests je IP in 300~s.
+Upload-Grants zählen Requests; Konto/IP/global zählen atomar jedes Original,
+auch bei bereits unterstütztem Multipart mit mehreren Originalen.
+Neue Fenster und Sperren dauern 60~s: 120/60 je verifiziertem
+Grant/Konto/Galerie, 240/120 je Konto und IP sowie 600/120 global.
+Gemeinsame Prüfung vor Authentifizierung erlaubt 240 je IP und 600 global
+pro Minute. Zwei Clients mit je 45 Bildern einschließlich Steuerung und
+sicherer Kopfprüfung passen hinein; dies misst keine Hosting-Kapazität.
+Retry-After erreicht denselben Kopf; sonst gelten automatische 5--300~s
+Rückwartezeiten ohne Aufgabe des Abschlusswunsches. Spekulatives Photos-
+Preload/Prefetch wartet bei Blockierung. Lokale Vorbereitung darf wiederholt
+werden; unbekannte gesendete Uploads verlangen Prüfung ohne erneutes Senden
+oder nächstes Bild. Hash-Inventar und requestlokale IDs sind keine
+Operationsbelege. Idle-Updates fordern keine Capture-Fortsetzung, aktive
+prüfen Nonce und Version streng. Diagnose behält Kopf, Anzahl,
+Producer/Consumer, Fortschritt, nächsten Versuch und historischen Fehler.
+BASIC prüft nur Quellen; installierter Windows-Betrieb, Layout und
+bereitgestellter Server benötigen separate Abnahme.
+Der dauerhafte Vertrag steht in \texttt{docs/UPLOADER\_QUEUE.md}.
+
 \subsection{Aufbau}
 
 Beim normalen Start öffnet sich \ui{Fotos}; die Reihenfolge lautet
@@ -10755,13 +10805,19 @@ verwenden das einheitliche Format.
 
 GitHub Actions führt die Quellvorprüfung vor der gehosteten Vorbereitung aus.
 Agenten folgen CI-first: aktuellen autorisierten Arbeitszweig, HEAD und
-ausdrückliche Push-Berechtigung prüfen, Quellen/Tests/Dokumentation
+auftragsbezogene Zweig-/Push-Berechtigung prüfen, Quellen/Tests/Dokumentation
 fertigstellen, committen und genau diesen Zweig pushen. \codeword{develop} und
 \codeword{main} niemals direkt ändern. Fehlender Zugriff bedeutet BLOCKED.
 Lokale Audits, Generatoren und Testschleifen sind Ausnahmediagnosen. CI behält
 die unveränderliche Merge-Base mit \codeword{origin/main}; Releases verwenden
 den vorherigen stabilen Tag. Rotes oder langsames CI rechtfertigt keine rein
 lokale Qualifikation.
+
+Ein Implementierungs- oder Reparaturauftrag erlaubt automatisch einen passenden
+codeword{feature/*}-Zweig aus geprüftem codeword{origin/develop}, Wechsel,
+Commits, exakten Push und hosted BASIC ohne erneute Routine-Rückfrage.
+Integration, Squash, Release, Tags und Veröffentlichung benötigen weiterhin
+gesonderte ausdrückliche Zustimmung gemäß ilepath{AGENTS.md}.
 
 Für Diagnosen mit einer temporären MySQL-Datenbank bietet
 \filepath{scripts/gallery_workflow_mysql.php} den Modus

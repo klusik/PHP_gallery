@@ -2,21 +2,19 @@
 
 ## Authoring Contract (Read Before Editing)
 
-Read this contract and affected area rules before edits; nested AGENTS are not
-loaded automatically. User rules prevail.
+Read this and affected area rules before edits. User rules prevail; nested
+AGENTS are not automatic.
 
-**Before writing:** verify branch authorization, find the domain owner and a
-compliant declaration, and read affected contracts from the map.
-For **every public or Admin UI change**, automatically read and follow
-[the mandatory design contract](docs/ADMIN_DESIGN.md): compact translucent
-surfaces and contextual panels anchored to their triggers. Verify the rendered
-desktop/narrow result; never wait for the user to request this or correct it.
-The approved visitor bell/PDF/music glass treatment is the default reference
-for new contextual UI; use its Theme tokens and action hierarchy automatically.
+**Before writing:** verify task/branch scope, find the domain owner and a
+compliant declaration, and read affected contracts below.
+For **every public/Admin UI change**, automatically follow
+[the mandatory design contract](docs/ADMIN_DESIGN.md): compact translucent surfaces,
+trigger-anchored panels, Theme tokens and action hierarchy from the approved
+visitor bell/PDF/music treatment. Verify rendered desktop/narrow results without
+waiting for user requests/corrections.
 
-**While writing:** write declarations and complete factual docs together.
-Preserve
-comments and update permanent docs. Fix repeated problems throughout the batch;
+**While writing:** write declarations and factual permanent docs together.
+Preserve comments. Fix repeated problems throughout the batch;
 never weaken types, checks, limits or baselines for PASS.
 
 **Before FULL:** complete the impact review in
@@ -47,22 +45,22 @@ installation proof.
 
 ## Branch authorization and repository safety
 
-Run Git commands, especially ref creation, checkout, fetch and push, outside
-the sandbox. The user explicitly requires non-sandbox Git because sandboxed Git
-cannot reliably write repository refs or access the configured remote.
+Run all Git commands outside the sandbox: the user requires this because
+sandboxed Git cannot reliably write refs or access the configured remote.
 
-Before writes, verify branch/HEAD, exact remote repository/head, explicit branch
-authorization and usable write permission. Targets: `feature/*`, `fix/*`,
-`bugfix/*`, `hotfix/*`, `codex/*`; new work uses `feature/`. Missing identity,
-access or authorization is **BLOCKED / not CI-qualified**; stop and request
-access.
+Before writes, verify branch/HEAD, exact remote repository/head, task scope and
+write access. An implementation/fix request authorizes automatic feature creation
+from verified `origin/develop`, checkout, commits, exact feature push and hosted
+BASIC; never ask again for routine branch permission. Reuse an explicitly selected
+suitable branch. Allowed: `feature/*`, `fix/*`, `bugfix/*`, `hotfix/*`, `codex/*`;
+new work uses `feature/`. Missing identity/access is **BLOCKED / not CI-qualified**;
+request only missing access or genuinely unclear scope.
 
-**Never directly mutate `develop` or `main`**, by Git or API: no push,
-force-push,
-FF, reset, deletion, ref update or merge. Creating/switching branches, squash,
-release operations, tags and publication need separate explicit authorization.
-Broad credentials/feature edits grant no authority. Protected writes belong to
-approved maintainer workflows; do not change protections or enable bypass.
+**Never directly mutate `develop`/`main`**, by Git or API: no push, force-push,
+FF, reset, deletion, ref update or merge. Integration, squash, release, tags and
+publication need separate explicit authorization. Feature work grants none.
+Protected writes belong to approved maintainer workflows; no protection changes
+or bypass.
 
 Check remote heads before writes. Use non-forced ordinary updates and exact refs
 (`git push origin HEAD:refs/heads/feature/example`); integrate concurrent bot
@@ -74,11 +72,9 @@ Do not routinely prune refs.
 Create features with `git switch --no-track --create feature/name origin/develop`
 from the verified base; never inherit that base branch's upstream.
 Its first push uses `git push --set-upstream origin HEAD:refs/heads/feature/name`.
-Verify `git branch -vv` after creation/push and
-before handoff: `develop` tracks `origin/develop`, `main` tracks `origin/main`,
-and each feature tracks only its own same-named remote branch (or has no
-upstream before first push). Check commit equality separately from tracking;
-a correct upstream does not prove freshness. Preserve protected-write rules.
+Verify `git branch -vv` after creation/push and before handoff: develop/main track
+their same-named origin refs; features track only their own remote (or none before
+first push). Check commit equality separately; tracking does not prove freshness.
 
 Never commit credentials, config.php, caches, uploads or deploy archives. Use
 config.example.php and existing access services. Ignored `.claude/`, `.codex/`,
@@ -93,143 +89,85 @@ PHP 8.1+, four-space indentation, `declare(strict_types=1);` in new PHP files;
 no Composer or Node build, framework-free public JS/CSS. Never use Python
 `from __future__ import annotations`.
 
-**Readability (advisory, no hard limit):** Prefer code/TeX/Markdown
-at <=80 display
-columns for GitHub split diffs/narrow editors. At 81-100 consider a natural
-split;
-above 100 actively seek one. Format lengthy arguments/collections/lists one
-entry
-per indented line; group conditions and separate logical steps/declarations with
-blank lines. Preserve semantics, types, comments and docstrings. Allow justified
-long literals, URLs, identifiers and generated content. Focus diffs; never gate
-CI.
-[examples and exceptions](docs/CODE_READABILITY.md).
+**Readability is advisory, never a CI gate.** Prefer <=80 columns; consider
+splitting at 81-100, actively above 100. Preserve semantics/comments and focused
+diffs; use [the complete rules/exceptions](docs/CODE_READABILITY.md).
 
-MVC is mandatory for new/materially refactored responsibilities:
-`Controller -> Service -> Model`. Models own SQL/PDO/persistence/row mapping;
-services own reusable policy/orchestration/filesystem workflows; controllers own
-HTTP, auth/CSRF, responses and prepared view models; views own presentation.
-Find the existing owner before adding helpers. Pass semantic inputs, never SQL
-fragments. Views do not discover domain policy. Never add MVC baseline debt.
+New/materially refactored responsibilities require `Controller -> Service -> Model`.
+Models own SQL/PDO/persistence/mapping; services own policy/orchestration/filesystems;
+controllers own HTTP/auth/CSRF/responses/prepared view models; views own presentation.
+Find existing owners; pass semantic inputs, never SQL fragments. Views cannot
+discover domain policy. Never add MVC baseline debt.
 
-New source files need leading native-comment headers: Project, Repository,
-actual
-tracked File path, Module Type, Purpose, Responsibilities, Author (Rudolf
-Klusal),
-License. Correct copied/moved paths. Headers, docs, native types and policy
-explanations are independent; use checked examples.
+[The complete authoring rules](docs/AGENT_AUTHORING.md) are mandatory, including
+all declaration/type/header/policy details and narrow exceptions; this summary
+grants no exemption:
 
-Each new/changed named function/method needs purpose before tags,
-typed/described
-parameters (defaulted, nullable, variadic and added too), and every return
-variant
-including void/None/failure. Document concrete collection elements/object
-fields,
-not bare array/Object/mixed/any/wildcards. Keep the opaque-unused-PHP exception
-narrow. PHPDoc/JSDoc immediately precedes declarations. Python docstrings come
-first inside, using typed Google-style `Args:`/`Returns:` consistently.
-Native PHP/Python types are independent; PHP constructors/destructors
-document returns without a native return type.
-
-All class-like declarations, anonymous included, need purpose docs. Anonymous
-callbacks/arrows and variables/constants/properties need no declaration
-docstring;
-nested named declarations do. Explicit PHP callback parameters need native
-types.
-Do not extract helpers just for docs or put docblocks in arguments. Preserve
-meaningful comments and local reasoning.
-
-Use named constants/configuration for numeric policies, including tools/tests:
-timeouts, sizes, counts, retries and defaults. At each policy site explain
-purpose,
-`Type:` (or @var/@type), `Units:`, `Scope:`, `Consumers:`, `Rationale:`, value
-and
-reason. Headers cannot replace this. Explain structural literals/test boundaries
-locally. Keep scanner scope/budgets: changed-runtime exemptions for tooling do
-not
-exempt whole-tree inventory.
-
-Changed fallbacks need reason, protected behavior/environment, owner and
-retirement
-proof/permanent-support rationale. Record high-impact regression/usage evidence
-(or unknown) in the lifecycle contract. Preserve support until safe retirement;
-never infer versions/usage.
+- New sources need native-comment Project, Repository, tracked File, Module Type,
+  Purpose, Responsibilities, Author (Rudolf Klusal), License. Correct copied paths.
+- Changed/new named functions/methods need purpose, every typed/described parameter
+  (defaults/nullable/variadic too), all return variants including void/None/failure,
+  concrete collection/object shapes. No bare array/Object/mixed/any. PHPDoc/JSDoc
+  precedes declarations; Python first-inside docstrings use typed Google
+  `Args:`/`Returns:`. Native types are independent; PHP constructor/destructor
+  return docs have no native return type.
+- Every class, anonymous included, needs purpose docs. Anonymous callbacks/arrows
+  and variables/constants/properties need no declaration docstring; nested named
+  declarations do. Explicit PHP callback parameters need native types. Preserve
+  comments/reasoning; no helpers just for docs or docblocks inside arguments.
+- Numeric policies, tools/tests included, require named constants/config and
+  purpose, `Type:` (or @var/@type), `Units:`, `Scope:`, `Consumers:`, `Rationale:`,
+  value/reason at each site. Headers do not substitute; explain structural literals
+  locally. Preserve scanner budgets/scope; tooling exemptions exclude no inventory.
+- Changed fallbacks need reason, protected behavior/environment, owner and
+  retirement proof/permanent-support rationale. Record high-impact regression/
+  usage evidence (or unknown) in lifecycle docs; retain support until safe
+  retirement, never infer versions/usage.
 
 ## Mandatory Agent Verification Contract
 
-**CI-first and working-branch-only writes override local test instructions.**
+**CI-first, working-branch-only writes override local test instructions.**
 `scripts/audit.php` is the sole orchestrator; no parallel YAML test registry.
-No routine local audits/lint/test loops/generators or repeats of green CI.
-Focused
-local diagnosis needs an observed environment-specific CI failure, inaccessible
-CI or explicit user request. Red/slow CI is available; local evidence never
-replaces
-hosted qualification.
+No routine local audits/lint/tests/generators or repeats of green CI. Local
+focused diagnosis requires an observed environment-specific CI failure,
+inaccessible CI or explicit user request. Red/slow CI remains available;
+local evidence never replaces hosted qualification.
 
-Installed cadence: finish source/tests/permanent docs -> commit -> exact working
-branch push -> hosted **Basic source checks**. Feature pushes/final squash
-receive
-BASIC syntax and changed named-declaration docs. BASIC currently omits native
-headers and FULL inventory; review changed/new headers before commit. An early
-header gate needs a separate scanner/CI change and qualification.
+Finish source/tests/permanent docs -> commit -> exact working-branch push ->
+hosted **Basic source checks**. Feature pushes/final squash check BASIC syntax
+and changed declarations, omitting headers/FULL inventory. Review headers before
+commit; an early header gate needs a separately qualified scanner/CI change.
 
-Maintainer-approved **Integrate into develop** uses the main/feature workflow
-ref
-selected in GitHub, including its tests/CI; prior main installation is
-unnecessary.
-Select one candidate above observed develop P, prepare artifacts, obtain fresh
-BASIC and run central FULL on final exact A before guarded non-force FF. Seal
-execution before writing; reuse only identical candidate/base after publication
-failure. Owner dispatch, all native owners and protected-write rules remain
-required.
+Integration/release require separate approval and all candidate, seal, lease,
+owner, FULL, protected-FF, assembly and publication rules in
+[CI instructions](.github/AGENTS.md), [coverage contract](docs/CI_COVERAGE_REUSE_CONTRACT.md),
+[RELEASE.md](RELEASE.md) and [lifecycle](docs/RELEASE_LIFECYCLE.md).
+Those full rules are mandatory; this summary grants no exceptions.
 
-A separately authorized release trusts protected-develop A, assembles notes,
-four
-manuals, inventory, manifest and attachments, then opens a PR without new
-BASIC/FULL.
-Keep assembly, leases, approval, merge/tag, draft and manual publication
-distinct;
-preserve origins/tags/assets. FF develop to actual tagged main: equal trees
-alone
-do not prove shared history. Never create content-copy synchronization commits.
+Hosted preparation owns modules, index inventory and complete-file manifest
+hashes in dependency order. Stage every new/deleted path, including development/
+docs; edit authored inputs, never modules.php. Never hash truncated Contents API
+data; later edits invalidate evidence. Read compact summaries, source-failures.md
+once per failed batch, then linked JSON; raw logs only for FAIL/BLOCKED/material
+SKIP. Immutable bases: feature BASIC origin/main merge-base, integration observed
+develop P, release delta A. Missing history/base is BLOCKED, never HEAD.
 
-Hosted preparation owns runtime modules, index-based inventory and complete-file
-manifest hashes in dependency order. Stage all new/deleted paths,
-development/docs
-included. Edit authored runtime inputs, not modules.php. Never hash truncated
-Contents API data. Later edits invalidate earlier evidence.
-
-Read compact summaries, source-failures.md once per failed batch, then linked
-JSON.
-Read raw logs for FAIL/BLOCKED/material SKIP only. Freeze base SHA: feature
-BASIC
-uses origin/main merge-base, integration observed develop P, release delta A.
-Missing history/base is BLOCKED, never HEAD.
-
-Handoff includes workflow URL, branch, exact checked/prepared SHA, immutable
-base,
-required results and missing/manual coverage. Failed/blocked/missing/cancelled/
-skipped/stale mandatory checks never qualify; earlier SHAs cannot qualify a
-later
-candidate. Distinguish BASIC-only, FULL-qualified, PR-open, merged/tagged,
-draft-ready and published.
+Handoff: workflow URL, branch, exact checked/prepared SHA, immutable base, required
+results and missing/manual coverage. Failed/blocked/missing/cancelled/skipped/stale
+mandatory checks and earlier-SHA evidence never qualify a candidate. Distinguish
+BASIC-only, FULL-qualified, PR-open, merged/tagged, draft-ready and published.
 
 ## Before-commit and handoff checklist
 
-- Review the whole diff/new files, tools and fixtures included.
-- Correct headers/paths, declaration docs/types/shapes and policy comments.
-- Preserve MVC, route/security and Admin contracts; finish permanent docs with
-  code.
-- Update affected sections in all four TeX sources; otherwise record
-  `No TeX manual
-  impact` with a reason. Follow docs rules for PDFs, markers and typography.
-- Leave PATCH_NOTES.md, packages/installers and release actions to their
-  explicitly
-  authorized lifecycle. Use focused imperative commits; describe behavior,
-  schema/filesystem impact and validation.
-- Inspect exact-SHA hosted results and state missing coverage. GitHub issue
-  titles,
+- Review the whole diff/new files, tools/fixtures included; check declarations,
+  headers/paths, types/shapes and policy comments.
+- Preserve MVC, security/routes and Admin contracts; finish permanent docs with code.
+- Update all four affected TeX sources or record `No TeX manual impact` with reason.
+  Follow docs rules for PDFs, markers and typography.
+- PATCH_NOTES.md, packages/installers and release actions require their authorized
+  lifecycle. Use focused imperative commits; explain behavior, schema/filesystem
+  impact and validation.
+- Inspect exact-SHA hosted results; state missing coverage. GitHub issue titles,
   bodies and **all comments are always English**; chat may be Czech.
 
-Keep root at 6-10 kB; keep lessons topical. Measure prevention per authoring;
-size or fixture PASS does not prove effectiveness.
+Keep root at 6-10 kB; keep lessons topical. Measure prevention; size/fixture PASS does not prove effectiveness.

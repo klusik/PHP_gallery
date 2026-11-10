@@ -1309,6 +1309,19 @@ matching hash, and a later capture replaces only its own grant/gallery row.
 Missing or unknown schema prevents temporary key operations. Classic
 `gallery_upload_tokens` and browser-link credential storage have separate owners.
 
+Delegated upload rate admission reuses `viewer_rate_limit_buckets` and
+`viewer_rate_limits` without schema changes. Inventory and originals have
+separate fixed bucket families plus a combined pre-authentication guard.
+Authenticated subject kinds include the verified grant/account/gallery tuple,
+account aggregates, IP and global load. Only installation-key HMAC subjects
+are persisted. Upload aggregates store original work units atomically; binding
+and inventory buckets count requests. Existing callers retain one-unit defaults.
+Windows and lock durations are 60 seconds for these families;
+the exact window-end comparison releases a permitted Retry-After attempt.
+Existing linking/media policies retain their own values. The complete request
+budget and table are in [the uploader queue contract](docs/UPLOADER_QUEUE.md).
+The version-two local session journal is desktop state, not gallery schema.
+
 The experimental linked `galleries:create` scope is explicitly consented and
 requires verified wide scope storage. Its source prepares a durable
 `admin_operation_keys` claim before creation, locks

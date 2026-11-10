@@ -127,6 +127,25 @@ existing configured rendition and can fall back to the existing public display f
 limits. Presentation reads expose up to 32 visible MP3/WAV tracks for local
 WinMM or macOS playback. Both paths reuse the current schema.
 
+Upload inventory and originals have independent authenticated rate budgets,
+described in [the uploader queue contract](docs/UPLOADER_QUEUE.md). A separate
+pre-authentication guard bounds both routes. The verified grant/account/gallery,
+account, IP and global subjects reuse the existing bounded HMAC rate store;
+no schema migration is introduced. Actual refusals propagate Retry-After and
+pre-storage admission evidence rather than erasing their phase.
+The model accepts an optional atomic work cost, defaulting to one for existing
+Viewer/public callers. Upload binding limits count requests; account/IP/global
+storage limits charge every multipart original, preserving the existing API cap.
+
+WinApp capture admission belongs to `discovery.py` and the version-two journal
+in `watch_queue.py`, using `state_store.py` durable atomic publication. The
+producer continues independently while one shared consumer resolves only the
+FIFO head. Watcher, import, recovery and one-shot mode share a native profile
+pipeline lease; target leases and server gallery mutation locking remain
+independent. Explicit Finish owns its cutoff and a new final-scan generation,
+never the last error checkpoint. See the queue contract for chronological,
+legacy-migration and uncertain-operation evidence boundaries.
+
 The normal WinApp launch selects Photos in the main window. Its workspace
 mounts optional last-complete metadata through `gallery_catalogue_cache.py`
 before refreshing the live link's hierarchy. That persistence owner validates

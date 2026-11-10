@@ -263,7 +263,8 @@ class SessionPlan:
         queue_path = directory / "watch-drain.json"
         if row["completed"] and not row["abandoned"] and queue_path.exists():
             queue = read_document(queue_path)
-            if queue.get("pending"):
+            if (queue.get("pending")
+                    or queue.get('schema_version') == 2 and queue.get('completed') is not True):
                 raise ValueError("Completed session has unfinished photographs.")
         return cls(
             directory=directory,

@@ -543,6 +543,7 @@ class PhotosWorkspace(ttk.Frame):
         self._preload_unpin = False
         self._preload_foreground = threading.Event()
         self._preload_foreground_reason = ''
+        self._upload_pipeline_waiting = False
         self._preload_activity_after: str | None = None
         self._preload_activity_index = 0
         self._storage_after: str | None = None
@@ -1541,6 +1542,8 @@ class PhotosWorkspace(ttk.Frame):
         self._cancel_catalogue_continuation()
         with self._photo_diagnostic_lock:
             self._session = session
+        if session is not None:
+            session.set_upload_pipeline_waiting(self._upload_pipeline_waiting)
         self._card_format_overrides.clear()
         self._card_format_unsaved.clear()
         self._tree_state = (
@@ -4857,7 +4860,7 @@ class PhotosWorkspace(ttk.Frame):
                 already admitted bounded HTTP read may finish before yielding.
         """
         controller = getattr(self._viewer, '_gallery_viewer_controller', None)
-        demanded = bool(
+        demanded = bool(self._upload_pipeline_waiting or
             (self._worker is not None and self._worker.is_alive())
             or self._has_pending_page or self._context_busy
             or (self._inspector_worker is not None
@@ -4888,6 +4891,20 @@ class PhotosWorkspace(ttk.Frame):
             self._preload_foreground.set()
         else:
             self._preload_foreground.clear()
+
+    def set_upload_pipeline_waiting(self, waiting: bool) -> None:
+        """Suspend automatic media work while upload retry or review owns priority.
+
+        Args:
+            waiting (bool): Current queue backpressure snapshot from its worker.
+
+        Returns:
+            None: Yields preload/prefetch without disabling explicit Photos controls.
+        """
+        self._upload_pipeline_waiting = waiting
+        if self._session is not None:
+            self._session.set_upload_pipeline_waiting(waiting)
+        self._update_preload_priority()
 
     def _show_preload_progress(self, progress: PreloadProgress) -> None:
         """Show truthful transfer counts and terminal reasons in the heading.

@@ -32,6 +32,7 @@ import tempfile
 import threading
 import types
 import unittest
+from watcher_test_support import initialize_watcher_fixture
 from pathlib import Path
 from unittest import mock
 from typing import Any, List, Optional, Tuple
@@ -897,6 +898,7 @@ class WatchedUploadLocationTests(unittest.TestCase):
                 network and native work replaced by test doubles.
         """
         watcher = object.__new__(self.main.WatcherThread)
+        initialize_watcher_fixture(watcher, self.main, self)
         watcher.linked_target = None
         watcher._linked_lease = None
         watcher.config = self.main.WatcherConfig(gallery_url="https://example.test", api_key="test-key", delete_uploaded_files=False)
@@ -919,6 +921,8 @@ class WatchedUploadLocationTests(unittest.TestCase):
         watcher.state.already_uploaded_hash.return_value = False
         watcher.state.can_attempt.return_value = True
         watcher.remote_inventory = mock.Mock()
+        watcher.remote_inventory.refresh.return_value = True
+        watcher.remote_inventory.last_error = None
         watcher.remote_inventory.has_hash.return_value = False
         watcher.simconnect_client = mock.Mock()
         watcher.simconnect_client.diagnostics_snapshot.return_value = {"result": "unavailable"}

@@ -74,6 +74,15 @@ namespace {
      */
     const APP_LINK_SCOPE_FIXTURE_METADATA_BOUND_SECONDS = 30;
 
+    /**
+     * Model an ordinary rapid screenshot capture below the new storage ceiling.
+     * Type: int. Units: originals per client in one minute. Scope: FIFO fixture.
+     * Consumers: app_link_test_fifo_rate_budgets.
+     * Rationale: 45 exceeds the historical thirty-image shared-budget boundary
+     * while leaving explicit head-reconciliation and multi-client allowance.
+     */
+    const APP_LINK_FIFO_FIXTURE_ORDINARY_ORIGINALS = 45;
+
     /** Observe the actual session timeout during fixture-owned scope DDL. */
     final class AppLinkScopeFixturePdo extends \PDO
     {
@@ -249,11 +258,165 @@ namespace {
         }
     }
 
+    /**
+     * Verify actual database rate windows against ordinary FIFO request budgets.
+     *
+     * @param \PDO $pdo Validated disposable workflow database connection.
+     * @param string $owner Random fixture identity used only for owned rate rows.
+     * @return void Confirms old exhaustion, new dual-client budgets and exact release.
+     */
+    function app_link_test_fifo_rate_budgets(\PDO $pdo, string $owner): void
+    {
+        $prefix = 'fifo_' . substr(hash('sha256', $owner), 0, 16);
+        $owned = [];
+        $clock = time();
+        $policies = \Gallery\Services\APP_LINKING_RATE_POLICIES;
+        $consume = static function (
+            string $policyName,
+            string $subject,
+            int $timestamp,
+            int $cost = 1,
+        ) use (&$owned, $prefix, $policies): array {
+            $bucket = $prefix . '_' . $policyName;
+            $owned[$bucket] = true;
+            return \Gallery\Models\app_link_model_rate_limit_consume(
+                $bucket,
+                hash('sha256', $subject),
+                $policies[$policyName],
+                \Gallery\Services\APP_LINKING_RATE_SUBJECT_CAP,
+                \Gallery\Services\APP_LINKING_RATE_CLEANUP_BATCH,
+                date('Y-m-d H:i:s', $timestamp - \Gallery\Services\APP_LINKING_RATE_STALE_SECONDS),
+                date('Y-m-d H:i:s', $timestamp),
+                $timestamp,
+                $cost,
+            );
+        };
+        try {
+            // Two clients behind one IP, each with 45 originals, 45 inventory
+            // checks and two safe extra reconciliation checks. Each route is
+            // charged separately; no UI-log copy becomes another request.
+            $clients = ['first', 'second'];
+            foreach ($clients as $client) {
+                for ($index = 0; $index < APP_LINK_FIFO_FIXTURE_ORDINARY_ORIGINALS; $index++) {
+                    foreach (['inventory', 'upload'] as $operation) {
+                        foreach ([
+                            'app_link_transfer_ip' => 'same-ip',
+                            'app_link_transfer_global' => 'global',
+                            'app_link_' . $operation . '_binding' => $client,
+                            'app_link_' . $operation . '_account' => 'same-account',
+                            'app_link_' . $operation . '_ip' => 'same-ip',
+                            'app_link_' . $operation . '_global' => 'global',
+                        ] as $policyName => $subject) {
+                            check($consume($policyName, $subject, $clock)['allowed'],
+                                'Ordinary serial FIFO budget was throttled.');
+                        }
+                    }
+                }
+                foreach (['watch_open', 'watch_close', 'reconcile_a', 'reconcile_a_again'] as $control) {
+                    check($consume('app_link_transfer_ip', 'same-ip', $clock)['allowed']
+                        && $consume('app_link_transfer_global', 'global', $clock)['allowed'],
+                        'Control/reconciliation admission exhausted the normal budget.');
+                    if (str_starts_with($control, 'reconcile_')) {
+                        foreach ([
+                            'app_link_inventory_binding' => $client,
+                            'app_link_inventory_account' => 'same-account',
+                            'app_link_inventory_ip' => 'same-ip',
+                            'app_link_inventory_global' => 'global',
+                        ] as $policyName => $subject) {
+                            check($consume($policyName, $subject, $clock)['allowed'],
+                                'Safe head reconciliation exhausted its independent budget.');
+                        }
+                    }
+                }
+            }
+            // The two ordinary clients used 45 * 2 = 90 global uploads.
+            // Fill the remaining actual policy allowance, then prove the
+            // expensive global storage circuit breaker still refuses abuse.
+            $ordinaryUploads = APP_LINK_FIFO_FIXTURE_ORDINARY_ORIGINALS * count($clients);
+            for ($index = $ordinaryUploads;
+                 $index < $policies['app_link_upload_global']['max_attempts']; $index++) {
+                check($consume('app_link_upload_global', 'global', $clock)['allowed'],
+                    'Global upload budget refused before its configured ceiling.');
+            }
+            check(!$consume('app_link_upload_global', 'global', $clock)['allowed'],
+                'Global upload circuit breaker did not bound additional load.');
+            // The old shared 60/300 bucket's 61st request is exactly the
+            // inventory request after thirty inventory/upload pairs.
+            $oldBucket = $prefix . '_historical_shared';
+            $owned[$oldBucket] = true;
+            /**
+             * Retain the historical policy solely as a reproduction vector.
+             * Type: array{max_attempts:int,window_seconds:int,lock_seconds:int}.
+             * Units: requests/seconds. Scope: this owned historical bucket.
+             * Consumers: app_link_model_rate_limit_consume below.
+             * Rationale: 60 requests/300 seconds and a 300-second lock reproduce
+             * the observed thirty-image exhaustion, never a new runtime policy.
+             */
+            $oldPolicy = ['max_attempts' => 60, 'window_seconds' => 300, 'lock_seconds' => 300];
+            for ($request = 1; $request <= 61; $request++) {
+                $decision = \Gallery\Models\app_link_model_rate_limit_consume(
+                    $oldBucket, hash('sha256', 'old-ip'), $oldPolicy,
+                    \Gallery\Services\APP_LINKING_RATE_SUBJECT_CAP,
+                    \Gallery\Services\APP_LINKING_RATE_CLEANUP_BATCH,
+                    date('Y-m-d H:i:s', $clock - \Gallery\Services\APP_LINKING_RATE_STALE_SECONDS),
+                    date('Y-m-d H:i:s', $clock), $clock,
+                );
+                check($decision['allowed'] === ($request <= 60),
+                    'Historical shared limiter no longer reproduces its exact boundary.');
+            }
+            // Same-grant burst reaches its actual configured ceiling, then
+            // releases exactly when Retry-After permits; early probes do not
+            // prolong the original lock or admit another image.
+            $limit = $policies['app_link_upload_binding']['max_attempts'];
+            for ($attempt = 0; $attempt < $limit; $attempt++) {
+                check($consume('app_link_upload_binding', 'burst', $clock)['allowed'],
+                    'Authenticated upload burst refused below its threshold.');
+            }
+            $refused = $consume('app_link_upload_binding', 'burst', $clock);
+            check(!$refused['allowed'] && $refused['retry_after_seconds'] > 0,
+                'A real rate refusal must report its actual retry delay.');
+            $early = $consume('app_link_upload_binding', 'burst', $clock + 1);
+            check(!$early['allowed']
+                && $early['retry_after_seconds'] === $refused['retry_after_seconds'] - 1,
+                'An early probe changed or extended the original lock.');
+            check($consume('app_link_upload_binding', 'burst',
+                $clock + $refused['retry_after_seconds'])['allowed'],
+                'Exact Retry-After release incorrectly started another lock.');
+            // A supported 100-original multipart must not count as one cheap
+            // storage operation in an aggregate bucket. These are structural
+            // vectors at the existing multipart boundary, never client batching.
+            $multipartCost = 100;
+            $aggregateLimit = $policies['app_link_upload_account']['max_attempts'];
+            $weighted = $consume('app_link_upload_account', 'multipart', $clock, $multipartCost);
+            check($weighted['allowed'] && $weighted['attempts'] === $multipartCost,
+                'First multipart admission did not charge every original.');
+            $remaining = $aggregateLimit - $multipartCost;
+            check($consume('app_link_upload_account', 'multipart', $clock, $remaining)['allowed'],
+                'Weighted admission refused within its aggregate allowance.');
+            $weightedRefusal = $consume('app_link_upload_account', 'multipart', $clock);
+            check(!$weightedRefusal['allowed'],
+                'Multipart originals bypassed the aggregate storage ceiling.');
+            $reset = $consume('app_link_upload_account', 'multipart',
+                $clock + $weightedRefusal['retry_after_seconds'], $multipartCost);
+            check($reset['allowed'] && $reset['attempts'] === $multipartCost,
+                'Weighted admission did not reset to its actual cost at release.');
+        } finally {
+            $subjects = $pdo->prepare('DELETE FROM viewer_rate_limits WHERE bucket = ?');
+            $buckets = $pdo->prepare('DELETE FROM viewer_rate_limit_buckets WHERE bucket = ?');
+            foreach (array_keys($owned) as $bucket) {
+                $subjects->execute([$bucket]);
+                $buckets->execute([$bucket]);
+            }
+        }
+    }
+
     require_once __DIR__ . '/support/gallery_workflow_safety.php';
     require_once __DIR__ . '/../app/policy_constants.php';
     require_once __DIR__ . '/../app/models/gallery_edit_concurrency.php';
     require_once __DIR__ . '/../app/services/gallery_edit_concurrency.php';
     require_once __DIR__ . '/../app/models/app_linking.php';
+    require_once __DIR__ . '/../app/models/viewer_rate_limits.php';
+    require_once __DIR__ . '/../app/services/app_linking_rate_limits.php';
     require_once __DIR__ . '/../app/models/app_linking_push.php';
     require_once __DIR__ . '/../app/models/app_linking_refresh.php';
     require_once __DIR__ . '/../app/services/app_linking_refresh.php';
@@ -294,6 +457,7 @@ namespace {
         app_link_test_scope_migration();
         // The random owner belongs only to this test and is removed in finally.
         $username = 'link_test_' . bin2hex(random_bytes(12));
+        app_link_test_fifo_rate_budgets($pdo, $username);
         $insert = $pdo->prepare(
             'INSERT INTO users (username, password_hash, role, created_at, updated_at) '
                 . "VALUES (?, 'fixture-only', 'admin', UTC_TIMESTAMP(), UTC_TIMESTAMP())",

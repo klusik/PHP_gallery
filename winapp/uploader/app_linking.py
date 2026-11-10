@@ -32,6 +32,7 @@ import threading
 import time
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field, replace as dataclass_replace
+from email.utils import parsedate_to_datetime
 from typing import Callable, Iterable, Literal, TypeVar
 from urllib.parse import SplitResult, parse_qsl, urlencode, urlsplit
 
@@ -44,6 +45,57 @@ from .gallery_media_cache import (
 
 
 CLIENT_ID = 'php-gallery-winapp'
+# Purpose: Validate a server retry hint without retaining arbitrary headers.
+# Type: int. Units: seconds. Scope: one inventory/upload Retry-After value.
+# Consumers: validated_retry_after.
+# Rationale: One day accepts maintenance windows; larger or ambiguous hints
+#   use the queue's bounded backoff instead of unverified indefinite waiting.
+UPLOAD_RETRY_AFTER_MAX_SECONDS = 86400
+
+# Purpose: Recognize fixed application refusals that precede original storage.
+# Type: dict[int,frozenset[str]]. Units: HTTP statuses and exact error identifiers.
+# Scope: delegated inventory/upload responses. Consumers: _request_json_once.
+# Rationale: Generic proxy failures and post-store 503 replies cannot authorize replay.
+UPLOAD_PRESTORE_REFUSALS = {
+    400: frozenset({'invalid_request'}),
+    403: frozenset({'feature_disabled', 'insufficient_scope'}),
+    404: frozenset({'target_unavailable'}),
+    405: frozenset({'invalid_request'}),
+    411: frozenset({'length_required'}),
+    413: frozenset({'request_too_large'}),
+    415: frozenset({'unsupported_media_type'}),
+    422: frozenset({'invalid_file'}),
+    429: frozenset({'temporarily_unavailable'}),
+    503: frozenset({'temporarily_unavailable'}),
+}
+
+
+def validated_retry_after(values: list[str], now: float | None = None) -> int | None:
+    """Accept one bounded delta-seconds or HTTP-date Retry-After header.
+
+    Args:
+        values (list[str]): All Retry-After fields on the same response.
+        now (float | None): Unix-seconds clock for dates, or None for current time.
+
+    Returns:
+        int | None: Positive delay in seconds, or None for absent/invalid hints.
+    """
+    if len(values) != 1:
+        return None
+    value = values[0].strip()
+    try:
+        if re.fullmatch(r'[0-9]+', value):
+            delay = int(value)
+        else:
+            parsed = parsedate_to_datetime(value)
+            if parsed.tzinfo is None:
+                return None
+            delay = math.ceil(parsed.timestamp() - (time.time() if now is None else now))
+        return delay if 1 <= delay <= UPLOAD_RETRY_AFTER_MAX_SECONDS else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
 # Purpose: Identify the native client on every direct PHP Gallery request.
 # Type: str. Units: HTTP User-Agent product token. Scope: linking JSON and media.
 # Consumers: _request_json_once, _native_media_read_once. Rationale: Hosting
@@ -866,6 +918,13 @@ class MediaReadTimings:
 class LinkingError(RuntimeError):
     """A linking attempt cannot continue without exposing protocol secrets."""
 
+    # A generic error after response validation has no no-send attestation.
+    # The actual transport replaces this only with its own dispatch evidence.
+    request_started: bool = True
+    operation_finished: threading.Event | None = None
+    definitely_rejected: bool = False
+    retry_after_seconds: int | None = None
+
 
 class LinkingResponseError(LinkingError):
     """Carry a bounded response diagnosis without retaining response contents.
@@ -886,6 +945,10 @@ class LinkingResponseError(LinkingError):
         content_kind: _LinkingDiagnosticContent,
         reason: _LinkingDiagnosticReason,
         *, media_policy_facts: MediaPolicyFacts | None = None,
+        retry_after_seconds: int | None = None,
+        request_started: bool = True,
+        definitely_rejected: bool = False,
+        operation_finished: threading.Event | None = None,
     ) -> None:
         """Store only validated diagnostic fields and a safe display string.
 
@@ -897,6 +960,11 @@ class LinkingResponseError(LinkingError):
             reason (_LinkingDiagnosticReason): Fixed protocol refusal category.
             media_policy_facts (MediaPolicyFacts | None): Optional allowlisted
                 parsed facts from the rejected media response headers.
+            retry_after_seconds (int | None): Validated response delay, in seconds.
+            request_started (bool): Whether HTTP dispatch may have begun.
+            definitely_rejected (bool): Exact known server refusal before storage.
+            operation_finished (threading.Event | None): Actual transport completion
+                event, or None when this diagnosis has no asynchronous worker.
 
         Returns:
             None: Stores no response body, header value, URL or exception text.
@@ -940,6 +1008,10 @@ class LinkingResponseError(LinkingError):
         self.status = status
         self.content_kind = content_kind
         self.reason = reason
+        self.retry_after_seconds = retry_after_seconds
+        self.request_started = request_started
+        self.definitely_rejected = definitely_rejected
+        self.operation_finished = operation_finished
         self.media_policy_facts = (
             None if media_policy_facts is None else MediaPolicyFacts(
                 media_policy_facts.cache_control,
@@ -1023,9 +1095,13 @@ class LinkingMediaThrottled(LinkingResponseError):
 class LinkingGrantRejected(LinkingError):
     """Report a revoked or expired authenticated linking grant."""
 
+    status = 401
+
 
 class LinkingRefreshRejected(LinkingError):
     """Report a definite invalid-grant response to an exact refresh request."""
+
+    status = 400
 
 
 class LinkingUnavailable(LinkingError):
@@ -1799,6 +1875,8 @@ class _LinkingTransportControl:
         self._lock = threading.Lock()
         self._socket: socket.socket | None = None
         self.timings: MediaReadTimings | None = None
+        self.request_started = False
+        self.operation_finished = threading.Event()
 
     def remaining(self) -> float:
         """Require an active request and return its remaining duration.
@@ -2468,6 +2546,12 @@ def _run_linking_transport(
             finally:
                 control.finish()
                 release_slot_once()
+                control.operation_finished.set()
+            if isinstance(outcome, LinkingError):
+                outcome.request_started = control.request_started
+                outcome.operation_finished = control.operation_finished
+                if isinstance(outcome, (LinkingGrantRejected, LinkingRefreshRejected)):
+                    outcome.definitely_rejected = True
             result.put_nowait(outcome)
 
         try:
@@ -2504,10 +2588,22 @@ def _run_linking_transport(
             if data is None:
                 raise LinkingError('Linking request did not complete safely.')
             return data
+    except LinkingError as failure:
+        if isinstance(failure, (LinkingResponseError, LinkingGrantRejected,
+                                LinkingRefreshRejected, LinkingMediaUnavailable,
+                                LinkingRevisionUnsupported, LinkingHttpsError)):
+            raise
+        raise LinkingResponseError(
+            phase, route, None, 'other', 'timeout',
+            request_started=control.request_started,
+            operation_finished=control.operation_finished,
+        ) from None
     finally:
         control.stop()
         if slot_acquired and not worker_started:
             release_slot_once()
+        if not worker_started:
+            control.operation_finished.set()
 
 
 def _response_content_kind(
@@ -2626,6 +2722,12 @@ def _request_json_once(
     connection = _linking_connection(parsed, control)
     try:
         # The direct transport never follows redirects.
+        connection.connect()
+        dispatch = getattr(body, 'before_dispatch', None)
+        if route == 'app_linking_upload' and dispatch is not None:
+            dispatch()
+        control.remaining()
+        control.request_started = True
         connection.request(method, path, body=body, headers=headers)
         with connection.getresponse() as response:
             content_types = response.headers.get_all('Content-Type', [])
@@ -2688,9 +2790,38 @@ def _request_json_once(
                                              'app_linking_photo_visibility')
                                    and response.status == 409)
             if response.status != expected_status and not visibility_conflict:
+                # Only this exact no-store application refusal attests that
+                # admission stopped before image storage. A proxy 429/503 does
+                # not establish that an earlier upload did not commit.
+                retry_after = validated_retry_after(
+                    response.headers.get_all('Retry-After', []),
+                )
+                rejected_before_store = False
+                if (route in ('app_linking_inventory', 'app_linking_upload')
+                        and response.status in UPLOAD_PRESTORE_REFUSALS
+                        and (response.status != 503
+                             or response.headers.get_all('X-PHP-Gallery-Upload-Phase', [])
+                             == ['rejected-before-store-v1']) and exact_json
+                        and 'no-store' in cache_directives
+                        and response.headers.get('Content-Encoding') is None):
+                    raw_refusal = response.read(LINKING_RESPONSE_MAX_BYTES + 1)
+                    if len(raw_refusal) <= LINKING_RESPONSE_MAX_BYTES:
+                        try:
+                            refused = json.loads(
+                                raw_refusal, object_pairs_hook=_unique_object,
+                                parse_constant=_reject_nonfinite,
+                            )
+                            rejected_before_store = any(
+                                refused == {'error': value}
+                                for value in UPLOAD_PRESTORE_REFUSALS[response.status]
+                            )
+                        except (ValueError, UnicodeError, RecursionError):
+                            pass
                 raise LinkingResponseError(
                     diagnostic_phase, route, response.status, content_kind,
                     'http_status',
+                    retry_after_seconds=retry_after,
+                    definitely_rejected=rejected_before_store,
                 )
             if not exact_json:
                 raise LinkingResponseError(
@@ -4277,6 +4408,7 @@ class LinkingSession:
             raise LinkingError('Invalid linking session.')
         self._lock = threading.Lock()
         self._request_gate = _FairRequestGate()
+        self._upload_pipeline_waiting = threading.Event()
         self._media_connection_pool = _MediaConnectionPool()
         self._cancelled = threading.Event()
         self._pending_gallery_cancels: set[threading.Event] = set()
@@ -6294,6 +6426,28 @@ class LinkingSession:
             return (not self._closed and bool(self._token)
                     and scope_base(self._scope) == UPLOAD_SCOPE
                     and (self._renew is not None or time.monotonic() < self._expires_at))
+
+    def set_upload_pipeline_waiting(self, waiting: bool) -> None:
+        """Publish upload backpressure without cancelling any active media request.
+
+        Args:
+            waiting (bool): True while upload work is retrying or needs review.
+
+        Returns:
+            None: Controls speculative work while explicit browsing stays usable.
+        """
+        if waiting:
+            self._upload_pipeline_waiting.set()
+        else:
+            self._upload_pipeline_waiting.clear()
+
+    def background_media_allowed(self) -> bool:
+        """Expose upload backpressure to optional preload and adjacent prefetch.
+
+        Returns:
+            bool: True when speculative media may join the existing serial transport.
+        """
+        return not self._upload_pipeline_waiting.is_set()
 
     def approved_scope(self) -> str:
         """Read the exact locally held scope without exposing its bearer.

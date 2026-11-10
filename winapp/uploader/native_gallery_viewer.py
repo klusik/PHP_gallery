@@ -3986,6 +3986,9 @@ class _NativeGalleryViewer:
             None: At most two adjacent details, including page edges, are queued.
         """
         self._pending_prefetch_ids.clear()
+        if not self.session.background_media_allowed():
+            self._prefetch_edge_direction = 0
+            return
         if (self._closed or self._lightbox is None
                 or not self._lightbox.visible
                 or self._pending_detail_index is not None
@@ -4025,7 +4028,8 @@ class _NativeGalleryViewer:
         Returns:
             bool: True when one prefetch worker started; false when none remain.
         """
-        if (self._closed or self._lightbox is None
+        if (not self.session.background_media_allowed()
+                or self._closed or self._lightbox is None
                 or not self._lightbox.visible):
             self._pending_prefetch_ids.clear()
             self._prefetch_edge_direction = 0

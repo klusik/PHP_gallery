@@ -355,8 +355,9 @@ example therefore cannot silently drift away from the implemented checkers.
 ## Source feedback and comparison base
 
 The [CI-first contract](../AGENTS.md#mandatory-agent-verification-contract) owns
-agent execution. Verify branch identity, HEAD, remote head and explicit push
-authorization before writes. Commit authored source, tests and documentation;
+agent execution. Verify branch identity, HEAD, remote head and task-scoped
+working-branch authorization under root AGENTS before writes. Commit authored
+source, tests and documentation;
 push only the exact authorized working ref. Never directly mutate develop/main.
 Missing access means BLOCKED, before writes.
 

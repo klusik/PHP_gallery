@@ -42,7 +42,7 @@ use Throwable;
 use function Gallery\Core\db;
 
 /**
- * Consume one rate-limit attempt atomically.
+ * Consume one bounded rate-limit cost atomically.
  *
  * @param string $bucket Application-owned rate-limit bucket identifier.
  * @param string $subjectHash Privacy-safe hash identifying the limited subject.
@@ -50,7 +50,10 @@ use function Gallery\Core\db;
  * @param int $subjectCap Maximum distinct subject rows retained for this bucket.
  * @param string $now Current SQL timestamp for persistence updates.
  * @param int $nowTimestamp Current Unix timestamp used for window comparisons.
+ * @param int $cost Positive admitted work units, defaulting to one request;
+ *     no operation may exceed the selected policy's complete window budget.
  * @return array{allowed:bool,retry_after_seconds:int,attempts:int,reason:string} Admission decision, retry delay, attempt count, and result reason.
+ * @throws \InvalidArgumentException When work cost is outside the fixed policy.
  */
 function viewer_rate_limit_model_consume(
     string $bucket,
@@ -59,7 +62,11 @@ function viewer_rate_limit_model_consume(
     int $subjectCap,
     string $now,
     int $nowTimestamp,
+    int $cost = 1,
 ): array {
+    if ($cost < 1 || $cost > (int) $policy['max_attempts']) {
+        throw new \InvalidArgumentException('Rate-limit cost exceeds its policy.');
+    }
     $pdo = db();
     $ownsTransaction = !$pdo->inTransaction();
     if ($ownsTransaction) {
@@ -105,9 +112,9 @@ function viewer_rate_limit_model_consume(
 
         if (!$row) {
             $pdo->prepare(
-                'INSERT INTO viewer_rate_limits (bucket, subject_hash, attempts, first_attempt_at, last_attempt_at, locked_until) VALUES (?, ?, 1, ?, ?, NULL)',
+                'INSERT INTO viewer_rate_limits (bucket, subject_hash, attempts, first_attempt_at, last_attempt_at, locked_until) VALUES (?, ?, ?, ?, ?, NULL)',
             )
-                ->execute([$bucket, $subjectHash, $now, $now]);
+                ->execute([$bucket, $subjectHash, $cost, $now, $now]);
             $pdo->prepare(
                 'UPDATE viewer_rate_limit_buckets SET entry_count = entry_count + 1, updated_at = ? WHERE bucket = ?',
             )
@@ -118,7 +125,7 @@ function viewer_rate_limit_model_consume(
             return [
                 'allowed' => true,
                 'retry_after_seconds' => 0,
-                'attempts' => 1,
+                'attempts' => $cost,
                 'reason' => 'ok',
             ];
         }
@@ -148,24 +155,24 @@ function viewer_rate_limit_model_consume(
         if (
             $firstAttemptTimestamp === false
             || $firstAttemptTimestamp
-                < ($nowTimestamp - (int) $policy['window_seconds'])
+                <= ($nowTimestamp - (int) $policy['window_seconds'])
         ) {
             $pdo->prepare(
-                'UPDATE viewer_rate_limits SET attempts = 1, first_attempt_at = ?, last_attempt_at = ?, locked_until = NULL WHERE bucket = ? AND subject_hash = ?',
+                'UPDATE viewer_rate_limits SET attempts = ?, first_attempt_at = ?, last_attempt_at = ?, locked_until = NULL WHERE bucket = ? AND subject_hash = ?',
             )
-                ->execute([$now, $now, $bucket, $subjectHash]);
+                ->execute([$cost, $now, $now, $bucket, $subjectHash]);
             if ($ownsTransaction) {
                 $pdo->commit();
             }
             return [
                 'allowed' => true,
                 'retry_after_seconds' => 0,
-                'attempts' => 1,
+                'attempts' => $cost,
                 'reason' => 'ok',
             ];
         }
 
-        $attempts = (int) $row['attempts'] + 1;
+        $attempts = (int) $row['attempts'] + $cost;
         $lockedUntil = $attempts > (int) $policy['max_attempts']
             ? date('Y-m-d H:i:s', $nowTimestamp + (int) $policy['lock_seconds'])
             : null;

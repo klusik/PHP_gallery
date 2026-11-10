@@ -21,7 +21,7 @@ import threading
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
 from .app_linking import (
     LINKING_GALLERY_ID_MAX, LinkingError, LinkingSession, LinkedGallery,
@@ -270,6 +270,29 @@ class LinkedTargetLease:
         except (OSError, ValueError):
             # Preserve an unverifiable or unremovable lock for explicit recovery.
             pass
+
+
+class UploadPipelineLease(LinkedTargetLease):
+    """Serialize all cooperating upload pipelines sharing one uploader profile.
+
+    This deliberately stronger profile-wide fence also covers legacy keys whose
+    account/gallery cannot be proven before their first request. Existing linked
+    target leases independently preserve older-client compatibility. A different
+    computer/profile is outside this local ownership proof.
+    """
+
+    def __init__(self, config_dir: Path) -> None:
+        """Select the common native lease used by Watcher, Import and recovery.
+
+        Args:
+            config_dir (Path): Canonical uploader profile directory shared by instances.
+
+        Returns:
+            None: Defers exclusive native acquisition until the pipeline starts.
+        """
+        super().__init__(config_dir, hashlib.sha256(
+            b'php-gallery-serial-upload-pipeline-v1',
+        ).hexdigest())
 
 
 @dataclass(frozen=True)
@@ -836,6 +859,7 @@ class LinkedUploadTarget:
         expected_sha256: str,
         thumbnails: tuple[LinkedThumbnail, ...] = (), client_upload_id: str = '',
         metadata: dict[str, str] | None = None,
+        *, before_dispatch: Callable[[], None] | None = None,
     ) -> dict[str, JsonValue]:
         """Stream one image once to this gallery without automatic retry.
 
@@ -846,6 +870,8 @@ class LinkedUploadTarget:
             thumbnails (tuple[LinkedThumbnail, ...]): Optional local derivatives.
             client_upload_id (str): Optional ID associating original and variants.
             metadata (dict[str, str] | None): Approved camera-location metadata.
+            before_dispatch (Callable[[], None] | None): Durable queue callback
+                after preparation/authorization/connect, before HTTP dispatch.
 
         Returns:
             dict[str, JsonValue]: Server confirmation for this exact gallery.
@@ -859,6 +885,7 @@ class LinkedUploadTarget:
             self.gallery_id, image, create_thumbnails, expected_sha256, thumbnails,
             client_upload_id, metadata,
         )
+        body.before_dispatch = before_dispatch
         if self.watch_key is None:
             return self.session.upload_multipart(
                 self.gallery_id, body, body.boundary, body.content_length,

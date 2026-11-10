@@ -41,6 +41,7 @@ else:
 
 from .models import (
     ActivityEvent, ImportJob, ITEM_STATES, LINKED_UPLOAD_UNCERTAIN_REASON,
+    JsonValue,
 )
 from .app_linking import linking_issuer
 from .windows_file_identity import WindowsDirectoryAnchor
@@ -138,16 +139,24 @@ def quarantine_malformed(path: Path) -> Optional[Path]:
         return None
 
 
-def atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+def atomic_write_json(
+    path: Path, payload: Dict[str, JsonValue], *, require_sync: bool = False,
+) -> None:
     """
     Write JSON through a same-directory temporary file and atomic replace.
 
     Args:
         path (Path): Owned destination file for a complete state snapshot.
-        payload (Dict[str, Any]): Complete JSON object to publish.
+        payload (Dict[str, JsonValue]): Complete string-keyed JSON document;
+            values are JSON scalars, lists or recursively keyed objects.
+        require_sync (bool): Refuse publication when file fsync fails, as
+            required for accepted upload work; False preserves display caches.
 
     Returns:
         None: The complete temporary file replaces the destination.
+
+    Raises:
+        OSError: Writing or replacement fails, or required fsync is unavailable.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     encoded = json.dumps(payload, indent=2, ensure_ascii=False)
@@ -164,7 +173,8 @@ def atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
             try:
                 os.fsync(handle.fileno())
             except OSError:
-                pass
+                if require_sync:
+                    raise
         stage.replace(path)
     finally:
         stage.unlink(missing_ok=True)

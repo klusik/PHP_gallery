@@ -2,6 +2,38 @@
 
 ## Identity linking and legacy uploads
 
+The durable uploader queue supports both linked and existing API-key modes.
+`watch-drain.json` version 2 adds ordered generation IDs, exact target/scope,
+retry deadlines and an explicit final-scan barrier. Version-one recovery keeps
+its original exclusions/cutoff; a zero cutoff never becomes its checkpoint.
+Multiple pending old paths have no provable FIFO order and block for review.
+Native notification absence retains periodic reconciliation as permanent
+portable support. Original fingerprints may be unknown; a changed historical
+source then requires review instead of automatic reupload. The owning contract
+is [UPLOADER_QUEUE.md](UPLOADER_QUEUE.md).
+
+The observed 1.0.9 regression included inventory HTTP 429 after thirty
+inventory/upload pairs in five minutes, followed by an erroneously closed
+capture interval and 22 synthetic-regression equivalents outside the old queue.
+Client logs establish the stop and exclusion mechanism; production limiter
+state and hosting 503 origins were not available. Authentication expiry was
+not evidenced as that incident's cause. No historical production screenshots
+or recovery records are part of source migration/testing.
+
+New inventory/upload rate families use existing bounded persistence and retain
+authorization/content/global protections. Upload aggregate budgets charge
+original counts atomically; the binding still counts
+requests so existing multipart support remains usable. Unchanged callers retain
+one-unit costs. Existing locks expire at their recorded deadline, without resets.
+New pre-storage 503 admission
+evidence is an additive header; clients lacking it still retain unknown upload
+outcomes. Older servers without Retry-After use bounded backoff. Neither this
+header nor a hash match becomes a durable operation receipt. Unknown dispatched
+uploads remain blocked without one. Active update nonce/version checks remain
+strict; explicit idle helper tickets omit capture continuation. Actual installed
+Windows and deployed-host qualification of these changes is unknown; feature
+BASIC cannot retire those acceptance requirements.
+
 WinApp direct linking JSON and media requests use a truthful stable
 `PHPGalleryUploader` User-Agent. A deployed HTTPS verification page was observed
 to reject the same public discovery request without this header while admitting
