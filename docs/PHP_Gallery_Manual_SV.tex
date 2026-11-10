@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.0.9}
-\newcommand{\manualdate}{9~november~2026}
+\newcommand{\version}{1.0.10}
+\newcommand{\manualdate}{10~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1821,6 +1821,54 @@ obligatoriskt schema avvisar delning och ändringar. Se
 \filepath{docs/COOPERATIVE_GALLERIES.md} för driftsgränser.
 
 \section{Windows-uppladdaren}
+\subsection{Beständig capture-kö och återställning}
+
+Anslut en gång, starta capture och välj \ui{Finish} en gång på slutet.
+En separat lokal producer registrerar skärmbilder under upload,
+tokenförnyelse, nätavbrott och väntan på servergränser. Windows-händelser
+kompletteras med avstämning varje sekund. Varje källgeneration får ett
+beständigt ID och oföränderlig FIFO-position innan hash finns. Endast äldsta
+olösta posten får börja inventering, anslutning eller upload. Instabila,
+saknade, väntande, obehöriga och osäkra huvuden blockerar nyare filer.
+Import använder samma consumer. ZIP packas upp lokalt; varje request
+innehåller ett original och dess valfria miniatyrer.
+
+Nya grupper använder identifierad Steam-tid, annars skapandetid eller första
+observation med deterministisk ordning vid lika tid. Ändrad mtime flyttar
+inte accepterade poster. Sent hittade äldre filer ändrar inte tidigare
+överföringar. Nya sessioner utesluter historiska bilder. Bekräftade återställda
+bytes dedupliceras per mål. Ändrade historiska källor utan fingerprint och
+äldre oordnade köer med flera väntande sökvägar kräver granskning i stället
+för påhittad ordning.
+
+Den kompakta ikonen \ui{Uppdatera kön} stämmer av samma session och återupptar
+säkert. Upprepade klick slås samman. En aktiv begäran behåller ägaren tills
+den verkligen avslutats. FIFO, mål/scope, retry-tid, osäkerhet och Finish-gräns
+bevaras. Finish sparar första gränsen, väntar på tillåtna ofärdiga källor
+och kräver en ny slutlig scan efter sista bekräftelsen. Fotokön får vänta
+längre än fem minuter. Verifierat foto-Finish för samma mål fortsätter efter
+omstart; äldre API-nycklar kräver fortsatt separat ny bekräftelse före
+återkallning. Linked-flygrapporter stannar lokalt.
+
+Inventering/upload delar inte längre 60 begäranden per IP under 300~s.
+Upload-grant räknar requests; konto/IP/globalt räknar varje original atomärt,
+även för redan stödd multipart med flera original.
+Nya fönster och spärrar är 60~s: 120/60 per verifierat grant/konto/galleri,
+240/120 per konto och IP samt 600/120 globalt. Gemensam kontroll före
+autentisering tillåter 240 per IP och 600 globalt per minut. Två klienter
+med 45 bilder var inklusive styrning och säkra huvudkontroller ryms;
+detta mäter inte webbhotellets kapacitet. Retry-After följer samma huvud;
+annars används automatisk 5--300~s backoff utan avbruten avsikt att slutföra.
+Spekulativ Photos-preload/prefetch väntar när kön blockeras. Lokala
+förberedelser kan upprepas; osäkra skickade uploads kräver granskning utan
+omsändning eller nästa bild. Hash-inventering och requestlokala ID är inga
+operationskvitton. Idle-uppdatering begär ingen capture-fortsättning;
+aktiv uppdatering kontrollerar nonce och version strikt. Diagnostiken
+behåller huvud, antal, producer/consumer, framsteg, nästa försök och
+historiskt fel. BASIC granskar bara källor. Installerad Windows-drift,
+layout och server i produktion kräver separat verifiering.
+Det beständiga kontraktet finns i \texttt{docs/UPLOADER\_QUEUE.md}.
+
 \subsection{Layout}
 
 Vid normal start öppnas \ui{Foton}; ordningen är \ui{Foton}, \ui{Watcher},
@@ -10088,13 +10136,19 @@ separat krav. Parsern stöder äldre taggindata för kompatibilitet, medan skriv
 Python-docstrings använder ett gemensamt format.
 
 GitHub Actions kör källförkontrollen före värdbaserad förberedelse. Agenter
-följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uttrycklig
-pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt
+följer CI-first: verifiera aktuell godkänd arbetsgren, HEAD och uppdragets
+gren-/pushbehörighet, slutför källkod/tester/dokumentation, committa och pusha exakt
 den grenen. Ändra aldrig \codeword{develop} eller \codeword{main} direkt. Saknad
 behörighet eller CI-åtkomst ger BLOCKED. Lokala granskningar, generatorer och
 testslingor är undantagsdiagnostik. CI behåller oföränderlig merge-base med
 \codeword{origin/main}; utgåvor använder föregående stabila tagg. Rött eller
 långsamt CI motiverar inte enbart lokal kvalificering.
+
+En begärd implementation eller rättning tillåter automatiskt en lämplig
+codeword{feature/*}-gren från verifierad codeword{origin/develop}, byte,
+commits, exakt push och hosted BASIC utan upprepad rutinfråga.
+Integration, squash, release, taggar och publicering kräver fortfarande separat
+uttryckligt godkännande enligt ilepath{AGENTS.md}.
 
 För diagnostik med en tillfällig MySQL-databas erbjuder
 \filepath{scripts/gallery_workflow_mysql.php} läget

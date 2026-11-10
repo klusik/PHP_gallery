@@ -9,6 +9,47 @@ The application keeps the existing `gallery_watch_upload.pyw` launcher,
 `run_gallery_watcher.bat`, and `--once` compatibility. Normal operation needs
 only Python plus the lightweight dependencies in `requirements.txt`.
 
+## Durable capture and FIFO uploads
+
+Connect once, start capture and press Finish once at the end. An independent
+local producer records source generations in the original session throughout
+HTTP, renewal, offline and rate-limit waits. Windows notifications plus a
+one-second reconciliation scan cover missed events. Every accepted source has
+a persistent ID and immutable sequence before stability or hashing is known.
+Only the oldest unresolved item may start inventory, connect or upload. Missing,
+partial, unreadable, retry-wait and unknown heads block all newer photographs.
+Import, including locally extracted ZIP sources, uses the same consumer and a
+shared native pipeline lease. Remote batch duplicate preflight is deferred to
+the current head. Each upload request contains one original and optional
+thumbnails.
+
+The compact **Refresh queue** icon requests same-session reconciliation and
+safe processing recovery. Repeated requests coalesce; an active transport keeps
+its owner until it really ends. Refresh does not clear Retry-After, uncertainty,
+history, startup exclusions, scope or Finish cutoff. Status and diagnostics show
+the head, count, reason, next retry and progress, retaining the last failure
+separately from the short Activity tail.
+
+Finish persists its first cutoff and continues eligible local reconciliation.
+It completes only after all accepted items and a fresh final scan are durable.
+After restart, verified same-target screenshot Finish intent continues
+automatically; legacy Revoke still needs the existing renewed confirmation.
+Changed historical sources lacking original byte evidence and old multi-path
+set queues with unprovable order block for review. A truly new session still
+excludes historical files. Capture clocks and late-arrival limits, source
+generation/deduplication, persistence and the full retry protocol are specified
+in [the queue contract](../docs/UPLOADER_QUEUE.md).
+
+The server now separates inventory and original-upload budgets in 60-second
+windows, scoped by verified grant/account/gallery, account, IP and global load.
+The old shared 60 requests/300 seconds no longer charges two requests against
+one small image budget. Server hints and bounded automatic backoff preserve the
+head indefinitely. Unknown post-dispatch results require review; hash inventory
+is not an operation receipt. Speculative Photos preload/prefetch yields during
+upload waits while explicit browsing remains available. These source changes
+require corresponding server deployment and an updated installed client;
+feature BASIC does not establish either installation.
+
 ## Interface and local feature settings
 
 The compact dark interface uses slate glass panels, cyan actions, an icon
@@ -214,8 +255,9 @@ unrelated AI, manual-import and preflight workers running and keeps the key
 configured. Confirmed Revoke runs that same Stop, also stops other authenticated
 producers and finishes accepted work before requesting scoped server revocation.
 The shared progress view shows phase and elapsed time; remaining time is shown
-only when measurable. Finalization drains accepted work for up to 300 seconds;
-after timeout, pending work and the API key are retained for recovery. Failures
+only when measurable. Non-photo workers retain the 300-second graceful-drain
+deadline; an active durable photo queue can wait through longer offline/rate
+limits and resume automatically. Failures
 retain pending tasks and local artifacts. After restart, pending work is
 restored,
 but Revoke requires renewed explicit confirmation. No simulator or valid flight

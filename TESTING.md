@@ -568,6 +568,22 @@ admission check.
 Linked Watcher regressions cover unchanged and changed source bytes, a
 refused inventory check, a retained queue after restart and explicit local
 closure without using or clearing the legacy key.
+`winapp/tests/test_watch_queue.py`, `test_uploader_fifo.py` and
+`test_upload_transport_recovery.py` extend that owner with durable order,
+source generations, required fsync/readback, stale-writer refusal, explicit
+Finish plus a newer final scan, typed transport completion and real local
+single-consumer leases. Controlled traces require A,A,B,C after safe rejection,
+zero B inventory/upload while A waits, independent durable B/C discovery during
+a blocked A upload, and the synthetic 22-image outage interval. Refresh retains
+backoff and unknown outcomes. Tests never use user screenshots or production.
+The existing database fixture compares the historical shared 60/300 exhaustion
+with two 45-image clients behind one IP, account/global ceilings, actual retry
+delays, exact release times and weighted multipart originals at reset/refusal.
+Update-helper regressions distinguish idle
+restart from nonce-bound active continuation. Central discovery owns execution;
+ordinary hosted BASIC validates source only. Installed Windows operation,
+native notification behavior, compact layout and production hosting capacity
+remain separate acceptance coverage.
 Filename fixtures require flight-number leading zeroes and
 ICAO tokens only for new reservations, preserving old paths and PDF bytes.
 Focused layout diagnosis uses isolated, explicitly synthetic telemetry in all
@@ -1628,7 +1644,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.0.9. Release verification uses the
+This guide applies to PHP Gallery Version 1.0.10. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

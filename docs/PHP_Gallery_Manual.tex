@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.0.9}
-\newcommand{\manualdate}{9 November 2026}
+\newcommand{\version}{1.0.10}
+\newcommand{\manualdate}{10 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1767,6 +1767,53 @@ and~mutations. See \filepath{docs/COOPERATIVE_GALLERIES.md} for~operational
 limits and~deployment qualification.
 
 \section{Windows companion uploader}
+\subsection{Durable capture queue and~recovery}
+
+Connect once, start capture and~press \ui{Finish} once at~the~end.
+A~local producer records screenshots throughout upload, renewal, outages
+and~rate-limit waits. Windows notifications have a~one-second reconciliation
+backup. Each source generation has a~durable ID and~immutable FIFO sequence
+before its~hash is~known. Only the~oldest unresolved item may query inventory,
+connect or~upload. Partial, missing, waiting, unauthorized and~unknown heads
+block newer files. Import uses the~same consumer; ZIP extraction stays local
+and~each HTTP request carries one original plus optional thumbnails.
+
+New groups use recognized Steam capture time, otherwise birth time or~first
+observation, with deterministic ties. Mtime never reorders accepted work.
+Late old files cannot change past transfers. A~new session still excludes
+historical images. Restored confirmed bytes are~deduplicated per destination;
+changed historical bytes without an~original fingerprint and~old unordered
+multi-path queues require review rather than an~invented chronology.
+
+The~compact \ui{Refresh queue} icon reconciles the~same session and~safely
+wakes processing. Repeated requests coalesce. An~active request retains
+its~owner until it~actually ends. FIFO, target/scope, retry deadlines,
+uncertainty and~Finish cutoff remain binding. Finish persists its~first cutoff,
+waits for~eligible unfinished sources and~requires a~new final scan after
+the~last acknowledgement. Photo queues can~wait beyond five minutes.
+Verified same-target screenshot Finish intent resumes after restart;
+legacy key revocation retains its~separate renewed-confirmation rule.
+Linked flight reports remain local.
+
+Inventory/upload no~longer share 60 requests per IP per 300~s.
+Upload grant budgets count requests; account/IP/global storage budgets charge
+every original atomically, including existing multi-original multipart requests.
+New 60-second windows and~locks allow 120/60 per verified grant/account/gallery,
+240/120 per account and~IP, and~600/120 globally, respectively.
+Combined pre-authentication admission allows 240 per IP and~600 globally
+per minute. Two 45-image clients fit including controls and~safe head checks;
+this does not~measure hosting capacity. Retry-After reaches the~same head;
+missing hints use automatic 5--300~s backoff without exhausting completion
+intent. Speculative Photos preload/prefetch yields during upload blocks.
+Local preparation failures can~retry; unknown dispatched uploads require
+review without resend or~the~next image. Hash inventory and~request-local
+IDs are~not operation receipts. Idle updates omit capture continuation;
+active updates retain strict nonce/version checks. Diagnostics retain head,
+counts, producer/consumer progress, next retry and~historical failure.
+Feature BASIC checks source only; installed Windows, layout and~deployed
+server behavior require separate acceptance. The~permanent contract
+is~\texttt{docs/UPLOADER\_QUEUE.md}.
+
 \subsection{Uploader layout}
 
 While Watcher capture is~active, a~red dot pulses on~the~tray icon in~step
@@ -9849,13 +9896,19 @@ for~compatibility, while authored Python docstrings use one consistent format.
 
 GitHub Actions runs the~source preflight before hosted preparation. Coding
 agents follow CI-first: identify the~current authorized working branch and~HEAD,
-verify branch-scoped push access, finish source/tests/documentation, commit
+verify task-scoped branch/push access, finish source/tests/documentation, commit
 and~push that exact branch. Never directly mutate \codeword{develop}
 or~\codeword{main}. Missing authorization or~CI access is~BLOCKED. Local audits,
 generators and~test loops are~exceptional diagnostics, not~routine handoff
 gates. Hosted CI retains the~immutable merge-base with \codeword{origin/main};
 releases retain the~previous stable tag. Red or~slow CI does~not~justify
 local-only qualification.
+
+A~requested implementation or~fix authorizes automatic creation/checkout
+of~a~suitable codeword{feature/*} branch from verified codeword{origin/develop},
+commits, exact branch push and~hosted BASIC. Routine branch permission needs
+no~repeat question. Integration, squash, release, tags and~publication still
+require separate explicit approval under ilepath{AGENTS.md}.
 
 For~disposable MySQL diagnostics, \filepath{scripts/gallery_workflow_mysql.php}
 offers \codeword{--audit-php-regression} through the~central PHP regression

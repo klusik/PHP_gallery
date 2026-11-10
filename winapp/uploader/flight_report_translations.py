@@ -17,6 +17,16 @@ languages use consistent analysis and control structure.
 
 from typing import Dict
 
+# Capture refresh labels are shared by Watcher controls and their tooltips.
+# Type: dict[str,str]. Units: localized UI text. Scope: queue refresh action.
+# Consumers: WatcherApp.build_watch_tab. Rationale: one key in every maintained locale.
+_WATCH_QUEUE_REFRESH_LABELS = {
+    'en': 'Refresh queue / safely resume processing',
+    'cs': 'Obnovit frontu / bezpečně znovu spustit zpracování',
+    'de': 'Warteschlange aktualisieren / sicher fortsetzen',
+    'sv': 'Uppdatera kön / återuppta bearbetningen säkert',
+}
+
 
 _TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "en": {
@@ -2908,3 +2918,6 @@ for _preload_language, _preload_labels in _PHOTOS_PRELOAD_LABELS.items():
         'photos_workspace_' + _preload_key: _preload_value
         for _preload_key, _preload_value in _preload_labels.items()
     })
+
+for _queue_language, _queue_refresh_label in _WATCH_QUEUE_REFRESH_LABELS.items():
+    _TRANSLATIONS[_queue_language]['watch_queue_refresh_hint'] = _queue_refresh_label

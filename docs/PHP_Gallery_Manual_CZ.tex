@@ -65,8 +65,8 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.0.9}
-\newcommand{\manualdate}{9.~listopadu~2026}
+\newcommand{\version}{1.0.10}
+\newcommand{\manualdate}{10.~listopadu~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1763,6 +1763,53 @@ i~mutace. Podrobnosti a~omezení nasazení uvádí
 \filepath{docs/COOPERATIVE_GALLERIES.md}.
 
 \section{Windows uploader}
+\subsection{Trvalá fronta capture a~obnova}
+
+Galerii připojte jednou, spusťte capture a~na konci jednou zvolte
+\ui{Finish}. Samostatný producer eviduje screenshoty během uploadu,
+obnovy tokenu, výpadků i~čekání na limit. Události Windows doplňuje
+reconciliation scan každou sekundu. Generace zdroje má trvalé ID a~neměnné
+FIFO pořadí ještě před zjištěním hashe. Inventory, spojení a~upload smí
+začít jen nejstarší nevyřešená položka. Nestabilní, chybějící, čekající,
+neautorizovaná a~nejistá hlava blokuje novější soubory. Import používá
+stejný consumer; ZIP se rozbaluje místně a~request nese jeden originál
+s~volitelnými thumbnails.
+
+Nové skupiny používají rozpoznaný čas v~názvu Steam screenshotu, jinak
+creation time či first-seen, s~deterministickým rozlišením shod.
+Mtime nepřehází přijatou frontu a~pozdě nalezený starý soubor nezmění již
+provedené přenosy. Nová session nadále vylučuje historické snímky.
+Potvrzené obnovené bytes se deduplikují podle cíle. Změněný historický
+zdroj bez původního fingerprintu a~starší neuspořádaná fronta s~více cestami
+vyžadují kontrolu, nikoli domyšlené pořadí.
+
+Kompaktní ikona \ui{Obnovit frontu} naplánuje scan stejné session a~bezpečné
+probuzení zpracování. Opakování se slučují; aktivní request drží vlastníka
+až do skutečného konce. FIFO, cíl/scope, retry termín, uncertain a~cutoff
+zůstávají závazné. Finish trvale uloží první cutoff, počká na způsobilé
+rozpracované soubory a~vyžaduje nový závěrečný scan po posledním
+acknowledgement. Fotografická fronta může čekat déle než pět minut.
+Po restartu pokračuje ověřený Finish stejného cíle automaticky;
+odvolání legacy klíče zachovává samostatné nové potvrzení.
+Linked flight reports zůstávají místně.
+
+Inventory/upload již nesdílejí 60 requestů na IP za 300~s.
+Upload grant počítá requesty; účet/IP/globální rozpočet účtuje atomicky každý
+originál, včetně již podporovaného multipart s~více originály.
+Nová okna i~lockout trvají 60~s: 120/60 na ověřený grant/účet/galerii,
+240/120 na účet i~IP a~600/120 globálně. Společná admission před autentizací
+dovoluje 240 na IP a~600 globálně za minutu. Dva klienti po 45 snímcích se
+vejdou včetně řízení a~bezpečných kontrol hlavy; nejde o~měření hostingu.
+Retry-After se přenáší ke stejné hlavě; bez platného údaje běží backoff
+5--300~s bez zahození záměru dokončit. Photos preload/prefetch při blokaci
+ustoupí. Místní přípravu lze opakovat; nejistý odeslaný upload vyžaduje
+kontrolu bez resend ani předběhnutí. Hash inventory a~request-local ID nejsou
+operation receipts. Idle aktualizace neobnovuje capture; aktivní zachovává
+přísné nonce a~verzi. Diagnostika uchovává hlavu, počty, producer/consumer,
+pokrok, další pokus a~historickou chybu. BASIC kontroluje jen zdroje;
+instalovaný Windows provoz, rozvržení a~nasazení vyžadují samostatné ověření.
+Trvalý kontrakt obsahuje \texttt{docs/UPLOADER\_QUEUE.md}.
+
 \subsection{Rozvržení}
 
 Při běžném spuštění se otevře karta \ui{Fotky}; pořadí je \ui{Fotky},
@@ -9795,12 +9842,18 @@ ale autorské Python docstringy používají jednotný formát.
 
 Zdrojovou předběžnou kontrolu provádí GitHub Actions před hostovanou přípravou.
 Agenti dodržují CI-first: ověří aktuální povolenou pracovní větev, HEAD
-a~výslovné oprávnění k~pushi, dokončí zdroje/testy/dokumentaci, commitnou
+a~oprávnění k~větvi/pushi dané úkolem, dokončí zdroje/testy/dokumentaci, commitnou
 a~pushnou přesně tuto větev. Nikdy přímo nemění \codeword{develop} ani
 \codeword{main}. Chybějící oprávnění nebo přístup k~CI znamená BLOCKED. Lokální
 audity, generátory a~smyčky testů jsou výjimečná diagnostika. CI zachovává
 neměnnou merge-base s~\codeword{origin/main}, vydání předchozí stabilní tag.
 Červené ani pomalé CI není důvod pro pouze lokální kvalifikaci.
+
+Požadavek na implementaci či opravu automaticky povoluje založení/přepnutí
+vhodné codeword{feature/*} větve z~ověřeného codeword{origin/develop}, commity,
+push přesné větve a~hosted BASIC. Běžné oprávnění k~feature větvi se znovu
+nepotvrzuje. Integrace, squash, release, tagy a~publikace stále vyžadují
+samostatné výslovné schválení podle ilepath{AGENTS.md}.
 
 Pro diagnostiku s~dočasnou MySQL nabízí
 \filepath{scripts/gallery_workflow_mysql.php} režim

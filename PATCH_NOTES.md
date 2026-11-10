@@ -1,5 +1,67 @@
 # Patch notes
 
+## Version 1.0.10
+
+Improved durable screenshot capture and serial upload recovery in the Windows
+companion, with separate application budgets for inventory and uploads.
+
+### Highlights
+
+#### Durable screenshot queue
+
+- Added a persistent FIFO queue that kept accepting screenshot observations
+  during uploads, temporary failures and retry waits.
+- Kept the oldest unresolved item ahead of newer transfers, preserved Finish
+  intent and added a queue refresh control for the original session.
+- Retained uncertain upload outcomes for review without automatically sending
+  the same original again or advancing to a later item.
+
+#### Rate limits and recovery
+
+- Separated inventory and upload budgets and propagated validated Retry-After
+  information to the queue. Temporary limits retained automatic retry intent.
+- Paused speculative Photos preload and adjacent prefetch while upload work
+  waited, and retained queue and historical failure details in diagnostics.
+- Corrected idle update restart handling while retaining active capture nonce
+  and version checks.
+
+### Technical Details
+
+#### Windows companion
+
+- Added `winapp/uploader/watch_queue.py` for ordered, target-bound source
+  generations, durable acknowledgements and the Finish reconciliation barrier.
+- Coordinated capture, import and one-shot consumers through a local pipeline
+  lease, with one original per upload request. ZIP imports remained locally
+  extracted and used the same head-only processing.
+- Preserved startup exclusions and blocked legacy pending sets whose original
+  FIFO order could not be established.
+
+#### Backend and compatibility
+
+- Updated `app/services/app_linking_rate_limits.php` and its controller to
+  apply independent authenticated and pre-authentication budgets. Aggregate
+  upload limits charged each submitted multipart original atomically.
+- Reused the existing rate-limit tables without a schema migration and retained
+  the original deadline for previously recorded locks.
+- Kept unknown post-dispatch outcomes blocked because inventory hashes and
+  request-local identifiers did not provide durable operation receipts.
+
+#### Tests and documentation
+
+- Added queue, simulated transport and FIFO regressions, including outage
+  arrivals, retry deadlines, uncertain outcomes and concurrent discovery.
+- Extended database limiter and updater coverage and updated the companion
+  guide, queue contract and four maintained manual sources.
+
+### User Impact
+
+- Companion users received ongoing capture and automatic retry for safely
+  recoverable failures, with visible queue state and a manual refresh option.
+- Administrators received cost-specific application rate limits while existing
+  authentication, storage and content protections remained in effect.
+- Public visitor interfaces did not change.
+
 ## Version 1.0.9
 
 Improved safe Watcher continuation after restart and corrected the compact photo storage panel placement.

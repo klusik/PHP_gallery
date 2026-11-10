@@ -79,6 +79,7 @@ class UpdateTicket:
     installer_path: str
     installed_executable: str
     schema: int = 1
+    resume_capture: bool = True
 
 
 Progress = Callable[[tuple[int, int] | None], None]
@@ -174,12 +175,25 @@ def launch_update(installer_path: Path, asset: "ReleaseAsset") -> subprocess.Pop
 
 
 def validate_ticket(ticket: UpdateTicket, ticket_path: Path) -> UpdateTicket:
-    """Reject malformed tickets and paths escaping their private session."""
+    """Reject malformed tickets and paths escaping their private session.
+
+    Args:
+        ticket (UpdateTicket): Parsed local installer identity and resume policy.
+        ticket_path (Path): Exact ticket.json beneath its fixed update session.
+
+    Returns:
+        UpdateTicket: Same validated ticket, including explicit capture intent.
+
+    Raises:
+        ValueError: Ticket fields, paths or installation identity are invalid.
+    """
     if any(type(value) is not str for value in (ticket.session_id, ticket.target_version, ticket.expected_sha256,
                                                ticket.installer_path, ticket.installed_executable)):
         raise ValueError("Invalid ticket field types")
     if type(ticket.schema) is not int or ticket.schema != 1:
         raise ValueError("Unsupported update ticket schema")
+    if type(ticket.resume_capture) is not bool:
+        raise ValueError('Invalid capture continuation policy')
     reject_reparse_path(ticket_path)
     reject_reparse_path(Path(ticket.installer_path))
     reject_reparse_path(Path(ticket.installed_executable))
@@ -244,9 +258,43 @@ def load_ticket(path: Path) -> UpdateTicket:
     )
     required = {"session_id", "target_version", "expected_sha256", "expected_size",
                 "installer_path", "installed_executable", "schema"}
-    if not isinstance(raw, dict) or set(raw) != required:
+    if (not isinstance(raw, dict)
+            or set(raw) not in (required, required | {'resume_capture'})):
         raise ValueError("Invalid ticket fields")
     return validate_ticket(UpdateTicket(**raw), path)
+
+
+def bind_capture_resume(ticket_path: Path, resume_capture: bool) -> None:
+    """Bind active-versus-idle restart intent before the helper is launched.
+
+    Args:
+        ticket_path (Path): Validated private helper ticket owned by this handoff.
+        resume_capture (bool): True only for an exact prepared Watcher continuation.
+
+    Returns:
+        None: Durably publishes the selected policy without modifying any checkpoint.
+
+    Raises:
+        ValueError: The ticket changed or the policy is not a boolean.
+        OSError: Durable ticket publication fails.
+    """
+    ticket = load_ticket(ticket_path)
+    values = asdict(ticket)
+    values['resume_capture'] = resume_capture
+    validate_ticket(UpdateTicket(**values), ticket_path)
+    temporary = ticket_path.with_name('ticket-' + uuid.uuid4().hex + '.tmp')
+    try:
+        with temporary.open('x', encoding='utf-8') as handle:
+            json.dump(values, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if load_ticket(ticket_path) != ticket:
+            raise ValueError('Update ticket changed during policy binding.')
+        os.replace(temporary, ticket_path)
+        if asdict(load_ticket(ticket_path)) != values:
+            raise ValueError('Update restart policy was not confirmed.')
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _strict_ticket_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -672,14 +720,15 @@ class WindowsBackend:
         return f"{values[2] >> 16}.{values[2] & 65535}.{values[3] >> 16}"
 
     def restart(self, executable: str, *, update_session: str) -> None:
-        """Relaunch under the original user with one exact continuation nonce.
+        """Relaunch under the original user with the ticket's capture policy.
 
         Args:
             executable (str): Verified registered application executable.
             update_session (str): Non-secret 128-bit updater session identifier.
 
         Returns:
-            None: Starts the same installed app without elevation.
+            None: Starts the same installed app without elevation; only an
+                active capture receives the exact one-use continuation nonce.
 
         Raises:
             ValueError: The session identifier is malformed.
@@ -687,8 +736,13 @@ class WindowsBackend:
         """
         if re.fullmatch(r'[0-9a-f]{32}', update_session) is None:
             raise ValueError('Invalid update continuation session.')
+        ticket = load_ticket(updates_root() / update_session / 'ticket.json')
+        if Path(ticket.installed_executable) != Path(executable):
+            raise ValueError('Update restart target changed.')
+        arguments = ([executable, '--after-update', update_session]
+                     if ticket.resume_capture else [executable])
         subprocess.Popen(
-            [executable, '--after-update', update_session],
+            arguments,
             cwd=str(Path(executable).parent),
         )
 

@@ -114,7 +114,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 1.0.9. Version 0.97 adds the recoverable gallery-trash
+application version 1.0.10. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -1308,6 +1308,19 @@ upload requests. Keys expire after 24 hours. A confirmed finish deletes the
 matching hash, and a later capture replaces only its own grant/gallery row.
 Missing or unknown schema prevents temporary key operations. Classic
 `gallery_upload_tokens` and browser-link credential storage have separate owners.
+
+Delegated upload rate admission reuses `viewer_rate_limit_buckets` and
+`viewer_rate_limits` without schema changes. Inventory and originals have
+separate fixed bucket families plus a combined pre-authentication guard.
+Authenticated subject kinds include the verified grant/account/gallery tuple,
+account aggregates, IP and global load. Only installation-key HMAC subjects
+are persisted. Upload aggregates store original work units atomically; binding
+and inventory buckets count requests. Existing callers retain one-unit defaults.
+Windows and lock durations are 60 seconds for these families;
+the exact window-end comparison releases a permitted Retry-After attempt.
+Existing linking/media policies retain their own values. The complete request
+budget and table are in [the uploader queue contract](docs/UPLOADER_QUEUE.md).
+The version-two local session journal is desktop state, not gallery schema.
 
 The experimental linked `galleries:create` scope is explicitly consented and
 requires verified wide scope storage. Its source prepares a durable

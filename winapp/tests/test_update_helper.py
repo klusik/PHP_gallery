@@ -386,7 +386,8 @@ class UpdateHelperTests(unittest.TestCase):
                 malformed nonces never reach process creation.
         """
         backend = object.__new__(helper.WindowsBackend)
-        nonce = "e" * 32
+        nonce = self.ticket.session_id
+        (self.session / 'ticket.json').write_text(json.dumps(asdict(self.ticket)), encoding='utf-8')
         with mock.patch.object(helper.subprocess, "Popen") as popen:
             backend.restart(str(self.installed), update_session=nonce)
             popen.assert_called_once_with(
@@ -397,6 +398,28 @@ class UpdateHelperTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 backend.restart(str(self.installed), update_session="not-a-nonce")
         popen.assert_not_called()
+
+    def test_idle_update_restarts_without_capture_continuation(self) -> None:
+        """Bind idle handoff explicitly instead of reusing a stale capture checkpoint.
+
+        Returns:
+            None: Idle restart omits --after-update; active restart keeps its exact nonce.
+        """
+        ticket_path = self.session / 'ticket.json'
+        ticket_path.write_text(json.dumps(asdict(self.ticket)), encoding='utf-8')
+        helper.bind_capture_resume(ticket_path, False)
+        self.assertFalse(helper.load_ticket(ticket_path).resume_capture)
+        backend = object.__new__(helper.WindowsBackend)
+        with mock.patch.object(helper.subprocess, 'Popen') as popen:
+            backend.restart(str(self.installed), update_session=self.ticket.session_id)
+        popen.assert_called_once_with([str(self.installed)], cwd=str(self.installed.parent))
+        helper.bind_capture_resume(ticket_path, True)
+        with mock.patch.object(helper.subprocess, 'Popen') as popen:
+            backend.restart(str(self.installed), update_session=self.ticket.session_id)
+        popen.assert_called_once_with(
+            [str(self.installed), '--after-update', self.ticket.session_id],
+            cwd=str(self.installed.parent),
+        )
 
     def test_restart_required_and_unknown_codes_are_honest(self) -> None:
         """Restart-required results never prematurely relaunch the uploader.

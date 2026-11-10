@@ -24,6 +24,8 @@ use function Gallery\Services\app_linking_recovery_probe;
 use function Gallery\Services\app_linking_scope_base;
 use function Gallery\Services\app_linking_upload_target;
 use function Gallery\Services\app_linking_upload_feature_enabled;
+use function Gallery\Services\app_linking_upload_rate_admission;
+use function Gallery\Services\request_client_ip;
 use function Gallery\Services\app_linking_watch_key_open;
 use function Gallery\Services\app_linking_watch_key_close;
 use function Gallery\Services\gallery_upload_entries;
@@ -65,7 +67,9 @@ function app_linking_upload_admission(string $page): ?array
         app_linking_json_error(403, 'feature_disabled');
         return null;
     }
-    if (!app_linking_admit_public('app_link_upload_ip', 'app_link_upload_global')) {
+    if (!app_linking_admit_public(
+        'app_link_transfer_ip', 'app_link_transfer_global', true,
+    )) {
         app_linking_json_error(429, 'temporarily_unavailable');
         return null;
     }
@@ -85,6 +89,45 @@ function app_linking_upload_admission(string $page): ?array
         return null;
     }
     return ['issuer' => $issuer, 'token' => $token, 'identity' => $identity];
+}
+
+/**
+ * Apply cost-specific budgets after authentication and target authorization.
+ *
+ * @param array{issuer:string,token:string,identity:array{grant_id:int,user_id:int,scope:string}} $auth
+ *     Verified current delegated authentication context.
+ * @param string $operation Exact inventory or upload operation.
+ * @param int $galleryId Server-verified authorized target identifier.
+ * @param int $originalCount Validated submitted original count for upload,
+ *     or one request unit for inventory.
+ * @return bool True when work may proceed; false after a bounded JSON refusal.
+ */
+function app_linking_admit_upload_target(
+    array $auth,
+    string $operation,
+    int $galleryId,
+    int $originalCount = 1,
+): bool {
+    $decision = app_linking_upload_rate_admission(
+        $operation,
+        $auth['identity']['grant_id'],
+        $auth['identity']['user_id'],
+        $galleryId,
+        request_client_ip(),
+        $originalCount,
+    );
+    if ($decision['allowed']) {
+        return true;
+    }
+    if ($decision['retry_after_seconds'] > 0) {
+        header('Retry-After: ' . $decision['retry_after_seconds']);
+    }
+    header('X-PHP-Gallery-Upload-Phase: rejected-before-store-v1');
+    app_linking_json_error(
+        $decision['reason'] === 'locked' ? 429 : 503,
+        'temporarily_unavailable',
+    );
+    return false;
 }
 
 /**
@@ -205,6 +248,9 @@ function cms_app_linking_inventory(): void
                 $current === null ? 401 : 404,
                 $current === null ? 'invalid_token' : 'target_unavailable',
             );
+            return;
+        }
+        if (!app_linking_admit_upload_target($auth, 'inventory', $galleryId)) {
             return;
         }
         if (($payload['deep_check'] ?? false) === true) {
@@ -378,6 +424,11 @@ function cms_app_linking_upload(): void
             || !is_array($thumbnailNames)
             || count($thumbnailNames) > APP_LINKING_UPLOAD_MAX_THUMBNAILS) {
             app_linking_json_error(413, 'request_too_large');
+            return;
+        }
+        if (!app_linking_admit_upload_target(
+            $auth, 'upload', $galleryId, max(1, count($names)),
+        )) {
             return;
         }
         foreach ([

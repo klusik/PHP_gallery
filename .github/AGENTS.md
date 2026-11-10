@@ -10,7 +10,8 @@ throughout. Feature edits never authorize themselves as protected CI authority.
 ## Current operational sequence
 
 1. Finish source, tests, permanent docs and membership staging; commit and push
-   only the explicitly authorized working branch with an exact ref and a checked
+   only the working branch authorized by the task under root AGENTS, with an
+   exact ref and a checked
    remote-head lease. `candidate-preparation.yml` is currently **Basic source
    checks** on ordinary feature pushes: BASIC `--changed`, no preparation/FULL.
 2. In **Integrate into develop**, select the intended main or feature workflow

@@ -54,6 +54,13 @@ const APP_LINKING_RATE_STALE_SECONDS = 86400;
  *     Identity reads permit a higher count because they are non-mutating.
  *     Photo bytes have a separate 600 per IP and 3600 global allowance for
  *     five-minute bursts so thumbnails do not lock gallery navigation.
+ *     Upload traffic uses independent 60-second windows/locks: 60 requests
+ *     per grant/account/gallery, 120 originals per IP/global, and 120 inventory reads
+ *     per grant/account/gallery, 240 per IP, 600 global. Account aggregates
+ *     are 120 originals/240 inventory reads. This admits two clients uploading
+ *     45 images/minute behind one IP while bounding expensive storage at
+ *     120 originals/minute globally. The 240/IP and 600/global pre-auth guard
+ *     includes both routes; it is not the authenticated image budget.
  */
 const APP_LINKING_RATE_POLICIES = [
     'app_link_start_ip' => [
@@ -113,12 +120,44 @@ const APP_LINKING_RATE_POLICIES = [
         'window_seconds' => 300, 'lock_seconds' => 300,
     ],
     'app_link_upload_ip' => [
-        'kind' => 'ip', 'max_attempts' => 60,
-        'window_seconds' => 300, 'lock_seconds' => 300,
+        'kind' => 'ip', 'max_attempts' => 120,
+        'window_seconds' => 60, 'lock_seconds' => 60,
     ],
     'app_link_upload_global' => [
+        'kind' => 'global', 'max_attempts' => 120,
+        'window_seconds' => 60, 'lock_seconds' => 60,
+    ],
+    'app_link_transfer_ip' => [
+        'kind' => 'ip', 'max_attempts' => 240,
+        'window_seconds' => 60, 'lock_seconds' => 60,
+    ],
+    'app_link_transfer_global' => [
         'kind' => 'global', 'max_attempts' => 600,
-        'window_seconds' => 300, 'lock_seconds' => 300,
+        'window_seconds' => 60, 'lock_seconds' => 60,
+    ],
+    'app_link_inventory_ip' => [
+        'kind' => 'ip', 'max_attempts' => 240,
+        'window_seconds' => 60, 'lock_seconds' => 60,
+    ],
+    'app_link_inventory_global' => [
+        'kind' => 'global', 'max_attempts' => 600,
+        'window_seconds' => 60, 'lock_seconds' => 60,
+    ],
+    'app_link_upload_binding' => [
+        'kind' => 'binding', 'max_attempts' => 60,
+        'window_seconds' => 60, 'lock_seconds' => 60,
+    ],
+    'app_link_inventory_binding' => [
+        'kind' => 'binding', 'max_attempts' => 120,
+        'window_seconds' => 60, 'lock_seconds' => 60,
+    ],
+    'app_link_upload_account' => [
+        'kind' => 'account', 'max_attempts' => 120,
+        'window_seconds' => 60, 'lock_seconds' => 60,
+    ],
+    'app_link_inventory_account' => [
+        'kind' => 'account', 'max_attempts' => 240,
+        'window_seconds' => 60, 'lock_seconds' => 60,
     ],
 ];
 
@@ -132,13 +171,19 @@ const APP_LINKING_RATE_POLICIES = [
  *
  * @param string $bucket One exact key from APP_LINKING_RATE_POLICIES.
  * @param string $subject Canonicalizable client IP, positive Admin identifier,
- *     or the literal global for the selected bucket's subject kind.
+ *     literal global, or trusted grant:account:gallery positive identifiers
+ *     for the selected bucket's subject kind. Only HMAC digests are persisted.
+ * @param int $cost Positive request/original work units; one preserves existing
+ *     public endpoint accounting, and the policy ceiling bounds weighted work.
  * @return array{allowed:bool,retry_after_seconds:int,attempts:int,reason:string}
  *     Atomic admission result; invalid input, unavailable storage and capacity
  *     exhaustion refuse the operation without exposing sensitive diagnostics.
  */
-function app_linking_rate_limit_consume(string $bucket, string $subject): array
-{
+function app_linking_rate_limit_consume(
+    string $bucket,
+    string $subject,
+    int $cost = 1,
+): array {
     $refused = [
         'allowed' => false,
         'retry_after_seconds' => 0,
@@ -146,7 +191,7 @@ function app_linking_rate_limit_consume(string $bucket, string $subject): array
         'reason' => 'unavailable',
     ];
     $entry = APP_LINKING_RATE_POLICIES[$bucket] ?? null;
-    if (!is_array($entry)) {
+    if (!is_array($entry) || $cost < 1 || $cost > $entry['max_attempts']) {
         return $refused;
     }
     try {
@@ -156,6 +201,11 @@ function app_linking_rate_limit_consume(string $bucket, string $subject): array
         } elseif ($kind === 'account') {
             $normalized = preg_match('/^[1-9][0-9]{0,19}$/D', $subject) === 1
                 ? $subject : '';
+        } elseif ($kind === 'binding') {
+            $normalized = preg_match(
+                '/^[1-9][0-9]{0,19}:[1-9][0-9]{0,19}:[1-9][0-9]{0,19}$/D',
+                $subject,
+            ) === 1 ? $subject : '';
         } else {
             $normalized = $subject === 'global' ? 'global' : '';
         }
@@ -189,9 +239,60 @@ function app_linking_rate_limit_consume(string $bucket, string $subject): array
             date('Y-m-d H:i:s', $nowTimestamp - APP_LINKING_RATE_STALE_SECONDS),
             date('Y-m-d H:i:s', $nowTimestamp),
             $nowTimestamp,
+            $cost,
         );
     } catch (Throwable) {
         // Missing schema, ambient transactions and storage failures all refuse.
         return $refused;
     }
+}
+
+/**
+ * Charge independent authenticated inventory or original-upload budgets.
+ *
+ * @param string $operation Exact inventory or upload semantic operation.
+ * @param int $grantId Currently authenticated delegated grant identifier.
+ * @param int $accountId Currently authenticated account identifier.
+ * @param int $galleryId Server-verified authorized gallery identifier.
+ * @param string $clientIp Request-bound canonicalizable client address.
+ * @param int $originalCount Bounded submitted originals for upload; inventory
+ *     uses one request unit, regardless of its bounded descriptor collection.
+ * @return array{allowed:bool,retry_after_seconds:int,attempts:int,reason:string}
+ *     Actual first refusal, or the final successful bounded admission.
+ */
+function app_linking_upload_rate_admission(
+    string $operation,
+    int $grantId,
+    int $accountId,
+    int $galleryId,
+    string $clientIp,
+    int $originalCount = 1,
+): array {
+    if (!in_array($operation, ['inventory', 'upload'], true)
+        || min($grantId, $accountId, $galleryId, $originalCount) <= 0
+        || ($operation === 'inventory' && $originalCount !== 1)) {
+        return [
+            'allowed' => false, 'retry_after_seconds' => 0,
+            'attempts' => 0, 'reason' => 'unavailable',
+        ];
+    }
+    $prefix = 'app_link_' . $operation;
+    $subjects = [
+        $prefix . '_binding' => $grantId . ':' . $accountId . ':' . $galleryId,
+        $prefix . '_account' => (string) $accountId,
+        $prefix . '_ip' => $clientIp,
+        $prefix . '_global' => 'global',
+    ];
+    foreach ($subjects as $bucket => $subject) {
+        // The binding limits request bursts; existing multipart support must
+        // still admit up to 100 originals. Aggregate storage budgets charge
+        // every original atomically so multipart cannot multiply their load.
+        $cost = $operation === 'upload' && $bucket !== $prefix . '_binding'
+            ? $originalCount : 1;
+        $decision = app_linking_rate_limit_consume($bucket, $subject, $cost);
+        if (!$decision['allowed']) {
+            return $decision;
+        }
+    }
+    return $decision;
 }

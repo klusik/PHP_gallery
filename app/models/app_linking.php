@@ -823,6 +823,8 @@ function app_link_model_revoke_token(string $tokenHash, string $issuer): bool
  * @param string $staleBefore SQL timestamp before which unlocked rows are stale.
  * @param string $now Current SQL timestamp in the existing limiter timezone.
  * @param int $nowTimestamp Current Unix timestamp for the existing limiter.
+ * @param int $cost Positive request/original work units, at most one policy
+ *     window's budget; one preserves every existing public admission caller.
  * @return array{allowed:bool,retry_after_seconds:int,attempts:int,reason:string}
  *     Atomic admission decision, including storage-cap refusal when full.
  * @throws InvalidArgumentException When a digest or positive limit is invalid.
@@ -838,9 +840,11 @@ function app_link_model_rate_limit_consume(
     string $staleBefore,
     string $now,
     int $nowTimestamp,
+    int $cost = 1,
 ): array {
     app_link_model_assert_hash($subjectHash);
-    if ($subjectCap <= 0 || $cleanupBatch <= 0) {
+    if ($subjectCap <= 0 || $cleanupBatch <= 0
+        || $cost < 1 || $cost > (int) $policy['max_attempts']) {
         throw new InvalidArgumentException('Rate-limit bounds must be positive.');
     }
     $pdo = db();
@@ -936,6 +940,7 @@ function app_link_model_rate_limit_consume(
             $subjectCap,
             $now,
             $nowTimestamp,
+            $cost,
         );
         $pdo->commit();
         return $decision;

@@ -26,10 +26,112 @@ import os
 import re
 import stat
 import zipfile
+import time
+
+from .watch_queue import WatchSource, observe_watch_source
 
 from .models import ImportItem
 
 _DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:")
+
+
+def discover_watch_sources(
+    folder: Path, supported_suffixes: Set[str], recursive: bool = False,
+) -> List[WatchSource]:
+    """Observe a complete capture folder without hashing or swallowing scan failure.
+
+    Args:
+        folder (Path): Original absolute capture folder.
+        supported_suffixes (Set[str]): Approved lowercase image extensions.
+        recursive (bool): Whether ordinary subdirectories belong to the capture.
+
+    Returns:
+        List[WatchSource]: Cheap regular-file observations with explicit clock evidence.
+
+    Raises:
+        OSError: A folder or image cannot be enumerated safely; completion must wait.
+    """
+    observed_at = time.time()
+    result: List[WatchSource] = []
+    directories = [folder.absolute()]
+    while directories:
+        directory = directories.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if entry.is_dir(follow_symlinks=False):
+                    if recursive and not entry.is_symlink():
+                        # Directory junctions can escape the selected capture
+                        # or recurse forever. Cloud-backed ordinary folders
+                        # remain supported; a junction requires explicit review.
+                        if hasattr(entry, 'is_junction') and entry.is_junction():
+                            raise OSError('Capture subdirectory is redirected.')
+                        directories.append(Path(entry.path))
+                elif Path(entry.name).suffix.lower() in supported_suffixes:
+                    try:
+                        result.append(observe_watch_source(Path(entry.path), observed_at))
+                    except FileNotFoundError:
+                        # A vanished new event is recovered on the next scan;
+                        # previously accepted missing sources stay in the FIFO.
+                        continue
+    return result
+
+
+class WatchDirectorySignal:
+    """Use coalesced Windows directory notifications with periodic reconciliation."""
+
+    def __init__(self, folder: Path, recursive: bool) -> None:
+        """Create an optional local notification handle without an extra worker.
+
+        Args:
+            folder (Path): Original capture directory.
+            recursive (bool): Whether nested changes should signal discovery.
+
+        Returns:
+            None: Portable/unavailable native notifications use the same periodic scan.
+        """
+        self._handle: int | None = None
+        self._kernel = None
+        if os.name == 'nt':
+            import ctypes
+            from ctypes import wintypes
+
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.FindFirstChangeNotificationW.argtypes = [
+                wintypes.LPCWSTR, wintypes.BOOL, wintypes.DWORD,
+            ]
+            kernel.FindFirstChangeNotificationW.restype = wintypes.HANDLE
+            kernel.FindNextChangeNotification.argtypes = [wintypes.HANDLE]
+            kernel.FindNextChangeNotification.restype = wintypes.BOOL
+            kernel.FindCloseChangeNotification.argtypes = [wintypes.HANDLE]
+            kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            # Win32 FILE_NAME, DIR_NAME, SIZE and LAST_WRITE notification flags.
+            handle = kernel.FindFirstChangeNotificationW(str(folder), recursive, 0x1B)
+            if handle not in (None, ctypes.c_void_p(-1).value):
+                self._kernel, self._handle = kernel, handle
+
+    def changed(self) -> bool:
+        """Poll a native signal without delaying refresh, Finish or shutdown.
+
+        Returns:
+            bool: True for a pending local directory notification; False otherwise.
+        """
+        if self._handle is None or self._kernel is None:
+            return False
+        # WAIT_OBJECT_0 and a zero-duration wait are Win32 structural constants.
+        if self._kernel.WaitForSingleObject(self._handle, 0) == 0:
+            self._kernel.FindNextChangeNotification(self._handle)
+            return True
+        return False
+
+    def close(self) -> None:
+        """Release only this producer's native notification handle.
+
+        Returns:
+            None: Leaves source files and pending directory events untouched.
+        """
+        if self._handle is not None and self._kernel is not None:
+            self._kernel.FindCloseChangeNotification(self._handle)
+            self._handle = None
 
 
 @dataclass

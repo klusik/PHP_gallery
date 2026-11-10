@@ -605,6 +605,8 @@ tag controller through the pagination and description-layout services.
 | Upload API | `app/controllers/upload_automation.php`, handler `cms_upload_automation_upload` |
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
 | Windows watcher | `winapp/gallery_watch_upload.pyw` |
+| Durable FIFO capture and head-only consumer contract | `winapp/uploader/watch_queue.py`, `winapp/uploader/discovery.py`, `winapp/uploader/state_store.py`; `docs/UPLOADER_QUEUE.md` |
+| Cost-specific delegated inventory/upload admission | `app/services/app_linking_rate_limits.php`, `app/controllers/app_linking/upload.php`; existing bounded rate persistence |
 | WinApp Photos tree, contextual management and folder cards | `winapp/uploader/photos_workspace.py`, `winapp/uploader/gallery_folders.py` |
 | WinApp optional complete catalogue snapshot and last-gallery restoration | `winapp/uploader/gallery_catalogue_cache.py`, `winapp/uploader/photos_workspace.py`, preference owner in `winapp/gallery_watch_upload.pyw` |
 | WinApp browser link and startup resume | `winapp/uploader/app_linking_ui.py`, `winapp/uploader/session_resume.py`, `winapp/uploader/offline_linking.py` |

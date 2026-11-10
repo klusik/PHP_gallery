@@ -1347,6 +1347,9 @@ class FlightUI:
         try:
             plan = replace(SessionPlan.load(row.directory), languages=languages)
             self.attach_loaded_dispatch(row.directory)
+            # Photo Finish is durable intent, not a five-minute retry budget.
+            # Its worker can remain in rate-limit/offline wait while local
+            # capture reconciliation continues under the original cutoff.
             self.operation = FinalizationWorker(
                 [plan], "", "", lambda _cancel, _deadline: None,
                 lambda: None, False, local_reports=True,
@@ -2213,20 +2216,48 @@ class FlightUI:
                 blockers.append("dependency installation")
             if self.operation is not None and blockers:
                 photo_count = 0
+                photo_details: list[str] = []
                 for plan in self.operation.plans:
                     path = plan.directory / "watch-drain.json"
                     if path.exists() and not plan.abandoned:
-                        pending = read_document(path).get("pending", [])
+                        row = read_document(path)
+                        pending = row.get("pending", [])
                         if not isinstance(pending, list):
                             raise ValueError("Pending photograph queue is malformed.")
                         photo_count += len(pending)
+                        head = next((item for item in row.get('items', [])
+                                     if isinstance(item, dict)
+                                     and item.get('state') != 'acknowledged'), None)
+                        if head is not None:
+                            source = head.get('source', {})
+                            name = Path(str(source.get('path', ''))).name
+                            detail = (f'#{head.get("sequence", "?")} {name}: '
+                                      f'{head.get("state", "waiting")}')
+                            retry = head.get('next_retry_at')
+                            if type(retry) in (int, float) and retry > 0:
+                                detail += ' · ' + time.strftime('%H:%M:%S', time.localtime(retry))
+                            if head.get('reason'):
+                                detail += ' · ' + str(head['reason'])
+                            progress = row.get('last_change_at')
+                            if type(progress) in (int, float) and progress > 0:
+                                detail += ' · progress ' + time.strftime(
+                                    '%H:%M:%S', time.localtime(progress),
+                                )
+                            photo_details.append(detail)
                 self.operation.update(
                     "draining",
-                    str(photo_count) + " photo(s); " + "; ".join(blockers),
+                    str(photo_count) + " photo(s); "
+                    + "; ".join([*photo_details, *blockers]),
                 )
             if not blockers:
                 break
-            if time.monotonic() >= deadline:
+            queued_workers = [self.host.worker, *self.resume_workers]
+            queue_waiting = any(
+                worker is not None and worker.is_alive()
+                and getattr(worker, 'drain_manifest', None) is not None
+                for worker in queued_workers
+            )
+            if time.monotonic() >= deadline and not queue_waiting:
                 raise TimeoutError("Workers did not drain: " + "; ".join(blockers))
             cancel.wait(DRAIN_POLL_SECONDS)
         watched = self.host.worker
@@ -2240,7 +2271,8 @@ class FlightUI:
                 pending = row.get("pending")
                 if not isinstance(pending, list) or not isinstance(row.get("frozen"), bool):
                     raise ValueError("Pending photograph queue is malformed.")
-                if pending or not row["frozen"]:
+                if (pending or not row["frozen"]
+                        or row.get('schema_version') == 2 and row.get('completed') is not True):
                     raise RuntimeError(
                         str(row.get("error") or "")
                         or "Photographs still need review. Retry or keep files locally."
@@ -2820,6 +2852,9 @@ class FlightUI:
         self.refresh_telemetry()
         self.accept_simbrief()
         self.refresh_dispatch_status()
+        resume_finish = getattr(self.host, 'resume_pending_finish', None)
+        if callable(resume_finish):
+            resume_finish()
         if operation is not None:
             progress = operation.snapshot()
             terminal = progress.phase in {"completed", "error", "cancelled"}
