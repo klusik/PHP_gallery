@@ -1,0 +1,216 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-362-a1-baseline.yml
+# Module Type: Issue-Scoped Disposable Performance Workflow
+# Purpose: Capture an A1 baseline without WEDOS traffic or persistent services.
+# Responsibilities:
+#   - Measure real PHP API and MariaDB reads in an owned temporary installation.
+#   - Connect genuine WinApp transport/cache clients to that same isolated server.
+#   - Run native WinApp tests and record bounded synthetic Tk metrics.
+#   - Retain private-free raw metrics, never credentials or hosted production data.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+name: Issue 362 A1 isolated performance baseline
+
+on:
+  push:
+    branches:
+      - feature/362-p1winappapiperformance-batched-thumbnail-reads-tree-v1-startup-audit-and-passive-transport-diagnostics
+    paths:
+      - '.github/workflows/issue-362-a1-baseline.yml'
+      - 'tools/perf/issue_362_a1_*'
+      - 'tools/perf/winapp_a1_isolated.php'
+      - 'app/services/seo_request_guard.php'
+      - 'tests/app_linking_gallery_guard_test.php'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-362-a1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php-http:
+    name: Disposable PHP API and MariaDB
+    runs-on: ubuntu-24.04
+    # Type: int. Units: minutes. Scope: bounded A1 HTTP job.
+    # Consumers: Actions timeout. Rationale: 201 paced pages and rate-limit recovery.
+    timeout-minutes: 35
+    services:
+      database:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 13316:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      GALLERY_WORKFLOW_ENABLE: disposable-only
+      GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
+      GALLERY_WORKFLOW_DB_PORT: '13316'
+      GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER_REQUIRED: '0'
+      PYTHONPATH: ${{ github.workspace }}/winapp
+    steps:
+      - name: Checkout exact issue SHA without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up isolated PHP and MySQL extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, exif, zip, dom, mbstring, intl
+          coverage: none
+
+      - name: Set up Python 3.14 for actual WinApp transport
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install declared WinApp media decoder
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'Pillow>=10.0'
+          python -c 'import tkinter; from PIL import Image; import uploader.native_gallery_viewer'
+
+      - name: Supply an owned virtual X11 display for the actual native viewer
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y xvfb
+          fi
+          command -v xvfb-run
+
+      - name: Verify SHA and benchmark syntax
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          php -l tools/perf/winapp_a1_isolated.php
+          php -l tools/perf/issue_362_a1_ci.php
+          php -l tools/perf/issue_362_a1_seed.php
+          php -l tools/perf/issue_362_a1_http.php
+          php -l tools/perf/issue_362_a1_mutate.php
+          php -l app/services/app_linking_media.php
+          python -m py_compile tools/perf/issue_362_a1_connected.py
+          php -l app/services/seo_request_guard.php
+          php -l tests/app_linking_gallery_guard_test.php
+
+      - name: Measure isolated PHP tree encoding and file hashing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p cache/test-audit
+          A1_COMMIT_SHA="$GITHUB_SHA" php tools/perf/winapp_a1_isolated.php \
+            > cache/test-audit/issue-362-a1-isolated-cli.json
+
+      - name: Measure owned authorized PHP API and MariaDB HTTP routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          php tools/perf/issue_362_a1_ci.php
+
+      - name: Preserve isolated PHP metrics even when the test fails
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-a1-php-${{ github.sha }}
+          path: |
+            cache/test-audit/issue-362-a1-http.json
+            cache/test-audit/issue-362-a1-client-*.json
+            cache/test-audit/issue-362-a1-isolated-cli.json
+          if-no-files-found: warn
+          # Type: int. Units: days. Scope: isolated A1 evidence.
+          # Consumers: GitHub artifact retention. Rationale: short-lived test data.
+          retention-days: 7
+
+  windows-native:
+    name: WinApp native and Tk baseline
+    runs-on: windows-2025
+    # Type: int. Units: minutes. Scope: bounded native tests.
+    # Consumers: Actions timeout. Rationale: finite registered WinApp owner.
+    timeout-minutes: 20
+    env:
+      PHP_GALLERY_REQUIRE_PILLOW: '1'
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - name: Checkout exact issue SHA without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python 3.14
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Set up PHP for the registered WinApp audit owner
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install declared native test requirements
+        shell: pwsh
+        run: |
+          $requirements = @(
+            Get-Content winapp/requirements.txt |
+              Where-Object { $_ -match '^(Pillow|reportlab|pypdf)' }
+          )
+          if ($requirements.Count -ne 3) {
+            throw 'Missing native fixture requirements.'
+          }
+          python -m pip install @requirements
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run existing registered native WinApp regression
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_SHA) {
+            throw 'Native checkout SHA mismatch.'
+          }
+          php scripts/audit.php --suite winapp-native
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Benchmark isolated Windows Tk row mounting
+        shell: pwsh
+        run: |
+          python tools/perf/issue_362_a1_tk.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retain native suite and Tk evidence even after failures
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-a1-windows-${{ github.sha }}
+          path: |
+            cache/test-audit/issue-362-a1-tk.json
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/**/source-failures.md
+            cache/test-audit/**/winapp-native.log
+          if-no-files-found: warn
+          retention-days: 7

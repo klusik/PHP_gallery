@@ -5928,8 +5928,23 @@ class NativeMediaTransportTests(unittest.TestCase):
                 ),
             ):
                 if page == good:
-                    self.assertEqual((linking.LinkedPhoto(100, 'Fixture', 49.2, 16.6),),
-                                     session.media_page(42, 99).photos)
+                    started = time.monotonic()
+                    photos = session.media_page(42, 99).photos
+                    completed = time.monotonic()
+                    self.assertEqual(len(photos), 1)
+                    self.assertEqual(
+                        linking.LinkedPhoto(100, 'Fixture', 49.2, 16.6),
+                        dataclass_replace(
+                            photos[0], thumbnail_verified_at=None,
+                        ),
+                    )
+                    self.assertIsNotNone(photos[0].thumbnail_verified_at)
+                    self.assertGreaterEqual(
+                        photos[0].thumbnail_verified_at, started,
+                    )
+                    self.assertLessEqual(
+                        photos[0].thumbnail_verified_at, completed,
+                    )
                 else:
                     with self.assertRaises(linking.LinkingError):
                         session.media_page(42, 99)

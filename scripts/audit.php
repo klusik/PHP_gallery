@@ -106,14 +106,27 @@ const AUDIT_READABILITY_REPORT_TIMEOUT_SECONDS = 240;
 const AUDIT_READABILITY_CONTRACT_TIMEOUT_SECONDS = 90;
 
 /**
- * Keep complete and explicitly scoped WinApp children within the existing cap.
+ * Retain the original complete WinApp unittest discovery deadline.
  * @var int
- * Units: seconds. Scope: one complete WinApp or native diagnostic child.
- * Consumers: audit_run_winapp() through the central process runner.
- * Rationale: preserve the installed 90-second budget for both selections;
- * diagnostic scope never extends or replaces mandatory complete execution.
+ * Units: seconds. Scope: one complete WinApp regression child.
+ * Consumers: audit_run_winapp() when nativeOnly is false.
+ * Rationale: preserve the existing 90-second complete-suite deadline;
+ * the separate native-only diagnostic does not replace mandatory coverage.
  */
 const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;
+
+/**
+ * Bound hosted Windows Tk diagnostic discovery without treating runner lag as
+ * a functional failure or accepting an incomplete structured result.
+ * @var int
+ * Units: seconds. Scope: one native-only WinApp diagnostic child.
+ * Consumers: audit_run_winapp() when nativeOnly is true.
+ * Rationale: 114 mounted native tests previously passed in 61.91, 80.07 and
+ * 86.32 seconds, then exceeded the 90-second budget on a later Windows
+ * runner. 150 seconds gives finite scheduling headroom; failures, partial
+ * reports and a genuine timeout still fail without relaxing any assertion.
+ */
+const AUDIT_WINAPP_NATIVE_TIMEOUT_SECONDS = 150;
 
 $registryPath = __DIR__ . '/audit_registry.php';
 if (!is_file($registryPath)) {
@@ -1609,7 +1622,10 @@ function audit_run_winapp(?array $python, bool $nativeOnly = false): array
         $command[] = '--native-only';
     }
     $reportExistedBeforeRun = file_exists($reportPath);
-    $process = run_process($command, $root, AUDIT_WINAPP_TIMEOUT_SECONDS);
+    $timeoutSeconds = $nativeOnly
+        ? AUDIT_WINAPP_NATIVE_TIMEOUT_SECONDS
+        : AUDIT_WINAPP_TIMEOUT_SECONDS;
+    $process = run_process($command, $root, $timeoutSeconds);
     audit_record_slow_check(
         'Python WinApp unittest discovery',
         (float) $process['duration'],

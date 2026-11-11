@@ -226,7 +226,9 @@ function seo_request_guard_allowed_parameters_for_page(string $page): array
         // Keep unknown queries subject to this guard before Admin login.
         'app_linking_start' => ['request_handle'],
         // These are bearer routes; their controllers validate exact query syntax.
-        'app_linking_galleries' => ['after'],
+        // The tree-v1 endpoint owns canonical tree/revision syntax and bearer
+        // authorization. The SEO guard validates only parameter names here.
+        'app_linking_galleries' => ['after', 'tree', 'revision'],
         'app_linking_gallery_detail' => ['gallery_id'],
         'app_linking_media' => ['gallery_id', 'kind', 'after', 'image_id', 'track_id'],
         'home' => ['gallery_page', 'view_as'],

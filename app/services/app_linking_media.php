@@ -639,6 +639,12 @@ function app_linking_media_catalogue_thumbnail_etag(array $image, array $gallery
     try {
         $candidate = app_linking_media_thumbnail_candidate($image, $gallery);
         if ($candidate === null) {
+            // The binary thumbnail route already falls back to the original
+            // display file. Prove those same bytes only within the existing
+            // 128 KiB metadata hashing budget, never by hashing large originals.
+            $candidate = image_public_display_file($image, $gallery, false);
+        }
+        if ($candidate === null) {
             return null;
         }
         $opened = app_linking_media_open_verified_photo_file(

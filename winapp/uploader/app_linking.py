@@ -3580,7 +3580,8 @@ class LinkedPhoto:
         size (int | None): Indexed original file size in bytes, if known.
         cache_eligible (bool | None): Current independent public admission, if supplied.
         thumbnail_etag (str | None): Current validator for an existing public thumbnail.
-        thumbnail_verified_at (float | None): Monotonic time of its authorized page read.
+        thumbnail_verified_at (float | None): Authorized public-page receipt time,
+            including when the thumbnail has no strong metadata validator.
         preload_eligible (bool | None): Current non-NSFW Admin preload admission.
         preload_thumbnail_etag (str | None): Strong Admin-preload thumbnail proof.
         preload_verified_at (float | None): Monotonic time of Admin preload metadata.
@@ -4416,6 +4417,16 @@ class LinkingSession:
         self._recent_media_pages: OrderedDict[
             int, tuple[float, LinkedMediaPage]
         ] = OrderedDict()
+        # The most recent authorized public page supersedes previous
+        # thumbnail descriptions, including removed rows and unproven bytes.
+        self._public_media_descriptors: OrderedDict[
+            int, dict[int, tuple[str | None, float | None]]
+        ] = OrderedDict()
+        # A no-validator original fallback becomes reusable within one
+        # authorized metadata epoch only after binary revalidation succeeds.
+        self._public_unverified_confirmations: OrderedDict[
+            tuple[int, int], tuple[float, str]
+        ] = OrderedDict()
         # Page authority covers automatic thumbnails. The separate final flag
         # confirms saved full-media intent; thumbnails cannot grant that intent.
         # Each row retains its source cursor so fullscreen can refresh a whole
@@ -4496,6 +4507,8 @@ class LinkingSession:
             self._expires_at = expires_at
             self._private_preload_generation += 1
             self._recent_media_pages.clear()
+            self._public_media_descriptors.clear()
+            self._public_unverified_confirmations.clear()
             self._private_preload_proofs.clear()
 
     def available(self) -> bool:
@@ -5117,7 +5130,10 @@ class LinkingSession:
                 photo,
                 latitude=float(latitude) if valid_location else None,
                 longitude=float(longitude) if valid_location else None,
-                thumbnail_verified_at=verified_at if photo.thumbnail_etag is not None else None,
+                thumbnail_verified_at=(
+                    verified_at if not scope_allows_admin_media(self._scope)
+                    or photo.cache_eligible is True else None
+                ),
                 preload_verified_at=(
                     verified_at if photo.preload_thumbnail_etag is not None else None
                 ),
@@ -5138,6 +5154,38 @@ class LinkingSession:
             except LinkingError:
                 private_user_id = None
         with self._lock:
+            if not self._closed:
+                # A first page starts a new catalogue epoch. Older IDs absent
+                # from that page must not reauthorize local photo bytes.
+                current = (
+                    {} if after_id is None
+                    else dict(self._public_media_descriptors.get(gallery_id, {}))
+                )
+                if after_id is None:
+                    for key in tuple(self._public_unverified_confirmations):
+                        if key[0] == gallery_id:
+                            del self._public_unverified_confirmations[key]
+                for prior_id in tuple(current):
+                    if (prior_id > (after_id or 0)
+                            and (next_after is None or prior_id <= previous)):
+                        current.pop(prior_id, None)
+                for photo in photos:
+                    if (not scope_allows_admin_media(self._scope)
+                            or photo.cache_eligible is True):
+                        current[photo.image_id] = (
+                            photo.thumbnail_etag, photo.thumbnail_verified_at,
+                        )
+                while len(current) > PRIVATE_PRELOAD_PROOF_ROW_LIMIT:
+                    current.pop(next(iter(current)))
+                self._public_media_descriptors[gallery_id] = current
+                self._public_media_descriptors.move_to_end(gallery_id)
+                while len(self._public_media_descriptors) > MEDIA_RECENT_PAGE_LIMIT:
+                    removed_gallery, _rows = self._public_media_descriptors.popitem(
+                        last=False,
+                    )
+                    for key in tuple(self._public_unverified_confirmations):
+                        if key[0] == removed_gallery:
+                            del self._public_unverified_confirmations[key]
             if request_generation != self._private_preload_generation:
                 private_user_id = None
             if private_user_id is None:
@@ -5528,8 +5576,45 @@ class LinkingSession:
         except (OSError, RuntimeError, ValueError):
             return False
 
+    def _public_thumbnail_descriptor_current(
+        self, gallery_id: int, image_id: int,
+        thumbnail_etag: str | None,
+        thumbnail_verified_at: float | None,
+    ) -> bool:
+        """Refuse an obsolete public thumbnail descriptor after a fresh page.
+
+        Args:
+            gallery_id (int): Gallery whose latest authorized page was received.
+            image_id (int): Direct-photo identity supplied by the caller.
+            thumbnail_etag (str | None): Optional page content validator.
+            thumbnail_verified_at (float | None): Exact page observation epoch.
+
+        Returns:
+            bool: Whether this descriptor matches the latest known page row;
+                sessions without any page retain the original HTTP-only path.
+        """
+        with self._lock:
+            latest = self._public_media_descriptors.get(gallery_id)
+            if latest is None:
+                return not self._closed
+            current = latest.get(image_id)
+            if current is None:
+                # A refreshed page no longer contains this image.
+                return False
+            current_etag, current_verified_at = current
+            if thumbnail_etag is not None:
+                # The latest authorized page independently confirmed these
+                # exact content bytes. Do not invalidate an unchanged photo
+                # merely because its newer page has a different receipt time.
+                return thumbnail_etag == current_etag
+            # Without a strong validator, only the exact page epoch can
+            # authorize a cached image or the subsequent binary recheck.
+            return (current_etag is None
+                    and thumbnail_verified_at == current_verified_at)
+
     def _public_cached_entry_current(
-        self, cache: GalleryMediaCache, entry: PhotoCacheEntry,
+        self, gallery_id: int, image_id: int,
+        cache: GalleryMediaCache, entry: PhotoCacheEntry,
         thumbnail: bool, thumbnail_etag: str | None,
         thumbnail_verified_at: float | None,
         cancelled: threading.Event | None,
@@ -5537,6 +5622,8 @@ class LinkingSession:
         """Apply the shared public disk freshness and live-session fence.
 
         Args:
+            gallery_id (int): Exact gallery whose descriptor was refreshed.
+            image_id (int): Direct photo whose fallback was revalidated.
             cache (GalleryMediaCache): Verified local media cache owner.
             entry (PhotoCacheEntry): Hash-validated stored body and validator.
             thumbnail (bool): Whether catalogue thumbnail proofs apply.
@@ -5550,6 +5637,16 @@ class LinkingSession:
         """
         if thumbnail and thumbnail_etag is not None and entry.etag != thumbnail_etag:
             return False
+        if (thumbnail and thumbnail_etag is None
+                and thumbnail_verified_at is not None):
+            # An unproven page cannot silently renew a previously cached
+            # original. One real HTTP 200/304 must confirm its exact body.
+            with self._lock:
+                confirmation = self._public_unverified_confirmations.get(
+                    (gallery_id, image_id),
+                )
+            if confirmation != (thumbnail_verified_at, entry.etag):
+                return False
         descriptor_current = (
             thumbnail and thumbnail_etag is not None
             and thumbnail_verified_at is not None
@@ -5886,6 +5983,12 @@ class LinkingSession:
             or (photo.cache_eligible is None and not admin_media)
             or private_mode
         )
+        if (thumbnail and (not admin_media or photo.cache_eligible is True)
+                and not self._public_thumbnail_descriptor_current(
+                    gallery_id, photo.image_id, photo.thumbnail_etag,
+                    photo.thumbnail_verified_at,
+                )):
+            raise LinkingError('Gallery thumbnail descriptor is no longer current.')
         if not cache_allowed:
             if timings is not None:
                 timings.cache_state = 'ineligible'
@@ -5934,8 +6037,8 @@ class LinkingSession:
         )
         public_current = (
             not private_mode and self._public_cached_entry_current(
-                cache, entry, thumbnail, photo.thumbnail_etag,
-                photo.thumbnail_verified_at, cancelled,
+                gallery_id, photo.image_id, cache, entry, thumbnail,
+                photo.thumbnail_etag, photo.thumbnail_verified_at, cancelled,
             )
         )
         if not (private_current or public_current):
@@ -6013,6 +6116,12 @@ class LinkingSession:
                 or not self.can_read_media()):
             raise LinkingError('Gallery photo permission is unavailable.')
         admin_media = scope_allows_admin_media(self._scope)
+        if (thumbnail and (not admin_media or cache_eligible is True)
+                and not self._public_thumbnail_descriptor_current(
+                    gallery_id, image_id, thumbnail_etag,
+                    thumbnail_verified_at,
+                )):
+            raise LinkingError('Gallery thumbnail descriptor is no longer current.')
         # Negotiate the server's verified binary representation independently
         # from local persistence. First viewing must use the same supported
         # media protocol as preload without requiring a saved preload marker.
@@ -6124,8 +6233,8 @@ class LinkingSession:
         public_current = (
             not private_mode and cache is not None and entry is not None
             and self._public_cached_entry_current(
-                cache, entry, thumbnail, thumbnail_etag,
-                thumbnail_verified_at, cancelled,
+                gallery_id, image_id, cache, entry, thumbnail,
+                thumbnail_etag, thumbnail_verified_at, cancelled,
             )
         )
         private_current = (
@@ -6245,6 +6354,12 @@ class LinkingSession:
                 cacheable = False
         if (cancelled is not None and cancelled.is_set()) or not self.can_read_media():
             raise LinkingError('Gallery photo permission is unavailable.')
+        if (thumbnail and (not admin_media or cache_eligible is True)
+                and not self._public_thumbnail_descriptor_current(
+                    gallery_id, image_id, thumbnail_etag,
+                    thumbnail_verified_at,
+                )):
+            raise LinkingError('Gallery thumbnail descriptor is no longer current.')
         if cache is not None and cacheable and etag is not None:
             write_started = time.perf_counter() if timings is not None else 0.0
             try:
@@ -6270,6 +6385,26 @@ class LinkingSession:
                         time.perf_counter() - write_started
                     ) * 1000.0
                     timings.observe_cache(cache, cache_observed)
+        if (not private_mode and thumbnail and cacheable
+                and thumbnail_etag is None
+                and thumbnail_verified_at is not None and etag is not None):
+            with self._lock:
+                latest = self._public_media_descriptors.get(gallery_id)
+                if (not self._closed and (
+                    latest is None or latest.get(image_id)
+                    == (None, thumbnail_verified_at)
+                )):
+                    self._public_unverified_confirmations[
+                        (gallery_id, image_id)
+                    ] = (thumbnail_verified_at, etag)
+                    self._public_unverified_confirmations.move_to_end(
+                        (gallery_id, image_id),
+                    )
+                    while (len(self._public_unverified_confirmations)
+                           > PRIVATE_PRELOAD_PROOF_ROW_LIMIT):
+                        self._public_unverified_confirmations.popitem(
+                            last=False,
+                        )
         if timings is not None:
             timings.source = 'revalidated' if revalidated else 'network'
         return body, mime
@@ -7241,4 +7376,6 @@ class LinkingSession:
             self._token = ''
             self._private_preload_generation += 1
             self._recent_media_pages.clear()
+            self._public_media_descriptors.clear()
+            self._public_unverified_confirmations.clear()
             self._private_preload_proofs.clear()

@@ -1778,10 +1778,27 @@ audit_test_assert(
             'const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;',
         )
         && php_source_contains(
+            $winappRunner,
+            'const AUDIT_WINAPP_NATIVE_TIMEOUT_SECONDS = 150;',
+        )
+        && php_source_contains(
             $winappRunnerBody,
-            'run_process($command, $root, AUDIT_WINAPP_TIMEOUT_SECONDS)',
+            '$timeoutSeconds = $nativeOnly',
+        )
+        && php_source_contains(
+            $winappRunnerBody,
+            '? AUDIT_WINAPP_NATIVE_TIMEOUT_SECONDS',
+        )
+        && php_source_contains(
+            $winappRunnerBody,
+            ': AUDIT_WINAPP_TIMEOUT_SECONDS;',
+        )
+        && php_source_contains(
+            $winappRunnerBody,
+            'run_process($command, $root, $timeoutSeconds)',
         ),
-    'Central WinApp audit must preserve the existing 90-second discovery owner and consume only its saved structured report.',
+    'Complete WinApp discovery must retain 90 seconds, with a separately '
+        . 'bounded 150-second native Tk diagnostic and mandatory structured evidence.',
 );
 
 $python3Runner = static fn(array $command): array => [

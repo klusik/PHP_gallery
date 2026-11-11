@@ -2565,7 +2565,14 @@ class _NativeGalleryViewer:
             photo.image_id for photo in photos
         )
         comparable = lambda photo: replace(
-            photo, thumbnail_verified_at=None, preload_verified_at=None,
+            photo,
+            # A page without a content validator cannot prove an old
+            # PhotoImage unchanged. Fresh metadata must replace that tile.
+            thumbnail_verified_at=(
+                photo.thumbnail_verified_at
+                if photo.thumbnail_etag is None else None
+            ),
+            preload_verified_at=None,
         )
         if (tuple(map(comparable, photos)) == tuple(map(comparable, self._photos))
                 and pages[-1].next_after == self._next_after):
@@ -4201,6 +4208,12 @@ class _NativeGalleryViewer:
             private_identity[1] if private_identity is not None
             else getattr(photo, 'thumbnail_etag', None)
         )
+        if (private_identity is None and validator is None
+                and photo.thumbnail_verified_at is not None):
+            # The metadata epoch is an identity fence, not a content ETag.
+            # Never reuse decoded pixels across independently refreshed pages
+            # whose fallback-original bytes remain unproven.
+            validator = 'page:' + repr(photo.thumbnail_verified_at)
         return (
             self.gallery.gallery_id, photo.image_id,
             getattr(photo, 'cache_eligible', None),

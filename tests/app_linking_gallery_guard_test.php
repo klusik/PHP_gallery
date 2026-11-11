@@ -32,6 +32,13 @@ namespace {
     $_SERVER['HTTP_AUTHORIZATION'] = 'Bearer fixture-only';
     foreach ([
         ['app_linking_galleries', ['page' => 'app_linking_galleries', 'after' => '12']],
+        // The bearer-authorized complete tree is an actual versioned GET route.
+        // Its controller still requires the exact canonical tree/revision shape.
+        ['app_linking_galleries', ['page' => 'app_linking_galleries', 'tree' => '1']],
+        ['app_linking_galleries', [
+            'page' => 'app_linking_galleries', 'tree' => '1',
+            'revision' => str_repeat('a', 64),
+        ]],
         ['app_linking_gallery_detail', [
             'page' => 'app_linking_gallery_detail', 'gallery_id' => '12',
         ]],

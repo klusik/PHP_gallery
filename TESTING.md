@@ -5489,6 +5489,11 @@ use different browser entrypoints.
     variants, first-paint and open/close geometry, native Enter, Escape/focus,
     narrow viewport bounds, clipping, long names and delegated replacement.
     `tests/hero_tag_theme_model_test.php` retains the Theme/rendering contracts.
+    The repeated module initialization assertion alone permits at most 0.02 CSS
+    pixels of DOMRect rounding noise per coordinate, observed as 0.01 pixels
+    on Chrome 156. Tag count, labels and order remain exact; deliberate
+    one-pixel shifts and changed labels are rejected by negative controls.
+    First-paint, disclosure, responsive and overlay geometry tests stay strict.
     Hosted candidate preparation invokes the full matrix; hosted release
     preparation invokes the release audit without redundant local runs.
 

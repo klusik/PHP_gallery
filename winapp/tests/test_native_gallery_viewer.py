@@ -4149,6 +4149,91 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         workspace.destroy()
 
+    def test_catalogue_http_429_schedules_one_real_workspace_retry(self) -> None:
+        """Respect Retry-After and preserve the last complete page boundary.
+
+        Returns:
+            None: One real PhotosWorkspace schedules its exact failed cursor.
+        """
+        session = cast(LinkingSession, mock.Mock())
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.root.update_idletasks()
+        self.root.update()
+        workspace._session = session
+        workspace._session_provider = lambda: session
+        workspace._next_after = TEST_GALLERY_ID
+        scheduled: list[tuple[int, Callable[[], None]]] = []
+        workspace.after = mock.Mock(side_effect=lambda delay, callback: (
+            scheduled.append((delay, callback)) or f'throttle-{len(scheduled)}'
+        ))
+        workspace.after_cancel = mock.Mock()
+        workspace._request_page = mock.Mock()
+        workspace._accept_page(
+            None, throttled=True, retry_after_seconds=2,
+            cursor=TEST_GALLERY_ID,
+        )
+        rate_callbacks = [
+            callback for delay, callback in scheduled if delay == 2000
+        ]
+        self.assertEqual(len(rate_callbacks), 1)
+        self.assertEqual(workspace._catalogue_rate_retries, 1)
+        self.assertEqual(workspace._next_after, TEST_GALLERY_ID)
+        rate_callbacks[0]()
+        workspace._request_page.assert_called_once_with(TEST_GALLERY_ID)
+        self.assertIsNone(workspace._catalogue_after)
+        workspace.destroy()
+
+    def test_catalogue_http_429_fences_cancelled_timers_and_caps_retries(self) -> None:
+        """Reject stale retry callbacks and refuse repeated 429 retry storms.
+
+        Returns:
+            None: Generation change and bounded retry count prevent dispatch.
+        """
+        session = cast(LinkingSession, mock.Mock())
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.root.update_idletasks()
+        self.root.update()
+        workspace._session = session
+        workspace._session_provider = lambda: session
+        workspace._next_after = TEST_GALLERY_ID
+        scheduled: list[tuple[int, Callable[[], None]]] = []
+        workspace.after = mock.Mock(side_effect=lambda delay, callback: (
+            scheduled.append((delay, callback)) or f'throttle-{len(scheduled)}'
+        ))
+        workspace.after_cancel = mock.Mock()
+        workspace._request_page = mock.Mock()
+        workspace._accept_page(
+            None, throttled=True, retry_after_seconds=1,
+            cursor=TEST_GALLERY_ID,
+        )
+        rate_callbacks = [
+            callback for delay, callback in scheduled if delay == 1000
+        ]
+        self.assertEqual(len(rate_callbacks), 1)
+        workspace._catalogue_generation += 1
+        rate_callbacks[0]()
+        workspace._request_page.assert_not_called()
+        workspace._catalogue_generation -= 1
+        workspace._accept_page(
+            None, throttled=True, retry_after_seconds=1,
+            cursor=TEST_GALLERY_ID,
+        )
+        self.assertEqual(workspace._catalogue_rate_retries, 2)
+        workspace._accept_page(
+            None, throttled=True, retry_after_seconds=1,
+            cursor=TEST_GALLERY_ID,
+        )
+        self.assertEqual(
+            sum(delay == 1000 for delay, _callback in scheduled), 2,
+        )
+        workspace.destroy()
+
     def test_cancelled_catalogue_timer_cannot_clear_its_replacement(self) -> None:
         """Fence late cancelled callbacks from replacing current page work.
 
@@ -6546,6 +6631,77 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'Changed refresh did not add the new photo.',
         )
         self.assertTrue(all(viewer._photo_images[:len(page.photos)]))
+        viewer.close()
+
+    def test_unproven_refresh_replaces_only_changed_visible_thumbnail(self) -> None:
+        """Invalidate a displayed no-ETag tile after an authorized new page.
+
+        Returns:
+            None: Real Tk PhotoImage, viewer RAM and binary read are refreshed;
+                the unrelated strongly proven tile keeps its existing image.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        initial_epoch = time.monotonic()
+        stable_etag = '"' + hashlib.sha256(
+            image_bytes[TEST_SECOND_IMAGE_ID],
+        ).hexdigest() + '"'
+        first = replace(
+            page.photos[0], cache_eligible=True,
+            thumbnail_verified_at=initial_epoch,
+        )
+        stable = replace(
+            page.photos[1], cache_eligible=True,
+            thumbnail_etag=stable_etag,
+            thumbnail_verified_at=initial_epoch,
+        )
+        current_page = LinkedMediaPage(
+            page.gallery_id, page.parent_id, (first, stable), None,
+        )
+        session = self._session(current_page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Unproven refresh'),
+        )
+        self._wait_until(
+            lambda: len(viewer._photo_images) == 2
+            and all(viewer._photo_images) and viewer._worker is None,
+            'Initial two real Tk thumbnails were not mounted.',
+        )
+        old_first, old_stable = viewer._photo_images
+        initial_reads = session.media_photo.call_count
+        self.assertEqual(2, initial_reads)
+
+        image_bytes[TEST_FIRST_IMAGE_ID] = self._png((12, 45, 230))
+        refreshed_first = replace(
+            first, thumbnail_verified_at=time.monotonic(),
+        )
+        refreshed_stable = replace(
+            stable, thumbnail_verified_at=time.monotonic(),
+        )
+        session.media_page.return_value = LinkedMediaPage(
+            page.gallery_id, page.parent_id,
+            (refreshed_first, refreshed_stable), None,
+        )
+        viewer.refresh_photos()
+        self._wait_until(
+            lambda: viewer._worker is None
+            and len(viewer._photo_images) == 2
+            and viewer._photo_images[0] is not None
+            and viewer._photo_images[0] is not old_first
+            and viewer._thumbnail_loaded == {0, 1},
+            'Fresh metadata did not invalidate the unproven rendered tile.',
+        )
+        self.assertIs(old_stable, viewer._photo_images[1])
+        self.assertEqual(initial_reads + 1, session.media_photo.call_count)
+        actual = viewer._cached_thumbnail(refreshed_first)
+        expected = viewer._prepare_thumbnail(image_bytes[TEST_FIRST_IMAGE_ID])
+        try:
+            self.assertIsNotNone(actual)
+            assert actual is not None
+            self.assertEqual(expected.tobytes(), actual.tobytes())
+        finally:
+            expected.close()
+            if actual is not None:
+                actual.close()
         viewer.close()
 
     def test_real_touchpad_packet_scrolls_grid_and_zoom(self) -> None:

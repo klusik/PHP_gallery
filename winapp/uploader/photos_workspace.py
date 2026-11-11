@@ -30,7 +30,7 @@ from .app_linking import (
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage, LinkedGalleryTree,
     LinkedMediaDetails,
     LinkedMediaGalleryInfo, LinkedPhoto, LinkingSession,
-    LinkingMediaThrottled,
+    LinkingMediaThrottled, LinkingResponseError,
 )
 from .app_linking_ui import LinkingManager
 from .gallery_catalogue_cache import (
@@ -95,6 +95,18 @@ PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT = 10
 # Consumers: PhotosWorkspace._continue_catalogue.
 # Rationale: One five-second interval limits steady requests without a user tap.
 PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS = 5_000
+
+# Purpose: Wait a full genuine gallery request budget without Retry-After.
+# Type: int. Units: seconds. Scope: one Photos catalogue HTTP 429 recovery.
+# Consumers: _schedule_catalogue_throttled_page. Rationale: the existing IP
+# limiter permits 120 requests per 300-second window.
+PHOTOS_CATALOGUE_RATE_RETRY_DEFAULT_SECONDS = 300
+
+# Purpose: Bound consecutive 429 retries without starving the Photos UI.
+# Type: int. Units: attempts per page. Scope: one live catalogue generation.
+# Consumers: _schedule_catalogue_throttled_page. Rationale: two retries
+# tolerate a temporarily shared limiter without an unbounded retry storm.
+PHOTOS_CATALOGUE_RATE_MAX_RETRIES = 2
 
 # Purpose: Advance prepared activity artwork without continuous widget redraws.
 # Type: int. Units: milliseconds. Scope: Photos catalogue/preload/storage activity.
@@ -326,6 +338,9 @@ class _CataloguePageResult:
 
     generation: int
     page: LinkedGalleryPage | None
+    throttled: bool = False
+    retry_after_seconds: int | None = None
+    cursor: int | None = None
 
 
 _GalleryResult: TypeAlias = (
@@ -628,6 +643,7 @@ class PhotosWorkspace(ttk.Frame):
         self._has_pending_page = False
         self._next_after: int | None = None
         self._pages_this_pass = 0
+        self._catalogue_rate_retries = 0
         self._catalogue_loading = False
         self._galleries: dict[int, LinkedGallery] = {}
         self._children_by_parent: dict[int, set[int]] = {}
@@ -1593,6 +1609,7 @@ class PhotosWorkspace(ttk.Frame):
         self._thumbnail_memory.clear()
         self._thumbnail_memory = GalleryThumbnailMemory()
         self._pages_this_pass = 0
+        self._catalogue_rate_retries = 0
         self.load_more_button.pack_forget()
         self._pending_cursor = None
         self._has_pending_page = False
@@ -1927,6 +1944,13 @@ class PhotosWorkspace(ttk.Frame):
                         cancelled=cancel,
                     )
                 except Exception as exc:
+                    if (isinstance(exc, LinkingResponseError)
+                            and exc.status == 429 and not cancel.is_set()):
+                        self._events.put(_CataloguePageResult(
+                            generation, None, True,
+                            exc.retry_after_seconds, after_id,
+                        ))
+                        return
                     if (not cancel.is_set()
                             and not isinstance(exc, LinkingMediaThrottled)):
                         _log_safe_media_failure(
@@ -1950,6 +1974,13 @@ class PhotosWorkspace(ttk.Frame):
             try:
                 page = session.gallery_page(after_id, cancelled=cancel)
             except Exception as exc:
+                if (isinstance(exc, LinkingResponseError)
+                        and exc.status == 429 and not cancel.is_set()):
+                    self._events.put(_CataloguePageResult(
+                        generation, None, True,
+                        exc.retry_after_seconds, after_id,
+                    ))
+                    return
                 if (not cancel.is_set()
                         and not isinstance(exc, LinkingMediaThrottled)):
                     _log_safe_media_failure(
@@ -2014,7 +2045,11 @@ class PhotosWorkspace(ttk.Frame):
                 elif isinstance(result, _CatalogueTreeResult):
                     self._accept_complete_catalogue(result.tree)
                 else:
-                    self._accept_page(result.page)
+                    self._accept_page(
+                        result.page, throttled=result.throttled,
+                        retry_after_seconds=result.retry_after_seconds,
+                        cursor=result.cursor,
+                    )
         if self._worker is not None and not self._worker.is_alive():
             if not self._events.empty():
                 self._schedule_poll()
@@ -2395,17 +2430,27 @@ class PhotosWorkspace(ttk.Frame):
         ))
         self._queue_catalogue_snapshot_save(self._catalogue_cache_snapshot)
 
-    def _accept_page(self, page: LinkedGalleryPage | None) -> None:
+    def _accept_page(
+        self, page: LinkedGalleryPage | None, *,
+        throttled: bool = False, retry_after_seconds: int | None = None,
+        cursor: int | None = None,
+    ) -> None:
         """Reconcile and persist one page before requesting its continuation.
 
         Args:
             page (LinkedGalleryPage | None): Validated response or failure marker.
+            throttled (bool): Actual catalogue HTTP 429 response marker.
+            retry_after_seconds (int | None): Validated server backoff seconds.
+            cursor (int | None): Original failing request cursor, if any.
 
         Returns:
             None: Confirmed metadata updates the known tree immediately; only
                 the last successful page removes absent cached rows.
         """
         if page is None:
+            if (throttled and self._schedule_catalogue_throttled_page(
+                    cursor, retry_after_seconds)):
+                return
             self._cancel_catalogue_continuation()
             self._set_catalogue_loading(False)
             self.tree_status.configure(text=self._text("error"))
@@ -2413,6 +2458,7 @@ class PhotosWorkspace(ttk.Frame):
             self.retry_button.pack(side="right")
             return
         self.retry_button.pack_forget()
+        self._catalogue_rate_retries = 0
         page_gallery_ids: list[int] = []
         changed_ids: list[int] = []
         for gallery in page.galleries:
@@ -2690,6 +2736,59 @@ class PhotosWorkspace(ttk.Frame):
             self._catalogue_after = after_id
             return
         self._request_page(self._next_after)
+
+    def _schedule_catalogue_throttled_page(
+        self, cursor: int | None, retry_after_seconds: int | None,
+    ) -> bool:
+        """Resume the captured page only after the server's rate budget resets.
+
+        Args:
+            cursor (int | None): Exclusive cursor of the refused gallery page.
+            retry_after_seconds (int | None): Safe server-supplied retry delay.
+
+        Returns:
+            bool: True if one generation-fenced timer was created; otherwise
+                retain the manual error/retry control without a retry storm.
+        """
+        if (self._destroyed or self._session is None
+                or self._catalogue_rate_retries
+                >= PHOTOS_CATALOGUE_RATE_MAX_RETRIES):
+            return False
+        delay = (retry_after_seconds
+                 if type(retry_after_seconds) is int
+                 else PHOTOS_CATALOGUE_RATE_RETRY_DEFAULT_SECONDS)
+        if not 1 <= delay <= PHOTOS_CATALOGUE_RATE_RETRY_DEFAULT_SECONDS:
+            # Never retry before an unreasonably large server instruction.
+            return False
+        self._cancel_catalogue_continuation()
+        session = self._session
+        generation = self._catalogue_generation
+        cancel = self._catalogue_cancel
+        self._catalogue_rate_retries += 1
+        after_id: str | None = None
+
+        def retry_page() -> None:
+            """Dispatch only when the captured session, timer and page persist.
+
+            Returns:
+                None: Stale or cancelled timers have no network side effects.
+            """
+            if self._catalogue_after != after_id:
+                return
+            self._catalogue_after = None
+            if (self._destroyed or self._catalogue_generation != generation
+                    or self._session is not session
+                    or self._session_provider() is not session
+                    or self._catalogue_cancel is not cancel or cancel.is_set()
+                    or self._next_after != cursor
+                    or self._catalogue_paused_for_preview):
+                return
+            self._request_page(cursor)
+
+        after_id = self.after(delay * 1000, retry_page)
+        self._catalogue_after = after_id
+        self._set_catalogue_loading(True)
+        return True
 
     def _cancel_catalogue_continuation(self) -> None:
         """Cancel the one pending post-cap page timer, if present.
