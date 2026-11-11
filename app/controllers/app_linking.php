@@ -16,6 +16,8 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+require_once __DIR__ . '/../services/app_linking_passive_profile.php';
+
 // Delegated uploads remain part of this controller owner.
 require_once __DIR__ . '/app_linking/upload.php';
 require_once __DIR__ . '/app_linking/detail.php';
@@ -31,6 +33,11 @@ use function Gallery\Core\request_is_https;
 use function Gallery\Core\request_method;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\app_linking_authenticate;
+use function Gallery\Services\app_linking_passive_begin;
+use function Gallery\Services\app_linking_passive_span_start;
+use function Gallery\Services\app_linking_passive_span_end;
+use function Gallery\Services\app_linking_passive_authorized;
+use function Gallery\Services\app_linking_passive_header;
 use function Gallery\Services\app_linking_discovery_capabilities;
 use function Gallery\Services\app_linking_canonical_256bit_value_valid;
 use function Gallery\Services\app_linking_exchange_code;
@@ -153,6 +160,19 @@ const APP_LINKING_UPLOAD_MAX_THUMBNAILS = 500;
  * Rationale: 32 bytes gives a distinct cryptographic value without persistent state.
  */
 const APP_LINKING_NONCE_BYTES = 32;
+
+/**
+ * Attach a passive header only after a caller has proved live authorization.
+ *
+ * @return void Disabled, anonymous and already-started responses are untouched.
+ */
+function app_linking_passive_emit_header(): void
+{
+    $timing = app_linking_passive_header();
+    if ($timing !== null && !headers_sent()) {
+        header('Server-Timing: ' . $timing, false);
+    }
+}
 
 /**
  * Send no-store security headers for a linking response.
@@ -1012,6 +1032,8 @@ function cms_app_linking_galleries(): void
             app_linking_json_error(400, 'invalid_request');
             return;
         }
+        app_linking_passive_begin($treeRequest ? 'gallery_tree' : 'gallery_page');
+        $authStarted = app_linking_passive_span_start();
         if (!app_linking_admit_public('app_link_galleries_ip', 'app_link_galleries_global')) {
             app_linking_json_error(429, 'temporarily_unavailable');
             return;
@@ -1031,6 +1053,7 @@ function cms_app_linking_galleries(): void
             app_linking_json_error(403, 'insufficient_scope');
             return;
         }
+        app_linking_passive_span_end('auth', $authStarted);
         $page = $treeRequest
             ? app_linking_gallery_tree(
                 $token, $issuer, $treeMatches[1] ?? null,
@@ -1044,9 +1067,13 @@ function cms_app_linking_galleries(): void
             app_linking_json_error(401, 'invalid_token');
             return;
         }
+        $encoded = json_encode($page, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
         app_linking_security_headers();
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode($page, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        // The full tree/page service has rechecked the current bearer and grant.
+        app_linking_passive_authorized();
+        app_linking_passive_emit_header();
+        echo $encoded;
     } catch (\OverflowException) {
         if ($treeRequest) {
             app_linking_json_error(503, 'temporarily_unavailable');

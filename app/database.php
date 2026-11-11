@@ -70,6 +70,13 @@ function database_dispatch_telemetry_query_observation(
             $error,
         );
     }
+    // Native A2 registers this numeric-only callback per authorized PHP route.
+    // Avoid a Core -> optional Services dependency in unrelated route plans.
+    // Never forward the SQL string, parameters or exception to this observer.
+    $passiveSqlObserver = $GLOBALS['app_linking_passive_sql_observer'] ?? null;
+    if ($passiveSqlObserver instanceof \Closure) {
+        $passiveSqlObserver($elapsedMs, $ok);
+    }
 }
 
 /**

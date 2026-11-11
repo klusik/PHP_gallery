@@ -1117,6 +1117,14 @@ class LinkingTransportTests(unittest.TestCase):
         headers = Message()
         headers.add_header('Content-Type', 'application/json')
         headers.add_header('Cache-Control', 'no-store')
+        headers.add_header(
+            'Server-Timing',
+            'gallery-php;dur=1.000, '
+            'gallery-sql;dur=0.500;desc="n=1;max_ms=0.500;failed=0;cap=0", '
+            'gallery-auth;dur=0.200, gallery-tree;dur=0.200, '
+            'gallery-hash;dur=0.000;desc="bytes=0", '
+            'gallery-media;dur=0.000',
+        )
         response = mock.Mock()
         response.status = 200
         response.headers = headers
@@ -1128,6 +1136,7 @@ class LinkingTransportTests(unittest.TestCase):
         control = linking._LinkingTransportControl(
             time.monotonic() + 60, None,
         )
+        control.server_timing_out = []
         with mock.patch.object(
             linking, '_linking_connection', return_value=connection,
         ):
@@ -1136,6 +1145,11 @@ class LinkingTransportTests(unittest.TestCase):
                 'app_linking_gallery_tree', 'GET', None, token, control,
                 tree_revision='d' * 64,
             )
+        self.assertEqual(1, len(control.server_timing_out))
+        php_sample, client_headers_ms = control.server_timing_out[0]
+        self.assertIsNotNone(php_sample)
+        self.assertEqual(1.0, php_sample.php_ms)
+        self.assertIsInstance(client_headers_ms, float)
         sent_path = connection.request.call_args.args[1]
         self.assertEqual(
             '/Galerie/index.php?page=app_linking_galleries&tree=1&revision='
@@ -1245,6 +1259,9 @@ class LinkingTransportTests(unittest.TestCase):
         def request_json(
             issuer: str, route: str, method: str, body: bytes | None,
             bearer: str | None, cancelled: threading.Event | None = None,
+            server_timing_out: list[
+                tuple[linking.PassiveServerTiming | None, float | None]
+            ] | None = None,
         ) -> dict[str, linking.JsonValue]:
             """Wait for the page owner's explicit cancellation signal.
 
@@ -1255,6 +1272,8 @@ class LinkingTransportTests(unittest.TestCase):
                 body (bytes | None): Optional body, absent for this GET.
                 bearer (str | None): In-memory bearer for the approved session.
                 cancelled (threading.Event | None): Request cancellation signal.
+                server_timing_out (list | None): Optional response timing
+                    sink, left empty by the cancelled test transport.
 
             Returns:
                 dict[str, linking.JsonValue]: No value when cancellation succeeds.

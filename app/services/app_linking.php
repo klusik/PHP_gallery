@@ -16,6 +16,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/app_linking_passive_profile.php';
+
 use RuntimeException;
 use Throwable;
 use function Gallery\Models\app_link_model_exchange;
@@ -699,10 +701,12 @@ function app_linking_gallery_tree(
     if ($hash === null) {
         return null;
     }
+    $modelStarted = app_linking_passive_span_start();
     $rows = gallery_model_linked_client_page(
         $identity['grant_id'], $identity['user_id'], $hash, $issuer,
         $identity['scope'], 0, APP_LINKING_GALLERY_TREE_MAX_ROWS + 1,
     );
+    app_linking_passive_span_end('gallery_model', $modelStarted);
     if ($rows === null) {
         return null;
     }
@@ -713,13 +717,18 @@ function app_linking_gallery_tree(
     foreach ($rows as $row) {
         $galleries[] = app_linking_gallery_identity($row);
     }
-    $revision = hash('sha256', json_encode([
+    $jsonStarted = app_linking_passive_span_start();
+    $encodedTree = json_encode([
         'version' => APP_LINKING_GALLERY_TREE_VERSION,
         'issuer' => $issuer,
         'account' => $identity['user_id'],
         'scope' => $identity['scope'],
         'galleries' => $galleries,
-    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+    ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    app_linking_passive_span_end('tree_json', $jsonStarted);
+    $hashStarted = app_linking_passive_span_start();
+    $revision = hash('sha256', $encodedTree);
+    app_linking_passive_span_end('tree_hash', $hashStarted);
     $result = [
         'version' => APP_LINKING_GALLERY_TREE_VERSION,
         'revision' => $revision,

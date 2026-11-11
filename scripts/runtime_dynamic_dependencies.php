@@ -100,6 +100,11 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     // lease verification is a service-owned lexical closure around the model
     // guard. Their concrete targets are already statically referenced in those
     // callers; request input cannot select either callback.
+    // The opt-in native Server-Timing formatter is a fixed local lexical
+    // closure, not a request-selected callback or a hidden runtime module root.
+    // Core's passive PDO hook accepts only a proven Closure registered by the
+    // trusted native service after server-side opt-in. The scanner excludes
+    // this typed local invocation from its unresolved dynamic-site inventory.
     $signatures = <<<'SITES'
     Gallery\Controllers\admin_gallery_discovery_capture_html|variable_callable|$renderer()
     Gallery\Controllers\admin_maintenance_center_json_action|variable_callable|$callback()
@@ -156,6 +161,7 @@ function runtime_dynamic_dependency_reviewed_sites(): array
     Gallery\Services\admin_test_run_clear_safe_caches|variable_callable|$callback()
     Gallery\Services\admin_test_run_create|variable_callable|$callback()
     Gallery\Services\admin_test_run_create|variable_callable|$phase()
+    Gallery\Services\app_linking_passive_header|variable_callable|$format()
     Gallery\Services\app_linking_recovery_probe|variable_callable|$currentGallery()
     Gallery\Services\application_autoupdate_maybe_run|variable_callable|$loadDependencies()
     Gallery\Services\application_update_background_chain_deliver|variable_callable|$deliver()

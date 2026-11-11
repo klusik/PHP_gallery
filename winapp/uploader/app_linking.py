@@ -42,6 +42,12 @@ from .gallery_media_cache import (
     GalleryMediaCache, PhotoCacheEntry, PhotoCacheReceipt,
     PHOTO_CACHE_FRESH_SECONDS,
 )
+from .linking_performance import (
+    LinkingRoutePerformanceWindow, linking_route_category,
+)
+from .passive_server_timing import (
+    PassiveServerTiming, ServerTimingWindow, parse_server_timing,
+)
 
 
 CLIENT_ID = 'php-gallery-winapp'
@@ -840,6 +846,8 @@ class MediaReadTimings:
         body_ms (float): Response validation/body-read milliseconds.
         cache_state (Literal['miss', 'hit', 'revalidation', 'ineligible',
             'changed', 'expired']): Passive outcome of a cache-only lookup.
+        server_timing (PassiveServerTiming | None): Strictly parsed numeric
+            opt-in PHP metrics from this accepted response, or None.
 
     This passive record contains no media, credentials or identities. Its
     counters never authorize cache reuse, transport admission or a retry.
@@ -889,6 +897,7 @@ class MediaReadTimings:
     cache_state: Literal[
         'miss', 'hit', 'revalidation', 'ineligible', 'changed', 'expired',
     ] = 'miss'
+    server_timing: PassiveServerTiming | None = None
 
     def observe_cache(
         self, cache: GalleryMediaCache,
@@ -1875,6 +1884,10 @@ class _LinkingTransportControl:
         self._lock = threading.Lock()
         self._socket: socket.socket | None = None
         self.timings: MediaReadTimings | None = None
+        self.server_timing_out: list[
+            tuple[PassiveServerTiming | None, float | None]
+        ] | None = None
+        self.server_header_ms: float | None = None
         self.request_started = False
         self.operation_finished = threading.Event()
 
@@ -2298,6 +2311,9 @@ def _request_json(
     gallery_id: int | None = None,
     watch_key: str | None = None,
     tree_revision: str | None = None,
+    server_timing_out: list[
+        tuple[PassiveServerTiming | None, float | None]
+    ] | None = None,
 ) -> dict[str, JsonValue]:
     """Bound one HTTPS request, including DNS, and validate its JSON.
 
@@ -2316,6 +2332,8 @@ def _request_json(
         gallery_id (int | None): Positive selected ID for gallery detail.
         watch_key (str | None): Supplemental key for a linked Watcher request.
         tree_revision (str | None): Exact optional tree-v1 SHA-256 revision.
+        server_timing_out (list[tuple[PassiveServerTiming | None, float | None]] | None):
+            Optional private numeric response-timing receiver for safe GETs.
 
     Returns:
         dict[str, JsonValue]: Strict, unique-key decoded JSON object.
@@ -2413,7 +2431,7 @@ def _request_json(
     return _run_linking_transport(
         request_once, cancelled, deadline_seconds, inactivity_seconds,
         phase=('discovery' if route == 'app_linking_discovery' else 'linking'),
-        route=route,
+        route=route, server_timing_out=server_timing_out,
     )
 
 
@@ -2424,6 +2442,9 @@ def _run_linking_transport(
     phase: _LinkingDiagnosticPhase = 'linking',
     route: _LinkingDiagnosticRoute = 'app_linking_discovery',
     timings: MediaReadTimings | None = None,
+    server_timing_out: list[
+        tuple[PassiveServerTiming | None, float | None]
+    ] | None = None,
 ) -> _TransportResult:
     """Admit one request within its total deadline and bound blocked DNS.
 
@@ -2437,6 +2458,8 @@ def _run_linking_transport(
         phase (_LinkingDiagnosticPhase): Fixed phase for safe diagnostics.
         route (_LinkingDiagnosticRoute): Fixed endpoint for safe diagnostics.
         timings (MediaReadTimings | None): Optional media admission counters.
+        server_timing_out (list[tuple[PassiveServerTiming | None, float | None]] | None):
+            Optional numeric response and send-to-header receiver for JSON GET.
 
     Returns:
         _TransportResult: Strict JSON object or bounded media bytes and MIME.
@@ -2448,6 +2471,7 @@ def _run_linking_transport(
     control = _LinkingTransportControl(
         time.monotonic() + deadline_seconds, cancelled, inactivity_seconds,
     )
+    control.server_timing_out = server_timing_out
     result: queue.Queue[
         _TransportResult | LinkingHttpsError | LinkingMediaUnavailable
         | LinkingResponseError | LinkingRevisionUnsupported
@@ -2728,8 +2752,15 @@ def _request_json_once(
             dispatch()
         control.remaining()
         control.request_started = True
+        header_started = (
+            time.perf_counter() if control.server_timing_out is not None else 0.0
+        )
         connection.request(method, path, body=body, headers=headers)
         with connection.getresponse() as response:
+            if control.server_timing_out is not None:
+                control.server_header_ms = (
+                    time.perf_counter() - header_started
+                ) * 1000.0
             content_types = response.headers.get_all('Content-Type', [])
             cache_headers = response.headers.get_all('Cache-Control', [])
             access_rejected = (
@@ -2876,6 +2907,16 @@ def _request_json_once(
         if (route in ('app_linking_gallery_visibility', 'app_linking_photo_visibility')
                 and '__client_visibility_conflict' in data):
             raise LinkingError('Linking response was not accepted.')
+        if (control.server_timing_out is not None
+                and method == 'GET' and route in (
+                    'app_linking_gallery_tree', 'app_linking_galleries',
+                )):
+            control.server_timing_out.append((
+                parse_server_timing(
+                    response.headers.get_all('Server-Timing', []),
+                ),
+                control.server_header_ms,
+            ))
         return data
     finally:
         connection.close()
@@ -4011,6 +4052,8 @@ def _native_media_read_once(
     """
     parsed = urlsplit(issuer)
     control.timings = timings
+    if timings is not None:
+        timings.server_timing = None
     if pool is not None:
         connection, reused, pool_epoch = pool.borrow(parsed, control)
     else:
@@ -4186,6 +4229,10 @@ def _native_media_read_once(
                     and response.headers.get_all('Content-Length', [])
                     in ([], ['0'])
                 )
+                if timings is not None:
+                    timings.server_timing = parse_server_timing(
+                        response.headers.get_all('Server-Timing', []),
+                    )
                 return None, '', etags[0], cacheable
             if response.status == 400 and '&kind=revision' in query:
                 payload = read_encoded(NATIVE_MEDIA_JSON_BYTES + 1)
@@ -4338,6 +4385,10 @@ def _native_media_read_once(
                 and response.headers.get_all('Content-Length', [])
                 == [str(len(payload))]
             )
+            if timings is not None:
+                timings.server_timing = parse_server_timing(
+                    response.headers.get_all('Server-Timing', []),
+                )
             return payload, media_type, etag, cacheable
     finally:
         if timings is not None and response is not None:
@@ -4409,6 +4460,8 @@ class LinkingSession:
             raise LinkingError('Invalid linking session.')
         self._lock = threading.Lock()
         self._request_gate = _FairRequestGate()
+        self._route_performance = LinkingRoutePerformanceWindow()
+        self._server_timing_window = ServerTimingWindow()
         self._upload_pipeline_waiting = threading.Event()
         self._media_connection_pool = _MediaConnectionPool()
         self._cancelled = threading.Event()
@@ -4449,6 +4502,48 @@ class LinkingSession:
         self._active_route = ''
         self._renew: Callable[[threading.Event], tuple[str, float]] | None = None
         self._closed = False
+
+    def route_performance_summary(self) -> str:
+        """Return bounded route/status diagnostics for the active Photos link.
+
+        Returns:
+            str: Fixed numeric counters without request URLs or identities.
+        """
+        return self._route_performance.render_summary()
+
+    def server_timing_summary(self) -> str:
+        """Return paired safe PHP/client timing without a request identifier.
+
+        Returns:
+            str: Fixed route and numeric PHP observations or explicit missing.
+        """
+        return self._server_timing_window.render_summary()
+
+    def _observe_route_performance(
+        self, route: str | None, status: int | None, reason: str,
+        elapsed_ms: float, attempts: int | None,
+    ) -> None:
+        """Keep any observer failure independent from a real HTTP outcome.
+
+        Args:
+            route (str | None): Fixed safe route category, or None if unknown.
+            status (int | None): Observed HTTP status, or unknown.
+            reason (str): Fixed diagnostic outcome code.
+            elapsed_ms (float): Measured local operation owner duration.
+            attempts (int | None): Known physical sends, or unknown.
+
+        Returns:
+            None: Failure to record cannot replace application behavior.
+        """
+        if route is None:
+            return
+        try:
+            self._route_performance.observe(
+                route, status, reason, elapsed_ms, attempts,
+            )
+        except Exception:
+            # Passive diagnostics must not alter network/error semantics.
+            pass
 
     def enable_renewal(
         self, renew: Callable[[threading.Event], tuple[str, float]],
@@ -4655,6 +4750,13 @@ class LinkingSession:
             self._active_route = route
             token = self._token
         watch_options = {'watch_key': watch_key} if watch_key is not None else {}
+        diagnostic_started = time.monotonic()
+        diagnostic_status: int | None = None
+        diagnostic_reason = 'unknown'
+        diagnostic_attempts: int | None = None
+        php_response: list[
+            tuple[PassiveServerTiming | None, float | None]
+        ] = []
         try:
             if route == 'app_linking_gallery_detail':
                 data = _request_json(
@@ -4675,6 +4777,7 @@ class LinkingSession:
                     cancelled=(gallery_cancel if gallery_cancel is not None
                                else self._cancelled),
                     tree_revision=tree_revision,
+                    server_timing_out=php_response,
                 )
             elif route == 'app_linking_galleries' and body is not None:
                 data = _request_json(
@@ -4701,11 +4804,15 @@ class LinkingSession:
                     'POST' if route == 'app_linking_revoke' else 'GET',
                     b'' if route == 'app_linking_revoke' else None, token,
                     cancelled=self._cancelled,
+                    **({'server_timing_out': php_response}
+                       if route == 'app_linking_galleries' else {}),
                 )
             else:
                 data = _request_json(
                     self._issuer, route, 'GET', None, token,
                     cancelled=self._cancelled, after_id=after_id,
+                    **({'server_timing_out': php_response}
+                       if route == 'app_linking_galleries' else {}),
                 )
             with self._lock:
                 if self._closed:
@@ -4716,8 +4823,27 @@ class LinkingSession:
                     self._token = ''
                     self._closed = True
                     self._media_connection_pool.discard(close=True)
-                return data
-        except LinkingGrantRejected:
+                diagnostic_status = (
+                    409 if '__client_visibility_conflict' in data else 200
+                )
+                diagnostic_reason = (
+                    'http_status' if diagnostic_status == 409 else 'ok'
+                )
+                diagnostic_attempts = 1
+            if diagnostic_status == 200 and php_response:
+                self._server_timing_window.observe(
+                    linking_route_category(route),
+                    php_response[-1][0], php_response[-1][1], 1,
+                )
+            return data
+        except LinkingResponseError as error:
+            diagnostic_status = error.status
+            diagnostic_reason = error.reason
+            diagnostic_attempts = 1 if error.request_started else 0
+            raise
+        except LinkingGrantRejected as error:
+            diagnostic_reason = 'grant_rejected'
+            diagnostic_attempts = 1 if error.request_started else 0
             with self._lock:
                 self._private_preload_generation += 1
                 self._private_preload_proofs.clear()
@@ -4726,6 +4852,12 @@ class LinkingSession:
                 self._expires_at = time.monotonic()
             raise
         finally:
+            self._observe_route_performance(
+                linking_route_category(route), diagnostic_status,
+                diagnostic_reason,
+                (time.monotonic() - diagnostic_started) * 1000.0,
+                diagnostic_attempts,
+            )
             with self._lock:
                 self._busy = False
                 self._active_route = ''
@@ -4963,6 +5095,16 @@ class LinkingSession:
                     transport_started = (
                         time.perf_counter() if timings is not None else 0.0
                     )
+                    diagnostic_started = time.monotonic()
+                    diagnostic_status: int | None = None
+                    diagnostic_reason = 'unknown'
+                    diagnostic_attempts: int | None = None
+                    prior_attempts = (
+                        timings.http_requests if timings is not None else 0
+                    )
+                    prior_ttfb_ms = (
+                        timings.ttfb_ms if timings is not None else 0.0
+                    )
                     if timings is not None:
                         timings.network_reads += 1
                     try:
@@ -4978,7 +5120,44 @@ class LinkingSession:
                             phase='media', route='app_linking_media',
                             timings=timings,
                         )
+                        diagnostic_status = 304 if result[0] is None else 200
+                        diagnostic_reason = 'ok'
+                    except LinkingResponseError as error:
+                        diagnostic_status = error.status
+                        diagnostic_reason = error.reason
+                        raise
+                    except LinkingGrantRejected:
+                        diagnostic_reason = 'grant_rejected'
+                        raise
+                    except LinkingMediaUnavailable:
+                        diagnostic_reason = 'target_unavailable'
+                        raise
+                    except LinkingRevisionUnsupported:
+                        diagnostic_reason = 'revision_unsupported'
+                        raise
                     finally:
+                        if timings is not None:
+                            diagnostic_attempts = (
+                                timings.http_requests - prior_attempts
+                            )
+                        # Compare only a genuinely accepted media response
+                        # using these exact physical send and TTFB deltas.
+                        if (timings is not None
+                                and diagnostic_status in (200, 304)):
+                            self._server_timing_window.observe(
+                                linking_route_category('app_linking_media', kind),
+                                timings.server_timing,
+                                timings.ttfb_ms - prior_ttfb_ms,
+                                diagnostic_attempts,
+                            )
+                        # An unmetered pooled GET can retry a stale socket.
+                        # Keep its physical send count unknown, not guessed.
+                        self._observe_route_performance(
+                            linking_route_category('app_linking_media', kind),
+                            diagnostic_status, diagnostic_reason,
+                            (time.monotonic() - diagnostic_started) * 1000.0,
+                            diagnostic_attempts,
+                        )
                         if timings is not None:
                             timings.network_ms += (
                                 time.perf_counter() - transport_started

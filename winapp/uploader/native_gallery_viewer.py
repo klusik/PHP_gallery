@@ -57,6 +57,8 @@ from .diagnostics import (
     format_safe_photos_shortcut,
     is_safe_photos_observation,
 )
+from .photos_performance import ThumbnailPerformanceWindow
+from .viewport_performance import ViewportPerformanceWindow
 from .gallery_lightbox import (
     LIGHTBOX_ZOOM_STEP,
     PhotoLightbox,
@@ -737,6 +739,10 @@ class _NativeGalleryViewer:
         self._diagnostic_callback = diagnostic_callback
         self._on_photo_selected = photo_selected
         self._observation_callback = observation_callback
+        self.on_first_thumbnail_presented: Callable[[], None] | None = None
+        self._first_thumbnail_reported = False
+        self.on_first_viewport_settled: Callable[[], None] | None = None
+        self._first_viewport_reported = False
         self._card_format = 'default'
         self.on_photos_changed: Callable[[], None] | None = None
         self.on_cache_changed: Callable[
@@ -761,6 +767,8 @@ class _NativeGalleryViewer:
         )
         self._thumbnail_result_lock = threading.Lock()
         self._thumbnail_metrics_lock = threading.Lock()
+        self._thumbnail_performance = ThumbnailPerformanceWindow()
+        self._viewport_performance = ViewportPerformanceWindow()
         self._detail_media_metrics: dict[str, int] = {
             name: 0 for name in (
                 'detail_source_disk', 'detail_source_network',
@@ -864,6 +872,8 @@ class _NativeGalleryViewer:
         self._thumbnail_loaded: set[int] = set()
         self._thumbnail_pending: list[int] = []
         self._visible_thumbnail_indices: set[int] = set()
+        self._measured_visible: frozenset[int] = frozenset()
+        self._viewport_measure_epoch: int | None = None
         self._admitted_thumbnail_indices: set[int] = set()
         self._viewport_after_id: str | None = None
         self._viewport_event_count = 0
@@ -1349,6 +1359,11 @@ class _NativeGalleryViewer:
             visible = tuple(self._visible_photo_indices())
             visible_set = set(visible)
             self._visible_thumbnail_indices = visible_set
+            if visible_set != self._measured_visible:
+                self._measured_visible = frozenset(visible_set)
+                self._viewport_measure_epoch = self._viewport_performance.begin(
+                    len(visible_set),
+                )
             admitted: set[int] = set()
             if visible:
                 columns = max(1, self._grid_columns)
@@ -1436,10 +1451,62 @@ class _NativeGalleryViewer:
                 # batch that this same viewport turn would immediately cancel.
                 self._load_more()
             self._dispatch_pending_work()
+            self._observe_visible_viewport_settled()
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         self._viewport_peak_update_ms = max(
             self._viewport_peak_update_ms, elapsed_ms,
         )
+
+    def rearm_first_viewport_diagnostics(self) -> None:
+        """Measure a new catalogue pass on this still-mounted Tk viewer.
+
+        Returns:
+            None: The next existing coalesced viewport pass can settle a new
+                diagnostic epoch without creating a media request or widget.
+        """
+        if self._closed:
+            return
+        self._first_viewport_reported = False
+        self._measured_visible = frozenset()
+        self._viewport_measure_epoch = None
+        self._on_grid_viewport(None)
+
+    def _observe_visible_viewport_settled(self) -> None:
+        """Measure only the current, fully resolved visible Tk tile band.
+
+        Returns:
+            None: An incomplete, stale, hidden or cancelled band remains
+                pending; each settled band is sampled only once.
+        """
+        epoch = self._viewport_measure_epoch
+        visible = self._visible_thumbnail_indices
+        if (self._closed or epoch is None or not visible
+                or self._viewport_after_id is not None
+                or not self.frame.winfo_viewable()
+                or self._refresh_pending
+                or not visible <= self._admitted_thumbnail_indices
+                or not visible <= self._thumbnail_loaded
+                or any(index >= len(self._photo_images) for index in visible)):
+            return
+        available = sum(
+            self._photo_images[index] is not None for index in visible
+        )
+        unavailable = len(visible) - available
+        if not self._viewport_performance.settle(
+            epoch, available, unavailable,
+        ):
+            return
+        if not self._first_viewport_reported:
+            self._first_viewport_reported = True
+            callback = self.on_first_viewport_settled
+            if callback is not None:
+                try:
+                    callback()
+                except Exception:
+                    # A diagnostic callback never affects genuine Tk rendering.
+                    logging.getLogger(__name__).warning(
+                        'First settled viewport diagnostic callback failed.',
+                    )
 
     def _cancel_grid_viewport_callback(self) -> None:
         """Cancel the owned coalescing timer and fence a stale callback.
@@ -1583,6 +1650,7 @@ class _NativeGalleryViewer:
                 self._thumbnail_source_network_count += 1
             elif timings.source == 'revalidated':
                 self._thumbnail_source_revalidated_count += 1
+        self._thumbnail_performance.observe(timings, decode_ms)
 
     def _observe_detail_read(
         self, kind: Literal['detail', 'prefetch'], timings: MediaReadTimings,
@@ -1668,7 +1736,14 @@ class _NativeGalleryViewer:
             f'peak_update_ms={self._viewport_peak_update_ms:.2f} '
             f'visible={len(self._visible_thumbnail_indices)} '
             f'admitted={len(self._admitted_thumbnail_indices)} '
-            f'retained={retained}'
+            f'retained={retained} '
+            f'visible_unsettled={len(self._visible_thumbnail_indices - self._thumbnail_loaded)} '
+            f'pending_thumbnail={len(self._thumbnail_pending)} '
+            f'pending_local={len(self._warm_thumbnail_pending)} '
+            f'queued_gui_results={self._events.qsize()} '
+            f'worker_active={int(self._worker is not None)}\n'
+            f'{self._thumbnail_performance.render_summary()}\n'
+            f'{self._viewport_performance.render_summary()}'
         )
 
     def _on_grid_resize(
@@ -2821,6 +2896,9 @@ class _NativeGalleryViewer:
         self._refresh_audio_button()
         self._empty_page = not bool(self._photos)
         if old_count == 0:
+            # Rebuilt descriptors invalidate the prior visible-band measurement.
+            self._measured_visible = frozenset()
+            self._viewport_measure_epoch = None
             for canonical in self._canonical_thumbnail_images.values():
                 canonical.close()
             self._canonical_thumbnail_images.clear()
@@ -4124,6 +4202,7 @@ class _NativeGalleryViewer:
             if data is not None:
                 data.close()
             return
+        presented_on_tk = False
         if data is not None and ImageTk is not None:
             image: object | None = None
             presented: 'Image.Image | None' = None
@@ -4145,6 +4224,7 @@ class _NativeGalleryViewer:
                     image=image, text='', compound='image',
                     style='LinkedPhoto.TButton',
                 )
+                presented_on_tk = True
             except Exception:
                 if image is not None:
                     self._thumbnail_image_release_count += 1
@@ -4169,6 +4249,19 @@ class _NativeGalleryViewer:
                 )
         self._thumbnail_loaded.add(index)
         self._render_photo_selection((index,))
+        if (presented_on_tk and not self._first_thumbnail_reported
+                and index in self._visible_thumbnail_indices
+                and self.frame.winfo_viewable()):
+            self._first_thumbnail_reported = True
+            callback = self.on_first_thumbnail_presented
+            if callback is not None:
+                try:
+                    callback()
+                except Exception:
+                    # Diagnostics cannot interrupt genuine image display.
+                    logging.getLogger(__name__).warning(
+                        'First visible thumbnail diagnostic callback failed.',
+                    )
         # A natural-aspect image can be shorter than its placeholder inside a
         # fixed row. The frame extent then stays unchanged, so its Configure
         # event cannot repair visible indices at the edge of the viewport.

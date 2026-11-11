@@ -14,6 +14,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/app_linking_passive_profile.php';
+
 require_once __DIR__ . '/../models/cooperative_galleries.php';
 
 use RuntimeException;
@@ -759,7 +761,11 @@ function app_linking_media_open_verified_photo_file(
         return ['stream' => $stream, 'size' => $size, 'mime' => $mime, 'etag' => null];
     }
     $digest = hash_init('sha256');
+    $hashStarted = app_linking_passive_span_start();
     $read = hash_update_stream($digest, $stream, $size);
+    app_linking_passive_span_end(
+        'file_hash', $hashStarted, is_int($read) ? max(0, $read) : 0,
+    );
     $after = fstat($stream);
     if ($read !== $size || !is_array($after) || $after['size'] !== $size
         || $after['mtime'] !== $before['mtime'] || $after['ctime'] !== $before['ctime']
