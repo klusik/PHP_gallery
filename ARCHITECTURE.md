@@ -706,7 +706,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.0.10';
+const CMS_VERSION = '1.1.0';
 ```
 
 Update-related code uses:

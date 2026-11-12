@@ -1,5 +1,136 @@
 # Patch notes
 
+## Version 1.1.0
+
+Improved the native Photos workflow with negotiated thumbnail streaming,
+less catalogue reconciliation work and bounded performance diagnostics.
+Added a persistent administrator switch and preserved manual Import originals.
+Updated the Windows companion version to 1.1.0.
+
+### Highlights
+
+#### Progressive native thumbnail batches
+
+- Added optional PGB1 thumbnail streaming for linked Windows clients, starting
+  with groups of up to eight images and increasing to sixteen after healthy
+  responses. Completed images became available individually while the group
+  streamed. Reused per-image memory and disk caches and requested only missing
+  or expired visible and overscan items. [#362](https://github.com/klusik/PHP_gallery/issues/362)
+- Preserved individual thumbnail reads for older servers, unavailable optional
+  capability and exceptional images. Kept authorization failures and rate
+  limits explicit, with bounded retry, cancellation and cooldown behavior.
+- Retained the existing single network owner and yielded between groups to
+  foreground metadata and upload work instead of adding transport workers.
+
+#### Persistent administrator choice
+
+- Added the thumbnail batching switch to the existing Admin Features screen
+  and setup/settings inventory, with matching English, Czech, German and
+  Swedish text. Set factory and fresh-install defaults to ON and preserved
+  saved OFF or ON on later updates.
+- Applied `PHP_GALLERY_THUMBNAIL_BATCH_V1` only while the stored choice was
+  absent: unset or `1` enabled batching; `0` or malformed input disabled it.
+  Made the saved administrator choice take precedence over that fallback.
+  Disabled batching without deleting grants, media or caches and retained
+  the original single-image route.
+
+#### Large catalogues and safer local files
+
+- Removed repeated root-sibling index scans during ordered Photos catalogue
+  mounting. Preserved incremental Tk rendering, selection reconciliation,
+  cancellation and stale-generation fences for large trees.
+- Improved bounded Retry-After recovery on the legacy paged catalogue path
+  and retained matching strong thumbnail proofs across metadata refreshes.
+- Fixed manual Import so selected files and extracted ZIP sources remained
+  available after confirmed upload even when Watcher's delete-after-upload
+  preference was enabled. Left ordinary Watcher cleanup preferences intact.
+- Restored capture-journal recovery for equivalent Windows folder paths using
+  the other slash direction while retaining exact capture-boundary checks.
+
+### Technical Details
+
+#### Backend and compatibility
+
+- Added the read-only bearer-authorized POST route
+  `index.php?page=app_linking_thumbnail_batch`, owned by
+  `app/controllers/app_linking/thumbnail_batch.php` and
+  `app/services/app_linking_thumbnail_batch.php`. Reused current grant, scope,
+  gallery, visibility, NSFW and contained-file validation at frame boundaries.
+- Limited requests to 32 images, encoded responses to 8 MiB and each image to
+  4 MiB. Supported JPEG/WebP frames, ordered independent outcomes and explicit
+  stream completion. Charged shared rate budgets by requested image work and
+  kept aggregate responses private and noncacheable.
+- Registered `thumbnail_batch` through the existing feature-policy adapter and
+  the single stored key `feature_flag.thumbnail_batch.enabled`. Made saved
+  strict OFF/ON values authoritative, failed malformed saved values closed,
+  and retained exact disabled `404 unsupported_capability` responses. Added
+  no database migration or consent scope.
+- Corrected admission of canonical `tree` and `revision` query keys in
+  `app/services/seo_request_guard.php`, while retaining unknown-key rejection.
+  Reused `galleries:tree-v1`, its 10,000-row/4-MiB bounds and permanent 50-row
+  paginated fallback. Added no server-side materialized tree cache.
+
+#### Native client and cache ownership
+
+- Added `winapp/uploader/thumbnail_batch_protocol.py` and integrated the codec
+  with `app_linking.py` and `native_gallery_viewer.py`. Validated frame order,
+  identities, MIME, lengths, digests, validators and terminal framing before
+  publishing complete images.
+- Kept byte-integrity verification separate from cache authority. Bound public
+  items to current descriptors and private items to account/epoch proofs,
+  rechecking session, gallery and generation before cache and GUI publication.
+  Disposed stale queued rasters during refresh or cancel.
+- Kept the existing GUI delivery batches separate from HTTP request groups and
+  preserved disk-cache reads that bypassed the network. Did not replay already
+  delivered frames when later transport work failed.
+
+#### Bounded diagnostics
+
+- Added privacy-safe client summaries for fixed route/status/reason categories,
+  available physical request counts, cache provenance, startup milestones,
+  viewport settlement and queue gauges. Kept unknown measurements explicit and
+  retained only bounded rolling observations.
+- Added the separate, default-off PHP profile controlled by
+  `PHP_GALLERY_A2_PASSIVE_PROFILE=1`. Observed existing SQL durations and
+  authorized tree/media work, emitting fixed numeric `Server-Timing` metrics
+  only after live authorization. Exported no SQL text, credentials, tokens,
+  private paths or response bodies.
+- Added validated timeout-step context for slot, DNS, connect, TLS, request,
+  headers and body failures, or an explicit unknown value. Kept diagnostic
+  output redacted and distinct from a root-cause claim about gateway errors.
+
+#### Regression evidence and documentation
+
+- Added disposable PHP/MariaDB HTTP and Linux/Windows client/Tk coverage for
+  protocol selection, malformed or truncated streams, authority changes,
+  missing files, cache proofs, cancellation, backoff and foreground/upload
+  admission. Kept the complete native test inventory in bounded serial
+  partitions. [#362](https://github.com/klusik/PHP_gallery/issues/362)
+- Exercised 500-, 2,000- and 10,000-row tree fixtures and actual PhotosWorkspace
+  mounting with synthetic large catalogues. Added reciprocal compatibility
+  checks using archived 1.0.10 client/server source in owned fixtures.
+- Synchronized architecture, compatibility, settings, queue and performance
+  references and all four maintained manual sources. Persisted canonical
+  runtime metadata for the new route and documented the prepared-checkout
+  handoff needed to avoid stale-route startup errors.
+
+### User Impact
+
+- Windows companion users received progressive grouped thumbnail reads and
+  reduced redundant catalogue work while retaining cache reuse, cancellation,
+  foreground/upload priority and older-server fallback.
+- Administrators received a batch preference with an ON default, persistent
+  saved choices and the initial legacy fallback. The optional PHP timing
+  profile remained a separate explicit opt-in.
+- Import users kept their selected originals after confirmed upload without
+  changing how Watcher handled its own cleanup preference. The public visitor
+  interface did not change.
+- Kept target FPM/proxy/HTTPS buffering, gateway limits, concurrent resource and
+  worker pressure, representative first-paint/upload latency and current
+  installed-candidate acceptance as outstanding work. Hosted fixtures and local
+  observations did not establish those deployment guarantees or complete
+  acceptance for [#362](https://github.com/klusik/PHP_gallery/issues/362).
+
 ## Version 1.0.10
 
 Improved durable screenshot capture and serial upload recovery in the Windows
