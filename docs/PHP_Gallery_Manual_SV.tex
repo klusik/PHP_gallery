@@ -2511,7 +2511,9 @@ Långa sidor och dialoger kan rullas med mushjulet eller rullningslisten;
 text- och tabellkontroller behåller sin egen rullning.
 
 När Watcher är aktiv pulserar en röd punkt på ikonen i systemfältet
-synkroniserat med indikatorn i appen; uppdateringsmärket är oberoende.
+synkroniserat med indikatorn i appen. Alla Watcher-markörer delar ett
+fasintervall på 267~ms, alltså cirka 534~ms för en fullständig ljus/mörk cykel;
+uppdateringsmärket är oberoende.
 
 Manuell \ui{Import} kräver fortfarande granskning av förkontrollen och ett
 uttryckligt startval. \ui{Activity} innehåller filtrerad händelsehistorik,

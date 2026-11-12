@@ -151,9 +151,10 @@ late startup results. Continuation diagnostics name the failed phase and a
 fixed safe reason without exposing keys, checkpoint contents or local paths.
 On Windows, recovery also accepts either slash direction in the recorded folder
 while retaining the existing exact boundary and queue verification.
-While Watcher capture is active, a red dot pulses
-on the tray icon in step with the in-app indicator. The update badge remains
-visible independently.
+While Watcher capture is active, a red dot pulses on the tray icon in step
+with the in-app indicator. All Watcher markers use the same 267 ms phase
+interval, or about 534 ms for a complete bright/dim cycle; the update badge
+remains visible independently.
 Source/Python runs never add an OS startup entry; their startup switch is
 disabled.
 
@@ -1689,10 +1690,10 @@ Before activating the destination, WinApp checks its accepted import
 work against the local upload history. A large existing Watcher history can
 be read within the same 256 MiB bound used for state updates. Unverifiable
 history or unfinished work for another destination still blocks a change.
-The red REC indicator shows active capture. The
-Watcher rail icon pulses red on every tab while capture is active. A small
-filled red light marks the exact upload gallery in the Photos tree and at its
-heading. A hollow light marks a collapsed branch that hides that gallery.
+The red REC indicator shows active capture. The Watcher rail, header, tray,
+Photos tree and cache markers share one pulse state while capture is active.
+A small filled red light marks the exact upload gallery in the Photos tree and
+at its heading. A hollow light marks a collapsed branch that hides that gallery.
 The context offers SimBrief when a flight simulator is detected. Finish a game
 to drain its screenshots, or finish a flight to save its available reports
 locally. Finishing revokes the temporary capture key and leaves the website
