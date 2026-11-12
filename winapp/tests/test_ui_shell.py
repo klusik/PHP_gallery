@@ -35,6 +35,12 @@ SHELL_TEST_DEADLINE_MS = 5000
 # mapping events while the unchanged test watchdog retains its hard deadline.
 SHELL_KEY_POLL_MS = 20
 
+# Purpose: Exercise prompts at the supported minimum application dimensions.
+# Type: str. Units: Tk geometry pixels. Scope: one shell regression root.
+# Consumers: EmbeddedShellTests.setUp. Rationale: 840x500 matches the launcher
+# minimum; Tk's tiny default root can leave the entry unmapped below the text.
+SHELL_TEST_GEOMETRY = '840x500'
+
 
 class EmbeddedShellTests(unittest.TestCase):
     """Exercise real Tk panel widgets without creating secondary windows."""
@@ -49,12 +55,14 @@ class EmbeddedShellTests(unittest.TestCase):
             self.root = tk.Tk()
         except tk.TclError as exc:
             self.skipTest(str(exc))
+        self.root.geometry(SHELL_TEST_GEOMETRY)
         initialize_shell(self.root)
         self.root.update()
         self.prompt_timed_out = False
         self.callback_errors = []
         self.root.report_callback_exception = lambda *_args: self.callback_errors.append(str(_args[1]))
         self.key_after_id = None
+        self.key_observation = 'no keyboard request'
         self.deadline = self.root.after(SHELL_TEST_DEADLINE_MS, self.expire_prompt)
 
     def expire_prompt(self) -> None:
@@ -81,7 +89,7 @@ class EmbeddedShellTests(unittest.TestCase):
             self.root.destroy()
             self.assertEqual(
                 (self.prompt_timed_out, self.callback_errors), (False, []),
-                'Dialog deadline or Tk callback failure',
+                'Dialog deadline or Tk callback failure: ' + self.key_observation,
             )
 
     def test_stack_and_modal_grab_restore(self) -> None:
@@ -140,6 +148,11 @@ class EmbeddedShellTests(unittest.TestCase):
             widget for widget in panel.winfo_children()[0].winfo_children()
             if isinstance(widget, ttk.Entry)
         )
+        self.key_observation = (
+            f"mapped={entry.winfo_ismapped()} "
+            f"geometry={self.root.winfo_geometry()} "
+            f"focus={self.root.focus_get()}"
+        )
         if not entry.winfo_ismapped():
             self.key_after_id = self.root.after(SHELL_KEY_POLL_MS, lambda: self.press_entry_key(sequence))
             return
@@ -152,6 +165,7 @@ class EmbeddedShellTests(unittest.TestCase):
                 None: Waits without reentrant update calls, then sends one key.
             """
             if self.root.focus_get() is not entry:
+                self.key_observation = f"mapped=1 focus={self.root.focus_get()}"
                 self.key_after_id = self.root.after(SHELL_KEY_POLL_MS, deliver)
                 return
             self.assertTrue(entry.winfo_ismapped())

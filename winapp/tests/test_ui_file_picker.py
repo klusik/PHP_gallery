@@ -36,6 +36,13 @@ _PICKER_TEST_TIMEOUT_MS = 8000
 # Rationale: 30 ms checks promptly without a busy event loop.
 _PICKER_TEST_POLL_MS = 30
 
+# Purpose: Keep native picker controls visible at supported application size.
+# Type: str; Units: Tk geometry pixels; Scope: one picker regression root.
+# Consumers: EmbeddedFilePickerTests and EmbeddedPickerInteractionTests.
+# Rationale: 840x500 matches the launcher minimum and leaves room for input
+# and footer controls instead of relying on Tk's tiny initial root geometry.
+_PICKER_TEST_GEOMETRY = '840x500'
+
 
 def _descendants(widget: tk.Misc) -> list[tk.Misc]:
     """Collect live descendants for interacting with the actual picker controls.
@@ -124,6 +131,7 @@ class EmbeddedFilePickerTests(unittest.TestCase):
         """
         try:
             root = tk.Tk()
+            root.geometry(_PICKER_TEST_GEOMETRY)
         except tk.TclError as exc:
             self.skipTest(str(exc))
         try:
@@ -148,6 +156,7 @@ class EmbeddedPickerInteractionTests(unittest.TestCase):
             self.root = tk.Tk()
         except tk.TclError as exc:
             self.skipTest(str(exc))
+        self.root.geometry(_PICKER_TEST_GEOMETRY)
         self.root.update()
 
     def tearDown(self) -> None:

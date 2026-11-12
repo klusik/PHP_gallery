@@ -100,6 +100,8 @@ class ApplicationShellTests(unittest.TestCase):
             self.root = tk.Tk()
         except tk.TclError as exc:
             self.skipTest(str(exc))
+        width, height = MAIN.WATCHER_WINDOW_MINIMUM
+        self.root.geometry(f"{width}x{height}")
         initialize_shell(self.root)
         self.app = object.__new__(MAIN.WatcherApp)
         self.app.root = self.root
