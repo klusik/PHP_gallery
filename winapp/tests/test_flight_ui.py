@@ -44,10 +44,15 @@ class FlightUITests(unittest.TestCase):
         """Create an app-shaped host with workers but no native Tk objects.
 
         Returns:
-            SimpleNamespace: Fake host with saved config and observable workers.
+            SimpleNamespace: Fake host with saved config, observable workers
+                and a root-shaped widget exposing its empty embedded panel stack.
         """
+        root = SimpleNamespace(
+            after=Mock(), focus_get=Mock(return_value=None), _embedded_panels=[],
+        )
+        root.winfo_toplevel = Mock(return_value=root)
         return SimpleNamespace(
-            root=SimpleNamespace(after=Mock(), focus_get=Mock(return_value=None)),
+            root=root,
             config=SimpleNamespace(
                 gallery_url="https://gallery.test/api",
                 api_key="test-key",

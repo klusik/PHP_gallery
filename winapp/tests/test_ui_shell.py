@@ -123,14 +123,15 @@ class EmbeddedShellTests(unittest.TestCase):
                 None: Generates Escape after focus and bind tags are installed.
             """
             panel = active_panel(self.root)
+            self.root.update_idletasks()
             panel._scope_keyboard()
-            self.root.focus_force()
             entry = next(
                 widget for widget in panel.winfo_children()[0].winfo_children()
                 if isinstance(widget, ttk.Entry)
             )
-            entry.focus_set()
-            entry.event_generate('<Escape>')
+            entry.focus_force()
+            self.root.update()
+            entry.event_generate('<Escape>', when='tail')
 
         self.root.after_idle(cancel_entry)
         self.assertIsNone(simpledialog.askstring('Input', 'Value', parent=self.root))
@@ -142,13 +143,14 @@ class EmbeddedShellTests(unittest.TestCase):
                 None: Accepts the initial value through Return rather than close.
             """
             panel = active_panel(self.root)
+            self.root.update_idletasks()
             entry = next(
                 widget for widget in panel.winfo_children()[0].winfo_children()
                 if isinstance(widget, ttk.Entry)
             )
-            self.root.focus_force()
-            entry.focus_set()
-            entry.event_generate('<Return>')
+            entry.focus_force()
+            self.root.update()
+            entry.event_generate('<Return>', when='tail')
 
         self.root.after_idle(submit_value)
         self.assertEqual(
