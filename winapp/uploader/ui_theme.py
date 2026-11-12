@@ -18,6 +18,7 @@ import sys
 import tkinter as tk
 from tkinter import font as tkfont, ttk
 from typing import TYPE_CHECKING, TypeAlias
+from uploader.ui_shell import EmbeddedWindow
 
 if TYPE_CHECKING:
     from PIL import ImageTk
@@ -2269,11 +2270,11 @@ def hide_inline_tooltip(surface: tk.Misc) -> None:
         state.hide(None)
 
 
-def place_dialog(dialog: tk.Toplevel, owner: tk.Misc) -> None:
+def place_dialog(dialog: tk.Toplevel | EmbeddedWindow, owner: tk.Misc) -> None:
     """Center a child window over the window that opened it.
 
     Args:
-        dialog (tk.Toplevel): Fully populated child window awaiting display.
+        dialog (tk.Toplevel | EmbeddedWindow): Populated child awaiting display.
         owner (tk.Misc): Invoking widget or its active application toplevel.
     Returns:
         None: Sets transient ownership and nearby requested-size geometry.
@@ -2297,7 +2298,7 @@ def _show_help(owner: tk.Misc, title: str, body: str) -> None:
     """Display a modal-style help panel with selectable content.
 
     Args:
-        owner (tk.Misc): Widget whose toplevel owns the help dialog.
+        owner (tk.Misc): Invoking widget owning the embedded help panel.
         title (str): Concise title shown in the dialog heading and chrome.
         body (str): Plain text content users may select or copy.
 
@@ -2308,7 +2309,7 @@ def _show_help(owner: tk.Misc, title: str, body: str) -> None:
         parent = owner.winfo_toplevel()
         previous_grab = parent.grab_current()
         previous_focus = parent.focus_get()
-        dialog = tk.Toplevel(parent)
+        dialog = EmbeddedWindow(owner)
     except tk.TclError:
         return
 

@@ -2586,6 +2586,41 @@ användare som kör appen; installation som uttryckligen startas upphöjd kan
 använda
 det kontot.
 
+Den inbyggda menyraden grupperar kommandon under \ui{File}, \ui{Edit},
+\ui{View}, \ui{Tools} och~\ui{Help}. \ui{File} importerar filer, mappar
+eller ZIP-arkiv; \texttt{Ctrl+O} öppnar filvalet. \ui{Edit} har
+textredigering och~\ui{Settings}; \texttt{Ctrl+,} öppnar inställningarna.
+\ui{View} växlar mellan Photos, Watcher, Import, Activity, AI och~Settings.
+\ui{Tools} innehåller Watcher-/anslutningsåtgärder, köuppdatering,
+uppdateringskontroll och~supportdiagnostik. \ui{Help} öppnar användarhjälpen
+med \texttt{F1}, supportdiagnostiken med \texttt{Ctrl+Shift+D} och About.
+Navigeringsflikarna finns kvar. En panel som äger inmatningen spärrar
+menykommandon och~dessa kortkommandon tills den stängs.
+
+Inställningar, hjälp, anslutningsfrågor och meddelanden visas i huvudfönstret.
+Informationsmeddelanden visas i en icke-blockerande, avvisbar remsa med
+rullbar text. Den köar högst 32 meddelanden och visar antalet äldsta som
+utelämnats; den tar inte fokus eller greppar inmatningen. Bekräftelser och
+text-/heltalspromptar är fortsatt modala paneler som väntar på svar medan
+bakgrundsjobb fortsätter. Oberoende förloppspaneler väntar tills den aktuella
+besluts-/inmatningspanelen stängs. När en sådan panel är öppen blockeras
+menyåtgärder och navigeringsgenvägar, men vanlig textredigering är tillgänglig
+i den fokuserade editorn. Åtgärder som beror på en sparad ägare kontrollerar
+ägaren på nytt före utförandet. Fil- och mappval visas också i en inbäddad
+panel; en begränsad kataloglista läses i en bakgrundstråd.
+
+\ui{Support diagnostics…} öppnar en lokal förhandsvisning med \ui{Refresh},
+\ui{Copy} och~\ui{Save}. Rapporten innehåller tillåtna inställningar och
+körningsfakta, den aktuella diagnostikbilden och högst de senaste 64~KiB av
+den befintliga apploggen. Saknade eller oläsbara loggavsnitt, trunkerad svans
+och en borttagen ofullständig första rad markeras. Rapporten
+använder inte nätverket och filtrerar igenkännbara
+autentiseringsuppgifter, URL-frågeparametrar/fragment, lokala sökvägar,
+identitetsfält, e-postadresser och igenkända koordinatfält. Fullständig
+anonymisering kan inte garanteras; granska förhandsvisningen innan delning.
+Ingen rå konfigurationsfil eller några fotografier bifogas. Kopiering och
+sparande är uttryckliga lokala åtgärder; appen skickar inte rapporten.
+
 \subsection{Uppdateringsmeddelande och indikatorer}
 
 Appen söker efter nya uploader-versioner vid start och därefter högst en gång

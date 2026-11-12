@@ -694,6 +694,39 @@ The compact instrument tests check IAS/feet/fpm conversion, missing readings,
 pause/stop clearing and the three-second freshness boundary without Tk or native
 connections. They do not establish visual fit or live sampling.
 
+The WinApp support-report regressions cover allowlisted settings/runtime
+snapshots (including finite interval floats while rejecting NaN/Infinity),
+current diagnostic retention, bearer, JWT and quoted JSON credential redaction,
+metadata secrets, URL credentials/query/fragment removal including percent-
+encoded query values while retaining the useful URL path, local identity/path
+and latitude/longitude/altitude filtering, absent and unreadable logs, bounded
+64 KiB tail reading, and dropping a partial first line when the byte boundary
+cuts through it. The report-size ceiling includes its visible truncation marker.
+The new test module is discovered
+by the existing WinApp test suite; source-only BASIC does not execute it.
+test_application_shell.py covers actual menu navigation, guarded shortcut
+suppression, and Copy/Save matching the displayed report snapshot.
+test_ui_shell.py covers embedded prompt responses, panel stacking, focus/grab
+restoration, and release of synchronous waits. Neither fixture proves that real
+background workers continue during a modal prompt; keep that behavior in manual
+acceptance.
+The issue-scoped Issue 380 integrated WinApp UI workflow runs central
+scripts/audit.php --suite=winapp-partitioned on Ubuntu 24.04 under Xvfb and
+Windows Server 2025, retaining exact-commit artifacts. This is the runtime
+evidence owner for report and shell changes; source BASIC alone does not run it,
+and this workflow does not establish FULL qualification or integration.
+Manual Windows acceptance
+must inspect
+the report preview at normal and narrow widths, then exercise Refresh, Copy,
+Save, missing/unreadable logs, and an oversized log. Review the artifact for
+unexpected private data before sharing; redaction is not proof of complete
+anonymization. Check every application panel and notice remains in the root,
+the embedded file/folder picker at normal and narrow widths, including
+background listing, navigation, filters, and cancellation. Check
+F1/Ctrl+O/Ctrl+,/Ctrl+Shift+D dispatch as documented, active panels suppress
+shortcuts, and owner revalidation is retained after synchronous waits.
+Installed-source and packaged-app behavior remain separate acceptance checks.
+
 For Windows acceptance after the flight, inspect the single-line IAS/ALT/V/S
 strip at compact and resized widths, stopped/paused/disconnected states, and the
 PDF shortcut. Exercise saved-flight selection, explicit Finish with automatic

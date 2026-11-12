@@ -24,6 +24,7 @@ import time
 from typing import Callable, Optional, Protocol, TYPE_CHECKING, cast
 
 from uploader.state_store import atomic_write_json
+from uploader.ui_shell import EmbeddedWindow
 from uploader.self_update import (
     ReleaseAsset,
     UpdateCancelled,
@@ -212,7 +213,7 @@ class UpdateController:
         self.check_result_pending = False
         self.asset: Optional[ReleaseAsset] = None
         self.installer: Optional[Path] = None
-        self.window: Optional["tk.Toplevel"] = None
+        self.window: Optional[EmbeddedWindow] = None
         self.worker: Optional[threading.Thread] = None
         self._diagnostic_phase = 'update'
         self._diagnostic_latest: UpdateDiagnostic | None = None
@@ -326,7 +327,7 @@ class UpdateController:
             self.window.deiconify()
             self.window.lift()
             return
-        self.window = tk.Toplevel(self.root)
+        self.window = EmbeddedWindow(self.root)
         self.window.withdraw()
         self.window.title("PHP Gallery Uploader updates")
         self.window.protocol("WM_DELETE_WINDOW", self.later)

@@ -23,7 +23,8 @@ import webbrowser
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import ttk
+from uploader.ui_shell import EmbeddedWindow, messagebox, simpledialog
 from typing import Callable, NamedTuple
 from .app_linking import (
     GALLERIES_SCOPE, IDENTITY_SCOPE, READ_SCOPE, READ_UPLOAD_SCOPE, UPLOAD_SCOPE,
@@ -379,11 +380,11 @@ class _LinkAddressChoices(ttk.Frame):
 class _LinkingScrollFrame(ttk.Frame):
     """Keep the link dialog usable when its content exceeds the viewport."""
 
-    def __init__(self, parent: tk.Toplevel) -> None:
+    def __init__(self, parent: EmbeddedWindow) -> None:
         """Create a vertical viewport with a visible themed scrollbar.
 
         Args:
-            parent (tk.Toplevel): Linking window owning this scroll container.
+            parent (EmbeddedWindow): Linking panel owning this scroll container.
 
         Returns:
             None: Installs the canvas and its width-matched content frame.
@@ -511,7 +512,7 @@ class LinkingManager:
     """Own live gallery links, the selected site's view and one linking worker."""
 
     # The prompt is created on demand and its widgets belong to one instance.
-    _address_prompt: tuple[tk.Toplevel, ttk.Entry, ttk.Button] | None = None
+    _address_prompt: tuple[EmbeddedWindow, ttk.Entry, ttk.Button] | None = None
     _refresh_address_prompt: Callable[[], None] | None = None
     _parked_links: tuple[_LinkedSite, ...] = ()
     _recent_links: tuple[str, ...] = ()
@@ -596,7 +597,7 @@ class LinkingManager:
         self._status = tk.StringVar(root)
         self._linked_address = tk.StringVar(root)
         self._gallery_status = tk.StringVar(root, value='No gallery selected.')
-        self._window: tk.Toplevel | None = None
+        self._window: EmbeddedWindow | None = None
         self._worker: threading.Thread | None = None
         self._attempt: LinkingAttempt | None = None
         self._session: LinkingSession | None = None
@@ -959,9 +960,6 @@ class LinkingManager:
         Returns:
             None: Shows the prompt, or leaves an active request or dialog open.
         """
-        if self._window is not None:
-            self._window.lift()
-            return
         if self._address_prompt is not None:
             self._address_prompt[0].lift()
             return
@@ -970,7 +968,8 @@ class LinkingManager:
                 self._status.set('A gallery request is already in progress.')
             return
 
-        dialog = tk.Toplevel(self._root)
+        owner = self._window if self._window is not None and self._window.winfo_exists() else self._root
+        dialog = EmbeddedWindow(owner)
         title = 'Manage link' if manage else 'Link gallery'
         dialog.title(title)
         dialog.resizable(True, False)
@@ -1724,7 +1723,7 @@ class LinkingManager:
                 self._offline_binding = self._saved_offline_binding(issuer)
             except RuntimeError:
                 self._offline_store = None
-        window = tk.Toplevel(parent)
+        window = EmbeddedWindow(parent)
         self._window = window
         title = 'Manage link' if manage else 'Choose gallery'
         window.title(title)
@@ -4824,7 +4823,7 @@ class LinkingManager:
             parent = self._window.master
             self._window.destroy()
             self._window = None
-            if isinstance(parent, tk.Toplevel) and parent.winfo_exists():
+            if isinstance(parent, (tk.Toplevel, EmbeddedWindow)) and parent.winfo_exists():
                 parent.grab_set()
 
     def close(self) -> None:

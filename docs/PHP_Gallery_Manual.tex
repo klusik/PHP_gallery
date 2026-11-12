@@ -2526,6 +2526,40 @@ If~the~tray cannot become available within five seconds, the~window appears
 so~the~app remains accessible. Startup registration belongs to~the~user running
 the~application; an~installer explicitly started elevated may~use that account.
 
+The~native menu bar groups commands under \ui{File}, \ui{Edit}, \ui{View},
+\ui{Tools} and~\ui{Help}. \ui{File} imports files, folders or~ZIP archives;
+\texttt{Ctrl+O} opens file import. \ui{Edit} includes standard text editing
+and~\ui{Settings}; \texttt{Ctrl+,} opens Settings. \ui{View} switches among
+Photos, Watcher, Import, Activity, AI and~Settings. \ui{Tools} provides
+Watcher/connection controls, queue refresh, update checks and~support
+diagnostics. \ui{Help} opens usage guidance with \texttt{F1}, support
+diagnostics with \texttt{Ctrl+Shift+D}, and~About. The~navigation tabs remain
+available. A~panel owning input suppresses menu commands and~these shortcuts
+until it closes.
+
+Settings, help, connection prompts and~notices appear inside the~main window.
+Informational notices use a~dismissible, scrollable, nonblocking strip. It~queues
+up~to 32~notices and~shows how many oldest notices were omitted; it~does not
+take focus or~a~grab. Confirmations and~text/integer entry remain modal panels
+that wait for~an~answer while background work continues. Independent progress
+panels wait until the~current decision/input panel closes. While such a~panel is
+open, non-edit menu actions and~navigation shortcuts are suppressed, but
+ordinary text editing remains available in~the~focused editor. Actions
+depending on~a~saved
+owner revalidate it before acting. File and~folder selection also use an~embedded
+panel; directory listing runs in~a~bounded background worker.
+
+\ui{Support diagnostics…} opens a~local preview with \ui{Refresh}, \ui{Copy}
+and~\ui{Save}. The~report includes allowlisted settings/runtime facts, the~current
+diagnostic snapshot and~up~to the~last 64~KiB of~the~existing app log. Missing
+or~unreadable log sections, a~truncated tail and~a~dropped partial first line
+are identified. It~does not
+access the~network. Filtering removes credential-like values, URL query and
+fragment data, local paths, identity labels, email addresses and~recognized
+coordinate fields; it~cannot guarantee complete anonymization. Review the~preview
+before sharing. No~raw configuration file or~photographs are attached. Copy
+and~Save are explicit local actions; the~app does not send the~report.
+
 \subsection{Update notice and~indicators}
 
 The~app checks for~uploader releases at~startup and~at~most once an~hour;

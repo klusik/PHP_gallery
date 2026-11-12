@@ -2083,6 +2083,7 @@ class WatcherContinuationTests(unittest.TestCase):
         app = object.__new__(MAIN.WatcherApp)
         app.root = mock.Mock()
         app.root.tk.call.return_value = "8.6.15"
+        app.config = MAIN.WatcherConfig()
         app.root.clipboard_clear = mock.Mock()
         app.root.clipboard_append = mock.Mock()
         app.current_job = None
@@ -2158,7 +2159,10 @@ class WatcherContinuationTests(unittest.TestCase):
         app.import_activity_var = SimpleNamespace(get=lambda: "Import: idle")
         app.ai_activity_var = SimpleNamespace(get=lambda: "AI: stopped")
         app.write_log = mock.Mock()
-        MAIN.WatcherApp.copy_diagnostics(app)
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            MAIN, "LOG_PATH", Path(directory) / "absent.log",
+        ):
+            MAIN.WatcherApp.copy_diagnostics(app)
         copied = app.root.clipboard_append.call_args.args[0]
         for expected in (
             "Browser linking: stage=discovery; reason=server_unavailable",

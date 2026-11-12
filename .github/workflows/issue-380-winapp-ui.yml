@@ -1,0 +1,75 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-380-winapp-ui.yml
+# Module Type: Issue-scoped Native Interface Verification
+# Purpose: Exercise the complete WinApp owner for the integrated interface.
+# Responsibilities: Delegate test discovery to the central audit and retain
+#   exact-commit reports from real Tk sessions on Linux and Windows.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+name: Issue 380 integrated WinApp UI
+
+on:
+  push:
+    branches:
+      - feature/winapp-1-2-integrated-shell
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-380-winapp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  winapp:
+    name: Complete WinApp and native Tk (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    # Purpose: Bound provisioning and the existing complete-suite coordinator.
+    # Type: int. Units: minutes. Scope: one OS verification job.
+    # Consumers: Actions job timeout. Rationale: 15 minutes accommodates the
+    # central 480-second partitioned owner plus interpreter/dependency setup.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - name: Install declared companion dependencies
+        run: python -m pip install -r winapp/requirements.txt
+      - name: Provision the Linux Tk display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb python3-tk
+      - name: Run central WinApp discovery on Linux
+        if: runner.os == 'Linux'
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_SOURCE_BASE: 9f92bc0122ddb3d009c5ba53c8ce5a59d1c6c129
+        run: xvfb-run -a php scripts/audit.php --suite=winapp-partitioned
+      - name: Run central WinApp discovery on Windows
+        if: runner.os == 'Windows'
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_SOURCE_BASE: 9f92bc0122ddb3d009c5ba53c8ce5a59d1c6c129
+        run: php scripts/audit.php --suite=winapp-partitioned
+      - name: Retain exact-commit test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue-380-winapp-${{ matrix.os }}-${{ github.sha }}
+          path: cache/test-audit/
+          if-no-files-found: error

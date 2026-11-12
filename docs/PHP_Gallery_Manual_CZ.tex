@@ -2491,6 +2491,40 @@ nezpřístupní,
 zobrazí se okno. Registrace patří uživateli spouštějícímu aplikaci; instalátor
 výslovně spuštěný se zvýšenými právy může použít příslušný účet.
 
+Nativní nabídka sdružuje příkazy pod \ui{File}, \ui{Edit}, \ui{View},
+\ui{Tools} a~\ui{Help}. \ui{File} nabízí import souborů, složky či ZIP;
+\texttt{Ctrl+O} otevře výběr souborů. \ui{Edit} obsahuje běžné úpravy textu
+a~\ui{Settings}; \texttt{Ctrl+,} otevře Nastavení. \ui{View} přepíná mezi
+Photos, Watcher, Import, Activity, AI a~Settings. \ui{Tools} nabízí ovládání
+Watcheru a~připojení, obnovu fronty, kontrolu aktualizací a~diagnostiku.
+\ui{Help} otevře nápovědu klávesou \texttt{F1}, diagnostiku
+\texttt{Ctrl+Shift+D} a~informace o~aplikaci. Navigační karty zůstávají
+dostupné. Panel, který právě vlastní vstup, do zavření potlačí příkazy nabídky
+a~tyto zkratky.
+
+Nastavení, nápověda, připojovací výzvy a~oznámení se zobrazují v~hlavním okně.
+Informační oznámení používají neblokující zavírací lištu s~posouvatelným textem.
+Fronta pojme 32~oznámení a~lišta zobrazí počet vynechaných nejstarších; oznámení
+nepřebírají fokus ani vstupní grab. Potvrzení a~textové/číselné zadávání zůstávají
+modálními panely čekajícími na~odpověď, zatímco běžící úlohy pokračují.
+Samostatné panely průběhu počkají na~zavření aktuálního rozhodovacího/vstupního
+panelu. Když je takový panel otevřený, ostatní akce nabídky a~navigační zkratky
+jsou potlačeny; běžné úpravy textu ve vybraném editoru však zůstávají dostupné.
+Akce závislé na~uloženém vlastníkovi jej před provedením znovu ověří. Výběr
+souborů a~složek probíhá v~integrovaném panelu; výpis adresáře čte omezené
+pracovní vlákno.
+
+\ui{Support diagnostics…} otevře místní náhled s~akcemi \ui{Refresh},
+\ui{Copy} a~\ui{Save}. Report obsahuje povolená nastavení a~údaje o~běhu,
+aktuální diagnostický snímek a~nejvýše posledních 64~KiB existujícího aplikačního
+logu. Chybějící či nečitelná část logu, zkrácení i~vynechaný částečný první
+řádek jsou označeny.
+Report nepoužívá síť; filtruje známé přihlašovací údaje, parametry a~fragmenty
+URL, místní cesty, identifikační štítky, e-mailové adresy a~rozpoznaná
+souřadnicová pole. Filtr nezaručuje úplnou anonymizaci, proto před sdílením
+zkontrolujte náhled. Nepřikládá se surový konfigurační soubor ani fotografie.
+Kopírování a~uložení jsou výslovné místní akce; aplikace report sama neodesílá.
+
 \subsection{Oznámení aktualizace a~indikátory}
 
 Aplikace kontroluje nová vydání uploaderu při spuštění a~poté nejvýše jednou

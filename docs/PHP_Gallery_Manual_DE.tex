@@ -2798,6 +2798,43 @@ geöffnet. Wiederherstellungsfragen für Importe warten beim Anmeldestart auf da
 erscheint das Fenster. Die Registrierung gehört dem ausführenden Benutzer;
 ausdrücklich erhöht gestartetes Setup kann das entsprechende Konto verwenden.
 
+Die native Menüleiste ordnet Befehle unter \ui{File}, \ui{Edit}, \ui{View},
+\ui{Tools} und~\ui{Help}. \ui{File} importiert Dateien, Ordner oder ZIP;
+\texttt{Ctrl+O} öffnet den Dateidialog. \ui{Edit} bietet Textbearbeitung
+und~\ui{Settings}; \texttt{Ctrl+,} öffnet die Einstellungen. \ui{View}
+wechselt zwischen Photos, Watcher, Import, Activity, AI und~Settings.
+\ui{Tools} enthält Watcher-/Verbindungsaktionen, Warteschlangenaktualisierung,
+Updateprüfung und~Supportdiagnose. \ui{Help} öffnet mit \texttt{F1} die
+Bedienhilfe, mit \texttt{Ctrl+Shift+D} die Supportdiagnose sowie About.
+Die Navigationsregister bleiben verfügbar. Solange ein Panel die Eingabe
+besitzt, sind Menübefehle und~Kurzbefehle gesperrt.
+
+Einstellungen, Hilfe, Verbindungsabfragen und~Hinweise erscheinen im
+Hauptfenster. Informative Hinweise nutzen eine nicht blockierende, schließbare
+Leiste mit scrollbarem Text. Sie reiht bis zu 32~Hinweise ein und~zeigt die
+Anzahl verworfener ältester Hinweise; Fokus oder Eingabe-Grab werden nicht
+übernommen. Bestätigungen und Text-/Zahleneingaben bleiben modale Panels, die
+auf eine Antwort warten, während laufende Hintergrundaufgaben fortfahren.
+Unabhängige Fortschrittspanels warten, bis das aktuelle Entscheidungs-/Eingabe-
+Panel geschlossen ist. Solange ein solches Panel offen ist, sind Menüaktionen
+und Navigationskurzbefehle gesperrt; normale Textbearbeitung bleibt im
+fokussierten Editor verfügbar. Aktionen mit gespeichertem Besitzer prüfen
+diesen vor der Ausführung erneut. Datei- und Ordnerauswahl erscheinen ebenfalls
+als eingebettetes Panel; die begrenzte Verzeichnisliste liest ein Hintergrund-
+Worker.
+
+\ui{Support diagnostics…} öffnet eine lokale Vorschau mit \ui{Refresh},
+\ui{Copy} und~\ui{Save}. Der Bericht enthält freigegebene Einstellungen und
+Laufzeitdaten, den aktuellen Diagnosesnapshot sowie höchstens die letzten
+64~KiB des vorhandenen Anwendungslogs. Fehlende oder unlesbare Logabschnitte,
+ein gekürzter Anfang und eine verworfene unvollständige erste Zeile werden
+angezeigt. Der Bericht verwendet kein Netzwerk
+und filtert erkennbare Zugangsdaten, URL-Abfrageparameter/Fragmente, lokale
+Pfade, Identitätsfelder, E-Mail-Adressen und erkannte Koordinatenfelder.
+Vollständige Anonymisierung ist nicht garantiert; prüfen Sie die Vorschau vor
+dem Teilen. Die Rohkonfiguration und Fotos werden nicht angehängt. Kopieren
+und Speichern erfolgen ausdrücklich lokal; die App sendet den Bericht nicht.
+
 \subsection{Updatehinweis und~Anzeigen}
 
 Die~App prüft beim Start und~danach höchstens einmal pro Stunde auf neue

@@ -1052,6 +1052,12 @@ navigation hints and upload/create actions wait.
 Maintainer UI diagnostics can select `native_only` in the existing hosted
 WinApp workflow. This runs the central `winapp-native` suite on Windows and
 records its exact narrower scope; it cannot qualify complete WinApp coverage.
+The issue-scoped **Issue 380 integrated WinApp UI** workflow runs central
+`scripts/audit.php --suite=winapp-partitioned` discovery on Ubuntu 24.04 with
+Xvfb and Windows Server 2025, retaining exact-commit artifacts. It owns runtime
+coverage for the integrated shell and support report; feature BASIC remains
+source-only, and this workflow alone does not establish FULL qualification or
+integration.
 Loaded galleries remain usable while the loading status above the tree and a
 small smooth spinning ring beside it indicate more work. The indicator covers
 initial reads and paced continuation, then stops on completion, error or
@@ -1078,6 +1084,39 @@ also has Settings, updates, and help controls. Icon controls have
 hover tooltips and keyboard focus; help opens usage guidance.
 Long pages and dialogs scroll with the mouse wheel or scrollbar; text and table
 controls keep their own scrolling.
+
+The native menu bar groups commands under **File**, **Edit**, **View**,
+**Tools**, and **Help**. File imports files, a folder, or a ZIP; **Ctrl+O**
+opens file import. Edit provides standard text editing and **Settings…**;
+**Ctrl+,** opens Settings. View switches among Photos, Watcher, Import,
+Activity, AI, and Settings. Tools contains watcher and connection controls,
+queue refresh, update checking, and support diagnostics. Help opens usage
+guidance with **F1**, support diagnostics with **Ctrl+Shift+D**, and About.
+The navigation tabs remain available. While a decision or input panel is open,
+non-edit menu actions and navigation shortcuts are suppressed; ordinary text
+editing commands continue to work in the focused editor.
+
+Settings, help, connection prompts, and notices are presented within the main
+window. Informational notices use a nonblocking, dismissible strip with
+scrollable text; notices queue up to 32, and the strip reports how many oldest
+notices were omitted. They do not take a grab or move focus. Confirmations and
+text/integer entry remain modal panels that wait for the user's answer while
+existing background work continues. Independent progress panels wait until
+the current decision/input panel closes. Actions that need a saved owner still
+revalidate that owner before acting. File and folder selection also use an
+embedded panel; directory listing runs in a worker and remains bounded.
+
+**Support diagnostics…** opens a local report preview with **Refresh**,
+**Copy**, and **Save** actions. The report includes allowlisted settings and
+runtime facts, the current diagnostic snapshot, and up to the last 64 KiB of
+the existing application log. Missing or unreadable log sections are labeled;
+a truncated tail and any dropped partial first line are marked. The report
+builder performs no network access
+and filters credential-like values, URL query/fragment data, local paths,
+identity labels, email addresses, and recognized coordinate fields. Redaction
+cannot guarantee complete anonymization: review the preview before sharing it.
+No raw configuration file or photographs are attached. Copying or saving is
+explicit; the application does not send the report.
 
 The Watcher screen keeps the selected folder path, watcher status, and source
 deletion warning visible. **▶ Start Watcher** starts only after an explicit

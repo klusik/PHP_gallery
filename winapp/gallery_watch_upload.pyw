@@ -43,6 +43,7 @@ import math
 import mimetypes
 import multiprocessing
 import os
+import platform
 import shutil
 import queue
 import re
@@ -147,6 +148,7 @@ from uploader.mode_coordinator import (
     CoordinatedWork, GuiModeOwner, ModeConfigPort, ModeCoordinator, ModeCoordinatorError,
 )
 from uploader.diagnostics import redact_text
+from uploader.support_report import build_support_report, save_support_report
 from uploader.linked_upload import (
     LINKED_UPLOAD_CHUNK_BYTES,
     LINKED_UPLOAD_FILE_MAX_BYTES,
@@ -248,6 +250,13 @@ except ImportError:  # pragma: no cover
     ttk = None
 
 if tk is not None:
+    from uploader import ui_file_picker as filedialog
+    from uploader.ui_shell import (
+        EmbeddedWindow,
+        active_panel,
+        initialize_shell,
+        messagebox,
+    )
     from uploader.ui_theme import (
         GalleryIdentityLabel,
         GlassCard,
@@ -7881,6 +7890,7 @@ class WatcherApp:
         # Establish the display context before Tk creates its first window.
         prepare_windows_display()
         self.root = tk.Tk()
+        initialize_shell(self.root)
         self.linking_manager = LinkingManager(
             self.root, self.linked_target_change_refusal, self.linked_target_changed,
             self.probe_linked_uncertain_upload, self.publish_linked_recovery,
@@ -8213,6 +8223,7 @@ class WatcherApp:
             Photos is selected by default; startup mode remains withdrawn.
         """
         configure_theme(self.root)
+        self.build_menu()
         self.gallery_title_var.trace_add(
             "write",
             lambda *_trace_info: self.refresh_watcher_header(),
@@ -8465,6 +8476,167 @@ class WatcherApp:
         self.refresh_connection_controls()
         self.update_monitor_state("disabled", "No background worker is active.")
         self.set_update_available(self.update_available_version)
+
+    def build_menu(self) -> None:
+        """Connect the native application menu to existing command owners.
+
+        Returns:
+            None: Installs keyboard-accessible menus and guarded shortcuts.
+        """
+        menu = tk.Menu(self.root, tearoff=False)
+        self.root.configure(menu=menu)
+        self._edit_focus = None
+        file_menu = tk.Menu(menu, tearoff=False)
+        menu.add_cascade(label="File", underline=0, menu=file_menu)
+        for label, action, shortcut in (
+            ("Import files…", self.select_manual_files, "Ctrl+O"),
+            ("Import folder…", self.select_manual_folder, ""),
+            ("Import ZIP archive…", self.select_manual_zip, ""),
+        ):
+            file_menu.add_command(
+                label=label, accelerator=shortcut,
+                command=lambda callback=action: self.menu_command(callback),
+            )
+        file_menu.add_separator()
+        file_menu.add_command(
+            label="Open watched folder",
+            command=lambda: self.menu_command(self.open_watched_folder),
+        )
+        file_menu.add_command(
+            label="Open log folder",
+            command=lambda: self.menu_command(self.open_config_folder),
+        )
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=lambda: self.menu_command(self.close))
+
+        edit = tk.Menu(menu, tearoff=False, postcommand=self.remember_edit_focus)
+        menu.add_cascade(label="Edit", underline=0, menu=edit)
+        for label, event, shortcut in (
+            ("Cut", "<<Cut>>", "Ctrl+X"),
+            ("Copy", "<<Copy>>", "Ctrl+C"),
+            ("Paste", "<<Paste>>", "Ctrl+V"),
+            ("Select all", "<<SelectAll>>", "Ctrl+A"),
+        ):
+            edit.add_command(
+                label=label, accelerator=shortcut,
+                command=lambda sequence=event: self.menu_edit(sequence),
+            )
+        edit.add_separator()
+        edit.add_command(
+            label="Settings…", accelerator="Ctrl+,",
+            command=lambda: self.menu_command(lambda: self.select_tab("settings")),
+        )
+        view = tk.Menu(menu, tearoff=False)
+        menu.add_cascade(label="View", underline=0, menu=view)
+        for name, label in (
+            ("photos", "Photos"), ("watch", "Watcher"), ("import", "Import"),
+            ("activity", "Activity"), ("ai", "AI"), ("settings", "Settings"),
+        ):
+            view.add_command(
+                label=label,
+                command=lambda key=name: self.menu_command(lambda: self.select_tab(key)),
+            )
+        tools = tk.Menu(menu, tearoff=False)
+        menu.add_cascade(label="Tools", underline=0, menu=tools)
+        for label, action in (
+            ("Watcher settings…", self.open_watcher_settings),
+            ("Refresh upload queue", self.refresh_upload_queue),
+            ("Gallery connections…", self.open_gallery_links),
+            ("API-key connection…", self.open_connection_dialog),
+            ("Check for updates…", self.updates.check),
+            ("Support diagnostics…", self.open_support_report),
+        ):
+            tools.add_command(
+                label=label,
+                command=lambda callback=action: self.menu_command(callback),
+            )
+        help_menu = tk.Menu(menu, tearoff=False)
+        menu.add_cascade(label="Help", underline=0, menu=help_menu)
+        help_menu.add_command(
+            label="Using PHP Gallery", accelerator="F1",
+            command=lambda: self.menu_command(self.open_help),
+        )
+        help_menu.add_command(
+            label="Support diagnostics…", accelerator="Ctrl+Shift+D",
+            command=lambda: self.menu_command(self.open_support_report),
+        )
+        help_menu.add_command(
+            label="About PHP Gallery",
+            command=lambda: self.menu_command(self.open_about),
+        )
+        for sequence, callback in (
+            ("<Control-o>", self.select_manual_files),
+            ("<Control-comma>", lambda: self.select_tab("settings")),
+            ("<Control-Shift-D>", self.open_support_report),
+            ("<F1>", self.open_help),
+        ):
+            self.root.bind(
+                sequence, lambda _event, action=callback: self.menu_command(action),
+                add="+",
+            )
+        self.menu_bar = menu
+
+    def menu_command(self, callback: Callable[[], None]) -> str:
+        """Dispatch a menu or shortcut only when no panel owns the interaction.
+
+        Args:
+            callback (Callable[[], None]): Existing application action to run.
+        Returns:
+            str: Tk break marker so shortcuts never reach background controls.
+        """
+        if active_panel(self.root) is None and not self.exiting:
+            callback()
+        return "break"
+
+    def remember_edit_focus(self) -> None:
+        """Remember the focused editor before the native Edit menu opens.
+
+        Returns:
+            None: Retains the actual text control receiving the next edit action.
+        """
+        self._edit_focus = self.root.focus_get()
+
+    def menu_edit(self, sequence: str) -> None:
+        """Send a standard editing event to the focused control.
+
+        Args:
+            sequence (str): Tk Cut, Copy, Paste or SelectAll virtual event.
+        Returns:
+            None: Edits only a surviving focused control, including panel text.
+        """
+        target = self._edit_focus
+        if target is not None and target.winfo_exists():
+            target.event_generate(sequence)
+
+    def open_help(self) -> None:
+        """Present operating guidance inside the application window.
+
+        Returns:
+            None: Opens a dismissible help panel without starting background work.
+        """
+        messagebox.showinfo(
+            "Using PHP Gallery",
+            "Connect a gallery, choose a Watcher folder, then explicitly start "
+            "capture. Finish drains accepted photographs before completing.\n\n"
+            "Use File to choose an import source. Review preflight before "
+            "starting an import. View switches between Photos, Watcher, Import, "
+            "Activity, AI and Settings.\n\n"
+            "Help → Support diagnostics builds a local report you can review, "
+            "copy or save for support. Review it before sharing; nothing is sent "
+            "automatically.", parent=self.root,
+        )
+
+    def open_about(self) -> None:
+        """Show the independent application version and attribution in place.
+
+        Returns:
+            None: Displays version and license information in the main window.
+        """
+        messagebox.showinfo(
+            "About PHP Gallery", f"{APP_DISPLAY_NAME} {APP_VERSION}\n"
+            "Author: Rudolf Klusal\nMIT License\n"
+            "https://github.com/klusik/PHP_gallery", parent=self.root,
+        )
 
     def build_gallery_link_bar(self, header: "ttk.Frame") -> None:
         """Group the selected site, gallery picker and connection actions.
@@ -9868,7 +10040,7 @@ class WatcherApp:
                 parent=self.root,
             )
             return
-        dialog = tk.Toplevel(self.root)
+        dialog = EmbeddedWindow(self.root)
         dialog.title("Watcher settings")
         dialog.configure(background=self.root.cget("background"))
         dialog.transient(self.root)
@@ -10293,7 +10465,7 @@ class WatcherApp:
             lambda _event: self.refresh_activity_drawer(),
         )
         ttk.Button(controls, text="Retry failed", command=self.retry_failed_import).pack(side="left")
-        ttk.Button(controls, text="Copy diagnostics", command=self.copy_diagnostics).pack(side="right")
+        ttk.Button(controls, text="Support diagnostics…", command=self.open_support_report).pack(side="right")
         event_table = ttk.Frame(events, style="Card.TFrame")
         event_table.grid(row=2, column=0, sticky="ew")
         event_table.columnconfigure(0, weight=1)
@@ -10336,7 +10508,8 @@ class WatcherApp:
         diagnostic_actions.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         ttk.Button(diagnostic_actions, text="Open app folder", command=self.open_config_folder).pack(side="left")
         ttk.Button(diagnostic_actions, text="Open log file", command=self.open_log_file).pack(side="left", padx=8)
-        ttk.Button(diagnostic_actions, text="Copy redacted diagnostics", command=self.copy_diagnostics).pack(side="left")
+        ttk.Button(diagnostic_actions, text="Support diagnostics…", command=self.open_support_report).pack(side="left")
+        ttk.Button(diagnostic_actions, text="Copy report", command=self.copy_diagnostics).pack(side="left", padx=8)
         self.log_text = tk.Text(
             diagnostics, height=9, wrap="word", relief="flat", padx=8, pady=6,
             font="TkFixedFont",
@@ -13473,7 +13646,7 @@ class WatcherApp:
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         self.restore_from_tray()
-        dialog = tk.Toplevel(self.root)
+        dialog = EmbeddedWindow(self.root)
         dialog.title("Gallery connection and API key")
         dialog.transient(self.root)
         dialog.geometry(CONNECTION_DIALOG_GEOMETRY)
@@ -14979,12 +15152,11 @@ class WatcherApp:
             filename = Path(event.filename).name if event.filename else ""
             self.activity_drawer.insert("", "end", iid=f"event-{index}-{int(event.timestamp * 1000)}", values=(stamp, event.level, filename, event.operation, event.message))
 
-    def copy_diagnostics(self) -> None:
-        """Copy redacted linking, updater, runtime and saved flight diagnostics.
+    def diagnostic_snapshot(self) -> str:
+        """Collect current linking, updater, runtime and flight observations.
 
         Returns:
-            None: Copies bounded support snapshots to the clipboard and records
-                the action without adding credentials or transport text.
+            str: Redacted snapshot without filesystem reads or network requests.
         """
         job_summary = self.describe_job(self.current_job) if self.current_job is not None else "No selected job"
         capability_summary = ", ".join(
@@ -15030,7 +15202,7 @@ class WatcherApp:
                 ),
                 f"OS: {os.name}",
                 f"Gallery URL: {self.gallery_url_var.get().strip()}",
-                f"API key: {self.api_key_var.get().strip()}",
+                f"API key configured: {bool(self.api_key_var.get().strip())}",
                 f"Connection: {self.connection_status_var.get()} | {self.connection_detail_var.get()}",
                 "Browser linking: " + (
                     self.linking_manager.diagnostics_snapshot()
@@ -15065,10 +15237,146 @@ class WatcherApp:
                 recent,
             ]
         )
-        safe = redact_text(raw, [self.api_key_var.get().strip()], redact_paths=True)
+        return redact_text(raw, [self.api_key_var.get().strip()], redact_paths=True)
+
+    def support_report(self) -> str:
+        """Build the local support report from current owners and a bounded log.
+
+        Returns:
+            str: Privacy-filtered report with runtime, settings and log status.
+        """
+        config = self.config
+        settings = {
+            key: value for key, value in config.to_dict().items()
+            if type(value) in (str, int, float, bool) or value is None
+        }
+        return build_support_report(
+            WatcherApp.diagnostic_snapshot(self), settings,
+            {
+                "app_version": APP_VERSION,
+                "python_version": sys.version.split()[0],
+                "platform": platform.system() + " " + platform.release(),
+                "machine": platform.machine(),
+                "runtime": "installed" if getattr(sys, "frozen", False) else "source",
+                "tk": str(self.root.tk.call("info", "patchlevel")),
+                "pillow": str(getattr(Image, "__version__", "unavailable")),
+            }, LOG_PATH, secrets=(self.api_key_var.get().strip(),),
+        )
+
+    def copy_diagnostics(self) -> None:
+        """Copy the complete redacted support report after explicit selection.
+
+        Returns:
+            None: Replaces the clipboard and records the local copy action.
+        """
+        safe = WatcherApp.support_report(self)
         self.root.clipboard_clear()
         self.root.clipboard_append(safe)
         self.write_log("Redacted diagnostic details copied to clipboard.", "system")
+
+    def open_support_report(self) -> None:
+        """Present a reviewable support report in the main application window.
+
+        Returns:
+            None: Opens a read-only preview with refresh, copy and local save.
+        """
+        existing = getattr(self, "_support_panel", None)
+        if existing is not None and existing.winfo_exists():
+            existing.deiconify()
+            return
+        panel = EmbeddedWindow(self.root)
+        panel.title("Support diagnostics")
+        self._support_panel = panel
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(2, weight=1)
+        description = ttk.Label(
+            panel,
+            text="Review this report before sharing. Credentials, local paths "
+            "and URL query values are filtered. Files and photographs are not "
+            "attached. Nothing is sent automatically.",
+            wraplength=WINDOW_SUMMARY_WRAP, padding=(16, 12),
+        )
+        description.grid(row=0, column=0, sticky="ew")
+        actions = ttk.Frame(panel, padding=(16, 0, 16, 10))
+        actions.grid(row=1, column=0, sticky="ew")
+        body = ttk.Frame(panel, padding=(16, 0, 16, 0))
+        body.grid(row=2, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
+        preview = tk.Text(
+            body, wrap="word", font="TkFixedFont", relief="flat",
+            background=_PALETTE["surface"], foreground=_PALETTE["ink"],
+            selectbackground=_PALETTE["primary_pressed"], padx=12, pady=10,
+        )
+        scrollbar = ttk.Scrollbar(body, orient="vertical", command=preview.yview)
+        preview.configure(yscrollcommand=scrollbar.set)
+        preview.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        status = tk.StringVar(master=panel)
+        ttk.Label(panel, textvariable=status, padding=(16, 10)).grid(
+            row=3, column=0, sticky="ew",
+        )
+        report = ""
+
+        def refresh() -> None:
+            """Replace the preview with a fresh passive diagnostic snapshot.
+
+            Returns:
+                None: Updates report text and collection status without HTTP.
+            """
+            nonlocal report
+            try:
+                report = self.support_report()
+            except (OSError, ValueError, RuntimeError, tk.TclError) as exc:
+                status.set("Report collection failed: " + type(exc).__name__)
+                return
+            preview.configure(state="normal")
+            preview.delete("1.0", "end")
+            preview.insert("1.0", report)
+            preview.configure(state="disabled")
+            status.set(f"Report ready · {len(report):,} characters · collected locally")
+
+        def copy_report() -> None:
+            """Copy exactly the report currently displayed for review.
+
+            Returns:
+                None: Replaces clipboard contents only after a report exists.
+            """
+            if report:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(report)
+                status.set("Displayed report copied to clipboard.")
+
+        def save_report() -> None:
+            """Save the displayed report to an explicitly selected destination.
+
+            Returns:
+                None: Saves UTF-8 text or retains the preview on cancel/failure.
+            """
+            if not report:
+                return
+            selected = filedialog.asksaveasfilename(
+                parent=panel, title="Save support report", defaultextension=".txt",
+                initialdir=str(CONFIG_DIR),
+                initialfile="PHP-Gallery-support-" + time.strftime("%Y%m%d-%H%M%S") + ".txt",
+                filetypes=(("Text files", "*.txt"), ("All files", "*.*")),
+            )
+            if not selected:
+                return
+            try:
+                save_support_report(Path(selected), report)
+            except OSError as exc:
+                status.set("Could not save report: " + type(exc).__name__)
+            else:
+                status.set("Displayed report saved locally. Nothing was sent.")
+
+        ttk.Button(actions, text="Refresh report", command=refresh).pack(side="left")
+        ttk.Button(actions, text="Copy report", command=copy_report).pack(side="left", padx=8)
+        ttk.Button(actions, text="Save report…", command=save_report, style="Primary.TButton").pack(side="left")
+        ttk.Button(actions, text="Close", command=panel.destroy).pack(side="right")
+        panel.grab_set()
+        preview.focus_set()
+        refresh()
 
     def refresh_watcher_header(self) -> None:
         """Show compact Watcher state, queue size and last scan artwork.

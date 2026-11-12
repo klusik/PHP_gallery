@@ -5102,3 +5102,38 @@ ancestor spellings; a single child repair preserves unselected existing parents.
 The real HTTP nested fixture compares the shown child path to the actual folder,
 while the Node preview fixture covers parent/child selection combinations and
 strict sibling-prefix boundaries. Both retain separators and hierarchy.
+
+## WinApp in-window shell and support reports
+
+The Windows companion's native File/Edit/View/Tools/Help menu and embedded
+panels, including file/folder selection, keep secondary workflows in the
+existing root while preserving background jobs. Informational notices use a
+dismissible, scrollable, nonblocking strip with a 32-item queue and an omitted-
+notice count; they do not take focus or a grab. Confirmations and text/integer
+input remain modal and wait for a response. Independent progress panels defer
+until the current input/decision panel closes, while admitted background work
+continues. During an input panel, menu actions and navigation shortcuts are
+non-edit menu actions and navigation shortcuts are suppressed, but ordinary
+text editing remains available. Directory listings run on a bounded worker.
+Synchronous input continuation must preserve the
+existing owner revalidation before any protected action.
+The support report is built offline from allowlisted settings/runtime facts,
+the current diagnostic snapshot, and at most the final 64 KiB of the existing
+application log. Missing/unreadable log sections and tail truncation are
+reported explicitly; if the byte boundary cuts a log line, the partial first
+line is dropped and marked. Credential fields including bearer and quoted JSON
+values, URL credentials/query/fragment, local paths and recognized identity or
+coordinate fields are filtered. URL host/path remain useful context. These
+filters reduce accidental disclosure but cannot guarantee anonymization;
+no raw configuration file or photographs are attached. Preview before sharing
+remains part of the user workflow. Copy and Save are explicit local actions,
+with no automatic transmission.
+
+This shell consolidates the Windows interface and gives users a reviewable
+support artifact without changing server access or job ownership. Retain the
+existing owner checks and background workers as the behavior boundary. Usage
+prevalence, installed-source acceptance, and real Windows narrow-layout review
+are unknown; hosted source/native coverage does not establish installed
+behavior. Keep these compatibility paths while supported installations may
+use them, and require installed Windows acceptance before claiming release
+qualification.

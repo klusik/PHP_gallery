@@ -6584,6 +6584,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 hint = mock.Mock()
                 with (
                     mock.patch('uploader.app_linking_ui.tk') as tk,
+                    mock.patch('uploader.app_linking_ui.EmbeddedWindow') as embedded_window,
                     mock.patch('uploader.app_linking_ui.ttk') as widgets,
                     mock.patch('uploader.app_linking_ui.GlassCard'),
                     mock.patch('uploader.app_linking_ui._LinkAddressChoices'),
@@ -6594,7 +6595,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                     platform.platform = 'linux'
                     widgets.Button.side_effect = [confirm, mock.Mock()]
                     widgets.Label.side_effect = [mock.Mock(), hint]
-                    dialog = tk.Toplevel.return_value
+                    dialog = embedded_window.return_value
                     # Supply the dimensions of a compact native prompt.
                     dialog.winfo_reqwidth.return_value = 380
                     dialog.winfo_reqheight.return_value = 220

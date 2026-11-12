@@ -21,7 +21,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Protocol
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import ttk
+from uploader import ui_file_picker as filedialog
+from uploader.ui_shell import EmbeddedWindow, active_panel, messagebox
 
 from uploader.flight_jobs import (
     REPORT_LANGUAGES,
@@ -338,9 +340,9 @@ class FlightUI:
         self.simbrief_status_var = tk.StringVar(value="")
         self.report_sort_column = "started"
         self.report_sort_descending = True
-        self.dialog: tk.Toplevel | None = None
-        self.settings_dialog: tk.Toplevel | None = None
-        self.report_dialog: tk.Toplevel | None = None
+        self.dialog: EmbeddedWindow | None = None
+        self.settings_dialog: EmbeddedWindow | None = None
+        self.report_dialog: EmbeddedWindow | None = None
         self.report_tree: ttk.Treeview | None = None
         self.report_rows: dict[str, SavedFlight] = {}
         self.report_files: dict[str, tuple[str, ReportRevision, str]] = {}
@@ -433,13 +435,16 @@ class FlightUI:
                 self.task_tree.heading("#0", text=title)
 
     def dialog_owner(self) -> tk.Misc:
-        """Find the invoking window so related dialogs stay together.
+        """Find the active panel for a user-invoked related dialog.
 
         Returns:
-            tk.Misc: Focused application toplevel, or the main window.
+            tk.Misc: Active embedded panel, focused root widget, or main root.
         """
+        panel = active_panel(self.host.root)
+        if panel is not None:
+            return panel
         focused = self.host.root.focus_get()
-        return focused.winfo_toplevel() if focused is not None else self.host.root
+        return focused if focused is not None else self.host.root
 
     def prompt_simbrief_identity(self, identity: str) -> str | None:
         """Ask for one validated identity in the application's themed dialog.
@@ -451,7 +456,7 @@ class FlightUI:
         """
         owner = self.dialog_owner()
         previous_grab, previous_focus = owner.grab_current(), owner.focus_get()
-        dialog = tk.Toplevel(owner)
+        dialog = EmbeddedWindow(owner)
         dialog.withdraw()
         dialog.title("SimBrief")
         dialog.configure(background="#131B26")
@@ -809,7 +814,7 @@ class FlightUI:
             self.settings_dialog.focus_set()
             return
         owner = self.dialog_owner()
-        dialog = tk.Toplevel(owner)
+        dialog = EmbeddedWindow(owner)
         dialog.withdraw()
         self.settings_dialog = dialog
         dialog.title(self.capture_text("flight_settings"))
@@ -962,7 +967,7 @@ class FlightUI:
             self.refresh_reports()
             return
         owner = self.dialog_owner()
-        self.report_dialog = tk.Toplevel(owner)
+        self.report_dialog = EmbeddedWindow(owner)
         self.report_dialog.withdraw()
         self.report_dialog.title(self.text("saved_reports"))
         self.report_dialog.transient(self.host.root)
@@ -2426,8 +2431,9 @@ class FlightUI:
             self.dialog.destroy()
             self._animation_running = False
         self._progress_local_mode = mode
-        owner = self.dialog_owner()
-        self.dialog = tk.Toplevel(owner)
+        # Background progress must not become a child of an unrelated prompt.
+        owner = self.host.root
+        self.dialog = EmbeddedWindow(owner)
         self.dialog.withdraw()
         self.dialog.configure(background=self.host.root.cget("background"))
         self.dialog.title(self.capture_text("flight_progress"))
