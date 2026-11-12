@@ -33,6 +33,13 @@ const A1_CI_DB_CONNECT_RETRY_MICROSECONDS = 500000;
 require_once dirname(__DIR__, 2) . '/tests/support/gallery_workflow_safety.php';
 
 try {
+    if (!in_array($argv, [
+        [$argv[0]],
+        [$argv[0], '--thumbnail-batch'],
+        [$argv[0], '--tree-catalogue'],
+    ], true)) {
+        throw new RuntimeException('Unexpected disposable provisioner arguments.');
+    }
     if (PHP_SAPI !== 'cli'
         || getenv('GITHUB_ACTIONS') !== 'true'
         || getenv('GALLERY_WORKFLOW_ENABLE') !== 'disposable-only') {
@@ -77,7 +84,12 @@ try {
     $database = null;
     $rootPassword = '';
     putenv('GALLERY_WORKFLOW_CI_ROOT_PASSWORD');
-    require __DIR__ . '/issue_362_a1_http.php';
+    $owner = match ($argv[1] ?? null) {
+        '--thumbnail-batch' => '/issue_362_b2_http.php',
+        '--tree-catalogue' => '/issue_362_c1_tree.php',
+        default => '/issue_362_a1_http.php',
+    };
+    require __DIR__ . $owner;
 } catch (Throwable $error) {
     fwrite(STDERR, 'BLOCKED A1 disposable DB provisioning (' .
         basename($error->getFile()) . ':' . $error->getLine() . ")\n");

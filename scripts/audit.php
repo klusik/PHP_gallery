@@ -32,7 +32,7 @@
  *   - The source test tree is intentionally absent from normal production deployment packages.
  *   - CI-first agents qualify the prepared SHA through hosted GitHub Actions; local profiles are exceptional diagnostics.
  *
- * @phpstan-type AuditPhpRegistry array{packaging_tests:list<string>,php_fast_tests:list<string>,php_test_requirements:array<string,array{extensions?:list<string>,reason?:string,timeout?:int,serial?:bool,serial_reason?:string,missing_status?:string}>,hosted_full_required_php_tests:list<string>,hosted_full_php_shard_count:int}
+ * @phpstan-type AuditPhpRegistry array{packaging_tests:list<string>,php_fast_tests:list<string>,thumbnail_batch_tests:list<string>,php_test_requirements:array<string,array{extensions?:list<string>,reason?:string,timeout?:int,serial?:bool,serial_reason?:string,missing_status?:string}>,hosted_full_required_php_tests:list<string>,hosted_full_php_shard_count:int}
  * @phpstan-type AuditPhpChild array{name:string,status:string,exit_code:?int,timed_out:bool,duration_seconds:float,serial:bool,metrics?:array<string,int|float>,metrics_error?:string}
  * @phpstan-type AuditPhpTask array{id:string,label:string,status:string,duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems?:list<string>,gaps?:list<string>,workers?:int,serial_tests?:int,tests?:list<AuditPhpChild>,shard?:array{index:int,total:int,selected_tests:int}}}
  * @phpstan-type AuditBuilderReport array{schema_version:int,file_count:int,directory:?string,zip:?string,archive_sha256:?string,timestamp:int,timings:array{source_validation_seconds:float,copy_seconds:float,zip_seconds:float,verification_seconds:float,total_seconds:float}}
@@ -106,6 +106,33 @@ const AUDIT_READABILITY_REPORT_TIMEOUT_SECONDS = 240;
 const AUDIT_READABILITY_CONTRACT_TIMEOUT_SECONDS = 90;
 
 /**
+ * Bound the isolated thumbnail batch HTTP and database qualification.
+ * Type: int. Units: seconds. Scope: one hosted disposable audit suite.
+ * Consumers: audit_run_php_command. Rationale: 600 seconds allows migration,
+ * synthetic image seeding and bounded HTTP cases without the long A1 baseline.
+ */
+const AUDIT_THUMBNAIL_BATCH_HTTP_TIMEOUT_SECONDS = 600;
+
+/**
+ * Bound the current-SHA gallery tree HTTP diagnostic independently of B2.
+ * @var int
+ * Units: seconds. Scope: one hosted disposable C1 tree suite.
+ * Consumers: audit_run_php_command.
+ * Rationale: allow bounded MariaDB seeding, full/unchanged reads, mutations,
+ * authority checks and two overflow/page proofs without replaying A1.
+ */
+const AUDIT_C1_TREE_HTTP_TIMEOUT_SECONDS = 300;
+
+/**
+ * Bound isolated Windows Tk viewer and PhotosWorkspace diagnostics.
+ * Type: int. Units: seconds. Scope: one issue-scoped hosted audit child.
+ * Consumers: audit_run_thumbnail_batch_viewer and
+ * audit_run_issue_362_c1_photos_workspace. Rationale: 180 seconds permits
+ * bounded Tk journeys and cleanup without changing regression deadlines.
+ */
+const AUDIT_THUMBNAIL_BATCH_VIEWER_TIMEOUT_SECONDS = 180;
+
+/**
  * Retain the original complete WinApp unittest discovery deadline.
  * @var int
  * Units: seconds. Scope: one complete WinApp regression child.
@@ -114,6 +141,17 @@ const AUDIT_READABILITY_CONTRACT_TIMEOUT_SECONDS = 90;
  * the separate native-only diagnostic does not replace mandatory coverage.
  */
 const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;
+
+/**
+ * Bound the sequential full-suite WinApp coordinator, including five 90-second
+ * children and inventory/report handling.
+ * @var int
+ * Units: seconds. Scope: one partitioned WinApp coordinator process.
+ * Consumers: audit_run_winapp_partitioned().
+ * Rationale: five unchanged full-child deadlines need up to 450 seconds; a
+ *     further 30 seconds bounds deterministic inventory and evidence merging.
+ */
+const AUDIT_WINAPP_PARTITIONED_TIMEOUT_SECONDS = 480;
 
 /**
  * Bound hosted Windows Tk diagnostic discovery without treating runner lag as
@@ -150,8 +188,12 @@ if ($options['help']) {
     PHP Gallery central audit
 
     Usage:
-      php scripts/audit.php [--profile basic|quick|full|release|release-preflight|release-stage-b|candidate-preflight|source-contracts|portable|hosted-full]
+      php scripts/audit.php [--profile basic|quick|thumbnail-batch|full|release|release-preflight|release-stage-b|candidate-preflight|source-contracts|portable|hosted-full]
       php scripts/audit.php --suite <suite-id>
+      php scripts/audit.php --suite=winapp-partitioned
+      php scripts/audit.php --suite=thumbnail-batch-viewer
+      php scripts/audit.php --suite=issue-362-c1-tree-http
+      php scripts/audit.php --suite=issue-362-c1-photos-workspace
       php scripts/audit.php --profile basic --changed
 
     Options:
@@ -178,6 +220,10 @@ if ($options['help']) {
       candidate-preflight  Read-only generated-artifact and CI-workflow integrity gate before heavy CI.
       source-contracts  Shared whole-tree syntax, declaration, policy and architecture owners.
       portable  Shared full Node and WinApp owners.
+      winapp-partitioned  Complete WinApp inventory in five serial class-preserving processes.
+      thumbnail-batch-viewer  Owned exact-SHA Windows Tk thumbnail benchmark.
+      issue-362-c1-tree-http Current-SHA disposable gallery tree diagnostics.
+      issue-362-c1-photos-workspace Current-SHA Windows PhotosWorkspace diagnostics.
       hosted-full  One exact-candidate PHP/runtime shard (hosted shard environment required).
       basic --changed  Lint the immutable PHP_GALLERY_SOURCE_BASE delta; evaluator/config changes expand to full tree, missing base blocks.
     TEXT);
@@ -232,6 +278,11 @@ if (
 }
 
 $knownSuites = [
+    'thumbnail-batch-viewer',
+    'thumbnail-batch-http',
+    'issue-362-c1-tree-http',
+    'issue-362-c1-photos-workspace',
+    'thumbnail-batch',
     'php-regression',
     'php-fast',
     'packaging',
@@ -245,6 +296,7 @@ $knownSuites = [
     'node-fast',
     'node-full',
     'winapp',
+    'winapp-partitioned',
     'winapp-native',
     'mutation-contracts',
     'version-audit',
@@ -568,7 +620,8 @@ function audit_process_output(array $process): string
  * Run complete or curated standalone PHP regressions through the isolated worker pool.
  *
  * @param AuditPhpRegistry $registry Central child registries, extension requirements, isolation settings and mandatory child names.
- * @param string $suiteId Complete regression, explicit fast feedback or database-independent packaging owner; defaults to complete regression.
+ * @param string $suiteId Complete regression, fast feedback, thumbnail batch
+ *     fixtures or database-independent packaging owner; defaults to complete regression.
  * @param array{valid:bool,index:?int,total:?int,owner:?string,candidate:?string,error:?string}|null $shard Validated hosted FULL shard context, or null for an unsharded suite.
  * @return AuditPhpTask Normalized child counts, individual timed outcomes and actionable failures; missing requirements block the suite.
  */
@@ -581,6 +634,7 @@ function audit_run_php_regression(
     $started = microtime(true);
     $testDirectory = $root . '/tests';
     $label = match ($suiteId) {
+        'thumbnail-batch' => 'Thumbnail batch PHP regression',
         'php-fast' => 'PHP regression (fast)',
         'packaging' => 'Production packaging policy and smoke',
         default => 'PHP regression',
@@ -602,6 +656,10 @@ function audit_run_php_regression(
 
     $packagingNames = $registry['packaging_tests'] ?? [];
     $files = match ($suiteId) {
+        'thumbnail-batch' => array_map(
+            static fn(string $name): string => $testDirectory . '/' . $name,
+            $registry['thumbnail_batch_tests'] ?? [],
+        ),
         'php-fast' => array_map(
             static fn(string $name): string => $testDirectory . '/' . $name,
             $registry['php_fast_tests'] ?? [],
@@ -1705,6 +1763,188 @@ function audit_run_winapp(?array $python, bool $nativeOnly = false): array
 }
 
 /**
+ * Run complete WinApp discovery in five serial, structured child processes.
+ *
+ * @param list<string>|null $python Python executable and option prefix, or null when unavailable.
+ * @return array{id:'winapp-partitioned',label:string,status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Full-suite outcomes with exact partition and real process evidence.
+ */
+function audit_run_winapp_partitioned(?array $python): array
+{
+    global $root, $runDirectory, $persistReports;
+    $started = microtime(true);
+    $id = 'winapp-partitioned';
+    $label = 'WinApp complete regression (five serial class partitions)';
+    if (!is_dir($root . '/winapp/tests')) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_SKIP,
+            0.0,
+            [],
+            'winapp/tests is not present in this source tree.',
+        );
+    }
+    if ($python === null) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Python executable was not found.',
+            null,
+            ['problems' => [
+                'Set PHP_GALLERY_PYTHON or install Python 3 to run WinApp partitions.',
+            ]],
+        );
+    }
+
+    $reportPath = $runDirectory . '/winapp-partitioned-report.json';
+    $command = array_merge($python, [
+        '-m', 'scripts.audit_winapp_partitioned', $reportPath,
+        (string) \PhpGallery\Audit\AUDIT_WINAPP_PARTITION_COUNT,
+        (string) AUDIT_WINAPP_TIMEOUT_SECONDS,
+    ]);
+    $reportExistedBeforeRun = file_exists($reportPath);
+    $process = run_process(
+        $command,
+        $root,
+        AUDIT_WINAPP_PARTITIONED_TIMEOUT_SECONDS,
+    );
+    $output = audit_process_output($process);
+    $logPath = audit_write_log($id, [$label, $output]);
+    $reportProduced = !$reportExistedBeforeRun && is_file($reportPath);
+    $reportContents = $reportProduced ? file_get_contents($reportPath) : false;
+    $evaluated = audit_evaluate_winapp_report(
+        is_string($reportContents) ? $reportContents : null,
+        [
+            'exit_code' => is_int($process['exit_code'] ?? null)
+                ? $process['exit_code']
+                : null,
+            'timed_out' => (bool) ($process['timed_out'] ?? false),
+            'duration_seconds' => (float) ($process['duration'] ?? 0.0),
+        ],
+        false,
+        true,
+    );
+    $adapterReportPath = $persistReports && $reportProduced
+        ? relative_path($reportPath, $root)
+        : null;
+    if (!$persistReports && $reportProduced) {
+        @unlink($reportPath);
+    }
+    $counts = $evaluated['counts'];
+    $summary = $counts['total'] . ' tests across five serial class partitions: '
+        . $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / '
+        . $counts['errors'] . ' error / ' . $counts['skipped'] . ' skip.';
+    if (is_array($evaluated['partition_proof'])) {
+        $summary .= ' Coordinator elapsed '
+            . number_format(
+                (float) $evaluated['partition_proof']['total_duration_seconds'],
+                2,
+                '.',
+            ) . ' seconds.';
+    }
+    if (!$evaluated['valid']) {
+        $summary = 'Partitioned WinApp structured report unavailable or invalid.';
+    }
+    return task_result(
+        $id,
+        $label,
+        $evaluated['status'],
+        microtime(true) - $started,
+        $counts,
+        $summary,
+        $logPath,
+        [
+            'report_file' => $adapterReportPath,
+            'report_schema_valid' => $evaluated['valid'],
+            'successful' => $evaluated['successful'],
+            'runtime' => $evaluated['runtime'],
+            'tests' => $evaluated['tests'],
+            'fixture_errors' => $evaluated['fixture_errors'],
+            'fixture_skips' => $evaluated['fixture_skips'],
+            'partition_processes' => $evaluated['partition_processes'],
+            'partition_proof' => $evaluated['partition_proof'],
+            'gaps' => $evaluated['gaps'],
+            'process' => $evaluated['process'],
+            'result_reason' => $evaluated['reason'],
+            'problems' => $evaluated['problems'],
+        ],
+    );
+}
+
+/**
+ * Run the owned Windows Tk benchmark and retain its exact-run artifact.
+ *
+ * @param list<string>|null $python Configured Python command, or null if unavailable.
+ * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>}} Normalized benchmark task result.
+ */
+function audit_run_thumbnail_batch_viewer(?array $python): array
+{
+    global $root, $runDirectory;
+    $id = 'thumbnail-batch-viewer';
+    $label = 'Windows Tk thumbnail batch benchmark';
+    if ($python === null) {
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [],
+            'Python executable was not found.', null,
+            ['problems' => ['Python is required for the native benchmark.']]);
+    }
+    $reportPath = $runDirectory . '/issue-362-b3-viewer.json';
+    $process = run_process(array_merge($python, [
+        $root . '/tools/perf/issue_362_b3_tk.py', $reportPath,
+    ]), $root, AUDIT_THUMBNAIL_BATCH_VIEWER_TIMEOUT_SECONDS);
+    $log = audit_write_log($id, [$label, audit_process_output($process)]);
+    $report = is_file($reportPath)
+        ? json_decode((string) file_get_contents($reportPath), true) : null;
+    $valid = is_array($report) && ($report['schema_version'] ?? null) === 1
+        && ($report['status'] ?? null) === 'PASS'
+        && ($report['commit_sha'] ?? null) === getenv('GITHUB_SHA')
+        && ($report['github_run_id'] ?? null) === getenv('GITHUB_RUN_ID');
+    $passed = process_status($process) === STATUS_PASS && $valid;
+    return task_result($id, $label, $passed ? STATUS_PASS : STATUS_FAIL,
+        (float) $process['duration'], [],
+        $passed ? 'Complete native viewer observations retained.'
+            : 'Native viewer observations incomplete.',
+        $log, ['problems' => $passed ? [] : ['Benchmark or report validation failed.']]);
+}
+
+/**
+ * Run the real PhotosWorkspace 10,000-row Tk diagnostic on hosted Windows.
+ *
+ * @param list<string>|null $python Configured Python command, or null if unavailable.
+ * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>}} Normalized exact-run PhotosWorkspace diagnostic result.
+ */
+function audit_run_issue_362_c1_photos_workspace(?array $python): array
+{
+    global $root, $runDirectory;
+    $id = 'issue-362-c1-photos-workspace';
+    $label = 'Current-SHA real PhotosWorkspace Tk diagnostics';
+    if ($python === null) {
+        return task_result($id, $label, STATUS_BLOCKED, 0.0, [],
+            'Python executable was not found.', null,
+            ['problems' => ['Python is required for the native Tk diagnostic.']]);
+    }
+    $reportPath = $runDirectory . '/issue-362-c1-photos-workspace.json';
+    $process = run_process(array_merge($python, [
+        $root . '/tools/perf/issue_362_c1_photos_tk.py', $reportPath,
+    ]), $root, AUDIT_THUMBNAIL_BATCH_VIEWER_TIMEOUT_SECONDS);
+    $log = audit_write_log($id, [$label, audit_process_output($process)]);
+    $report = is_file($reportPath)
+        ? json_decode((string) file_get_contents($reportPath), true) : null;
+    $valid = is_array($report) && ($report['schema_version'] ?? null) === 1
+        && ($report['status'] ?? null) === 'PASS'
+        && ($report['commit_sha'] ?? null) === getenv('GITHUB_SHA')
+        && ($report['github_run_id'] ?? null) === getenv('GITHUB_RUN_ID');
+    $passed = process_status($process) === STATUS_PASS && $valid;
+    return task_result($id, $label, $passed ? STATUS_PASS : STATUS_FAIL,
+        (float) $process['duration'], [],
+        $passed ? 'Complete real PhotosWorkspace observations retained.'
+            : 'Real PhotosWorkspace observations incomplete.',
+        $log, ['problems' => $passed ? [] : ['Diagnostic or report validation failed.']]);
+}
+
+/**
  * Run one repository PHP utility as an audit task.
  *
  * @param string $id Stable task identifier.
@@ -2505,7 +2745,12 @@ function audit_run_git_diff_check(?string $git): array
 function audit_suite_console_label(string $suiteId): string
 {
     return match ($suiteId) {
+        'thumbnail-batch-viewer' => 'Windows Tk thumbnail batch benchmark',
+        'thumbnail-batch-http' => 'Disposable thumbnail batch HTTP',
+        'issue-362-c1-tree-http' => 'Current-SHA gallery tree HTTP diagnostics',
+        'issue-362-c1-photos-workspace' => 'Current-SHA real PhotosWorkspace Tk diagnostics',
         'php-regression' => 'PHP regression',
+        'thumbnail-batch' => 'Thumbnail batch PHP regression',
         'php-fast' => 'PHP regression (fast)',
         'packaging' => 'Production packaging policy and smoke',
         'production-package' => 'Required production packaging',
@@ -2520,6 +2765,7 @@ function audit_suite_console_label(string $suiteId): string
         'browser-map' => 'Chromium browser integration',
         'website' => 'Static project website',
         'winapp' => 'WinApp regression',
+        'winapp-partitioned' => 'WinApp complete regression (five serial class partitions)',
         'winapp-native' => 'WinApp native viewer diagnostic',
         'mutation-contracts' => 'Admin mutation contracts',
         'version-audit' => 'Runtime hardening audit',
@@ -2603,12 +2849,29 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
     fflush(STDOUT);
 
     $task = match ($suiteId) {
+        'thumbnail-batch-viewer' => audit_run_thumbnail_batch_viewer($python),
+        'thumbnail-batch-http' => audit_run_php_command(
+            'thumbnail-batch-http',
+            'Disposable thumbnail batch HTTP',
+            'tools/perf/issue_362_a1_ci.php',
+            ['--thumbnail-batch'],
+            AUDIT_THUMBNAIL_BATCH_HTTP_TIMEOUT_SECONDS,
+        ),
+        'issue-362-c1-tree-http' => audit_run_php_command(
+            'issue-362-c1-tree-http',
+            'Current-SHA gallery tree HTTP diagnostics',
+            'tools/perf/issue_362_a1_ci.php',
+            ['--tree-catalogue'],
+            AUDIT_C1_TREE_HTTP_TIMEOUT_SECONDS,
+        ),
+        'issue-362-c1-photos-workspace' => audit_run_issue_362_c1_photos_workspace($python),
         'php-regression' => audit_run_php_regression(
             $registry,
             'php-regression',
             $profileLabel === 'hosted-full' ? $phpShard : null,
         ),
         'php-fast' => audit_run_php_regression($registry, 'php-fast'),
+        'thumbnail-batch' => audit_run_php_regression($registry, 'thumbnail-batch'),
         'packaging' => audit_run_php_regression($registry, 'packaging'),
         'production-package' => audit_run_production_package($registry),
         'runtime-performance' => audit_run_runtime_performance($registry),
@@ -2680,6 +2943,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
             30,
         ),
         'winapp' => audit_run_winapp($python),
+        'winapp-partitioned' => audit_run_winapp_partitioned($python),
         'winapp-native' => audit_run_winapp($python, true),
         'mutation-contracts' => audit_run_php_command(
             'mutation-contracts',

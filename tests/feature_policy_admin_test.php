@@ -122,6 +122,8 @@ namespace {
     require_once $root . '/app/services/feature_flags.php';
 
     $GLOBALS['feature_policy_admin_settings'] = [];
+    $priorBatchEnvironment = getenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
     $revision = feature_capability_registry_revision();
     feature_policy_admin_assert(
         strlen($revision) === 20,
@@ -131,6 +133,34 @@ namespace {
         $revision === feature_capability_registry_revision(),
         'Capability dashboard revision must be deterministic within one registry shape.',
     );
+    feature_policy_admin_assert(
+        feature_capability_configured_enabled('thumbnail_batch'),
+        'A missing saved thumbnail-batch choice must use its ON default.',
+    );
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=1');
+    $batchOff = save_feature_flags_from_post([
+        'feature_registry_revision' => $revision,
+        'feature_changes' => ['thumbnail_batch' => '0'],
+    ]);
+    $batchHealth = \Gallery\Services\feature_capability_admin_health_snapshot()
+        ['thumbnail_batch'] ?? [];
+    feature_policy_admin_assert(
+        ($batchOff['changed_count'] ?? -1) === 1
+            && !feature_capability_configured_enabled('thumbnail_batch')
+            && !feature_capability_effective_enabled('thumbnail_batch')
+            && ($GLOBALS['feature_policy_admin_settings'][
+                'feature_flag.thumbnail_batch.enabled'
+            ] ?? null) === '0'
+            && !feature_capability_configured_enabled('thumbnail_batch')
+            && ($batchHealth['configured'] ?? null) === false
+            && ($batchHealth['effective'] ?? null) === false,
+        'Admin OFF must persist canonically and remain authoritative over the legacy environment on repeated reads.',
+    );
+    if ($priorBatchEnvironment === false) {
+        putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
+    } else {
+        putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=' . $priorBatchEnvironment);
+    }
 
     $unchanged = save_feature_flags_from_post([
         'feature_registry_revision' => $revision,

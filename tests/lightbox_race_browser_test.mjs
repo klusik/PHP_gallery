@@ -364,6 +364,8 @@ try {
         const diagnostics = await evaluate(`({phase: window.quickTagInputPhase, readyState: document.readyState,
             result: document.querySelector('#results')?.textContent || '',
             errors: window.quickTagFixtureErrors || [],
+            fullscreenMode: window.quickTagFullscreenMode || 'not-entered',
+            keyboardLock: window.quickTagKeyboardLockDiagnostics || null,
             viewerHidden: document.querySelector('[data-lightbox]')?.hidden ?? null,
             activeTitle: document.querySelector('[data-lightbox-title]')?.textContent || ''})`);
         throw new Error(`Fixture did not complete trusted keyboard phases: ${[...completed].join(', ')}; diagnostics=${JSON.stringify(diagnostics)}`);

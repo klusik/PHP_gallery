@@ -2746,17 +2746,21 @@ class PhotosWorkspace(ttk.Frame):
             self._continue_catalogue()
 
     def _render_tree(self, page_gallery_ids: list[int]) -> None:
-        """Incrementally add a page and attach newly resolvable orphans.
+        """Render ordered rows and attach newly resolvable orphans in one slice.
 
         Args:
             page_gallery_ids (list[int]): IDs introduced or refreshed by the
                 current validated catalogue page.
 
         Returns:
-            None: Existing item state remains intact as later pages arrive.
+            None: Ascending new root IDs append using one batch-local tail;
+                interleaved IDs retain the ordered lookup. Existing item state
+                remains intact as later pages arrive.
         """
         self._rendering_tree = True
         candidates = set(page_gallery_ids)
+        root_tail_loaded = False
+        root_tail_id: int | None = None
         for gallery_id in page_gallery_ids:
             gallery = self._galleries[gallery_id]
             item_id = str(gallery_id)
@@ -2776,9 +2780,25 @@ class PhotosWorkspace(ttk.Frame):
                     image=image or "",
                 )
             else:
+                if not root_tail_loaded:
+                    # The tree keeps root siblings ordered by numeric ID. Read
+                    # them once per render call; repeated reads copy and scan
+                    # an ever-growing Tk child tuple during ascending mounts.
+                    root_children = self.tree.get_children("")
+                    if root_children:
+                        root_tail_id = int(root_children[-1])
+                    root_tail_loaded = True
+                root_index: int | str
+                if root_tail_id is None or gallery_id > root_tail_id:
+                    root_index = "end"
+                    root_tail_id = gallery_id
+                else:
+                    # Refreshes can introduce lower IDs; retain the general
+                    # ordered lookup for those interleaved insertions.
+                    root_index = self._ordered_index("", gallery_id)
                 self.tree.insert(
                     "",
-                    self._ordered_index("", gallery_id),
+                    root_index,
                     iid=str(gallery_id),
                     text=label,
                     image=image or "",

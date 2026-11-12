@@ -53,7 +53,9 @@ const APP_LINKING_RATE_STALE_SECONDS = 86400;
  *     per-IP and per-Admin limits than the shared global circuit breakers.
  *     Identity reads permit a higher count because they are non-mutating.
  *     Photo bytes have a separate 600 per IP and 3600 global allowance for
- *     five-minute bursts so thumbnails do not lock gallery navigation.
+ *     five-minute bursts so thumbnails do not lock gallery navigation. The
+ *     batch also charges 600 per authenticated account in the same window
+ *     to bound one account without replacing the shared limits.
  *     Upload traffic uses independent 60-second windows/locks: 60 requests
  *     per grant/account/gallery, 120 originals per IP/global, and 120 inventory reads
  *     per grant/account/gallery, 240 per IP, 600 global. Account aggregates
@@ -117,6 +119,10 @@ const APP_LINKING_RATE_POLICIES = [
     ],
     'app_link_photo_global' => [
         'kind' => 'global', 'max_attempts' => 3600,
+        'window_seconds' => 300, 'lock_seconds' => 300,
+    ],
+    'app_link_photo_account' => [
+        'kind' => 'account', 'max_attempts' => 600,
         'window_seconds' => 300, 'lock_seconds' => 300,
     ],
     'app_link_upload_ip' => [

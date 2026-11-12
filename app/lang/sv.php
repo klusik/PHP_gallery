@@ -1628,6 +1628,12 @@ return [
         'Ladda upp och spela musik i gallerier och smarta gallerier. '
             . 'Avstängning bevarar filer, spellistor och '
             . 'bildspelsinställningar.',
+    'admin.features.thumbnail_batch.label' =>
+        'Samlade miniatyrbilder för appen',
+    'admin.features.thumbnail_batch.description' =>
+        'Tillåt länkade galleriappar att hämta begränsade grupper av '
+            . 'miniatyrbilder. Avstängning bevarar medier och använder den '
+            . 'kompatibla rutten för en miniatyrbild i taget.',
     'admin.upload.media_files_label' => 'Välj eller släpp filer',
     'admin.upload.media_files_help' =>
         'Välj eller släpp filer som stöds. Filväljaren visar aktiverade '
@@ -1661,6 +1667,15 @@ return [
             . 'Avstängning bevarar filer, spellistor och '
             . 'bildspelsinställningar.',
     'admin.settings.item.feature_gallery_music.example' => 'ON tillåter medietypen; OFF bevarar filer och kan återställas.',
+    'admin.settings.item.feature_thumbnail_batch' =>
+        'Samlade miniatyrbilder för appen',
+    'admin.settings.item.feature_thumbnail_batch.hint' =>
+        'Tillåt länkade galleriappar att hämta begränsade grupper av '
+            . 'miniatyrbilder. Ett sparat val har företräde framför det äldre '
+            . 'miljövärdet.',
+    'admin.settings.item.feature_thumbnail_batch.example' =>
+        'PÅ aktiverar förhandlade grupper; AV bevarar medier och använder '
+            . 'enskilda miniatyrbilder.',
     'admin.storage.progress_counts' => '{processed} / {total} poster',
     'admin.storage.tab_files_hint' => 'Foton, härledda filer, PDF- och musikoriginal',
     'media_summary.files' => 'Filer',

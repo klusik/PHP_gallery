@@ -32,7 +32,7 @@ const APP_LINKING_PASSIVE_ENVIRONMENT = 'PHP_GALLERY_A2_PASSIVE_PROFILE';
  */
 const APP_LINKING_PASSIVE_ROUTES = [
     'gallery_tree', 'gallery_page', 'media_page',
-    'thumbnail_single', 'photo_single', 'revision',
+    'thumbnail_single', 'thumbnail_batch', 'photo_single', 'revision',
 ];
 
 /**

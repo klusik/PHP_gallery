@@ -55,7 +55,7 @@ SERVER_TIMING_MAX_SAMPLES = 256
 # Consumers: ServerTimingWindow.observe. Rationale: Match current native reads.
 _SERVER_TIMING_ROUTES = frozenset((
     'gallery_tree', 'gallery_page', 'media_page',
-    'thumbnail_single', 'photo_single', 'revision',
+    'thumbnail_single', 'thumbnail_batch', 'photo_single', 'revision',
 ))
 
 

@@ -54,6 +54,7 @@ _JSON_ROUTE_CATEGORIES = {
     'app_linking_gallery_visibility': 'gallery_visibility',
     'app_linking_photo_visibility': 'photo_visibility',
     'app_linking_media_delete': 'media_delete',
+    'app_linking_thumbnail_batch': 'thumbnail_batch',
 }
 
 # Purpose: Distinguish physical media request kinds without parsing raw URLs.
@@ -82,6 +83,7 @@ LINKING_ROUTE_REASONS = frozenset((
     'dns_failure', 'connect_failure', 'tls_failure', 'timeout',
     'transport_failure', 'throttled', 'grant_rejected',
     'refresh_rejected', 'target_unavailable', 'revision_unsupported',
+    'proof_changed',
 ))
 
 

@@ -37,6 +37,11 @@ from typing import Callable, Iterable, Literal, TypeVar
 from urllib.parse import SplitResult, parse_qsl, urlencode, urlsplit
 
 from .models import JsonValue
+from .thumbnail_batch_protocol import (
+    INPUT_SLICE_BYTES, MAX_IMAGE_ID, PRODUCTION_MAX_IMAGE_BYTES, PRODUCTION_MAX_ITEMS,
+    PRODUCTION_MAX_RESPONSE_BYTES,
+    ProtocolError, ThumbnailBatchParser, ValidatedItem,
+)
 from .server_discovery import _reject_nonfinite, _unique_object, discovery_url
 from .gallery_media_cache import (
     GalleryMediaCache, PhotoCacheEntry, PhotoCacheReceipt,
@@ -51,11 +56,11 @@ from .passive_server_timing import (
 
 
 CLIENT_ID = 'php-gallery-winapp'
-# Purpose: Validate a server retry hint without retaining arbitrary headers.
-# Type: int. Units: seconds. Scope: one inventory/upload Retry-After value.
-# Consumers: validated_retry_after.
-# Rationale: One day accepts maintenance windows; larger or ambiguous hints
-#   use the queue's bounded backoff instead of unverified indefinite waiting.
+# Purpose: Bound accepted inventory, upload and batch Retry-After hints.
+# Type: int. Units: seconds. Scope: one validated inventory/upload/batch hint.
+# Consumers: validated_retry_after and LinkingMediaThrottled.
+# Rationale: One day preserves long server-directed batch/maintenance waits;
+#   larger or ambiguous values are discarded instead of waiting indefinitely.
 UPLOAD_RETRY_AFTER_MAX_SECONDS = 86400
 
 # Purpose: Recognize fixed application refusals that precede original storage.
@@ -129,6 +134,11 @@ ADMIN_MEDIA_SCOPE_SUFFIX = ' media:admin'
 # Consumers: LinkingAttempt and LinkingSession. Rationale: A capability marker
 # negotiates wire behavior without changing OAuth consent or grant scopes.
 ADMIN_PRELOAD_CAPABILITY = 'media:admin-preload-v1'
+# Purpose: Identify the optional framed thumbnail batch transport.
+# Type: str. Units: discovery capability. Scope: one linking installation.
+# Consumers: LinkingAttempt and LinkingSession. Rationale: Discovery negotiates
+# the optional protocol without changing OAuth consent or media authorization.
+THUMBNAIL_BATCH_CAPABILITY = 'media:thumbnail-batch-v1'
 ADMIN_PRESENTATION_SCOPE_SUFFIX = ADMIN_MEDIA_SCOPE_SUFFIX + ' presentation:read'
 # Purpose: Add deletion only after the existing explicit Admin media consent.
 # Type: str. Units: ordered OAuth scope suffix. Scope: native Admin Photos.
@@ -424,6 +434,26 @@ LINKING_HTTPS_DEFAULT_PORT = 443
 # ensuring an unresponsive server does not hold the caller indefinitely.
 LINKING_REQUEST_DEADLINE_SECONDS = 12
 
+# Purpose: Bound an entire thumbnail group, including one session-gate wait.
+# Type: float. Units: seconds. Scope: one media_thumbnails call.
+# Consumers: LinkingSession.media_thumbnails. Rationale: Compose the existing
+# 20-second admission and 12-second transport budgets without a new longer cap.
+THUMBNAIL_BATCH_OPERATION_SECONDS = (
+    LINKING_SESSION_ADMISSION_TIMEOUT_SECONDS + LINKING_REQUEST_DEADLINE_SECONDS
+)
+
+# Purpose: Space a single automatic retry of a transient batch transport fault.
+# Type: float. Units: seconds. Scope: one thumbnail batch session cooldown.
+# Consumers: LinkingSession.media_thumbnails. Rationale: One second prevents
+# immediate retry storms while staying inside the existing operation budget.
+THUMBNAIL_BATCH_RETRY_SECONDS = 1.0
+
+# Purpose: Bound automatic replay after a transient pre-frame transport failure.
+# Type: int. Units: physical attempts. Scope: one homogeneous thumbnail group.
+# Consumers: LinkingSession.media_thumbnails. Rationale: One initial request
+# plus one retry prevents indefinite replay and never retries delivered frames.
+THUMBNAIL_BATCH_MAX_ATTEMPTS = 2
+
 # Purpose: Preserve the existing upload's tolerance for an inactive socket.
 # Type: int. Units: seconds. Scope: one delegated multipart socket operation.
 # Consumers: _request_json. Rationale: 180 seconds matches legacy upload.
@@ -695,9 +725,15 @@ _LinkingDiagnosticRoute = Literal[
     'app_linking_gallery_create', 'app_linking_gallery_create_status',
     'app_linking_gallery_create_abandon', 'app_linking_gallery_visibility',
     'app_linking_photo_visibility', 'app_linking_media_delete',
-    'app_linking_media',
+    'app_linking_media', 'app_linking_thumbnail_batch',
 ]
 _LinkingDiagnosticContent = Literal['json', 'html', 'other']
+_LinkingTransportStep = Literal[
+    'unknown', 'slot', 'dns', 'connect', 'tls', 'request', 'headers', 'body',
+]
+_LINKING_TRANSPORT_STEPS: tuple[_LinkingTransportStep, ...] = (
+    'unknown', 'slot', 'dns', 'connect', 'tls', 'request', 'headers', 'body',
+)
 _LinkingAvailability = Literal['true', 'false', 'unknown']
 _LinkingUnavailableReason = Literal[
     'server_unavailable', 'scope_unavailable', 'request_unavailable',
@@ -834,7 +870,7 @@ class MediaReadTimings:
         network_ms (float): Media transport admission, transfer and validation
             milliseconds; excludes the session gate and renewal work.
         network_reads (int): Media transport attempts, including 304 retries.
-        http_requests (int): GET send attempts, including a stale-socket retry.
+        http_requests (int): HTTP send attempts, including a stale-socket retry.
         connections (int): Newly connected TCP sockets.
         tls_handshakes (int): Attempted TLS handshakes on fresh sockets.
         connection_reuses (int): GETs borrowing a retained socket.
@@ -842,7 +878,7 @@ class MediaReadTimings:
         dns_ms (float): Address resolution milliseconds.
         tcp_ms (float): TCP connection milliseconds.
         tls_ms (float): TLS wrapping and handshake milliseconds.
-        ttfb_ms (float): GET send through response-header receipt milliseconds.
+        ttfb_ms (float): HTTP send through response-header receipt milliseconds.
         body_ms (float): Response validation/body-read milliseconds.
         cache_state (Literal['miss', 'hit', 'revalidation', 'ineligible',
             'changed', 'expired']): Passive outcome of a cache-only lookup.
@@ -944,6 +980,8 @@ class LinkingResponseError(LinkingError):
         status (int | None): HTTP status, or None if no response arrived.
         content_kind (_LinkingDiagnosticContent): Coarse response media class.
         reason (_LinkingDiagnosticReason): Fixed protocol refusal category.
+        transport_step (_LinkingTransportStep): Optional finite transport
+            operation step for a typed timeout, without request data.
         media_policy_facts (MediaPolicyFacts | None): Optional finite facts
             attached only to a media response-policy refusal.
     """
@@ -954,6 +992,7 @@ class LinkingResponseError(LinkingError):
         content_kind: _LinkingDiagnosticContent,
         reason: _LinkingDiagnosticReason,
         *, media_policy_facts: MediaPolicyFacts | None = None,
+        transport_step: _LinkingTransportStep = 'unknown',
         retry_after_seconds: int | None = None,
         request_started: bool = True,
         definitely_rejected: bool = False,
@@ -967,6 +1006,8 @@ class LinkingResponseError(LinkingError):
             status (int | None): HTTP status, or None if no response arrived.
             content_kind (_LinkingDiagnosticContent): Coarse response media class.
             reason (_LinkingDiagnosticReason): Fixed protocol refusal category.
+            transport_step (_LinkingTransportStep): Optional allowlisted
+                transport operation step; unknown preserves prior summaries.
             media_policy_facts (MediaPolicyFacts | None): Optional allowlisted
                 parsed facts from the rejected media response headers.
             retry_after_seconds (int | None): Validated response delay, in seconds.
@@ -993,7 +1034,7 @@ class LinkingResponseError(LinkingError):
                     'app_linking_gallery_create_abandon',
                     'app_linking_gallery_visibility',
                     'app_linking_photo_visibility', 'app_linking_media_delete',
-                    'app_linking_media',
+                    'app_linking_media', 'app_linking_thumbnail_batch',
                 )
                 or (status is not None and (
                     type(status) is not int or not 100 <= status <= 599
@@ -1005,6 +1046,8 @@ class LinkingResponseError(LinkingError):
                     'dns_failure', 'connect_failure', 'tls_failure', 'timeout',
                     'transport_failure', 'throttled',
                 )
+                or transport_step not in _LINKING_TRANSPORT_STEPS
+                or (transport_step != 'unknown' and reason != 'timeout')
                 or (media_policy_facts is not None and (
                     type(media_policy_facts) is not MediaPolicyFacts
                     or reason != 'response_policy'
@@ -1017,6 +1060,7 @@ class LinkingResponseError(LinkingError):
         self.status = status
         self.content_kind = content_kind
         self.reason = reason
+        self.transport_step = transport_step
         self.retry_after_seconds = retry_after_seconds
         self.request_started = request_started
         self.definitely_rejected = definitely_rejected
@@ -1042,6 +1086,8 @@ class LinkingResponseError(LinkingError):
             f'stage={phase}; route={route}; http={status_text}; '
             f'response_kind={content_kind}; reason={reason}'
         )
+        if transport_step != 'unknown':
+            self.safe_summary += f'; transport_step={transport_step}'
         if self.media_policy_facts is not None:
             facts = self.media_policy_facts
             max_age = (
@@ -1069,6 +1115,51 @@ class LinkingMediaUnavailable(LinkingError):
     """Report an authenticated gallery media target that is unavailable."""
 
 
+class LinkingThumbnailProofChanged(LinkingError):
+    """Report that a captured thumbnail proof no longer authorizes publication."""
+
+
+class LinkingThumbnailBatchDeferred(LinkingError):
+    """Report a local cooldown without inventing an HTTP response.
+
+    Args:
+        retry_after_seconds (int): Remaining bounded cooldown in seconds.
+    """
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        """Store the validated remaining delay and a fixed safe message.
+
+        Args:
+            retry_after_seconds (int): Positive remaining whole seconds within
+                the existing maximum accepted server retry interval.
+
+        Returns:
+            None: No HTTP status or remote response is implied.
+
+        Raises:
+            ValueError: The delay is outside the existing bounded policy.
+        """
+        if (type(retry_after_seconds) is not int
+                or not 1 <= retry_after_seconds <= UPLOAD_RETRY_AFTER_MAX_SECONDS):
+            raise ValueError('Invalid thumbnail cooldown delay.')
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__('Thumbnail requests are deferred until cooldown ends.')
+
+
+class LinkingThumbnailBatchUnsupported(LinkingResponseError):
+    """Report the explicit optional-route capability refusal."""
+
+    def __init__(self) -> None:
+        """Create the fixed, non-sensitive unsupported-route diagnosis.
+
+        Returns:
+            None: Records only the fixed status and endpoint category.
+        """
+        super().__init__(
+            'media', 'app_linking_thumbnail_batch', 404, 'json', 'http_status',
+        )
+
+
 class LinkingRevisionUnsupported(LinkingError):
     """Report an older server that rejects the revision selector."""
 
@@ -1080,22 +1171,34 @@ class LinkingMediaThrottled(LinkingResponseError):
         retry_after_seconds (int | None): Validated bounded server delay, if sent.
     """
 
-    def __init__(self, retry_after_seconds: int | None = None) -> None:
+    def __init__(
+        self, retry_after_seconds: int | None = None, *,
+        route: Literal['app_linking_media', 'app_linking_thumbnail_batch'] = 'app_linking_media',
+    ) -> None:
         """Create a throttle failure without preserving raw server text.
 
         Args:
             retry_after_seconds (int | None): Bounded integer delay from one
                 unambiguous Retry-After header, or None when unavailable.
+            route (Literal['app_linking_media', 'app_linking_thumbnail_batch']):
+                Exact media endpoint that returned the throttle.
 
         Returns:
             None: Stores the safe delay and fixed error message.
         """
-        super().__init__(
-            'media', 'app_linking_media', 429, 'json', 'throttled',
+        if route not in ('app_linking_media', 'app_linking_thumbnail_batch'):
+            raise ValueError('Invalid media throttle route.')
+        super().__init__('media', route, 429, 'json', 'throttled')
+        # Keep the legacy single-photo limit unchanged; framed batches can
+        # retain the already validated full-day hint through their one request.
+        retry_limit = (
+            UPLOAD_RETRY_AFTER_MAX_SECONDS
+            if route == 'app_linking_thumbnail_batch'
+            else MEDIA_RETRY_AFTER_MAX_SECONDS
         )
         if (retry_after_seconds is not None
                 and (type(retry_after_seconds) is not int
-                     or not 1 <= retry_after_seconds <= MEDIA_RETRY_AFTER_MAX_SECONDS)):
+                     or not 1 <= retry_after_seconds <= retry_limit)):
             retry_after_seconds = None
         self.args = ('Photo requests are limited. Try again shortly.',)
         self.retry_after_seconds = retry_after_seconds
@@ -1889,7 +1992,36 @@ class _LinkingTransportControl:
         ] | None = None
         self.server_header_ms: float | None = None
         self.request_started = False
+        self._transport_step: _LinkingTransportStep = 'unknown'
         self.operation_finished = threading.Event()
+
+    @property
+    def transport_step(self) -> _LinkingTransportStep:
+        """Return the current allowlisted network operation step.
+
+        Returns:
+            _LinkingTransportStep: Last observed step, or ``unknown`` before
+                transport work starts.
+        """
+        with self._lock:
+            return self._transport_step
+
+    def set_transport_step(self, step: _LinkingTransportStep) -> None:
+        """Record one finite transport step without retaining request data.
+
+        Args:
+            step (_LinkingTransportStep): Allowlisted operation being entered.
+
+        Returns:
+            None: Updates only the fixed diagnostic step label.
+
+        Raises:
+            ValueError: The requested diagnostic label is not allowlisted.
+        """
+        if step not in _LINKING_TRANSPORT_STEPS:
+            raise ValueError('Invalid linking transport step.')
+        with self._lock:
+            self._transport_step = step
 
     def remaining(self) -> float:
         """Require an active request and return its remaining duration.
@@ -2003,6 +2135,7 @@ class _LinkingTransportControl:
             OSError: No resolved address could be connected.
         """
         self.remaining()
+        self.set_transport_step('dns')
         started = time.perf_counter() if self.timings is not None else 0.0
         try:
             addresses = socket.getaddrinfo(
@@ -2017,6 +2150,7 @@ class _LinkingTransportControl:
             self.remaining()
             if loopback_only and target[0] not in ('127.0.0.1', '::1'):
                 continue
+            self.set_transport_step('connect')
             connection = socket.socket(family, kind, protocol)
             try:
                 self.set_socket(connection)
@@ -2081,6 +2215,7 @@ class _DeadlineHTTPSConnection(http.client.HTTPSConnection):
         self.sock = self._linking_control.connect(
             (self.host, self.port), self.source_address,
         )
+        self._linking_control.set_transport_step('tls')
         timings = self._linking_control.timings
         started = time.perf_counter() if timings is not None else 0.0
         try:
@@ -2475,7 +2610,8 @@ def _run_linking_transport(
     result: queue.Queue[
         _TransportResult | LinkingHttpsError | LinkingMediaUnavailable
         | LinkingResponseError | LinkingRevisionUnsupported
-        | LinkingGrantRejected | LinkingRefreshRejected | None
+        | LinkingGrantRejected | LinkingRefreshRejected
+        | LinkingThumbnailProofChanged | None
     ] = queue.Queue(maxsize=1)
     slot_acquired = False
     worker_started = False
@@ -2496,6 +2632,7 @@ def _run_linking_transport(
         _LINKING_TRANSPORT_SLOTS.release()
 
     try:
+        control.set_transport_step('slot')
         admission_started = time.perf_counter()
         try:
             while not slot_acquired:
@@ -2510,6 +2647,9 @@ def _run_linking_transport(
                 ) * 1000.0
         # Cancellation or deadline may race a successful slot acquisition.
         control.remaining()
+        # The worker has not entered a socket operation yet. Its concrete
+        # transport hook will label the first observed network step.
+        control.set_transport_step('unknown')
 
         def worker() -> None:
             """Perform one request and retain the slot until network work ends.
@@ -2520,14 +2660,15 @@ def _run_linking_transport(
             outcome: (
                 _TransportResult | LinkingHttpsError | LinkingMediaUnavailable
                 | LinkingResponseError | LinkingRevisionUnsupported
-                | LinkingGrantRejected | LinkingRefreshRejected | None
+                | LinkingGrantRejected | LinkingRefreshRejected
+                | LinkingThumbnailProofChanged | None
             )
             try:
                 control.remaining()
                 outcome = request_once(control)
             except LinkingMediaThrottled as error:
                 outcome = LinkingMediaThrottled(
-                    error.retry_after_seconds,
+                    error.retry_after_seconds, route=error.route,
                 )
             except LinkingResponseError as error:
                 outcome = error
@@ -2542,6 +2683,7 @@ def _run_linking_transport(
             except (socket.timeout, TimeoutError):
                 outcome = LinkingResponseError(
                     phase, route, None, 'other', 'timeout',
+                    transport_step=control.transport_step,
                 )
             except OSError:
                 outcome = LinkingResponseError(
@@ -2554,6 +2696,10 @@ def _run_linking_transport(
             except LinkingRevisionUnsupported:
                 outcome = LinkingRevisionUnsupported(
                     'Gallery revision is unsupported.',
+                )
+            except LinkingThumbnailProofChanged:
+                outcome = LinkingThumbnailProofChanged(
+                    'Gallery thumbnail proof is unavailable.',
                 )
             except LinkingMediaUnavailable:
                 outcome = LinkingMediaUnavailable(
@@ -2605,6 +2751,8 @@ def _run_linking_transport(
                 raise data
             if isinstance(data, LinkingRevisionUnsupported):
                 raise data
+            if isinstance(data, LinkingThumbnailProofChanged):
+                raise data
             if isinstance(data, LinkingMediaUnavailable):
                 raise data
             if isinstance(data, (LinkingGrantRejected, LinkingRefreshRejected)):
@@ -2615,10 +2763,12 @@ def _run_linking_transport(
     except LinkingError as failure:
         if isinstance(failure, (LinkingResponseError, LinkingGrantRejected,
                                 LinkingRefreshRejected, LinkingMediaUnavailable,
-                                LinkingRevisionUnsupported, LinkingHttpsError)):
+                                LinkingRevisionUnsupported, LinkingHttpsError,
+                                LinkingThumbnailProofChanged)):
             raise
         raise LinkingResponseError(
             phase, route, None, 'other', 'timeout',
+            transport_step=control.transport_step,
             request_started=control.request_started,
             operation_finished=control.operation_finished,
         ) from None
@@ -2752,10 +2902,12 @@ def _request_json_once(
             dispatch()
         control.remaining()
         control.request_started = True
+        control.set_transport_step('request')
         header_started = (
             time.perf_counter() if control.server_timing_out is not None else 0.0
         )
         connection.request(method, path, body=body, headers=headers)
+        control.set_transport_step('headers')
         with connection.getresponse() as response:
             if control.server_timing_out is not None:
                 control.server_header_ms = (
@@ -2782,6 +2934,7 @@ def _request_json_once(
                         for part in cache_headers[0].split(',')
                     }
                     and response.headers.get('Content-Encoding') is None):
+                control.set_transport_step('body')
                 payload = response.read(LINKING_RESPONSE_MAX_BYTES + 1)
                 if len(payload) <= LINKING_RESPONSE_MAX_BYTES:
                     try:
@@ -2835,6 +2988,7 @@ def _request_json_once(
                              == ['rejected-before-store-v1']) and exact_json
                         and 'no-store' in cache_directives
                         and response.headers.get('Content-Encoding') is None):
+                    control.set_transport_step('body')
                     raw_refusal = response.read(LINKING_RESPONSE_MAX_BYTES + 1)
                     if len(raw_refusal) <= LINKING_RESPONSE_MAX_BYTES:
                         try:
@@ -2875,6 +3029,7 @@ def _request_json_once(
                          LINKING_UPLOAD_RESPONSE_MAX_BYTES
                          if route in ('app_linking_inventory', 'app_linking_upload')
                          else LINKING_RESPONSE_MAX_BYTES)
+            control.set_transport_step('body')
             payload = response.read(max_bytes + 1)
         control.remaining()
         if len(payload) > max_bytes:
@@ -2952,6 +3107,7 @@ class LinkingAttempt:
         self._scope = scope
         self._admin_preload_supported = False
         self._gallery_tree_supported = False
+        self._thumbnail_batch_supported = False
         self._state = secrets.token_urlsafe(ATTEMPT_RANDOM_BYTES)
         self._verifier = secrets.token_urlsafe(ATTEMPT_RANDOM_BYTES)
         self._code = ''
@@ -3057,6 +3213,10 @@ class LinkingAttempt:
             self._admin_preload_supported = (
                 isinstance(capabilities, list)
                 and ADMIN_PRELOAD_CAPABILITY in capabilities
+            )
+            self._thumbnail_batch_supported = (
+                isinstance(capabilities, list)
+                and THUMBNAIL_BATCH_CAPABILITY in capabilities
             )
             with self._lock:
                 if self._cancelled.is_set() or time.monotonic() >= self._deadline:
@@ -3367,6 +3527,7 @@ class LinkingAttempt:
                 parameters.issuer, token, started + lifetime, parameters.scope,
                 admin_preload_supported=self._admin_preload_supported,
                 gallery_tree_supported=self._gallery_tree_supported,
+                thumbnail_batch_supported=self._thumbnail_batch_supported,
             )
             return session, refresh, refresh_lifetime
 
@@ -3641,6 +3802,153 @@ class LinkedPhoto:
     preload_eligible: bool | None = None
     preload_thumbnail_etag: str | None = None
     preload_verified_at: float | None = None
+
+
+@dataclass(frozen=True)
+class ThumbnailBatchWitness:
+    """Capture one current catalogue proof for a single batch candidate.
+
+    Attributes:
+        owner (LinkingSession): Exact session that captured this authority.
+        issuer (str): Exact session issuer that registered the proof.
+        gallery_id (int): Physical gallery owning the direct photo.
+        photo (LinkedPhoto): Immutable authorized catalogue descriptor.
+        kind (Literal['public', 'private']): Independent proof owner.
+        public_row (tuple[str | None, float | None] | None): Exact public
+            validator and catalogue receipt time, or None for private proof.
+        private_identity (tuple[int, str, float, int] | None): Account,
+            validator, row receipt time and row epoch, or None for public proof.
+        generation (int): Captured private authorization generation.
+    """
+
+    owner: 'LinkingSession'
+    issuer: str
+    gallery_id: int
+    photo: LinkedPhoto
+    kind: Literal['public', 'private']
+    public_row: tuple[str | None, float | None] | None
+    private_identity: tuple[int, str, float, int] | None
+    generation: int
+
+
+@dataclass(frozen=True)
+class ThumbnailPublication:
+    """Carry one verified batch item and its independent reuse authority.
+
+    Attributes:
+        witness (ThumbnailBatchWitness): Captured authorization and identity.
+        photo (LinkedPhoto): Exact descriptor corresponding to this result.
+        status (Literal['ok', 'unavailable', 'oversize']): Validated wire outcome.
+        body (bytes | None): Verified image bytes for ok, otherwise None.
+        mime (str | None): Validated image MIME for ok, otherwise None.
+        etag (str | None): Actual wire validator, never inferred from SHA-256.
+        ram_eligible (bool): Independent proof permits decoded-image reuse.
+    """
+
+    witness: ThumbnailBatchWitness
+    photo: LinkedPhoto
+    status: Literal['ok', 'unavailable', 'oversize']
+    body: bytes | None
+    mime: str | None
+    etag: str | None
+    ram_eligible: bool
+
+
+@dataclass(frozen=True)
+class LegacyThumbnailPublication:
+    """Carry a single authenticated GET result without granting RAM reuse.
+
+    Attributes:
+        owner (LinkingSession): Exact session that owns the authenticated GET.
+        issuer (str): Exact issuer used by the session.
+        gallery_id (int): Physical gallery owning the photo.
+        photo (LinkedPhoto): Captured current viewer descriptor.
+        status (Literal['ok', 'unavailable']): Result of the authenticated GET.
+        body (bytes | None): Authorized body, or None for an unavailable item.
+        mime (str | None): Accepted media type, or None for an unavailable item.
+        etag (str | None): Actual GET validator, never inferred from a digest.
+        witness (ThumbnailBatchWitness | None): Independent registered proof,
+            or None for explicitly restricted transient-only descriptors.
+        generation (int): Session authorization generation captured at dispatch.
+        ram_eligible (Literal[False]): Always False; no cache reuse is granted.
+    """
+
+    owner: 'LinkingSession'
+    issuer: str
+    gallery_id: int
+    photo: LinkedPhoto
+    status: Literal['ok', 'unavailable']
+    body: bytes | None
+    mime: str | None
+    etag: str | None
+    witness: ThumbnailBatchWitness | None
+    generation: int
+    ram_eligible: Literal[False] = False
+
+
+@dataclass
+class ThumbnailBatchStats:
+    """Accumulate bounded numeric observations for one caller-owned group.
+
+    Attributes:
+        requested (int): Requested unique photos.
+        returned (int): Delivered results containing an image body.
+        delivered (int): All completed result callbacks, including unavailable.
+        failed (int): Requested images without a delivered body.
+        operation_failures (int): Calls ending with a whole-operation failure.
+        wire_items (int): Complete validated wire frames.
+        wire_failures (int): Complete nonbinary wire frames.
+        wire_unavailable (int): Complete unavailable wire frames.
+        wire_oversize (int): Complete oversize wire frames.
+        cache_hits (int): Authorized local cache results.
+        fallback_unsupported (int): Singles after explicit capability refusal.
+        fallback_capability_missing (int): Singles when discovery omitted support.
+        fallback_wire_disabled (int): Singles after an earlier malformed response.
+        fallback_restricted (int): Explicitly restricted single reads.
+        fallback_exceptional (int): Unavailable or oversize single reads.
+        batch_sizes (dict[int, int]): Physical batch counts keyed by group size.
+        first_frame_ms (float | None): Delay to first completed wire item.
+        publish_ms (float): Time spent in caller-owned result callbacks.
+    """
+
+    requested: int = 0
+    returned: int = 0
+    delivered: int = 0
+    failed: int = 0
+    operation_failures: int = 0
+    wire_items: int = 0
+    wire_failures: int = 0
+    wire_unavailable: int = 0
+    wire_oversize: int = 0
+    cache_hits: int = 0
+    fallback_unsupported: int = 0
+    fallback_capability_missing: int = 0
+    fallback_wire_disabled: int = 0
+    fallback_restricted: int = 0
+    fallback_exceptional: int = 0
+    batch_sizes: dict[int, int] = field(default_factory=dict)
+    first_frame_ms: float | None = None
+    publish_ms: float = 0.0
+
+
+def _observe_thumbnail_mime(timings: MediaReadTimings, mime: str | None) -> None:
+    """Count one accepted per-item image type without counting HTTP again.
+
+    Args:
+        timings (MediaReadTimings): The owning item's independent metrics.
+        mime (str | None): Accepted image media type, or None for unavailable.
+
+    Returns:
+        None: Increments only the fixed matching image counter.
+    """
+    if mime == 'image/jpeg':
+        timings.jpeg_responses += 1
+    elif mime == 'image/png':
+        timings.png_responses += 1
+    elif mime == 'image/gif':
+        timings.gif_responses += 1
+    elif mime == 'image/webp':
+        timings.webp_responses += 1
 
 
 def _linked_thumbnail_etag(value: JsonValue) -> str | None:
@@ -4072,6 +4380,7 @@ def _native_media_read_once(
             bytes: Encoded bytes from the owned HTTP response.
         """
         assert response is not None
+        control.set_transport_step('body')
         try:
             payload = response.read(limit)
         except http.client.IncompleteRead as error:
@@ -4123,10 +4432,12 @@ def _native_media_read_once(
                 if timings is not None:
                     timings.http_requests += 1
                 try:
+                    control.set_transport_step('request')
                     connection.request(
                         'GET', parsed.path + '/index.php?' + query,
                         headers=headers,
                     )
+                    control.set_transport_step('headers')
                     response = connection.getresponse()
                 finally:
                     if timings is not None:
@@ -4401,6 +4712,226 @@ def _native_media_read_once(
             connection.close()
 
 
+# Purpose: Bound one batch error response before strict JSON parsing.
+# Type: int. Units: bytes. Scope: one thumbnail batch HTTP error.
+# Consumers: _native_thumbnail_batch_read_once. Rationale: 4096 bytes allows
+# fixed server error objects without buffering arbitrary intermediary content.
+THUMBNAIL_BATCH_ERROR_BYTES = 4096
+
+# Purpose: Identify the exact v1 framed response media type.
+# Type: str. Units: MIME media type. Scope: thumbnail batch responses.
+# Consumers: _native_thumbnail_batch_read_once. Rationale: a different format
+# must never be interpreted as the reviewed binary framing.
+THUMBNAIL_BATCH_MIME = 'application/vnd.php-gallery.thumbnail-batch.v1'
+
+
+def _native_thumbnail_batch_read_once(
+    issuer: str, bearer: str, requested_ids: tuple[str, ...], gallery_id: int,
+    control: _LinkingTransportControl, publish: Callable[[ValidatedItem], None],
+    *, admin_preload: bool = False, timings: MediaReadTimings | None = None,
+) -> None:
+    """Stream one authenticated batch through the strict production parser.
+
+    Args:
+        issuer (str): Previously verified exact installation issuer and mount.
+        bearer (str): Current scoped bearer, never retained in diagnostics.
+        requested_ids (tuple[str, ...]): Ordered unique canonical photo IDs.
+        gallery_id (int): Positive physical gallery ID in signed 64-bit range.
+        control (_LinkingTransportControl): Deadline and interruptible socket owner.
+        publish (Callable[[ValidatedItem], None]): Worker-safe receiver for each
+            completely framed and digest-verified item; it must recheck authority.
+        admin_preload (bool): Request the existing Admin preload policy lane.
+        timings (MediaReadTimings | None): Caller-owned network observations.
+
+    Returns:
+        None: The footer, exact response length and EOF were validated.
+
+    Raises:
+        LinkingError: Invalid input, cancellation, refusal or unsafe response.
+        OSError: An underlying transport operation failed.
+        http.client.HTTPException: HTTP framing or response transfer failed.
+    """
+    if (not _issuer_valid(issuer, allow_local_http=True)
+            or type(gallery_id) is not int or not 0 < gallery_id <= MAX_IMAGE_ID
+            or type(requested_ids) is not tuple or type(admin_preload) is not bool):
+        raise LinkingError('Invalid thumbnail batch request.')
+    try:
+        parser = ThumbnailBatchParser(requested_ids)
+    except ProtocolError:
+        raise LinkingError('Invalid thumbnail batch request.') from None
+    payload = json.dumps(
+        {'v': 1, 'gallery_id': str(gallery_id), 'image_ids': requested_ids},
+        separators=(',', ':'), ensure_ascii=True,
+    ).encode('ascii')
+    parsed = urlsplit(issuer)
+    control.timings = timings
+    if timings is not None:
+        timings.server_timing = None
+    connection = _linking_connection(parsed, control)
+    started = time.perf_counter()
+    body_started = 0.0
+    publication_seconds = 0.0
+    response: http.client.HTTPResponse | None = None
+    try:
+        control.remaining()
+        headers = {
+            'Accept': THUMBNAIL_BATCH_MIME,
+            'Authorization': 'Bearer ' + bearer,
+            'Content-Type': 'application/json',
+            'User-Agent': LINKING_USER_AGENT,
+        }
+        if admin_preload:
+            headers['X-PHP-Gallery-Preload'] = 'admin-v1'
+        connection.connect()
+        control.remaining()
+        header_started = time.perf_counter()
+        control.request_started = True
+        control.set_transport_step('request')
+        if timings is not None:
+            timings.network_reads += 1
+            timings.http_requests += 1
+        try:
+            connection.request(
+                'POST', parsed.path + '/index.php?page=app_linking_thumbnail_batch',
+                body=payload, headers=headers,
+            )
+            control.set_transport_step('headers')
+            response = connection.getresponse()
+        finally:
+            if timings is not None:
+                timings.ttfb_ms += (time.perf_counter() - header_started) * 1000.0
+        control.remaining()
+        body_started = time.perf_counter()
+        types = response.headers.get_all('Content-Type', [])
+        kind = _response_content_kind(types)
+        if response.status in (401, 403):
+            raise LinkingGrantRejected('The linking grant was rejected.')
+        if response.status == 429:
+            raise LinkingMediaThrottled(validated_retry_after(
+                response.headers.get_all('Retry-After', []),
+            ), route='app_linking_thumbnail_batch')
+        if response.status == 404:
+            control.set_transport_step('body')
+            error_body = response.read(THUMBNAIL_BATCH_ERROR_BYTES + 1)
+            if timings is not None:
+                timings.encoded_bytes += len(error_body)
+            control.remaining()
+            if (len(types) == 1 and re.fullmatch(
+                    r'application/json\s*(?:;\s*charset\s*=\s*(?:utf-8|"utf-8")\s*)?',
+                    types[0], flags=re.IGNORECASE,
+                ) is not None
+                    and response.headers.get_all('Cache-Control', []) == ['no-store']
+                    and len(error_body) <= THUMBNAIL_BATCH_ERROR_BYTES):
+                try:
+                    error_data = _native_media_json(error_body)
+                except LinkingError:
+                    error_data = {}
+                if error_data == {'error': 'unsupported_capability'}:
+                    raise LinkingThumbnailBatchUnsupported()
+                if error_data == {'error': 'target_unavailable'}:
+                    raise LinkingMediaUnavailable('Photos are unavailable.')
+        if response.status != 200:
+            raise LinkingResponseError(
+                'media', 'app_linking_thumbnail_batch', response.status,
+                kind, 'http_status',
+            )
+        if types != [THUMBNAIL_BATCH_MIME]:
+            raise LinkingResponseError(
+                'media', 'app_linking_thumbnail_batch', 200, kind, 'content_type',
+            )
+        directives = {part.strip().lower() for value in
+                      response.headers.get_all('Cache-Control', [])
+                      for part in value.split(',')}
+        vary = {part.strip().lower() for value in
+                response.headers.get_all('Vary', []) for part in value.split(',')}
+        encodings = response.headers.get_all('Content-Encoding', [])
+        lengths = response.headers.get_all('Content-Length', [])
+        transfer = response.headers.get_all('Transfer-Encoding', [])
+        if (not {'private', 'no-store'}.issubset(directives)
+                or 'authorization' not in vary or '*' in vary
+                or (admin_preload and 'x-php-gallery-preload' not in vary)
+                or encodings not in ([], ['identity'])
+                or len(lengths) > 1 or len(transfer) > 1
+                or (lengths and transfer)
+                or (transfer and transfer[0].lower().strip() != 'chunked')
+                or (lengths and re.fullmatch(r'[0-9]+', lengths[0]) is None)):
+            raise LinkingResponseError(
+                'media', 'app_linking_thumbnail_batch', 200, kind, 'response_policy',
+            )
+        # Reject an excessive decimal before int conversion, including headers
+        # too long for Python's integer conversion safety limit.
+        length_text = lengths[0].lstrip('0') or '0' if lengths else None
+        limit_text = str(PRODUCTION_MAX_RESPONSE_BYTES)
+        if (length_text is not None and (
+                len(length_text) > len(limit_text)
+                or (len(length_text) == len(limit_text)
+                    and length_text > limit_text))):
+            raise LinkingResponseError(
+                'media', 'app_linking_thumbnail_batch', 200, kind, 'response_size',
+            )
+        declared = int(length_text) if length_text is not None else None
+        seen = 0
+        try:
+            while True:
+                control.remaining()
+                control.set_transport_step('body')
+                chunk = response.read1(INPUT_SLICE_BYTES)
+                control.remaining()
+                if not chunk:
+                    break
+                seen += len(chunk)
+                if timings is not None:
+                    timings.encoded_bytes += len(chunk)
+                if seen > PRODUCTION_MAX_RESPONSE_BYTES:
+                    raise LinkingResponseError(
+                        'media', 'app_linking_thumbnail_batch', 200, kind,
+                        'response_size',
+                    )
+                for item in parser.feed(chunk):
+                    control.remaining()
+                    publish_started = time.perf_counter()
+                    try:
+                        publish(item)
+                    finally:
+                        publication_seconds += time.perf_counter() - publish_started
+            if declared is not None and seen != declared:
+                raise ProtocolError('response_length_mismatch')
+            parser.finish()
+            if timings is not None:
+                timings.server_timing = parse_server_timing(
+                    response.headers.get_all('Server-Timing', []),
+                )
+        except ProtocolError:
+            raise LinkingResponseError(
+                'media', 'app_linking_thumbnail_batch', 200, kind, 'invalid_shape',
+            ) from None
+    finally:
+        if timings is not None:
+            timings.network_ms += max(
+                0.0, time.perf_counter() - started - publication_seconds,
+            ) * 1000.0
+            if body_started:
+                timings.body_ms += max(
+                    0.0, time.perf_counter() - body_started - publication_seconds,
+                ) * 1000.0
+        # Cleanup is best-effort so close errors cannot replace the primary
+        # auth/protocol failure. This dedicated connection is never pooled;
+        # every owner still attempts response, connection and control cleanup.
+        if response is not None:
+            try:
+                response.close()
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            connection.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            control.finish()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _native_media_json(payload: bytes) -> dict[str, JsonValue]:
     """Decode strict, already bounded media metadata for typed validation.
 
@@ -4430,6 +4961,7 @@ class LinkingSession:
         self, issuer: str, token: str, expires_at: float,
         scope: str = IDENTITY_SCOPE, *, admin_preload_supported: bool = False,
         gallery_tree_supported: bool = False,
+        thumbnail_batch_supported: bool = False,
     ) -> None:
         """Create a transient session from a validated token response.
 
@@ -4442,6 +4974,8 @@ class LinkingSession:
                 explicit versioned private media protocol.
             gallery_tree_supported (bool): Whether discovery advertised the
                 optional complete catalogue tree protocol.
+            thumbnail_batch_supported (bool): Whether discovery advertised the
+                optional framed thumbnail batch protocol.
 
         Returns:
             None: Owns one token solely for the life of this object.
@@ -4455,6 +4989,7 @@ class LinkingSession:
                 or scope_base(scope) is None
                 or type(admin_preload_supported) is not bool
                 or type(gallery_tree_supported) is not bool
+                or type(thumbnail_batch_supported) is not bool
                 or not math.isfinite(expires_at)
                 or expires_at <= time.monotonic()):
             raise LinkingError('Invalid linking session.')
@@ -4496,6 +5031,9 @@ class LinkingSession:
         self._scope = scope
         self._admin_preload_supported = admin_preload_supported
         self._gallery_tree_supported = gallery_tree_supported
+        self._thumbnail_batch_supported = thumbnail_batch_supported
+        self._thumbnail_batch_disabled_reason = ''
+        self._thumbnail_batch_cooldown_until = 0.0
         self._token = token
         self._expires_at = expires_at
         self._busy = False
@@ -4874,7 +5412,11 @@ class LinkingSession:
             None: Signals an in-flight operation, leaving an open session usable.
         """
         with self._lock:
-            if gallery_only or self._active_route == 'app_linking_media':
+            # A logical Photos operation may be between requests while no
+            # route is active. Do not cancel its owner during an active upload.
+            if gallery_only or self._active_route in (
+                '', 'app_linking_media', 'app_linking_thumbnail_batch',
+            ):
                 for pending in self._pending_gallery_cancels:
                     pending.set()
             if self._busy and (not gallery_only
@@ -4996,6 +5538,7 @@ class LinkingSession:
         if_none_match: str | None = None, *, admin_preload: bool = False,
         timings: MediaReadTimings | None = None,
         proof_generation_out: list[int] | None = None,
+        operation_deadline: float | None = None,
     ) -> _NativeMediaResponse:
         """Serialize one exact media read under the shared session and HTTPS gates.
 
@@ -5011,6 +5554,9 @@ class LinkingSession:
             proof_generation_out (list[int] | None): Optional private witness
                 sink for the authorization generation after preflight renewal.
                 The caller supplies an empty list and receives one integer.
+            operation_deadline (float | None): Optional absolute monotonic
+                deadline shared with a larger operation, or None for the
+                existing independent admission and transport limits.
 
         Returns:
             _NativeMediaResponse: Body/304 status, media type, validator, and
@@ -5021,6 +5567,10 @@ class LinkingSession:
         """
         if not _native_media_id(gallery_id):
             raise LinkingError('Invalid gallery media target.')
+        if (operation_deadline is not None and (
+                type(operation_deadline) not in (int, float)
+                or not math.isfinite(operation_deadline))):
+            raise LinkingError('Invalid gallery media deadline.')
         if (type(admin_preload) is not bool
                 or (admin_preload and (kind not in ('photo', 'thumbnail')
                     or not scope_allows_admin_media(self._scope)))):
@@ -5046,8 +5596,15 @@ class LinkingSession:
         try:
             gate_started = time.perf_counter() if timings is not None else 0.0
             try:
+                admission_timeout = LINKING_SESSION_ADMISSION_TIMEOUT_SECONDS
+                if operation_deadline is not None:
+                    admission_timeout = min(
+                        admission_timeout, operation_deadline - time.monotonic(),
+                    )
+                    if admission_timeout <= 0:
+                        raise LinkingError('Gallery media deadline expired.')
                 admitted = self._request_gate.acquire(
-                    timeout=LINKING_SESSION_ADMISSION_TIMEOUT_SECONDS,
+                    timeout=admission_timeout,
                     cancelled=cancel,
                 )
             finally:
@@ -5069,6 +5626,9 @@ class LinkingSession:
                         timings.renewal_ms += (
                             time.perf_counter() - renewal_started
                         ) * 1000.0
+                if (operation_deadline is not None
+                        and time.monotonic() >= operation_deadline):
+                    raise LinkingError('Gallery media deadline expired.')
                 with self._lock:
                     if proof_generation_out is not None:
                         proof_generation_out.append(
@@ -5108,6 +5668,14 @@ class LinkingSession:
                     if timings is not None:
                         timings.network_reads += 1
                     try:
+                        transport_timeout = float(LINKING_REQUEST_DEADLINE_SECONDS)
+                        if operation_deadline is not None:
+                            transport_timeout = min(
+                                transport_timeout,
+                                operation_deadline - time.monotonic(),
+                            )
+                            if transport_timeout <= 0:
+                                raise LinkingError('Gallery media deadline expired.')
                         result = _run_linking_transport(
                             lambda control: _native_media_read_once(
                                 self._issuer, encoded, token, accepted, control,
@@ -5115,7 +5683,7 @@ class LinkingSession:
                                 admin_preload=admin_preload,
                                 pool=self._media_connection_pool,
                                 timings=timings,
-                            ), cancel, LINKING_REQUEST_DEADLINE_SECONDS,
+                            ), cancel, transport_timeout,
                             LINKING_SOCKET_TIMEOUT_SECONDS,
                             phase='media', route='app_linking_media',
                             timings=timings,
@@ -5164,6 +5732,8 @@ class LinkingSession:
                             ) * 1000.0
                     with self._lock:
                         if (cancel.is_set() or self._closed
+                                or (operation_deadline is not None
+                                    and time.monotonic() >= operation_deadline)
                                 or time.monotonic() >= self._expires_at):
                             raise LinkingError('Gallery media is no longer current.')
                     return result
@@ -6107,6 +6677,812 @@ class LinkingSession:
             gallery_id, image_id, cancelled,
         )
         return current if current == user_id else None
+
+    def prepare_thumbnail_batch_item(
+        self, gallery_id: int, photo: LinkedPhoto,
+        cancelled: threading.Event | None = None,
+    ) -> ThumbnailBatchWitness:
+        """Capture a currently registered public or private thumbnail proof.
+
+        Args:
+            gallery_id (int): Physical gallery owning the direct photo.
+            photo (LinkedPhoto): Exact catalogue descriptor for the candidate.
+            cancelled (threading.Event | None): Optional viewer cancellation.
+
+        Returns:
+            ThumbnailBatchWitness: Immutable issuer, row and account evidence.
+
+        Raises:
+            LinkingError: The candidate lacks current independent batch proof.
+        """
+        if (not _native_media_id(gallery_id) or not isinstance(photo, LinkedPhoto)
+                or not _native_media_id(photo.image_id)
+                or (cancelled is not None and cancelled.is_set())):
+            raise LinkingError('Gallery thumbnail proof is unavailable.')
+        private = self.can_read_admin_media() and photo.cache_eligible is not True
+        identity = (
+            self.private_preload_cache_identity(gallery_id, photo, thumbnail=True)
+            if private else None
+        )
+        if private and identity is None:
+            # Restricted and unproven private rows retain their existing GET
+            # owner; a digest alone cannot establish their current authority.
+            raise LinkingError('Gallery thumbnail proof is unavailable.')
+        with self._lock:
+            rows = self._public_media_descriptors.get(gallery_id)
+            row = rows.get(photo.image_id) if rows is not None else None
+            witness = ThumbnailBatchWitness(
+                self, self._issuer, gallery_id, photo,
+                'private' if private else 'public',
+                None if private else row, identity, self._private_preload_generation,
+            )
+        if not self._thumbnail_batch_witness_current(witness, cancelled):
+            raise LinkingError('Gallery thumbnail proof is unavailable.')
+        return witness
+
+    def _thumbnail_batch_witness_current(
+        self, witness: ThumbnailBatchWitness,
+        cancelled: threading.Event | None,
+    ) -> bool:
+        """Recheck the exact captured row and live session without network work.
+
+        Args:
+            witness (ThumbnailBatchWitness): Previously captured row authority.
+            cancelled (threading.Event | None): Optional viewer cancellation.
+
+        Returns:
+            bool: True only while the same issuer, row and account remain live.
+        """
+        if cancelled is not None and cancelled.is_set():
+            return False
+        now = time.monotonic()
+        photo = witness.photo
+        with self._lock:
+            if (witness.owner is not self
+                    or self._closed or not self._token or now >= self._expires_at
+                    or self._issuer != witness.issuer
+                    or scope_base(self._scope) not in (GALLERIES_SCOPE, UPLOAD_SCOPE)
+                    or (cancelled is not None and cancelled.is_set())):
+                return False
+            if witness.kind == 'public':
+                row = witness.public_row
+                rows = self._public_media_descriptors.get(witness.gallery_id)
+                return bool(
+                    row is not None and rows is not None
+                    and (photo.cache_eligible is True
+                         or (photo.cache_eligible is None
+                             and not scope_allows_admin_media(self._scope)))
+                    and rows.get(photo.image_id) == row
+                    and row == (photo.thumbnail_etag, photo.thumbnail_verified_at)
+                    and row[1] is not None
+                    and 0 <= now - row[1] < PHOTO_CACHE_FRESH_SECONDS
+                )
+            identity = witness.private_identity
+            proof = self._private_preload_proofs.get(witness.gallery_id)
+            row = proof[2].get(photo.image_id) if proof is not None else None
+            return bool(
+                witness.kind == 'private' and identity is not None
+                and photo.nsfw is False and photo.cache_eligible is False
+                and photo.preload_eligible is True
+                and self._admin_preload_supported
+                and scope_allows_admin_media(self._scope)
+                and self._private_preload_generation == witness.generation
+                and proof is not None and proof[0] == identity[0]
+                and self._bound_user_id == identity[0] and row is not None
+                and row[:3] == identity[1:]
+                and photo.preload_thumbnail_etag == identity[1]
+                and photo.preload_verified_at is not None
+                and photo.preload_verified_at <= identity[2]
+                and 0 <= now - identity[2] < PHOTO_CACHE_FRESH_SECONDS
+            )
+
+    def thumbnail_publication_current(
+        self, publication: ThumbnailPublication | LegacyThumbnailPublication,
+        cancelled: threading.Event | None = None,
+    ) -> bool:
+        """Recheck a published item's exact proof before later GUI reuse.
+
+        Args:
+            publication (ThumbnailPublication | LegacyThumbnailPublication):
+                Completed immutable batch or transient single item.
+            cancelled (threading.Event | None): Optional viewer cancellation.
+
+        Returns:
+            bool: True only while its captured authorization remains current.
+        """
+        if isinstance(publication, LegacyThumbnailPublication):
+            if (publication.owner is not self or publication.issuer != self._issuer
+                    or publication.ram_eligible is not False):
+                return False
+            if publication.witness is not None and (
+                    publication.witness.owner is not self
+                    or publication.witness.issuer != publication.issuer
+                    or publication.witness.gallery_id != publication.gallery_id
+                    or publication.witness.photo != publication.photo):
+                return False
+            with self._lock:
+                live = (not self._closed and bool(self._token)
+                        and time.monotonic() < self._expires_at
+                        and scope_base(self._scope) in (GALLERIES_SCOPE, UPLOAD_SCOPE)
+                        and (publication.witness is not None
+                             or scope_allows_admin_media(self._scope))
+                        and self._private_preload_generation == publication.generation
+                        and (cancelled is None or not cancelled.is_set()))
+            return bool(live and (publication.witness is None
+                        or self._thumbnail_batch_witness_current(
+                            publication.witness, cancelled,
+                        )))
+        return (isinstance(publication, ThumbnailPublication)
+                and publication.photo == publication.witness.photo
+                and self._thumbnail_batch_witness_current(publication.witness, cancelled))
+
+    def _invalidate_thumbnail_batch_witness(
+        self, witness: ThumbnailBatchWitness,
+    ) -> None:
+        """Invalidate only the exact captured row after a validator refusal.
+
+        Args:
+            witness (ThumbnailBatchWitness): Earlier independently captured row.
+
+        Returns:
+            None: A newer replacement row remains untouched.
+        """
+        with self._lock:
+            if witness.owner is not self:
+                return
+            if witness.kind == 'public':
+                rows = self._public_media_descriptors.get(witness.gallery_id)
+                if rows is not None and rows.get(witness.photo.image_id) == witness.public_row:
+                    rows.pop(witness.photo.image_id, None)
+                    self._public_unverified_confirmations.pop(
+                        (witness.gallery_id, witness.photo.image_id), None,
+                    )
+            else:
+                proof = self._private_preload_proofs.get(witness.gallery_id)
+                row = proof[2].get(witness.photo.image_id) if proof else None
+                if (proof is not None and witness.private_identity is not None
+                        and proof[0] == witness.private_identity[0]
+                        and row is not None and row[:3] == witness.private_identity[1:]
+                        and self._private_preload_generation == witness.generation):
+                    proof[2].pop(witness.photo.image_id, None)
+                    self._private_preload_generation += 1
+                    self._private_preload_proof_epoch += 1
+
+    def finish_thumbnail_batch_item(
+        self, witness: ThumbnailBatchWitness, item: ValidatedItem,
+        cancelled: threading.Event | None = None, *,
+        timings: MediaReadTimings | None = None,
+        check_active: Callable[[], None] | None = None,
+    ) -> ThumbnailPublication:
+        """Apply current authority and cache policy to one verified wire item.
+
+        Args:
+            witness (ThumbnailBatchWitness): Proof captured before batch admission.
+            item (ValidatedItem): Production parser's complete validated item.
+            cancelled (threading.Event | None): Optional viewer cancellation.
+            timings (MediaReadTimings | None): Optional cache-write observations.
+            check_active (Callable[[], None] | None): Optional worker deadline
+                and cancellation checker, called around cache publication.
+
+        Returns:
+            ThumbnailPublication: Independently authorized result and RAM policy.
+
+        Raises:
+            LinkingError: Identity, digest, validator or current proof changed.
+        """
+        if check_active is not None:
+            check_active()
+        if (not isinstance(witness, ThumbnailBatchWitness)
+                or not isinstance(item, ValidatedItem)
+                or item.image_id != str(witness.photo.image_id)
+                or item.status not in ('ok', 'unavailable', 'oversize')
+                or not self._thumbnail_batch_witness_current(witness, cancelled)):
+            raise LinkingError('Gallery thumbnail proof is unavailable.')
+        expected = (witness.public_row[0] if witness.public_row is not None
+                    else witness.private_identity[1]
+                    if witness.private_identity is not None else None)
+        if item.status == 'ok':
+            if (not item.data or len(item.data) > PRODUCTION_MAX_IMAGE_BYTES
+                    or item.mime not in ('image/jpeg', 'image/webp')
+                    or item.sha256 != hashlib.sha256(item.data).hexdigest()
+                    or (item.etag is not None
+                        and item.etag != '"' + item.sha256 + '"')):
+                raise LinkingError('Gallery thumbnail response is invalid.')
+            if expected is not None and item.etag != expected:
+                self._invalidate_thumbnail_batch_witness(witness)
+                raise LinkingError('Gallery thumbnail descriptor requires refresh.')
+        elif (item.data or item.sha256 is not None or item.etag is not None
+              or item.mime != 'application/octet-stream'):
+            raise LinkingError('Gallery thumbnail response is invalid.')
+        ram_eligible = item.status == 'ok' and expected is not None
+        if ram_eligible:
+            if not self._thumbnail_batch_witness_current(witness, cancelled):
+                raise LinkingError('Gallery thumbnail proof is unavailable.')
+            started = time.perf_counter()
+            cache: GalleryMediaCache | None = None
+            cache_observed: dict[str, int] | None = None
+            try:
+                cache = GalleryMediaCache.for_current_user(
+                    NATIVE_MEDIA_MAX_BYTES, thumbnails=True,
+                )
+                if timings is not None:
+                    cache_observed = cache.operation_counts()
+                if witness.private_identity is not None:
+                    key = cache.private_key(
+                        witness.issuer, witness.private_identity[0],
+                        witness.gallery_id, witness.photo.image_id, True,
+                    )
+                    gallery_key = (cache.gallery_key(witness.issuer, witness.gallery_id)
+                                   if self._private_preload_intent_user_id(
+                                       witness.gallery_id,
+                                   ) is not None else None)
+                else:
+                    key = cache.key(witness.issuer, witness.gallery_id,
+                                    witness.photo.image_id, True)
+                    gallery_key = cache.gallery_key(witness.issuer, witness.gallery_id)
+                if not self._thumbnail_batch_witness_current(witness, cancelled):
+                    raise LinkingError('Gallery thumbnail proof is unavailable.')
+                if check_active is not None:
+                    check_active()
+                stored = cache.write(key, item.data, item.mime, expected,
+                                     gallery_key=gallery_key)
+                if timings is not None:
+                    timings.cache_stored = stored
+                    timings.stored_bytes = len(item.data) if stored else 0
+            except LinkingError:
+                raise
+            except (OSError, RuntimeError, ValueError):
+                pass
+            finally:
+                if timings is not None:
+                    timings.disk_write_ms += (time.perf_counter() - started) * 1000.0
+                    if cache is not None and cache_observed is not None:
+                        timings.observe_cache(cache, cache_observed)
+        if check_active is not None:
+            check_active()
+        if not self._thumbnail_batch_witness_current(witness, cancelled):
+            raise LinkingError('Gallery thumbnail proof is unavailable.')
+        if timings is not None:
+            timings.source = 'network'
+        return ThumbnailPublication(
+            witness, witness.photo, item.status,
+            item.data if item.status == 'ok' else None,
+            item.mime if item.status == 'ok' else None, item.etag, ram_eligible,
+        )
+
+    def supports_thumbnail_batch(self) -> bool:
+        """Check whether this live session negotiated the optional batch route.
+
+        Returns:
+            bool: True only while discovery and this session permit batch reads.
+        """
+        with self._lock:
+            return bool(not self._closed and self._token
+                        and self._thumbnail_batch_supported
+                        and (self._renew is not None
+                             or time.monotonic() < self._expires_at))
+
+    def thumbnail_batch_preferred(self, gallery_id: int, photo: LinkedPhoto) -> bool:
+        """Select batching only for current provable thumbnail representations.
+
+        Args:
+            gallery_id (int): Physical gallery owning the direct photo.
+            photo (LinkedPhoto): Current catalogue descriptor.
+
+        Returns:
+            bool: False for public unverified originals that retain the existing
+                single-read confirmation/cache path; True for batch candidates.
+
+        Raises:
+            LinkingError: A batch-eligible descriptor has no current proof.
+        """
+        if (self.can_read_admin_media() and (
+                photo.nsfw is True or (photo.cache_eligible is False
+                                       and photo.preload_eligible is False))):
+            return True
+        witness = self.prepare_thumbnail_batch_item(gallery_id, photo)
+        return witness.kind != 'public' or witness.public_row[0] is not None
+
+    def thumbnail_batch_disabled_reason(self) -> Literal[
+        'available', 'capability_missing', 'unsupported', 'wire_fault',
+    ]:
+        """Return a fixed optional-route availability reason for this session.
+
+        Returns:
+            Literal['available', 'capability_missing', 'unsupported', 'wire_fault']:
+                Negotiated capability or the exact safe disabled category.
+        """
+        with self._lock:
+            if self._thumbnail_batch_disabled_reason == 'unsupported':
+                return 'unsupported'
+            if self._thumbnail_batch_disabled_reason == 'wire_fault':
+                return 'wire_fault'
+            return ('available' if self._thumbnail_batch_supported
+                    else 'capability_missing')
+
+    def _thumbnail_batch_attempt(
+        self, gallery_id: int, witnesses: tuple[ThumbnailBatchWitness, ...],
+        publish: Callable[[ThumbnailPublication | LegacyThumbnailPublication,
+                           MediaReadTimings, Callable[[], None]], None],
+        cancel: threading.Event, deadline: float, timings: MediaReadTimings,
+        stats: ThumbnailBatchStats, operation_started: float,
+        frame_count: list[int], exceptional: list[ThumbnailBatchWitness],
+        item_metrics: dict[int, MediaReadTimings],
+    ) -> None:
+        """Run one homogeneous group on the existing serialized worker.
+
+        Args:
+            gallery_id (int): Exact physical gallery.
+            witnesses (tuple[ThumbnailBatchWitness, ...]): Same-policy ordered rows.
+            publish (Callable[[ThumbnailPublication | LegacyThumbnailPublication, MediaReadTimings, Callable[[], None]], None]):
+                Worker-safe recipient and active-operation checker.
+            cancel (threading.Event): Registered caller cancellation.
+            deadline (float): Absolute whole-operation monotonic deadline.
+            timings (MediaReadTimings): Physical request and gate observations.
+            stats (ThumbnailBatchStats): Caller-owned bounded counters.
+            operation_started (float): Monotonic start for first-frame timing.
+            frame_count (list[int]): Mutable one-element received-frame count.
+            exceptional (list[ThumbnailBatchWitness]): Nonbinary rows needing GET.
+            item_metrics (dict[int, MediaReadTimings]): Candidate ID to the
+                existing per-item cache lookup and publication observations.
+
+        Returns:
+            None: Validated ordinary frames are delivered during the request.
+
+        Raises:
+            LinkingError: Admission, authorization or transport was refused.
+        """
+        with self._lock:
+            self._pending_gallery_cancels.add(cancel)
+        admitted = False
+        started = time.perf_counter()
+        try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise LinkingError('Thumbnail batch deadline expired.')
+            admitted = self._request_gate.acquire(
+                timeout=min(remaining, LINKING_SESSION_ADMISSION_TIMEOUT_SECONDS),
+                cancelled=cancel,
+            )
+            timings.gate_wait_ms += (time.perf_counter() - started) * 1000.0
+            if not admitted:
+                raise LinkingError('Linking session is busy or cancelled.')
+            renewal_started = time.perf_counter()
+            try:
+                self._renew_if_expired(cancel)
+            finally:
+                timings.renewal_ms += (time.perf_counter() - renewal_started) * 1000.0
+            if any(not self._thumbnail_batch_witness_current(row, cancel)
+                   for row in witnesses):
+                raise LinkingThumbnailProofChanged(
+                    'Gallery thumbnail proof is unavailable.',
+                )
+            with self._lock:
+                if (self._closed or self._busy or not self._token or cancel.is_set()
+                        or time.monotonic() >= self._expires_at
+                        or not self._thumbnail_batch_supported):
+                    raise LinkingError('Gallery media permission is unavailable.')
+                self._busy = True
+                self._active_route = 'app_linking_thumbnail_batch'
+                token = self._token
+            route_started = time.monotonic()
+            prior_requests = timings.http_requests
+            prior_ttfb = timings.ttfb_ms
+            status: int | None = None
+            reason = 'unknown'
+            try:
+                def request(control: _LinkingTransportControl) -> dict[str, JsonValue]:
+                    """Stream one group on its admitted transport worker.
+
+                    Args:
+                        control (_LinkingTransportControl): Deadline and socket owner.
+
+                    Returns:
+                        dict[str, JsonValue]: Nonempty transport completion sentinel.
+                    """
+                    def receive(item: ValidatedItem) -> None:
+                        """Validate one complete frame before delivering its result.
+
+                        Args:
+                            item (ValidatedItem): Ordered parser-validated frame.
+
+                        Returns:
+                            None: Publishes or defers the exact indexed candidate.
+                        """
+                        control.remaining()
+                        frame_count[0] += 1
+                        stats.wire_items += 1
+                        if item.status != 'ok':
+                            stats.wire_failures += 1
+                            if item.status == 'unavailable':
+                                stats.wire_unavailable += 1
+                            elif item.status == 'oversize':
+                                stats.wire_oversize += 1
+                        if stats.first_frame_ms is None:
+                            stats.first_frame_ms = (time.monotonic() - operation_started) * 1000.0
+                        witness = witnesses[item.request_index]
+                        item_timings = item_metrics[witness.photo.image_id]
+                        try:
+                            result = self.finish_thumbnail_batch_item(
+                                witness, item, cancel, timings=item_timings,
+                                check_active=lambda: control.remaining() and None,
+                            )
+                        except LinkingError:
+                            control.remaining()
+                            raise LinkingThumbnailProofChanged(
+                                'Gallery thumbnail proof is unavailable.',
+                            ) from None
+                        if item.status != 'ok':
+                            exceptional.append(witness)
+                            return
+                        publish_started = time.perf_counter()
+                        try:
+                            _observe_thumbnail_mime(item_timings, result.mime)
+                            publish(result, item_timings,
+                                    lambda: control.remaining() and None)
+                            stats.returned += 1
+                            stats.delivered += 1
+                        finally:
+                            stats.publish_ms += (time.perf_counter() - publish_started) * 1000.0
+
+                    _native_thumbnail_batch_read_once(
+                        self._issuer, token,
+                        tuple(str(row.photo.image_id) for row in witnesses),
+                        gallery_id, control, receive,
+                        admin_preload=witnesses[0].kind == 'private', timings=timings,
+                    )
+                    return {'completed': True}
+
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise LinkingError('Thumbnail batch deadline expired.')
+                _run_linking_transport(
+                    request, cancel, min(remaining, LINKING_REQUEST_DEADLINE_SECONDS),
+                    LINKING_SOCKET_TIMEOUT_SECONDS, phase='media',
+                    route='app_linking_thumbnail_batch', timings=timings,
+                )
+                status, reason = 200, 'ok'
+            except LinkingResponseError as error:
+                status, reason = error.status, error.reason
+                raise
+            except LinkingThumbnailProofChanged:
+                reason = 'proof_changed'
+                raise
+            except LinkingMediaUnavailable:
+                status, reason = 404, 'target_unavailable'
+                raise
+            except LinkingGrantRejected:
+                reason = 'grant_rejected'
+                with self._lock:
+                    self._expires_at = time.monotonic()
+                    self._private_preload_generation += 1
+                    self._private_preload_proofs.clear()
+                self._media_connection_pool.discard()
+                raise
+            finally:
+                attempts = timings.http_requests - prior_requests
+                if attempts:
+                    stats.batch_sizes[len(witnesses)] = (
+                        stats.batch_sizes.get(len(witnesses), 0) + attempts
+                    )
+                if status == 200:
+                    self._server_timing_window.observe(
+                        'thumbnail_batch', timings.server_timing,
+                        timings.ttfb_ms - prior_ttfb, attempts,
+                    )
+                self._observe_route_performance(
+                    'thumbnail_batch', status, reason,
+                    (time.monotonic() - route_started) * 1000.0, attempts,
+                )
+                with self._lock:
+                    self._busy = False
+                    self._active_route = ''
+                    if not self._closed:
+                        self._cancelled.clear()
+        finally:
+            if admitted:
+                self._request_gate.release()
+            with self._lock:
+                self._pending_gallery_cancels.discard(cancel)
+
+    def media_thumbnails(
+        self, gallery_id: int, photos: tuple[LinkedPhoto, ...],
+        publish: Callable[[ThumbnailPublication | LegacyThumbnailPublication,
+                           MediaReadTimings, Callable[[], None]], None],
+        cancelled: threading.Event | None = None, *,
+        timings: MediaReadTimings | None = None,
+        stats: ThumbnailBatchStats | None = None,
+    ) -> None:
+        """Read a bounded current photo group with one serialized transport.
+
+        Args:
+            gallery_id (int): Exact physical gallery containing all candidates.
+            photos (tuple[LinkedPhoto, ...]): Ordered unique current descriptors.
+            publish (Callable[[ThumbnailPublication | LegacyThumbnailPublication, MediaReadTimings, Callable[[], None]], None]):
+                Worker-safe result receiver with an active-operation checker.
+            cancelled (threading.Event | None): Optional viewer cancellation.
+            timings (MediaReadTimings | None): Optional aggregate physical metrics.
+            stats (ThumbnailBatchStats | None): Optional fresh per-call counters;
+                do not reuse an instance across operations.
+
+        Returns:
+            None: Authorized hits and complete network results were delivered.
+
+        Raises:
+            LinkingError: A target, proof, deadline or transport was refused.
+        """
+        if (not _native_media_id(gallery_id) or type(photos) is not tuple
+                or not 1 <= len(photos) <= PRODUCTION_MAX_ITEMS
+                or any(not isinstance(photo, LinkedPhoto)
+                       or not _native_media_id(photo.image_id) for photo in photos)
+                or len({photo.image_id for photo in photos}) != len(photos)):
+            raise LinkingError('Invalid thumbnail batch request.')
+        cancel = cancelled if cancelled is not None else threading.Event()
+        operation_cancel = threading.Event()
+        physical = timings if timings is not None else MediaReadTimings()
+        counters = stats if stats is not None else ThumbnailBatchStats()
+        counters.requested = len(photos)
+        started = time.monotonic()
+        deadline = started + THUMBNAIL_BATCH_OPERATION_SECONDS
+
+        def check_active() -> None:
+            """Refuse a cancelled, expired or closed group operation.
+
+            Returns:
+                None: The current session and whole-operation deadline remain live.
+            """
+            if (cancel.is_set() or operation_cancel.is_set()
+                    or time.monotonic() >= deadline or not self.available()):
+                raise LinkingError('Thumbnail batch operation is unavailable.')
+
+        def deliver(
+            result: ThumbnailPublication | LegacyThumbnailPublication,
+            item_timings: MediaReadTimings,
+        ) -> None:
+            """Deliver one result after the caller-owned operation fence.
+
+            Args:
+                result (ThumbnailPublication | LegacyThumbnailPublication):
+                    Independently authorized or transient result.
+                item_timings (MediaReadTimings): Per-item disk and cache metrics.
+
+            Returns:
+                None: One callback completes within the operation deadline.
+            """
+            check_active()
+            if not self.thumbnail_publication_current(result, cancel):
+                raise LinkingError('Gallery thumbnail proof is unavailable.')
+            began = time.perf_counter()
+            try:
+                publish(result, item_timings, check_active)
+                counters.delivered += 1
+                if result.body is not None:
+                    counters.returned += 1
+            finally:
+                counters.publish_ms += (time.perf_counter() - began) * 1000.0
+
+        def wait_cooldown(*, wait_for_retry: bool = False) -> None:
+            """Honor a prior server hint without owning either transport gate.
+
+            Args:
+                wait_for_retry (bool): Wait interruptibly for this operation's
+                    one authorized automatic retry; other calls defer.
+
+            Returns:
+                None: The cooldown elapsed within this operation's deadline.
+
+            Raises:
+                LinkingError: The operation was cancelled or must be deferred.
+            """
+            while True:
+                check_active()
+                with self._lock:
+                    until = self._thumbnail_batch_cooldown_until
+                delay = until - time.monotonic()
+                if delay <= 0:
+                    return
+                if not wait_for_retry or delay >= deadline - time.monotonic():
+                    raise LinkingThumbnailBatchDeferred(
+                        min(UPLOAD_RETRY_AFTER_MAX_SECONDS, max(1, math.ceil(delay))),
+                    )
+                if cancel.wait(min(delay, LINKING_CANCELLATION_POLL_SECONDS)):
+                    raise LinkingError('Thumbnail batch operation was cancelled.')
+
+        def legacy(
+            photo: LinkedPhoto, witness: ThumbnailBatchWitness | None,
+            item_timings: MediaReadTimings,
+        ) -> None:
+            """Read one original media route without granting cache permission.
+
+            Args:
+                photo (LinkedPhoto): Exact captured current descriptor.
+                witness (ThumbnailBatchWitness | None): Optional established proof.
+                item_timings (MediaReadTimings): Existing item lookup observations.
+
+            Returns:
+                None: One authorized GET body is delivered transiently.
+            """
+            check_active()
+            wait_cooldown()
+            if witness is not None and not self._thumbnail_batch_witness_current(witness, cancel):
+                raise LinkingError('Gallery thumbnail proof is unavailable.')
+            generation_out: list[int] = []
+            try:
+                body, mime, etag, _cacheable = self._media_read(
+                    gallery_id, 'thumbnail', photo.image_id, cancel,
+                    admin_preload=bool(witness is not None and witness.kind == 'private'),
+                    timings=physical, proof_generation_out=generation_out,
+                    operation_deadline=deadline,
+                )
+            except LinkingMediaThrottled as error:
+                if error.retry_after_seconds is not None:
+                    with self._lock:
+                        self._thumbnail_batch_cooldown_until = max(
+                            self._thumbnail_batch_cooldown_until,
+                            time.monotonic() + error.retry_after_seconds,
+                        )
+                raise
+            except LinkingMediaUnavailable:
+                check_active()
+                if len(generation_out) != 1:
+                    raise LinkingError('Gallery thumbnail proof is unavailable.')
+                result = LegacyThumbnailPublication(
+                    self, self._issuer, gallery_id, photo, 'unavailable',
+                    None, None, None, witness, generation_out[0],
+                )
+                deliver(result, item_timings)
+                return
+            check_active()
+            if body is None:
+                raise LinkingError('Gallery thumbnail response is unavailable.')
+            if len(generation_out) != 1:
+                raise LinkingError('Gallery thumbnail proof is unavailable.')
+            if witness is not None:
+                expected = (witness.public_row[0] if witness.public_row is not None
+                            else witness.private_identity[1]
+                            if witness.private_identity is not None else None)
+                if expected is not None and etag != expected:
+                    self._invalidate_thumbnail_batch_witness(witness)
+                    raise LinkingError('Gallery thumbnail descriptor requires refresh.')
+            result = LegacyThumbnailPublication(
+                self, self._issuer, gallery_id, photo, 'ok', body, mime, etag,
+                witness, generation_out[0],
+            )
+            item_timings.source = 'network'
+            _observe_thumbnail_mime(item_timings, mime)
+            deliver(result, item_timings)
+
+        with self._lock:
+            self._pending_gallery_cancels.add(operation_cancel)
+        try:
+            candidates: list[tuple[LinkedPhoto, ThumbnailBatchWitness | None]] = []
+            item_metrics: dict[int, MediaReadTimings] = {}
+            for photo in photos:
+                check_active()
+                if (self.can_read_admin_media()
+                        and (photo.nsfw is True or (
+                            photo.cache_eligible is False
+                            and photo.preload_eligible is False))):
+                    candidates.append((photo, None))
+                    item_metrics[photo.image_id] = MediaReadTimings()
+                    continue
+                try:
+                    witness = self.prepare_thumbnail_batch_item(gallery_id, photo, cancel)
+                except LinkingError:
+                    check_active()
+                    raise LinkingThumbnailProofChanged(
+                        'Gallery thumbnail proof is unavailable.',
+                    ) from None
+                item_timings = MediaReadTimings()
+                item_metrics[photo.image_id] = item_timings
+                cached = self.cached_media_photo(
+                    gallery_id, photo, cancelled=cancel, timings=item_timings,
+                )
+                if cached is None:
+                    candidates.append((photo, witness))
+                    continue
+                check_active()
+                body, mime = cached
+                expected = (witness.public_row[0] if witness.public_row is not None
+                            else witness.private_identity[1]
+                            if witness.private_identity is not None else None)
+                result = ThumbnailPublication(
+                    witness, photo, 'ok', body, mime, expected, expected is not None,
+                )
+                _observe_thumbnail_mime(item_timings, mime)
+                deliver(result, item_timings)
+                counters.cache_hits += 1
+            while candidates:
+                check_active()
+                wait_cooldown()
+                photo, first_witness = candidates[0]
+                if first_witness is None:
+                    candidates.pop(0)
+                    counters.fallback_restricted += 1
+                    legacy(photo, None, item_metrics[photo.image_id])
+                    continue
+                kind = first_witness.kind
+                group_list: list[ThumbnailBatchWitness] = []
+                while (candidates and candidates[0][1] is not None
+                       and candidates[0][1].kind == kind):
+                    candidate = candidates.pop(0)[1]
+                    if candidate is not None:
+                        group_list.append(candidate)
+                group = tuple(group_list)
+                if not self.supports_thumbnail_batch():
+                    for witness in group:
+                        with self._lock:
+                            reason = self._thumbnail_batch_disabled_reason
+                        if reason == 'wire_fault':
+                            counters.fallback_wire_disabled += 1
+                        elif reason == 'unsupported':
+                            counters.fallback_unsupported += 1
+                        else:
+                            counters.fallback_capability_missing += 1
+                        legacy(witness.photo, witness,
+                               item_metrics[witness.photo.image_id])
+                    continue
+                frames = [0]
+                exceptional: list[ThumbnailBatchWitness] = []
+                for attempt in range(THUMBNAIL_BATCH_MAX_ATTEMPTS):
+                    try:
+                        check_active()
+                        self._thumbnail_batch_attempt(
+                            gallery_id, group, publish, cancel, deadline, physical,
+                            counters, started, frames, exceptional, item_metrics,
+                        )
+                        break
+                    except LinkingThumbnailBatchUnsupported:
+                        with self._lock:
+                            self._thumbnail_batch_supported = False
+                            self._thumbnail_batch_disabled_reason = 'unsupported'
+                        for witness in group:
+                            counters.fallback_unsupported += 1
+                            legacy(witness.photo, witness,
+                                   item_metrics[witness.photo.image_id])
+                        break
+                    except LinkingMediaThrottled as error:
+                        if error.retry_after_seconds is not None:
+                            with self._lock:
+                                self._thumbnail_batch_cooldown_until = max(
+                                    self._thumbnail_batch_cooldown_until,
+                                    time.monotonic() + error.retry_after_seconds,
+                                )
+                        raise
+                    except LinkingResponseError as error:
+                        if error.status == 200:
+                            with self._lock:
+                                self._thumbnail_batch_supported = False
+                                self._thumbnail_batch_disabled_reason = 'wire_fault'
+                            raise
+                        transient = (error.status in (502, 503) or (
+                            error.status is None and error.reason in (
+                                'timeout', 'connect_failure', 'dns_failure',
+                                'transport_failure',
+                            )))
+                        if transient:
+                            with self._lock:
+                                self._thumbnail_batch_cooldown_until = max(
+                                    self._thumbnail_batch_cooldown_until,
+                                    time.monotonic() + THUMBNAIL_BATCH_RETRY_SECONDS,
+                                )
+                        if (not transient or frames[0] or attempt or cancel.is_set()
+                                or operation_cancel.is_set()):
+                            raise
+                        if deadline - time.monotonic() <= THUMBNAIL_BATCH_RETRY_SECONDS:
+                            raise
+                        wait_cooldown(wait_for_retry=True)
+                for witness in exceptional:
+                    counters.fallback_exceptional += 1
+                    legacy(witness.photo, witness,
+                           item_metrics[witness.photo.image_id])
+        except Exception:
+            counters.operation_failures += 1
+            raise
+        finally:
+            counters.failed = counters.requested - counters.returned
+            with self._lock:
+                self._pending_gallery_cancels.discard(operation_cancel)
 
     def cached_media_photo(
         self, gallery_id: int, photo: LinkedPhoto, *, thumbnail: bool = True,

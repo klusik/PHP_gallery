@@ -1687,6 +1687,11 @@ return [
     'admin.features.gallery_music.description' =>
         'Upload and play gallery and Smart Gallery music. Disabling '
             . 'preserves existing files, playlists and slideshow settings.',
+    'admin.features.thumbnail_batch.label' => 'Native thumbnail batching',
+    'admin.features.thumbnail_batch.description' =>
+        'Allow linked native gallery clients to request bounded thumbnail '
+            . 'batches. Disabling preserves existing media and uses the '
+            . 'compatible single-thumbnail route.',
     'admin.upload.media_files_label' => 'Choose or drop files',
     'admin.upload.media_files_help' =>
         'Select or drop supported files. Enabled gallery media types are '
@@ -1723,6 +1728,15 @@ return [
     'admin.settings.item.feature_gallery_music.example' =>
         'ON permits this media type; OFF preserves files and can be '
             . 'reversed.',
+    'admin.settings.item.feature_thumbnail_batch' =>
+        'Native thumbnail batching',
+    'admin.settings.item.feature_thumbnail_batch.hint' =>
+        'Allow linked native gallery clients to request bounded thumbnail '
+            . 'batches. A saved choice takes precedence over the legacy '
+            . 'environment fallback.',
+    'admin.settings.item.feature_thumbnail_batch.example' =>
+        'ON enables negotiated batches; OFF preserves media and uses '
+            . 'single-thumbnail reads.',
     'admin.storage.progress_counts' => '{processed} / {total} record(s)',
     'admin.storage.tab_files_hint' => 'Photos, derivatives, PDF and music originals',
     'media_summary.files' => 'Files',

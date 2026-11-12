@@ -30,6 +30,12 @@ already present in its plan. Native typeahead reuses the public query parser
 and matches literal gallery metadata inside its existing authorized SQL model.
 Hosted preparation regenerates the plan and manifest; the runtime checks that
 the prepared plan covers every registered route before processing requests.
+This includes optional routes whose capability is disabled. Preparation in a
+temporary CI checkout does not update the developer's checkout: the complete
+canonical plan, production inventory and integrity manifest must be persisted
+on the feature branch and reproduced by final-SHA hosted preparation. When a
+local smoke check is requested, it follows that persistence; a visible error
+reference is correlated with the PHP emergency log before claiming recovery.
 
 The optional `galleries:tree-v1` capability extends the existing
 `app_linking_galleries` GET route with exclusive `tree=1` and an optional
@@ -126,6 +132,26 @@ per IP and 3,600 globally per five minutes. Photos displays a limit on HTTP
 existing configured rendition and can fall back to the existing public display file within those
 limits. Presentation reads expose up to 32 visible MP3/WAV tracks for local
 WinMM or macOS playback. Both paths reuse the current schema.
+
+The optional exact capability `media:thumbnail-batch-v1` uses the
+Admin > Features `thumbnail_batch` preference and defaults ON for fresh
+installations and upgrades without a saved choice. The canonical persisted
+key is `feature_flag.thumbnail_batch.enabled`; saved `0`/`1` values take
+precedence over the legacy `PHP_GALLERY_THUMBNAIL_BATCH_V1` fallback, which
+applies only while the setting is absent. Its fixed-page bearer POST
+reuses the existing media authority and adds no grant. It accepts up to 32
+photos, with an 8 MiB whole response and 4 MiB per-image ceiling; every response
+is `private, no-store`. A SHA-256 digest verifies emitted bytes but grants no
+cache authority. The existing Admin preload opt-in remains independent. The
+route charges N requested photos to the existing 600/IP and 3,600/global
+five-minute budgets and adds 600/account per five minutes. The server buffers
+at most one 4 MiB image while hashing exact bytes and completing final authority
+checks; it does not buffer the whole bundle. When negotiated, WinApp begins
+with groups of eight and can use sixteen after a healthy group, returning to
+eight after slow, large or exceptional groups. The four-item GUI queue remains
+independent; unverified originals keep their single-read confirmation path.
+Host FPM, proxy and HTTPS acceptance remains unknown; the configured default
+is not evidence of target-host acceptance.
 
 Upload inventory and originals have independent authenticated rate budgets,
 described in [the uploader queue contract](docs/UPLOADER_QUEUE.md). A separate

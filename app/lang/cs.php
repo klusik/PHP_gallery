@@ -1682,6 +1682,11 @@ return [
     'admin.features.gallery_music.description' =>
         'Nahrávání a přehrávání hudby galerií a Smart galerií. Vypnutí '
             . 'zachová soubory, playlisty a nastavení slideshow.',
+    'admin.features.thumbnail_batch.label' => 'Dávkové náhledy nativní aplikace',
+    'admin.features.thumbnail_batch.description' =>
+        'Umožní propojeným nativním aplikacím galerie načítat omezené dávky '
+            . 'náhledů. Vypnutí zachová média a použije kompatibilní trasu '
+            . 'pro jednotlivé náhledy.',
     'admin.upload.media_files_label' => 'Vybrat nebo přetáhnout soubory',
     'admin.upload.media_files_help' =>
         'Vyberte nebo přetáhněte podporované soubory. Dialog nabízí '
@@ -1718,6 +1723,15 @@ return [
     'admin.settings.item.feature_gallery_music.example' =>
         'Zapnutí povolí tento typ médií; vypnutí zachová soubory a je '
             . 'vratné.',
+    'admin.settings.item.feature_thumbnail_batch' =>
+        'Dávkové náhledy nativní aplikace',
+    'admin.settings.item.feature_thumbnail_batch.hint' =>
+        'Umožní propojeným nativním aplikacím galerie načítat omezené dávky '
+            . 'náhledů. Uložená volba má přednost před starší proměnnou '
+            . 'prostředí.',
+    'admin.settings.item.feature_thumbnail_batch.example' =>
+        'Zapnuto povolí dohodnuté dávky; vypnuto zachová média a použije '
+            . 'jednotlivé náhledy.',
     'admin.storage.progress_counts' => '{processed} / {total} záznamů',
     'admin.storage.tab_files_hint' => 'Fotografie, odvozené soubory, originály PDF a hudby',
     'media_summary.files' => 'Soubory',

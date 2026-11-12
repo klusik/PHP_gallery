@@ -581,6 +581,11 @@ $registry = [
 ];
 
 $registry['php_fast_tests'] = $phpRegistry['quick_tests'];
+$registry['thumbnail_batch_tests'] = $phpRegistry['thumbnail_batch_tests'];
+// Reuse the exact quick profile and append only the isolated feature owner.
+$registry['profiles']['thumbnail-batch'] = array_merge(
+    $registry['profiles']['quick'], ['thumbnail-batch'],
+);
 $registry['hosted_full_php_shard_count'] =
     $phpRegistry['hosted_full_php_shard_count'];
 $registry['performance_probes'] = require

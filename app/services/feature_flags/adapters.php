@@ -42,7 +42,7 @@ namespace Gallery\Services;
  * Function names are stored as strings instead of eager callables so registry
  * construction remains safe before later service modules have been required.
  *
- * @return array<string,array<string,mixed>> Adapter definitions keyed by stable adapter ID.
+ * @return array<string,array{setting_key:string,default_enabled:bool}> Adapter definitions keyed by stable adapter ID.
  */
 function feature_capability_domain_adapters(): array
 {
@@ -61,6 +61,10 @@ function feature_capability_domain_adapters(): array
         ],
         'automatic_updates' => [
             'setting_key' => 'application_autoupdate_enabled',
+            'default_enabled' => true,
+        ],
+        'thumbnail_batch' => [
+            'setting_key' => 'feature_flag.thumbnail_batch.enabled',
             'default_enabled' => true,
         ],
     ];
@@ -147,6 +151,26 @@ function feature_capability_domain_adapter_read(
             . '\\application_autoupdate_enabled')
                 ? application_autoupdate_enabled()
                 : $default,
+        'thumbnail_batch' => (static function () use ($default): bool {
+            // Legacy operator configuration is only a bootstrap fallback;
+            // saved Admin choices stay authoritative across future upgrades.
+            $stored = app_setting(
+                'feature_flag.thumbnail_batch.enabled',
+                null,
+            );
+            if ($stored !== null) {
+                return $stored === '1';
+            }
+
+            $legacy = getenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
+            if ($legacy === '1') {
+                return true;
+            }
+            if ($legacy === '0') {
+                return false;
+            }
+            return $legacy === false ? $default : false;
+        })(),
         default => $default,
     };
 }
@@ -204,6 +228,14 @@ function feature_capability_domain_adapter_write(
             return false;
         }
         set_application_autoupdate_enabled($enabled);
+        return true;
+    }
+
+    if ($adapterId === 'thumbnail_batch') {
+        set_app_setting(
+            'feature_flag.thumbnail_batch.enabled',
+            $enabled ? '1' : '0',
+        );
         return true;
     }
 

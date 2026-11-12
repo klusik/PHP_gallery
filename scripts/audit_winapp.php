@@ -18,6 +18,16 @@ declare(strict_types=1);
 namespace PhpGallery\Audit;
 
 /**
+ * Define the fixed full-suite partition count owned by the central audit.
+ * @var int
+ * Units: child processes. Scope: the optional partitioned WinApp full suite.
+ * Consumers: audit_validate_winapp_report() and audit.php's coordinator call.
+ * Rationale: five serial class groups isolate measured slow owners while
+ * retaining the exact complete canonical test inventory.
+ */
+const AUDIT_WINAPP_PARTITION_COUNT = 5;
+
+/**
  * Validate a complete version-one WinApp unittest evidence document.
  *
  * The report records unittest callbacks; aggregate counts alone never establish
@@ -26,11 +36,16 @@ namespace PhpGallery\Audit;
  * The default requires complete discovery; only an explicit diagnostic caller
  * may require the narrower native-viewer pattern instead.
  *
- * @param array<string,mixed> $report Untrusted decoded JSON object; schema v1 requires exactly `schema_version:int`, `successful:bool`, `runtime:{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:{start_directory:'winapp/tests',pattern:'test_*.py'|'test_native_gallery_viewer.py',runner:'unittest.TextTestRunner',verbosity:1}}`, `counts:{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int}`, `tests:list<{id:string,status:'PASS'|'FAIL'|'ERROR'|'SKIP'|'EXPECTED_FAILURE'|'UNEXPECTED_SUCCESS',duration_seconds:int|float,reason:?string,subtests:list<{id:string,status:'FAIL'|'ERROR'|'SKIP',reason:string}>}>`, `fixture_errors:list<{phase:'setUpClass'|'tearDownClass'|'setUpModule'|'tearDownModule',id:string,reason:string}>`, and `fixture_skips` with the same fixture-entry shape.
- * @return array{valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>} Validated results, or empty counts and details when validation fails.
+ * @param array<string,mixed> $report Untrusted schema-1 object with exactly `schema_version:int`, `successful:bool`, `runtime:{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:{start_directory:'winapp/tests',pattern:'test_*.py'|'test_native_gallery_viewer.py',runner:'unittest.TextTestRunner',verbosity:1}}`, `counts:{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int}`, `tests:list<{id:string,status:'PASS'|'FAIL'|'ERROR'|'SKIP'|'EXPECTED_FAILURE'|'UNEXPECTED_SUCCESS',duration_seconds:int|float,reason:?string,subtests:list<{id:string,status:'FAIL'|'ERROR'|'SKIP',reason:string}>}>`, `fixture_errors:list<{phase:'setUpClass'|'tearDownClass'|'setUpModule'|'tearDownModule',id:string,reason:string}>` and same-shaped `fixture_skips`; partitioned mode additionally requires exactly five ordered process records and proof identity lists.
+ * @return array{valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes?:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof?:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>} Validated schema-v1 evidence with calculated counts and coverage.
  * @param bool $nativeOnly Require the explicit native-viewer diagnostic pattern instead of complete discovery; default false never accepts a diagnostic as full evidence.
+ * @param bool $partitioned Require the complete five-partition full-discovery proof; default false retains the original schema contract.
  */
-function audit_validate_winapp_report(array $report, bool $nativeOnly = false): array
+function audit_validate_winapp_report(
+    array $report,
+    bool $nativeOnly = false,
+    bool $partitioned = false,
+): array
 {
     $emptyCounts = [
         'total' => 0,
@@ -46,19 +61,30 @@ function audit_validate_winapp_report(array $report, bool $nativeOnly = false): 
         'fixture_errors' => 0,
         'fixture_skips' => 0,
     ];
-    $invalid = static fn(string $reason): array => [
-        'valid' => false,
-        'reason' => $reason,
-        'successful' => is_bool($report['successful'] ?? null)
-            ? $report['successful']
-            : null,
-        'runtime' => null,
-        'counts' => $emptyCounts,
-        'tests' => [],
-        'fixture_errors' => [],
-        'fixture_skips' => [],
-        'gaps' => [],
-    ];
+    $invalid = static function (string $reason) use (
+        $report,
+        $emptyCounts,
+        $partitioned,
+    ): array {
+        $result = [
+            'valid' => false,
+            'reason' => $reason,
+            'successful' => is_bool($report['successful'] ?? null)
+                ? $report['successful']
+                : null,
+            'runtime' => null,
+            'counts' => $emptyCounts,
+            'tests' => [],
+            'fixture_errors' => [],
+            'fixture_skips' => [],
+            'gaps' => [],
+        ];
+        if ($partitioned) {
+            $result['partition_processes'] = [];
+            $result['partition_proof'] = null;
+        }
+        return $result;
+    };
     $expectedTopKeys = [
         'schema_version',
         'successful',
@@ -68,6 +94,10 @@ function audit_validate_winapp_report(array $report, bool $nativeOnly = false): 
         'fixture_errors',
         'fixture_skips',
     ];
+    if ($partitioned) {
+        $expectedTopKeys[] = 'partition_processes';
+        $expectedTopKeys[] = 'partition_proof';
+    }
     $actualTopKeys = array_keys($report);
     sort($expectedTopKeys, SORT_STRING);
     sort($actualTopKeys, SORT_STRING);
@@ -76,6 +106,155 @@ function audit_validate_winapp_report(array $report, bool $nativeOnly = false): 
         || ($report['schema_version'] ?? null) !== 1
     ) {
         return $invalid('missing-or-unsupported-report-schema');
+    }
+
+    $partitionFailure = false;
+    $partitionProcesses = [];
+    $partitionProof = null;
+    if ($partitioned) {
+        $rawProcesses = $report['partition_processes'];
+        $rawProof = $report['partition_proof'];
+        if (!is_array($rawProcesses) || !array_is_list($rawProcesses)
+            || count($rawProcesses) !== AUDIT_WINAPP_PARTITION_COUNT
+            || !is_array($rawProof)
+            || array_is_list($rawProof)) {
+            return $invalid('invalid-partition-evidence');
+        }
+        $expectedProofKeys = [
+            'partition_count', 'complete', 'exact_union', 'expected_test_ids',
+            'observed_test_ids', 'total_duration_seconds',
+        ];
+        $actualProofKeys = array_keys($rawProof);
+        sort($expectedProofKeys, SORT_STRING);
+        sort($actualProofKeys, SORT_STRING);
+        if ($actualProofKeys !== $expectedProofKeys
+            || $rawProof['partition_count'] !== AUDIT_WINAPP_PARTITION_COUNT
+            || !is_bool($rawProof['complete'])
+            || !is_bool($rawProof['exact_union'])
+            || !is_array($rawProof['expected_test_ids'])
+            || !array_is_list($rawProof['expected_test_ids'])
+            || !is_array($rawProof['observed_test_ids'])
+            || !array_is_list($rawProof['observed_test_ids'])
+            || (!is_int($rawProof['total_duration_seconds'])
+                && !is_float($rawProof['total_duration_seconds']))
+            || !is_finite((float) $rawProof['total_duration_seconds'])
+            || $rawProof['total_duration_seconds'] < 0) {
+            return $invalid('invalid-partition-proof');
+        }
+        $expectedIds = $rawProof['expected_test_ids'];
+        $observedIds = $rawProof['observed_test_ids'];
+        if (!array_is_list($expectedIds) || !array_is_list($observedIds)
+            || count(array_filter($expectedIds, 'is_string')) !== count($expectedIds)
+            || count(array_filter($observedIds, 'is_string')) !== count($observedIds)) {
+            return $invalid('invalid-partition-test-identities');
+        }
+        $exactUnion = count($expectedIds) > 0
+            && count($expectedIds) === count(array_unique($expectedIds))
+            && count($observedIds) === count(array_unique($observedIds))
+            && count($expectedIds) === count($observedIds)
+            && array_diff($expectedIds, $observedIds) === []
+            && array_diff($observedIds, $expectedIds) === [];
+        $partitionComplete = $exactUnion;
+        $partitionExpectedIds = [];
+        $partitionObservedIds = [];
+        $classOwners = [];
+        foreach ($rawProcesses as $index => $processRecord) {
+            $processKeys = [
+                'partition', 'test_count', 'exit_code', 'timed_out',
+                'duration_seconds', 'report_present', 'report_valid',
+                'report_successful',
+                'coverage_complete', 'expected_test_ids', 'observed_test_ids',
+            ];
+            if (!is_array($processRecord) || array_is_list($processRecord)) {
+                return $invalid('invalid-partition-process');
+            }
+            $actualProcessKeys = array_keys($processRecord);
+            sort($processKeys, SORT_STRING);
+            sort($actualProcessKeys, SORT_STRING);
+            if ($actualProcessKeys !== $processKeys
+                || $processRecord['partition'] !== $index + 1
+                || !is_int($processRecord['test_count'])
+                || $processRecord['test_count'] < 1
+                || (!is_int($processRecord['exit_code'])
+                    && $processRecord['exit_code'] !== null)
+                || !is_bool($processRecord['timed_out'])
+                || (!is_int($processRecord['duration_seconds'])
+                    && !is_float($processRecord['duration_seconds']))
+                || !is_finite((float) $processRecord['duration_seconds'])
+                || $processRecord['duration_seconds'] < 0
+                || !is_bool($processRecord['report_present'])
+                || !is_bool($processRecord['report_valid'])
+                || ($processRecord['report_valid']
+                    && !$processRecord['report_present'])
+                || (!$processRecord['report_valid']
+                    && $processRecord['report_successful'] !== null)
+                || ($processRecord['report_valid']
+                    && !is_bool($processRecord['report_successful']))
+                || (!is_bool($processRecord['report_successful'])
+                    && $processRecord['report_successful'] !== null)
+                || !is_bool($processRecord['coverage_complete'])
+                || !is_array($processRecord['expected_test_ids'])
+                || !array_is_list($processRecord['expected_test_ids'])
+                || !is_array($processRecord['observed_test_ids'])
+                || !array_is_list($processRecord['observed_test_ids'])
+                || count(array_filter(
+                    $processRecord['expected_test_ids'],
+                    'is_string',
+                )) !== count($processRecord['expected_test_ids'])
+                || count(array_filter(
+                    $processRecord['observed_test_ids'],
+                    'is_string',
+                )) !== count($processRecord['observed_test_ids'])
+                || $processRecord['test_count']
+                    !== count($processRecord['expected_test_ids'])) {
+                return $invalid('invalid-partition-process');
+            }
+            $shardComplete = $processRecord['expected_test_ids']
+                === $processRecord['observed_test_ids'];
+            if ($processRecord['coverage_complete'] !== $shardComplete) {
+                return $invalid('partition-shard-proof-mismatch');
+            }
+            foreach ($processRecord['expected_test_ids'] as $testId) {
+                $separator = strrpos($testId, '.');
+                if ($separator === false) {
+                    return $invalid('invalid-partition-test-identities');
+                }
+                $classId = substr($testId, 0, $separator);
+                if (isset($classOwners[$classId])
+                    && $classOwners[$classId] !== $index + 1) {
+                    return $invalid('partition-split-test-class');
+                }
+                $classOwners[$classId] = $index + 1;
+            }
+            array_push($partitionExpectedIds, ...$processRecord['expected_test_ids']);
+            array_push($partitionObservedIds, ...$processRecord['observed_test_ids']);
+            $partitionComplete = $partitionComplete
+                && $processRecord['coverage_complete'];
+            $partitionFailure = $partitionFailure
+                || $processRecord['exit_code'] !== 0
+                || $processRecord['timed_out']
+                || !$processRecord['report_present']
+                || !$processRecord['report_valid']
+                || $processRecord['report_successful'] !== true
+                || !$processRecord['coverage_complete'];
+            $partitionProcesses[] = $processRecord;
+        }
+        $sortedExpectedIds = $expectedIds;
+        $sortedPartitionExpectedIds = $partitionExpectedIds;
+        $sortedObservedIds = $observedIds;
+        $sortedPartitionObservedIds = $partitionObservedIds;
+        sort($sortedExpectedIds, SORT_STRING);
+        sort($sortedPartitionExpectedIds, SORT_STRING);
+        sort($sortedObservedIds, SORT_STRING);
+        sort($sortedPartitionObservedIds, SORT_STRING);
+        if ($sortedExpectedIds !== $sortedPartitionExpectedIds
+            || $sortedObservedIds !== $sortedPartitionObservedIds
+            || $rawProof['exact_union'] !== $exactUnion
+            || $rawProof['complete'] !== $partitionComplete) {
+            return $invalid('partition-proof-does-not-match-identities');
+        }
+        $partitionFailure = $partitionFailure || !$partitionComplete;
+        $partitionProof = $rawProof;
     }
     if (!is_bool($report['successful'])) {
         return $invalid('invalid-successful-flag');
@@ -167,11 +346,8 @@ function audit_validate_winapp_report(array $report, bool $nativeOnly = false): 
     if (!is_array($rawFixtureSkips) || !array_is_list($rawFixtureSkips)) {
         return $invalid('invalid-fixture-skips');
     }
-    if (
-        $rawTests === []
-        && $rawFixtureErrors === []
-        && $rawFixtureSkips === []
-    ) {
+    if (!$partitioned && $rawTests === [] && $rawFixtureErrors === []
+        && $rawFixtureSkips === []) {
         return $invalid('missing-or-empty-test-results');
     }
 
@@ -368,6 +544,26 @@ function audit_validate_winapp_report(array $report, bool $nativeOnly = false): 
         ];
     }
 
+    if ($partitioned) {
+        $reportedTestIds = array_column($tests, 'id');
+        $observedTestIds = $partitionProof['observed_test_ids'];
+        $reportedProcessTests = array_sum(array_column(
+            $partitionProcesses,
+            'test_count',
+        ));
+        $sortedReportedIds = $reportedTestIds;
+        $sortedObservedIds = $observedTestIds;
+        sort($sortedReportedIds, SORT_STRING);
+        sort($sortedObservedIds, SORT_STRING);
+        if ($sortedReportedIds !== $sortedObservedIds
+            || $reportedProcessTests !== count($partitionProof['expected_test_ids'])) {
+            return $invalid('partition-report-identities-disagree');
+        }
+        if ($partitionFailure) {
+            $gaps[] = 'Partition child exit, report or complete identity proof failed.';
+        }
+    }
+
     $fixtureErrors = [];
     $fixtureSkips = [];
     $seenFixtureIds = [];
@@ -473,11 +669,11 @@ function audit_validate_winapp_report(array $report, bool $nativeOnly = false): 
         || $computed['subtest_failures'] > 0
         || $computed['subtest_errors'] > 0
         || $computed['fixture_errors'] > 0;
-    if ($report['successful'] === $hasFailure) {
+    if ($report['successful'] === ($hasFailure || $partitionFailure)) {
         return $invalid('successful-flag-disagrees-with-outcomes');
     }
 
-    return [
+    $validated = [
         'valid' => true,
         'reason' => null,
         'successful' => $report['successful'],
@@ -494,6 +690,11 @@ function audit_validate_winapp_report(array $report, bool $nativeOnly = false): 
         'fixture_skips' => $fixtureSkips,
         'gaps' => $gaps,
     ];
+    if ($partitioned) {
+        $validated['partition_processes'] = $partitionProcesses;
+        $validated['partition_proof'] = $partitionProof;
+    }
+    return $validated;
 }
 
 /**
@@ -505,19 +706,21 @@ function audit_validate_winapp_report(array $report, bool $nativeOnly = false): 
  *
  * @param string|null $contents Exact saved adapter report bytes, or null when the output file is missing or unreadable.
  * @param array{exit_code:?int,timed_out:bool,duration_seconds:int|float} $process Bounded process result returned by the central audit runner.
- * @return array{status:string,valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},problems:list<string>} Normalized status and validated evidence.
+ * @return array{status:string,valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes?:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof?:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},problems:list<string>} Normalized status and validated evidence.
  * @param bool $nativeOnly Validate only explicitly requested native-viewer diagnostic evidence; default false retains complete-suite qualification.
+ * @param bool $partitioned Validate five child processes and complete/disjoint full-discovery identities.
  */
 function audit_evaluate_winapp_report(
     ?string $contents,
     array $process,
     bool $nativeOnly = false,
+    bool $partitioned = false,
 ): array
 {
-    $empty = audit_validate_winapp_report([], $nativeOnly);
+    $empty = audit_validate_winapp_report([], $nativeOnly, $partitioned);
     $decoded = $contents === null ? null : json_decode($contents, true);
     $validation = is_array($decoded)
-        ? audit_validate_winapp_report($decoded, $nativeOnly)
+        ? audit_validate_winapp_report($decoded, $nativeOnly, $partitioned)
         : $empty;
     if (!$validation['valid']) {
         $validation['reason'] = $contents === null
@@ -568,15 +771,26 @@ function audit_evaluate_winapp_report(
         $problems[] = 'WinApp unittest reported unsuccessful outcomes.';
     }
 
-    $processFailed = $timedOut || $exitCode !== 0 || !$validDuration;
+    $partitionChildFailed = false;
+    foreach ($validation['partition_processes'] ?? [] as $partitionProcess) {
+        $partitionChildFailed = $partitionChildFailed
+            || ($partitionProcess['exit_code'] ?? null) !== 0
+            || ($partitionProcess['timed_out'] ?? true)
+            || !($partitionProcess['report_present'] ?? false)
+            || !($partitionProcess['report_valid'] ?? false)
+            || ($partitionProcess['report_successful'] ?? null) !== true
+            || !($partitionProcess['coverage_complete'] ?? false);
+    }
+    $processFailed = $timedOut || $exitCode !== 0 || !$validDuration
+        || $partitionChildFailed;
     $status = $processFailed
         ? STATUS_FAIL
         : (
             !$validation['valid']
-                ? STATUS_BLOCKED
+                ? ($partitioned ? STATUS_FAIL : STATUS_BLOCKED)
                 : (!$validation['successful'] ? STATUS_FAIL : STATUS_PASS)
         );
-    return [
+    $result = [
         'status' => $status,
         'valid' => $validation['valid'],
         'reason' => $validation['reason'],
@@ -590,4 +804,9 @@ function audit_evaluate_winapp_report(
         'process' => $normalizedProcess,
         'problems' => $problems,
     ];
+    if ($partitioned) {
+        $result['partition_processes'] = $validation['partition_processes'];
+        $result['partition_proof'] = $validation['partition_proof'];
+    }
+    return $result;
 }

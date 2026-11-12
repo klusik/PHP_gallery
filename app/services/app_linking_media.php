@@ -665,6 +665,77 @@ function app_linking_media_catalogue_thumbnail_etag(array $image, array $gallery
 }
 
 /**
+ * Check direct photo membership and current visibility without opening files.
+ *
+ * @param array{id:int|string,folder_path:string} $gallery Admitted physical gallery.
+ * @param int $imageId Positive direct photo identifier.
+ * @param bool $adminMedia Whether restricted photos are currently authorized.
+ * @return bool True only for a directly contained, currently visible photo.
+ */
+function app_linking_media_photo_admitted(
+    array $gallery,
+    int $imageId,
+    bool $adminMedia,
+): bool {
+    $image = image_model_find_by_id($imageId);
+    return $image !== null && (int) $image['gallery_id'] === (int) $gallery['id']
+        && ($adminMedia || app_linking_media_photo_is_public($image))
+        && !str_contains((string) $image['relative_path'], '/');
+}
+
+/**
+ * Apply the existing independent public and Admin preload validator policy.
+ *
+ * @param array{visibility?:string,nsfw_enabled?:int|string|null} $image Current indexed photo.
+ * @param int $galleryId Current physical gallery identifier.
+ * @param bool $adminMedia Whether restricted media is currently authorized.
+ * @param bool $publicGallery Whether the gallery independently allows public export.
+ * @param bool $adminPreload Whether the request explicitly opted into Admin preload.
+ * @return bool True when this photo can receive the existing strong validator.
+ */
+function app_linking_media_validator_allowed(
+    array $image,
+    int $galleryId,
+    bool $adminMedia,
+    bool $publicGallery,
+    bool $adminPreload,
+): bool {
+    $publicPhoto = $publicGallery && app_linking_media_photo_is_public($image);
+    $preloadPhoto = $adminMedia && $adminPreload
+        && gallery_admin_media_preload_gallery_allowed($galleryId)
+        && in_array($image['nsfw_enabled'] ?? null, [0, '0'], true);
+    return !$adminMedia || $publicPhoto || $preloadPhoto;
+}
+
+/**
+ * Recheck current direct membership, visibility and validator eligibility.
+ *
+ * @param array{id:int|string,folder_path:string} $gallery Currently admitted gallery.
+ * @param int $imageId Positive direct photo identifier.
+ * @param bool $adminMedia Whether restricted media is currently authorized.
+ * @param bool $adminPreload Whether this request opted into Admin preload.
+ * @return bool|null Current validator eligibility, or null if the photo is not admitted.
+ */
+function app_linking_media_current_validator_allowed(
+    array $gallery,
+    int $imageId,
+    bool $adminMedia,
+    bool $adminPreload,
+): ?bool {
+    $image = image_model_find_by_id($imageId);
+    if ($image === null || (int) $image['gallery_id'] !== (int) $gallery['id']
+        || (!$adminMedia && !app_linking_media_photo_is_public($image))
+        || str_contains((string) $image['relative_path'], '/')) {
+        return null;
+    }
+    $publicGallery = $adminMedia
+        && gallery_public_export_policy((int) $gallery['id'])['allowed'];
+    return app_linking_media_validator_allowed(
+        $image, (int) $gallery['id'], $adminMedia, $publicGallery, $adminPreload,
+    );
+}
+
+/**
  * Open an authorized existing display rendition or thumbnail without writes.
  *
  * A detail whose display source exceeds the transfer cap may use an existing
@@ -676,8 +747,11 @@ function app_linking_media_catalogue_thumbnail_etag(array $image, array $gallery
  * @param bool $adminMedia Whether restricted photos are authorized on this request.
  * @param bool $publicGallery Whether the Admin gallery independently passed public export.
  * @param bool $adminPreload Whether this binary read explicitly opted into Admin preload.
- * @return array{stream:resource,size:int,mime:string,etag:?string}|null
- *     Open verified file and safe wire metadata, or null if unavailable.
+ * @param int $maxBytes Maximum selected file bytes before any hash.
+ * @param bool $reportOversized Whether to return a distinct oversized signal.
+ * @param bool $deferValidator Whether the caller will hash admitted bytes itself.
+ * @return array{stream:resource,size:int,mime:string,etag:?string,validator_allowed?:bool}|array{oversized:true}|null
+ *     Verified stream, optional oversized signal, or null when unavailable.
  * @throws RuntimeException If the existing path owner cannot verify containment.
  */
 function app_linking_media_open_photo(
@@ -687,6 +761,9 @@ function app_linking_media_open_photo(
     bool $adminMedia = false,
     bool $publicGallery = false,
     bool $adminPreload = false,
+    int $maxBytes = APP_LINKING_MEDIA_MAX_BYTES,
+    bool $reportOversized = false,
+    bool $deferValidator = false,
 ): ?array {
     $image = image_model_find_by_id($imageId);
     if ($image === null || (int) $image['gallery_id'] !== (int) $gallery['id']
@@ -701,22 +778,24 @@ function app_linking_media_open_photo(
         // and format limits. This read never creates a derivative.
         $display = image_public_display_file($image, $gallery, false);
     }
-    $publicPhoto = $publicGallery && app_linking_media_photo_is_public($image);
-    $preloadPhoto = $adminMedia && $adminPreload
-        && gallery_admin_media_preload_gallery_allowed((int) $gallery['id'])
-        && in_array($image['nsfw_enabled'] ?? null, [0, '0'], true);
-    $withValidator = !$adminMedia || $publicPhoto || $preloadPhoto;
+    $withValidator = app_linking_media_validator_allowed(
+        $image, (int) $gallery['id'], $adminMedia, $publicGallery, $adminPreload,
+    );
     $opened = $display === null ? null : app_linking_media_open_verified_photo_file(
-        $display['path'], $display['mime'], APP_LINKING_MEDIA_MAX_BYTES, $withValidator,
+        $display['path'], $display['mime'], $maxBytes, $withValidator && !$deferValidator,
     );
     if (!$thumbnail && isset($opened['oversized'])) {
         // Keep the existing bounded fallback for oversized display sources.
         $display = image_public_display_derivative_fallback_file($image, $gallery);
         $opened = $display === null ? null : app_linking_media_open_verified_photo_file(
-            $display['path'], $display['mime'], APP_LINKING_MEDIA_MAX_BYTES, $withValidator,
+            $display['path'], $display['mime'], $maxBytes, $withValidator && !$deferValidator,
         );
     }
-    return isset($opened['stream']) ? $opened : null;
+    if (isset($opened['stream']) && $deferValidator) {
+        $opened['validator_allowed'] = $withValidator;
+    }
+    return isset($opened['stream']) || ($reportOversized && isset($opened['oversized']))
+        ? $opened : null;
 }
 
 /**

@@ -87,6 +87,7 @@ function cms_route_handlers(): array
         'app_linking_identity' => '\\Gallery\\Controllers\\cms_app_linking_identity',
         'app_linking_galleries' => '\\Gallery\\Controllers\\cms_app_linking_galleries',
         'app_linking_gallery_detail' => '\\Gallery\\Controllers\\cms_app_linking_gallery_detail',
+        'app_linking_thumbnail_batch' => '\\Gallery\\Controllers\\cms_app_linking_thumbnail_batch',
         'app_linking_media' => '\\Gallery\\Controllers\\cms_app_linking_media',
         'app_linking_gallery_create' => '\\Gallery\\Controllers\\cms_app_linking_gallery_create',
         'app_linking_gallery_create_status' => '\\Gallery\\Controllers\\cms_app_linking_gallery_create_status',

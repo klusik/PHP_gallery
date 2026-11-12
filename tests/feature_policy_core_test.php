@@ -123,6 +123,7 @@ namespace {
     require_once $root . '/app/services/feature_flags.php';
 
     $GLOBALS['feature_policy_core_settings'] = [];
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
     $definitions = feature_capability_definitions();
     $expectedKeys = [
         'cooperative_galleries',
@@ -135,6 +136,7 @@ namespace {
         'smart_galleries',
         'gallery_pdf_documents',
         'gallery_music',
+        'thumbnail_batch',
         'downloads',
         'thumbnail_warmup',
         'multilingual_content',
@@ -171,6 +173,16 @@ namespace {
     feature_policy_core_assert(
         feature_capability_validate_registry() === [],
         'The canonical capability registry must validate without errors.',
+    );
+    feature_policy_core_assert(
+        $definitions['thumbnail_batch']['default_enabled'] === true
+            && $definitions['thumbnail_batch']['fresh_default_enabled'] === true
+            && $definitions['thumbnail_batch']['routes'] === []
+            && $definitions['thumbnail_batch']['source'] === [
+                'type' => 'domain_adapter',
+                'adapter' => 'thumbnail_batch',
+            ],
+        'Thumbnail batching must default ON, use its canonical adapter, and preserve its exact endpoint refusal.',
     );
     foreach (['gallery_pdf_documents', 'gallery_music'] as $capability) {
         feature_policy_core_assert(

@@ -374,6 +374,7 @@ def format_safe_photos_failure(
                 error.phase, error.route, error.status,
                 error.content_kind, error.reason,
                 media_policy_facts=error.media_policy_facts,
+                transport_step=error.transport_step,
             )
         except (AttributeError, TypeError, ValueError):
             try:

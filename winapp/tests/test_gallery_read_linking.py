@@ -17,6 +17,7 @@ import json
 import multiprocessing
 import os
 import queue
+import sys
 import tempfile
 import time
 import unittest
@@ -31,19 +32,20 @@ from uploader import offline_linking as offline
 
 # Purpose: Bound temporary media accepted by each isolated cache regression.
 # Type: int. Units: bytes. Scope: one synthetic photo-cache body.
-# Consumers: ThumbnailCacheIndexTests._write_thumbnail.
+# Consumers: ThumbnailCacheFixture._write_thumbnail and its test classes.
 # Rationale: 1 MiB comfortably admits short synthetic bodies and cache headers.
 TEST_CACHE_BODY_LIMIT_BYTES = 1024 * 1024
 
 # Purpose: Verify indexed admission with a realistic small preload batch.
 # Type: int. Units: entries. Scope: one cache-index operation-count fixture.
-# Consumers: test_indexed_batch_has_constant_directory_work.
+# Consumers: ThumbnailCacheFixture._run_indexed_batch_benchmark().
 # Rationale: 265 media match the observed ordinary preload target under test.
 TEST_CACHE_PRELOAD_WRITE_BATCH = 265
 
 # Purpose: Compare first index discovery at small and multi-thousand pool sizes.
 # Type: tuple[int, int]. Units: synthetic files. Scope: fixture-only pool sizes.
-# Consumers: test_indexed_batch_has_constant_directory_work.
+# Consumers: ThumbnailCacheSmallBenchmarkTests and
+#     ThumbnailCacheLargeBenchmarkTests.
 # Rationale: 100 and 3072 expose whether each write rescans pool growth.
 TEST_CACHE_SEED_COUNTS = (100, 3072)
 
@@ -291,8 +293,8 @@ class GalleryReadLinkingTests(unittest.TestCase):
         self.assertEqual(len(offline._OFFLINE_SCOPES), len(set(offline._OFFLINE_SCOPES)))
 
 
-class ThumbnailCacheIndexTests(unittest.TestCase):
-    """Verify shared indexed accounting without weakening media integrity."""
+class ThumbnailCacheFixture(unittest.TestCase):
+    """Share isolated cache builders and one-cohort benchmark setup only."""
 
     def _cache(self, root: Path) -> media_cache.GalleryMediaCache:
         """Create one isolated ordinary-thumbnail cache owner.
@@ -331,36 +333,25 @@ class ThumbnailCacheIndexTests(unittest.TestCase):
         )
         return key, stored, receipts
 
-    def test_thumbnail_limit_is_shared_and_rejects_invalid_values(self) -> None:
-        """Persist one quota across cache instances and reject unsafe inputs.
+    def _run_indexed_batch_benchmark(
+        self, seed_count: int, measurement_filename: str,
+    ) -> None:
+        """Compare indexed and redundant legacy writes for one seed cohort.
 
+        Args:
+            seed_count (int): Exact synthetic preexisting file count for this
+                independent cohort.
+            measurement_filename (str): Cohort-specific JSON artifact basename.
         Returns:
-            None: New cache owners observe the same setting; bool and values
-                above the documented integer range leave it unchanged.
-        """
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / 'cache'
-            first = self._cache(root)
-            second = self._cache(root)
-            requested = 8 * 1024 * 1024
-            self.assertTrue(first.set_thumbnail_limit_bytes(requested))
-            self.assertEqual(requested, second.thumbnail_storage_snapshot()[2])
-            self.assertFalse(first.set_thumbnail_limit_bytes(True))
-            self.assertFalse(first.set_thumbnail_limit_bytes(
-                media_cache.MEDIA_THUMBNAIL_CACHE_LIMIT_MAX_BYTES + 1,
-            ))
-            self.assertEqual(requested, second.thumbnail_storage_snapshot()[2])
-
-    def test_indexed_batch_has_constant_directory_work(self) -> None:
-        """Keep post-recovery writes independent of ordinary pool size.
-
-        Returns:
-            None: Small and multi-thousand pools incur no per-write directory
-                inventory or in-memory sorting during a 265-write batch.
+            None: One cohort retains its full seed, indexed and legacy batches,
+                accounting assertions, cleanup and independent measurement row.
         """
         benchmark: list[dict[str, int | float]] = []
-        for seed_count in TEST_CACHE_SEED_COUNTS:
+        for seed_count in (seed_count,):
             with self.subTest(seed_count=seed_count):
+                phase_started = time.monotonic()
+                print(f'CACHE_PHASE seed={seed_count} phase=seed_copy start',
+                      file=sys.stderr, flush=True)
                 with tempfile.TemporaryDirectory() as temporary:
                     root = Path(temporary) / 'cache'
                     cache = self._cache(root)
@@ -379,9 +370,18 @@ class ThumbnailCacheIndexTests(unittest.TestCase):
                             continue
                         (root / 'thumbnails' / name).write_bytes(seed_bytes)
                         created += 1
+                    print(f'CACHE_PHASE seed={seed_count} phase=seed_copy '
+                          f'end elapsed={time.monotonic() - phase_started:.3f}s',
+                          file=sys.stderr, flush=True)
+                    phase_started = time.monotonic()
+                    print(f'CACHE_PHASE seed={seed_count} phase=recovery start',
+                          file=sys.stderr, flush=True)
                     recovered = cache.thumbnail_storage_snapshot()
                     self.assertTrue(recovered[3], recovered[4])
                     self.assertEqual(seed_count + 1, recovered[0])
+                    print(f'CACHE_PHASE seed={seed_count} phase=recovery '
+                          f'end elapsed={time.monotonic() - phase_started:.3f}s',
+                          file=sys.stderr, flush=True)
                     before = cache.operation_counts()
                     new_observations = {'path_lstat': 0, 'os_fstat': 0}
                     # Cache safety checks use lstat directly. Path.stat does
@@ -417,6 +417,8 @@ class ThumbnailCacheIndexTests(unittest.TestCase):
                         return original_fstat(descriptor)
 
                     started = time.perf_counter()
+                    print(f'CACHE_PHASE seed={seed_count} phase=indexed_write start',
+                          file=sys.stderr, flush=True)
                     with patch.object(path_class, 'lstat', new=observe_path_lstat), \
                             patch.object(os, 'fstat', new=observe_fstat):
                         for offset in range(TEST_CACHE_PRELOAD_WRITE_BATCH):
@@ -425,6 +427,9 @@ class ThumbnailCacheIndexTests(unittest.TestCase):
                             )
                             self.assertTrue(wrote, key)
                     elapsed_ms = (time.perf_counter() - started) * 1000.0
+                    print(f'CACHE_PHASE seed={seed_count} phase=indexed_write '
+                          f'end elapsed={elapsed_ms / 1000.0:.3f}s',
+                          file=sys.stderr, flush=True)
                     after = cache.operation_counts()
                     delta = {
                         name: after[name] - before[name]
@@ -480,6 +485,8 @@ class ThumbnailCacheIndexTests(unittest.TestCase):
 
                     legacy_before = cache.operation_counts()
                     legacy_started = time.perf_counter()
+                    print(f'CACHE_PHASE seed={seed_count} phase=legacy_scan_write start',
+                          file=sys.stderr, flush=True)
                     legacy_candidate_stats = 0
                     with patch.object(
                         path_class, 'lstat', new=observe_legacy_path_lstat,
@@ -495,6 +502,9 @@ class ThumbnailCacheIndexTests(unittest.TestCase):
                     legacy_elapsed_ms = (
                         time.perf_counter() - legacy_started
                     ) * 1000.0
+                    print(f'CACHE_PHASE seed={seed_count} phase=legacy_scan_write '
+                          f'end elapsed={legacy_elapsed_ms / 1000.0:.3f}s',
+                          file=sys.stderr, flush=True)
                     legacy_after = cache.operation_counts()
                     legacy_delta = {
                         name: legacy_after[name] - legacy_before[name]
@@ -518,16 +528,82 @@ class ThumbnailCacheIndexTests(unittest.TestCase):
                         'legacy_candidate_metadata_stats': legacy_candidate_stats,
                         **delta,
                     })
+                    phase_started = time.monotonic()
+                    print(f'CACHE_PHASE seed={seed_count} phase=cleanup start',
+                          file=sys.stderr, flush=True)
+                print(f'CACHE_PHASE seed={seed_count} phase=cleanup '
+                      f'end elapsed={time.monotonic() - phase_started:.3f}s',
+                      file=sys.stderr, flush=True)
         evidence = Path(__file__).resolve().parents[2] / 'cache' / 'test-audit'
         evidence.mkdir(parents=True, exist_ok=True)
-        (evidence / 'thumbnail-cache-measurement.json').write_text(
+        (evidence / measurement_filename).write_text(
             json.dumps({
                 'data_source': 'isolated synthetic files on runner disk',
                 'comparison': 'same writes plus redundant legacy inventory/sort',
                 'measurements': benchmark,
             }, indent=2) + '\n', encoding='utf-8',
         )
-        print('CACHE_BENCHMARK ' + json.dumps(benchmark, sort_keys=True))
+        print(
+            f'CACHE_BENCHMARK file={measurement_filename} '
+            + json.dumps(benchmark, sort_keys=True),
+            flush=True,
+        )
+
+
+class ThumbnailCacheSmallBenchmarkTests(ThumbnailCacheFixture):
+    """Measure the original 100-entry thumbnail pool cohort independently."""
+
+    def test_indexed_batch_has_constant_directory_work(self) -> None:
+        """Run the complete indexed-versus-legacy small-pool comparison.
+
+        Returns:
+            None: The 265 indexed and 265 legacy writes retain all operation
+                accounting checks and the small-cohort measurement artifact.
+        """
+        self._run_indexed_batch_benchmark(
+            TEST_CACHE_SEED_COUNTS[0],
+            'thumbnail-cache-measurement-small.json',
+        )
+
+
+class ThumbnailCacheLargeBenchmarkTests(ThumbnailCacheFixture):
+    """Measure the original 3,072-entry thumbnail pool cohort independently."""
+
+    def test_indexed_batch_has_constant_directory_work(self) -> None:
+        """Run the complete indexed-versus-legacy large-pool comparison.
+
+        Returns:
+            None: The 265 indexed and 265 legacy writes retain all operation
+                accounting checks and the large-cohort measurement artifact.
+        """
+        self._run_indexed_batch_benchmark(
+            TEST_CACHE_SEED_COUNTS[1],
+            'thumbnail-cache-measurement-large.json',
+        )
+
+
+class ThumbnailCacheIndexTests(ThumbnailCacheFixture):
+    """Verify shared indexed accounting without weakening media integrity."""
+
+    def test_thumbnail_limit_is_shared_and_rejects_invalid_values(self) -> None:
+        """Persist one quota across cache instances and reject unsafe inputs.
+
+        Returns:
+            None: New cache owners observe the same setting; bool and values
+                above the documented integer range leave it unchanged.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'cache'
+            first = self._cache(root)
+            second = self._cache(root)
+            requested = 8 * 1024 * 1024
+            self.assertTrue(first.set_thumbnail_limit_bytes(requested))
+            self.assertEqual(requested, second.thumbnail_storage_snapshot()[2])
+            self.assertFalse(first.set_thumbnail_limit_bytes(True))
+            self.assertFalse(first.set_thumbnail_limit_bytes(
+                media_cache.MEDIA_THUMBNAIL_CACHE_LIMIT_MAX_BYTES + 1,
+            ))
+            self.assertEqual(requested, second.thumbnail_storage_snapshot()[2])
 
     def test_replacement_and_external_removal_reconcile_exact_totals(self) -> None:
         """Update physical byte totals for replacement and outside deletion.

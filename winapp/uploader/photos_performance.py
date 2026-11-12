@@ -19,6 +19,7 @@ import threading
 import time
 
 from .app_linking import MediaReadTimings
+from .thumbnail_batch_protocol import PRODUCTION_MAX_ITEMS, PRODUCTION_MAX_RESPONSE_BYTES
 
 
 # Purpose: Bound the elapsed observation period independently of viewer lifetime.
@@ -39,6 +40,26 @@ THUMBNAIL_PERFORMANCE_SAMPLE_LIMIT = 256
 # Consumers: ThumbnailPerformanceWindow.observe. Rationale: Ten minutes exceeds
 # the normal request deadline while enforcing a fixed numeric upper bound.
 THUMBNAIL_PERFORMANCE_MAX_PHASE_MS = 600_000.0
+
+# Purpose: Bound actual sends retained for one mixed batch/exceptional group.
+# Type: int. Units: HTTP attempts. Scope: one batch physical observation.
+# Consumers: ThumbnailBatchPhysicalWindow.observe. Rationale: Three attempts
+# per maximum item covers two batch attempts and one exceptional single read.
+THUMBNAIL_BATCH_PHYSICAL_MAX_ATTEMPTS = 3 * PRODUCTION_MAX_ITEMS
+
+# Purpose: Bound body accounting for one mixed batch/exceptional group.
+# Type: int. Units: bytes. Scope: one batch physical observation.
+# Consumers: ThumbnailBatchPhysicalWindow.observe. Rationale: Four aggregate
+# wire budgets per maximum item cover retries and bounded original GET bodies.
+THUMBNAIL_BATCH_PHYSICAL_MAX_BYTES = (
+    4 * PRODUCTION_MAX_ITEMS * PRODUCTION_MAX_RESPONSE_BYTES
+)
+
+# Purpose: Avoid presenting a tail percentile from a tiny physical sample.
+# Type: int. Units: single-send observations. Scope: batch physical p95.
+# Consumers: ThumbnailBatchPhysicalWindow.render_summary. Rationale: One
+# hundred observations provide at least several samples in the upper tail.
+THUMBNAIL_BATCH_TAIL_MIN_SAMPLES = 100
 
 # Purpose: Accept only fixed, identity-free read outcomes in exported metrics.
 # Type: frozenset[str]. Units: fixed outcome codes. Scope: thumbnail reads.
@@ -256,3 +277,85 @@ class ThumbnailPerformanceWindow:
             for key, value in data.items()
         ]
         return 'Photos thumbnail performance: ' + ' '.join(parts)
+
+
+class ThumbnailBatchPhysicalWindow:
+    """Retain one bounded physical observation per batch API operation."""
+
+    def __init__(self) -> None:
+        """Initialize a separate numeric-only rolling transport window.
+
+        Returns:
+            None: No per-tile samples or HTTP observations are synthesized.
+        """
+        self._lock = threading.Lock()
+        self._samples: deque[tuple[float, int, int, float, float]] = deque(
+            maxlen=THUMBNAIL_PERFORMANCE_SAMPLE_LIMIT,
+        )
+
+    def observe(self, timings: MediaReadTimings) -> bool:
+        """Record actual complete-call sends and timing once per operation.
+
+        Args:
+            timings (MediaReadTimings): Aggregate completed physical metrics.
+
+        Returns:
+            bool: True only when the fixed numeric bounds admit the sample.
+        """
+        if (not isinstance(timings, MediaReadTimings)
+                or type(timings.http_requests) is not int
+                or not 0 <= timings.http_requests <= THUMBNAIL_BATCH_PHYSICAL_MAX_ATTEMPTS
+                or type(timings.encoded_bytes) is not int
+                or not 0 <= timings.encoded_bytes <= THUMBNAIL_BATCH_PHYSICAL_MAX_BYTES
+                or not _phase_valid(timings.ttfb_ms)
+                or not _phase_valid(timings.network_ms)):
+            return False
+        now = time.monotonic()
+        with self._lock:
+            cutoff = now - THUMBNAIL_PERFORMANCE_WINDOW_SECONDS
+            while self._samples and self._samples[0][0] < cutoff:
+                self._samples.popleft()
+            self._samples.append((
+                now, timings.http_requests, timings.encoded_bytes,
+                float(timings.ttfb_ms), float(timings.network_ms),
+            ))
+        return True
+
+    def render_summary(self) -> str:
+        """Render bounded aggregate sends and single-request timing only.
+
+        Returns:
+            str: Fixed route, numeric counts and nullable single-send p95 values.
+        """
+        now = time.monotonic()
+        with self._lock:
+            cutoff = now - THUMBNAIL_PERFORMANCE_WINDOW_SECONDS
+            while self._samples and self._samples[0][0] < cutoff:
+                self._samples.popleft()
+            samples = tuple(self._samples)
+        singles = [sample for sample in samples if sample[1] == 1]
+        ttfb_values = [sample[3] for sample in singles]
+        network_values = [sample[4] for sample in singles]
+        first_byte = (_percentile(ttfb_values, 95)
+                      if len(singles) >= THUMBNAIL_BATCH_TAIL_MIN_SAMPLES else None)
+        network = (_percentile(network_values, 95)
+                   if len(singles) >= THUMBNAIL_BATCH_TAIL_MIN_SAMPLES else None)
+        median = _percentile(ttfb_values, 50)
+        maximum = max(ttfb_values, default=None)
+        end_utc = datetime.now(timezone.utc)
+        start_utc = end_utc - timedelta(seconds=THUMBNAIL_PERFORMANCE_WINDOW_SECONDS)
+        return (
+            'Photos batch physical: route=thumbnail_batch '
+            f'operations={len(samples)} http_attempts={sum(item[1] for item in samples)} '
+            f'window_seconds={THUMBNAIL_PERFORMANCE_WINDOW_SECONDS} '
+            f'window_start_utc={start_utc.isoformat(timespec="seconds")} '
+            f'window_end_utc={end_utc.isoformat(timespec="seconds")} '
+            f'received_bytes={sum(item[2] for item in samples)} '
+            f'single_http_samples={len(singles)} '
+            f'multiple_http_samples={sum(item[1] > 1 for item in samples)} '
+            f'tail_min_samples={THUMBNAIL_BATCH_TAIL_MIN_SAMPLES} '
+            f'ttfb_median_ms={median if median is not None else "unknown"} '
+            f'ttfb_max_ms={maximum if maximum is not None else "unknown"} '
+            f'ttfb_p95_ms={first_byte if first_byte is not None else "unknown"} '
+            f'network_p95_ms={network if network is not None else "unknown"}'
+        )

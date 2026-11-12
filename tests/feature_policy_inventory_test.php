@@ -140,6 +140,7 @@ namespace Gallery\Core {
         'smart_galleries',
         'gallery_pdf_documents',
         'gallery_music',
+        'thumbnail_batch',
         'downloads',
         'thumbnail_warmup',
         'multilingual_content',

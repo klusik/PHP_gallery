@@ -24,12 +24,37 @@ if str(WINAPP_DIR) not in sys.path:
 from uploader.app_linking import MediaReadTimings
 from uploader.photos_performance import (
     THUMBNAIL_PERFORMANCE_SAMPLE_LIMIT,
+    ThumbnailBatchPhysicalWindow,
     ThumbnailPerformanceWindow,
 )
 
 
 class ThumbnailPerformanceWindowTests(unittest.TestCase):
     """Validate only numerical, bounded, credential-free read observations."""
+
+    def test_batch_physical_window_counts_attempts_without_tile_samples(self) -> None:
+        """Keep multiple-send aggregate timing out of single-send percentiles.
+
+        Returns:
+            None: One physical operation records its two actual sends once.
+        """
+        window = ThumbnailBatchPhysicalWindow()
+        self.assertTrue(window.observe(MediaReadTimings(
+            http_requests=2, encoded_bytes=100, ttfb_ms=15.0, network_ms=25.0,
+        )))
+        summary = window.render_summary()
+        self.assertIn('route=thumbnail_batch', summary)
+        self.assertIn('operations=1', summary)
+        self.assertIn('http_attempts=2', summary)
+        self.assertIn('multiple_http_samples=1', summary)
+        self.assertIn('ttfb_p95_ms=unknown', summary)
+        self.assertTrue(window.observe(MediaReadTimings(
+            http_requests=1, encoded_bytes=100, ttfb_ms=12.0, network_ms=20.0,
+        )))
+        summary = window.render_summary()
+        self.assertIn('single_http_samples=1', summary)
+        self.assertIn('ttfb_median_ms=12.0', summary)
+        self.assertIn('ttfb_p95_ms=unknown', summary)
 
     def test_empty_window_has_explicitly_unknown_percentiles(self) -> None:
         """Do not fabricate timing distributions before a genuine observation.

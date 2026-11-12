@@ -1850,7 +1850,9 @@ odstraní jen úplná úspěšná obnova. Kruhová šipka vedle rozbalení, sbal
 a~přidání obnoví strom včetně přejmenování a~změn rodičů; zachová rozbalení,
 výběr i~prohlížeč fotek. Opakovaná obnova ignoruje zastaralé odpovědi.
 Při přesunu vybrané galerie se její nová větev rozbalí, aby výběr zůstal vidět.
-Krátké dávky rozhraní aktualizují změněné řádky. Tooltip je viditelný pouze
+Krátké dávky rozhraní aktualizují změněné řádky. Číselné pořadí galerií pod
+stejným rodičem zůstává zachované i~při pozdějším doručení řádků. Galerie
+čekající na rodiče se po jeho načtení zařadí pod něj. Tooltip je viditelný pouze
 s~kurzorem nad aktivačním prvkem; samotný fokus klávesnice jej neotevře.
 Správce může v~hosted WinApp workflow zvolit \texttt{native\_only}.
 Centrální sada \texttt{winapp-native} zaznamená užší rozsah nativního
@@ -2159,6 +2161,25 @@ soubory i~volbu uchování, ale neoznačí celou galerii za přednačtenou.
 Opakování po limitu serveru znovu využije ověřená místní data. Média
 s~\texttt{no-store} zůstávají dočasná; uložené soubory neobcházejí přihlášení
 ani platnost propojení. Jedna operace přijme nejvýše 100\,000~přímých fotek.
+
+Volitelné serverové rozhraní \codeword{media:thumbnail-batch-v1} řídí přepínač
+v~\ui{Admin > Features}. Na nových instalacích a~při aktualizaci bez uložené
+volby je~zapnuté; správce je může vypnout a~uložená volba přetrvá aktualizace.
+Dokud volba není uložená, použije se starší
+\codeword{PHP_GALLERY_THUMBNAIL_BATCH_V1}: nezadaná hodnota nebo~1 znamená
+zapnuto, 0 nebo jiná hodnota vypnuto. Uložená volba má vždy přednost. Rozhraní
+využívá stávající oprávnění bearer propojení bez nového souhlasu. Přijímá pouze čtení
+až 32~fotek, celkem 8~MiB a nejvýše 4~MiB na snímek; odpověď má
+\texttt{private, no-store}. SHA-256 ověřuje bajty, ale nepovoluje jejich
+ukládání do cache. Admin preload zůstává oddělený. Server účtuje N požadovaných
+fotek do~stávajícího limitu 600/IP a 3~600 globálně a~do limitu 600/account
+za pět minut. V paměti drží nejvýše jeden 4~MiB snímek. WinApp při podpoře
+začíná skupinami po osmi, po úspěšné skupině používá až šestnáct a při pomalé,
+velké či výjimečné skupině se vrací k~osmi. Neověřené originály si zachovávají
+samostatné potvrzení. FPM, proxy a HTTPS na~cílovém hostiteli zatím nebyly
+ověřeny; výchozí zapnutí jejich přijetí nepotvrzuje.
+Jednotlivé čtení zůstává podporovaným záložním řešením pro smíšené verze a
+výjimečné snímky.
 Výslovné přednačtení s~Admin Photos propojením může na podporovaném serveru
 uložit i~soukromé a~rozpracované fotky. Snímek, galerie i~celá větev předků
 musí být ověřeně bez NSFW omezení. Volba i~soukromá data patří konkrétní
@@ -2425,7 +2446,9 @@ i~API-key záznam. Po úspěšné odpovědi uploadu a~lokálním potvrzení nati
 handle ověří identitu a~bajty původního souboru a~smaže tentýž otevřený zdroj.
 Změněné, přesměrované, hardlinkované či obsazené soubory zůstanou s~varováním.
 Shoda inventáře ani nejistý upload mazání nepovolí. Ostatní platformy, ruční
-importy a~zdrojové ZIPy zdroje zachovávají. Odvolání API klíče
+importy a~zdrojové ZIPy zdroje zachovávají. Přepínač mazání Watcheru platí
+jen pro sledované snímky; nemaže soubory vybrané pro ruční Import. Odvolání
+API klíče
 z~letového workflow je dočasně nedostupné. Ochrana režimu GUI a~obnova po pádu
 se stále dokončují a~nejsou kvalifikované.
 
@@ -9931,6 +9954,24 @@ všech čtyř jazykových zdrojů TeX, nejen uživatelsky viditelných obrazovek
 běžném vývoji se~nemění \filepath{PATCH_NOTES.md} ani sledované soubory PDF
 příruček.
 
+Zdrojový workflow issue~362 nabízí také neprivilegovaný recovery artifact
+s~připravenými výstupy. Oba rychlé PHP joby provedou přípravu a~kontrolu bez
+zápisu; úplné bajty souborů \filepath{app/runtime/modules.php},
+\filepath{app/production-files.json} a~\filepath{app/core-manifest.json}
+nahraje po úspěšné přípravě před testy pouze job PHP~8.5. Název artifactu začíná na
+\codeword{issue-362-prepared-} a~obsahuje přesné SHA zdrojů. Vlastník může tyto
+připravené bajty zkontrolovat a~commitnout. Artifact nepředstavuje FULL
+kvalifikaci ani pravomoc vydavatele; před použitím ověřte SHA a~zkontrolujte
+všechny tři soubory.
+
+Příprava dočasného CI checkoutu sama neaktualizuje lokální checkout. Všechny tři
+kanonické výstupy uložte do feature větve a~před předáním funkčního checkoutu
+ověřte, že~je hostovaná příprava pro konečné SHA znovu vytvoří beze změny.
+Startup kontroluje každou registrovanou routu včetně volitelných rout s~vypnutou
+capability. Je-li výslovně požadován localhost smoke, po uložení výstupů znovu
+načtěte přesný mount a~stránku s~obsahem; případnou chybovou referenci dohledávejte
+v~PHP emergency logu a~po opravě kontrolu v~prohlížeči zopakujte.
+
 \begin{enumerate}
   \item Hostovaný postup Candidate preparation spouští
   \filepath{scripts/prepare_candidate.php} a~kontrolu bez zápisu: postupně
@@ -9997,6 +10038,22 @@ panel široký 320 pixelů, úklid při resetu a~navigaci, zaměření a~opakov�
 klasického i~připraveného nahrávání bez duplicit. Počty URL a~dekodérů nejsou
 měřením paměti celého procesu; skutečná systémová schránka a~kontroly
 Firefoxu/Safari zůstávají ruční.
+
+Podle důkazů o~vypršení limitu v~hostovaném běhu používá Windows feature job
+příkaz \codeword{php scripts/audit.php --suite=winapp-partitioned}. Zařadí
+všechny třídy z~\codeword{test_native_gallery_viewer.py} do~prvního procesu,
+třídy \codeword{ThumbnailCacheSmallBenchmarkTests} a~
+\codeword{ThumbnailCacheLargeBenchmarkTests} do~samostatných procesů
+a~třídu \codeword{GalleryPreloadWorkerTests} do~čtvrtého a~přesný zbytek sady
+do~pátého. Všech pět sériových procesů zachovává stávající limit 90~sekund;
+centrální koordinátor má limit 480~sekund
+pro~tyto procesy a~zpracování inventáře a~reportů. Audit ověřuje všechny
+reporty schématu 1 všech pěti procesů a~úplné disjunktní sjednocení ID testů
+před sloučením skutečných výsledků.
+Chybějící, neúplný, chybný, duplicitní, neúspěšný či překročený proces znamená
+neúspěch. Běžný vlastník úplné sady zachovává dosavadní samostatný proces
+i~limit; dřívější úplné, dvou-, tří- a~čtyřprocesové vypršení limitu zůstávají
+neúspěšnými běhy.
 
 Pro agenty je GitHub Actions výchozí a~autoritativní ověřovací prostředí
 (CI-first). Níže uvedené příkazy popisují hostovaný centrální audit; agent je

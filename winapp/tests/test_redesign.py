@@ -63,6 +63,13 @@ from uploader.state_store import (
 # workers to schedule without letting a failed fixture wait indefinitely.
 TEST_HEARTBEAT_WAIT_SECONDS = 5.0
 
+# Purpose: Admit the fixture's already complete manual source without a delay.
+# Type: float. Units: seconds. Scope: the manual Import retention regression.
+# Consumers: MediaJobLifecycleTests manual FIFO configuration.
+# Rationale: Zero avoids a stability wait for immutable test-authored bytes;
+# the production Watcher stability preference remains unchanged.
+TEST_IMPORT_STABLE_SECONDS = 0.0
+
 # Purpose: Give black-bar trimming a known symmetric fixture boundary.
 # Type: tuple[int, int]; Units: pixels; Scope: source-raster edge policy test.
 # Consumers: PhotoPresentationPolicyTests.test_symmetric_black_edges_are_trimmed.
@@ -3655,6 +3662,71 @@ class MediaJobLifecycleTests(unittest.TestCase):
             self.assertFalse(worker.pause_event.is_set())
             worker.stop()
             self.assertTrue(worker.stop_event.is_set())
+
+    def test_manual_fifo_keeps_source_with_watcher_deletion_enabled(self) -> None:
+        """Keep a confirmed manual source despite the saved Watcher preference.
+
+        Returns:
+            None: The actual Import FIFO consumer confirms the job while
+                retaining source bytes and leaving the shared config unchanged.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'selected.jpg'
+            original_bytes = b'manual import original bytes'
+            source.write_bytes(original_bytes)
+            store = JobStateStore(root / 'jobs.json')
+            events = MAIN.queue.Queue()
+            config = MAIN.WatcherConfig(
+                gallery_url='https://gallery.example.test/upload',
+                api_key='fixture-key',
+                watched_folder=str(root),
+                delete_uploaded_files=True,
+                stable_seconds=TEST_IMPORT_STABLE_SECONDS,
+            )
+            with mock.patch.object(MAIN, 'CONFIG_DIR', root):
+                preflight = MAIN.ImportPreflightThread(
+                    config, 'files', [source], None, None, False, False,
+                    events, store,
+                )
+                preflight.run()
+            preflight_events = list(events.queue)
+            plan_event = next(
+                event for event in preflight_events
+                if event['kind'] == 'preflight_complete'
+            )
+            job = plan_event['payload']['plan'].job
+            self.assertEqual(1, len(job.items))
+            item = job.items[0]
+            self.assertEqual(
+                hashlib.sha256(original_bytes).hexdigest(), item.sha256,
+            )
+            self.assertEqual(len(original_bytes), item.size)
+            worker = MAIN.ManualUploadThread(
+                config, [source], False, 1, 1, events, job, store,
+            )
+            worker.remote_inventory = mock.Mock()
+            worker.remote_inventory.refresh.return_value = True
+            worker.remote_inventory.has_hash.return_value = False
+            with mock.patch.object(MAIN, 'CONFIG_DIR', root), mock.patch.object(
+                MAIN.WatcherThread, 'upload_watched_file',
+                return_value={'ok': True, 'uploaded': 1, 'scanned': 0},
+            ), mock.patch.object(
+                MAIN.WatcherThread, 'sim_camera_metadata_fields', return_value={},
+            ), mock.patch.object(MAIN, 'delete_verified_linked_source') as delete_source:
+                MAIN.ManualUploadThread._run_owned(worker)
+
+            self.assertEqual('confirmed', item.state)
+            self.assertEqual(1, worker.uploaded)
+            self.assertEqual(0, worker.failed)
+            self.assertEqual(original_bytes, source.read_bytes())
+            self.assertTrue(config.delete_uploaded_files)
+            self.assertGreater(job.finished_at, 0.0)
+            delete_source.assert_not_called()
+            saved_job = store.get_job(job.id)
+            self.assertIsNotNone(saved_job)
+            assert saved_job is not None
+            self.assertEqual('confirmed', saved_job.items[0].state)
 
 
 class IsolationAndCallbackTests(unittest.TestCase):

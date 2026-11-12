@@ -327,7 +327,15 @@ class WatchQueueStore:
             version = row.get('schema_version', 1)
             if type(version) is not int or version not in (1, 2):
                 raise ValueError('Capture queue version is malformed.')
-            if (row.get('folder') != str(self.folder)
+            stored_folder = row.get('folder')
+            captured_folder = str(self.folder)
+            # Windows accepts either separator spelling for the same lexical
+            # boundary; do not normalize case, dot components or aliases.
+            if os.name == 'nt' and isinstance(stored_folder, str):
+                stored_folder = stored_folder.replace('/', '\\')
+                captured_folder = captured_folder.replace('/', '\\')
+            if (not isinstance(stored_folder, str)
+                    or stored_folder != captured_folder
                     or row.get('recursive') is not self.recursive
                     or row.get('initial_captured', True) is not True):
                 raise ValueError('Original capture boundary could not be verified.')

@@ -23,6 +23,7 @@ require_once __DIR__ . '/app_linking/upload.php';
 require_once __DIR__ . '/app_linking/detail.php';
 require_once __DIR__ . '/app_linking/create.php';
 require_once __DIR__ . '/app_linking/media.php';
+require_once __DIR__ . '/app_linking/thumbnail_batch.php';
 
 use Throwable;
 use const Gallery\Services\APP_LINKING_RATE_POLICIES;

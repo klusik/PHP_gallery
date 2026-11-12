@@ -51,6 +51,20 @@ const APP_LINKING_VISIBILITY_READY = true;
 const APP_LINKING_MEDIA_READY = true;
 
 /**
+ * Read the canonical thumbnail-batch capability for native linking.
+ *
+ * The feature adapter gives saved administrator state priority and consults
+ * the legacy environment value only when no persistent preference exists.
+ * Endpoint refusal stays owned by the batch controller, not route dispatch.
+ *
+ * @return bool True when the canonical capability is effectively enabled.
+ */
+function app_linking_thumbnail_batch_enabled(): bool
+{
+    return feature_capability_effective_enabled('thumbnail_batch');
+}
+
+/**
  * Add public photo browsing to an explicitly approved link.
  * Type: string. Units: scope suffix. Scope: temporary photo grants.
  * Consumers: app_linking_public_client, app_linking_scope_without_media.

@@ -320,6 +320,9 @@ function app_linking_discovery_capabilities(
             APP_LINKING_WINAPP_CLIENT_ID, APP_LINKING_GALLERIES_SCOPE . APP_LINKING_MEDIA_SUFFIX,
         )) {
         $capabilities[] = 'media:read';
+        if (app_linking_thumbnail_batch_enabled()) {
+            $capabilities[] = 'media:thumbnail-batch-v1';
+        }
         if (app_linking_scope_allowed(
             APP_LINKING_WINAPP_CLIENT_ID,
             APP_LINKING_GALLERIES_SCOPE . APP_LINKING_ADMIN_MEDIA_SUFFIX,

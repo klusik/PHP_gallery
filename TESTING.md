@@ -1081,6 +1081,12 @@ photographs and recorder history. The checkpoint reader exposes fixed safe
 reasons for invalid shape, scope, profile, filesystem identity and expiry.
 The full registered WinApp owner also retains the thumbnail cache regressions;
 BASIC alone executes none of these behavioral fixtures.
+The durable queue fixtures also verify Windows slash-direction compatibility
+for both journal versions, rejection of changed boundaries and bindings, and
+the distinct POSIX backslash behavior on their native platforms.
+The indexed thumbnail comparison flushes fixed seed, recovery, indexed-write,
+legacy scan/write and cleanup phase timings to its child log, so a timeout
+identifies the active phase without exposing paths or reducing fixture work.
 
 The WinApp linking fixture switches two approvals for distinct mounts on one
 host. It checks exact account selection, the existing upload guard, unlinking
@@ -6100,12 +6106,18 @@ the production deferred viewer entry with its canonical initial-loader markup,
 asserts that the visible loading shell has no active photo identity, and then
 opens the first photo after full viewer setup. This covers the race where an
 already-visible loading shell could be mistaken for a committed photo during
-setup-time order reconciliation. Its focused run passed
-the deferred Keyboard Lock resolve/reject ownership cases, scoped acquire and
-release, fullscreen request option, save-and-refresh close behavior, input
-retention on unconfirmed or unsynchronized results, and popup dismissal. Browser
-fixtures cannot establish physical Mac keyboard handling; post-fix physical
-Chrome and Safari Escape behavior remains manual coverage.
+setup-time order reconciliation. The fixture records each native Keyboard Lock
+request by its current fixture phase and waits for each actual browser request
+to fulfill or reject before advancing. The stale resolve case deliberately
+holds only the wrapper continuation after native fulfillment; the controlled
+stale reject case is reported separately. Native Escape acquire/release
+assertions use the current phase's settled request, not a lifetime acquisition
+counter. If the viewer uses application-managed fullscreen, diagnostics
+explicitly mark native Keyboard Lock coverage as not applicable; no synthetic
+acquisition is counted. Failure diagnostics retain fullscreen mode, per-phase
+request state, aggregate attempt/acquire/reject/release counts and the last
+unlock phase. Browser fixtures cannot establish physical Mac keyboard handling;
+post-fix physical Chrome and Safari Escape behavior remains manual coverage.
 
 The existing gallery-tags fixture also authors canonical Smart Gallery
 enter/leave refresh, result-count/page/cache-buster updates, viewer-order
@@ -6277,9 +6289,11 @@ php tests/viewer_feature_wrapper_test.php
 ```
 
 The wrapper test verifies that the canonical `viewer_accounts` Admin feature
-defaults to disabled while all established feature switches retain their
-historical enabled defaults. It proves that historical `config.php` or
-`viewer_accounts_admin_mode=invite_only` state cannot bypass the master switch,
+defaults to disabled while established feature switches retain their historical
+defaults. It checks the exact 38-key registry and the `thumbnail_batch` domain
+adapter, saved setting key, ON defaults and empty route ownership. It proves that
+historical `config.php` or `viewer_accounts_admin_mode=invite_only` state cannot
+bypass the master switch,
 every current `viewer_*` dispatcher route and the historical Admin
 viewer-management route belong to the wrapper, the Admin Viewer accounts
 navigation item is feature-owned, public disabled viewer routes use a generic
@@ -8561,6 +8575,14 @@ index zero, drag/release, tab hide/show and a new workspace backed by the same
 preference. A temporary 210-pixel default must never replace a saved choice.
 Viewer failures log a fixed fetch/apply phase and safe exception class, never
 an exception message, media URL, gallery title, bearer or filesystem path.
+Typed transport timeouts may also report one finite `transport_step` label
+(`slot`, `dns`, `connect`, `tls`, `request`, `headers` or `body`). The value is
+the observed operation at failure, not a remote-cause diagnosis. The focused
+WinApp owners induce JSON, single-media and batch header timeouts plus a
+single-media body timeout, and verify the safe labels and redaction; these
+fake-transport cases do not establish deployed network behavior. No TeX manual
+impact: this adds diagnostic detail and source assertions without changing
+product behavior or operator procedures.
 Transport admission regressions hold the only network slot behind an event,
 then verify successful handoff after release, bounded deadline/cancellation and
 no second transport thread or semaphore leak. A late DNS result still cannot
@@ -8593,6 +8615,228 @@ bounded public display file when all configured thumbnails are absent.
 Request a detail whose source exceeds 16 MiB. Verify that an existing bounded
 display rendition is returned, and that an absent or oversized rendition
 produces the opaque unavailable response without generating files.
+
+The optional thumbnail batch server capability is enabled by default for fresh
+installations and upgrades without a saved administrator choice; Admin >
+Features owns its persistent ON/OFF preference. The legacy environment value
+is consulted only while that preference is absent. Its hosted thumbnail-batch profile composes the unchanged quick profile
+with focused PHP fixtures for bounded request and framing contracts; it does
+not qualify host FPM, proxy buffering, HTTPS termination, worker occupancy or
+production acceptance. Discovery advertises the exact
+`media:thumbnail-batch-v1` token only when the canonical effective preference
+is ON. Core and adapter quick owners cover default-on, legacy-env fallback,
+saved-value precedence, malformed-value fail-closed behavior and fresh
+seeding. The B2 disposable HTTP owner checks the exact capability refusal when
+saved OFF and successful negotiation when saved ON. The shared pure-Python
+PGB1 codec and strict
+production-profile parser live under
+`winapp/uploader/thumbnail_batch_protocol.py` and
+`winapp/tests/test_thumbnail_batch_protocol.py`. The low-level POST helper,
+discovery capability propagation and focused fixtures live in
+`winapp/uploader/app_linking.py`, `winapp/uploader/app_linking_ui.py`,
+`winapp/tests/test_thumbnail_batch_protocol.py`, and
+`winapp/tests/test_thumbnail_batch_transport.py`. The
+`LinkingSession.media_thumbnails` API and viewer integration use negotiated
+batch reads while retaining the original single-thumbnail route when discovery
+does not advertise the capability. The per-item publication owner and
+`test_thumbnail_batch_publication.py` cover public/private proof, cache writes
+and transient results. These client fixtures do not establish target-host
+acceptance.
+
+The issue-362 source workflow runs candidate preparation and its read-only
+check in both PHP quick jobs. After successful preparation and before the
+feature profile starts, only the PHP 8.5 job uploads the complete bytes of `app/runtime/modules.php`,
+`app/production-files.json`, and `app/core-manifest.json` as
+`issue-362-prepared-${{ github.sha }}`. This unprivileged recovery artifact is
+for owner review and commit of those exact prepared outputs. Verify its source
+SHA and inspect all three files; the artifact is not FULL qualification or
+publisher authority.
+
+Before claiming the working checkout runnable, follow the
+[runtime handoff rule](app/AGENTS.md#runnable-checkout-handoff): persist all three
+canonical outputs and verify final-SHA re-preparation. CI-only regeneration
+does not update localhost, even when the new route's capability is disabled.
+
+`tests/app_linking_thumbnail_batch_stream_test.php` runs the real stream and
+verified-file owners with disposable files and fake database/auth/policy
+boundaries. It deletes the independent second file after the first complete
+item boundary and checks ordered `ok`/`unavailable`/`ok` frames, exact readable
+payload digests, the neutral empty missing item, terminal completion and handle
+cleanup. This is a synthetic filesystem regression, not production race or FPM
+acceptance. No TeX manual impact: this internal test changes no product
+procedure, configuration or manual instructions.
+`test_native_thumbnail_batch.py` exercises early streamed display in native Tk.
+It also holds a second decoded frame in the real viewer queue across an
+authoritative photo refresh, checking generation fencing, raster disposal and
+that the fresh page starts only after the prior batch worker exits. No TeX
+manual impact: this internal regression adds no product procedure,
+configuration or manual instruction.
+The separate Windows-only `thumbnail-batch-viewer` audit owns four real Tk
+traversals against disposable loopback HTTP with actual discovery, session,
+parser and cache. It compares cold single/batch and disk-warm, RAM-empty
+returns over 120 direct photos, retaining exact-SHA numeric evidence without
+request identities. This is not PHP/FPM, proxy, HTTPS or monitor-scanout proof.
+Two setup-only connections compare the actual client connector against an
+IPv4-only listener and the first supported localhost resolver family. Their
+DNS, TCP and wall timings are reported separately; they send no HTTP requests.
+Completed transport timings exclude any worker still active at the snapshot.
+The four traversals and their existing watchdog remain unchanged. This internal
+fixture diagnostic has no TeX manual impact or product behavior change.
+The issue-scoped Windows `issue-362-c1-photos-workspace` suite mounts the real
+`PhotosWorkspace` and Treeview with 10,000 flat synthetic rows through Tk's
+scheduled mainloop. Its fake session replaces only remote tree/media reads; the
+production catalogue cache performs a cold save and a Windows DPAPI-backed disk
+load. The fresh tree is held while cached rows mount, then a changed 10,000-row
+tree exercises live reconciliation. It records first-row and complete-display
+times, per-callback p95/max, event-loop heartbeat gaps, and aggregate
+`_ordered_index` count/time/max without machine-specific thresholds. A final
+mid-mount disconnect checks cancellation and stale result-generation fences.
+The report contains numeric diagnostics and fixed scope facts only. This does
+not use PHP or MariaDB, and does not establish installed-machine responsiveness,
+remote latency, or monitor scanout. The native regression fixture also checks
+exact root/sibling order, local-tail appends, interleaved insertion fallback,
+late-parent attachment, cycle reachability and refresh selection/order. The
+post-change run for source SHA
+`8c2418344e2e6bf241eec08b2ed6fc9e4322f3b8`
+([hosted run 43111401537](https://github.com/klusik/PHP_gallery/actions/runs/43111401537))
+measured cold and warm display at 4,222.154 ms and 3,823.707 ms, with zero
+`_ordered_index` calls across the 10,000-row traversal. Cold/warm mount p95 was
+4.432/4.146 ms. First-row timings were 222.955/124.360 ms versus the baseline
+186.106/119.967 ms, so these measurements do not show a first-row improvement.
+Changed-tree reconciliation was 3,160.253 ms versus 3,185.736 ms. They are
+synthetic hosted observations, not installed-machine responsiveness, remote
+latency or monitor scanout.
+The separate batch physical window retains 300 seconds and at most 256
+operations, counts attempts and bytes once, and reports tail timing as unknown
+below 100 single-send samples. Aggregated multi-send TTFB is not a per-request
+sample; dispatch groups remain distinct from four-item GUI delivery slices.
+`test_thumbnail_batch_session.py` tests session-level behavior through the real
+capability state, page proofs, serialized worker, strict parser
+and caller publication callback using only owned fake HTTP responses. It covers
+one-request accounting, warm-cache no-HTTP behavior, proof mismatch, exact
+unsupported fallback, auth refusal, malformed-wire disablement, carried
+throttling, cooldown after exhausted transient retries and callback deadline
+fencing with both transport gates released. It also queues real foreground
+listing/identity and upload session routes while a first thumbnail publication
+is held, checks dispatch order between two successive batch reads at the owned
+HTTP connection, and cancels a batch ticket waiting behind an incumbent gate
+owner without starting HTTP. These are in-process fairness/cancellation checks;
+they do not model server worker scheduling. No TeX manual impact: this internal
+regression adds no user procedure, configuration or manual instruction. Its
+compatibility cases exercise
+the real legacy thumbnail GET through an owned fake HTTP connection for prior
+gallery-list, upload/media and Admin-media grant scopes when batch discovery is
+absent; an unexpected HTML 404 after negotiation remains a fail-closed batch
+error without a single-read fallback. The exact JSON unsupported-capability
+response retains its explicit optional-route fallback behavior. These fakes
+prove client route selection and response handling; the separate archived-source
+HTTP cohort is described below.
+The
+issue-scoped workflows delegate the Linux full WinApp run to
+`php scripts/audit.php --suite=winapp` and the Windows partitioned run to
+`php scripts/audit.php --suite=winapp-partitioned`.
+The issue-scoped `thumbnail-batch-http` audit suite provisions an owned
+localhost PHP CLI server and disposable MariaDB with the A1 synthetic photos.
+It checks discovery, live authorization, framed bytes, shared weighted rates,
+and synthetic 120-photo single/group timings. The existing PHP cohorts retain
+one observation each and have no PASS threshold.
+
+The same B2 owner materializes the `winapp/uploader` source and `winapp/VERSION`
+from immutable commit
+`1c1e2e9145cd92cb2f0ee731da5655c900d4d3e1` inside its temporary fixture and
+runs that archived 1.0.10 `LinkingSession` against the current loopback PHP and
+MariaDB instance. It verifies discovery with the batch capability advertised,
+identity, gallery and media pages, an original-route public thumbnail GET, a
+public refusal for a temporarily private photo, and an Admin read of that
+private photo. An observer delegates to the actual HTTP transport and records
+only route names, methods and statuses; the report requires three thumbnail
+GETs and zero batch POSTs. Expected SHA-256 values come from two actual B2
+single-route reference reads immediately before the visibility change. The
+archived client cache roots point inside the owned
+temporary fixture. This proves source compatibility for
+that immutable client against the current fixture server; it does not test an
+installed 1.0.10 binary, an older server, or a deployment host. No TeX manual
+impact: this is an internal disposable compatibility owner and changes no user
+operation or manual procedure.
+
+The reciprocal B2 owner extracts the required PHP source closure from that
+same pinned commit into the parent fixture, checks the 1.0.10 core manifest,
+and starts it through a separate `GalleryWorkflow\Fixture` database and
+loopback server. Its archived seed uses the archived migrations and scanner.
+The current uploader source then discovers that server without
+`media:thumbnail-batch-v1`, calls `LinkingSession.media_thumbnails` for the
+two seeded photos, and verifies each published MIME and SHA-256 against an
+actual reference GET from the old server. Its delegated HTTP observer requires
+two original thumbnail GETs and zero batch POSTs. The sanitized B2 report
+records the current client SHA and archived server source commit. The paired
+cohorts provide source-compatibility evidence for those revisions when both
+pass; they do not qualify installed binaries, other versions, or a
+target PHP/FPM/proxy/HTTPS deployment. No TeX manual impact: these are internal
+fixture assertions and add no user or developer procedure.
+
+The `tools/perf/issue_362_b3_connected.py` child uses actual discovery, identity,
+current media pages, `media_photo` and `LinkingSession.media_thumbnails` through
+the owned loopback server. Its feature profile passed in exact-SHA run
+[43111401537](https://github.com/klusik/PHP_gallery/actions/runs/43111401537).
+Each cohort binds the first 120 ordered authorized
+descriptors, recording pages and observed rows without claiming the gallery's
+total size. Five isolated cache cohorts compare one cold/warm
+single-read profile with cold/warm group sizes 8, 16, 24 and 32. The child
+compares per-photo SHA-256 and MIME in memory, requires warm phases to use zero
+new HTTP requests, and emits sanitized counts, body bytes, first-frame/ready
+times and per-request numeric samples plus min/median/max. It emits p95/p99 only
+for a 120-request sample; smaller batch samples retain null tails. Strictly
+parsed passive Server-Timing metrics are kept as optional per-response header
+snapshots, or null if unavailable. Those snapshots end before the body stream
+and are not total PHP runtime or worker-occupancy measures. Histograms preserve
+actual request group sizes, including the shorter final group. Cold means the isolated
+client disk cache starts empty; discovery and proof binding are excluded, and
+server filesystem/opcode cache state is not controlled or reset. The PHP owner
+asserts exact photo-budget deltas of 600 IP/global and 480 account charges,
+preserving the existing rate rules. These are client observations, not GUI paint or a PASS
+threshold, and do not establish real-host latency, FPM, HTTPS, proxy, worker
+occupancy or staging acceptance. Credentials travel only in a temporary child
+environment and never enter report files. Failure artifacts retain bounded
+numeric progress plus fixed check codes or allowlisted response diagnosis;
+raw response data and exception text are omitted. Failures suppress private
+fixture data; account loss is covered by deleting the owned account, while no role
+downgrade is claimed. No TeX manual impact: this is an internal disposable
+qualification owner and changes no user-facing operation or manual procedure.
+
+The central `issue-362-c1-tree-http` suite is a separate current-SHA owner for
+the existing tree-v1 route, using an owned copied app, disposable MariaDB and
+localhost HTTP. It records three full/unchanged pairs at 500, 2000 and 10000
+rows, then proves title/parent/add/delete revision changes, visibility-only
+unchanged proof, exact-scope revision binding, and live grant/issuer/account
+refusal. Its connected 403 case retains the client's approved gallery-list
+scope while downgrading only the current server grant, so the refusal crosses
+HTTP instead of stopping at a local scope precheck. The 401 child requires the
+specific terminal grant-rejection type, an expired session and a started
+request; the paired PHP observation records the actual response status. The
+403 child requires a typed response error with the exact status. It checks the
+real 10001-row and four-byte UTF-8 over-4-MiB refusals,
+then reads only the first two 50-row legacy pages. It does not claim a fresh
+complete 201-page traversal. A real WinApp `LinkingSession` child checks current
+discovery, full/unchanged parsing, optional 503 fallback, and that 401/403 do not
+fall back. The child reports only sanitized booleans and counts.
+
+The owner retains cURL TTFB, elapsed time, body bytes and strictly parsed
+allowlisted A2 `Server-Timing` numbers; missing or malformed values remain
+unknown. Those header samples end before the body transfer. SQL time overlaps
+model/tree work and must not be summed or subtracted. Three observations do not
+establish timing tails. A report `rows` value describes the fixture population
+for full/unchanged/overflow requests; overflow rows are not rows returned, and
+legacy page observations use zero because their 50-row count is recorded by the
+client proof. The hosted command is
+`php scripts/audit.php --suite=issue-362-c1-tree-http`; it prepares and checks
+the candidate in a separate Linux job bound to the exact source SHA and
+immutable main merge base. Source SHA
+`8c2418344e2e6bf241eec08b2ed6fc9e4322f3b8` passed the C1 tree HTTP profile in
+[feature run 43111401537](https://github.com/klusik/PHP_gallery/actions/runs/43111401537).
+This diagnostic does not qualify provider FPM, HTTPS, proxy behavior or
+installed PhotosWorkspace 10k mounting. No TeX manual impact: it adds no user
+operation, configuration or manual procedure.
+
 Send `X-PHP-Gallery-Photo-Cache: 1` on a photo or thumbnail read and verify the
 private 60-second response and `Vary` on authorization and the opt-in header.
 Verify an authorized 304 refreshes metadata without rewriting the file.
@@ -8752,6 +8996,15 @@ bytes during a new preflight and confirmed one fresh original in the same
 gallery. This is disposable fixture evidence; deployment and installed Windows
 GUI acceptance are separate.
 
+The WinApp manual-import FIFO regression uses the actual preflight owner and
+`ManualUploadThread` consumer with the saved Watcher source-deletion preference
+enabled and a successful upload boundary. It requires a confirmed terminal
+item while the selected original bytes remain on disk and the shared saved
+preference remains enabled. `test_flight_watch_drain.py` retains the separate
+Watcher control for exact-snapshot deletion after a confirmed fresh upload and
+source retention on inventory match. These source fixtures do not establish
+installed-client prevalence or live-gallery behavior.
+
 The Windows-only mode fixture uses the real Credential Manager and a temporary
 config: explicit linked selection, unchanged saved API key, refused switching
 during work, disconnected restart, verified reactivation and explicit legacy
@@ -8883,11 +9136,15 @@ same-size corruption. No-store and failed writes cannot claim
 completion. Phase/counter benchmarks are synthetic, with no runner-speed
 assertion or claim about deployed hosting. Cache operation fixtures compare
 265 writes over small and multi-thousand preexisting pools using exact
-scan/stat/hash/sort counts. Recovery, replacement, shared quotas, pin/unpin and
-reparse refusal use disposable directories. `thumbnail-cache-measurement.json`
-records the real runner-disk batch and its explicit redundant-scan comparison;
-actual no-follow path calls are counted separately from index accounting and
-directory-entry observations, with a nonzero instrumentation assertion;
+scan/stat/hash/sort counts. Separate small and large benchmark classes retain
+the complete 100-entry and 3,072-entry seed cohorts, each with its own full
+265-write indexed batch and 265-write legacy scan/sort comparison. The
+cohorts write independent `thumbnail-cache-measurement-small.json` and
+`thumbnail-cache-measurement-large.json` artifacts, with no shared aggregate.
+Recovery, replacement, shared quotas, pin/unpin and reparse refusal use
+disposable directories. Actual no-follow path calls are counted separately
+from index accounting and directory-entry observations, with a nonzero
+instrumentation assertion;
 `thumbnail-preload-measurement.json` records real session/cache paths with a
 stubbed authorized transport. The latter cannot measure TCP/TLS or hosting
 latency. Native Tk checks inspect the full
@@ -9208,6 +9465,27 @@ requires that explicit scope and refuses the same report as complete WinApp
 evidence. Default complete discovery and the 90-second child cap remain intact.
 This scope permits hosted native UI verification after a whole-suite timeout;
 it does not repair or qualify an incomplete full Windows run.
+
+The issue #362 Windows feature job selects `winapp-partitioned`, which still
+discovers the canonical complete `test_*.py` inventory. Based on hosted timeout
+evidence, the coordinator places all classes discovered from
+`test_native_gallery_viewer.py` into one child, the small and large cohort
+benchmark classes `ThumbnailCacheSmallBenchmarkTests` and
+`ThumbnailCacheLargeBenchmarkTests` into separate children,
+`GalleryPreloadWorkerTests` into a fourth, and the exact remaining inventory
+into a fifth. The five children run serially in separate Python processes,
+each under the existing 90-second cap; the coordinator has a 480-second outer
+bound for those unchanged child caps plus inventory and report handling. It
+retains each original schema-1 child report and log. Selected-ID children flush
+each test's START, END, status and duration to the retained log so a timeout
+identifies the active case; report verbosity, schema, child limits and
+selection remain unchanged. The coordinator checks runtime identity and report
+counts, and requires the exact disjoint test-ID union across all five children
+before merging the real outcomes. Missing, timed-out, malformed, duplicate,
+incomplete or unsuccessful child evidence fails. The ordinary `winapp` suite
+and its 90-second full-process behavior remain unchanged; earlier full-process
+and two-, three- and four-partition timeouts remain failed historical runs and
+are not converted into passes by partitioned execution.
 
 The gallery writer fixture executes the real copy, Trash and restore wrappers
 against an injected linked-creation reservation refusal. It requires each guard

@@ -1,0 +1,479 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-362-thumbnail-batch.yml
+# Module Type: Issue-Scoped Source Qualification Workflow
+# Purpose: Qualify issue #362 source, WinApp regressions and C1 tree diagnostics.
+# Responsibilities:
+#   - Bind source, PHP and WinApp evidence to the exact branch SHA
+#   - Exercise one immutable archived WinApp client against the owned B2 server
+#   - Exercise the current WinApp source against an immutable archived PHP server
+#   - Retain prepared generated candidate bytes for unprivileged owner review
+#   - Run registered audit owners on Linux and Windows
+#   - Measure the real PhotosWorkspace Tk path on Windows at 10,000 rows
+#   - Retain audit diagnostics even when qualification fails
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Issue 362 thumbnail batch source and WinApp
+
+on:
+  push:
+    branches:
+      - feature/362-b1-thumbnail-batch-protocol-benchmark
+    paths:
+      - '.github/workflows/issue-362-thumbnail-batch.yml'
+      - 'app/runtime/modules.php'
+      - 'app/production-files.json'
+      - 'app/core-manifest.json'
+      - 'app/controllers/app_linking/thumbnail_batch.php'
+      - 'app/services/app_linking_thumbnail_batch.php'
+      - 'app/services/app_linking_media.php'
+      - 'app/services/app_linking_rate_limits.php'
+      - 'app/controllers/app_linking/media.php'
+      - 'app/services/app_linking.php'
+      - 'app/services/app_linking_policy.php'
+      - 'app/services/app_linking_passive_profile.php'
+      - 'app/models/app_linking.php'
+      - 'app/models/galleries.php'
+      - 'app/controllers/app_linking.php'
+      - 'app/bootstrap/dispatch.php'
+      - 'tests/app_linking_thumbnail_batch_test.php'
+      - 'tests/app_linking_thumbnail_batch_stream_test.php'
+      - 'ARCHITECTURE.md'
+      - 'TESTING.md'
+      - 'docs/COMPATIBILITY_LIFECYCLE.md'
+      - 'docs/PHP_Gallery_Manual*.tex'
+      - 'docs/performance/issue_362_thumbnail_batch_v1.md'
+      - 'winapp/**'
+      - 'winapp/README.md'
+      - 'scripts/**'
+      - 'tools/perf/issue_362_a1_ci.php'
+      - 'tools/perf/issue_362_a1_seed.php'
+      - 'tools/perf/issue_362_b2_http.php'
+      - 'tools/perf/issue_362_d_legacy_client.py'
+      - 'tools/perf/issue_362_d_old_server.php'
+      - 'tools/perf/issue_362_d_old_server_client.py'
+      - 'tools/perf/issue_362_c1_tree.php'
+      - 'tools/perf/issue_362_c1_connected.py'
+      - 'tools/perf/issue_362_b3_connected.py'
+      - 'tools/perf/issue_362_b3_tk.py'
+      - 'tools/perf/issue_362_c1_photos_tk.py'
+      - 'tests/support/gallery_workflow_*.php'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-362-b2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick:
+    name: B2 quick audit (PHP ${{ matrix.php }})
+    runs-on: ubuntu-24.04
+    # Type: integer. Units: minutes. Scope: one matrix job.
+    # Consumers: GitHub Actions job timeout.
+    # Rationale: bound a canonical quick audit while allowing preparation and registered fixtures.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.5']
+    steps:
+      - name: Checkout exact source SHA without credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify event SHA and immutable source base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          git fetch --no-tags origin main
+          source_base="$(git merge-base HEAD origin/main)"
+          test -n "$source_base"
+          echo "PHP_GALLERY_SOURCE_BASE=$source_base" >> "$GITHUB_ENV"
+
+      - name: Install PHP and required extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '${{ matrix.php }}'
+          extensions: pdo_sqlite, mbstring, dom, curl, gd, zip, intl, pdo_mysql, exif
+          coverage: none
+
+      - name: Install Node and Python runtimes
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Prepare and verify generated candidate inputs
+        shell: bash
+        env:
+          PHP_GALLERY_BROWSER: disabled
+          GALLERY_WORKFLOW_BROWSER: disabled
+        run: |
+          set -euo pipefail
+          php scripts/prepare_candidate.php
+          php scripts/prepare_candidate.php --check
+
+      - name: Retain prepared candidate inputs for review
+        if: matrix.php == '8.5'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-prepared-${{ github.sha }}
+          path: |
+            app/runtime/modules.php
+            app/production-files.json
+            app/core-manifest.json
+          if-no-files-found: error
+          # Type: integer. Units: days. Scope: prepared exact-SHA candidate inputs.
+          # Consumers: Unprivileged owner review and commit of complete prepared bytes.
+          # Rationale: retain verified pre-test bytes for 14-day review
+          # without long-term duplication.
+          retention-days: 14
+
+      - name: Run the thumbnail batch feature profile
+        env:
+          PHP_GALLERY_BROWSER: disabled
+          GALLERY_WORKFLOW_BROWSER: disabled
+          PHP_GALLERY_SOURCE_BASE: ${{ env.PHP_GALLERY_SOURCE_BASE }}
+        run: php scripts/audit.php --profile=thumbnail-batch
+
+      - name: Retain exact-SHA quick audit evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-b2-php-${{ matrix.php }}-${{ github.sha }}
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/**/source-failures.md
+            cache/test-audit/**/*.log
+            cache/test-audit/**/*.json
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: each uploaded matrix artifact.
+          # Consumers: GitHub Actions artifact retention.
+          # Rationale: retain the run evidence for review without long-term duplication.
+          retention-days: 14
+  php-http:
+    name: B2 disposable HTTP and MariaDB
+    runs-on: ubuntu-24.04
+    # Type: int. Units: minutes. Scope: one isolated B2 qualification.
+    # Consumers: Actions timeout. Rationale: preparation and bounded HTTP suite.
+    timeout-minutes: 20
+    services:
+      database:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 13316:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      GALLERY_WORKFLOW_ENABLE: disposable-only
+      GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
+      GALLERY_WORKFLOW_DB_PORT: '13316'
+      GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER_REQUIRED: '0'
+    steps:
+      - name: Checkout exact source SHA without credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source SHA and immutable base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          git fetch --no-tags origin main
+          source_base="$(git merge-base HEAD origin/main)"
+          test -n "$source_base"
+          echo "PHP_GALLERY_SOURCE_BASE=$source_base" >> "$GITHUB_ENV"
+      - name: Install PHP and required extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, exif, zip, dom, mbstring, intl
+          coverage: none
+      - name: Install Node
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Prepare and verify generated candidate inputs
+        run: |
+          php scripts/prepare_candidate.php
+          php scripts/prepare_candidate.php --check
+      - name: Run the registered disposable HTTP suite
+        run: php scripts/audit.php --suite=thumbnail-batch-http
+      - name: Retain sanitized qualification and audit evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-b2-http-${{ github.sha }}
+          path: |
+            cache/test-audit/issue-362-b2-http.json
+            cache/test-audit/issue-362-b3-client.json
+            cache/test-audit/issue-362-b3-client-partial.json
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/**/source-failures.md
+            cache/test-audit/**/thumbnail-batch-http.log
+          if-no-files-found: warn
+          # Type: int. Units: days. Scope: disposable qualification evidence.
+          # Consumers: Actions artifact retention. Rationale: short review window.
+          retention-days: 7
+
+  c1-tree-http:
+    name: C1 current-SHA tree HTTP diagnostics
+    runs-on: ubuntu-24.04
+    # Type: integer. Units: minutes. Scope: one isolated current-SHA suite.
+    # Consumers: GitHub Actions job timeout.
+    # Rationale: bound candidate preparation and the central 300-second owner.
+    timeout-minutes: 15
+    services:
+      database:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 13317:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      GALLERY_WORKFLOW_ENABLE: disposable-only
+      GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
+      GALLERY_WORKFLOW_DB_PORT: '13317'
+      GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER_REQUIRED: '0'
+    steps:
+      - name: Checkout exact source SHA without credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source SHA and immutable base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          git fetch --no-tags origin main
+          source_base="$(git merge-base HEAD origin/main)"
+          test -n "$source_base"
+          echo "PHP_GALLERY_SOURCE_BASE=$source_base" >> "$GITHUB_ENV"
+      - name: Install PHP 8.5 and required extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, exif, zip, dom, mbstring, intl
+          coverage: none
+      - name: Install Node 22 and Python 3.14
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Prepare and verify generated candidate inputs
+        shell: bash
+        env:
+          PHP_GALLERY_BROWSER: disabled
+          GALLERY_WORKFLOW_BROWSER: disabled
+        run: |
+          set -euo pipefail
+          php scripts/prepare_candidate.php
+          php scripts/prepare_candidate.php --check
+      - name: Run central C1 tree diagnostics
+        env:
+          PHP_GALLERY_BROWSER: disabled
+          GALLERY_WORKFLOW_BROWSER: disabled
+          PHP_GALLERY_SOURCE_BASE: ${{ env.PHP_GALLERY_SOURCE_BASE }}
+        run: php scripts/audit.php --suite=issue-362-c1-tree-http
+      - name: Retain current-SHA C1 tree evidence and audit logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-c1-tree-http-${{ github.sha }}
+          path: |
+            cache/test-audit/issue-362-c1-tree-http*.json
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/**/source-failures.md
+            cache/test-audit/**/*.log
+            cache/test-audit/**/*.json
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: C1 run evidence artifact.
+          # Consumers: Actions retention. Rationale: short exact-SHA review window.
+          retention-days: 14
+
+  winapp:
+    name: B3.1 WinApp regression (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Type: integer. Units: minutes. Scope: one central WinApp suite.
+    # Consumers: GitHub Actions job timeout.
+    # Rationale: bound registered WinApp regressions on each native OS runner.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    env:
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      PHP_GALLERY_BROWSER_REQUIRED: '0'
+      PHP_GALLERY_REQUIRE_PILLOW: '1'
+    steps:
+      - name: Checkout exact source SHA without credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact source and immutable main base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+          git fetch --no-tags origin main
+          source_base="$(git merge-base HEAD origin/main)"
+          test -n "$source_base"
+          echo "PHP_GALLERY_SOURCE_BASE=$source_base" >> "$GITHUB_ENV"
+
+      - name: Install PHP 8.5 for the central audit
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install Python 3.14 for WinApp regressions
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install declared image and PDF requirements on Ubuntu
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          requirements = [
+              line.strip()
+              for line in Path("winapp/requirements.txt")
+              .read_text(encoding="utf-8")
+              .splitlines()
+              if line.strip().lower().startswith(("pillow", "reportlab", "pypdf"))
+          ]
+          if len(requirements) != 3:
+              raise SystemExit("Expected Pillow, ReportLab and pypdf requirements.")
+          subprocess.run(
+              [sys.executable, "-m", "pip", "install", *requirements],
+              check=True,
+          )
+          PY
+
+      - name: Install declared image and PDF requirements on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $requirements = @(
+            Get-Content winapp/requirements.txt |
+              Where-Object { $_ -match '^(Pillow|reportlab|pypdf)' }
+          )
+          if ($requirements.Count -ne 3) {
+            throw 'Expected Pillow, ReportLab and pypdf requirements.'
+          }
+          python -m pip install @requirements
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run central WinApp regression suite on Ubuntu
+        if: runner.os == 'Linux'
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: xvfb-run -a php scripts/audit.php --suite=winapp
+
+      - name: Run complete five-partition WinApp regression on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          php scripts/audit.php --suite=winapp-partitioned
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Preserve Windows regression summary
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path -LiteralPath 'cache/test-audit/latest.json') {
+            Copy-Item -LiteralPath 'cache/test-audit/latest.json' -Destination 'cache/test-audit/winapp-regression-latest.json'
+          }
+          if (Test-Path -LiteralPath 'cache/test-audit/latest.md') {
+            Copy-Item -LiteralPath 'cache/test-audit/latest.md' -Destination 'cache/test-audit/winapp-regression-latest.md'
+          }
+
+      - name: Observe Windows native thumbnail traversal
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          ISSUE_362_EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          php scripts/audit.php --suite=thumbnail-batch-viewer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Observe real PhotosWorkspace at 10,000 rows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          ISSUE_362_EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          php scripts/audit.php --suite=issue-362-c1-photos-workspace
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retain exact-SHA WinApp audit evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-b3-winapp-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/winapp-regression-latest.json
+            cache/test-audit/winapp-regression-latest.md
+            cache/test-audit/**/issue-362-c1-photos-workspace.json
+            cache/test-audit/**/source-failures.md
+            cache/test-audit/**/*.log
+            cache/test-audit/**/*.json
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: exact-SHA WinApp evidence.
+          # Consumers: Actions artifact retention.
+          # Rationale: retain concise review evidence without long-term duplication.
+          retention-days: 14

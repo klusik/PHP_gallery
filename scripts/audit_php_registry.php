@@ -27,6 +27,12 @@ return [
     // Rationale: Four isolated owners preserve bounded per-run process pools while splitting the complete central test registry.
     'hosted_full_php_shard_count' => 4,
 
+    // The feature profile owns these focused cases; FULL discovers them normally.
+    'thumbnail_batch_tests' => [
+        'app_linking_thumbnail_batch_test.php',
+        'app_linking_thumbnail_batch_stream_test.php',
+    ],
+
     // Exercise orchestration, fail-closed storage, mutation and authorized media paths.
     // Full/release still discover every standalone PHP regression test.
     'quick_tests' => [

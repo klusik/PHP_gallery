@@ -214,6 +214,27 @@ function feature_capability_definitions(): array
             'behavior_tags' => ['public', 'admin-only', 'writes-files'],
             'settings_route' => 'admin_music',
         ],
+        'thumbnail_batch' => [
+            'group' => 'admin_tools',
+            'label' => t(
+                'admin.features.thumbnail_batch.label',
+                'Native thumbnail batching',
+            ),
+            'description' => t(
+                'admin.features.thumbnail_batch.description',
+                'Allow linked native gallery clients to request bounded thumbnail batches. Disabling preserves existing media and uses the compatible single-thumbnail route.',
+            ),
+            'source' => [
+                'type' => 'domain_adapter',
+                'adapter' => 'thumbnail_batch',
+            ],
+            'default_enabled' => true,
+            'fresh_default_enabled' => true,
+            'dependencies' => [],
+            'routes' => [],
+            'data_disable_policy' => 'preserve',
+            'behavior_tags' => ['admin-only', 'privacy'],
+        ],
         'downloads' => [
             'group' => 'public_display',
             'label' => t(

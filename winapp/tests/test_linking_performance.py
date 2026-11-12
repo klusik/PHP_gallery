@@ -46,6 +46,10 @@ class LinkingRoutePerformanceTests(unittest.TestCase):
         self.assertEqual(linking_route_category('app_linking_galleries'), 'gallery_page')
         self.assertEqual(linking_route_category('app_linking_gallery_tree'), 'gallery_tree')
         self.assertEqual(
+            linking_route_category('app_linking_thumbnail_batch'), 'thumbnail_batch',
+        )
+        self.assertIsNone(linking_route_category('app_linking_thumbnail_batch', 'thumbnail'))
+        self.assertEqual(
             linking_route_category('app_linking_media', 'thumbnail'),
             'thumbnail_single',
         )
