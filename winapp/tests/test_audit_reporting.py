@@ -4,6 +4,7 @@
 # Responsibilities:
 #   - Cover individual unittest outcomes, subtests and fixture errors.
 #   - Protect report completeness, uniqueness, counts and native unittest success semantics.
+#   - Retain selected-child failure reasons before a timeout can discard its report.
 # File: winapp/tests/test_audit_reporting.py
 # Repository: https://github.com/klusik/PHP_gallery
 # Author: Rudolf Klusal
@@ -66,6 +67,56 @@ class AuditReportingTests(unittest.TestCase):
         self.assertEqual(normal['counts'], selected['counts'])
         self.assertTrue(normal['successful'])
         self.assertTrue(selected['successful'])
+
+    def test_selected_child_progress_flushes_failure_and_error_reasons(self) -> None:
+        """Retain adverse reasons before unittest's final summary is printed.
+
+        Returns:
+            None: Selected-child progress includes full failure and error
+                details even when unittest's trailing traceback output is absent.
+        """
+        class FailingCase(unittest.TestCase):
+            """Supply one assertion failure and one test error."""
+
+            def test_expected_mismatch(self) -> None:
+                """Fail with one fixed reason safe in audit diagnostics.
+
+                Returns:
+                    None: The reporter captures the assertion without raising
+                        out of the unittest runner.
+                """
+                self.fail('controlled failure reason')
+
+            def test_unexpected_runtime_error(self) -> None:
+                """Raise one fixed exception for selected-child diagnostics.
+
+                Returns:
+                    None: The report classifies the callback as an error.
+                """
+                raise RuntimeError('controlled error reason')
+
+        stream = io.StringIO()
+        with mock.patch.object(unittest.TextTestResult, 'printErrors'):
+            report = report_suite(
+                unittest.defaultTestLoader.loadTestsFromTestCase(FailingCase),
+                stream, partition_child=True,
+            )
+        output = stream.getvalue()
+        self.assertFalse(report['successful'])
+        self.assertEqual(1, report['counts']['failed'])
+        self.assertEqual(1, report['counts']['errors'])
+        self.assertRegex(
+            output,
+            r'END .*\.test_expected_mismatch FAIL [0-9]+\.[0-9]{3}s\n'
+            r'Traceback \(most recent call last\):\n',
+        )
+        self.assertIn('AssertionError: controlled failure reason', output)
+        self.assertRegex(
+            output,
+            r'END .*\.test_unexpected_runtime_error ERROR [0-9]+\.[0-9]{3}s\n'
+            r'Traceback \(most recent call last\):\n',
+        )
+        self.assertIn('RuntimeError: controlled error reason', output)
 
     def test_native_diagnostic_is_explicit_and_preserves_full_discovery(self) -> None:
         """Bind diagnostic reports to their exact selected native fixture.

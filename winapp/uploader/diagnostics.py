@@ -57,7 +57,8 @@ _SAFE_PHOTOS_SOURCE_FILES = frozenset({
 # Type: frozenset[str]. Units: exception class names. Scope: Photos diagnostics.
 # Consumers: format_safe_photos_failure. Rationale: Discard dynamic class text.
 _SAFE_PHOTOS_EXCEPTION_TYPES = frozenset({
-    "LinkingError", "LinkingMediaThrottled", "LinkingMediaUnavailable",
+    "LinkingError", "LinkingMediaNotCurrent", "LinkingMediaThrottled",
+    "LinkingMediaUnavailable",
     "LinkingResponseError", "LinkingRevisionUnsupported", "OSError",
     "RuntimeError", "ValueError", "TypeError", "TimeoutError",
     "ConnectionError", "IndexError", "KeyError", "OverflowError",
@@ -65,6 +66,13 @@ _SAFE_PHOTOS_EXCEPTION_TYPES = frozenset({
     "DecompressionBombError", "PermissionError", "FileNotFoundError",
     "NotImplementedError", "AssertionError", "PhotosDecodeError",
     "error", "Exception",
+})
+
+# Purpose: Retain only local reasons for rejecting an accepted media response.
+# Type: frozenset[str]. Units: fixed currentness categories. Scope: Photos errors.
+# Consumers: format_safe_photos_failure. Rationale: Never imply an HTTP refusal.
+_SAFE_MEDIA_CURRENTNESS_REASONS = frozenset({
+    "cancelled", "session_closed", "deadline", "grant_expired",
 })
 
 # Purpose: Bound source-defined exception labels retained in support output.
@@ -349,7 +357,7 @@ def format_safe_photos_failure(
 
     Returns:
         str: Bounded phase, exception class, owned source site and validated
-            LinkingResponseError facts when the exception supplies them.
+            response facts or local currentness reason when supplied safely.
     """
     safe_phase = phase if phase in _SAFE_PHOTOS_PHASES else "media-fetch"
     safe_kind = (
@@ -366,9 +374,14 @@ def format_safe_photos_failure(
         else "OtherError"
     )
     response = ""
-    from .app_linking import LinkingResponseError
+    from .app_linking import LinkingMediaNotCurrent, LinkingResponseError
 
-    if isinstance(error, LinkingResponseError):
+    if isinstance(error, LinkingMediaNotCurrent):
+        reason = getattr(error, "currentness_reason", None)
+        if (type(reason) is str
+                and reason in _SAFE_MEDIA_CURRENTNESS_REASONS):
+            response = f" currentness={reason}"
+    elif isinstance(error, LinkingResponseError):
         try:
             validated = LinkingResponseError(
                 error.phase, error.route, error.status,

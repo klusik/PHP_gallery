@@ -2103,7 +2103,11 @@ are~local observations; installed scrolling still needs manual qualification.
 One thumbnail worker publishes ready images in~bounded serial batches without
 a~separate GUI polling wait between photos. Ready results and~decoded-cache
 hits attach in~small GUI slices; foreground work and~viewport changes interrupt
-remaining reads. The~session request gate still owns authenticated transport.
+remaining reads. A~brief local pause after a~transient transport failure resumes
+pending thumbnails only after the~delay has~elapsed and~the~prior request
+has~finished; an~HTTP~429 still waits for~the~existing explicit \ui{Retry} action.
+The~session request gate
+still owns authenticated transport.
 Diagnostics separate disk access, gate wait, credential renewal, media
 transport, decoding, queue wait and~Tk application. Compare cold and~warm
 browsing separately; these measurements do~not establish FPS.
@@ -10108,6 +10112,9 @@ union before merging actual outcomes. Missing, timed-out, malformed, duplicate
 or~unsuccessful evidence fails. The~ordinary full-suite owner keeps its
 existing single-process behavior and~limit. Earlier full-process and~two-,
 three- and~four-partition timeouts remain failed runs.
+Selected-child logs flush the~full failure traceback immediately after each
+FAIL/ERROR terminal record, preserving its~reason if~a~later timeout prevents
+the~final JSON report.
 
 For~coding agents, GitHub Actions is~the~default and~authoritative verification
 environment (CI-first). The~central audit commands below describe the~hosted

@@ -1320,6 +1320,9 @@ session/transport admission gives queued viewport and Watcher work a turn,
 retaining one active media GET. An admitted bounded request may finish. The original
 **Preload gallery** still prepares both renditions. Both modes respect the
 server's HTTP 429 and Retry-After limits; thumbnail-only is not a bulk endpoint.
+In Photos, a short local pause after a transient transport failure resumes
+pending thumbnails automatically after the prior request has finished. A
+server HTTP 429 still waits for the existing explicit Retry action.
 Both modes yield between catalogue pages and image reads when the current view
 needs metadata, a selected image, audio or adjacent lightbox preparation.
 Explicit full preload checks current authorized cache hits before skipping a

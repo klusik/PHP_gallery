@@ -420,6 +420,11 @@ class _HttpBatchCompletion:
         elapsed (float): End-to-end worker duration in seconds.
         physical_complete (bool): Whether the transport worker has finished.
         decode_failures (int): Independently failed image decode attempts.
+        deferred_seconds (int | None): Existing cooldown remainder, if deferred.
+        deferred_source (Literal['transient', 'server_retry_after', 'unknown']):
+            Trusted source category for the cooldown.
+        prior_operation_finished (threading.Event | None): Completion signal for
+            a physical operation that preceded this no-request deferral.
     """
 
     generation: int
@@ -430,6 +435,11 @@ class _HttpBatchCompletion:
     elapsed: float
     physical_complete: bool
     decode_failures: int
+    deferred_seconds: int | None = None
+    deferred_source: Literal[
+        'transient', 'server_retry_after', 'unknown',
+    ] = 'unknown'
+    prior_operation_finished: threading.Event | None = None
 
 
 def _next_http_thumbnail_group_limit(completion: _HttpBatchCompletion) -> int:
@@ -981,6 +991,8 @@ class _NativeGalleryViewer:
         self._http_batch_sizes: dict[int, int] = {}
         self._http_batch_retry_indices: tuple[int, ...] = ()
         self._http_thumbnail_failure_latched = False
+        self._thumbnail_resume_after_id: str | None = None
+        self._thumbnail_resume_serial = 0
         self._thumbnail_source_disk_count = 0
         self._thumbnail_source_network_count = 0
         self._thumbnail_source_revalidated_count = 0
@@ -2683,6 +2695,7 @@ class _NativeGalleryViewer:
         """
         if self._closed:
             return
+        self._cancel_thumbnail_resume()
         self._cancel_thumbnail_gui_slice()
         self._thumbnail_disk_lane.invalidate()
         if self._worker_kind == 'thumbnail_batch':
@@ -2699,6 +2712,7 @@ class _NativeGalleryViewer:
             None: The serialized worker returns a validated metadata snapshot;
                 a new photo selection can cancel this background operation.
         """
+        self._cancel_thumbnail_resume()
         # A complete old snapshot admits one additional native page so an
         # upload after an exactly full final page is actually displayed.
         target_count = len(self._photos) + (
@@ -2751,6 +2765,7 @@ class _NativeGalleryViewer:
         Returns:
             None: Equal snapshots leave tiles and decoded thumbnails untouched.
         """
+        self._cancel_thumbnail_resume()
         # An accepted authoritative snapshot permits a new network attempt.
         self._http_thumbnail_failure_latched = False
         for index in self._http_batch_retry_indices:
@@ -2867,6 +2882,114 @@ class _NativeGalleryViewer:
                      or not self._events.empty()
                      or self._thumbnail_disk_lane.busy())):
             self._after_id = self.window.after(delay_ms, self._poll_queue)
+
+    def _cancel_thumbnail_resume(self) -> None:
+        """Revoke the one pending local-cooldown wakeup for this viewer.
+
+        Returns:
+            None: Any queued callback becomes stale and releases its owner data.
+        """
+        self._thumbnail_resume_serial += 1
+        if self._thumbnail_resume_after_id is not None:
+            try:
+                self.window.after_cancel(self._thumbnail_resume_after_id)
+            except tk.TclError:
+                pass
+        self._thumbnail_resume_after_id = None
+
+    def _schedule_thumbnail_resume(
+        self, delay_seconds: int,
+        operation_finished: threading.Event | None,
+    ) -> None:
+        """Resume unsettled visible thumbnails after the current cooldown.
+
+        Args:
+            delay_seconds (int): Nonnegative cooldown remainder from the session
+                owner, in seconds; zero means its delay has already elapsed.
+            operation_finished (threading.Event | None): Prior transport worker
+                completion signal that must be set before another request.
+
+        Returns:
+            None: One viewer/session/gallery-bound Tk wakeup resumes current
+                admitted work through normal foreground-first dispatch.
+        """
+        if type(delay_seconds) is not int or delay_seconds < 0:
+            return
+        self._cancel_thumbnail_resume()
+        serial = self._thumbnail_resume_serial
+        gallery_id = self.gallery.gallery_id
+        session = self.session
+        deadline = time.monotonic() + delay_seconds
+
+        def resume() -> None:
+            """Check the existing cooldown and wake only its live viewer.
+
+            Returns:
+                None: A ready owner dispatches normally; stale owners are dropped.
+            """
+            if serial != self._thumbnail_resume_serial:
+                return
+            self._thumbnail_resume_after_id = None
+            if (self._closed or self.session is not session
+                    or self.gallery.gallery_id != gallery_id
+                    or self._cancelled.is_set()):
+                self._cancel_thumbnail_resume()
+                return
+            if not self.session.can_read_media():
+                self._cancel_thumbnail_resume()
+                self.close()
+                return
+            if self._worker_kind == 'thumbnail_batch':
+                remaining = LINKING_CANCELLATION_POLL_SECONDS
+                delay_ms = max(
+                    MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS,
+                    int(remaining * 1000),
+                )
+                self._thumbnail_resume_after_id = self.window.after(
+                    delay_ms, resume,
+                )
+                return
+            if (operation_finished is not None
+                    and not operation_finished.is_set()):
+                remaining = max(0.0, deadline - time.monotonic())
+                if remaining <= 0:
+                    remaining = LINKING_CANCELLATION_POLL_SECONDS
+                # The session constant is seconds; Tk's after() accepts ms.
+                delay_ms = max(
+                    MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS,
+                    int(remaining * 1000),
+                )
+                self._thumbnail_resume_after_id = self.window.after(
+                    delay_ms, resume,
+                )
+                return
+            # A viewport change can cancel the completed batch just before its
+            # completion is drained. Keep that fence until prior I/O is over,
+            # then recompute work from the current admitted rows.
+            if self._thumbnail_cancelled.is_set():
+                self._thumbnail_cancelled.clear()
+            for index in self._http_batch_retry_indices:
+                self._thumbnail_loaded.discard(index)
+                if (index in self._admitted_thumbnail_indices
+                        and index not in self._thumbnail_pending):
+                    self._thumbnail_pending.append(index)
+            self._http_batch_retry_indices = ()
+            self._thumbnail_resume_serial += 1
+            if (not self._media_throttled
+                    and not self._http_thumbnail_failure_latched
+                    and self._retry_kind == 'thumbnail'):
+                self.retry_button.configure(state='disabled')
+                self.retry_button.pack_forget()
+                self.status.pack_forget()
+            self._dispatch_pending_work()
+
+        # Cooldown seconds come from the already validated session result.
+        # Convert seconds to the millisecond unit required by Tk after().
+        delay_ms = max(
+            MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS,
+            delay_seconds * 1000,
+        )
+        self._thumbnail_resume_after_id = self.window.after(delay_ms, resume)
 
     def _load_first_page(self) -> None:
         """Show recent session metadata and refresh it through the same owner.
@@ -2995,7 +3118,9 @@ class _NativeGalleryViewer:
                     and (type(page.next_after) is not int
                          or page.next_after <= 0))):
             raise ValueError('Invalid media page')
+        self._cancel_thumbnail_resume()
         if self._page_request_mode == 'initial':
+            self._http_batch_retry_indices = ()
             if not getattr(self, '_reconciling', False):
                 self._selected_photo_ids.clear()
                 self._selection_anchor_index = None
@@ -3367,6 +3492,11 @@ class _NativeGalleryViewer:
         outcome = 'ok'
         physical_complete = True
         decode_failures = 0
+        deferred_seconds: int | None = None
+        deferred_source: Literal[
+            'transient', 'server_retry_after', 'unknown',
+        ] = 'unknown'
+        prior_operation_finished: threading.Event | None = None
 
         def publish(
             publication: ThumbnailPublication | LegacyThumbnailPublication,
@@ -3431,16 +3561,45 @@ class _NativeGalleryViewer:
                 gallery_id, photos, publish, cancelled,
                 timings=physical, stats=stats,
             )
-        except (LinkingMediaThrottled, LinkingThumbnailBatchDeferred):
+        except LinkingMediaThrottled:
             outcome = 'throttled'
+        except LinkingThumbnailBatchDeferred as error:
+            deferred_seconds = error.retry_after_seconds
+            prior_operation_finished = error.operation_finished
+            if physical.http_requests > 0:
+                physical_complete = bool(
+                    error.operation_finished is not None
+                    and error.operation_finished.is_set()
+                )
+            deferred_source = (
+                'unknown'
+                if (error.cooldown_source == 'transient'
+                    and error.operation_finished is None)
+                else error.cooldown_source
+            )
+            outcome = (
+                'deferred_transient'
+                if deferred_source == 'transient'
+                else 'deferred_wait'
+            )
         except LinkingThumbnailProofChanged:
             outcome = 'proof_changed'
         except LinkingError as error:
             outcome = 'error'
             finished = getattr(error, 'operation_finished', None)
             physical_complete = finished is None or finished.is_set()
-        except Exception:  # noqa: BLE001
+            if not cancelled.is_set() and not self._cancelled.is_set():
+                _log_safe_media_failure(
+                    'media-fetch', 'thumbnail', error,
+                    diagnostic_callback=self._diagnostic_callback,
+                )
+        except Exception as error:  # noqa: BLE001
             outcome = 'error'
+            if not cancelled.is_set() and not self._cancelled.is_set():
+                _log_safe_media_failure(
+                    'media-fetch', 'thumbnail', error,
+                    diagnostic_callback=self._diagnostic_callback,
+                )
         finally:
             if cancelled.is_set() or self._cancelled.is_set() or self._closed:
                 outcome = 'cancelled'
@@ -3449,6 +3608,7 @@ class _NativeGalleryViewer:
                 generation, outcome, tuple(index for index in indices
                                            if index not in completed),
                 stats, physical, elapsed, physical_complete, decode_failures,
+                deferred_seconds, deferred_source, prior_operation_finished,
             )
             with self._thumbnail_result_lock:
                 self._http_batch_completion = completion
@@ -3466,6 +3626,7 @@ class _NativeGalleryViewer:
             None: One worker serially publishes up to the batch limit.
         """
         if (self._media_throttled or self._http_thumbnail_failure_latched
+                or self._thumbnail_resume_after_id is not None
                 or not self._thumbnail_pending
                 or not self.grid_canvas.winfo_viewable()
                 or self._thumbnail_cancelled.is_set() or self._closed
@@ -4071,7 +4232,12 @@ class _NativeGalleryViewer:
             if completion is not None:
                 with self._thumbnail_metrics_lock:
                     physical = completion.timings
-                    if completion.physical_complete:
+                    zero_http_defer = (
+                        completion.outcome in (
+                            'deferred_transient', 'deferred_wait',
+                        ) and physical.http_requests == 0
+                    )
+                    if not zero_http_defer and completion.physical_complete:
                         self._thumbnail_batch_physical.observe(physical)
                         self._thumbnail_gate_wait_ms += physical.gate_wait_ms
                         self._thumbnail_renewal_ms += physical.renewal_ms
@@ -4104,7 +4270,7 @@ class _NativeGalleryViewer:
                             self._http_batch_fallback_reasons[reason] += count
                         if completion.stats.first_frame_ms is not None:
                             self._http_batch_first_frame_ms = completion.stats.first_frame_ms
-                    else:
+                    elif not zero_http_defer and not completion.physical_complete:
                         self._http_batch_incomplete += 1
                 self._http_thumbnail_group_limit = _next_http_thumbnail_group_limit(
                     completion,
@@ -4118,20 +4284,43 @@ class _NativeGalleryViewer:
                             self._thumbnail_proof_refresh_attempt_at = now
                             self._thumbnail_proof_refresh_count += 1
                             self._refresh_pending = True
-                    elif completion.outcome in ('throttled', 'error'):
+                    elif completion.outcome == 'deferred_transient':
                         self._http_batch_retry_indices = completion.remaining
-                        self._media_throttled = completion.outcome == 'throttled'
+                        self.status.pack(anchor='w', pady=(4, 8))
+                        self.status.configure(
+                            text=self._text('linking_media_retry_wait'),
+                        )
+                        self.retry_button.configure(state='disabled')
+                        self.retry_button.pack_forget()
+                        self._retry_kind = 'thumbnail'
+                        if completion.deferred_seconds is not None:
+                            self._schedule_thumbnail_resume(
+                                completion.deferred_seconds,
+                                completion.prior_operation_finished,
+                            )
+                    elif completion.outcome in (
+                        'throttled', 'error', 'deferred_wait',
+                    ):
+                        self._http_batch_retry_indices = completion.remaining
+                        self._media_throttled = completion.outcome in (
+                            'throttled', 'deferred_wait',
+                        )
                         if completion.outcome == 'error':
                             self._http_thumbnail_failure_latched = True
                         self.status.pack(anchor='w', pady=(4, 8))
                         self.status.configure(text=self._text(
-                            'linking_media_throttled' if self._media_throttled
+                            'linking_media_retry_wait'
+                            if completion.outcome == 'deferred_wait'
+                            else 'linking_media_throttled'
+                            if self._media_throttled
                             else 'linking_media_error',
                         ))
                         self.retry_button.configure(state='normal')
                         self.retry_button.pack(side='left', padx=(8, 0))
                         self._retry_kind = 'thumbnail'
-                    if completion.outcome != 'cancelled':
+                    if completion.outcome not in (
+                        'cancelled', 'deferred_transient',
+                    ):
                         for index in completion.remaining:
                             if index in self._thumbnail_pending:
                                 self._thumbnail_pending.remove(index)
@@ -4238,6 +4427,7 @@ class _NativeGalleryViewer:
         priority_due = revision_due or self._presentation_pending
         if (self._thumbnail_pending and not self._media_throttled
                 and not self._http_thumbnail_failure_latched
+                and self._thumbnail_resume_after_id is None
                 and (not priority_due
                      or self._initial_thumbnail_priority_count
                      < MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT)):
@@ -4279,7 +4469,8 @@ class _NativeGalleryViewer:
                 ),
             )
             return
-        if self._media_throttled or self._http_thumbnail_failure_latched:
+        if (self._media_throttled or self._http_thumbnail_failure_latched
+                or self._thumbnail_resume_after_id is not None):
             return
         if self._thumbnail_pending:
             self._thumbnail_cancelled.clear()
@@ -5897,6 +6088,7 @@ class _NativeGalleryViewer:
         if self._closed:
             return
         self._closed = True
+        self._cancel_thumbnail_resume()
         self._cancelled.set()
         if self._active_media_cancelled is not None:
             self._active_media_cancelled.set()

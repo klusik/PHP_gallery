@@ -676,8 +676,11 @@ allocations/releases, cache hits and callback duration. A bounded serial
 thumbnail batch now publishes each ready raster without a GUI polling round
 trip between items. Ready results and decoded-memory hits apply in bounded
 GUI slices. Foreground work, viewport changes, refresh and close interrupt or
-fence the remaining work; stale rasters are explicitly released. HTTP 429
-still stops thumbnail admission until the existing explicit Retry action.
+fence the remaining work; stale rasters are explicitly released. A transient
+transport cooldown resumes pending thumbnails after its delay and after the
+prior transport has actually finished. A validated HTTP 429 still stops
+thumbnail admission until the existing explicit Retry action; neither path
+adds concurrent requests or changes authorization and cache proofs.
 The session request gate remains the authentication/renewal/transport owner;
 this change neither adds parallel network requests nor changes cache proofs.
 Passive numeric observations separate disk, gate admission, renewal, media

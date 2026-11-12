@@ -2077,7 +2077,10 @@ aktualizace pohledu. Jde o~lokální pozorování; plynulost vyžaduje ruční o
 Jeden worker předává hotové náhledy v~omezených sériových dávkách bez čekání
 na samostatný GUI polling mezi fotkami. Hotové výsledky a~zásahy dekódované
 cache se připojují po malých částech v~GUI; přednostní akce a~změna pohledu
-přeruší zbývající čtení. Request gate session nadále řídí schválený transport.
+přeruší zbývající čtení. Krátká místní pauza po přechodné chybě transportu
+znovu spustí čekající náhledy až po jejím uplynutí a~ukončení předchozího
+požadavku; HTTP~429 dál čeká na stávající ruční volbu \ui{Zkusit znovu}. Request gate
+session nadále řídí schválený transport.
 Diagnostika odděluje disk, čekání na gate, obnovu přihlášení, transport médií,
 dekódování, čekání ve frontě a~aplikaci v~Tk. Studené a~teplé procházení
 porovnávejte zvlášť; tato měření neprokazují FPS.
@@ -10054,6 +10057,9 @@ Chybějící, neúplný, chybný, duplicitní, neúspěšný či překročený p
 neúspěch. Běžný vlastník úplné sady zachovává dosavadní samostatný proces
 i~limit; dřívější úplné, dvou-, tří- a~čtyřprocesové vypršení limitu zůstávají
 neúspěšnými běhy.
+Log vybraného procesu ihned za~koncovým záznamem FAIL/ERROR vypíše celý
+traceback, takže při pozdějším vypršení limitu zůstane zachován důvod před
+dokončením závěrečného JSON reportu.
 
 Pro agenty je GitHub Actions výchozí a~autoritativní ověřovací prostředí
 (CI-first). Níže uvedené příkazy popisují hostovaný centrální audit; agent je

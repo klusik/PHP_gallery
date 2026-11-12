@@ -8,6 +8,7 @@
 #   - Preserve unittest outcomes, reasons, durations and fixture errors in one report.
 #   - Write a complete schema-versioned JSON report for the PHP audit owner.
 #   - Label explicitly scoped native diagnosis separately from full discovery.
+#   - Flush failed-case tracebacks before selected-child report serialization.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 
@@ -193,7 +194,8 @@ class AuditTextTestResult(unittest.TextTestResult):
         Args:
             test (unittest.case.TestCase): Test case that has completed teardown.
         Returns:
-            None: Closes timing while preserving explicit outcome evidence.
+            None: Closes timing and flushes the final status plus full failure
+                traceback while preserving structured outcome evidence.
         """
         key = id(test)
         record = self._active.pop(key, None)
@@ -203,10 +205,14 @@ class AuditTextTestResult(unittest.TextTestResult):
             if record["status"] == "PENDING":
                 record["reason"] = "No terminal unittest outcome callback was received."
             if self._progress:
+                reason = record["reason"]
                 self.stream.write(
                     f'\nEND {record["id"]} {record["status"]} '
                     f'{record["duration_seconds"]:.3f}s\n'
                 )
+                if (record["status"] in ("FAIL", "ERROR", "UNEXPECTED_SUCCESS")
+                        and isinstance(reason, str) and reason.strip()):
+                    self.stream.write(reason.rstrip() + '\n')
                 self.stream.flush()
         super().stopTest(test)
 
