@@ -29,6 +29,12 @@ from uploader.ui_shell import (
 # runner scheduling while ensuring a failed Escape cannot hang the whole suite.
 SHELL_TEST_DEADLINE_MS = 5000
 
+# Purpose: Wait for native layout/focus without entering nested update loops.
+# Type: int. Units: milliseconds. Scope: one scheduled keyboard interaction.
+# Consumers: EmbeddedShellTests.press_entry_key. Rationale: 20 ms yields to Tk
+# mapping events while the unchanged test watchdog retains its hard deadline.
+SHELL_KEY_POLL_MS = 20
+
 
 class EmbeddedShellTests(unittest.TestCase):
     """Exercise real Tk panel widgets without creating secondary windows."""
@@ -46,6 +52,9 @@ class EmbeddedShellTests(unittest.TestCase):
         initialize_shell(self.root)
         self.root.update()
         self.prompt_timed_out = False
+        self.callback_errors = []
+        self.root.report_callback_exception = lambda *_args: self.callback_errors.append(str(_args[1]))
+        self.key_after_id = None
         self.deadline = self.root.after(SHELL_TEST_DEADLINE_MS, self.expire_prompt)
 
     def expire_prompt(self) -> None:
@@ -67,8 +76,13 @@ class EmbeddedShellTests(unittest.TestCase):
         """
         if hasattr(self, 'root'):
             self.root.after_cancel(self.deadline)
+            if self.key_after_id is not None:
+                self.root.after_cancel(self.key_after_id)
             self.root.destroy()
-            self.assertFalse(self.prompt_timed_out, 'Dialog response exceeded deadline')
+            self.assertEqual(
+                (self.prompt_timed_out, self.callback_errors), (False, []),
+                'Dialog deadline or Tk callback failure',
+            )
 
     def test_stack_and_modal_grab_restore(self) -> None:
         """Restore the parent panel after closing a nested grabbed panel.
@@ -110,49 +124,58 @@ class EmbeddedShellTests(unittest.TestCase):
         self.assertTrue(str(panel).startswith(str(owner) + '.'))
         self.assertFalse(any(isinstance(widget, tk.Toplevel) for widget in self.root.winfo_children()))
 
-    def test_escape_from_entry_cancels_without_an_input_sentinel_collision(self) -> None:
-        """Route descendant Escape through the panel and preserve arbitrary text.
+    def press_entry_key(self, sequence: str) -> None:
+        """Deliver one key after native mapping and focus events can settle.
+
+        Args:
+            sequence (str): Tk Escape or Return key sequence for the real entry.
+        Returns:
+            None: Polls the mapped target and queues its actual key binding.
+        """
+        panel = active_panel(self.root)
+        if panel is None:
+            self.key_after_id = self.root.after(SHELL_KEY_POLL_MS, lambda: self.press_entry_key(sequence))
+            return
+        entry = next(
+            widget for widget in panel.winfo_children()[0].winfo_children()
+            if isinstance(widget, ttk.Entry)
+        )
+        if not entry.winfo_ismapped():
+            self.key_after_id = self.root.after(SHELL_KEY_POLL_MS, lambda: self.press_entry_key(sequence))
+            return
+        entry.focus_force()
+
+        def deliver() -> None:
+            """Send the key only after the observed focus reaches the entry.
+
+            Returns:
+                None: Waits without reentrant update calls, then sends one key.
+            """
+            if self.root.focus_get() is not entry:
+                self.key_after_id = self.root.after(SHELL_KEY_POLL_MS, deliver)
+                return
+            self.assertTrue(entry.winfo_ismapped())
+            self.key_after_id = None
+            entry.event_generate(sequence, when='tail')
+
+        self.key_after_id = self.root.after(SHELL_KEY_POLL_MS, deliver)
+
+    def test_escape_from_entry_cancels(self) -> None:
+        """Route descendant Escape through the active panel's close protocol.
 
         Returns:
-            None: Escape cancels; a user string matching an internal token survives.
+            None: Cancellation returns without waiting for the fixture watchdog.
         """
-        def cancel_entry() -> None:
-            """Cancel the focused input from its actual child-widget binding.
-
-            Returns:
-                None: Generates Escape after focus and bind tags are installed.
-            """
-            panel = active_panel(self.root)
-            self.root.update_idletasks()
-            panel._scope_keyboard()
-            entry = next(
-                widget for widget in panel.winfo_children()[0].winfo_children()
-                if isinstance(widget, ttk.Entry)
-            )
-            entry.focus_force()
-            self.root.update()
-            entry.event_generate('<Escape>', when='tail')
-
-        self.root.after_idle(cancel_entry)
+        self.root.after_idle(lambda: self.press_entry_key('<Escape>'))
         self.assertIsNone(simpledialog.askstring('Input', 'Value', parent=self.root))
 
-        def submit_value() -> None:
-            """Submit the literal input token using the real entry binding.
+    def test_return_preserves_a_string_matching_an_internal_token(self) -> None:
+        """Accept arbitrary input through Return without a sentinel collision.
 
-            Returns:
-                None: Accepts the initial value through Return rather than close.
-            """
-            panel = active_panel(self.root)
-            self.root.update_idletasks()
-            entry = next(
-                widget for widget in panel.winfo_children()[0].winfo_children()
-                if isinstance(widget, ttk.Entry)
-            )
-            entry.focus_force()
-            self.root.update()
-            entry.event_generate('<Return>', when='tail')
-
-        self.root.after_idle(submit_value)
+        Returns:
+            None: The actual entry key binding preserves the submitted text.
+        """
+        self.root.after_idle(lambda: self.press_entry_key('<Return>'))
         self.assertEqual(
             simpledialog.askstring('Input', 'Value', parent=self.root, initialvalue='__cancel__'),
             '__cancel__',
