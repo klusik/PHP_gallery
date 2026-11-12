@@ -1,5 +1,101 @@
 # Patch notes
 
+## Version 1.1.1
+
+Improved Windows Photos recovery after transient local thumbnail cooldowns,
+kept server rate limits and manual retry behavior intact, and made bounded
+failure diagnostics more useful. Accelerated the shared Watcher recording
+indicators and updated WinApp to 1.1.1.
+
+### Highlights
+
+#### Photos thumbnail cooldown recovery
+
+- Resumed pending thumbnails automatically after the existing transient
+  cooldown and completion of the preceding transport operation. Preserved the
+  single network owner, foreground priority, cancellation, currentness checks,
+  partial publication, request limits and cache proofs. [#362](https://github.com/klusik/PHP_gallery/issues/362)
+- Kept a real HTTP 429 and validated server `Retry-After` distinct from a local
+  transient pause. Server throttling still required the existing explicit
+  Retry action; no rate limits were removed. [#362](https://github.com/klusik/PHP_gallery/issues/362)
+- Added a separate paused-request message in English, Czech, German and
+  Swedish instead of presenting a local cooldown as server rate limiting.
+
+#### Safe Photos diagnostics
+
+- Recorded fixed local reasons when an accepted media response was no longer
+  current: cancellation, session closure, operation deadline or grant expiry.
+  Kept the response rejected and did not attribute these local checks to an
+  HTTP refusal. [#362](https://github.com/klusik/PHP_gallery/issues/362)
+- Routed genuine thumbnail batch failures through the existing safe diagnostic
+  owner, without retaining raw exception text, credentials or private paths.
+  The original cause of the previously observed installed-client warning
+  remains unproven. [#362](https://github.com/klusik/PHP_gallery/issues/362)
+
+#### Watcher recording indicators
+
+- Updated the shared Watcher phase interval from 800 ms to 267 ms, for an
+  approximately 534 ms bright/dim cycle across the tray, navigation rail,
+  header, Photos tree and cache markers. Preserved the single Tk scheduler and
+  independent update badge. [#362](https://github.com/klusik/PHP_gallery/issues/362)
+
+### Technical Details
+
+#### WinApp and compatibility
+
+- Updated the independent `winapp/VERSION` from `1.1.0` to `1.1.1` and prepared
+  Gallery 1.1.1 with matching manual edition metadata. Preserved saved
+  thumbnail-batch preferences.
+- Kept the existing bounded thumbnail retry policy, request/concurrency limits,
+  authorization checks, cache proofs and HTTP 429/`Retry-After` handling. No
+  server capability default or public web endpoint changed.
+- Added no database migration or schema change.
+
+#### Diagnostics and hosted test coverage
+
+- Updated `winapp/uploader/app_linking.py`,
+  `winapp/uploader/native_gallery_viewer.py` and
+  `winapp/uploader/diagnostics.py` to carry cooldown cause and prior-operation
+  completion, schedule one cancellable Tk resume, retain safe failure details
+  and identify the four finite post-response currentness reasons. Added the
+  paused-request translations in
+  `winapp/uploader/flight_report_translations.py`.
+- Added regressions in `winapp/tests/test_thumbnail_batch_session.py`,
+  `winapp/tests/test_native_thumbnail_batch.py` and
+  `winapp/tests/test_app_linking.py` for transient recovery, manual 429 retry,
+  transport completion, cancellation, close, foreground throttling and safe
+  currentness diagnostics. Updated `winapp/tests/test_audit_reporting.py` and
+  `scripts/audit_winapp_report.py` so selected-child logs flush complete
+  failure tracebacks immediately after FAIL/ERROR records, preserving reasons
+  if a later timeout prevents final JSON serialization.
+- Updated `TESTING.md`, `winapp/README.md`,
+  `docs/COMPATIBILITY_LIFECYCLE.md` and all four maintained manual sources.
+  Native Tk regressions require hosted Windows qualification and do not prove
+  installed-host latency or acceptance.
+
+### User Impact
+
+#### For Windows companion users
+
+- Photos resumed pending thumbnails after a transient local cooldown once the
+  prior request had actually finished. Foreground work, cancellation and
+  currentness fences remained in effect. A server HTTP 429 still waited for
+  manual Retry; this change did not remove server rate limits.
+- Watcher recording markers pulsed through a shared, shorter cycle. The
+  tray, navigation, Watcher header and Photos markers stayed synchronized.
+
+#### For visitors and administrators
+
+- Public gallery and administrator behavior did not change. The release added
+  no public web interface, route or database schema change.
+
+#### For maintainers
+
+- Selected Windows audit child logs retained full failure tracebacks before
+  final report serialization, making a failure reason available even if a
+  later timeout prevented the final JSON report. The supplied evidence did not
+  establish installed-client acceptance.
+
 ## Version 1.1.0
 
 Improved the native Photos workflow with negotiated thumbnail streaming,
