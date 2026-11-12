@@ -1075,6 +1075,13 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             )
             with self.assertRaises(linking.LinkingThumbnailBatchDeferred) as deferred:
                 session.media_thumbnails(42, photos, lambda *_args: None)
+            self.assertEqual(
+                'server_retry_after', deferred.exception.cooldown_source,
+            )
+            self.assertIs(
+                initial.exception.operation_finished,
+                deferred.exception.operation_finished,
+            )
             self.assertNotIsInstance(
                 deferred.exception, linking.LinkingMediaThrottled,
             )
@@ -1115,7 +1122,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         with mock.patch.object(
             linking, '_linking_connection', side_effect=connect,
         ) as connection_factory:
-            with self.assertRaises(linking.LinkingResponseError):
+            with self.assertRaises(linking.LinkingResponseError) as exhausted:
                 session.media_thumbnails(42, photos, lambda *_args: None)
             self.assertGreater(
                 session._thumbnail_batch_cooldown_until, time.monotonic(),
@@ -1127,6 +1134,11 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             )
             with self.assertRaises(linking.LinkingThumbnailBatchDeferred) as deferred:
                 session.media_thumbnails(42, photos, lambda *_args: None)
+            self.assertEqual('transient', deferred.exception.cooldown_source)
+            self.assertIs(
+                exhausted.exception.operation_finished,
+                deferred.exception.operation_finished,
+            )
             self.assertNotIsInstance(
                 deferred.exception, linking.LinkingMediaThrottled,
             )

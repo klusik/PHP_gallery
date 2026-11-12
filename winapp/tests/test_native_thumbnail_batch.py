@@ -7,6 +7,7 @@
 #   - Prove the first tile is displayed before its batch worker completes.
 #   - Retain the four-item queue and captured session proof checks.
 #   - Fence a queued partial-batch raster across an authoritative photo refresh.
+#   - Resume local transient cooldowns without weakening server throttle state.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Exercise the native batch viewer using existing isolated Tk fixtures."""
@@ -165,6 +166,283 @@ class NativeThumbnailBatchTests(unittest.TestCase):
         self.assertIn('http_batches=1', viewer.render_diagnostics())
         self.assertIn('route=thumbnail_batch operations=1 http_attempts=1',
                       viewer.render_diagnostics())
+
+    def test_local_defer_retries_after_delay_and_transport_completion(self) -> None:
+        """Resume a local timeout cooldown without labeling it as HTTP 429.
+
+        Returns:
+            None: The local deferral retains pending rows, yields to a selected
+                detail and retries only after its prior operation completes.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.supports_thumbnail_batch.return_value = True
+        session.thumbnail_batch_preferred.return_value = True
+        session.thumbnail_publication_current.return_value = True
+        previous_finished = threading.Event()
+        attempts: list[int] = []
+
+        def deferred_then_publish(
+            gallery_id: int, requested: tuple[linking.LinkedPhoto, ...],
+            publish: Callable[[linking.ThumbnailPublication | linking.LegacyThumbnailPublication,
+                               linking.MediaReadTimings, Callable[[], None]], None],
+            cancelled: threading.Event, *, timings: linking.MediaReadTimings,
+            stats: linking.ThumbnailBatchStats,
+        ) -> None:
+            """Defer once, then publish through the real Tk callback owner.
+
+            Args:
+                gallery_id (int): Captured physical gallery identifier.
+                requested (tuple[linking.LinkedPhoto, ...]): Admitted rows.
+                publish (Callable[[linking.ThumbnailPublication | linking.LegacyThumbnailPublication, linking.MediaReadTimings, Callable[[], None]], None]):
+                    Worker-safe owned result callback.
+                cancelled (threading.Event): Current thumbnail cancellation.
+                timings (linking.MediaReadTimings): Physical request metrics.
+                stats (linking.ThumbnailBatchStats): Per-call batch metrics.
+
+            Returns:
+                None: The second call publishes complete decoded fixtures.
+
+            Raises:
+                linking.LinkingThumbnailBatchDeferred: First call models the
+                    existing one-second transient cooldown without a new request.
+            """
+            del cancelled
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise linking.LinkingThumbnailBatchDeferred(
+                    int(linking.THUMBNAIL_BATCH_RETRY_SECONDS),
+                    cooldown_source='transient',
+                    operation_finished=previous_finished,
+                )
+            timings.http_requests = 1
+            stats.batch_sizes[len(requested)] = 1
+            for photo in requested:
+                body = image_bytes[photo.image_id]
+                publish(
+                    self._publication(session, gallery_id, photo, body),
+                    linking.MediaReadTimings(), lambda: None,
+                )
+                stats.wire_items += 1
+
+        session.media_thumbnails.side_effect = deferred_then_publish
+        gallery = linking.LinkedGallery(
+            native_fixture.TEST_GALLERY_ID,
+            native_fixture.TEST_PARENT_GALLERY_ID, 'Batch',
+        )
+        viewer = self._open_viewer(session, gallery)
+        self.addCleanup(viewer.close)
+        self._wait_until(
+            lambda: viewer._worker is None
+            and viewer._thumbnail_resume_after_id is not None,
+            'The local cooldown did not reach its owned Tk timer.',
+        )
+        self.assertFalse(viewer._media_throttled)
+        self.assertFalse(viewer._http_thumbnail_failure_latched)
+        self.assertTrue(viewer._thumbnail_pending)
+        self.assertEqual(
+            viewer._text('linking_media_retry_wait'),
+            viewer.status.cget('text'),
+        )
+        self.assertNotEqual(
+            viewer._text('linking_media_throttled'), viewer.status.cget('text'),
+        )
+        self.assertIn('http_failures=0', viewer.render_diagnostics())
+        self.assertIn('http_incomplete=0', viewer.render_diagnostics())
+
+        # Viewport admission can leave the shared cancellation fence set while
+        # the deferred retry waits; release it only after transport completion.
+        viewer._thumbnail_cancelled.set()
+
+        viewer._select_photo(0)
+        self._wait_until(
+            lambda: session.media_photo.called,
+            'The local thumbnail wait blocked foreground detail work.',
+        )
+        retry_deadline = (
+            time.monotonic() + linking.THUMBNAIL_BATCH_RETRY_SECONDS
+            + native_fixture.TEST_GUI_POLL_SECONDS
+        )
+        self._wait_until(
+            lambda: time.monotonic() >= retry_deadline,
+            'The original cooldown did not elapse while pumping Tk.',
+        )
+        self.assertEqual(1, session.media_thumbnails.call_count)
+        self.assertTrue(
+            viewer._thumbnail_cancelled.is_set(),
+            'A live transport must retain its cancellation fence.',
+        )
+        # The detail lightbox suspends the grid; resume it before expecting
+        # background thumbnail dispatch to become visible again.
+        assert viewer._lightbox is not None
+        viewer._lightbox.dismiss()
+        self._wait_until(
+            lambda: viewer.grid_canvas.winfo_viewable(),
+            'Dismissing foreground detail did not restore the thumbnail grid.',
+        )
+        previous_finished.set()
+        self._wait_until(
+            lambda: session.media_thumbnails.call_count == 2
+            and viewer._worker is None
+            and not viewer._thumbnail_pending
+            and not viewer._thumbnail_cancelled.is_set()
+            and all(viewer._photo_images[index] is not None
+                    for index in viewer._admitted_thumbnail_indices),
+            'The live pending rows did not resume after transport completion.',
+        )
+
+    def test_server_throttle_stays_manual_without_local_resume_timer(self) -> None:
+        """Keep a real 429 visible for explicit Retry without early replay.
+
+        Returns:
+            None: A server throttle remains a manual decision and never arms the
+                transient local-cooldown timer.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.supports_thumbnail_batch.return_value = True
+        session.thumbnail_batch_preferred.return_value = True
+        error = linking.LinkingMediaThrottled(
+            route='app_linking_thumbnail_batch',
+        )
+        session.media_thumbnails.side_effect = error
+        gallery = linking.LinkedGallery(
+            native_fixture.TEST_GALLERY_ID,
+            native_fixture.TEST_PARENT_GALLERY_ID, 'Batch',
+        )
+        viewer = self._open_viewer(session, gallery)
+        self.addCleanup(viewer.close)
+        self._wait_until(
+            lambda: viewer._worker is None and viewer._media_throttled,
+            'The actual throttle did not reach the explicit retry state.',
+        )
+        self.assertIsNone(viewer._thumbnail_resume_after_id)
+        self.assertEqual(1, session.media_thumbnails.call_count)
+        self.assertEqual(
+            viewer._text('linking_media_throttled'), viewer.status.cget('text'),
+        )
+        self.assertEqual('normal', str(viewer.retry_button.cget('state')))
+
+    def test_close_revokes_a_scheduled_local_resume(self) -> None:
+        """Prevent a stale cooldown callback from restarting a closed viewer.
+
+        Returns:
+            None: Closing cancels the single owned Tk retry before its deadline.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.supports_thumbnail_batch.return_value = True
+        session.thumbnail_batch_preferred.return_value = True
+
+        def defer(
+            _gallery_id: int, _requested: tuple[linking.LinkedPhoto, ...],
+            _publish: Callable[[linking.ThumbnailPublication | linking.LegacyThumbnailPublication,
+                                linking.MediaReadTimings, Callable[[], None]], None],
+            _cancelled: threading.Event, *,
+            timings: linking.MediaReadTimings,
+            stats: linking.ThumbnailBatchStats,
+        ) -> None:
+            """Return one local pause without making an HTTP request.
+
+            Args:
+                _gallery_id (int): Captured physical gallery identifier.
+                _requested (tuple[linking.LinkedPhoto, ...]): Admitted rows.
+                _publish (Callable[[linking.ThumbnailPublication | linking.LegacyThumbnailPublication, linking.MediaReadTimings, Callable[[], None]], None]):
+                    Worker-safe result callback unused by this deferral.
+                _cancelled (threading.Event): Current operation cancellation.
+                timings (linking.MediaReadTimings): Physical metrics owner.
+                stats (linking.ThumbnailBatchStats): Per-call counters.
+
+            Returns:
+                None: The viewer receives only the validated transient delay.
+
+            Raises:
+                linking.LinkingThumbnailBatchDeferred: The fixture's pause.
+            """
+            del timings, stats
+            raise linking.LinkingThumbnailBatchDeferred(
+                int(linking.THUMBNAIL_BATCH_RETRY_SECONDS),
+                cooldown_source='transient',
+                operation_finished=threading.Event(),
+            )
+
+        session.media_thumbnails.side_effect = defer
+        gallery = linking.LinkedGallery(
+            native_fixture.TEST_GALLERY_ID,
+            native_fixture.TEST_PARENT_GALLERY_ID, 'Batch',
+        )
+        viewer = self._open_viewer(session, gallery)
+        self.addCleanup(viewer.close)
+        self._wait_until(
+            lambda: viewer._worker is None
+            and viewer._thumbnail_resume_after_id is not None,
+            'The local resume was not scheduled before close.',
+        )
+        resume_deadline = (
+            time.monotonic() + linking.THUMBNAIL_BATCH_RETRY_SECONDS
+            + native_fixture.TEST_GUI_POLL_SECONDS
+        )
+        viewer.close()
+        self.assertIsNone(viewer._thumbnail_resume_after_id)
+        self._wait_until(
+            lambda: time.monotonic() >= resume_deadline,
+            'Tk did not advance past the cancelled resume deadline.',
+        )
+        self.assertEqual(1, session.media_thumbnails.call_count)
+
+    def test_local_resume_preserves_newer_foreground_throttle(self) -> None:
+        """Keep a newer foreground 429 authoritative over a stale local timer.
+
+        Returns:
+            None: The local timer cannot hide the foreground Retry state or
+                dispatch a thumbnail request while the server throttle is live.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = linking.LinkedGallery(
+            native_fixture.TEST_GALLERY_ID,
+            native_fixture.TEST_PARENT_GALLERY_ID, 'Batch',
+        )
+        viewer = self._open_viewer(session, gallery)
+        self.addCleanup(viewer.close)
+        self._wait_until(
+            lambda: viewer._worker is None
+            and not viewer._thumbnail_pending
+            and not viewer._thumbnail_disk_lane.busy()
+            and not viewer._warm_thumbnail_pending
+            and bool(viewer._admitted_thumbnail_indices)
+            and all(viewer._photo_images[index] is not None
+                    for index in viewer._admitted_thumbnail_indices),
+            'The legacy fixture thumbnails did not settle before ownership change.',
+        )
+
+        session.supports_thumbnail_batch.return_value = True
+        session.thumbnail_batch_preferred.return_value = True
+        viewer._media_throttled = True
+        viewer._retry_kind = 'detail'
+        throttled_text = viewer._text('linking_media_throttled')
+        viewer.status.configure(text=throttled_text)
+        viewer.status.pack(anchor='w', pady=(4, 8))
+        viewer.retry_button.configure(state='normal')
+        viewer.retry_button.pack(side='left', padx=(8, 0))
+        viewer._thumbnail_loaded.discard(0)
+        viewer._admitted_thumbnail_indices.add(0)
+        viewer._thumbnail_pending.append(0)
+        finished = threading.Event()
+        finished.set()
+
+        viewer._schedule_thumbnail_resume(0, finished)
+        self._wait_until(
+            lambda: viewer._thumbnail_resume_after_id is None,
+            'The ready local timer did not release its owned pause.',
+        )
+
+        self.assertTrue(viewer._media_throttled)
+        self.assertEqual('detail', viewer._retry_kind)
+        self.assertEqual(throttled_text, viewer.status.cget('text'))
+        self.assertEqual('normal', str(viewer.retry_button.cget('state')))
+        self.assertTrue(viewer._thumbnail_pending)
+        session.media_thumbnails.assert_not_called()
 
     def test_partial_batch_refresh_discards_queued_raster(self) -> None:
         """Fence a queued later frame while refreshing a partial batch.

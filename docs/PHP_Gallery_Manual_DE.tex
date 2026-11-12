@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.1.0}
+\newcommand{\version}{1.1.1}
 \newcommand{\manualdate}{12.~November~2026}
 
 \hypersetup{
@@ -2315,6 +2315,10 @@ Ein Worker übergibt fertige Miniaturen in begrenzten seriellen Gruppen ohne
 separates GUI-Polling zwischen Fotos. Fertige Ergebnisse und Treffer im
 dekodierten Cache werden in kleinen GUI-Schritten angewendet; vorrangige
 Aktionen und Ansichtswechsel unterbrechen verbleibende Lesevorgänge.
+Eine kurze lokale Pause nach einem vorübergehenden Transportfehler setzt
+ausstehende Miniaturen erst nach Ablauf und Abschluss der vorherigen Anfrage
+fort; HTTP~429 wartet weiterhin auf die bestehende manuelle Aktion
+\ui{Erneut versuchen}.
 Das Request-Gate der Sitzung steuert weiterhin authentifizierte Übertragungen.
 Die Diagnostik trennt Festplatte, Gate-Wartezeit, Anmeldeerneuerung,
 Medientransport, Dekodierung, Warteschlange und Tk-Anwendung. Kalte und warme
@@ -2756,7 +2760,9 @@ GUI-Modusschutz und Wiederherstellung nach Absturz sind noch nicht qualifiziert.
 \subsection{Windows-Start und eine laufende Instanz}
 
 Bei aktiver Watcher-Erfassung pulsiert ein roter Punkt auf dem Tray-Symbol
-synchron zur Anzeige in der App; das Update-Abzeichen bleibt unabhängig.
+synchron zur Anzeige in der App. Alle Watcher-Markierungen teilen ein
+267-ms-Phasenintervall, also etwa 534~ms für einen vollständigen
+Hell/Dunkel-Zyklus; das Update-Abzeichen bleibt unabhängig.
 
 Der installierte Uploader startet standardmäßig nach der Windows-Anmeldung
 direkt minimiert im Infobereich. Unter \ui{Settings > App \& integrations}
@@ -11037,6 +11043,9 @@ Fehlende, unvollständige, fehlerhafte, doppelte, fehlgeschlagene oder
 abgelaufene Nachweise führen zum Fehlschlag. Der normale Vollsuite-Owner behält
 sein bisheriges Einzelprozessverhalten und Limit; frühere Gesamt-, Zwei-, Drei-
 und Vier-Prozess-Timeouts bleiben fehlgeschlagene Läufe.
+Das ausgewählte Prozessprotokoll gibt den vollständigen Fehler-Traceback direkt
+nach dem FAIL/ERROR-Endeintrag aus; so bleibt der Grund erhalten, wenn ein
+späteres Timeout den abschließenden JSON-Bericht verhindert.
 
 GitHub Actions ist für Agenten die normale und maßgebliche Prüfumgebung
 (CI-first). Die folgenden zentralen Audit-Befehle beschreiben den gehosteten

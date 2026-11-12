@@ -219,6 +219,9 @@ _NativeMediaKind = Literal[
     'photos', 'presentation', 'thumbnail', 'photo', 'track', 'info',
     'gallery_info', 'photo_info', 'revision',
 ]
+_MediaCurrentnessReason = Literal[
+    'cancelled', 'session_closed', 'deadline', 'grant_expired',
+]
 LinkedMediaDetails = dict[str, str | int | float | bool | None]
 GALLERIES_SCOPE = 'link:identity galleries:list'
 UPLOAD_SCOPE = 'link:identity galleries:list gallery:upload'
@@ -453,6 +456,14 @@ THUMBNAIL_BATCH_RETRY_SECONDS = 1.0
 # Consumers: LinkingSession.media_thumbnails. Rationale: One initial request
 # plus one retry prevents indefinite replay and never retries delivered frames.
 THUMBNAIL_BATCH_MAX_ATTEMPTS = 2
+
+# Purpose: Carry the existing pause cause without inventing an HTTP response.
+# Type: Literal values. Units: cooldown cause. Scope: deferred thumbnail reads.
+# Consumers: LinkingThumbnailBatchDeferred and native viewer completion.
+# Rationale: Keep a local transient pause distinct from a server Retry-After.
+_ThumbnailCooldownSource = Literal[
+    'transient', 'server_retry_after', 'unknown',
+]
 
 # Purpose: Preserve the existing upload's tolerance for an inactive socket.
 # Type: int. Units: seconds. Scope: one delegated multipart socket operation.
@@ -1115,6 +1126,39 @@ class LinkingMediaUnavailable(LinkingError):
     """Report an authenticated gallery media target that is unavailable."""
 
 
+class LinkingMediaNotCurrent(LinkingError):
+    """Report a media response rejected by the post-response currentness fence.
+
+    Args:
+        currentness_reason (_MediaCurrentnessReason): Fixed local guard that
+            rejected the otherwise accepted media response. The post-response
+            guard reports the first matching state in a stable priority order;
+            it does not claim which condition occurred first in time.
+    """
+
+    def __init__(self, currentness_reason: _MediaCurrentnessReason) -> None:
+        """Store only a finite local rejection cause and fixed safe message.
+
+        Args:
+            currentness_reason (_MediaCurrentnessReason): Cancel, session close,
+                operation deadline or grant expiry observed after transport.
+                The first matching guard in the stable priority order is kept.
+
+        Returns:
+            None: No HTTP response status or remote failure is implied.
+
+        Raises:
+            ValueError: The reason is outside the local currentness allowlist.
+        """
+        if (type(currentness_reason) is not str
+                or currentness_reason not in (
+                    'cancelled', 'session_closed', 'deadline', 'grant_expired',
+                )):
+            raise ValueError('Invalid media currentness reason.')
+        self.currentness_reason = currentness_reason
+        super().__init__('Gallery media is no longer current.')
+
+
 class LinkingThumbnailProofChanged(LinkingError):
     """Report that a captured thumbnail proof no longer authorizes publication."""
 
@@ -1124,14 +1168,25 @@ class LinkingThumbnailBatchDeferred(LinkingError):
 
     Args:
         retry_after_seconds (int): Remaining bounded cooldown in seconds.
+        cooldown_source (_ThumbnailCooldownSource): Cause of the stored cooldown.
+        operation_finished (threading.Event | None): Prior transport completion,
+            when the cooldown came from an observed network operation.
     """
 
-    def __init__(self, retry_after_seconds: int) -> None:
+    def __init__(
+        self, retry_after_seconds: int, *,
+        cooldown_source: _ThumbnailCooldownSource = 'unknown',
+        operation_finished: threading.Event | None = None,
+    ) -> None:
         """Store the validated remaining delay and a fixed safe message.
 
         Args:
             retry_after_seconds (int): Positive remaining whole seconds within
                 the existing maximum accepted server retry interval.
+            cooldown_source (_ThumbnailCooldownSource): Closed cause category
+                associated with the deadline that currently wins.
+            operation_finished (threading.Event | None): Completion signal for
+                the preceding physical request, if one caused this cooldown.
 
         Returns:
             None: No HTTP status or remote response is implied.
@@ -1142,7 +1197,13 @@ class LinkingThumbnailBatchDeferred(LinkingError):
         if (type(retry_after_seconds) is not int
                 or not 1 <= retry_after_seconds <= UPLOAD_RETRY_AFTER_MAX_SECONDS):
             raise ValueError('Invalid thumbnail cooldown delay.')
+        if cooldown_source not in (
+            'transient', 'server_retry_after', 'unknown',
+        ):
+            raise ValueError('Invalid thumbnail cooldown source.')
         self.retry_after_seconds = retry_after_seconds
+        self.cooldown_source = cooldown_source
+        self.operation_finished = operation_finished
         super().__init__('Thumbnail requests are deferred until cooldown ends.')
 
 
@@ -5034,6 +5095,8 @@ class LinkingSession:
         self._thumbnail_batch_supported = thumbnail_batch_supported
         self._thumbnail_batch_disabled_reason = ''
         self._thumbnail_batch_cooldown_until = 0.0
+        self._thumbnail_batch_cooldown_source: _ThumbnailCooldownSource = 'unknown'
+        self._thumbnail_batch_cooldown_operation_finished: threading.Event | None = None
         self._token = token
         self._expires_at = expires_at
         self._busy = False
@@ -5563,6 +5626,8 @@ class LinkingSession:
                 negotiated cache permission.
 
         Raises:
+            LinkingMediaNotCurrent: The accepted response lost its local
+                currentness fence before returning to the caller.
             LinkingError: Invalid target, expired grant, unavailable media or unsafe transfer.
         """
         if not _native_media_id(gallery_id):
@@ -5731,11 +5796,19 @@ class LinkingSession:
                                 time.perf_counter() - transport_started
                             ) * 1000.0
                     with self._lock:
-                        if (cancel.is_set() or self._closed
-                                or (operation_deadline is not None
-                                    and time.monotonic() >= operation_deadline)
-                                or time.monotonic() >= self._expires_at):
-                            raise LinkingError('Gallery media is no longer current.')
+                        # Session closure wins when close also signals cancel.
+                        currentness_reason: _MediaCurrentnessReason | None = None
+                        if self._closed:
+                            currentness_reason = 'session_closed'
+                        elif cancel.is_set():
+                            currentness_reason = 'cancelled'
+                        elif (operation_deadline is not None
+                              and time.monotonic() >= operation_deadline):
+                            currentness_reason = 'deadline'
+                        elif time.monotonic() >= self._expires_at:
+                            currentness_reason = 'grant_expired'
+                        if currentness_reason is not None:
+                            raise LinkingMediaNotCurrent(currentness_reason)
                     return result
                 except LinkingGrantRejected:
                     self._media_connection_pool.discard()
@@ -7185,6 +7258,34 @@ class LinkingSession:
             with self._lock:
                 self._pending_gallery_cancels.discard(cancel)
 
+    def _remember_thumbnail_batch_cooldown(
+        self, delay_seconds: int | float, source: _ThumbnailCooldownSource,
+        operation_finished: threading.Event | None,
+    ) -> None:
+        """Retain the cause and completion signal for the longest pause.
+
+        Args:
+            delay_seconds (int | float): Existing server hint or fixed transient
+                cooldown duration in seconds.
+            source (_ThumbnailCooldownSource): Closed cause category for the
+                candidate deadline.
+            operation_finished (threading.Event | None): Prior request's actual
+                worker completion signal, when that request is observable.
+
+        Returns:
+            None: The longest current deadline and matching evidence remain.
+        """
+        if (type(delay_seconds) not in (int, float)
+                or not math.isfinite(delay_seconds) or delay_seconds <= 0
+                or source not in ('transient', 'server_retry_after', 'unknown')):
+            return
+        candidate_until = time.monotonic() + delay_seconds
+        with self._lock:
+            if candidate_until >= self._thumbnail_batch_cooldown_until:
+                self._thumbnail_batch_cooldown_until = candidate_until
+                self._thumbnail_batch_cooldown_source = source
+                self._thumbnail_batch_cooldown_operation_finished = operation_finished
+
     def media_thumbnails(
         self, gallery_id: int, photos: tuple[LinkedPhoto, ...],
         publish: Callable[[ThumbnailPublication | LegacyThumbnailPublication,
@@ -7262,7 +7363,7 @@ class LinkingSession:
                 counters.publish_ms += (time.perf_counter() - began) * 1000.0
 
         def wait_cooldown(*, wait_for_retry: bool = False) -> None:
-            """Honor a prior server hint without owning either transport gate.
+            """Honor the existing cooldown without owning either transport gate.
 
             Args:
                 wait_for_retry (bool): Wait interruptibly for this operation's
@@ -7278,12 +7379,18 @@ class LinkingSession:
                 check_active()
                 with self._lock:
                     until = self._thumbnail_batch_cooldown_until
+                    source = self._thumbnail_batch_cooldown_source
+                    operation_finished = (
+                        self._thumbnail_batch_cooldown_operation_finished
+                    )
                 delay = until - time.monotonic()
                 if delay <= 0:
                     return
                 if not wait_for_retry or delay >= deadline - time.monotonic():
                     raise LinkingThumbnailBatchDeferred(
                         min(UPLOAD_RETRY_AFTER_MAX_SECONDS, max(1, math.ceil(delay))),
+                        cooldown_source=source,
+                        operation_finished=operation_finished,
                     )
                 if cancel.wait(min(delay, LINKING_CANCELLATION_POLL_SECONDS)):
                     raise LinkingError('Thumbnail batch operation was cancelled.')
@@ -7316,11 +7423,10 @@ class LinkingSession:
                 )
             except LinkingMediaThrottled as error:
                 if error.retry_after_seconds is not None:
-                    with self._lock:
-                        self._thumbnail_batch_cooldown_until = max(
-                            self._thumbnail_batch_cooldown_until,
-                            time.monotonic() + error.retry_after_seconds,
-                        )
+                    self._remember_thumbnail_batch_cooldown(
+                        error.retry_after_seconds, 'server_retry_after',
+                        error.operation_finished,
+                    )
                 raise
             except LinkingMediaUnavailable:
                 check_active()
@@ -7354,6 +7460,7 @@ class LinkingSession:
 
         with self._lock:
             self._pending_gallery_cancels.add(operation_cancel)
+        deferred = False
         try:
             candidates: list[tuple[LinkedPhoto, ThumbnailBatchWitness | None]] = []
             item_metrics: dict[int, MediaReadTimings] = {}
@@ -7443,11 +7550,10 @@ class LinkingSession:
                         break
                     except LinkingMediaThrottled as error:
                         if error.retry_after_seconds is not None:
-                            with self._lock:
-                                self._thumbnail_batch_cooldown_until = max(
-                                    self._thumbnail_batch_cooldown_until,
-                                    time.monotonic() + error.retry_after_seconds,
-                                )
+                            self._remember_thumbnail_batch_cooldown(
+                                error.retry_after_seconds, 'server_retry_after',
+                                error.operation_finished,
+                            )
                         raise
                     except LinkingResponseError as error:
                         if error.status == 200:
@@ -7461,11 +7567,10 @@ class LinkingSession:
                                 'transport_failure',
                             )))
                         if transient:
-                            with self._lock:
-                                self._thumbnail_batch_cooldown_until = max(
-                                    self._thumbnail_batch_cooldown_until,
-                                    time.monotonic() + THUMBNAIL_BATCH_RETRY_SECONDS,
-                                )
+                            self._remember_thumbnail_batch_cooldown(
+                                THUMBNAIL_BATCH_RETRY_SECONDS, 'transient',
+                                error.operation_finished,
+                            )
                         if (not transient or frames[0] or attempt or cancel.is_set()
                                 or operation_cancel.is_set()):
                             raise
@@ -7476,11 +7581,16 @@ class LinkingSession:
                     counters.fallback_exceptional += 1
                     legacy(witness.photo, witness,
                            item_metrics[witness.photo.image_id])
+        except LinkingThumbnailBatchDeferred:
+            deferred = True
+            counters.failed = 0
+            raise
         except Exception:
             counters.operation_failures += 1
             raise
         finally:
-            counters.failed = counters.requested - counters.returned
+            if not deferred:
+                counters.failed = counters.requested - counters.returned
             with self._lock:
                 self._pending_gallery_cancels.discard(operation_cancel)
 

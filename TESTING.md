@@ -1650,7 +1650,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.1.0. Release verification uses the
+This guide applies to PHP Gallery Version 1.1.1. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -8668,9 +8668,11 @@ procedure, configuration or manual instructions.
 `test_native_thumbnail_batch.py` exercises early streamed display in native Tk.
 It also holds a second decoded frame in the real viewer queue across an
 authoritative photo refresh, checking generation fencing, raster disposal and
-that the fresh page starts only after the prior batch worker exits. No TeX
-manual impact: this internal regression adds no product procedure,
-configuration or manual instruction.
+that the fresh page starts only after the prior batch worker exits. Its cooldown
+regressions keep transient local deferral distinct from HTTP 429, retain pending
+rows, allow foreground detail work, wait for prior transport completion,
+preserve a newer foreground throttle, and cancel stale resumes on close. These
+native tests require hosted Windows Tk; they do not prove installed-host latency.
 The separate Windows-only `thumbnail-batch-viewer` audit owns four real Tk
 traversals against disposable loopback HTTP with actual discovery, session,
 parser and cache. It compares cold single/batch and disk-warm, RAM-empty
@@ -8716,7 +8718,9 @@ and caller publication callback using only owned fake HTTP responses. It covers
 one-request accounting, warm-cache no-HTTP behavior, proof mismatch, exact
 unsupported fallback, auth refusal, malformed-wire disablement, carried
 throttling, cooldown after exhausted transient retries and callback deadline
-fencing with both transport gates released. It also queues real foreground
+fencing with both transport gates released. It distinguishes transient cooldown
+from validated server Retry-After and preserves the prior transport completion
+event for viewer resumption. It also queues real foreground
 listing/identity and upload session routes while a first thumbnail publication
 is held, checks dispatch order between two successive batch reads at the owned
 HTTP connection, and cancels a batch ticket waiting behind an incumbent gate
@@ -9431,6 +9435,9 @@ poll, bounded ready rasters and GUI attachment slices, decoded-memory reuse
 during an active network read, foreground interruption, viewport repriority,
 refresh identity, stale raster release, HTTP 429 and close. Scheduling/count
 assertions are independent of runner speed; they do not measure installed FPS.
+Post-response currentness regressions separately identify local cancellation,
+session closure, operation deadline and grant expiry after a valid transport
+response; these labels do not attribute an HTTP refusal or change rejection.
 The passive media-timing fixtures distinguish a verified disk hit from session
 gate wait, credential renewal and media transfer, including both attempts of
 the narrow refused-304 retry. Rejection, cancellation and throttling retain
@@ -9478,8 +9485,13 @@ each under the existing 90-second cap; the coordinator has a 480-second outer
 bound for those unchanged child caps plus inventory and report handling. It
 retains each original schema-1 child report and log. Selected-ID children flush
 each test's START, END, status and duration to the retained log so a timeout
-identifies the active case; report verbosity, schema, child limits and
-selection remain unchanged. The coordinator checks runtime identity and report
+identifies the active case. The END record is followed immediately by the full
+FAIL/ERROR traceback, preserving its reason if a later child timeout prevents
+JSON report serialization.
+`test_audit_reporting.py` suppresses unittest's trailing traceback summary to
+verify this progress evidence itself.
+Report verbosity, schema, child limits and selection remain unchanged. The
+coordinator checks runtime identity and report
 counts, and requires the exact disjoint test-ID union across all five children
 before merging the real outcomes. Missing, timed-out, malformed, duplicate,
 incomplete or unsuccessful child evidence fails. The ordinary `winapp` suite

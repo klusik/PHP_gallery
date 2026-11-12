@@ -151,9 +151,10 @@ late startup results. Continuation diagnostics name the failed phase and a
 fixed safe reason without exposing keys, checkpoint contents or local paths.
 On Windows, recovery also accepts either slash direction in the recorded folder
 while retaining the existing exact boundary and queue verification.
-While Watcher capture is active, a red dot pulses
-on the tray icon in step with the in-app indicator. The update badge remains
-visible independently.
+While Watcher capture is active, a red dot pulses on the tray icon in step
+with the in-app indicator. All Watcher markers use the same 267 ms phase
+interval, or about 534 ms for a complete bright/dim cycle; the update badge
+remains visible independently.
 Source/Python runs never add an OS startup entry; their startup switch is
 disabled.
 
@@ -1320,6 +1321,9 @@ session/transport admission gives queued viewport and Watcher work a turn,
 retaining one active media GET. An admitted bounded request may finish. The original
 **Preload gallery** still prepares both renditions. Both modes respect the
 server's HTTP 429 and Retry-After limits; thumbnail-only is not a bulk endpoint.
+In Photos, a short local pause after a transient transport failure resumes
+pending thumbnails automatically after the prior request has finished. A
+server HTTP 429 still waits for the existing explicit Retry action.
 Both modes yield between catalogue pages and image reads when the current view
 needs metadata, a selected image, audio or adjacent lightbox preparation.
 Explicit full preload checks current authorized cache hits before skipping a
@@ -1686,10 +1690,10 @@ Before activating the destination, WinApp checks its accepted import
 work against the local upload history. A large existing Watcher history can
 be read within the same 256 MiB bound used for state updates. Unverifiable
 history or unfinished work for another destination still blocks a change.
-The red REC indicator shows active capture. The
-Watcher rail icon pulses red on every tab while capture is active. A small
-filled red light marks the exact upload gallery in the Photos tree and at its
-heading. A hollow light marks a collapsed branch that hides that gallery.
+The red REC indicator shows active capture. The Watcher rail, header, tray,
+Photos tree and cache markers share one pulse state while capture is active.
+A small filled red light marks the exact upload gallery in the Photos tree and
+at its heading. A hollow light marks a collapsed branch that hides that gallery.
 The context offers SimBrief when a flight simulator is detected. Finish a game
 to drain its screenshots, or finish a flight to save its available reports
 locally. Finishing revokes the temporary capture key and leaves the website

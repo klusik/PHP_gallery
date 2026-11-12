@@ -773,11 +773,13 @@ MIN_STABLE_SECONDS = 0.5
 LINKED_INVENTORY_BATCH_SIZE = 500
 DEFAULT_INVENTORY_REFRESH_SECONDS = 30.0
 
-# Purpose: Bound the watcher recording indicator's accessible color pulse.
+# Purpose: Set the shared Watcher recording marker phase interval.
 # Type: int. Units: milliseconds. Scope: one active GUI watcher.
-# Consumers: WatcherApp._pulse_watcher_recording.
-# Rationale: 800 ms alternation stays noticeable while never hiding the marker.
-WATCHER_RECORDING_PULSE_MS = 800
+# Consumers: WatcherApp._set_watcher_recording, _pulse_watcher_recording,
+# _render_watcher_recording and refresh_watcher_header.
+# Rationale: 267 ms is roughly one third of the previous 800 ms phase interval;
+# two phases form an approximately 534 ms bright/dim cycle without hiding it.
+WATCHER_RECORDING_PULSE_MS = 267
 
 # Purpose: Animate unknown-duration Watcher linking and initial folder capture.
 # Type: int. Units: milliseconds. Scope: Watcher startup activity only.

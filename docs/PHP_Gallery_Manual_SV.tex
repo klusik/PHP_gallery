@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.1.0}
+\newcommand{\version}{1.1.1}
 \newcommand{\manualdate}{12~november~2026}
 
 \hypersetup{
@@ -2145,7 +2145,11 @@ kontroll på den installerade datorn.
 En arbetstråd lämnar färdiga miniatyrer i begränsade seriella grupper utan
 separat GUI-pollning mellan foton. Färdiga resultat och träffar i avkodad cache
 läggs till i små GUI-steg; prioriterade åtgärder och vyändringar avbryter
-återstående läsningar. Sessionens request-gate styr fortfarande autentiserade
+återstående läsningar. En kort lokal paus efter ett tillfälligt transportfel
+återupptar väntande miniatyrer först när pausen gått ut och föregående begäran
+har avslutats; HTTP~429 väntar fortfarande på den befintliga manuella åtgärden
+\ui{Försök igen}.
+Sessionens request-gate styr fortfarande autentiserade
 överföringar. Diagnostiken skiljer på disk, väntan vid gate,
 inloggningsförnyelse, medietransport, avkodning, kötid och Tk-tillämpning.
 Jämför kall och varm bläddring separat; mätningarna bevisar inte FPS.
@@ -2507,7 +2511,9 @@ Långa sidor och dialoger kan rullas med mushjulet eller rullningslisten;
 text- och tabellkontroller behåller sin egen rullning.
 
 När Watcher är aktiv pulserar en röd punkt på ikonen i systemfältet
-synkroniserat med indikatorn i appen; uppdateringsmärket är oberoende.
+synkroniserat med indikatorn i appen. Alla Watcher-markörer delar ett
+fasintervall på 267~ms, alltså cirka 534~ms för en fullständig ljus/mörk cykel;
+uppdateringsmärket är oberoende.
 
 Manuell \ui{Import} kräver fortfarande granskning av förkontrollen och ett
 uttryckligt startval. \ui{Activity} innehåller filtrerad händelsehistorik,
@@ -10355,6 +10361,9 @@ samman. Saknade, ofullständiga, felaktiga, dubbla, misslyckade eller
 överskridna resultat innebär underkänt. Den vanliga fullständiga ägaren behåller
 sin tidigare enkla process och tidsgräns; tidigare timeout för hela sviten och
 med två, tre och fyra processer förblir misslyckade körningar.
+Den valda processens logg skriver hela felspårningen direkt efter det avslutande
+FAIL/ERROR-inlägget, så att orsaken bevaras om en senare timeout hindrar den
+slutliga JSON-rapporten.
 
 GitHub Actions är agenternas normala och auktoritativa verifieringsmiljö
 (CI-first). Audit-kommandona nedan beskriver den värdbaserade köraren; agenter

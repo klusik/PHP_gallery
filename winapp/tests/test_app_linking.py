@@ -5571,6 +5571,135 @@ class NativeMediaTransportTests(unittest.TestCase):
         self.assertNotIn('fixture-secret', failure)
         self.assertNotIn('private response body', failure)
 
+    def test_post_response_currentness_guard_reports_safe_local_reason(self) -> None:
+        """Name each local guard without attributing an HTTP refusal.
+
+        Returns:
+            None: Four currentness conditions remain fail-closed and redact all
+                dynamic exception text from their bounded Photos summaries.
+        """
+        guard_cases = (
+            'cancelled', 'session_closed', 'deadline', 'grant_expired',
+        )
+        for currentness_reason in guard_cases:
+            # Fixed 100/200/600-second clock values make the boundary vectors
+            # runner-independent; they do not define application timing policy.
+            fake_clock = [100.0]
+            deadline = 200.0 if currentness_reason == 'deadline' else None
+            with mock.patch.object(
+                linking, 'time', SimpleNamespace(
+                    monotonic=lambda: fake_clock[0],
+                    perf_counter=time.perf_counter,
+                ),
+            ):
+                session = linking.LinkingSession(
+                    'https://gallery.example/Galerie', 'pgla_' + 'A' * 43,
+                    fake_clock[0] + 600.0, linking.GALLERIES_SCOPE,
+                )
+                self.addCleanup(session.close)
+                cancelled = threading.Event()
+
+                def finish_transport(
+                    request_once: Callable[
+                        [linking._LinkingTransportControl],
+                        linking._NativeMediaResponse,
+                    ],
+                    transport_cancelled: threading.Event | None,
+                    deadline_seconds: float,
+                    inactivity_seconds: float,
+                    *, phase: linking._LinkingDiagnosticPhase,
+                    route: linking._LinkingDiagnosticRoute,
+                    timings: linking.MediaReadTimings | None = None,
+                    server_timing_out: list[
+                        tuple[linking.PassiveServerTiming | None, float | None]
+                    ] | None = None,
+                ) -> linking._NativeMediaResponse:
+                    """Return one safe media body after staging a fence state.
+
+                    Args:
+                        request_once (Callable[[linking._LinkingTransportControl], linking._NativeMediaResponse]): Native response reader is unused by
+                            this controlled transport.
+                        transport_cancelled (threading.Event | None): Current
+                            read's cancellation signal.
+                        deadline_seconds (float): Existing transport bound.
+                        inactivity_seconds (float): Existing socket bound.
+                        phase (linking._LinkingDiagnosticPhase): Fixed media
+                            diagnostic phase.
+                        route (linking._LinkingDiagnosticRoute): Fixed media
+                            route.
+                        timings (linking.MediaReadTimings | None): Optional
+                            physical read metrics.
+                        server_timing_out (list[tuple[linking.PassiveServerTiming | None, float | None]] | None): Optional passive timing output.
+
+                    Returns:
+                        linking._NativeMediaResponse: Valid-shaped response accepted by the media owner.
+                    """
+                    del request_once, deadline_seconds, inactivity_seconds
+                    del phase, route, timings, server_timing_out
+                    if currentness_reason == 'cancelled':
+                        if transport_cancelled is not None:
+                            transport_cancelled.set()
+                    elif currentness_reason == 'session_closed':
+                        session._closed = True
+                    elif currentness_reason == 'deadline':
+                        fake_clock[0] = deadline if deadline is not None else 0.0
+                    else:
+                        session._expires_at = fake_clock[0] - 1.0
+                    return b'{}', 'application/json', None, False
+
+                with self.subTest(currentness_reason=currentness_reason), mock.patch.object(
+                    linking, '_run_linking_transport', side_effect=finish_transport,
+                ) as transport:
+                    with self.assertRaises(
+                        linking.LinkingMediaNotCurrent,
+                    ) as raised:
+                        session._media_read(
+                            4, 'photos', None, cancelled,
+                            operation_deadline=deadline,
+                        )
+                    transport.assert_called_once()
+
+                self.assertEqual(
+                    currentness_reason,
+                    raised.exception.currentness_reason,
+                )
+                self.assertFalse(isinstance(
+                    raised.exception, linking.LinkingResponseError,
+                ))
+                summary = format_safe_photos_failure(
+                    'media-fetch', 'refresh', raised.exception,
+                )
+                self.assertIn(
+                    f'currentness={currentness_reason}', summary,
+                )
+                self.assertNotIn('http=', summary)
+                self.assertNotIn('gallery.example', summary)
+                self.assertTrue(summary.isprintable())
+                if currentness_reason == 'cancelled':
+                    raised.exception.args = (
+                        'token=fixture-secret C:\\private\\photo.jpg',
+                    )
+                    summary = format_safe_photos_failure(
+                        'media-fetch', 'refresh', raised.exception,
+                    )
+                    self.assertNotIn('fixture-secret', summary)
+                    self.assertNotIn('C:\\private', summary)
+                    self.assertIn('currentness=cancelled', summary)
+
+        invalid_reason = 'token=fixture-secret C:\\private\\photo.jpg'
+        with self.assertRaises(ValueError):
+            linking.LinkingMediaNotCurrent(invalid_reason)
+        mutated = linking.LinkingMediaNotCurrent('grant_expired')
+        setattr(mutated, 'currentness_reason', invalid_reason)
+        mutated.args = (invalid_reason,)
+        summary = format_safe_photos_failure(
+            'media-fetch', 'refresh', mutated,
+        )
+        self.assertNotIn(invalid_reason, summary)
+        self.assertNotIn('fixture-secret', summary)
+        self.assertNotIn('C:\\private', summary)
+        self.assertNotIn('currentness=token', summary)
+
     def test_restricted_photo_transport_has_no_cache_validator(self) -> None:
         """Accept the explicit restricted lane only for an Admin media reader.
 
