@@ -167,7 +167,7 @@ BASIC-only, FULL-qualified, PR-open, merged/tagged, draft-ready and published.
 - PATCH_NOTES.md, packages/installers and release actions require their authorized
   lifecycle. Use focused imperative commits; explain behavior, schema/filesystem
   impact and validation.
-- Inspect exact-SHA hosted results; state missing coverage. GitHub issue titles,
-  bodies and **all comments are always English**; chat may be Czech.
+- Verify exact-SHA CI and [persisted metadata](app/AGENTS.md); state gaps.
+  All GitHub titles, bodies and comments are English; chat may be Czech.
 
 Keep root at 6-10 kB; keep lessons topical. Measure prevention; size/fixture PASS does not prove effectiveness.

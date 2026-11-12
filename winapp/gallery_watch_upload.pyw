@@ -6316,7 +6316,7 @@ class ManualUploadThread(threading.Thread):
     Background worker for manual bulk uploads.
 
     The worker keeps manual uploading separate from watch-folder polling while
-    reusing the same config object, endpoint normalizer, API-key header, and
+    reusing captured configuration, endpoint normalization, API-key headers, and
     multipart upload function. Client-side thumbnail generation is optional and
     runs in a worker pool before each image is uploaded.
     """
@@ -6682,6 +6682,9 @@ class ManualUploadThread(threading.Thread):
     def _run_fifo_import(self, upload_url: str) -> None:
         """Use the same head-only consumer for imports, including staged ZIP images.
 
+        The Import consumer uses a private config snapshot with watched-source
+        deletion disabled; the saved preference remains available to Watcher.
+
         Args:
             upload_url (str): Captured legacy endpoint or linked issuer.
 
@@ -6720,7 +6723,11 @@ class ManualUploadThread(threading.Thread):
                                            time.time(), 'accepted_import_order')
                 observations.append(observed)
             journal.reconcile(observations)
-        consumer = WatcherThread(self.config, self.events, self.linked_target,
+        # Import-selected originals are retained independently of the Watcher
+        # preference. Keep the saved/shared config unchanged for later Watcher
+        # sessions and give this consumer an Import-specific snapshot.
+        consumer_config = replace(self.config, delete_uploaded_files=False)
+        consumer = WatcherThread(consumer_config, self.events, self.linked_target,
                                  once_work=self._gui_work)
         consumer._queue = journal
         consumer._admission_lock = journal.lock

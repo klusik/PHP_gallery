@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.0.10}
-\newcommand{\manualdate}{10~november~2026}
+\newcommand{\version}{1.1.0}
+\newcommand{\manualdate}{12~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1910,7 +1910,9 @@ uppdatering tar bort saknade rader. Cirkelpilen bredvid expandera, fäll ihop oc
 lägg till uppdaterar namn och överordnade gallerier men behåller expansion,
 markering och fotovyn. Upprepade uppdateringar ignorerar föråldrade svar.
 Om det valda galleriet flyttas öppnas dess nya överordnade sökväg så att det syns.
-Korta UI-steg uppdaterar ändrade rader. Verktygstips visas bara med pekaren över
+Korta UI-steg uppdaterar ändrade rader. Inkrementell inläsning behåller syskonens
+numeriska ordning även när rader kommer senare. En rad vars överordnade galleri
+ännu saknas flyttas under det när det har lästs in. Verktygstips visas bara med pekaren över
 utlösaren; tangentbordsfokus ensamt öppnar dem inte. Windows skyddar titlar med
 användarbundet DPAPI; osäker eller
 skadad lagring räknas som en cachemiss. Media kräver fortfarande aktuell
@@ -2228,6 +2230,24 @@ inställningen utan att hävda full täckning. Ett nytt försök efter servergr�
 återanvänder verifierade lokala data. No-store-medier förblir tillfälliga;
 lokala filer kringgår inte inloggning eller utgången länk. En operation
 accepterar högst 100\,000 direkta foton.
+
+Den valfria serverfunktionen \codeword{media:thumbnail-batch-v1} styrs under
+\ui{Admin > Features}. Den är på för nya installationer och uppgraderingar
+utan sparat val; administratören kan stänga av den och sparade val bevaras vid
+uppdateringar. Innan ett val sparas används det äldre värdet
+\codeword{PHP_GALLERY_THUMBNAIL_BATCH_V1}: ej angivet eller 1 betyder på,
+0 eller annat värde betyder av. Ett sparat val har alltid företräde. Funktionen
+använder befintlig Bearer-behörighet för medier utan nytt samtycke. Den skrivskyddade
+begäran tar upp till 32~foton, totalt 8~MiB och högst 4~MiB per bild; svaret är
+\texttt{private, no-store}. SHA-256 verifierar byte men ger ingen rätt att cacha
+dem. Admin-förladdning är fortsatt separat. Servern räknar N begärda foton mot
+de befintliga gränserna 600/IP och 3~600 globalt samt 600/account per fem minuter.
+Den håller högst en bild på 4~MiB i minnet åt gången. WinApp börjar med grupper
+om åtta och använder högst sexton efter en lyckad grupp; långsamma, stora eller
+avvikande grupper återgår till åtta. Obekräftade original behåller enskild
+verifiering. FPM, proxy och HTTPS på värden har inte verifierats; standardvärdet
+innebär ingen sådan acceptans. Enskilda begäranden
+stöds fortsatt som reserv för blandade versioner och undantagsbilder.
 Uttrycklig förladdning med en Admin Photos-länk kan på servrar med stöd även
 spara privata foton och utkast. Fotot, galleriet och hela kedjan av föräldrar
 måste vara verifierat utan NSFW-begränsning. Inställningen och privata filer
@@ -2520,7 +2540,8 @@ verifierar ett inbyggt handtag samma filidentitet och byte och raderar just
 den öppnade filen. Ändrade, omdirigerade, hårdlänkade eller upptagna filer
 behålls med en varning. Inventarieträffar och osäkra svar tillåter ingen
 radering. Andra plattformar, manuella importer och käll-ZIP-filer behåller
-sina källor.
+sina källor. Watchers raderingsinställning gäller endast bevakade bilder;
+den raderar inte filer som valts för manuell import.
 Återkallande av API-nyckel i flygflödet är tillfälligt otillgängligt.
 GUI-lägesskydd och återhämtning efter avbrott är ännu inte kvalificerade.
 
@@ -10230,6 +10251,24 @@ säkerhet, paketering eller CI kräver granskning av~alla fyra TeX-manualkällor
 inte bara synliga användarsidor. Vanligt utvecklingsarbete ändrar varken
 \filepath{PATCH_NOTES.md} eller de~versionshanterade PDF-manualerna.
 
+Källarbetsflödet för issue~362 tillhandahåller också en oprivilegierad
+återställningsartefakt med förberedda utdata. Båda PHP-snabbjobben kör
+förberedelsen och den skrivskyddade kontrollen; endast PHP~8.5-jobbet laddar efter
+godkänd förberedelse upp de fullständiga bytena för \filepath{app/runtime/modules.php},
+\filepath{app/production-files.json} och \filepath{app/core-manifest.json} före
+funktionstesterna. Artefaktnamnet börjar med \codeword{issue-362-prepared-} och
+innehåller den exakta käll-SHA:n. Ägaren kan granska och checka in dessa
+förberedda byte. Artefakten är inte FULL-kvalificering eller publicerarbehörighet;
+verifiera SHA:n och granska alla tre filer före användning.
+
+Förberedelse i en tillfällig CI-arbetskopia uppdaterar inte den lokala kopian.
+Spara alla tre kanoniska utdata på feature-grenen och låt värdbaserad förberedelse
+för slutlig SHA återskapa dem oförändrade innan arbetskopian lämnas som körbar.
+Starten kontrollerar varje registrerad route, även valfria routes med avstängd
+capability. När ett localhost-smoke uttryckligen begärs ska exakt mount och en
+innehållssida laddas om efter sparandet; jämför felreferenser med PHP:s
+nödlogg och upprepa webbläsarkontrollen efter åtgärden.
+
 \begin{enumerate}
   \item Värdbaserad Candidate preparation kör
   \filepath{scripts/prepare_candidate.php} och skrivskyddad kontroll:
@@ -10300,6 +10339,22 @@ och resursfrigöring. Chromium-fixturerna kontrollerar även FileList-paritet me
 fokus samt klassiska och förberedda återförsök utan dubbla bilder. Antal URL:er
 och avkodare mäter inte hela processens minne; verkligt operativsystemsurklipp
 och Firefox/Safari återstår att kontrollera manuellt.
+
+Utifrån den observerade timeouten i värd-CI använder Windows-jobbet kommandot
+\codeword{php scripts/audit.php --suite=winapp-partitioned}. Jobbet lägger alla
+klasser från \codeword{test_native_gallery_viewer.py} i en process, små och stora
+cache-riktmärken med klasserna \codeword{ThumbnailCacheSmallBenchmarkTests}
+och \codeword{ThumbnailCacheLargeBenchmarkTests} i var sin process,
+\codeword{GalleryPreloadWorkerTests} i en fjärde process och den kanoniska
+återstoden i den femte. Alla fem seriella processer behåller gränsen
+på 90 sekunder; en yttre gräns på 480 sekunder täcker dem samt
+inventarie- och rapporthantering. Den centrala granskningen verifierar
+alla fem schema-1-rapporter och den
+fullständiga, disjunkta föreningen av test-ID:n innan verkliga resultat slås
+samman. Saknade, ofullständiga, felaktiga, dubbla, misslyckade eller
+överskridna resultat innebär underkänt. Den vanliga fullständiga ägaren behåller
+sin tidigare enkla process och tidsgräns; tidigare timeout för hela sviten och
+med två, tre och fyra processer förblir misslyckade körningar.
 
 GitHub Actions är agenternas normala och auktoritativa verifieringsmiljö
 (CI-first). Audit-kommandona nedan beskriver den värdbaserade köraren; agenter

@@ -27,6 +27,7 @@ from dataclasses import replace as dataclass_replace
 from email.message import Message
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from typing import Callable
 from unittest import mock
 from urllib.parse import parse_qs, urlencode
@@ -36,7 +37,7 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader import app_linking as linking
-from uploader import gallery_media_cache, offline_linking
+from uploader import gallery_media_cache, offline_linking, session_resume
 from uploader.diagnostics import (
     PhotosDecodeError, PhotosDecodeFacts,
     SAFE_PHOTOS_DECODE_BODY_MAX_BYTES, SAFE_PHOTOS_DECODE_PIXEL_MAX,
@@ -55,6 +56,13 @@ from uploader.state_store import load_recent_gallery_addresses
 # Consumers: LinkingTransportTests. Rationale: two seconds permits a loaded
 # runner to schedule worker threads without waiting indefinitely on failure.
 TEST_WORKER_WAIT_SECONDS = 2.0
+
+# Purpose: Keep restored grant fixtures live for their synchronous worker call.
+# Type: float. Units: seconds. Scope: transient/offline restore regressions.
+# Consumers: LinkingTransportTests restore capability fixtures.
+# Rationale: Two minutes is independent of scheduling waits and avoids an
+#   expiry race without prolonging or sleeping in the test.
+TEST_RESTORE_CREDENTIAL_LIFETIME_SECONDS = 120.0
 
 # Purpose: Make the deadline regression complete promptly without real I/O.
 # Type: float. Units: seconds. Scope: one fake delayed HTTPS request.
@@ -107,19 +115,22 @@ TEST_POOLED_GET_COUNT = 3
 
 
 def discovery_response(
-    issuer: str, scope: str,
+    issuer: str, scope: str, extra_capabilities: tuple[str, ...] = (),
 ) -> dict[str, linking.JsonValue]:
     """Build a supported public-discovery envelope for one attempt.
 
     Args:
         issuer (str): Exact canonical issuer selected by the fixture.
         scope (str): Registered requested scope bundle.
+        extra_capabilities (tuple[str, ...]): Additional public capability
+            markers used to test optional discovery negotiation.
 
     Returns:
         dict[str, linking.JsonValue]: Public capability response with every
             requested non-identity scope and the browser linking capability.
     """
     capabilities = ['linking', *sorted(set(scope.split()) - {linking.IDENTITY_SCOPE})]
+    capabilities.extend(extra_capabilities)
     return {
         'contract_version': linking.LINKING_DISCOVERY_CONTRACT_VERSION,
         'app_linking': {
@@ -586,6 +597,7 @@ class LinkingTransportTests(unittest.TestCase):
             self.assertEqual('approved', attempt.wait_for_callback())
             session = attempt.exchange_once()
             self.addCleanup(session.close)
+            self.assertFalse(session._thumbnail_batch_supported)
             exchange_args = request_json.call_args_list[2].args
             fields = parse_qs(exchange_args[3].decode('ascii'))
             verifier = fields['code_verifier'][0]
@@ -647,7 +659,10 @@ class LinkingTransportTests(unittest.TestCase):
         self.addCleanup(attempt.close)
         with mock.patch.object(linking, '_request_json') as request_json:
             request_json.side_effect = [
-                discovery_response('https://gallery.example', linking.GALLERIES_SCOPE),
+                discovery_response(
+                    'https://gallery.example', linking.GALLERIES_SCOPE,
+                    (linking.THUMBNAIL_BATCH_CAPABILITY,),
+                ),
                 handoff_response('https://gallery.example'),
             ]
             attempt.push_request()
@@ -664,6 +679,7 @@ class LinkingTransportTests(unittest.TestCase):
             }
             session = attempt.exchange_once()
             self.addCleanup(session.close)
+            self.assertTrue(session._thumbnail_batch_supported)
             self.assertTrue(session.can_list_galleries())
             request_json.return_value = {
                 'scope': linking.GALLERIES_SCOPE,
@@ -1117,6 +1133,14 @@ class LinkingTransportTests(unittest.TestCase):
         headers = Message()
         headers.add_header('Content-Type', 'application/json')
         headers.add_header('Cache-Control', 'no-store')
+        headers.add_header(
+            'Server-Timing',
+            'gallery-php;dur=1.000, '
+            'gallery-sql;dur=0.500;desc="n=1;max_ms=0.500;failed=0;cap=0", '
+            'gallery-auth;dur=0.200, gallery-tree;dur=0.200, '
+            'gallery-hash;dur=0.000;desc="bytes=0", '
+            'gallery-media;dur=0.000',
+        )
         response = mock.Mock()
         response.status = 200
         response.headers = headers
@@ -1128,6 +1152,7 @@ class LinkingTransportTests(unittest.TestCase):
         control = linking._LinkingTransportControl(
             time.monotonic() + 60, None,
         )
+        control.server_timing_out = []
         with mock.patch.object(
             linking, '_linking_connection', return_value=connection,
         ):
@@ -1136,6 +1161,11 @@ class LinkingTransportTests(unittest.TestCase):
                 'app_linking_gallery_tree', 'GET', None, token, control,
                 tree_revision='d' * 64,
             )
+        self.assertEqual(1, len(control.server_timing_out))
+        php_sample, client_headers_ms = control.server_timing_out[0]
+        self.assertIsNotNone(php_sample)
+        self.assertEqual(1.0, php_sample.php_ms)
+        self.assertIsInstance(client_headers_ms, float)
         sent_path = connection.request.call_args.args[1]
         self.assertEqual(
             '/Galerie/index.php?page=app_linking_galleries&tree=1&revision='
@@ -1245,6 +1275,9 @@ class LinkingTransportTests(unittest.TestCase):
         def request_json(
             issuer: str, route: str, method: str, body: bytes | None,
             bearer: str | None, cancelled: threading.Event | None = None,
+            server_timing_out: list[
+                tuple[linking.PassiveServerTiming | None, float | None]
+            ] | None = None,
         ) -> dict[str, linking.JsonValue]:
             """Wait for the page owner's explicit cancellation signal.
 
@@ -1255,6 +1288,8 @@ class LinkingTransportTests(unittest.TestCase):
                 body (bytes | None): Optional body, absent for this GET.
                 bearer (str | None): In-memory bearer for the approved session.
                 cancelled (threading.Event | None): Request cancellation signal.
+                server_timing_out (list | None): Optional response timing
+                    sink, left empty by the cancelled test transport.
 
             Returns:
                 dict[str, linking.JsonValue]: No value when cancellation succeeds.
@@ -1823,7 +1858,7 @@ class LinkingTransportTests(unittest.TestCase):
         try:
             with mock.patch.object(linking, '_LINKING_TRANSPORT_SLOTS', gate), \
                     mock.patch.object(linking.threading, 'Thread', thread_factory):
-                with self.assertRaises(linking.LinkingError):
+                with self.assertRaises(linking.LinkingResponseError) as raised:
                     linking._run_linking_transport(
                         lambda _control: {}, None,
                         TEST_REQUEST_DEADLINE_SECONDS,
@@ -1834,10 +1869,37 @@ class LinkingTransportTests(unittest.TestCase):
 
         elapsed = time.monotonic() - started
         self.assertTrue(waiting.is_set())
+        self.assertIn('reason=timeout; transport_step=slot',
+                      raised.exception.safe_summary)
         self.assertGreaterEqual(elapsed, TEST_ADMISSION_WAIT_MIN_SECONDS)
         self.assertLess(elapsed, TEST_WORKER_WAIT_SECONDS)
         thread_factory.assert_not_called()
         gate.release.assert_not_called()
+
+    def test_json_header_timeout_keeps_its_observed_transport_step(self) -> None:
+        """Report the JSON response-header wait without its issuer or error text.
+
+        Returns:
+            None: The safe linking diagnostic records only the headers step.
+        """
+        connection = mock.MagicMock()
+        connection.getresponse.side_effect = socket.timeout(
+            'https://private.example/Galerie bearer=fixture-secret',
+        )
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            with self.assertRaises(linking.LinkingResponseError) as raised:
+                linking._request_json(
+                    'https://private.example/Galerie',
+                    'app_linking_discovery', 'GET', None, None,
+                )
+
+        self.assertEqual('app_linking_discovery', raised.exception.route)
+        self.assertEqual('headers', raised.exception.transport_step)
+        self.assertNotIn('private.example', raised.exception.safe_summary)
+        self.assertNotIn('fixture-secret', raised.exception.safe_summary)
+        self.assertNotIn('bearer=', raised.exception.safe_summary)
 
     def test_cancel_racing_slot_acquire_releases_once_without_worker(self) -> None:
         """Release a just-acquired slot exactly once when cancellation races it.
@@ -4276,6 +4338,16 @@ class NativeMediaSessionTests(unittest.TestCase):
         self.assertIn('binary:validator', error.safe_summary)
         with self.assertRaises(ValueError):
             dataclass_replace(facts, binary_check='raw server secret')
+        with self.assertRaises(ValueError):
+            linking.LinkingResponseError(
+                'media', 'app_linking_media', None, 'other', 'timeout',
+                transport_step='private.example',
+            )
+        with self.assertRaises(ValueError):
+            linking.LinkingResponseError(
+                'media', 'app_linking_media', 200, 'other', 'http_status',
+                transport_step='headers',
+            )
 
     def test_current_catalogue_proof_reuses_an_expired_thumbnail(self) -> None:
         """Read a matching old thumbnail before starting binary transport.
@@ -5434,6 +5506,71 @@ class NativeMediaTransportTests(unittest.TestCase):
         connection.getresponse.return_value = response
         return connection, response
 
+    def test_header_timeout_reports_only_the_fixed_transport_step(self) -> None:
+        """Attribute a header wait without retaining request or error text.
+
+        Returns:
+            None: The typed timeout identifies headers and omits fixture secrets.
+        """
+        connection = mock.MagicMock()
+        connection.getresponse.side_effect = socket.timeout(
+            'https://private.example/gallery bearer=fixture-secret',
+        )
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            with self.assertRaises(linking.LinkingResponseError) as raised:
+                linking._run_linking_transport(
+                    lambda control: linking._native_media_read_once(
+                        'https://private.example/gallery',
+                        'page=app_linking_media&gallery_id=4&kind=photos',
+                        'fixture-secret', ('application/json',), control,
+                    ),
+                    None, linking.LINKING_REQUEST_DEADLINE_SECONDS,
+                    linking.LINKING_SOCKET_TIMEOUT_SECONDS,
+                    phase='media', route='app_linking_media',
+                )
+
+        self.assertEqual('timeout', raised.exception.reason)
+        self.assertEqual('headers', raised.exception.transport_step)
+        self.assertIn('transport_step=headers', raised.exception.safe_summary)
+        self.assertNotIn('private.example', raised.exception.safe_summary)
+        self.assertNotIn('fixture-secret', raised.exception.safe_summary)
+
+    def test_body_timeout_survives_safe_photos_diagnostic_formatting(self) -> None:
+        """Retain the body-read step through the Photos safe formatter.
+
+        Returns:
+            None: The bounded summary reports body timeout without payload data.
+        """
+        headers = Message()
+        headers['Content-Type'] = 'application/json'
+        headers['Cache-Control'] = 'no-store'
+        connection, response = self._response(200, headers)
+        response.read.side_effect = socket.timeout('private response body')
+        with mock.patch.object(
+            linking, '_linking_connection', return_value=connection,
+        ):
+            with self.assertRaises(linking.LinkingResponseError) as raised:
+                linking._run_linking_transport(
+                    lambda control: linking._native_media_read_once(
+                        'https://private.example/gallery',
+                        'page=app_linking_media&gallery_id=4&kind=photos',
+                        'fixture-secret', ('application/json',), control,
+                    ),
+                    None, linking.LINKING_REQUEST_DEADLINE_SECONDS,
+                    linking.LINKING_SOCKET_TIMEOUT_SECONDS,
+                    phase='media', route='app_linking_media',
+                )
+
+        failure = format_safe_photos_failure(
+            'media-fetch', 'refresh', raised.exception,
+        )
+        self.assertIn('transport_step=body', failure)
+        self.assertNotIn('private.example', failure)
+        self.assertNotIn('fixture-secret', failure)
+        self.assertNotIn('private response body', failure)
+
     def test_restricted_photo_transport_has_no_cache_validator(self) -> None:
         """Accept the explicit restricted lane only for an Admin media reader.
 
@@ -5928,8 +6065,23 @@ class NativeMediaTransportTests(unittest.TestCase):
                 ),
             ):
                 if page == good:
-                    self.assertEqual((linking.LinkedPhoto(100, 'Fixture', 49.2, 16.6),),
-                                     session.media_page(42, 99).photos)
+                    started = time.monotonic()
+                    photos = session.media_page(42, 99).photos
+                    completed = time.monotonic()
+                    self.assertEqual(len(photos), 1)
+                    self.assertEqual(
+                        linking.LinkedPhoto(100, 'Fixture', 49.2, 16.6),
+                        dataclass_replace(
+                            photos[0], thumbnail_verified_at=None,
+                        ),
+                    )
+                    self.assertIsNotNone(photos[0].thumbnail_verified_at)
+                    self.assertGreaterEqual(
+                        photos[0].thumbnail_verified_at, started,
+                    )
+                    self.assertLessEqual(
+                        photos[0].thumbnail_verified_at, completed,
+                    )
                 else:
                     with self.assertRaises(linking.LinkingError):
                         session.media_page(42, 99)
@@ -6408,6 +6560,123 @@ class LinkingDeliveryTests(unittest.TestCase):
                     manager.status.set.assert_called_with(
                         'Saved gallery access expired. Approve the link again.',
                     )
+
+    def test_transient_restore_propagates_optional_batch_discovery(self) -> None:
+        """Restore a transient grant with the freshly discovered capability.
+
+        Returns:
+            None: Present and absent public markers produce true and false flags.
+        """
+        if LinkingManager is None:
+            self.skipTest('Tk support is unavailable.')
+        issuer = 'https://gallery.example/Galerie'
+        grant = session_resume.TransientGrant(
+            issuer, 7, linking.GALLERIES_SCOPE,
+            time.time() + TEST_RESTORE_CREDENTIAL_LIFETIME_SECONDS,
+            'pgla_' + 'A' * 43,
+        )
+        for capabilities, expected in (
+            (frozenset({
+                'rolling_access', linking.THUMBNAIL_BATCH_CAPABILITY,
+            }), True),
+            (frozenset({'rolling_access'}), False),
+        ):
+            with (
+                self.subTest(expected=expected),
+                mock.patch('uploader.app_linking_ui.tk.StringVar',
+                           side_effect=lambda *_a, **_kw: mock.Mock()),
+                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                           return_value=()),
+                mock.patch(
+                    'uploader.app_linking_ui.sys',
+                    SimpleNamespace(platform='darwin'),
+                ),
+                mock.patch('uploader.app_linking_ui.load_transient',
+                           return_value=grant),
+                mock.patch('uploader.app_linking_ui.discover_linking_capabilities',
+                           return_value=capabilities),
+                mock.patch('uploader.app_linking_ui.LinkingSession') as factory,
+                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+            ):
+                session = mock.Mock()
+                session.identity.return_value = linking.LinkedIdentity(7, 'admin')
+                factory.return_value = session
+                thread.return_value.is_alive.return_value = False
+                manager = LinkingManager(mock.Mock())
+                manager._saved_offline_binding = mock.Mock(return_value=None)
+                manager._worker = None
+                manager._refresh = mock.Mock()
+                manager._schedule_poll = mock.Mock()
+                manager._queue_initial_gallery_page = mock.Mock()
+                self.assertTrue(manager.resume_saved_link(issuer))
+                thread.call_args.kwargs['target']()
+                self.assertEqual(
+                    expected,
+                    factory.call_args.kwargs['thumbnail_batch_supported'],
+                )
+                manager._queue_initial_gallery_page.assert_called_once()
+
+    def test_offline_restore_propagates_optional_batch_discovery(self) -> None:
+        """Restore an offline binding with its current discovery capability.
+
+        Returns:
+            None: Successful restore passes the exact present or absent flag.
+        """
+        if LinkingManager is None:
+            self.skipTest('Tk support is unavailable.')
+        issuer = 'https://gallery.example/Galerie'
+        binding = offline_linking.OfflineBinding(
+            issuer, 7, linking.ROLLING_GALLERIES_SCOPE,
+        )
+        access = mock.Mock()
+        access.issuer = issuer
+        access.token = 'pgla_' + 'A' * 43
+        access.expires_at = (
+            time.monotonic() + TEST_RESTORE_CREDENTIAL_LIFETIME_SECONDS
+        )
+        access.username = 'admin'
+        access.scope = binding.scope
+        for capabilities, expected in (
+            (frozenset({
+                'rolling_access', linking.THUMBNAIL_BATCH_CAPABILITY,
+            }), True),
+            (frozenset({'rolling_access'}), False),
+        ):
+            with (
+                self.subTest(expected=expected),
+                TemporaryDirectory() as offline_directory,
+                mock.patch('uploader.app_linking_ui.tk.StringVar',
+                           side_effect=lambda *_a, **_kw: mock.Mock()),
+                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                           return_value=()),
+                mock.patch('uploader.app_linking_ui.discover_linking_capabilities',
+                           return_value=capabilities),
+                mock.patch('uploader.app_linking_ui.rotate_saved_offline_access',
+                           return_value=access),
+                mock.patch('uploader.app_linking_ui.LinkingSession') as factory,
+                mock.patch('uploader.app_linking_ui.enable_rolling_renewal'),
+                mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+            ):
+                session = mock.Mock()
+                session.identity.return_value = linking.LinkedIdentity(7, 'admin')
+                factory.return_value = session
+                thread.return_value.is_alive.return_value = False
+                manager = LinkingManager(mock.Mock())
+                manager._offline_binding = binding
+                manager._offline_store = mock.Mock()
+                manager._offline_path = Path(offline_directory) / 'offline-link.json'
+                manager._current_issuer = issuer
+                manager._worker = None
+                manager._refresh = mock.Mock()
+                manager._schedule_poll = mock.Mock()
+                manager._queue_initial_gallery_page = mock.Mock()
+                manager._restore_offline(silent=True)
+                thread.call_args.kwargs['target']()
+                self.assertEqual(
+                    expected,
+                    factory.call_args.kwargs['thumbnail_batch_supported'],
+                )
+                manager._queue_initial_gallery_page.assert_called_once()
 
     def test_photos_watcher_key_stays_out_of_selected_upload_mode(self) -> None:
         """Use the exact issued key only for the contextual Watcher handoff.

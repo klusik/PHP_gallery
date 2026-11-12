@@ -35,18 +35,24 @@ from .app_linking import (
     NATIVE_MEDIA_MAX_BYTES,
     NATIVE_MEDIA_LEGACY_PAGE_SIZE,
     NATIVE_MEDIA_PAGE_SIZE,
+    LINKING_CANCELLATION_POLL_SECONDS,
     LinkedGallery,
     LinkedMediaPage,
     LinkedPhoto,
     LinkedPresentation,
     LinkedTrack,
     LinkingMediaThrottled,
+    LinkingThumbnailBatchDeferred,
+    LinkingThumbnailProofChanged,
     LinkingMediaUnavailable,
     LinkingError,
     LinkingResponseError,
     LinkingRevisionUnsupported,
     LinkingSession,
     MediaReadTimings,
+    ThumbnailBatchStats,
+    ThumbnailPublication,
+    LegacyThumbnailPublication,
 )
 from .flight_report_translations import tr
 from .diagnostics import (
@@ -57,6 +63,8 @@ from .diagnostics import (
     format_safe_photos_shortcut,
     is_safe_photos_observation,
 )
+from .photos_performance import ThumbnailBatchPhysicalWindow, ThumbnailPerformanceWindow
+from .viewport_performance import ViewportPerformanceWindow
 from .gallery_lightbox import (
     LIGHTBOX_ZOOM_STEP,
     PhotoLightbox,
@@ -83,6 +91,30 @@ MEDIA_IMAGE_MAX_SIZE = (2048, 1536)
 # Consumers: _NativeGalleryViewer._load_thumbnails.
 # Rationale: 144 px bounds both natural-aspect dimensions and retained pixels.
 MEDIA_THUMBNAIL_SIZE = (144, 144)
+
+# Purpose: Start optional HTTP batching with the reviewed conservative group.
+# Type: int. Units: images. Scope: first and downshifted network group.
+# Consumers: _NativeGalleryViewer._load_next_thumbnail. Rationale: Eight
+# limits first-turn occupancy before a host proves the framed path healthy.
+MEDIA_HTTP_BATCH_INITIAL_SIZE = 8
+
+# Purpose: Raise throughput after a healthy bounded thumbnail group.
+# Type: int. Units: images. Scope: steady-state network group.
+# Consumers: _NativeGalleryViewer._load_next_thumbnail. Rationale: Sixteen
+# remains below the 32-item wire cap and does not change GUI queue limits.
+MEDIA_HTTP_BATCH_STEADY_SIZE = 16
+
+# Purpose: Downshift a slow group before admitting subsequent network work.
+# Type: float. Units: seconds. Scope: one completed thumbnail group.
+# Consumers: _NativeGalleryViewer._run_http_thumbnail_batch. Rationale: Two
+# seconds bounds a speculative turn without asserting host latency acceptance.
+MEDIA_HTTP_BATCH_SLOW_SECONDS = 2.0
+
+# Purpose: Downshift groups approaching the framed response byte budget.
+# Type: int. Units: bytes. Scope: one completed thumbnail response.
+# Consumers: _NativeGalleryViewer._run_http_thumbnail_batch. Rationale: Six
+# MiB leaves headroom beneath the independently enforced eight MiB wire cap.
+MEDIA_HTTP_BATCH_LARGE_BYTES = 6 * 1024 * 1024
 
 # Purpose: Reduce large server fallback JPEGs before thumbnail RGB allocation.
 # Type: tuple[int, int]. Units: decoded pixels. Scope: one thumbnail worker.
@@ -361,6 +393,8 @@ class _ThumbnailResult:
         timings (MediaReadTimings): Mutable timing facts filled by the session.
         decode_ms (float): Thumbnail decode duration in milliseconds.
         enqueued_at (float): Monotonic result-publication timestamp.
+        publication (ThumbnailPublication | LegacyThumbnailPublication | None):
+            Optional batch-session proof; None preserves existing single reads.
     """
 
     gallery_id: int
@@ -370,6 +404,55 @@ class _ThumbnailResult:
     timings: MediaReadTimings
     decode_ms: float
     enqueued_at: float
+    publication: ThumbnailPublication | LegacyThumbnailPublication | None = None
+
+
+@dataclass(frozen=True)
+class _HttpBatchCompletion:
+    """Retain one worker completion independently of the bounded image queue.
+
+    Attributes:
+        generation (int): Viewer generation that dispatched this group.
+        outcome (str): Fixed safe completion category.
+        remaining (tuple[int, ...]): Captured indices without a queued result.
+        stats (ThumbnailBatchStats): Bounded per-call numeric observations.
+        timings (MediaReadTimings): Physical transport observations once.
+        elapsed (float): End-to-end worker duration in seconds.
+        physical_complete (bool): Whether the transport worker has finished.
+        decode_failures (int): Independently failed image decode attempts.
+    """
+
+    generation: int
+    outcome: str
+    remaining: tuple[int, ...]
+    stats: ThumbnailBatchStats
+    timings: MediaReadTimings
+    elapsed: float
+    physical_complete: bool
+    decode_failures: int
+
+
+def _next_http_thumbnail_group_limit(completion: _HttpBatchCompletion) -> int:
+    """Choose the next safe HTTP group after one completed worker turn.
+
+    Args:
+        completion (_HttpBatchCompletion): Bounded numeric result of the turn.
+
+    Returns:
+        int: Sixteen after a healthy initial group; otherwise eight.
+    """
+    stats = completion.stats
+    healthy = (
+        completion.physical_complete and completion.outcome == 'ok'
+        and any(size >= MEDIA_HTTP_BATCH_INITIAL_SIZE for size in stats.batch_sizes)
+        and completion.elapsed < MEDIA_HTTP_BATCH_SLOW_SECONDS
+        and completion.timings.encoded_bytes < MEDIA_HTTP_BATCH_LARGE_BYTES
+        and not stats.wire_failures and not completion.decode_failures
+        and not (stats.fallback_capability_missing or stats.fallback_unsupported
+                 or stats.fallback_wire_disabled or stats.fallback_restricted
+                 or stats.fallback_exceptional or stats.operation_failures)
+    )
+    return MEDIA_HTTP_BATCH_STEADY_SIZE if healthy else MEDIA_HTTP_BATCH_INITIAL_SIZE
 
 
 class _ThumbnailDiskLane:
@@ -737,6 +820,10 @@ class _NativeGalleryViewer:
         self._diagnostic_callback = diagnostic_callback
         self._on_photo_selected = photo_selected
         self._observation_callback = observation_callback
+        self.on_first_thumbnail_presented: Callable[[], None] | None = None
+        self._first_thumbnail_reported = False
+        self.on_first_viewport_settled: Callable[[], None] | None = None
+        self._first_viewport_reported = False
         self._card_format = 'default'
         self.on_photos_changed: Callable[[], None] | None = None
         self.on_cache_changed: Callable[
@@ -761,6 +848,9 @@ class _NativeGalleryViewer:
         )
         self._thumbnail_result_lock = threading.Lock()
         self._thumbnail_metrics_lock = threading.Lock()
+        self._thumbnail_performance = ThumbnailPerformanceWindow()
+        self._thumbnail_batch_physical = ThumbnailBatchPhysicalWindow()
+        self._viewport_performance = ViewportPerformanceWindow()
         self._detail_media_metrics: dict[str, int] = {
             name: 0 for name in (
                 'detail_source_disk', 'detail_source_network',
@@ -864,6 +954,8 @@ class _NativeGalleryViewer:
         self._thumbnail_loaded: set[int] = set()
         self._thumbnail_pending: list[int] = []
         self._visible_thumbnail_indices: set[int] = set()
+        self._measured_visible: frozenset[int] = frozenset()
+        self._viewport_measure_epoch: int | None = None
         self._admitted_thumbnail_indices: set[int] = set()
         self._viewport_after_id: str | None = None
         self._viewport_event_count = 0
@@ -873,6 +965,22 @@ class _NativeGalleryViewer:
         self._thumbnail_warm_cache_hit_count = 0
         self._thumbnail_batch_count = 0
         self._thumbnail_batch_indices: tuple[int, ...] = ()
+        self._http_thumbnail_group_limit = MEDIA_HTTP_BATCH_INITIAL_SIZE
+        self._http_batch_completion: _HttpBatchCompletion | None = None
+        self._http_batch_requests = 0
+        self._http_batch_frames = 0
+        self._http_batch_bytes = 0
+        self._http_batch_failures = 0
+        self._http_batch_incomplete = 0
+        self._http_batch_fallbacks = 0
+        self._http_batch_fallback_reasons: dict[str, int] = {
+            'missing': 0, 'unsupported': 0, 'wire': 0,
+            'restricted': 0, 'exceptional': 0,
+        }
+        self._http_batch_first_frame_ms = 0.0
+        self._http_batch_sizes: dict[int, int] = {}
+        self._http_batch_retry_indices: tuple[int, ...] = ()
+        self._http_thumbnail_failure_latched = False
         self._thumbnail_source_disk_count = 0
         self._thumbnail_source_network_count = 0
         self._thumbnail_source_revalidated_count = 0
@@ -1349,6 +1457,11 @@ class _NativeGalleryViewer:
             visible = tuple(self._visible_photo_indices())
             visible_set = set(visible)
             self._visible_thumbnail_indices = visible_set
+            if visible_set != self._measured_visible:
+                self._measured_visible = frozenset(visible_set)
+                self._viewport_measure_epoch = self._viewport_performance.begin(
+                    len(visible_set),
+                )
             admitted: set[int] = set()
             if visible:
                 columns = max(1, self._grid_columns)
@@ -1436,10 +1549,62 @@ class _NativeGalleryViewer:
                 # batch that this same viewport turn would immediately cancel.
                 self._load_more()
             self._dispatch_pending_work()
+            self._observe_visible_viewport_settled()
         elapsed_ms = (time.perf_counter() - started) * 1000.0
         self._viewport_peak_update_ms = max(
             self._viewport_peak_update_ms, elapsed_ms,
         )
+
+    def rearm_first_viewport_diagnostics(self) -> None:
+        """Measure a new catalogue pass on this still-mounted Tk viewer.
+
+        Returns:
+            None: The next existing coalesced viewport pass can settle a new
+                diagnostic epoch without creating a media request or widget.
+        """
+        if self._closed:
+            return
+        self._first_viewport_reported = False
+        self._measured_visible = frozenset()
+        self._viewport_measure_epoch = None
+        self._on_grid_viewport(None)
+
+    def _observe_visible_viewport_settled(self) -> None:
+        """Measure only the current, fully resolved visible Tk tile band.
+
+        Returns:
+            None: An incomplete, stale, hidden or cancelled band remains
+                pending; each settled band is sampled only once.
+        """
+        epoch = self._viewport_measure_epoch
+        visible = self._visible_thumbnail_indices
+        if (self._closed or epoch is None or not visible
+                or self._viewport_after_id is not None
+                or not self.frame.winfo_viewable()
+                or self._refresh_pending
+                or not visible <= self._admitted_thumbnail_indices
+                or not visible <= self._thumbnail_loaded
+                or any(index >= len(self._photo_images) for index in visible)):
+            return
+        available = sum(
+            self._photo_images[index] is not None for index in visible
+        )
+        unavailable = len(visible) - available
+        if not self._viewport_performance.settle(
+            epoch, available, unavailable,
+        ):
+            return
+        if not self._first_viewport_reported:
+            self._first_viewport_reported = True
+            callback = self.on_first_viewport_settled
+            if callback is not None:
+                try:
+                    callback()
+                except Exception:
+                    # A diagnostic callback never affects genuine Tk rendering.
+                    logging.getLogger(__name__).warning(
+                        'First settled viewport diagnostic callback failed.',
+                    )
 
     def _cancel_grid_viewport_callback(self) -> None:
         """Cancel the owned coalescing timer and fence a stale callback.
@@ -1583,6 +1748,7 @@ class _NativeGalleryViewer:
                 self._thumbnail_source_network_count += 1
             elif timings.source == 'revalidated':
                 self._thumbnail_source_revalidated_count += 1
+        self._thumbnail_performance.observe(timings, decode_ms)
 
     def _observe_detail_read(
         self, kind: Literal['detail', 'prefetch'], timings: MediaReadTimings,
@@ -1633,6 +1799,13 @@ class _NativeGalleryViewer:
                 f'{name}={value}'
                 for name, value in self._detail_media_metrics.items()
             )
+            http_sizes = ','.join(
+                f'{size}:{count}' for size, count in sorted(self._http_batch_sizes.items())
+            ) or 'none'
+            http_fallbacks = ','.join(
+                f'{reason}:{count}' for reason, count
+                in self._http_batch_fallback_reasons.items()
+            )
         return (
             'Photos grid: '
             f'viewport_events={self._viewport_event_count} '
@@ -1652,6 +1825,16 @@ class _NativeGalleryViewer:
             f'validator_changes={self._thumbnail_memory.validator_changes} '
             f'proof_refreshes={self._thumbnail_proof_refresh_count} '
             f'batches={self._thumbnail_batch_count} '
+            f'dispatch_groups={self._thumbnail_batch_count} '
+            f'http_batches={self._http_batch_requests} '
+            f'http_frames={self._http_batch_frames} '
+            f'http_bytes={self._http_batch_bytes} '
+            f'http_failures={self._http_batch_failures} '
+            f'http_incomplete={self._http_batch_incomplete} '
+            f'http_fallbacks={self._http_batch_fallbacks} '
+            f'http_fallback_reasons={http_fallbacks} '
+            f'http_first_frame_ms={self._http_batch_first_frame_ms:.2f} '
+            f'http_sizes={http_sizes} '
             f'source_disk={self._thumbnail_source_disk_count} '
             f'source_network={self._thumbnail_source_network_count} '
             f'source_revalidated={self._thumbnail_source_revalidated_count} '
@@ -1668,7 +1851,15 @@ class _NativeGalleryViewer:
             f'peak_update_ms={self._viewport_peak_update_ms:.2f} '
             f'visible={len(self._visible_thumbnail_indices)} '
             f'admitted={len(self._admitted_thumbnail_indices)} '
-            f'retained={retained}'
+            f'retained={retained} '
+            f'visible_unsettled={len(self._visible_thumbnail_indices - self._thumbnail_loaded)} '
+            f'pending_thumbnail={len(self._thumbnail_pending)} '
+            f'pending_local={len(self._warm_thumbnail_pending)} '
+            f'queued_gui_results={self._events.qsize()} '
+            f'worker_active={int(self._worker is not None)}\n'
+            f'{self._thumbnail_performance.render_summary()}\n'
+            f'{self._thumbnail_batch_physical.render_summary()}\n'
+            f'{self._viewport_performance.render_summary()}'
         )
 
     def _on_grid_resize(
@@ -2560,12 +2751,24 @@ class _NativeGalleryViewer:
         Returns:
             None: Equal snapshots leave tiles and decoded thumbnails untouched.
         """
+        # An accepted authoritative snapshot permits a new network attempt.
+        self._http_thumbnail_failure_latched = False
+        for index in self._http_batch_retry_indices:
+            self._thumbnail_loaded.discard(index)
+        self._http_batch_retry_indices = ()
         photos = tuple(photo for page in pages for photo in page.photos)
         self._selected_photo_ids.intersection_update(
             photo.image_id for photo in photos
         )
         comparable = lambda photo: replace(
-            photo, thumbnail_verified_at=None, preload_verified_at=None,
+            photo,
+            # A page without a content validator cannot prove an old
+            # PhotoImage unchanged. Fresh metadata must replace that tile.
+            thumbnail_verified_at=(
+                photo.thumbnail_verified_at
+                if photo.thumbnail_etag is None else None
+            ),
+            preload_verified_at=None,
         )
         if (tuple(map(comparable, photos)) == tuple(map(comparable, self._photos))
                 and pages[-1].next_after == self._next_after):
@@ -2814,6 +3017,9 @@ class _NativeGalleryViewer:
         self._refresh_audio_button()
         self._empty_page = not bool(self._photos)
         if old_count == 0:
+            # Rebuilt descriptors invalidate the prior visible-band measurement.
+            self._measured_visible = frozenset()
+            self._viewport_measure_epoch = None
             for canonical in self._canonical_thumbnail_images.values():
                 canonical.close()
             self._canonical_thumbnail_images.clear()
@@ -3137,6 +3343,116 @@ class _NativeGalleryViewer:
                 )
             return index, None, (time.perf_counter() - decode_started) * 1000.0
 
+    def _run_http_thumbnail_batch(
+        self, generation: int, gallery_id: int, indices: tuple[int, ...],
+        photos: tuple[LinkedPhoto, ...], cancelled: threading.Event,
+    ) -> None:
+        """Stream one session batch into the bounded Tk result queue.
+
+        Args:
+            generation (int): Viewer generation captured before dispatch.
+            gallery_id (int): Physical gallery owning the captured rows.
+            indices (tuple[int, ...]): Ordered admitted tile indices.
+            photos (tuple[LinkedPhoto, ...]): Matching immutable descriptors.
+            cancelled (threading.Event): Captured viewer cancellation signal.
+
+        Returns:
+            None: Queues validated rasters and records one completion summary.
+        """
+        physical = MediaReadTimings()
+        stats = ThumbnailBatchStats()
+        started = time.monotonic()
+        completed: set[int] = set()
+        lookup = {photo.image_id: index for index, photo in zip(indices, photos)}
+        outcome = 'ok'
+        physical_complete = True
+        decode_failures = 0
+
+        def publish(
+            publication: ThumbnailPublication | LegacyThumbnailPublication,
+            timings: MediaReadTimings, check_active: Callable[[], None],
+        ) -> None:
+            """Decode one result without Tk and wait safely for queue space.
+
+            Args:
+                publication (ThumbnailPublication | LegacyThumbnailPublication):
+                    Session-owned proof or explicitly transient legacy result.
+                timings (MediaReadTimings): Item-only cache observations.
+                check_active (Callable[[], None]): Worker deadline/cancel fence.
+
+            Returns:
+                None: Transfers the raster to the GUI queue or closes it.
+            """
+            nonlocal decode_failures
+            index = lookup[publication.photo.image_id]
+            image: 'Image.Image | None' = None
+            decode_ms = 0.0
+            try:
+                check_active()
+                if publication.body is not None:
+                    decode_started = time.perf_counter()
+                    try:
+                        image = self._prepare_thumbnail(publication.body)
+                    except Exception as error:  # noqa: BLE001
+                        decode_failures += 1
+                        _log_safe_media_failure(
+                            'media-decode', 'thumbnail', error,
+                            diagnostic_callback=self._diagnostic_callback,
+                        )
+                    finally:
+                        decode_ms = (time.perf_counter() - decode_started) * 1000.0
+                check_active()
+                result = _ThumbnailResult(
+                    gallery_id, index, publication.photo, image, timings,
+                    decode_ms, time.perf_counter(), publication,
+                )
+                while True:
+                    check_active()
+                    with self._thumbnail_result_lock:
+                        if cancelled.is_set() or self._cancelled.is_set() or self._closed:
+                            raise LinkingError('Thumbnail publication was cancelled.')
+                        try:
+                            self._events.put_nowait((generation, 'thumbnail_batch_item', result))
+                        except queue.Full:
+                            pass
+                        else:
+                            completed.add(index)
+                            image = None
+                            break
+                    if cancelled.wait(LINKING_CANCELLATION_POLL_SECONDS):
+                        raise LinkingError('Thumbnail publication was cancelled.')
+            finally:
+                self._observe_thumbnail_read(timings, decode_ms)
+                if image is not None:
+                    image.close()
+
+        try:
+            self.session.media_thumbnails(
+                gallery_id, photos, publish, cancelled,
+                timings=physical, stats=stats,
+            )
+        except (LinkingMediaThrottled, LinkingThumbnailBatchDeferred):
+            outcome = 'throttled'
+        except LinkingThumbnailProofChanged:
+            outcome = 'proof_changed'
+        except LinkingError as error:
+            outcome = 'error'
+            finished = getattr(error, 'operation_finished', None)
+            physical_complete = finished is None or finished.is_set()
+        except Exception:  # noqa: BLE001
+            outcome = 'error'
+        finally:
+            if cancelled.is_set() or self._cancelled.is_set() or self._closed:
+                outcome = 'cancelled'
+            elapsed = time.monotonic() - started
+            completion = _HttpBatchCompletion(
+                generation, outcome, tuple(index for index in indices
+                                           if index not in completed),
+                stats, physical, elapsed, physical_complete, decode_failures,
+            )
+            with self._thumbnail_result_lock:
+                self._http_batch_completion = completion
+
     def _load_next_thumbnail(
         self, limit: int = MEDIA_THUMBNAIL_BATCH_SIZE,
     ) -> None:
@@ -3149,7 +3465,7 @@ class _NativeGalleryViewer:
         Returns:
             None: One worker serially publishes up to the batch limit.
         """
-        if (self._media_throttled
+        if (self._media_throttled or self._http_thumbnail_failure_latched
                 or not self._thumbnail_pending
                 or not self.grid_canvas.winfo_viewable()
                 or self._thumbnail_cancelled.is_set() or self._closed
@@ -3160,11 +3476,44 @@ class _NativeGalleryViewer:
         if not self.session.can_read_media():
             self.close()
             return
+        use_http_batch = self.session.supports_thumbnail_batch() is True
+        if use_http_batch:
+            first = self._thumbnail_pending[0]
+            try:
+                use_http_batch = self.session.thumbnail_batch_preferred(
+                    self.gallery.gallery_id, self._photos[first],
+                ) is True
+            except LinkingError:
+                now = time.monotonic()
+                if (self._thumbnail_proof_refresh_attempt_at is None
+                        or now - self._thumbnail_proof_refresh_attempt_at
+                        >= MEDIA_REVISION_POLL_MS / 1000.0):
+                    self._thumbnail_proof_refresh_attempt_at = now
+                    self._thumbnail_proof_refresh_count += 1
+                    self._refresh_pending = True
+                else:
+                    self._thumbnail_pending.remove(first)
+                    self._thumbnail_loaded.add(first)
+                self._schedule_queue_poll()
+                return
         # Keep the in-flight index queued until it resolves. Configure events
         # can otherwise enqueue the same visible tile again during a download.
-        indices = tuple(self._thumbnail_pending[:max(
-            0, min(limit, MEDIA_THUMBNAIL_BATCH_SIZE),
-        )])
+        size_limit = (self._http_thumbnail_group_limit if use_http_batch
+                      else MEDIA_THUMBNAIL_BATCH_SIZE)
+        selected = self._thumbnail_pending[:max(0, min(limit, size_limit))]
+        if use_http_batch:
+            eligible: list[int] = []
+            for index in selected:
+                try:
+                    if self.session.thumbnail_batch_preferred(
+                        self.gallery.gallery_id, self._photos[index],
+                    ) is not True:
+                        break
+                except LinkingError:
+                    break
+                eligible.append(index)
+            selected = eligible
+        indices = tuple(selected)
         if not indices:
             return
         self._generation += 1
@@ -3175,6 +3524,20 @@ class _NativeGalleryViewer:
         thumbnail_cancelled = self._thumbnail_cancelled
         session_cancelled = self._cancelled
         result_lock = self._thumbnail_result_lock
+
+        if use_http_batch:
+            self._thumbnail_batch_count += 1
+            self._thumbnail_batch_indices = indices
+            self._worker = threading.Thread(
+                target=lambda: self._run_http_thumbnail_batch(
+                    generation, gallery_id, indices, descriptors,
+                    thumbnail_cancelled,
+                ), name='linked-gallery-thumbnail-batch', daemon=True,
+            )
+            self._worker_kind = 'thumbnail_batch'
+            self._worker.start()
+            self._schedule_queue_poll()
+            return
 
         def run_batch() -> None:
             """Read and publish each captured thumbnail in serial order.
@@ -3488,7 +3851,15 @@ class _NativeGalleryViewer:
                         result.gallery_id == self.gallery.gallery_id
                         and 0 <= result.index < len(self._photos)
                         and self._photos[result.index] == result.photo
+                        and result.index in self._admitted_thumbnail_indices
                     )
+                    if result.publication is not None:
+                        valid_identity = bool(
+                            valid_identity and not self._thumbnail_cancelled.is_set()
+                            and self.session.thumbnail_publication_current(
+                                result.publication, self._thumbnail_cancelled,
+                            )
+                        )
                     if not valid_identity:
                         if result.image is not None:
                             result.image.close()
@@ -3510,8 +3881,9 @@ class _NativeGalleryViewer:
                     )
                     self._show_thumbnail(
                         result.index, result.image,
-                        remember=(not private_descriptor
-                                  or verified_private_response),
+                        remember=(result.publication.ram_eligible
+                                  if result.publication is not None else
+                                  not private_descriptor or verified_private_response),
                     )
                     self._thumbnail_tk_ms += (
                         time.perf_counter() - show_started
@@ -3693,6 +4065,78 @@ class _NativeGalleryViewer:
                     MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS,
                 )
                 return
+            with self._thumbnail_result_lock:
+                completion = self._http_batch_completion
+                self._http_batch_completion = None
+            if completion is not None:
+                with self._thumbnail_metrics_lock:
+                    physical = completion.timings
+                    if completion.physical_complete:
+                        self._thumbnail_batch_physical.observe(physical)
+                        self._thumbnail_gate_wait_ms += physical.gate_wait_ms
+                        self._thumbnail_renewal_ms += physical.renewal_ms
+                        self._thumbnail_network_ms += physical.network_ms
+                        self._thumbnail_network_reads += physical.network_reads
+                        for name in self._thumbnail_transport_totals:
+                            self._thumbnail_transport_totals[name] += getattr(physical, name)
+                        self._http_batch_requests += sum(completion.stats.batch_sizes.values())
+                        for size, count in completion.stats.batch_sizes.items():
+                            self._http_batch_sizes[size] = (
+                                self._http_batch_sizes.get(size, 0) + count
+                            )
+                        self._http_batch_frames += completion.stats.wire_items
+                        self._http_batch_bytes += physical.encoded_bytes
+                        self._http_batch_failures += completion.stats.operation_failures
+                        self._http_batch_fallbacks += (
+                            completion.stats.fallback_capability_missing
+                            + completion.stats.fallback_unsupported
+                            + completion.stats.fallback_wire_disabled
+                            + completion.stats.fallback_restricted
+                            + completion.stats.fallback_exceptional
+                        )
+                        for reason, count in (
+                            ('missing', completion.stats.fallback_capability_missing),
+                            ('unsupported', completion.stats.fallback_unsupported),
+                            ('wire', completion.stats.fallback_wire_disabled),
+                            ('restricted', completion.stats.fallback_restricted),
+                            ('exceptional', completion.stats.fallback_exceptional),
+                        ):
+                            self._http_batch_fallback_reasons[reason] += count
+                        if completion.stats.first_frame_ms is not None:
+                            self._http_batch_first_frame_ms = completion.stats.first_frame_ms
+                    else:
+                        self._http_batch_incomplete += 1
+                self._http_thumbnail_group_limit = _next_http_thumbnail_group_limit(
+                    completion,
+                )
+                if completion.generation == self._generation:
+                    if completion.outcome == 'proof_changed':
+                        now = time.monotonic()
+                        if (self._thumbnail_proof_refresh_attempt_at is None
+                                or now - self._thumbnail_proof_refresh_attempt_at
+                                >= MEDIA_REVISION_POLL_MS / 1000.0):
+                            self._thumbnail_proof_refresh_attempt_at = now
+                            self._thumbnail_proof_refresh_count += 1
+                            self._refresh_pending = True
+                    elif completion.outcome in ('throttled', 'error'):
+                        self._http_batch_retry_indices = completion.remaining
+                        self._media_throttled = completion.outcome == 'throttled'
+                        if completion.outcome == 'error':
+                            self._http_thumbnail_failure_latched = True
+                        self.status.pack(anchor='w', pady=(4, 8))
+                        self.status.configure(text=self._text(
+                            'linking_media_throttled' if self._media_throttled
+                            else 'linking_media_error',
+                        ))
+                        self.retry_button.configure(state='normal')
+                        self.retry_button.pack(side='left', padx=(8, 0))
+                        self._retry_kind = 'thumbnail'
+                    if completion.outcome != 'cancelled':
+                        for index in completion.remaining:
+                            if index in self._thumbnail_pending:
+                                self._thumbnail_pending.remove(index)
+                            if index in self._admitted_thumbnail_indices:
+                                self._thumbnail_loaded.add(index)
             self._worker = None
             self._worker_kind = None
             self._thumbnail_batch_indices = ()
@@ -3793,6 +4237,7 @@ class _NativeGalleryViewer:
         )
         priority_due = revision_due or self._presentation_pending
         if (self._thumbnail_pending and not self._media_throttled
+                and not self._http_thumbnail_failure_latched
                 and (not priority_due
                      or self._initial_thumbnail_priority_count
                      < MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT)):
@@ -3801,7 +4246,9 @@ class _NativeGalleryViewer:
             remaining = (
                 MEDIA_INITIAL_THUMBNAIL_PRIORITY_LIMIT
                 - self._initial_thumbnail_priority_count
-                if priority_due else MEDIA_THUMBNAIL_BATCH_SIZE
+                if priority_due else self._http_thumbnail_group_limit
+                if self.session.supports_thumbnail_batch() is True
+                else MEDIA_THUMBNAIL_BATCH_SIZE
             )
             self._load_next_thumbnail(remaining)
             if self._worker is not None and self._worker is not previous_worker:
@@ -3832,11 +4279,15 @@ class _NativeGalleryViewer:
                 ),
             )
             return
-        if self._media_throttled:
+        if self._media_throttled or self._http_thumbnail_failure_latched:
             return
         if self._thumbnail_pending:
             self._thumbnail_cancelled.clear()
-            self._load_next_thumbnail()
+            self._load_next_thumbnail(
+                self._http_thumbnail_group_limit
+                if self.session.supports_thumbnail_batch() is True
+                else MEDIA_THUMBNAIL_BATCH_SIZE,
+            )
             if self._worker is not None:
                 return
 
@@ -4117,6 +4568,7 @@ class _NativeGalleryViewer:
             if data is not None:
                 data.close()
             return
+        presented_on_tk = False
         if data is not None and ImageTk is not None:
             image: object | None = None
             presented: 'Image.Image | None' = None
@@ -4138,6 +4590,7 @@ class _NativeGalleryViewer:
                     image=image, text='', compound='image',
                     style='LinkedPhoto.TButton',
                 )
+                presented_on_tk = True
             except Exception:
                 if image is not None:
                     self._thumbnail_image_release_count += 1
@@ -4162,6 +4615,19 @@ class _NativeGalleryViewer:
                 )
         self._thumbnail_loaded.add(index)
         self._render_photo_selection((index,))
+        if (presented_on_tk and not self._first_thumbnail_reported
+                and index in self._visible_thumbnail_indices
+                and self.frame.winfo_viewable()):
+            self._first_thumbnail_reported = True
+            callback = self.on_first_thumbnail_presented
+            if callback is not None:
+                try:
+                    callback()
+                except Exception:
+                    # Diagnostics cannot interrupt genuine image display.
+                    logging.getLogger(__name__).warning(
+                        'First visible thumbnail diagnostic callback failed.',
+                    )
         # A natural-aspect image can be shorter than its placeholder inside a
         # fixed row. The frame extent then stays unchanged, so its Configure
         # event cannot repair visible indices at the edge of the viewport.
@@ -4201,6 +4667,12 @@ class _NativeGalleryViewer:
             private_identity[1] if private_identity is not None
             else getattr(photo, 'thumbnail_etag', None)
         )
+        if (private_identity is None and validator is None
+                and photo.thumbnail_verified_at is not None):
+            # The metadata epoch is an identity fence, not a content ETag.
+            # Never reuse decoded pixels across independently refreshed pages
+            # whose fallback-original bytes remain unproven.
+            validator = 'page:' + repr(photo.thumbnail_verified_at)
         return (
             self.gallery.gallery_id, photo.image_id,
             getattr(photo, 'cache_eligible', None),
@@ -4830,11 +5302,18 @@ class _NativeGalleryViewer:
         """
         self.retry_button.configure(state='disabled')
         self._media_throttled = False
+        self._http_thumbnail_failure_latched = False
         self._thumbnail_cancelled.clear()
         self.status.pack_forget()
         if self._retry_kind == 'detail' and self._photos:
             self._load_detail(self._slide_index)
         elif self._retry_kind == 'thumbnail':
+            for index in self._http_batch_retry_indices:
+                self._thumbnail_loaded.discard(index)
+                if (index in self._admitted_thumbnail_indices
+                        and index not in self._thumbnail_pending):
+                    self._thumbnail_pending.append(index)
+            self._http_batch_retry_indices = ()
             self._dispatch_pending_work()
         elif self._page_request_mode == 'initial':
             self._load_first_page()

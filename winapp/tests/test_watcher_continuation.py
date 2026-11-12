@@ -16,6 +16,7 @@ from collections import deque
 from dataclasses import replace
 import json
 import queue
+import re
 import sys
 import tempfile
 import threading
@@ -567,6 +568,11 @@ class WatcherContinuationTests(unittest.TestCase):
         app._resume_continuation = record
         app._update_resume_preparing = False
         app._update_resume_context_target = None
+        app._update_resume_context_key_closing = False
+        app._update_resume_generation = 0
+        app._update_resume_cancelled = False
+        app._update_resume_inspecting = False
+        app._ordinary_restart_resuming = False
         app.exiting = False
         app.worker = None
         app.config = config
@@ -603,7 +609,42 @@ class WatcherContinuationTests(unittest.TestCase):
             simconnect_factory.return_value.diagnostics_snapshot.return_value = {}
             self.assertTrue(MAIN.WatcherApp._prepare_update_resume(app, None))
 
-        event = wait_for_event_kind(app.events, "watcher_resume_prepared")
+        # The inline thread has already finished; preserve safe failure facts
+        # instead of silently discarding them while waiting for a success.
+        try:
+            observed = [app.events.get(timeout=TEST_EVENT_WAIT_SECONDS)]
+        except queue.Empty:
+            self.fail('Inline preparation produced no event within the bound.')
+        while not app.events.empty():
+            observed.append(app.events.get_nowait())
+        prepared = [item for item in observed if isinstance(item, dict)
+                    and item.get('kind') == 'watcher_resume_prepared']
+        safe_failures: list[str] = []
+        for item in observed:
+            if isinstance(item, dict) and item.get('kind') == 'watcher_resume_failed':
+                payload = item.get('payload')
+                if isinstance(payload, dict):
+                    stage = payload.get('stage')
+                    reason = payload.get('reason')
+                    if (stage in ('read_watch_drain', 'create_watcher',
+                                  'restore_watch_drain', 'restore_flight_recorder')
+                            and reason == 'saved_session_needs_review'):
+                        safe_failures.append(f'kind=watcher_resume_failed '
+                                             f'operation={stage} reason={reason}')
+            elif (isinstance(item, tuple) and len(item) == 2
+                  and item[0] == 'warning' and isinstance(item[1], str)):
+                match = re.search(
+                    r'operation=(read_watch_drain|create_watcher|restore_watch_drain|'
+                    r'restore_flight_recorder) error_type=([A-Za-z_][A-Za-z_0-9]*)\.',
+                    item[1],
+                )
+                if match:
+                    safe_failures.append(
+                        f'operation={match.group(1)} error_type={match.group(2)}',
+                    )
+        self.assertEqual(1, len(prepared), '; '.join(safe_failures)
+                         or 'Expected exactly one prepared event.')
+        event = prepared[0]
         worker = event["payload"]["worker"]
         recorder = event["payload"]["recorder"]
         self.assertEqual(self.watch_folder, worker._watch_folder_override)

@@ -497,6 +497,11 @@ writable persisted sources. Fresh defaults do not overwrite explicit upgrade
 state. Disabled persistent capabilities preserve their subsystem data and
 subordinate preferences.
 
+The optional native thumbnail-batch capability follows this same generic
+ownership model. Admin > Features owns its one saved `thumbnail_batch`
+preference; the legacy environment value supplies only an absent-setting
+upgrade fallback and cannot override a saved administrator choice.
+
 ## Future registration rule
 
 A new global setting should be added to the registry only after its canonical

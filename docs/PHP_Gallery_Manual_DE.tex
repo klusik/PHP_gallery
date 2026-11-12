@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.0.10}
-\newcommand{\manualdate}{10.~November~2026}
+\newcommand{\version}{1.1.0}
+\newcommand{\manualdate}{12.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2060,8 +2060,11 @@ Kreispfeil neben Aufklappen, Zuklappen und Hinzufügen aktualisiert Namen und
 Elternzuordnungen; Aufklappzustand, Auswahl und Fotoansicht bleiben erhalten.
 Bei verschobener Auswahl öffnet sich ihr neuer Vorfahrenpfad und bleibt sichtbar.
 Wiederholte Aktualisierungen ignorieren veraltete Antworten. Kurze UI-Schritte
-aktualisieren geänderte Zeilen. Tooltips erscheinen nur mit dem Zeiger über
-ihrem Auslöser; Tastaturfokus allein öffnet sie nicht. Windows schützt Titel
+aktualisieren geänderte Zeilen. Inkrementelles Laden erhält die numerische
+Reihenfolge gleichrangiger Galerien auch bei später eintreffenden Zeilen.
+Galerien mit noch nicht geladenem Elternknoten werden diesem nach seinem
+Eintreffen zugeordnet. Tooltips erscheinen nur mit dem Zeiger über ihrem
+Auslöser; Tastaturfokus allein öffnet sie nicht. Windows schützt Titel
 mit benutzergebundenem
 DPAPI; unsichere oder beschädigte Dateien gelten als Cache-Fehlschlag. Medien
 benötigen weiterhin aktuelle Serverfreigabe, neue Upload-/Erstellaktionen eine
@@ -2404,6 +2407,27 @@ behauptet aber keine vollständige Abdeckung. Ein erneuter Versuch nach einem
 Serverlimit verwendet geprüfte lokale Daten weiter. No-store-Medien bleiben
 temporär; lokale Dateien umgehen weder Anmeldung noch Linkablauf. Ein Vorgang
 akzeptiert höchstens 100\,000 direkte Fotos.
+
+Die optionale Serverfunktion \codeword{media:thumbnail-batch-v1} wird unter
+\ui{Admin > Features} gesteuert. Bei Neuinstallationen und Upgrades ohne
+gespeicherte Auswahl ist sie aktiviert; Admins können sie deaktivieren, und
+gespeicherte Auswahl bleibt bei Updates erhalten. Solange keine Auswahl
+gespeichert ist, gilt der ältere Wert
+\codeword{PHP_GALLERY_THUMBNAIL_BATCH_V1}: nicht gesetzt oder 1 bedeutet an,
+0 oder ein anderer Wert bedeutet aus. Eine gespeicherte Auswahl hat immer
+Vorrang. Die Funktion nutzt die vorhandene
+Bearer-Medienberechtigung ohne neue Einwilligung. Der schreibgeschützte Aufruf
+nimmt bis zu 32~Fotos, insgesamt 8~MiB und höchstens 4~MiB je Bild an; die
+Antwort ist \texttt{private, no-store}. SHA-256 prüft Bytes, erlaubt aber keine
+Cache-Nutzung. Admin-Vorladen bleibt getrennt. Der Server rechnet N angeforderte
+Fotos auf die bestehenden Grenzen von 600/IP und 3\,600 insgesamt sowie
+600/account je fünf Minuten an. Er hält höchstens ein 4-MiB-Bild gleichzeitig
+im Speicher. WinApp beginnt bei Unterstützung mit Gruppen von acht und nutzt
+nach einer erfolgreichen Gruppe bis zu sechzehn; langsame, große oder besondere
+Gruppen führen zurück zu acht. Unbestätigte Originale behalten Einzelabrufe.
+Die Abnahme von FPM, Proxy und HTTPS auf dem Zielserver ist noch offen; der
+Standardwert bestätigt sie nicht. Einzelabrufe bleiben als
+Rückfall für gemischte Versionen und Sonderfälle unterstützt.
 Ausdrückliches Vorladen mit einer Admin-Photos-Verknüpfung kann auf
 unterstützten Servern auch private Fotos und Entwürfe speichern. Foto,
 Galerie und sämtliche Vorfahren müssen nachweislich ohne NSFW-Beschränkung
@@ -2723,7 +2747,9 @@ Upload und lokaler Quittierung prüft ein natives Handle Identität und Bytes
 und löscht genau diese geöffnete Datei. Geänderte, umgeleitete, hartverknüpfte
 oder belegte Dateien bleiben mit einer Warnung erhalten. Inventartreffer und
 ungewisse Uploads erlauben keine Löschung. Andere Plattformen, manuelle Importe
-und Quell-ZIPs behalten ihre Quellen.
+und Quell-ZIPs behalten ihre Quellen. Die Watcher-Löschoption gilt nur für
+überwachte Aufnahmen; sie löscht keine für den manuellen Import ausgewählten
+Dateien.
 Der API-Schlüsselwiderruf im Flugablauf ist vorübergehend nicht verfügbar.
 GUI-Modusschutz und Wiederherstellung nach Absturz sind noch nicht qualifiziert.
 
@@ -10904,6 +10930,26 @@ aller vier TeX-Handbuchquellen, nicht nur der~sichtbaren Benutzeroberfläche. Be
 normaler Entwicklung bleiben \filepath{PATCH_NOTES.md} und~die gespeicherten
 Handbuch-PDFs unverändert.
 
+Der issue-362-Quellworkflow stellt zusätzlich ein unprivilegiertes
+Recovery-Artefakt mit vorbereiteten Ausgaben bereit. Beide PHP-Quick-Jobs
+führen die Vorbereitung und deren schreibgeschützte Prüfung aus; nur der
+PHP~8.5-Job lädt nach erfolgreicher Vorbereitung die vollständigen Bytes von
+\filepath{app/runtime/modules.php}, \filepath{app/production-files.json} und
+\filepath{app/core-manifest.json} vor den Featuretests hoch. Der Artefaktname
+beginnt mit \codeword{issue-362-prepared-} und enthält die exakte Quell-SHA. Der
+Maintainer kann diese vorbereiteten Bytes prüfen und committen. Das Artefakt ist
+weder FULL-Qualifikation noch Publisher-Berechtigung; vor der Nutzung SHA
+prüfen und alle drei Dateien kontrollieren.
+
+Die Vorbereitung eines temporären CI-Checkouts aktualisiert nicht den lokalen
+Checkout. Alle drei kanonischen Ausgaben im Feature-Branch speichern und vor
+der Übergabe eines lauffähigen Checkouts durch gehostete Vorbereitung der
+endgültigen SHA unverändert reproduzieren lassen. Beim Start wird jede
+registrierte Route geprüft, auch optionale Routen mit deaktivierter Capability.
+Ist ein Localhost-Smoke ausdrücklich angefordert, danach den exakten Mount und
+eine Inhaltsseite neu laden; Fehlerreferenzen mit dem PHP-Notfallprotokoll
+abgleichen und die Browserprüfung nach der Reparatur wiederholen.
+
 \begin{enumerate}
   \item Gehostete Candidate preparation führt
   \filepath{scripts/prepare_candidate.php} und die schreibgeschützte Prüfung
@@ -10975,6 +11021,22 @@ Zurücksetzen und Navigation, Fokus sowie klassische und vorbereitete
 Wiederholungen ohne doppelte Übernahme. URL-/Decoderzahlen sind keine Messung
 des gesamten Prozessspeichers; echte Betriebssystem-Zwischenablage sowie
 Firefox/Safari bleiben manuell zu prüfen.
+
+Auf Grundlage der gehosteten Timeout-Evidenz ordnet der Windows-Featurejob
+mit dem Befehl \codeword{php scripts/audit.php --suite=winapp-partitioned}
+alle Klassen aus \codeword{test_native_gallery_viewer.py} einem Prozess,
+die Klassen \codeword{ThumbnailCacheSmallBenchmarkTests} und
+\codeword{ThumbnailCacheLargeBenchmarkTests} je einem eigenen Prozess und die
+Klasse \codeword{GalleryPreloadWorkerTests} dem vierten sowie die
+vollständige restliche Inventarliste dem fünften zu. Alle fünf seriellen
+Prozesse behalten das bestehende 90-Sekunden-Limit; für diese Prozesse sowie
+Inventar- und Reportverarbeitung gilt ein äußeres Limit von 480~Sekunden. Der
+zentrale Audit prüft alle fünf Schema-1-Berichte und die vollständige
+disjunkte Vereinigung der Test-IDs, bevor er echte Ergebnisse zusammenführt.
+Fehlende, unvollständige, fehlerhafte, doppelte, fehlgeschlagene oder
+abgelaufene Nachweise führen zum Fehlschlag. Der normale Vollsuite-Owner behält
+sein bisheriges Einzelprozessverhalten und Limit; frühere Gesamt-, Zwei-, Drei-
+und Vier-Prozess-Timeouts bleiben fehlgeschlagene Läufe.
 
 GitHub Actions ist für Agenten die normale und maßgebliche Prüfumgebung
 (CI-first). Die folgenden zentralen Audit-Befehle beschreiben den gehosteten

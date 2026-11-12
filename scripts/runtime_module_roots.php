@@ -197,6 +197,7 @@ return [
         'Gallery\\Controllers\\cms_app_linking_identity' => 'domain-admin-auth',
         'Gallery\\Controllers\\cms_app_linking_galleries' => 'domain-admin-auth',
         'Gallery\\Controllers\\cms_app_linking_gallery_detail' => 'domain-admin-auth',
+        'Gallery\\Controllers\\cms_app_linking_thumbnail_batch' => 'domain-admin-auth',
         'Gallery\\Controllers\\cms_app_linking_media' => 'domain-admin-auth',
         'Gallery\\Controllers\\cms_app_linking_gallery_create' => 'domain-admin-auth',
         'Gallery\\Controllers\\cms_app_linking_gallery_create_status' => 'domain-admin-auth',

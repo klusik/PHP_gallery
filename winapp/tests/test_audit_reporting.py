@@ -10,6 +10,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Verify schema-versioned WinApp audit reports without running the production suite."""
 
+import copy
 import io
 import sys
 import unittest
@@ -21,11 +22,50 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from scripts.audit_winapp_report import AuditReport, report_suite
-from scripts.audit_winapp_report import discover_canonical_suite, main
+from scripts.audit_winapp_report import discover_canonical_suite, flatten_suite, main
+from scripts.audit_winapp_partitioned import merge_reports, partition_test_ids
+from scripts.audit_winapp_partitioned import validate_child_report
 
 
 class AuditReportingTests(unittest.TestCase):
     """Protect structured WinApp unittest outcomes and report accounting."""
+
+    def test_selected_child_progress_is_flushed_without_changing_reports(self) -> None:
+        """Emit per-test progress only for selected child execution.
+
+        Returns:
+            None: Default reporting stays quiet and both reports retain counts.
+        """
+        class SampleCase(unittest.TestCase):
+            """Supply one deterministic test to both reporting modes."""
+
+            def test_sample(self) -> None:
+                """Complete one selected child case successfully.
+
+                Returns:
+                    None: The result owner observes one successful case.
+                """
+                self.assertTrue(True)
+
+        normal_stream = io.StringIO()
+        selected_stream = io.StringIO()
+        normal = report_suite(
+            unittest.defaultTestLoader.loadTestsFromTestCase(SampleCase),
+            normal_stream,
+        )
+        selected = report_suite(
+            unittest.defaultTestLoader.loadTestsFromTestCase(SampleCase),
+            selected_stream, partition_child=True,
+        )
+        test_id = normal['tests'][0]['id']
+        self.assertNotIn('START ', normal_stream.getvalue())
+        self.assertNotIn('END ', normal_stream.getvalue())
+        self.assertIn(f'START {test_id}\n', selected_stream.getvalue())
+        self.assertRegex(selected_stream.getvalue(),
+                         r'END .*\.test_sample PASS [0-9]+\.[0-9]{3}s\n')
+        self.assertEqual(normal['counts'], selected['counts'])
+        self.assertTrue(normal['successful'])
+        self.assertTrue(selected['successful'])
 
     def test_native_diagnostic_is_explicit_and_preserves_full_discovery(self) -> None:
         """Bind diagnostic reports to their exact selected native fixture.
@@ -53,6 +93,266 @@ class AuditReportingTests(unittest.TestCase):
             report['runtime']['suite_settings']['pattern'],
         )
         self.assertEqual(2, main(['unused-output.json', '--other-selection']))
+        self.assertEqual(
+            2,
+            main(['unused-output.json', '--native-only', '--native-only']),
+        )
+        self.assertEqual(2, main(['unused-output.json', '--test-ids-file=']))
+        with self.assertRaises(TypeError):
+            flatten_suite(unittest.TestSuite([object()]))
+
+    def test_partition_assignment_keeps_classes_whole_and_is_deterministic(self) -> None:
+        """Balance all canonical IDs without splitting test classes.
+
+        Returns:
+            None: Exact union, disjointness, class ownership and stable order hold.
+        """
+        test_ids = [
+            'pkg.alpha.Alpha.test_one', 'pkg.alpha.Alpha.test_two',
+            'pkg.beta.Beta.test_one', 'pkg.beta.Beta.test_two',
+            'pkg.gamma.Gamma.test_one', 'pkg.delta.Delta.test_one',
+            'pkg.epsilon.Epsilon.test_one',
+        ]
+        first = partition_test_ids(test_ids, 2)
+        second = partition_test_ids(test_ids, 2)
+        self.assertEqual(first, second)
+        self.assertEqual(set(test_ids), set(first[0]) | set(first[1]))
+        self.assertFalse(set(first[0]) & set(first[1]))
+        for class_name in ('Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'):
+            matching = [index for index, shard in enumerate(first)
+                        if any(f'.{class_name}.' in test_id for test_id in shard)]
+            self.assertEqual(1, len(matching))
+        fallback = partition_test_ids(test_ids, 4)
+        fallback_ids = [test_id for shard in fallback for test_id in shard]
+        self.assertEqual(set(test_ids), set(fallback_ids))
+        self.assertEqual(len(fallback_ids), len(set(fallback_ids)))
+        self.assertEqual(4, len(fallback))
+        for class_name in ('Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'):
+            matching = [index for index, shard in enumerate(fallback)
+                        if any(f'.{class_name}.' in test_id for test_id in shard)]
+            self.assertEqual(1, len(matching))
+        full_fallback = partition_test_ids(test_ids, 5)
+        self.assertEqual(set(test_ids), {
+            test_id for shard in full_fallback for test_id in shard
+        })
+        self.assertEqual(5, len(full_fallback))
+        for class_name in ('Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'):
+            matching = [index for index, shard in enumerate(full_fallback)
+                        if any(f'.{class_name}.' in test_id for test_id in shard)]
+            self.assertEqual(1, len(matching))
+
+    def test_partition_isolates_slow_canonical_groups(self) -> None:
+        """Keep the viewer module and all measured classes isolated.
+
+        Returns:
+            None: Viewer, both cache cohorts, preload benchmark and complete
+                remainder occupy separate shards with exact disjoint coverage.
+        """
+        viewer_ids = [
+            'test_native_gallery_viewer.NativeGalleryViewerTests.test_one',
+            'test_native_gallery_viewer.NativeGalleryViewerTests.test_two',
+            'test_native_gallery_viewer.OtherViewerTests.test_three',
+        ]
+        small_benchmark_ids = [
+            'test_gallery_read_linking.ThumbnailCacheSmallBenchmarkTests.test_four',
+        ]
+        large_benchmark_ids = [
+            'test_gallery_read_linking.ThumbnailCacheLargeBenchmarkTests.test_five',
+        ]
+        preload_benchmark_ids = [
+            'test_gallery_preload.GalleryPreloadWorkerTests.test_six',
+            'test_gallery_preload.GalleryPreloadWorkerTests.test_seven',
+        ]
+        complement_ids = ['test_upload.UploadTests.test_eight']
+        canonical_ids = (
+            viewer_ids + small_benchmark_ids + large_benchmark_ids
+            + preload_benchmark_ids + complement_ids
+        )
+
+        shards = partition_test_ids(canonical_ids, 5)
+
+        self.assertEqual(set(viewer_ids), set(shards[0]))
+        self.assertEqual(set(small_benchmark_ids), set(shards[1]))
+        self.assertEqual(set(large_benchmark_ids), set(shards[2]))
+        self.assertEqual(set(preload_benchmark_ids), set(shards[3]))
+        self.assertEqual(set(complement_ids), set(shards[4]))
+        self.assertEqual(
+            set(canonical_ids),
+            set(shards[0]) | set(shards[1]) | set(shards[2])
+            | set(shards[3]) | set(shards[4]),
+        )
+        self.assertFalse(set(shards[0]) & set(shards[1]))
+        self.assertFalse(set(shards[0]) & set(shards[2]))
+        self.assertFalse(set(shards[0]) & set(shards[3]))
+        self.assertFalse(set(shards[0]) & set(shards[4]))
+        self.assertFalse(set(shards[1]) & set(shards[2]))
+        self.assertFalse(set(shards[1]) & set(shards[3]))
+        self.assertFalse(set(shards[1]) & set(shards[4]))
+        self.assertFalse(set(shards[2]) & set(shards[3]))
+        self.assertFalse(set(shards[2]) & set(shards[4]))
+        self.assertFalse(set(shards[3]) & set(shards[4]))
+
+    def test_partition_merge_rejects_missing_duplicate_and_unsuccessful_children(self) -> None:
+        """Prevent incomplete, duplicated or failed child evidence from passing.
+
+        Returns:
+            None: Five real successful reports with the exact ID union qualify.
+        """
+        class AlphaCase(unittest.TestCase):
+            """Provide one passing class for coordinator evidence tests."""
+
+            def test_alpha(self) -> None:
+                """Pass one synthetic selected-ID test.
+
+                Returns:
+                    None: The synthetic assertion completes successfully.
+                """
+
+        class BetaCase(unittest.TestCase):
+            """Provide a second passing class for coordinator evidence tests."""
+
+            def test_beta(self) -> None:
+                """Pass one synthetic selected-ID test.
+
+                Returns:
+                    None: The synthetic assertion completes successfully.
+                """
+
+        class GammaCase(unittest.TestCase):
+            """Provide a third passing class for coordinator evidence tests."""
+
+            def test_gamma(self) -> None:
+                """Pass one synthetic selected-ID test.
+
+                Returns:
+                    None: The synthetic assertion completes successfully.
+                """
+
+        class DeltaCase(unittest.TestCase):
+            """Provide a fourth passing class for coordinator evidence tests."""
+
+            def test_delta(self) -> None:
+                """Pass one synthetic selected-ID test.
+
+                Returns:
+                    None: The synthetic assertion completes successfully.
+                """
+
+        class EpsilonCase(unittest.TestCase):
+            """Provide a fifth passing class for coordinator evidence tests."""
+
+            def test_epsilon(self) -> None:
+                """Pass one synthetic selected-ID test.
+
+                Returns:
+                    None: The synthetic assertion completes successfully.
+                """
+
+        reports = [
+            report_suite(
+                unittest.defaultTestLoader.loadTestsFromTestCase(case_type),
+                io.StringIO(), partition_child=True,
+            )
+            for case_type in (AlphaCase, BetaCase, GammaCase, DeltaCase, EpsilonCase)
+        ]
+        expected_ids = [test['id'] for report in reports for test in report['tests']]
+        self.assertTrue(all(validate_child_report(report) for report in reports))
+        bool_schema_version = copy.deepcopy(reports[0])
+        bool_schema_version['schema_version'] = True
+        self.assertFalse(validate_child_report(bool_schema_version))
+        bool_verbosity = copy.deepcopy(reports[0])
+        bool_verbosity['runtime']['suite_settings']['verbosity'] = True
+        self.assertFalse(validate_child_report(bool_verbosity))
+        malformed = copy.deepcopy(reports[0])
+        malformed['tests'][0]['duration_seconds'] = float('nan')
+        self.assertFalse(validate_child_report(malformed))
+        contradictory = copy.deepcopy(reports[0])
+        contradictory['tests'][0]['subtests'] = [{
+            'id': 'child-failure', 'status': 'FAIL', 'reason': 'Controlled failure.',
+        }]
+        contradictory['counts']['subtest_failures'] = 1
+        self.assertFalse(validate_child_report(contradictory))
+        processes = [
+            {
+                'partition': index, 'test_count': 1, 'exit_code': 0,
+                'timed_out': False, 'duration_seconds': 0.1,
+                'report_present': True, 'report_valid': True,
+                'report_successful': True,
+                'coverage_complete': True,
+                'expected_test_ids': [report['tests'][0]['id']],
+                'observed_test_ids': [report['tests'][0]['id']],
+            }
+            for index, report in enumerate(reports, start=1)
+        ]
+        merged, successful = merge_reports(reports, processes, expected_ids, 0.5)
+        self.assertTrue(successful)
+        self.assertEqual(5, merged['counts']['total'])
+        self.assertEqual(
+            'test_*.py',
+            merged['runtime']['suite_settings']['pattern'],
+        )
+        self.assertNotIn(
+            'partition_selection', merged['runtime']['suite_settings'],
+        )
+
+        missing, complete = merge_reports(
+            [reports[0], None, reports[2], reports[3], reports[4]],
+            [processes[0], {
+                **processes[1], 'exit_code': None, 'timed_out': True,
+                'report_present': False, 'report_valid': False,
+                'report_successful': None,
+                'coverage_complete': False, 'observed_test_ids': [],
+            }, processes[2], processes[3], processes[4]],
+            expected_ids, 0.5,
+        )
+        self.assertFalse(complete)
+        self.assertFalse(missing['partition_proof']['complete'])
+
+        duplicate_report = dict(reports[1])
+        duplicate_report['tests'] = list(reports[0]['tests'])
+        duplicate_report['counts'] = dict(reports[0]['counts'])
+        duplicate_processes = [dict(process) for process in processes]
+        duplicate_processes[1]['observed_test_ids'] = expected_ids[:1]
+        duplicate_processes[1]['coverage_complete'] = False
+        duplicate, duplicate_success = merge_reports(
+            [reports[0], duplicate_report, reports[2], reports[3], reports[4]],
+            duplicate_processes,
+            expected_ids, 0.5,
+        )
+        self.assertFalse(duplicate_success)
+        self.assertFalse(duplicate['partition_proof']['complete'])
+        self.assertFalse(duplicate['partition_proof']['exact_union'])
+        self.assertEqual(
+            [expected_ids[0], expected_ids[0], expected_ids[2], expected_ids[3],
+             expected_ids[4]],
+            [test['id'] for test in duplicate['tests']],
+        )
+        self.assertEqual(5, duplicate['counts']['total'])
+
+        failed_report = copy.deepcopy(reports[0])
+        failed_report['successful'] = False
+        failed_report['tests'][0]['status'] = 'FAIL'
+        failed_report['tests'][0]['reason'] = 'Controlled assertion failure.'
+        failed_report['counts']['passed'] = 0
+        failed_report['counts']['failed'] = 1
+        self.assertTrue(validate_child_report(failed_report))
+        failed_processes = [dict(process) for process in processes]
+        failed_processes[0]['exit_code'] = 1
+        failed_processes[0]['report_successful'] = False
+        failed, complete = merge_reports(
+            [failed_report, reports[1], reports[2], reports[3], reports[4]],
+            failed_processes, expected_ids, 0.5,
+        )
+        self.assertFalse(complete)
+        self.assertFalse(failed['successful'])
+
+        failed_exit_processes = [dict(process) for process in processes]
+        failed_exit_processes[0]['exit_code'] = 9
+        failed_exit, complete = merge_reports(
+            reports, failed_exit_processes, expected_ids, 0.5,
+        )
+        self.assertFalse(complete)
+        self.assertFalse(failed_exit['successful'])
 
     def report_case(self, case_type: type[unittest.TestCase]) -> AuditReport:
         """Run one local fixture case through the public structured report seam.

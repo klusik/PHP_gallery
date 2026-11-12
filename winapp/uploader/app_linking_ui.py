@@ -31,6 +31,7 @@ from .app_linking import (
     LINKING_RECOVERY_MAX_FILE_BYTES,
     ADMIN_PRELOAD_CAPABILITY,
     GALLERY_TREE_CAPABILITY,
+    THUMBNAIL_BATCH_CAPABILITY,
     ADMIN_MEDIA_SCOPE_SUFFIX, ADMIN_PRESENTATION_SCOPE_SUFFIX,
     MEDIA_SCOPE_SUFFIX, PRESENTATION_SCOPE_SUFFIX, ROLLING_SCOPE_SUFFIX,
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage,
@@ -884,6 +885,9 @@ class LinkingManager:
                     grant.scope,
                     gallery_tree_supported=(
                         GALLERY_TREE_CAPABILITY in capabilities
+                    ),
+                    thumbnail_batch_supported=(
+                        THUMBNAIL_BATCH_CAPABILITY in capabilities
                     ),
                 )
                 identity = session.identity()
@@ -3592,6 +3596,9 @@ class LinkingManager:
                     ),
                     gallery_tree_supported=(
                         GALLERY_TREE_CAPABILITY in capabilities
+                    ),
+                    thumbnail_batch_supported=(
+                        THUMBNAIL_BATCH_CAPABILITY in capabilities
                     ),
                 )
                 identity = session.identity()

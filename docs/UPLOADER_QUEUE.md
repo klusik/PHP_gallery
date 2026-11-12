@@ -173,6 +173,12 @@ format have no provable FIFO order and block for review. A frozen old queue
 without a cutoff is also unverifiable. No historical completed queue is migrated
 just by installing source code.
 
+For both journal versions, Windows recovery accepts `/` and `\` as alternate
+separator spellings of the same recorded folder. Comparison otherwise remains
+lexically exact, including case and dot components; POSIX retains its exact
+original spelling. This reader compatibility does not change destination,
+scope, session, source containment, recursion or FIFO verification.
+
 Active update continuation retains its exact one-use nonce and version checks.
 Idle helper tickets explicitly omit capture continuation on restart, so a stale
 checkpoint is not misreported as an active-session mismatch.

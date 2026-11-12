@@ -149,6 +149,8 @@ intent for bounded retry; malformed state, changed target/scope and revoked
 access still block capture. Stop or unlink also cancels pending retries and
 late startup results. Continuation diagnostics name the failed phase and a
 fixed safe reason without exposing keys, checkpoint contents or local paths.
+On Windows, recovery also accepts either slash direction in the recorded folder
+while retaining the existing exact boundary and queue verification.
 While Watcher capture is active, a red dot pulses
 on the tray icon in step with the in-app indicator. The update badge remains
 visible independently.
@@ -1006,9 +1008,34 @@ web, including 1.0.3, uses the original API: first up to 500 entries, then one
 page every five seconds. Unsupported, malformed, oversized or unavailable
 optional tree replies use that same paged path. Authorization refusals,
 cancellation and rate limits stop the read instead of downgrading it.
+
+Servers may implement the optional `media:thumbnail-batch-v1` capability.
+PHP Gallery enables it by default for fresh installations and upgrades without
+a saved Admin > Features choice. Administrators can disable it there; a saved
+choice takes precedence over the legacy `PHP_GALLERY_THUMBNAIL_BATCH_V1`
+environment value, which applies only while the setting is absent. It uses the
+existing bearer media authority and no new grant; the read-only fixed-page POST
+is capped at 32 photos, 8 MiB total and 4 MiB per image and always uses
+`private, no-store`. Its SHA-256 is byte-integrity evidence, not cache
+authority, and the existing Admin preload opt-in remains separate. The server
+buffers at most one 4 MiB image at once and charges N photos against the shared
+600/IP, 3,600/global and 600/account per-five-minute limits. When advertised,
+WinApp starts with groups of at most eight and uses up to sixteen after a
+healthy group; slow, large or exceptional groups return to eight. Local hits
+stay first and unverified originals retain the individual confirmation path.
+Target-host FPM, proxy and HTTPS acceptance is currently unknown; this server
+default does not establish it. Individual reads remain the fallback for
+mixed versions and exceptional images.
+Photos diagnostics keep a separate 300-second, 256-observation physical batch
+window. It counts HTTP attempts and bytes once per operation; p95 remains
+unknown below 100 single-send samples, and multi-send timing is not treated as
+one request. Dispatch groups and the four-item GUI delivery limit are distinct.
 Both cached and complete trees mount in short UI batches; existing rows change
 only when their metadata differs. A failed or incomplete pass retains the prior
 known structure, including successful pages received before an interruption.
+Ascending root rows append using the current batch's last ID; interleaved rows
+use the numeric ordering lookup. This keeps sibling order without maintaining a
+second tree index, while missing-parent rows can attach during reconciliation.
 Every successful page and confirmed creation saves the merged known metadata,
 including rows not yet mounted in the UI. Accepted disk writes finish on normal
 exit even when network work is cancelled. Rows absent from the new catalogue
@@ -1396,6 +1423,11 @@ reuse are separate counts. SSLContext, DNS, TCP, TLS, request/header wait and
 body/validation have separate observations; the encompassing transport total
 must not be added to its own component times. Work is counted before GUI
 admission, including results later discarded by cancellation or identity fences.
+When a network timeout is reported, its safe summary may include one fixed
+`transport_step` value: `slot`, `dns`, `connect`, `tls`, `request`, `headers` or
+`body`. This identifies the operation active when the timeout was observed; it
+does not diagnose the remote cause. The value contains no issuer URL, headers,
+credentials, response body or exception text.
 Cancelled completed reads and discarded disk results have distinct counters;
 these dispositions never imply that their earlier I/O did not happen.
 These are cumulative local observations, not an FPS benchmark. Compare cold
@@ -2119,8 +2151,10 @@ replacement during this final check.
 
 An inventory match, an uncertain response or a restart never independently
 authorizes source deletion. Files present at startup remain excluded. Manual
-import sources and ZIPs keep their existing retention policy. Other platforms
-retain watched sources until a native deletion owner is available.
+import sources and ZIPs remain on disk after confirmation. The Watcher deletion
+preference applies only to Watcher captures and does not delete files selected
+for Import. Other platforms retain watched sources until a native deletion
+owner is available.
 
 Start shows an activity indicator while it verifies the destination and reads
 the initial folder. REC appears after the initial exclusion boundary is ready.

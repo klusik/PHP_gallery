@@ -60,6 +60,28 @@ When a caller explicitly loads a deferred owner, register both its module roots
 and the guarded call edges in runtime_module_roots.php; keep presence checks
 before the load and actual deferred calls after it.
 
+## Runnable checkout handoff
+
+CI regeneration prepares its temporary checkout, not the developer's checkout.
+After route/root or updater-managed input changes, persist the complete canonical
+hosted `app/runtime/modules.php`, `app/production-files.json` and
+`app/core-manifest.json` outputs on the authorized feature branch. Use the approved
+preparation path or its exact-source-SHA artifact and review all three together.
+An optional route still needs a plan entry with its capability OFF: startup
+validates every registered route, including routes not advertised in discovery.
+
+Before claiming a runnable checkout, qualify the persisted commit and compare
+its generated files with that SHA's hosted re-preparation outputs. Later edits
+invalidate this proof. BASIC and fixtures that regenerate before testing cannot
+alone establish persisted freshness. Keep CI-first/no-local-generator rules;
+never hand-edit the plan, compile during web requests or bypass the stale guard.
+Do not dispatch protected integration/release merely to obtain generated files.
+
+When localhost smoke is explicitly requested, reload the exact mount and open a
+content route after persistence. On `Server error`, correlate its visible
+reference with the configured PHP emergency log, repair the owning state and
+repeat the browser check. CI success alone is not evidence that localhost runs.
+
 ## Translation Catalog Ownership
 
 Update user-facing keys in all EN/CS/DE/SV `app/lang/*.json` catalogs consumed

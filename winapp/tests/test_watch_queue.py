@@ -12,6 +12,7 @@
 
 import hashlib
 import json
+import os
 import tempfile
 import sys
 import threading
@@ -328,3 +329,81 @@ class WatchQueueTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             changed.restore()
         self.assertEqual(before, hashlib.sha256(self.journal.path.read_bytes()).hexdigest())
+
+    @unittest.skipUnless(os.name == 'nt', 'Requires native Windows path spelling.')
+    def test_windows_separator_compatibility_preserves_queue_boundaries(self) -> None:
+        """Restore both journal versions with only their folder slashes changed.
+
+        Returns:
+            None: Source identity and order survive; unrelated boundaries are
+                rejected without rewriting the original persisted bytes.
+        """
+        source = self.source('pending.png', 1.0)
+        self.journal.reconcile([source])
+        original_items = self.journal.items()
+        version_two = json.loads(self.journal.path.read_text(encoding='utf-8'))
+        version_one = {
+            'schema_version': 1, 'folder': str(self.folder), 'recursive': False,
+            'initial': [], 'pending': [source.path], 'initial_captured': True,
+            'frozen': False, 'cutoff': 0.0, 'checkpoint': self.now, 'error': '',
+        }
+        for version, original in ((1, version_one), (2, version_two)):
+            with self.subTest(version=version, boundary='slash spelling'):
+                row = dict(original)
+                row['folder'] = str(self.folder).replace('\\', '/')
+                self.journal.path.write_text(json.dumps(row), encoding='utf-8')
+                recovered = self.store()
+                recovered.restore()
+                self.assertEqual([source.path], recovered.data['pending'])
+                self.assertEqual(0.0, recovered.data['cutoff'])
+                self.assertTrue(recovered.data['order_verified'])
+                if version == 2:
+                    self.assertEqual(
+                        [(item.item_id, item.sequence, item.source.path)
+                         for item in original_items],
+                        [(item.item_id, item.sequence, item.source.path)
+                         for item in recovered.items()],
+                    )
+                    self.assertEqual(row['folder'], recovered.data['folder'])
+                else:
+                    self.assertEqual(source.path, recovered.items()[0].source.path)
+                    self.assertEqual(1, recovered.items()[0].sequence)
+
+            cases = [
+                ('different folder', 'folder', str(self.root / 'other')),
+                ('parent alias', 'folder', str(self.folder / '..' / self.folder.name)),
+                ('different case', 'folder', str(self.folder).swapcase()),
+                ('missing folder', 'folder', None),
+                ('binding', 'binding', 'b' * 64),
+                ('recursion', 'recursive', True),
+            ]
+            if version == 2:
+                cases.extend((
+                    ('scope', 'scope', 'other:scope'),
+                    ('session', 'session_id', 'different-session'),
+                ))
+            for name, field, value in cases:
+                with self.subTest(version=version, boundary=name):
+                    row = dict(original)
+                    row['folder'] = str(self.folder).replace('\\', '/')
+                    row[field] = value
+                    encoded = json.dumps(row).encode('utf-8')
+                    self.journal.path.write_bytes(encoded)
+                    with self.assertRaises(ValueError):
+                        self.store().restore()
+                    self.assertEqual(encoded, self.journal.path.read_bytes())
+
+    @unittest.skipIf(os.name == 'nt', 'Requires native POSIX path spelling.')
+    def test_posix_backslash_remains_a_distinct_folder_character(self) -> None:
+        """Keep a backslash distinct from a POSIX directory separator.
+
+        Returns:
+            None: A changed lexical folder is rejected without rewriting it.
+        """
+        row = json.loads(self.journal.path.read_text(encoding='utf-8'))
+        row['folder'] = str(self.folder).replace('/', '\\')
+        encoded = json.dumps(row).encode('utf-8')
+        self.journal.path.write_bytes(encoded)
+        with self.assertRaises(ValueError):
+            self.store().restore()
+        self.assertEqual(encoded, self.journal.path.read_bytes())

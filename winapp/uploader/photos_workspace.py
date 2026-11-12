@@ -30,12 +30,13 @@ from .app_linking import (
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage, LinkedGalleryTree,
     LinkedMediaDetails,
     LinkedMediaGalleryInfo, LinkedPhoto, LinkingSession,
-    LinkingMediaThrottled,
+    LinkingMediaThrottled, LinkingResponseError,
 )
 from .app_linking_ui import LinkingManager
 from .gallery_catalogue_cache import (
     GalleryCatalogueCache, GalleryCatalogueSnapshot, GalleryCatalogueWriter,
 )
+from .photos_catalogue_performance import CataloguePerformanceWindow
 from .diagnostics import (
     format_safe_photos_failure, is_safe_photos_observation,
 )
@@ -95,6 +96,18 @@ PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT = 10
 # Consumers: PhotosWorkspace._continue_catalogue.
 # Rationale: One five-second interval limits steady requests without a user tap.
 PHOTOS_CATALOGUE_CONTINUATION_DELAY_MS = 5_000
+
+# Purpose: Wait a full genuine gallery request budget without Retry-After.
+# Type: int. Units: seconds. Scope: one Photos catalogue HTTP 429 recovery.
+# Consumers: _schedule_catalogue_throttled_page. Rationale: the existing IP
+# limiter permits 120 requests per 300-second window.
+PHOTOS_CATALOGUE_RATE_RETRY_DEFAULT_SECONDS = 300
+
+# Purpose: Bound consecutive 429 retries without starving the Photos UI.
+# Type: int. Units: attempts per page. Scope: one live catalogue generation.
+# Consumers: _schedule_catalogue_throttled_page. Rationale: two retries
+# tolerate a temporarily shared limiter without an unbounded retry storm.
+PHOTOS_CATALOGUE_RATE_MAX_RETRIES = 2
 
 # Purpose: Advance prepared activity artwork without continuous widget redraws.
 # Type: int. Units: milliseconds. Scope: Photos catalogue/preload/storage activity.
@@ -296,10 +309,15 @@ class _CatalogueCacheResult:
         generation (int): Catalogue pass that began the cache read.
         snapshot (GalleryCatalogueSnapshot | None): Validated last-known local
             display metadata, or None when storage was unavailable or empty.
+        source (str): Fixed retained, disk, miss or disabled cache origin.
+        read_ms (float | None): Actual disk read and validation duration,
+            or None if no physical cache lookup was performed.
     """
 
     generation: int
     snapshot: GalleryCatalogueSnapshot | None
+    source: str = 'unknown'
+    read_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -309,10 +327,13 @@ class _CatalogueTreeResult:
     Args:
         generation (int): Catalogue pass that began the request.
         tree (LinkedGalleryTree): Complete rows or matching unchanged proof.
+        request_ms (float | None): Measured optional tree worker operation,
+            or None in direct test/compatibility calls.
     """
 
     generation: int
     tree: LinkedGalleryTree
+    request_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -322,10 +343,20 @@ class _CataloguePageResult:
     Args:
         generation (int): Catalogue pass that began the request.
         page (LinkedGalleryPage | None): Fresh page or safe failure marker.
+        throttled (bool): Whether this read returned an HTTP 429.
+        retry_after_seconds (int | None): Existing bounded retry instruction.
+        cursor (int | None): Captured continuation cursor, never exported.
+        request_ms (float | None): Actual measured tree/page worker duration.
+        fallback_reason (str): Fixed optional-tree compatibility outcome.
     """
 
     generation: int
     page: LinkedGalleryPage | None
+    throttled: bool = False
+    retry_after_seconds: int | None = None
+    cursor: int | None = None
+    request_ms: float | None = None
+    fallback_reason: str = 'none'
 
 
 _GalleryResult: TypeAlias = (
@@ -607,7 +638,9 @@ class PhotosWorkspace(ttk.Frame):
         self._events: queue.Queue[_GalleryResult] = queue.Queue()
         self._catalogue_cache_snapshot: GalleryCatalogueSnapshot | None = None
         self._catalogue_cache: GalleryCatalogueCache | None = None
+        self._catalogue_performance = CataloguePerformanceWindow()
         self._catalogue_generation = 0
+        self._viewer_viewport_pass_generation: int | None = None
         self._catalogue_cancel = threading.Event()
         self._catalogue_cache_ids: set[int] = set()
         self._fresh_catalogue_ids: set[int] = set()
@@ -628,6 +661,7 @@ class PhotosWorkspace(ttk.Frame):
         self._has_pending_page = False
         self._next_after: int | None = None
         self._pages_this_pass = 0
+        self._catalogue_rate_retries = 0
         self._catalogue_loading = False
         self._galleries: dict[int, LinkedGallery] = {}
         self._children_by_parent: dict[int, set[int]] = {}
@@ -1580,6 +1614,7 @@ class PhotosWorkspace(ttk.Frame):
         self._catalogue_generation += 1
         self._catalogue_cancel.set()
         self._catalogue_cancel = threading.Event()
+        self._catalogue_performance = CataloguePerformanceWindow()
         self._clear_photo_diagnostics()
         self._cancel.set()
         self._cancel = threading.Event()
@@ -1593,6 +1628,7 @@ class PhotosWorkspace(ttk.Frame):
         self._thumbnail_memory.clear()
         self._thumbnail_memory = GalleryThumbnailMemory()
         self._pages_this_pass = 0
+        self._catalogue_rate_retries = 0
         self.load_more_button.pack_forget()
         self._pending_cursor = None
         self._has_pending_page = False
@@ -1604,6 +1640,7 @@ class PhotosWorkspace(ttk.Frame):
         self.panes.grid()
         self._set_catalogue_loading(True)
         self.viewer_status.configure(text=self._text("loading"))
+        self._catalogue_performance.begin_pass()
         self._request_page(None)
 
     def _clear_catalogue(self) -> None:
@@ -1865,6 +1902,41 @@ class PhotosWorkspace(ttk.Frame):
                 'Recent observations:',
                 *('  ' + entry for entry in observations),
             ))
+        session = getattr(self, '_session', None)
+        session_summary = getattr(
+            session, 'route_performance_summary', None,
+        )
+        if callable(session_summary):
+            try:
+                lines.append(session_summary())
+            except Exception:
+                # A passive diagnostic failure cannot mask Photos errors.
+                logging.getLogger(__name__).warning(
+                    'Photos route performance counters unavailable.',
+                )
+        server_summary = getattr(
+            session, 'server_timing_summary', None,
+        )
+        if callable(server_summary):
+            try:
+                lines.append(server_summary())
+            except Exception:
+                # Passive diagnostics cannot mask the original gallery state.
+                logging.getLogger(__name__).warning(
+                    'Photos PHP response timing unavailable.',
+                )
+        catalogue_performance = getattr(self, '_catalogue_performance', None)
+        catalogue_summary = getattr(
+            catalogue_performance, 'render_summary', None,
+        )
+        if callable(catalogue_summary):
+            try:
+                lines.append(catalogue_summary())
+            except Exception:
+                # An optional diagnostic renderer must not mask Photos state.
+                logging.getLogger(__name__).warning(
+                    'Photos catalogue timing counters unavailable.',
+                )
         controller = getattr(
             getattr(self, '_viewer', None), '_gallery_viewer_controller', None,
         )
@@ -1910,23 +1982,51 @@ class PhotosWorkspace(ttk.Frame):
                 None: Every result is generation-fenced by the Tk polling owner.
             """
             cached = retained_snapshot if after_id is None else None
+            fallback_reason = 'none'
             if after_id is None:
+                source = 'retained' if cached is not None else (
+                    'disabled' if catalogue_cache is None else 'miss'
+                )
+                load_ms: float | None = None
                 if cached is None and catalogue_cache is not None:
-                    cached = catalogue_cache.load(cancel)
+                    cache_started = time.perf_counter()
+                    try:
+                        cached = catalogue_cache.load(cancel)
+                    finally:
+                        load_ms = (
+                            time.perf_counter() - cache_started
+                        ) * 1000.0
+                    if cached is not None:
+                        source = 'disk'
                 if not cancel.is_set():
-                    self._events.put(_CatalogueCacheResult(generation, cached))
+                    self._events.put(_CatalogueCacheResult(
+                        generation, cached, source, load_ms,
+                    ))
             if cancel.is_set():
                 return
             tree_reader = getattr(session, 'gallery_tree', None)
             tree_support = getattr(session, 'supports_gallery_tree', None)
-            if (after_id is None and tree_reader is not None
-                    and tree_support is not None and tree_support()):
+            can_tree = (after_id is None and tree_reader is not None
+                        and tree_support is not None and tree_support())
+            if can_tree:
+                tree_started = time.perf_counter()
                 try:
                     tree = tree_reader(
                         cached.revision if cached is not None else None,
                         cancelled=cancel,
                     )
                 except Exception as exc:
+                    tree_ms = (
+                        time.perf_counter() - tree_started
+                    ) * 1000.0
+                    if (isinstance(exc, LinkingResponseError)
+                            and exc.status == 429 and not cancel.is_set()):
+                        self._events.put(_CataloguePageResult(
+                            generation, None, True,
+                            exc.retry_after_seconds, after_id,
+                            tree_ms, 'tree_error',
+                        ))
+                        return
                     if (not cancel.is_set()
                             and not isinstance(exc, LinkingMediaThrottled)):
                         _log_safe_media_failure(
@@ -1938,18 +2038,35 @@ class PhotosWorkspace(ttk.Frame):
                             ),
                         )
                     if not cancel.is_set():
-                        self._events.put(
-                            _CataloguePageResult(generation, None),
-                        )
+                        self._events.put(_CataloguePageResult(
+                            generation, None, request_ms=tree_ms,
+                            fallback_reason='tree_error',
+                        ))
                     return
                 if cancel.is_set():
                     return
                 if tree is not None:
-                    self._events.put(_CatalogueTreeResult(generation, tree))
+                    self._events.put(_CatalogueTreeResult(
+                        generation, tree,
+                        (time.perf_counter() - tree_started) * 1000.0,
+                    ))
                     return
+                fallback_reason = 'optional_unavailable'
+            elif after_id is None:
+                fallback_reason = 'capability_missing'
+            page_started = time.perf_counter()
             try:
                 page = session.gallery_page(after_id, cancelled=cancel)
             except Exception as exc:
+                page_ms = (time.perf_counter() - page_started) * 1000.0
+                if (isinstance(exc, LinkingResponseError)
+                        and exc.status == 429 and not cancel.is_set()):
+                    self._events.put(_CataloguePageResult(
+                        generation, None, True,
+                        exc.retry_after_seconds, after_id,
+                        page_ms, fallback_reason,
+                    ))
+                    return
                 if (not cancel.is_set()
                         and not isinstance(exc, LinkingMediaThrottled)):
                     _log_safe_media_failure(
@@ -1962,7 +2079,11 @@ class PhotosWorkspace(ttk.Frame):
                     )
                 page = None
             if not cancel.is_set():
-                self._events.put(_CataloguePageResult(generation, page))
+                self._events.put(_CataloguePageResult(
+                    generation, page,
+                    request_ms=(time.perf_counter() - page_started) * 1000.0,
+                    fallback_reason=fallback_reason,
+                ))
 
         self._worker = threading.Thread(
             target=fetch,
@@ -2010,11 +2131,40 @@ class PhotosWorkspace(ttk.Frame):
                     and self._session_provider() is self._session
                     and not self._catalogue_cancel.is_set()):
                 if isinstance(result, _CatalogueCacheResult):
+                    stage = 'cache_' + result.source
+                    self._catalogue_performance.observe(
+                        stage, result.read_ms,
+                        rows=(len(result.snapshot.galleries)
+                              if result.snapshot is not None else 0),
+                    )
                     self._accept_cached_catalogue(result.snapshot)
                 elif isinstance(result, _CatalogueTreeResult):
-                    self._accept_complete_catalogue(result.tree)
+                    self._accept_complete_catalogue(
+                        result.tree, request_ms=result.request_ms,
+                    )
                 else:
-                    self._accept_page(result.page)
+                    if result.fallback_reason == 'tree_error':
+                        self._catalogue_performance.observe(
+                            'tree_throttled' if result.throttled
+                            else 'tree_error', result.request_ms,
+                        )
+                    else:
+                        if result.fallback_reason != 'none':
+                            self._catalogue_performance.observe(
+                                'paged_fallback', reason=result.fallback_reason,
+                            )
+                        self._catalogue_performance.observe(
+                            'page_throttled' if result.throttled
+                            else 'page_error' if result.page is None
+                            else 'page_ok', result.request_ms,
+                            rows=(len(result.page.galleries)
+                                  if result.page is not None else 0),
+                        )
+                    self._accept_page(
+                        result.page, throttled=result.throttled,
+                        retry_after_seconds=result.retry_after_seconds,
+                        cursor=result.cursor,
+                    )
         if self._worker is not None and not self._worker.is_alive():
             if not self._events.empty():
                 self._schedule_poll()
@@ -2069,6 +2219,8 @@ class PhotosWorkspace(ttk.Frame):
         if (self._destroyed or self._catalogue_cache_snapshot is None
                 or self._cached_mount_index >= len(self._cached_mount_rows)):
             return
+        mount_started = time.perf_counter()
+        mount_from = self._cached_mount_index
         stop = min(
             len(self._cached_mount_rows),
             self._cached_mount_index + PHOTOS_CATALOGUE_CACHE_BATCH_SIZE,
@@ -2088,6 +2240,9 @@ class PhotosWorkspace(ttk.Frame):
                 ).add(gallery_id)
         if changed:
             self._render_tree(changed)
+            self._catalogue_performance.mark_milestone(
+                'cached_rows_mounted',
+            )
             for gallery_id in changed:
                 self._cache_pending.setdefault(gallery_id, (None, False))
             self._start_cache_probe()
@@ -2101,6 +2256,10 @@ class PhotosWorkspace(ttk.Frame):
                     self._select_gallery(preferred, restore=True)
         if self._cached_mount_index < len(self._cached_mount_rows):
             self._schedule_cached_catalogue_batch()
+        self._catalogue_performance.observe(
+            'mount_cached', (time.perf_counter() - mount_started) * 1000.0,
+            rows=stop - mount_from,
+        )
 
     def _schedule_cached_catalogue_batch(self) -> None:
         """Schedule the next cached or complete row slice on one owned timer.
@@ -2149,11 +2308,16 @@ class PhotosWorkspace(ttk.Frame):
         except tk.TclError:
             pass
 
-    def _accept_complete_catalogue(self, tree: LinkedGalleryTree) -> None:
+    def _accept_complete_catalogue(
+        self, tree: LinkedGalleryTree, *,
+        request_ms: float | None = None,
+    ) -> None:
         """Stage a fresh full tree for bounded, difference-only UI updates.
 
         Args:
             tree (LinkedGalleryTree): Validated complete tree-v1 response.
+            request_ms (float | None): Actual measured transport operation,
+                or None when this method is called without a worker result.
 
         Returns:
             None: Cached display survives until the complete tree is mounted.
@@ -2161,11 +2325,16 @@ class PhotosWorkspace(ttk.Frame):
         cached = self._catalogue_cache_snapshot
         if tree.unchanged:
             if (cached is None or cached.revision != tree.revision):
+                self._catalogue_performance.observe('tree_error', request_ms)
                 self._request_page(None)
                 return
             galleries = cached.galleries
         else:
             galleries = tree.galleries
+        self._catalogue_performance.observe(
+            'tree_unchanged' if tree.unchanged else 'tree_full',
+            request_ms, rows=len(galleries),
+        )
         self._cancel_cached_catalogue_mount()
         self.retry_button.pack_forget()
         self._catalogue_cache_ids.update(self._galleries)
@@ -2194,6 +2363,7 @@ class PhotosWorkspace(ttk.Frame):
         tree = self._complete_catalogue_tree
         if tree is None or self._destroyed or self._catalogue_cancel.is_set():
             return
+        mount_started = time.perf_counter()
         stop = min(
             len(self._cached_mount_rows),
             self._cached_mount_index + PHOTOS_CATALOGUE_CACHE_BATCH_SIZE,
@@ -2226,11 +2396,22 @@ class PhotosWorkspace(ttk.Frame):
                 self._cache_pending.setdefault(gallery_id, (None, False))
             self._start_cache_probe()
             self._sync_subgalleries()
+        if confirmed and any(
+            self.tree.exists(str(gallery_id)) for gallery_id in confirmed
+        ):
+            self._catalogue_performance.mark_milestone(
+                'fresh_rows_confirmed',
+            )
         if self._selected_gallery_id in self._fresh_catalogue_ids:
             self.add_child_button.configure(state="normal")
+            self._rearm_current_viewport_after_fresh_catalogue()
         if self._cached_mount_index < len(self._cached_mount_rows):
             self._restore_or_choose_gallery(complete=False)
             self._schedule_cached_catalogue_batch()
+            self._catalogue_performance.observe(
+                'mount_fresh', (time.perf_counter() - mount_started) * 1000.0,
+                rows=len(confirmed),
+            )
             return
         self._complete_catalogue_tree = None
         self._prune_cached_catalogue_rows()
@@ -2246,6 +2427,10 @@ class PhotosWorkspace(ttk.Frame):
         else:
             self.tree_status.configure(text="")
         self._restore_or_choose_gallery(complete=True)
+        self._catalogue_performance.observe(
+            'mount_fresh', (time.perf_counter() - mount_started) * 1000.0,
+            rows=len(confirmed),
+        )
 
     def _persist_selected_gallery_if_fresh(
         self, fresh_ids: tuple[int, ...] | list[int],
@@ -2395,24 +2580,36 @@ class PhotosWorkspace(ttk.Frame):
         ))
         self._queue_catalogue_snapshot_save(self._catalogue_cache_snapshot)
 
-    def _accept_page(self, page: LinkedGalleryPage | None) -> None:
+    def _accept_page(
+        self, page: LinkedGalleryPage | None, *,
+        throttled: bool = False, retry_after_seconds: int | None = None,
+        cursor: int | None = None,
+    ) -> None:
         """Reconcile and persist one page before requesting its continuation.
 
         Args:
             page (LinkedGalleryPage | None): Validated response or failure marker.
+            throttled (bool): Actual catalogue HTTP 429 response marker.
+            retry_after_seconds (int | None): Validated server backoff seconds.
+            cursor (int | None): Original failing request cursor, if any.
 
         Returns:
             None: Confirmed metadata updates the known tree immediately; only
                 the last successful page removes absent cached rows.
         """
         if page is None:
+            if (throttled and self._schedule_catalogue_throttled_page(
+                    cursor, retry_after_seconds)):
+                return
             self._cancel_catalogue_continuation()
             self._set_catalogue_loading(False)
             self.tree_status.configure(text=self._text("error"))
             self.viewer_status.configure(text=self._text("error"))
             self.retry_button.pack(side="right")
             return
+        apply_started = time.perf_counter()
         self.retry_button.pack_forget()
+        self._catalogue_rate_retries = 0
         page_gallery_ids: list[int] = []
         changed_ids: list[int] = []
         for gallery in page.galleries:
@@ -2435,8 +2632,15 @@ class PhotosWorkspace(ttk.Frame):
         self._persist_selected_gallery_if_fresh(page_gallery_ids)
         if changed_ids:
             self._render_tree(changed_ids)
+        if page_gallery_ids and any(
+            self.tree.exists(str(gallery_id)) for gallery_id in page_gallery_ids
+        ):
+            self._catalogue_performance.mark_milestone(
+                'fresh_rows_confirmed',
+            )
         if self._selected_gallery_id in self._fresh_catalogue_ids:
             self.add_child_button.configure(state="normal")
+            self._rearm_current_viewport_after_fresh_catalogue()
         for gallery_id in changed_ids:
             self._cache_pending.setdefault(gallery_id, (None, False))
         self._start_cache_probe()
@@ -2468,6 +2672,10 @@ class PhotosWorkspace(ttk.Frame):
             )
             self._catalogue_cache_snapshot = complete_snapshot
             self._queue_catalogue_snapshot_save(complete_snapshot)
+        self._catalogue_performance.observe(
+            'page_apply', (time.perf_counter() - apply_started) * 1000.0,
+            rows=len(page.galleries),
+        )
 
     def _first_gallery(self) -> LinkedGallery | None:
         """Choose an untried leaf gallery, falling back to an orphan row.
@@ -2538,17 +2746,21 @@ class PhotosWorkspace(ttk.Frame):
             self._continue_catalogue()
 
     def _render_tree(self, page_gallery_ids: list[int]) -> None:
-        """Incrementally add a page and attach newly resolvable orphans.
+        """Render ordered rows and attach newly resolvable orphans in one slice.
 
         Args:
             page_gallery_ids (list[int]): IDs introduced or refreshed by the
                 current validated catalogue page.
 
         Returns:
-            None: Existing item state remains intact as later pages arrive.
+            None: Ascending new root IDs append using one batch-local tail;
+                interleaved IDs retain the ordered lookup. Existing item state
+                remains intact as later pages arrive.
         """
         self._rendering_tree = True
         candidates = set(page_gallery_ids)
+        root_tail_loaded = False
+        root_tail_id: int | None = None
         for gallery_id in page_gallery_ids:
             gallery = self._galleries[gallery_id]
             item_id = str(gallery_id)
@@ -2568,9 +2780,25 @@ class PhotosWorkspace(ttk.Frame):
                     image=image or "",
                 )
             else:
+                if not root_tail_loaded:
+                    # The tree keeps root siblings ordered by numeric ID. Read
+                    # them once per render call; repeated reads copy and scan
+                    # an ever-growing Tk child tuple during ascending mounts.
+                    root_children = self.tree.get_children("")
+                    if root_children:
+                        root_tail_id = int(root_children[-1])
+                    root_tail_loaded = True
+                root_index: int | str
+                if root_tail_id is None or gallery_id > root_tail_id:
+                    root_index = "end"
+                    root_tail_id = gallery_id
+                else:
+                    # Refreshes can introduce lower IDs; retain the general
+                    # ordered lookup for those interleaved insertions.
+                    root_index = self._ordered_index("", gallery_id)
                 self.tree.insert(
                     "",
-                    self._ordered_index("", gallery_id),
+                    root_index,
                     iid=str(gallery_id),
                     text=label,
                     image=image or "",
@@ -2690,6 +2918,59 @@ class PhotosWorkspace(ttk.Frame):
             self._catalogue_after = after_id
             return
         self._request_page(self._next_after)
+
+    def _schedule_catalogue_throttled_page(
+        self, cursor: int | None, retry_after_seconds: int | None,
+    ) -> bool:
+        """Resume the captured page only after the server's rate budget resets.
+
+        Args:
+            cursor (int | None): Exclusive cursor of the refused gallery page.
+            retry_after_seconds (int | None): Safe server-supplied retry delay.
+
+        Returns:
+            bool: True if one generation-fenced timer was created; otherwise
+                retain the manual error/retry control without a retry storm.
+        """
+        if (self._destroyed or self._session is None
+                or self._catalogue_rate_retries
+                >= PHOTOS_CATALOGUE_RATE_MAX_RETRIES):
+            return False
+        delay = (retry_after_seconds
+                 if type(retry_after_seconds) is int
+                 else PHOTOS_CATALOGUE_RATE_RETRY_DEFAULT_SECONDS)
+        if not 1 <= delay <= PHOTOS_CATALOGUE_RATE_RETRY_DEFAULT_SECONDS:
+            # Never retry before an unreasonably large server instruction.
+            return False
+        self._cancel_catalogue_continuation()
+        session = self._session
+        generation = self._catalogue_generation
+        cancel = self._catalogue_cancel
+        self._catalogue_rate_retries += 1
+        after_id: str | None = None
+
+        def retry_page() -> None:
+            """Dispatch only when the captured session, timer and page persist.
+
+            Returns:
+                None: Stale or cancelled timers have no network side effects.
+            """
+            if self._catalogue_after != after_id:
+                return
+            self._catalogue_after = None
+            if (self._destroyed or self._catalogue_generation != generation
+                    or self._session is not session
+                    or self._session_provider() is not session
+                    or self._catalogue_cancel is not cancel or cancel.is_set()
+                    or self._next_after != cursor
+                    or self._catalogue_paused_for_preview):
+                return
+            self._request_page(cursor)
+
+        after_id = self.after(delay * 1000, retry_page)
+        self._catalogue_after = after_id
+        self._set_catalogue_loading(True)
+        return True
 
     def _cancel_catalogue_continuation(self) -> None:
         """Cancel the one pending post-cap page timer, if present.
@@ -2917,6 +3198,7 @@ class PhotosWorkspace(ttk.Frame):
         self._catalogue_cancel.set()
         self._catalogue_cancel = threading.Event()
         self._catalogue_generation += 1
+        self._catalogue_performance.begin_pass()
         self._catalogue_cache_ids.update(self._galleries)
         self._fresh_catalogue_ids.clear()
         self._complete_catalogue_tree = None
@@ -2964,6 +3246,78 @@ class PhotosWorkspace(ttk.Frame):
             self._dismiss_context(restore=False)
             self._select_gallery(gallery)
 
+    def _rearm_current_viewport_after_fresh_catalogue(self) -> None:
+        """Requalify a retained viewer only after its gallery is freshly known.
+
+        Returns:
+            None: The native viewport samples the current pass on Tk without
+                adding transport work or treating cached tree rows as grants.
+        """
+        session = self._session
+        gallery_id = self._selected_gallery_id
+        generation = self._catalogue_generation
+        if (self._destroyed or session is None
+                or self._session_provider() is not session
+                or self._catalogue_cancel.is_set()
+                or gallery_id is None
+                or gallery_id not in self._fresh_catalogue_ids
+                or self._viewer is None
+                or self._viewer_viewport_pass_generation == generation):
+            return
+        controller = self._viewer._gallery_viewer_controller
+        controller.on_first_thumbnail_presented = lambda: (
+            self._record_first_visible_thumbnail(session, generation, gallery_id)
+        )
+        controller.on_first_viewport_settled = lambda: (
+            self._record_first_viewport_settled(session, generation, gallery_id)
+        )
+        self._viewer_viewport_pass_generation = generation
+        controller.rearm_first_viewport_diagnostics()
+
+    def _record_first_visible_thumbnail(
+        self, session: LinkingSession, generation: int, gallery_id: int,
+    ) -> None:
+        """Accept only the current viewer's truly mounted first image.
+
+        Args:
+            session (LinkingSession): Current media authorization owner.
+            generation (int): Exact catalogue generation of this viewer.
+            gallery_id (int): Current selected gallery for stale-result fencing.
+
+        Returns:
+            None: Stores only the first monotonic elapsed millisecond value.
+        """
+        if (not self._destroyed and self._session is session
+                and self._session_provider() is session
+                and self._catalogue_generation == generation
+                and self._selected_gallery_id == gallery_id
+                and not self._catalogue_cancel.is_set()):
+            self._catalogue_performance.mark_milestone(
+                'first_thumbnail_visible',
+            )
+
+    def _record_first_viewport_settled(
+        self, session: LinkingSession, generation: int, gallery_id: int,
+    ) -> None:
+        """Accept the current viewer's first fully resolved visible tile band.
+
+        Args:
+            session (LinkingSession): Exact active media authorization owner.
+            generation (int): Captured catalogue generation for stale fencing.
+            gallery_id (int): Gallery selected when this viewer was mounted.
+
+        Returns:
+            None: Stores one current-pass milestone, not a compositor paint.
+        """
+        if (not self._destroyed and self._session is session
+                and self._session_provider() is session
+                and self._catalogue_generation == generation
+                and self._selected_gallery_id == gallery_id
+                and not self._catalogue_cancel.is_set()):
+            self._catalogue_performance.mark_milestone(
+                'first_viewport_settled',
+            )
+
     def _select_gallery(
         self, gallery: LinkedGallery, *, implicit: bool = False,
         restore: bool = False,
@@ -3007,6 +3361,7 @@ class PhotosWorkspace(ttk.Frame):
         if not implicit:
             self.tree.see(str(gallery.gallery_id))
         diagnostic_generation = self._generation
+        catalogue_generation = self._catalogue_generation
         if self._viewer is not None:
             self._viewer.destroy()
             self._viewer = None
@@ -3042,6 +3397,17 @@ class PhotosWorkspace(ttk.Frame):
                 ) if implicit else None,
             )
             controller = self._viewer._gallery_viewer_controller
+            controller.on_first_thumbnail_presented = lambda: (
+                self._record_first_visible_thumbnail(
+                    session, catalogue_generation, gallery.gallery_id,
+                )
+            )
+            controller.on_first_viewport_settled = lambda: (
+                self._record_first_viewport_settled(
+                    session, catalogue_generation, gallery.gallery_id,
+                )
+            )
+            self._viewer_viewport_pass_generation = catalogue_generation
             controller.set_card_format(self._card_format_overrides[gallery.gallery_id])
             controller.on_photos_changed = lambda: self._photos_changed(
                 gallery.gallery_id,
@@ -3050,6 +3416,9 @@ class PhotosWorkspace(ttk.Frame):
                 self._cache_snapshot_changed(gallery.gallery_id, photos, complete)
             )
             self._viewer.pack(fill="both", expand=True)
+            self._catalogue_performance.mark_milestone(
+                'gallery_view_mounted',
+            )
         except tk.TclError:
             self.viewer_status.configure(text=self._text("error"))
             self.viewer_status.pack(fill="x", padx=8, pady=8)

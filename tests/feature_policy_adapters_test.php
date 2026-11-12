@@ -13,6 +13,7 @@
  * Responsibilities:
  *   - Verify generic app-setting capability sources read and write canonical persisted values
  *   - Verify lazy domain adapters delegate to existing domain-owned setters
+ *   - Verify thumbnail batching preserves its legacy environment fallback without shadowing saved state
  *   - Verify Gallery Trash master writes preserve subordinate Trash preferences
  *   - Verify fresh-install defaults never overwrite explicit persisted administrator state
  *   - Verify fresh-install seeding is idempotent through its lifecycle marker
@@ -170,10 +171,12 @@ namespace Gallery\Services {
 namespace {
     use function Gallery\Services\feature_capability_seed_fresh_install_defaults
     ;
+    use function Gallery\Services\feature_capability_definitions;
     use function Gallery\Services\feature_capability_source_has_explicit_value;
     use function Gallery\Services\feature_capability_source_read;
     use function Gallery\Services\feature_capability_source_setting_key;
     use function Gallery\Services\feature_capability_source_write;
+    use function Gallery\Services\save_feature_flags_from_post;
 
     /** Throw when one persistence-adapter expectation fails. */
     function feature_policy_adapter_assert(bool $condition, string $label): void
@@ -303,6 +306,162 @@ namespace {
             'Domain adapter must delegate to the existing domain setter: '
                 . $adapterId,
         );
+    }
+
+    $legacyThumbnailBatch = [
+        'source' => [
+            'type' => 'domain_adapter',
+            'adapter' => 'thumbnail_batch',
+        ],
+        'default_enabled' => true,
+    ];
+    feature_policy_adapter_assert(
+        feature_capability_source_setting_key(
+            'thumbnail_batch',
+            $legacyThumbnailBatch,
+        ) === 'feature_flag.thumbnail_batch.enabled',
+        'Thumbnail batching must expose its one canonical persisted setting key.',
+    );
+    $priorEnvironment = getenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
+    feature_policy_adapter_assert(
+        feature_capability_source_read(
+            'thumbnail_batch',
+            $legacyThumbnailBatch,
+        ),
+        'A missing thumbnail-batch preference with no legacy override defaults ON.',
+    );
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=1');
+    feature_policy_adapter_assert(
+        feature_capability_source_read(
+            'thumbnail_batch',
+            $legacyThumbnailBatch,
+        ),
+        'The explicit legacy environment opt-in remains honored when no setting exists.',
+    );
+    foreach (['0', 'true', 'invalid'] as $legacyValue) {
+        putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=' . $legacyValue);
+        feature_policy_adapter_assert(
+            !feature_capability_source_read(
+                'thumbnail_batch',
+                $legacyThumbnailBatch,
+            ),
+            'Legacy environment OFF or malformed values must fail closed.',
+        );
+    }
+    $GLOBALS['feature_policy_adapter_settings'][
+        'feature_flag.thumbnail_batch.enabled'
+    ] = '0';
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=1');
+    feature_policy_adapter_assert(
+        !feature_capability_source_read(
+            'thumbnail_batch',
+            $legacyThumbnailBatch,
+        ),
+        'A saved OFF preference must override the legacy environment opt-in.',
+    );
+    feature_policy_adapter_assert(
+        feature_capability_seed_fresh_install_defaults([
+            'thumbnail_batch' => feature_capability_definitions()['thumbnail_batch'],
+        ]) === []
+            && ($GLOBALS['feature_policy_adapter_settings'][
+                'feature_flag.thumbnail_batch.enabled'
+            ] ?? null) === '0',
+        'Fresh seeding must retain a saved thumbnail-batch OFF choice.',
+    );
+    feature_policy_adapter_assert(
+        feature_capability_seed_fresh_install_defaults([
+            'thumbnail_batch' => feature_capability_definitions()['thumbnail_batch'],
+        ]) === []
+            && ($GLOBALS['feature_policy_adapter_settings'][
+                'feature_flag.thumbnail_batch.enabled'
+            ] ?? null) === '0',
+        'Repeated fresh seeding must preserve a saved thumbnail-batch OFF choice.',
+    );
+    $GLOBALS['feature_policy_adapter_settings'][
+        'feature_flag.thumbnail_batch.enabled'
+    ] = 'malformed';
+    feature_policy_adapter_assert(
+        !feature_capability_source_read(
+            'thumbnail_batch',
+            $legacyThumbnailBatch,
+        ),
+        'Malformed persisted state must fail closed instead of falling back to ON.',
+    );
+    $GLOBALS['feature_policy_adapter_settings'][
+        'feature_flag.thumbnail_batch.enabled'
+    ] = '1';
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=0');
+    feature_policy_adapter_assert(
+        feature_capability_source_read(
+            'thumbnail_batch',
+            $legacyThumbnailBatch,
+        ),
+        'A saved ON preference must override the legacy environment opt-out.',
+    );
+    unset($GLOBALS['feature_policy_adapter_settings'][
+        'feature_flag.thumbnail_batch.enabled'
+    ]);
+    unset($GLOBALS['feature_policy_adapter_settings'][
+        'feature_capability.fresh_defaults_seeded'
+    ]);
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=0');
+    $thumbnailBatchDefinition = feature_capability_definitions()['thumbnail_batch'];
+    feature_policy_adapter_assert(
+        feature_capability_seed_fresh_install_defaults([
+            'thumbnail_batch' => $thumbnailBatchDefinition,
+        ]) === ['thumbnail_batch']
+            && ($GLOBALS['feature_policy_adapter_settings'][
+                'feature_flag.thumbnail_batch.enabled'
+            ] ?? null) === '1',
+        'Fresh-install seeding must persist thumbnail batching ON despite a legacy OFF override.',
+    );
+    feature_policy_adapter_assert(
+        feature_capability_seed_fresh_install_defaults([
+            'thumbnail_batch' => $thumbnailBatchDefinition,
+        ]) === []
+            && ($GLOBALS['feature_policy_adapter_settings'][
+                'feature_flag.thumbnail_batch.enabled'
+            ] ?? null) === '1',
+        'Repeated fresh seeding must preserve the persisted thumbnail-batch choice.',
+    );
+    if ($priorEnvironment === false) {
+        putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
+    } else {
+        putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=' . $priorEnvironment);
+    }
+
+    $GLOBALS['feature_policy_adapter_settings'] = [];
+    $adminRevision = \Gallery\Services\feature_capability_registry_revision();
+    putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=1');
+    $adminOff = save_feature_flags_from_post([
+        'feature_registry_revision' => $adminRevision,
+        'feature_changes' => ['thumbnail_batch' => '0'],
+    ]);
+    feature_policy_adapter_assert(
+        ($adminOff['changed_count'] ?? -1) === 1
+            && ($GLOBALS['feature_policy_adapter_settings'][
+                'feature_flag.thumbnail_batch.enabled'
+            ] ?? null) === '0'
+            && !\Gallery\Services\feature_capability_configured_enabled(
+                'thumbnail_batch',
+            )
+            && !\Gallery\Services\feature_capability_effective_enabled(
+                'thumbnail_batch',
+            ),
+        'The generic Admin Features save path must persist OFF and override legacy environment ON.',
+    );
+    feature_policy_adapter_assert(
+        (save_feature_flags_from_post([
+            'feature_registry_revision' => $adminRevision,
+            'feature_changes' => ['thumbnail_batch' => '0'],
+        ])['changed_count'] ?? -1) === 0,
+        'Repeated Admin OFF saves must preserve the canonical preference without another transition.',
+    );
+    if ($priorEnvironment === false) {
+        putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
+    } else {
+        putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1=' . $priorEnvironment);
     }
 
     // Fresh-install seeding writes only declared defaults and then becomes idempotent.

@@ -62,6 +62,12 @@ TEST_SESSION_LIFETIME_SECONDS = 120.0
 TEST_CLOCK_EDGE_SECONDS = 0.01
 TEST_PROOF_ADVANCE_SECONDS = 1.0
 
+# Purpose: Keep synthetic monotonic timestamps positive and independent of host uptime.
+# Type: float. Units: monotonic seconds. Scope: thumbnail proof refresh tests.
+# Consumers: ThumbnailRamProofTests. Rationale: exceed the freshness interval
+# so expired proof fixtures remain nonnegative even on a newly started runner.
+TEST_MONOTONIC_BASELINE_SECONDS = 3600.0
+
 
 class ThumbnailRamProofTests(unittest.TestCase):
     """Check stable decoded entries while live proof gates remain mandatory."""
@@ -261,7 +267,7 @@ class ThumbnailRamProofTests(unittest.TestCase):
             None: Existing refresh work coalesces; a failed attempt cannot
                 schedule another refresh until the existing revision interval.
         """
-        now = time.monotonic()
+        now = TEST_MONOTONIC_BASELINE_SECONDS
         photo = linking.LinkedPhoto(
             TEST_DISK_MEDIA_ID[1], 'public photo', cache_eligible=True,
             thumbnail_etag=TEST_THUMBNAIL_ETAG,
@@ -270,7 +276,10 @@ class ThumbnailRamProofTests(unittest.TestCase):
                 - TEST_PROOF_ADVANCE_SECONDS
             ),
         )
-        instance, session = self._refresh_viewer(photo)
+        with mock.patch.object(
+            viewer_module.time, 'monotonic', return_value=now,
+        ):
+            instance, session = self._refresh_viewer(photo)
         with mock.patch.object(viewer_module.time, 'monotonic', return_value=now):
             self.assertTrue(instance._queue_thumbnail_proof_refresh())
             self.assertTrue(instance._refresh_pending)
@@ -302,18 +311,17 @@ class ThumbnailRamProofTests(unittest.TestCase):
             None: A descriptor superseded by a fresh same-validator ledger row
                 stays usable; existing refresh ownership reports queued.
         """
-        now = time.monotonic()
-        photo = self._photo()
-        photo = replace(
-            photo,
-            preload_verified_at=(
-                now - viewer_module.MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS
-                - TEST_PROOF_ADVANCE_SECONDS
-            ),
-        )
-        instance, session = self._refresh_viewer(photo)
-        now = time.monotonic()
+        now = TEST_MONOTONIC_BASELINE_SECONDS
         with mock.patch.object(viewer_module.time, 'monotonic', return_value=now):
+            photo = self._photo()
+            photo = replace(
+                photo,
+                preload_verified_at=(
+                    now - viewer_module.MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS
+                    - TEST_PROOF_ADVANCE_SECONDS
+                ),
+            )
+            instance, session = self._refresh_viewer(photo)
             self.assertFalse(instance._queue_thumbnail_proof_refresh())
             self.assertEqual(0, instance._thumbnail_proof_refresh_count)
             instance._refresh_pending = True
@@ -331,7 +339,7 @@ class ThumbnailRamProofTests(unittest.TestCase):
             None: Closed viewers, revoked sessions, no-store-like metadata and
                 unsupported private rows never queue a background refresh.
         """
-        now = time.monotonic()
+        now = TEST_MONOTONIC_BASELINE_SECONDS
         expired_at = (
             now - viewer_module.MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS
             - TEST_PROOF_ADVANCE_SECONDS
@@ -340,7 +348,10 @@ class ThumbnailRamProofTests(unittest.TestCase):
             TEST_DISK_MEDIA_ID[1], 'expired', cache_eligible=True,
             thumbnail_etag=TEST_THUMBNAIL_ETAG, thumbnail_verified_at=expired_at,
         )
-        instance, session = self._refresh_viewer(public_expired)
+        with mock.patch.object(
+            viewer_module.time, 'monotonic', return_value=now,
+        ):
+            instance, session = self._refresh_viewer(public_expired)
         session.close()
         self.assertFalse(instance._queue_thumbnail_proof_refresh())
         instance._closed = True
@@ -358,10 +369,10 @@ class ThumbnailRamProofTests(unittest.TestCase):
         )
         for descriptor in unproven_rows:
             with self.subTest(title=descriptor.title):
-                shell, live_session = self._refresh_viewer(descriptor)
                 with mock.patch.object(
                     viewer_module.time, 'monotonic', return_value=now,
                 ):
+                    shell, live_session = self._refresh_viewer(descriptor)
                     self.assertFalse(shell._queue_thumbnail_proof_refresh())
                 self.assertEqual(0, shell._thumbnail_proof_refresh_count)
                 live_session.close()

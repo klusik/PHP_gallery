@@ -1,0 +1,126 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-362-b1-protocol.yml
+# Module Type: Issue-Scoped Protocol Qualification Workflow
+# Purpose: Qualify isolated B1.1 wire and B1.2 loopback HTTP transport.
+# Responsibilities:
+#   - Exercise Python 3.14 parser regression on Ubuntu and Windows.
+#   - Benchmark PHP 8.1/8.5 producer interoperation on disposable Ubuntu.
+#   - Qualify disposable loopback status, buffering and cancellation behavior.
+#   - Retain SHA-bound sanitized JSON/Markdown as GitHub Actions artifacts.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+name: Issue 362 B1 protocol decision
+
+on:
+  push:
+    branches:
+      - feature/362-b1-thumbnail-batch-protocol-benchmark
+    paths:
+      - '.github/workflows/issue-362-b1-protocol.yml'
+      - 'winapp/uploader/thumbnail_batch_protocol.py'
+      - 'tools/perf/issue_362_b1_protocol.py'
+      - 'winapp/tests/test_thumbnail_batch_protocol.py'
+      - 'tools/perf/issue_362_b1_producer.php'
+      - 'tools/perf/issue_362_b1_benchmark.py'
+      - 'tools/perf/issue_362_b1_http_router.php'
+      - 'tools/perf/issue_362_b1_http.py'
+      - 'tools/perf/issue_362_b1_http_benchmark.py'
+      - 'tests/test_issue_362_b1_http.py'
+      - 'docs/performance/issue_362_b1_http_transport_benchmark.md'
+      - 'tests/test_issue_362_b1_protocol.py'
+      - 'docs/performance/issue_362_b1_protocol_benchmark.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-362-b1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protocol:
+    name: B1 framed and MIME (${{ matrix.os }}, PHP ${{ matrix.php }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            php: '8.1'
+          - os: ubuntu-24.04
+            php: '8.5'
+          - os: windows-2025
+            php: 'none'
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Run strict parser safety and fragmentation regressions
+        run: >-
+          python -m unittest discover -s tests
+          -p test_issue_362_b1_protocol.py -v
+
+      - name: Check portable HTTP admission and fallback policies
+        run: >-
+          python -m unittest discover -s tests
+          -p test_issue_362_b1_http.py -v
+
+      - name: Install matrix PHP without external application dependencies
+        if: runner.os == 'Linux'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '${{ matrix.php }}'
+          coverage: none
+
+      - name: Check isolated PHP producer syntax
+        if: runner.os == 'Linux'
+        run: php -l tools/perf/issue_362_b1_producer.php
+
+      - name: Check isolated HTTP PHP router syntax
+        if: runner.os == 'Linux'
+        run: php -l tools/perf/issue_362_b1_http_router.php
+
+      - name: Install disposable JPEG and WebP fixture encoder
+        if: runner.os == 'Linux'
+        run: python -m pip install 'Pillow>=10.0'
+
+      - name: Qualify PHP producer and Python parser, record real measurements
+        if: runner.os == 'Linux'
+        env:
+          GALLERY_WORKFLOW_ENABLE: disposable-only
+          PHP_GALLERY_BROWSER: disabled
+        run: >-
+          python -m tools.perf.issue_362_b1_benchmark cache/test-audit
+
+      - name: Qualify HTTP loopback, errors, cancellation and resource metrics
+        if: runner.os == 'Linux'
+        env:
+          GALLERY_WORKFLOW_ENABLE: disposable-only
+          PHP_GALLERY_BROWSER: disabled
+        run: >-
+          python -m tools.perf.issue_362_b1_http_benchmark
+          cache/test-audit
+
+      - name: Retain sanitized exact-SHA metrics
+        if: runner.os == 'Linux' && success()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-b1-php-${{ matrix.php }}-${{ github.sha }}
+          path: |
+            cache/test-audit/issue-362-b1-php-*.json
+            cache/test-audit/issue-362-b1-php-*.md
+            cache/test-audit/issue-362-b1-http-php-*.json
+            cache/test-audit/issue-362-b1-http-php-*.md
+          if-no-files-found: error
+          retention-days: 14

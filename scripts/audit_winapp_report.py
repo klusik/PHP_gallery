@@ -20,9 +20,10 @@ import sys
 import tempfile
 import time
 import unittest
+from functools import partial
 from pathlib import Path
 from types import TracebackType
-from typing import TextIO, TypedDict
+from typing import NotRequired, TextIO, TypedDict
 
 
 class SubtestReport(TypedDict):
@@ -66,6 +67,7 @@ class SuiteSettingsReport(TypedDict):
     pattern: str
     runner: str
     verbosity: int
+    partition_selection: NotRequired[str]
 
 
 class RuntimeReport(TypedDict):
@@ -105,18 +107,51 @@ class AuditReport(TypedDict):
     tests: list[TestReport]
     fixture_errors: list[FixtureErrorReport]
     fixture_skips: list[FixtureSkipReport]
+    partition_processes: NotRequired[list["PartitionProcess"]]
+    partition_proof: NotRequired["PartitionCoverageProof"]
+
+
+class PartitionProcess(TypedDict):
+    """Describe the actual process and selected coverage for one shard."""
+
+    partition: int
+    test_count: int
+    exit_code: int | None
+    timed_out: bool
+    duration_seconds: float
+    report_present: bool
+    report_valid: bool
+    report_successful: bool | None
+    coverage_complete: bool
+    expected_test_ids: list[str]
+    observed_test_ids: list[str]
+
+
+class PartitionCoverageProof(TypedDict):
+    """Bind the canonical full inventory to unique child-reported test IDs."""
+
+    partition_count: int
+    complete: bool
+    exact_union: bool
+    expected_test_ids: list[str]
+    observed_test_ids: list[str]
+    total_duration_seconds: float
 
 
 class AuditTextTestResult(unittest.TextTestResult):
     """Retain individual unittest outcomes and their factual execution details."""
 
-    def __init__(self, stream: TextIO, descriptions: bool, verbosity: int) -> None:
+    def __init__(
+        self, stream: TextIO, descriptions: bool, verbosity: int, *,
+        progress: bool = False,
+    ) -> None:
         """Initialize text reporting with structured per-test and fixture records.
 
         Args:
             stream (TextIO): Private stream used by unittest's standard summary.
             descriptions (bool): Whether unittest includes test descriptions.
             verbosity (int): Standard unittest output verbosity.
+            progress (bool): Emit flushed per-test progress for selected children.
         Returns:
             None: Initializes an empty structured result collection.
         """
@@ -127,6 +162,7 @@ class AuditTextTestResult(unittest.TextTestResult):
         self._active: dict[int, TestReport] = {}
         self._started_at: dict[int, float] = {}
         self._subtest_event_counts: dict[int, int] = {}
+        self._progress = progress
 
     def startTest(self, test: unittest.case.TestCase) -> None:
         """Start timing and recording one canonical unittest test case.
@@ -146,6 +182,9 @@ class AuditTextTestResult(unittest.TextTestResult):
         self.records.append(record)
         self._active[id(test)] = record
         self._started_at[id(test)] = time.perf_counter()
+        if self._progress:
+            self.stream.write(f'\nSTART {test.id()}\n')
+            self.stream.flush()
         super().startTest(test)
 
     def stopTest(self, test: unittest.case.TestCase) -> None:
@@ -163,6 +202,12 @@ class AuditTextTestResult(unittest.TextTestResult):
             record["duration_seconds"] = max(0.0, time.perf_counter() - started)
             if record["status"] == "PENDING":
                 record["reason"] = "No terminal unittest outcome callback was received."
+            if self._progress:
+                self.stream.write(
+                    f'\nEND {record["id"]} {record["status"]} '
+                    f'{record["duration_seconds"]:.3f}s\n'
+                )
+                self.stream.flush()
         super().stopTest(test)
 
     def addSuccess(self, test: unittest.case.TestCase) -> None:
@@ -367,6 +412,7 @@ class AuditTextTestResult(unittest.TextTestResult):
 
 def report_suite(
     suite: unittest.TestSuite, stream: TextIO, *, native_only: bool = False,
+    partition_child: bool = False,
 ) -> AuditReport:
     """Run one supplied suite and return its complete structured test report.
 
@@ -375,10 +421,15 @@ def report_suite(
         stream (TextIO): Private stream for unittest's human-readable summary.
         native_only (bool): Label the explicitly selected native Tk diagnostic;
             False retains canonical complete-suite evidence.
+        partition_child (bool): Mark selected-ID child evidence so the default
+            full-suite validator refuses it as a complete standalone report.
     Returns:
         AuditReport: Schema-1 runtime, counts, test outcomes, fixture errors and success state.
     """
-    runner = unittest.TextTestRunner(stream=stream, verbosity=1, resultclass=AuditTextTestResult)
+    runner = unittest.TextTestRunner(
+        stream=stream, verbosity=1,
+        resultclass=partial(AuditTextTestResult, progress=partition_child),
+    )
     result = runner.run(suite)
     tests = result.records
     ids = [record["id"] for record in tests]
@@ -410,6 +461,8 @@ def report_suite(
         "runner": "unittest.TextTestRunner",
         "verbosity": 1,
     }
+    if partition_child:
+        suite_settings["partition_selection"] = "selected-id-subset"
     runtime: RuntimeReport = {
         "python_version": platform.python_version(),
         "python_implementation": platform.python_implementation(),
@@ -453,6 +506,27 @@ def discover_canonical_suite(*, native_only: bool = False) -> unittest.TestSuite
     return unittest.defaultTestLoader.discover(str(test_directory), pattern=pattern)
 
 
+def flatten_suite(suite: unittest.TestSuite) -> list[unittest.case.TestCase]:
+    """Return leaf test cases in the suite's existing execution order.
+
+    Args:
+        suite (unittest.TestSuite): Canonically discovered suite.
+    Returns:
+        list[unittest.case.TestCase]: Ordered test cases without suite wrappers.
+    """
+    cases: list[unittest.case.TestCase] = []
+    for item in suite:
+        if isinstance(item, unittest.TestSuite):
+            cases.extend(flatten_suite(item))
+        elif isinstance(item, unittest.case.TestCase):
+            cases.append(item)
+        else:
+            raise TypeError(
+                f"Canonical discovery produced unsupported leaf: {type(item).__name__}"
+            )
+    return cases
+
+
 def write_complete_report(output_path: Path, report: AuditReport) -> None:
     """Atomically write one complete UTF-8 JSON report to the requested file.
 
@@ -482,23 +556,53 @@ def write_complete_report(output_path: Path, report: AuditReport) -> None:
 
 
 def main(arguments: list[str]) -> int:
-    """Run owned discovery with an optional explicit native diagnostic selector.
+    """Run canonical discovery or an explicitly marked selected-ID child.
 
     Args:
-        arguments (list[str]): Output path followed optionally by --native-only;
-            all other extra arguments are refused.
+        arguments (list[str]): Output path and at most one --native-only or
+            nonempty --test-ids-file= selector; duplicate/unknown options fail.
     Returns:
-        int: Zero for a native successful suite, one for reported failures, or two for adapter errors.
+        int: Zero for a successful run, one for reported failures, or two for adapter errors.
     """
-    if not arguments or arguments[1:] not in ([], ['--native-only']):
+    if not arguments:
         return 2
-    native_only = arguments[1:] == ['--native-only']
-    output_path = Path(arguments[0]).expanduser().resolve()
+    output_value = arguments[0]
+    native_only = False
+    ids_value: str | None = None
+    for option in arguments[1:]:
+        if option == '--native-only' and not native_only:
+            native_only = True
+        elif option.startswith('--test-ids-file=') and ids_value is None:
+            ids_value = option.partition('=')[2]
+            if not ids_value:
+                return 2
+        else:
+            return 2
+    if native_only and ids_value is not None:
+        return 2
+    output_path = Path(output_value).expanduser().resolve()
     if output_path.exists():
         return 2
     try:
         suite = discover_canonical_suite(native_only=native_only)
-        report = report_suite(suite, sys.stderr, native_only=native_only)
+        if ids_value is not None:
+            requested = json.loads(Path(ids_value).read_text(encoding='utf-8'))
+            if (not isinstance(requested, list)
+                    or not all(isinstance(test_id, str) for test_id in requested)
+                    or len(requested) != len(set(requested))):
+                return 2
+            cases = flatten_suite(suite)
+            selected = set(requested)
+            by_id = {test.id(): test for test in cases}
+            if not selected or not selected.issubset(by_id):
+                return 2
+            suite = unittest.TestSuite(
+                test for test in cases if test.id() in selected
+            )
+        report = report_suite(
+            suite, sys.stderr, native_only=native_only,
+            partition_child=ids_value is not None,
+        )
         write_complete_report(output_path, report)
     except Exception as error:
         print(f"WinApp report adapter failed: {type(error).__name__}: {error}", file=sys.stderr)

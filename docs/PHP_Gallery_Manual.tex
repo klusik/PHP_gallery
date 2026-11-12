@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.0.10}
-\newcommand{\manualdate}{10 November 2026}
+\newcommand{\version}{1.1.0}
+\newcommand{\manualdate}{12 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1857,8 +1857,10 @@ beside expand, collapse and~add refreshes the~tree, including renamed galleries
 and~changed parents, while preserving expansion, selection and~the~photo view.
 If~the~selected gallery moves, its~new ancestor path opens to~keep it~visible.
 Repeated refreshes ignore obsolete responses. Short UI batches update
-changed rows. Tooltips appear only while the~pointer remains over their
-trigger; keyboard focus alone does~not open them. Windows protects saved titles
+changed rows. Incremental loading preserves numeric sibling order, including
+later rows. A~row whose parent arrives later moves under that parent. Tooltips appear only
+while the~pointer remains over their trigger; keyboard focus alone does~not
+open them. Windows protects saved titles
 with user-scoped DPAPI; unsafe
 or~corrupt local storage is~a~cache miss. Media still needs live authorization;
 new upload/create actions wait for~fresh gallery confirmation. This metadata
@@ -2031,6 +2033,24 @@ Photos and~thumbnails have a~separate
 five-minute limit of~600 requests per IP and~3,600 globally. On~HTTP~429,
 Photos displays the~limit and~pauses speculative requests until \ui{Retry}. Source launches use Pillow
 from the~same Python interpreter.
+The~optional server capability \texttt{media:thumbnail-batch-v1} is~controlled
+in~\ui{Admin > Features}. It~defaults to~enabled for~fresh installations and~upgrades
+without a~saved choice; an~administrator can~turn it~off, and~saved choices
+survive updates. While no~choice is~saved, the~legacy
+\codeword{PHP_GALLERY_THUMBNAIL_BATCH_V1} value is~used: unset or~1 means on;
+0 or~another value means off. A~saved choice always takes precedence. It~uses
+the~existing bearer media authority without a~new grant and~accepts a~fixed
+read-only request of~up~to~32~photos, 8~MiB total and~4~MiB per~image. Responses are~
+\texttt{private, no-store}. SHA-256 verifies bytes but grants no~cache
+authority; Admin preload remains separate. The~server buffers at~most one
+4~MiB image at~a~time. It~charges N requested photos against the~existing
+600/IP and~3,600/global limits and~the~600/account limit per~five minutes.
+When negotiated, WinApp starts with groups of~eight and~uses up~to~sixteen
+after a~healthy group; slow, large or~exceptional groups return to~eight.
+Unverified originals retain individual confirmation. Target FPM, proxy and~HTTPS
+acceptance remains unverified; the~default does not establish host acceptance.
+Existing single reads remain the~fallback for~mixed versions and~exceptional
+images.
 Retry reloads failed content. Use the~wheel, a~two-finger scroll or~+ and~\ensuremath{-}
 to~zoom. Press 0 to~reset the~view and~drag to~pan. F or~F11 toggles
 fullscreen. Pointer motion briefly reveals the~controls. When permitted coordinates exist, an~anchored
@@ -2463,7 +2483,8 @@ acknowledgement, a~native handle verifies the~same file identity and~bytes
 before deleting that opened source. Changed, redirected, hardlinked or~busy
 files remain with a~warning. Inventory matches and~uncertain uploads do~not
 authorize deletion. Other platforms, manual imports and~source ZIPs retain
-their sources. Flight
+their sources. The~Watcher deletion preference applies only to~watched
+captures; it~does not~delete files selected for~manual Import. Flight
 API-key revocation is temporarily unavailable. GUI mode protection and crash
 recovery are still being implemented and are not qualified.
 
@@ -9986,6 +10007,23 @@ require reviewing all~four TeX manual editions, not~only user-facing pages.
 Routine development leaves \filepath{PATCH_NOTES.md} and~the~tracked manual PDFs
 unchanged.
 
+The issue-362 source workflow also provides an unprivileged recovery artifact
+for prepared outputs. Both PHP quick jobs run preparation and its read-only
+check; after successful preparation, only the PHP~8.5 job uploads the complete bytes of
+\filepath{app/runtime/modules.php}, \filepath{app/production-files.json}, and
+\filepath{app/core-manifest.json} before feature tests. The artifact name starts
+with \codeword{issue-362-prepared-} and includes the exact source SHA. It lets
+the owner review and commit those prepared bytes. It is not FULL qualification
+or publisher authority; verify the SHA and inspect all three files before use.
+
+Preparation in a temporary CI checkout does not update the local checkout.
+Persist all three canonical outputs on the feature branch and require final-SHA
+hosted re-preparation to reproduce them before claiming a runnable checkout.
+Startup checks every registered route, including optional routes with a disabled
+capability. When localhost smoke is explicitly requested, reload the exact mount
+and a content page after persistence; correlate any error reference with the PHP
+emergency log and repeat the browser check after repair.
+
 \begin{enumerate}
   \item Hosted Candidate preparation runs
   \filepath{scripts/prepare_candidate.php} and~its read-only check: runtime
@@ -10055,6 +10093,21 @@ parity, a~320-pixel drawer, reset/navigation cleanup, focus and~classic/prepared
 retry without duplicate ingestion. Observed URL/decode counts
 are~not~a~whole-process memory measurement; real OS clipboard delivery
 and~Firefox/Safari checks remain manual.
+
+Based on~hosted timeout evidence, the~Windows feature job uses
+\codeword{php scripts/audit.php --suite=winapp-partitioned}. It~places all
+classes from \codeword{test_native_gallery_viewer.py} into one child, the~small and~large
+thumbnail-cache benchmark classes \codeword{ThumbnailCacheSmallBenchmarkTests}
+and~\codeword{ThumbnailCacheLargeBenchmarkTests} into separate children,
+the~\codeword{GalleryPreloadWorkerTests} class into a~fourth, and~the~exact
+remaining inventory into a~fifth. All five serial processes retain the~existing
+90-second child limit; the~coordinator has a~480-second outer bound for these
+child caps and~inventory/report handling. The~central
+audit verifies all five schema-1 reports and~the~complete disjoint test-ID
+union before merging actual outcomes. Missing, timed-out, malformed, duplicate
+or~unsuccessful evidence fails. The~ordinary full-suite owner keeps its
+existing single-process behavior and~limit. Earlier full-process and~two-,
+three- and~four-partition timeouts remain failed runs.
 
 For~coding agents, GitHub Actions is~the~default and~authoritative verification
 environment (CI-first). The~central audit commands below describe the~hosted

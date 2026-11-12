@@ -79,7 +79,11 @@ License: MIT License (see LICENSE file in repository)
         acquired: 0,
         rejected: 0,
         releases: 0,
+        requestsByPhase: Object.create(null),
+        lastUnlockPhase: '',
+        nativeCoverage: 'not-started',
     };
+    window.quickTagKeyboardLockDiagnostics = quickTagKeyboardLock;
     window.quickTagDeferNextKeyboardLock = false;
     window.quickTagDeferredKeyboardLockResolver = null;
     window.quickTagRejectNextKeyboardLock = false;
@@ -99,11 +103,21 @@ License: MIT License (see LICENSE file in repository)
                  */
                 value(keys) {
                     quickTagKeyboardLock.attempts += 1;
+                    const requestState = {
+                        attempt: quickTagKeyboardLock.attempts,
+                        phase: window.quickTagInputPhase || '',
+                        keys: [...keys],
+                        state: 'native-pending',
+                    };
+                    quickTagKeyboardLock.requestsByPhase[requestState.phase]
+                        = requestState;
                     if (window.quickTagRejectNextKeyboardLock) {
                         window.quickTagRejectNextKeyboardLock = false;
+                        requestState.state = 'controlled-rejection-pending';
                         return new Promise((resolve, reject) => {
                             window.quickTagDeferredKeyboardLockRejector = () => {
                                 window.quickTagDeferredKeyboardLockSettled = true;
+                                requestState.state = 'controlled-rejected';
                                 reject(new Error('Controlled fixture rejection.'));
                             };
                         }).catch((error) => {
@@ -113,16 +127,30 @@ License: MIT License (see LICENSE file in repository)
                     }
                     const deferResolution = window.quickTagDeferNextKeyboardLock;
                     window.quickTagDeferNextKeyboardLock = false;
-                    return nativeKeyboardLock(keys).then(() => {
+                    let nativeRequest;
+                    try {
+                        nativeRequest = nativeKeyboardLock(keys);
+                    } catch (error) {
+                        requestState.state = 'native-rejected';
+                        quickTagKeyboardLock.rejected += 1;
+                        return Promise.reject(error);
+                    }
+                    return Promise.resolve(nativeRequest).then(() => {
                         quickTagKeyboardLock.acquired += 1;
-                        if (!deferResolution) return;
+                        if (!deferResolution) {
+                            requestState.state = 'acquired';
+                            return;
+                        }
+                        requestState.state = 'deferred-pending';
                         return new Promise((resolve) => {
                             window.quickTagDeferredKeyboardLockResolver = () => {
                                 window.quickTagDeferredKeyboardLockSettled = true;
+                                requestState.state = 'deferred-resolved';
                                 resolve();
                             };
                         });
                     }).catch((error) => {
+                        requestState.state = 'native-rejected';
                         quickTagKeyboardLock.rejected += 1;
                         throw error;
                     });
@@ -136,6 +164,8 @@ License: MIT License (see LICENSE file in repository)
                      */
                     value() {
                         quickTagKeyboardLock.releases += 1;
+                        quickTagKeyboardLock.lastUnlockPhase =
+                            window.quickTagInputPhase || '';
                         return nativeKeyboardUnlock();
                     },
                 });
@@ -631,13 +661,27 @@ License: MIT License (see LICENSE file in repository)
         }));
         window.quickTagFullscreenMode = document.fullscreenElement === quickTagViewer
             ? 'native' : 'application';
+        const nativeKeyboardLockActive = quickTagFullscreenMode === 'native'
+            && quickTagKeyboardLock.supported;
+        quickTagKeyboardLock.nativeCoverage = quickTagFullscreenMode !== 'native'
+            ? 'not-applicable-application-fullscreen'
+            : quickTagKeyboardLock.supported ? 'pending' : 'api-unavailable';
         if (quickTagFullscreenMode === 'native' && nativeRequestFullscreen
             && quickTagViewer.dataset.currentQuickTagEnabled === '1') {
             check(window.quickTagFullscreenOptions?.keyboardLock === 'browser',
                 'authorized native viewer requests browser-specific fullscreen key routing');
         }
+        const releasesBeforeFullscreenLock = quickTagKeyboardLock.releases;
         window.quickTagInputPhase = 'fullscreen-t';
         await waitFor(() => !quickTagPopover.hidden, 'Shift+T did not open quick tags in fullscreen.');
+        if (nativeKeyboardLockActive) {
+            await waitFor(() => {
+                const request = quickTagKeyboardLock.requestsByPhase['fullscreen-t'];
+                return request?.state === 'acquired'
+                    || request?.state === 'native-rejected';
+            }, 'The fullscreen editor Keyboard Lock request did not settle: '
+                + JSON.stringify(quickTagKeyboardLock));
+        }
         const hudTagButton = quickTagViewer.querySelector('.lightbox-quick-photo-tag-button.lightbox-hud');
         const quickPopoverRect = quickTagPopover.getBoundingClientRect();
         check(quickTagFullscreenMode === 'native'
@@ -675,6 +719,14 @@ License: MIT License (see LICENSE file in repository)
             'fullscreen tag mutation remains bound to the active physical source image');
         await waitFor(() => quickTagPopover.hidden,
             'Confirmed successful fullscreen add did not close its current editor.');
+        if (nativeKeyboardLockActive
+            && quickTagKeyboardLock.requestsByPhase['fullscreen-t']?.state
+                === 'acquired') {
+            await waitFor(() => quickTagKeyboardLock.releases
+                    > releasesBeforeFullscreenLock,
+                'Closing the fullscreen editor did not release its settled native lock: '
+                    + JSON.stringify(quickTagKeyboardLock));
+        }
         // Each reopening owns a new request. Earlier successful/failed locks
         // cannot establish that this request exposed its deferred resolver.
         const acquisitionsBeforeReopen = quickTagKeyboardLock.acquired;
@@ -683,12 +735,19 @@ License: MIT License (see LICENSE file in repository)
         window.quickTagInputPhase = 'fullscreen-reopen-t';
         await waitFor(() => !quickTagPopover.hidden,
             'T did not reopen the fullscreen editor after a confirmed save.');
-        if (quickTagKeyboardLock.supported) {
-            await waitFor(() => (
-                quickTagKeyboardLock.acquired > acquisitionsBeforeReopen
-                    && typeof quickTagDeferredKeyboardLockResolver === 'function'
-            ) || quickTagKeyboardLock.rejected > rejectionsBeforeReopen,
-            'The reopened editor Keyboard Lock did not expose its deferred resolver or reject.');
+        if (nativeKeyboardLockActive) {
+            await waitFor(() => {
+                const request = quickTagKeyboardLock.requestsByPhase[
+                    'fullscreen-reopen-t'
+                ];
+                return (request?.state === 'deferred-pending'
+                        && quickTagKeyboardLock.acquired > acquisitionsBeforeReopen
+                        && typeof quickTagDeferredKeyboardLockResolver === 'function')
+                    || (request?.state === 'native-rejected'
+                        && quickTagKeyboardLock.rejected > rejectionsBeforeReopen);
+            }, 'The reopened editor Keyboard Lock request did not reach its own '
+                + 'deferred or rejected state: '
+                + JSON.stringify(quickTagKeyboardLock));
         }
         if (quickTagDeferredKeyboardLockResolver && !quickTagDeferredKeyboardLockSettled) {
             const releasesBeforeRebind = quickTagKeyboardLock.releases;
@@ -706,7 +765,7 @@ License: MIT License (see LICENSE file in repository)
                 && !quickTagPopover.hidden,
             'stale lock completion is retained for the newer popup instead of unlocking it');
         }
-        if (quickTagKeyboardLock.supported) {
+        if (nativeKeyboardLockActive) {
             const releasesBeforeStaleRejectCase = quickTagKeyboardLock.releases;
             quickTagPopover.querySelector('[data-quick-photo-tag-close]').click();
             check(quickTagPopover.hidden,
@@ -730,10 +789,22 @@ License: MIT License (see LICENSE file in repository)
             await waitFor(() => quickTagKeyboardLock.rejected > failuresBeforeRejection
                 && quickTagKeyboardLock.attempts > attemptsBeforeRejection,
             'A stale rejected request did not reconcile the newer popup lock owner.');
+            await waitFor(() => {
+                const request = quickTagKeyboardLock.requestsByPhase[
+                    'fullscreen-stale-reject-reopen-t'
+                ];
+                return request?.state === 'acquired'
+                    || request?.state === 'native-rejected';
+            }, 'The new owner request after stale rejection did not settle: '
+                + JSON.stringify(quickTagKeyboardLock));
             check(!quickTagPopover.hidden,
                 'stale lock rejection leaves the newer quick-tag editor open');
         }
-        const quickTagEscapeLockAcquired = quickTagKeyboardLock.acquired > 0;
+        const quickTagEscapeRequest = quickTagKeyboardLock.requestsByPhase[
+            'fullscreen-stale-reject-reopen-t'
+        ];
+        const quickTagEscapeLockAcquired = quickTagEscapeRequest?.state
+            === 'acquired';
         window.quickTagInputPhase = 'fullscreen-escape';
         await waitFor(() => quickTagPopover.hidden,
             'Escape or the browser fullscreen-exit fallback did not dismiss the fullscreen quick-tag editor.');
@@ -746,6 +817,11 @@ License: MIT License (see LICENSE file in repository)
         else {
             check(!quickTagViewer.hidden,
                 'a denied or unavailable native Escape lock still dismisses the popup with browser fullscreen exit');
+        }
+        if (nativeKeyboardLockActive) {
+            quickTagKeyboardLock.nativeCoverage = quickTagEscapeLockAcquired
+                ? 'native-Escape-acquired-and-verified'
+                : 'native-lock-rejected-fallback-verified';
         }
         window.quickTagInputPhase = 'fullscreen-hud-auto-hide-restored';
         if (document.fullscreenElement === quickTagViewer) {
@@ -802,7 +878,12 @@ License: MIT License (see LICENSE file in repository)
         check(errors.length === 0, `browser errors: ${errors.join('; ')}`);
         result.textContent = `BROWSER PASS: native lightbox quick-tag keyboard flow, remembered photo tag, fullscreen HUD and active-source targeting, plus real A/B/C image load/decode races, sparse metadata windows, close/reopen invalidation, detached-load cancellation and bounded original requests. Keyboard Lock: ${JSON.stringify(quickTagKeyboardLock)}.`;
     } catch (error) {
-        result.textContent = `BROWSER FAIL: ${error.stack}\n${errors.join('\n')}`;
+        result.textContent = `BROWSER FAIL: ${error.stack}\n`
+            + `${errors.join('\n')}\nKeyboard Lock diagnostics: `
+            + JSON.stringify({
+                fullscreenMode: window.quickTagFullscreenMode || 'not-entered',
+                ...quickTagKeyboardLock,
+            });
     } finally {
         teardownGalleryLightbox();
         window.fetch = originalFetch;

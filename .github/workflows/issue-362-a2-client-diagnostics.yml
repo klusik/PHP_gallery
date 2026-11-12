@@ -1,0 +1,177 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-362-a2-client-diagnostics.yml
+# Module Type: Issue-Scoped Client Diagnostics Workflow
+# Purpose: Qualify the first A2 passive WinApp measurement slice remotely.
+# Responsibilities:
+#   - Exercise portable fixed-window client sampling on GitHub runners.
+#   - Validate imported native viewer syntax without production access.
+#   - Retain no tokens, private gallery data or persistent benchmark files.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+
+name: Issue 362 A2 client diagnostics
+
+on:
+  push:
+    branches:
+      - feature/362-p1winappapiperformance-batched-thumbnail-reads-tree-v1-startup-audit-and-passive-transport-diagnostics
+    paths:
+      - '.github/workflows/issue-362-a2-client-diagnostics.yml'
+      - 'scripts/runtime_dynamic_dependencies.php'
+      - 'app/services/app_linking_passive_profile.php'
+      - 'app/services/app_linking.php'
+      - 'app/services/app_linking_media.php'
+      - 'app/controllers/app_linking.php'
+      - 'app/controllers/app_linking/media.php'
+      - 'app/database.php'
+      - 'tests/app_linking_passive_profile_test.php'
+      - 'tests/mvc_layer_contract_test.php'
+      - 'tests/stage9_http_transport_boundary_test.php'
+      - 'tests/runtime_plan_ratchet_test.php'
+      - 'tools/perf/issue_362_a2_php_http.php'
+      - 'docs/performance/issue_362_a2_php_20261111.md'
+      - 'winapp/uploader/photos_performance.py'
+      - 'winapp/uploader/viewport_performance.py'
+      - 'winapp/tests/test_viewport_performance.py'
+      - 'winapp/uploader/passive_server_timing.py'
+      - 'winapp/tests/test_passive_server_timing.py'
+      - 'winapp/uploader/linking_performance.py'
+      - 'winapp/uploader/app_linking.py'
+      - 'winapp/uploader/native_gallery_viewer.py'
+      - 'winapp/uploader/photos_workspace.py'
+      - 'winapp/uploader/photos_catalogue_performance.py'
+      - 'winapp/tests/test_photos_catalogue_performance.py'
+      - 'winapp/tests/test_native_gallery_viewer.py'
+      - 'winapp/tests/test_app_linking.py'
+      - 'winapp/tests/test_watcher_continuation.py'
+      - 'docs/performance/issue_362_a2_startup_20261111.md'
+      - 'docs/performance/issue_362_a2_viewport_20261111.md'
+      - 'docs/performance/issue_362_a2_acceptance_20261111.md'
+      - 'winapp/tests/test_photos_performance.py'
+      - 'winapp/tests/test_linking_performance.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-362-a2-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    name: Bounded Photos and linking sampling (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact feature commit
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Verify native module syntax
+        run: python -m py_compile winapp/uploader/passive_server_timing.py winapp/tests/test_passive_server_timing.py winapp/uploader/photos_performance.py winapp/uploader/viewport_performance.py winapp/tests/test_viewport_performance.py winapp/uploader/linking_performance.py winapp/uploader/app_linking.py winapp/uploader/native_gallery_viewer.py winapp/uploader/photos_workspace.py winapp/uploader/photos_catalogue_performance.py winapp/tests/test_photos_catalogue_performance.py winapp/tests/test_photos_performance.py winapp/tests/test_linking_performance.py
+      - name: Exercise PHP response timing validation
+        run: python -m unittest discover -s winapp/tests -p test_passive_server_timing.py -v
+      - name: Exercise fixed-window diagnostics
+        run: python -m unittest discover -s winapp/tests -p test_photos_performance.py -v
+      - name: Exercise settled visible viewport diagnostics
+        run: python -m unittest discover -s winapp/tests -p test_viewport_performance.py -v
+      - name: Exercise fixed-route status diagnostics
+        run: python -m unittest discover -s winapp/tests -p test_linking_performance.py -v
+      - name: Exercise fixed catalogue provenance and UI phase reductions
+        run: python -m unittest discover -s winapp/tests -p test_photos_catalogue_performance.py -v
+      - name: Guard full-suite linking cancellation and Photos support copying
+        run: >-
+          python -m unittest -v
+          winapp.tests.test_app_linking.LinkingTransportTests.test_cancelling_gallery_read_keeps_the_local_session
+          winapp.tests.test_watcher_continuation.WatcherContinuationTests.test_diagnostics_keep_safe_browser_runtime_and_update_context
+      - name: Install native Tk fixture image dependency
+        if: runner.os == 'Windows'
+        run: python -m pip install 'Pillow>=10.0'
+      - name: Verify real Windows Tk catalogue modes and bounded mounting
+        if: runner.os == 'Windows'
+        run: python -m unittest -v winapp.tests.test_native_gallery_viewer.NativeGalleryViewerTests.test_cached_catalogue_displays_before_old_server_page_fallback winapp.tests.test_native_gallery_viewer.NativeGalleryViewerTests.test_unchanged_catalogue_confirms_cached_rows_without_rerender winapp.tests.test_native_gallery_viewer.NativeGalleryViewerTests.test_fresh_tree_response_is_saved_with_its_server_revision winapp.tests.test_native_gallery_viewer.NativeGalleryViewerTests.test_fresh_complete_tree_mounts_in_bounded_ui_batches winapp.tests.test_native_gallery_viewer.NativeGalleryViewerTests.test_linked_tree_loads_photos_without_a_chooser
+
+  php-profiler:
+    name: Passive PHP and owned MariaDB (PHP ${{ matrix.php }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      database:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        ports:
+          - 13316:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      GALLERY_WORKFLOW_ENABLE: disposable-only
+      GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
+      GALLERY_WORKFLOW_DB_PORT: '13316'
+      GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      PHP_GALLERY_BROWSER: disabled
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.5']
+    steps:
+      - name: Checkout exact feature commit without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install supported PHP with PDO
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '${{ matrix.php }}'
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, exif, zip, dom, mbstring, intl
+          coverage: none
+      - name: Preflight exact integration preparation on hosted PHP 8.5
+        if: matrix.php == '8.5'
+        run: |
+          php scripts/prepare_candidate.php
+          php scripts/prepare_candidate.php --check
+        shell: bash
+      - name: Verify full-suite MVC, transport and runtime plan ratchets
+        if: matrix.php == '8.5'
+        run: |
+          php scripts/check_mvc_boundaries.php
+          php tests/mvc_layer_contract_test.php
+          php tests/stage9_http_transport_boundary_test.php
+          php tests/runtime_plan_ratchet_test.php
+        shell: bash
+      - name: Validate profiler source and HTTP fixture syntax
+        run: |
+          php -l app/services/app_linking_passive_profile.php
+          php -l app/services/app_linking.php
+          php -l app/services/app_linking_media.php
+          php -l app/controllers/app_linking.php
+          php -l app/controllers/app_linking/media.php
+          php -l app/database.php
+          php -l tools/perf/issue_362_a2_php_http.php
+          php -l tests/app_linking_passive_profile_test.php
+        shell: bash
+      - name: Validate default-off and authorized PHP numeric contract
+        run: php tests/app_linking_passive_profile_test.php
+        shell: bash
+      - name: Exercise owned bearer-authenticated PHP HTTP and MariaDB
+        run: php tools/perf/issue_362_a2_php_http.php
+        shell: bash
+      - name: Retain only sanitized A2 server qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-362-a2-php-${{ matrix.php }}-${{ github.sha }}
+          path: cache/test-audit/issue-362-a2-php.json
+          if-no-files-found: warn
+          retention-days: 7

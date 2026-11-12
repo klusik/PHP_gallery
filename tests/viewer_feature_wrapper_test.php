@@ -12,6 +12,7 @@
  *
  * Responsibilities:
  *   - Verify viewer accounts are disabled by default at the global feature layer
+ *   - Verify the complete capability registry and thumbnail-batch storage semantics
  *   - Verify the existing viewer mode remains a subordinate gate after the wrapper is enabled
  *   - Verify every current viewer route and Admin viewer-management entry belongs to the wrapper
  *   - Verify hidden Admin navigation and maintained translations are wired to the registered feature
@@ -104,6 +105,7 @@ namespace {
     use function Gallery\Services\feature_flag_exists;
     use function Gallery\Services\feature_flag_for_route;
     use function Gallery\Services\feature_flag_route_map;
+    use function Gallery\Services\feature_capability_source_setting_key;
     use function Gallery\Services\set_feature_flag_enabled;
     use function Gallery\Services\viewer_accounts_enabled;
     use function Gallery\Services\viewer_registration_mode;
@@ -206,15 +208,76 @@ namespace {
     );
 
     $definitions = feature_flag_definitions();
-    // The 35 established capabilities plus independent PDF/music masters.
+    $expectedFeatureKeys = [
+        'cooperative_galleries',
+        'public_search',
+        'lightbox_modes',
+        'picture_manager',
+        'inline_administration',
+        'image_voting',
+        'picture_game',
+        'smart_galleries',
+        'gallery_pdf_documents',
+        'gallery_music',
+        'thumbnail_batch',
+        'downloads',
+        'thumbnail_warmup',
+        'multilingual_content',
+        'public_tag_browsing',
+        'viewer_accounts',
+        'gallery_maps',
+        'flight_maps',
+        'navigation_data',
+        'simbrief',
+        'openai_text_assist',
+        'ai_image_metadata',
+        'upload_api',
+        'mobile_webdav',
+        'gallery_migration',
+        'gallery_trash',
+        'duplicate_photo_detector',
+        'metadata_organizer',
+        'exif_gallery_date_suggestions',
+        'complete_gallery_report',
+        'development_diagnostics',
+        'remote_favicon_discovery',
+        'built_in_update_installer',
+        'advanced_database_maintenance',
+        'media_renamer',
+        'telemetry',
+        'automatic_cache_cleanup',
+        'admin_test_runs',
+    ];
+    $thumbnailBatch = $definitions['thumbnail_batch'] ?? [];
     viewer_feature_wrapper_assert(
-        count($definitions) === 37
+        count($definitions) === 38
+            && array_keys($definitions) === $expectedFeatureKeys
             && isset(
                 $definitions['automatic_cache_cleanup'],
                 $definitions['gallery_pdf_documents'],
                 $definitions['gallery_music'],
-            ),
-        'Feature registry must include all 37 canonical capabilities.',
+                $definitions['thumbnail_batch'],
+            )
+            && ($thumbnailBatch['group'] ?? null) === 'admin_tools'
+            && ($thumbnailBatch['default_enabled'] ?? null) === true
+            && ($thumbnailBatch['fresh_default_enabled'] ?? null) === true
+            && ($thumbnailBatch['routes'] ?? null) === []
+            && ($thumbnailBatch['dependencies'] ?? null) === []
+            && ($thumbnailBatch['data_disable_policy'] ?? null) === 'preserve'
+            && ($thumbnailBatch['behavior_tags'] ?? null) === [
+                'admin-only',
+                'privacy',
+            ]
+            && feature_flag_default_enabled('thumbnail_batch')
+            && ($thumbnailBatch['source'] ?? null) === [
+                'type' => 'domain_adapter',
+                'adapter' => 'thumbnail_batch',
+            ]
+            && feature_capability_source_setting_key(
+                'thumbnail_batch',
+                $thumbnailBatch,
+            ) === 'feature_flag.thumbnail_batch.enabled',
+        'Feature registry must include all 38 canonical capabilities and preserve thumbnail-batch Admin ownership.',
     );
     viewer_feature_wrapper_assert(
         !feature_flag_default_enabled('admin_test_runs'),

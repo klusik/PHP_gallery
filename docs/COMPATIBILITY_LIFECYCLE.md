@@ -12,6 +12,14 @@ portable support. Original fingerprints may be unknown; a changed historical
 source then requires review instead of automatic reupload. The owning contract
 is [UPLOADER_QUEUE.md](UPLOADER_QUEUE.md).
 
+Windows CI reproduced a continuation refusal when a journal recorded the same
+folder with forward slashes: the host accepted it but the durable queue reader
+compared its spelling literally. The reader permanently supports either Windows
+separator direction for v1 and v2 while preserving case, lexical boundary and
+all existing ownership and source checks. This narrow compatibility is retained
+because persisted journals can outlive the client version that wrote them;
+installed prevalence and installed-client recovery remain unknown.
+
 The observed 1.0.9 regression included inventory HTTP 429 after thirty
 inventory/upload pairs in five minutes, followed by an erroneously closed
 capture interval and 22 synthetic-regression equivalents outside the old queue.
@@ -449,6 +457,27 @@ administrator role is required for every read and mutation. Creation and
 visibility retain their explicit scope and authoritative server checks.
 Deployment usage of administrator media and rolling grants is unknown.
 
+An optional `media:thumbnail-batch-v1` capability is controlled by the
+Admin > Features `thumbnail_batch` preference. It defaults ON for fresh
+installations and upgrades without a saved preference; saved `0`/`1` choices
+survive updates. The legacy `PHP_GALLERY_THUMBNAIL_BATCH_V1` value is consulted
+only while no preference exists (unset/`1` means ON; `0` or malformed means
+OFF). Its fixed-page read-only bearer POST
+uses existing media authority and adds no grant. It admits at most 32 photos,
+8 MiB per response and 4 MiB per image, with `private, no-store`; a body digest
+proves byte integrity, not cache eligibility. Admin preload remains a separate
+existing opt-in. Accounting charges N photos to the shared 600/IP and
+3,600/global five-minute budgets and 600/account per five minutes. Only one
+4 MiB image is buffered at a time for hashing and final authority checks.
+Negotiated WinApp browsing starts at eight items, may use sixteen after a
+healthy group and returns to eight for slow, large or exceptional groups.
+The existing single path remains authoritative for unverified originals.
+Installed-client usage and host FPM,
+proxy and HTTPS acceptance is unknown; the default policy is not target-host
+acceptance evidence, and the Admin preference remains available to disable it.
+The single-request fallback remains supported for mixed server/client versions
+and exceptional images.
+
 The separate detailed Information selectors use the existing Admin Photos
 scope. The workspace can show the gallery's direct inventory or the photo
 descriptor from an older server when extended fields are unavailable. These
@@ -568,7 +597,10 @@ Source regressions cover interrupted paging, retained disk metadata, writer
 teardown and repeated refreshes. Installed performance and crash/power-loss
 durability remain unknown; no server or credential format changes are required.
 Cached and complete-tree UI updates yield in short batches and retain unchanged
-rows. The account-scoped last explicit gallery preference reuses existing
+rows. Within each render batch, ascending root IDs append from a local tail;
+interleaved IDs retain the existing ordered lookup, so sibling order and
+late-parent reconciliation remain intact without a persistent tree index. The
+account-scoped last explicit gallery preference reuses existing
 versioned tree preferences; version 1 expansion states remain supported.
 Cached navigation still performs independent live media authorization; new
 upload and create actions require fresh gallery confirmation. Cached metadata
@@ -4227,6 +4259,27 @@ uses 6.1-terra. No new root menu item or storage migration is introduced.
   explicit public-URL breaking policy and proof for generated/bookmarked URLs.
 
 ## WinApp, upload, and downloads
+
+### WINAPP-IMPORT — Manual source retention
+
+- **Reason / protected scenario:** A confirmed manual Import must retain its
+  selected original regardless of the saved Watcher-only source-deletion
+  preference. The manual FIFO reuses the Watcher transport consumer, so it must
+  pass a private config snapshot with deletion disabled without mutating the
+  saved preference or changing Watcher behavior.
+- **Owner:** `ManualUploadThread._run_fifo_import` in
+  `winapp/gallery_watch_upload.pyw` owns the Import-specific consumer config;
+  Watcher continues to own confirmed capture deletion.
+- **Evidence / limits:** Current source behavior was observed to delete one
+  selected Import original after confirmed upload while the saved Watcher
+  deletion preference was enabled. The tracked source asset was restored from
+  the clean source revision. The focused FIFO regression requires confirmed
+  terminal state and retained original bytes; the existing Watcher fixture
+  remains the positive deletion control. Installed-client prevalence and
+  cross-version behavior are unknown; hosted regression results are required.
+- **Retirement:** Keep manual-source retention independent while Import shares
+  the Watcher consumer. Reconsider only after a distinct Import-owned transport
+  and compatibility evidence establish the same contract.
 
 ### WINAPP — Optional discovery and mixed-version upload compatibility
 

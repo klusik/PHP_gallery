@@ -29,6 +29,10 @@ use function Gallery\Services\app_linking_admin_media_revision;
 use function Gallery\Services\app_linking_admin_media_info;
 use function Gallery\Services\app_linking_admin_media_photo_info;
 use function Gallery\Services\app_linking_authenticate;
+use function Gallery\Services\app_linking_passive_begin;
+use function Gallery\Services\app_linking_passive_span_start;
+use function Gallery\Services\app_linking_passive_span_end;
+use function Gallery\Services\app_linking_passive_authorized;
 use function Gallery\Services\app_linking_media_gallery;
 use function Gallery\Services\app_linking_media_open_photo;
 use function Gallery\Services\app_linking_media_page;
@@ -137,8 +141,17 @@ function cms_app_linking_media(): void
             app_linking_json_error(400, 'invalid_request');
             return;
         }
-        $token = app_linking_bearer();
         $kind = $query['kind'];
+        $route = match ($kind) {
+            'photos' => 'media_page',
+            'thumbnail' => 'thumbnail_single',
+            'photo' => 'photo_single',
+            'revision' => 'revision',
+            default => '',
+        };
+        app_linking_passive_begin($route);
+        $authStarted = app_linking_passive_span_start();
+        $token = app_linking_bearer();
         // Bound credential lookups before trusting the bearer. Only canonical
         // access tokens can enter the separate photo and thumbnail budget.
         $photoRequest = in_array($kind, ['photo', 'thumbnail'], true)
@@ -192,7 +205,9 @@ function cms_app_linking_media(): void
         app_linking_security_headers();
         $publicGallery = $adminMedia && !in_array($kind, ['info', 'gallery_info', 'photo_info', 'revision'], true)
             && gallery_public_export_policy($query['gallery_id'])['allowed'];
+        app_linking_passive_span_end('auth', $authStarted);
         if (in_array($kind, ['photos', 'presentation', 'info', 'gallery_info', 'photo_info', 'revision'], true)) {
+            $metadataStarted = app_linking_passive_span_start();
             $payload = match ($kind) {
                 'photos' => app_linking_media_page(
                     $gallery, $query['cursor'],
@@ -209,13 +224,19 @@ function cms_app_linking_media(): void
                 ),
                 'presentation' => app_linking_media_presentation($gallery),
             };
+            app_linking_passive_span_end('media_metadata', $metadataStarted);
             if ($payload === null) {
                 app_linking_json_error(404, 'target_unavailable');
                 return;
             }
+            $encoded = $method === 'GET'
+                ? json_encode($payload, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE)
+                : null;
             header('Content-Type: application/json; charset=utf-8');
-            if ($method === 'GET') {
-                echo json_encode($payload, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
+            app_linking_passive_authorized();
+            app_linking_passive_emit_header();
+            if ($encoded !== null) {
+                echo $encoded;
             }
             return;
         }
@@ -233,10 +254,12 @@ function cms_app_linking_media(): void
             }
             return;
         }
+        $photoStarted = app_linking_passive_span_start();
         $photo = app_linking_media_open_photo(
             $gallery, $query['image_id'], $kind === 'thumbnail', $adminMedia,
             $publicGallery, $adminPreload,
         );
+        app_linking_passive_span_end('photo_open', $photoStarted);
         if ($photo === null || ($adminPreload && $photo['etag'] === null)) {
             if ($photo !== null) {
                 fclose($photo['stream']);
@@ -260,9 +283,16 @@ function cms_app_linking_media(): void
         if ($photo['etag'] === null) {
             header('X-PHP-Gallery-Media-Restricted: 1');
         }
-        if ($photo['etag'] === null || !app_linking_media_not_modified($photo['etag'])) {
+        $notModified = $photo['etag'] !== null
+            && app_linking_media_not_modified($photo['etag']);
+        if (!$notModified) {
             header('Content-Type: ' . $photo['mime']);
             header('Content-Length: ' . $photo['size']);
+        }
+        // Only a current, verified photo may export request-local timings.
+        app_linking_passive_authorized();
+        app_linking_passive_emit_header();
+        if (!$notModified) {
             if (session_status() === PHP_SESSION_ACTIVE) {
                 session_write_close();
             }

@@ -1149,6 +1149,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'The cached preferred gallery did not mount before page completion.',
         )
         self.assertEqual('Saved preferred', workspace._galleries[2].title)
+        cache_milestones = dict(
+            workspace._catalogue_performance.snapshot().milestones
+        )
+        self.assertIn('cached_rows_mounted', cache_milestones)
+        self.assertNotIn('fresh_rows_confirmed', cache_milestones)
         session.gallery_tree.assert_not_called()
         self.assertEqual([None], requested_cursors)
 
@@ -1161,8 +1166,22 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'Fresh paging did not prune the old tree and choose a safe fallback.',
         )
         self.assertEqual('Fresh first', workspace._galleries[1].title)
+        self.assertIn(
+            'fresh_rows_confirmed',
+            dict(workspace._catalogue_performance.snapshot().milestones),
+        )
         self.assertIsNone(cache.save.call_args.args[0].revision)
         self.assertEqual([], saved_selection)
+        evidence = workspace._catalogue_performance.snapshot()
+        self.assertEqual('disk', evidence.cache_source)
+        self.assertEqual('paged-fallback', evidence.transport_source)
+        self.assertEqual('capability_missing', evidence.fallback_reason)
+        self.assertEqual(1, evidence.completed_pages)
+        self.assertEqual(2, evidence.confirmed_rows)
+        self.assertTrue(any(
+            phase.stage == 'mount_cached' and phase.measured > 0
+            for phase in evidence.phases
+        ))
         workspace.destroy()
 
     def test_failed_catalogue_walk_retains_prior_complete_snapshot(self) -> None:
@@ -1212,7 +1231,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
             LinkedGallery(3, None, 'Removed on server'),
         )
         renamed = LinkedGallery(2, 4, 'Renamed on server')
-        replacement = (original[0], renamed, LinkedGallery(4, None, 'New parent'))
+        replacement = (
+            original[0], renamed, LinkedGallery(4, None, 'New parent'),
+            LinkedGallery(5, 4, 'Second child'),
+        )
         provider: list[LinkingSession | None] = [None]
         session = self._session(*self._gallery_data())
         session.supports_gallery_tree.return_value = False
@@ -1302,6 +1324,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertEqual([None, None], refresh_calls)
         self.assertEqual(('2',), workspace.tree.selection())
         self.assertEqual('4', workspace.tree.parent('2'))
+        self.assertEqual(('1', '4'), workspace.tree.get_children(''))
+        self.assertEqual(('2', '5'), workspace.tree.get_children('4'))
         self.assertTrue(workspace.tree.item('1', 'open'))
         self.assertTrue(workspace.tree.item('4', 'open'))
         self.assertEqual('Renamed on server', workspace._gallery_title.get())
@@ -1376,6 +1400,12 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertTrue(workspace.tree.exists('1'))
         self.assertTrue(workspace.tree.exists('2'))
         cache.save.assert_not_called()
+        evidence = workspace._catalogue_performance.snapshot()
+        self.assertEqual('tree-v1-unchanged', evidence.transport_source)
+        self.assertEqual(2, evidence.confirmed_rows)
+        self.assertTrue(any(
+            phase.stage == 'mount_fresh' for phase in evidence.phases
+        ))
         workspace.destroy()
 
     def test_selected_cached_gallery_persists_only_after_fresh_confirmation(self) -> None:
@@ -1462,6 +1492,15 @@ class NativeGalleryViewerTests(unittest.TestCase):
         stored = cache.save.call_args.args[0]
         self.assertEqual(revision, stored.revision)
         self.assertEqual((gallery,), stored.galleries)
+        evidence = workspace._catalogue_performance.snapshot()
+        self.assertEqual('miss', evidence.cache_source)
+        self.assertEqual('tree-v1-full', evidence.transport_source)
+        self.assertEqual(1, evidence.confirmed_rows)
+        self.assertEqual(0, evidence.completed_pages)
+        self.assertTrue(any(
+            phase.stage == 'mount_fresh' and phase.measured == 1
+            for phase in evidence.phases
+        ))
         workspace.destroy()
 
     def test_cancelled_cache_batch_cannot_overwrite_fresh_page(self) -> None:
@@ -1500,11 +1539,13 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace.destroy()
 
     def test_fresh_complete_tree_mounts_in_bounded_ui_batches(self) -> None:
-        """Yield between complete-tree slices instead of mounting all at once.
+        """Yield between tree slices and preserve ordered, reachable hierarchy.
 
         Returns:
             None: All metadata is retained before later IDs become visible
                 through the owned timer callback, so an early close can save it.
+                Appends, interleaved rows, late parents and cycles preserve
+                numeric order and reachable rows through the real renderer.
         """
         workspace = photos_workspace.PhotosWorkspace(
             self.root, lambda: None, mock.Mock(), lambda: 'en',
@@ -1532,6 +1573,83 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'The bounded tree renderer did not finish its later batch.',
         )
         self.assertEqual(TEST_CATALOGUE_CACHE_ROWS, len(workspace._galleries))
+        self.assertEqual(
+            tuple(str(index) for index in range(1, TEST_CATALOGUE_CACHE_ROWS + 1)),
+            workspace.tree.get_children(""),
+        )
+        evidence = workspace._catalogue_performance.snapshot()
+        self.assertEqual('tree-v1-full', evidence.transport_source)
+        fresh_mounts = [
+            phase for phase in evidence.phases
+            if phase.stage == 'mount_fresh'
+        ]
+        self.assertEqual(1, len(fresh_mounts))
+        self.assertEqual(2, fresh_mounts[0].samples)
+        self.assertEqual(TEST_CATALOGUE_CACHE_ROWS, fresh_mounts[0].rows)
+
+        lower = galleries[0]
+        workspace.tree.delete(str(lower.gallery_id))
+        workspace._galleries.pop(lower.gallery_id)
+        workspace._galleries[lower.gallery_id] = lower
+        with mock.patch.object(
+            workspace, '_ordered_index', wraps=workspace._ordered_index,
+        ) as ordered_index:
+            workspace._render_tree([lower.gallery_id])
+        self.assertEqual(1, ordered_index.call_count)
+        self.assertEqual('1', workspace.tree.get_children("")[0])
+
+        appended = LinkedGallery(TEST_CATALOGUE_CACHE_ROWS + 1, None, 'Appended')
+        workspace._galleries[appended.gallery_id] = appended
+        with mock.patch.object(
+            workspace, '_ordered_index', wraps=workspace._ordered_index,
+        ) as ordered_index:
+            workspace._render_tree([appended.gallery_id])
+        self.assertEqual(0, ordered_index.call_count)
+        self.assertEqual(
+            str(appended.gallery_id), workspace.tree.get_children("")[-1],
+        )
+
+        late_parent_id = appended.gallery_id + 2
+        orphan = LinkedGallery(
+            appended.gallery_id + 1, late_parent_id,
+            'Orphan awaiting parent',
+        )
+        workspace._galleries[orphan.gallery_id] = orphan
+        workspace._children_by_parent.setdefault(
+            late_parent_id, set(),
+        ).add(orphan.gallery_id)
+        workspace._render_tree([orphan.gallery_id])
+        self.assertEqual('', workspace.tree.parent(str(orphan.gallery_id)))
+        parent = LinkedGallery(late_parent_id, None, 'Late parent')
+        workspace._galleries[parent.gallery_id] = parent
+        workspace._render_tree([parent.gallery_id])
+        self.assertEqual(str(parent.gallery_id), workspace.tree.parent(
+            str(orphan.gallery_id),
+        ))
+
+        cycle_first_id = parent.gallery_id + 1
+        cycle_second_id = parent.gallery_id + 2
+        cycle_first = LinkedGallery(
+            cycle_first_id, cycle_second_id, 'Cycle first',
+        )
+        cycle_second = LinkedGallery(
+            cycle_second_id, cycle_first_id, 'Cycle second',
+        )
+        workspace._galleries[cycle_first.gallery_id] = cycle_first
+        workspace._galleries[cycle_second.gallery_id] = cycle_second
+        workspace._children_by_parent.setdefault(
+            cycle_second_id, set(),
+        ).add(cycle_first.gallery_id)
+        workspace._children_by_parent.setdefault(
+            cycle_first_id, set(),
+        ).add(cycle_second.gallery_id)
+        workspace._render_tree([
+            cycle_first.gallery_id, cycle_second.gallery_id,
+        ])
+        self.assertEqual('', workspace.tree.parent(str(cycle_second.gallery_id)))
+        self.assertEqual(str(cycle_second.gallery_id), workspace.tree.parent(
+            str(cycle_first.gallery_id),
+        ))
         workspace.destroy()
 
     def test_preload_diagnostic_reaches_copy_and_log_for_exact_session(self) -> None:
@@ -2068,11 +2186,22 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         self._wait_until(
             lambda: viewer._worker is None
+            and viewer._events.empty()
             and bool(viewer._admitted_thumbnail_indices)
             and all(viewer._photo_images[index]
                     for index in viewer._admitted_thumbnail_indices),
             'The thumbnail fixture did not reach its idle viewport.',
         )
+        self.assertGreaterEqual(
+            len(viewer._admitted_thumbnail_indices),
+            native_gallery_viewer.MEDIA_THUMBNAIL_BATCH_SIZE,
+            'The fixture needs a full admitted thumbnail batch.',
+        )
+        self.assertFalse(viewer._cancelled.is_set())
+        self.assertTrue(viewer.grid_canvas.winfo_viewable())
+        self.assertIsNone(viewer._pending_detail_index)
+        self.assertIsNone(viewer._pending_page_request)
+        self.assertFalse(viewer._media_throttled)
 
         batch_ready = threading.Event()
         original_read = session.media_photo.side_effect
@@ -2133,7 +2262,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session.media_photo.side_effect = read_and_count
         viewer._thumbnail_loaded.clear()
         viewer._thumbnail_pending = sorted(viewer._admitted_thumbnail_indices)
+        # Normal dispatch clears a previous viewport's cancellation before
+        # starting the next batch; this fixture invokes the worker directly.
+        viewer._thumbnail_cancelled.clear()
         viewer._load_next_thumbnail()
+        self.assertIsNotNone(viewer._worker, 'The full batch was not admitted.')
         self.assertTrue(
             batch_ready.wait(TEST_GUI_WAIT_SECONDS),
             'The worker did not fetch multiple thumbnails before a GUI poll.',
@@ -3509,6 +3642,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             spec_set=True,
         )
         session.can_read_media.return_value = True
+        session.route_performance_summary.return_value = ''
+        session.server_timing_summary.return_value = ''
         session.can_reuse_cached_media.return_value = True
         session.can_read_admin_media.return_value = False
         session.private_preload_user_id.return_value = None
@@ -3804,6 +3939,70 @@ class NativeGalleryViewerTests(unittest.TestCase):
             and bool(workspace._viewer._gallery_viewer_controller._photo_images),
             'The linked workspace did not render the first album.',
         )
+        self._wait_until(
+            lambda: 'first_viewport_settled' in dict(
+                workspace._catalogue_performance.snapshot().milestones
+            ),
+            'The current visible Tk viewport was not fully resolved.',
+        )
+        milestones = dict(
+            workspace._catalogue_performance.snapshot().milestones
+        )
+        for stage in (
+            'fresh_rows_confirmed', 'gallery_view_mounted',
+            'first_thumbnail_visible', 'first_viewport_settled',
+        ):
+            self.assertIn(stage, milestones)
+        self.assertGreaterEqual(
+            milestones['first_thumbnail_visible'],
+            milestones['fresh_rows_confirmed'],
+        )
+        self.assertIsNotNone(
+            workspace._catalogue_performance.snapshot().fresh_to_thumbnail_ms,
+        )
+        self.assertGreaterEqual(
+            milestones['first_viewport_settled'],
+            milestones['first_thumbnail_visible'],
+        )
+        self.assertIsNotNone(
+            workspace._catalogue_performance.snapshot().fresh_to_viewport_settled_ms,
+        )
+        viewer = workspace._viewer._gallery_viewer_controller
+        visible_outcome = viewer._viewport_performance.snapshot()
+        self.assertEqual(visible_outcome.current_state, 'settled')
+        self.assertGreaterEqual(visible_outcome.current_available, 1)
+        self.assertEqual(visible_outcome.current_unavailable, 0)
+        self.assertIn('queued_gui_results=', viewer.render_diagnostics())
+        self.assertIn('visible_unsettled=0', viewer.render_diagnostics())
+        # Reusing this mounted viewer must not strand the new catalogue pass.
+        old_callback = viewer.on_first_viewport_settled
+        prior_settled = visible_outcome.settled
+        prior_photo_reads = session.media_photo.call_count
+        workspace.tree_refresh_button.invoke()
+        old_callback()
+        self.assertNotIn(
+            'first_viewport_settled',
+            dict(workspace._catalogue_performance.snapshot().milestones),
+        )
+        self._wait_until(
+            lambda: 'first_viewport_settled' in dict(
+                workspace._catalogue_performance.snapshot().milestones
+            ),
+            'A retained Tk viewer did not settle its refreshed catalogue pass.',
+        )
+        self.assertIs(viewer, workspace._viewer._gallery_viewer_controller)
+        refreshed = workspace._catalogue_performance.snapshot()
+        refreshed_milestones = dict(refreshed.milestones)
+        self.assertIn('fresh_rows_confirmed', refreshed_milestones)
+        self.assertGreaterEqual(
+            refreshed_milestones['first_viewport_settled'],
+            refreshed_milestones['fresh_rows_confirmed'],
+        )
+        self.assertIsNotNone(refreshed.fresh_to_viewport_settled_ms)
+        self.assertGreater(
+            viewer._viewport_performance.snapshot().settled, prior_settled,
+        )
+        self.assertEqual(prior_photo_reads, session.media_photo.call_count)
         self.assertEqual(330, workspace.current_tree_width())
         sash_x = int(workspace.panes.sashpos(0))
         sash_y = max(1, workspace.panes.winfo_height() // 2)
@@ -4146,6 +4345,91 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertEqual(
             workspace._pages_this_pass,
             photos_workspace.PHOTOS_CATALOGUE_AUTO_PAGE_LIMIT + 1,
+        )
+        workspace.destroy()
+
+    def test_catalogue_http_429_schedules_one_real_workspace_retry(self) -> None:
+        """Respect Retry-After and preserve the last complete page boundary.
+
+        Returns:
+            None: One real PhotosWorkspace schedules its exact failed cursor.
+        """
+        session = cast(LinkingSession, mock.Mock())
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.root.update_idletasks()
+        self.root.update()
+        workspace._session = session
+        workspace._session_provider = lambda: session
+        workspace._next_after = TEST_GALLERY_ID
+        scheduled: list[tuple[int, Callable[[], None]]] = []
+        workspace.after = mock.Mock(side_effect=lambda delay, callback: (
+            scheduled.append((delay, callback)) or f'throttle-{len(scheduled)}'
+        ))
+        workspace.after_cancel = mock.Mock()
+        workspace._request_page = mock.Mock()
+        workspace._accept_page(
+            None, throttled=True, retry_after_seconds=2,
+            cursor=TEST_GALLERY_ID,
+        )
+        rate_callbacks = [
+            callback for delay, callback in scheduled if delay == 2000
+        ]
+        self.assertEqual(len(rate_callbacks), 1)
+        self.assertEqual(workspace._catalogue_rate_retries, 1)
+        self.assertEqual(workspace._next_after, TEST_GALLERY_ID)
+        rate_callbacks[0]()
+        workspace._request_page.assert_called_once_with(TEST_GALLERY_ID)
+        self.assertIsNone(workspace._catalogue_after)
+        workspace.destroy()
+
+    def test_catalogue_http_429_fences_cancelled_timers_and_caps_retries(self) -> None:
+        """Reject stale retry callbacks and refuse repeated 429 retry storms.
+
+        Returns:
+            None: Generation change and bounded retry count prevent dispatch.
+        """
+        session = cast(LinkingSession, mock.Mock())
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: None, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self.root.update_idletasks()
+        self.root.update()
+        workspace._session = session
+        workspace._session_provider = lambda: session
+        workspace._next_after = TEST_GALLERY_ID
+        scheduled: list[tuple[int, Callable[[], None]]] = []
+        workspace.after = mock.Mock(side_effect=lambda delay, callback: (
+            scheduled.append((delay, callback)) or f'throttle-{len(scheduled)}'
+        ))
+        workspace.after_cancel = mock.Mock()
+        workspace._request_page = mock.Mock()
+        workspace._accept_page(
+            None, throttled=True, retry_after_seconds=1,
+            cursor=TEST_GALLERY_ID,
+        )
+        rate_callbacks = [
+            callback for delay, callback in scheduled if delay == 1000
+        ]
+        self.assertEqual(len(rate_callbacks), 1)
+        workspace._catalogue_generation += 1
+        rate_callbacks[0]()
+        workspace._request_page.assert_not_called()
+        workspace._catalogue_generation -= 1
+        workspace._accept_page(
+            None, throttled=True, retry_after_seconds=1,
+            cursor=TEST_GALLERY_ID,
+        )
+        self.assertEqual(workspace._catalogue_rate_retries, 2)
+        workspace._accept_page(
+            None, throttled=True, retry_after_seconds=1,
+            cursor=TEST_GALLERY_ID,
+        )
+        self.assertEqual(
+            sum(delay == 1000 for delay, _callback in scheduled), 2,
         )
         workspace.destroy()
 
@@ -4998,8 +5282,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
         # Three distinct explicit actions: full preload, pin and thumbnails.
         self.assertEqual(3, worker.start.call_count)
         self.assertEqual(3, worker.stop.call_count)
+        replacement = self._session(page, presentation, image_bytes)
         with workspace._photo_diagnostic_lock:
-            workspace._session = mock.Mock(spec=LinkingSession)
+            workspace._session = replacement
         diagnostic_callback('phase=preload-fetch stale-session')
         self.assertNotIn('stale-session', workspace.diagnostics_snapshot())
         workspace.destroy()
@@ -6546,6 +6831,77 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'Changed refresh did not add the new photo.',
         )
         self.assertTrue(all(viewer._photo_images[:len(page.photos)]))
+        viewer.close()
+
+    def test_unproven_refresh_replaces_only_changed_visible_thumbnail(self) -> None:
+        """Invalidate a displayed no-ETag tile after an authorized new page.
+
+        Returns:
+            None: Real Tk PhotoImage, viewer RAM and binary read are refreshed;
+                the unrelated strongly proven tile keeps its existing image.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        initial_epoch = time.monotonic()
+        stable_etag = '"' + hashlib.sha256(
+            image_bytes[TEST_SECOND_IMAGE_ID],
+        ).hexdigest() + '"'
+        first = replace(
+            page.photos[0], cache_eligible=True,
+            thumbnail_verified_at=initial_epoch,
+        )
+        stable = replace(
+            page.photos[1], cache_eligible=True,
+            thumbnail_etag=stable_etag,
+            thumbnail_verified_at=initial_epoch,
+        )
+        current_page = LinkedMediaPage(
+            page.gallery_id, page.parent_id, (first, stable), None,
+        )
+        session = self._session(current_page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session, LinkedGallery(TEST_GALLERY_ID, None, 'Unproven refresh'),
+        )
+        self._wait_until(
+            lambda: len(viewer._photo_images) == 2
+            and all(viewer._photo_images) and viewer._worker is None,
+            'Initial two real Tk thumbnails were not mounted.',
+        )
+        old_first, old_stable = viewer._photo_images
+        initial_reads = session.media_photo.call_count
+        self.assertEqual(2, initial_reads)
+
+        image_bytes[TEST_FIRST_IMAGE_ID] = self._png((12, 45, 230))
+        refreshed_first = replace(
+            first, thumbnail_verified_at=time.monotonic(),
+        )
+        refreshed_stable = replace(
+            stable, thumbnail_verified_at=time.monotonic(),
+        )
+        session.media_page.return_value = LinkedMediaPage(
+            page.gallery_id, page.parent_id,
+            (refreshed_first, refreshed_stable), None,
+        )
+        viewer.refresh_photos()
+        self._wait_until(
+            lambda: viewer._worker is None
+            and len(viewer._photo_images) == 2
+            and viewer._photo_images[0] is not None
+            and viewer._photo_images[0] is not old_first
+            and viewer._thumbnail_loaded == {0, 1},
+            'Fresh metadata did not invalidate the unproven rendered tile.',
+        )
+        self.assertIs(old_stable, viewer._photo_images[1])
+        self.assertEqual(initial_reads + 1, session.media_photo.call_count)
+        actual = viewer._cached_thumbnail(refreshed_first)
+        expected = viewer._prepare_thumbnail(image_bytes[TEST_FIRST_IMAGE_ID])
+        try:
+            self.assertIsNotNone(actual)
+            assert actual is not None
+            self.assertEqual(expected.tobytes(), actual.tobytes())
+        finally:
+            expected.close()
+            if actual is not None:
+                actual.close()
         viewer.close()
 
     def test_real_touchpad_packet_scrolls_grid_and_zoom(self) -> None:

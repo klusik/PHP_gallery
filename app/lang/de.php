@@ -1631,6 +1631,12 @@ return [
         'Musik für Galerien und Smart-Galerien hochladen und abspielen. '
             . 'Deaktivieren erhält Dateien, Wiedergabelisten und '
             . 'Diashow-Einstellungen.',
+    'admin.features.thumbnail_batch.label' =>
+        'Gebündelte Miniaturansichten für die native App',
+    'admin.features.thumbnail_batch.description' =>
+        'Verknüpften nativen Galerie-Apps begrenzte Miniaturansichts-Bündel '
+            . 'erlauben. Deaktivieren erhält Medien und verwendet die '
+            . 'kompatible Einzelabruf-Route.',
     'admin.upload.media_files_label' => 'Dateien auswählen oder ablegen',
     'admin.upload.media_files_help' =>
         'Unterstützte Dateien auswählen oder ablegen. Der Dateidialog '
@@ -1669,6 +1675,15 @@ return [
     'admin.settings.item.feature_gallery_music.example' =>
         'ON erlaubt diesen Medientyp; OFF bewahrt Dateien und ist '
             . 'umkehrbar.',
+    'admin.settings.item.feature_thumbnail_batch' =>
+        'Gebündelte Miniaturansichten für die native App',
+    'admin.settings.item.feature_thumbnail_batch.hint' =>
+        'Erlaubt verknüpften nativen Galerie-Apps begrenzte '
+            . 'Miniaturansichts-Bündel. Eine gespeicherte Auswahl hat Vorrang '
+            . 'vor dem älteren Umgebungswert.',
+    'admin.settings.item.feature_thumbnail_batch.example' =>
+        'AN aktiviert ausgehandelte Bündel; AUS erhält Medien und verwendet '
+            . 'Einzelabrufe.',
     'admin.storage.progress_counts' => '{processed} / {total} Datensätze',
     'admin.storage.tab_files_hint' => 'Fotos, Ableitungen, PDF- und Musikoriginale',
     'media_summary.files' => 'Dateien',

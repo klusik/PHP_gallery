@@ -15,6 +15,15 @@ License: MIT License (see LICENSE file in repository)
 let assertions = 0;
 
 /**
+ * Bound fractional DOMRect rounding noise during repeated tag-module startup.
+ * Type: number. Units: CSS pixels. Scope: Chromium tag-fixture idempotence.
+ * Consumers: stableRepeatedModuleGeometry. Rationale: Chrome 156 returned
+ * 361.38 versus 361.37 after an otherwise unchanged native disclosure; 0.02
+ * is below a single CSS pixel while rejecting meaningful layout displacement.
+ */
+const TAG_MODULE_SUBPIXEL_TOLERANCE_CSS_PX = 0.02;
+
+/**
  * Require one browser-visible tag-layout invariant.
  * @param {boolean} condition Expected invariant.
  * @param {string} message Assertion context.
@@ -186,6 +195,38 @@ function snapshot(selector) {
         list: relativeRect(list, cardRect),
         pills: tagGeometry(list, cardRect),
     };
+}
+
+/**
+ * Compare repeated native tag-module layout, retaining exact label/order proofs.
+ *
+ * @param {{card: number[], tags: number[], list: number[], pills: Array<[string, number, number, number, number]>}} before Earlier settled card snapshot.
+ * @param {{card: number[], tags: number[], list: number[], pills: Array<[string, number, number, number, number]>}} after Repeatedly initialized snapshot.
+ * @return {boolean} True for unchanged tag identity and subpixel-only geometry.
+ */
+function stableRepeatedModuleGeometry(before, after) {
+    const near = (left, right) => Number.isFinite(left)
+        && Number.isFinite(right)
+        && Math.abs(left - right) <= TAG_MODULE_SUBPIXEL_TOLERANCE_CSS_PX;
+    for (const key of ['card', 'tags', 'list']) {
+        if (!Array.isArray(before[key]) || !Array.isArray(after[key])
+                || before[key].length !== after[key].length
+                || !before[key].every((value, index) => near(value, after[key][index]))) {
+            return false;
+        }
+    }
+    if (!Array.isArray(before.pills) || !Array.isArray(after.pills)
+            || before.pills.length !== after.pills.length) {
+        return false;
+    }
+    return before.pills.every((pill, index) => {
+        const candidate = after.pills[index];
+        return Array.isArray(pill) && Array.isArray(candidate)
+            && pill.length === 5 && candidate.length === 5
+            && pill[0] === candidate[0]
+            && pill.slice(1).every((value, coordinate) =>
+                near(value, candidate[coordinate + 1]));
+    });
 }
 
 /**
@@ -576,7 +617,21 @@ async function runFixture() {
     check(heroEscape.ok && heroEscapeFinished && document.activeElement === heroSummary, 'Escape closes the hero panel and restores focus to its summary');
     setupHeroTagDisclosure();
     await settle();
-    check(JSON.stringify(snapshot('[data-fixture-case="rows-one"]')) === JSON.stringify(beforeInit), 'repeated module initialization remains geometry-idempotent: ' + JSON.stringify({before:beforeInit,after:snapshot('[data-fixture-case="rows-one"]'),scrollY:window.scrollY,focus:document.activeElement?.tagName}));
+    const repeatedAfterInit = snapshot('[data-fixture-case="rows-one"]');
+    const shiftedTagProbe = structuredClone(beforeInit);
+    shiftedTagProbe.pills[3][2] += 1;
+    check(!stableRepeatedModuleGeometry(beforeInit, shiftedTagProbe),
+        'repeated tag layout comparison rejects a real one-pixel displacement');
+    const renamedTagProbe = structuredClone(beforeInit);
+    renamedTagProbe.pills[0][0] = 'Different tag';
+    check(!stableRepeatedModuleGeometry(beforeInit, renamedTagProbe),
+        'repeated tag layout comparison rejects tag-label identity changes');
+    check(stableRepeatedModuleGeometry(beforeInit, repeatedAfterInit),
+        'repeated module initialization remains geometry-idempotent: '
+        + JSON.stringify({
+            before: beforeInit, after: repeatedAfterInit,
+            scrollY: window.scrollY, focus: document.activeElement?.tagName,
+        }));
 
     summary.click();
     await settle();

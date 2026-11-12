@@ -798,6 +798,15 @@ audit_test_assert(
         && !in_array('php-regression', $profiles['quick'], true),
     'Quick must use curated PHP feedback instead of the complete regression tree.',
 );
+audit_test_assert(
+    ($profiles['thumbnail-batch'] ?? null) === array_merge($profiles['quick'], ['thumbnail-batch'])
+        && ($registry['thumbnail_batch_tests'] ?? null) === [
+            'app_linking_thumbnail_batch_test.php',
+            'app_linking_thumbnail_batch_stream_test.php',
+        ]
+        && count(array_intersect($registry['thumbnail_batch_tests'], $registry['php_fast_tests'])) === 0,
+    'Thumbnail batch profile must extend unchanged quick coverage with its own focused cases.',
+);
 foreach (['full', 'release'] as $profile) {
     audit_test_assert(
         in_array('php-regression', $profiles[$profile], true),
@@ -1465,6 +1474,13 @@ audit_test_assert(
         && !audit_validate_winapp_report($winappReport, true)['valid'],
     'Native diagnostic evidence must never substitute for complete discovery.',
 );
+$selectedChildReport = $winappReport;
+$selectedChildReport['runtime']['suite_settings']['partition_selection'] =
+    'selected-id-subset';
+audit_test_assert(
+    !audit_validate_winapp_report($selectedChildReport)['valid'],
+    'A marked selected-ID child report must never qualify as ordinary full discovery.',
+);
 $nativeWinappSuccess = audit_evaluate_winapp_report(
     json_encode($nativeWinappReport),
     ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.1],
@@ -1474,6 +1490,118 @@ audit_test_assert(
     $nativeWinappSuccess['status'] === 'PASS',
     'Explicit native diagnostic evaluation must retain ordinary outcome checks.',
 );
+
+$partitionedWinappReport = $winappReport;
+$partitionedWinappReport['tests'] = [
+    array_replace($winappReport['tests'][0], ['id' => 'suite.NativeViewer.test_one']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.ThumbnailIndex.test_two']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.Complement.test_three']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.OtherComplement.test_four']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.PreloadBenchmark.test_five']),
+];
+$partitionedWinappReport['counts'] = array_fill_keys(
+    array_keys($winappReport['counts']),
+    0,
+);
+$partitionedWinappReport['counts']['total'] = 5;
+$partitionedWinappReport['counts']['passed'] = 5;
+$partitionedIds = array_column($partitionedWinappReport['tests'], 'id');
+$partitionedWinappReport['partition_processes'] = [
+    [
+        'partition' => 1, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[0]],
+        'observed_test_ids' => [$partitionedIds[0]],
+    ],
+    [
+        'partition' => 2, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[1]],
+        'observed_test_ids' => [$partitionedIds[1]],
+    ],
+    [
+        'partition' => 3, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[2]],
+        'observed_test_ids' => [$partitionedIds[2]],
+    ],
+    [
+        'partition' => 4, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[3]],
+        'observed_test_ids' => [$partitionedIds[3]],
+    ],
+    [
+        'partition' => 5, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[4]],
+        'observed_test_ids' => [$partitionedIds[4]],
+    ],
+];
+$partitionedWinappReport['partition_proof'] = [
+    'partition_count' => 5, 'complete' => true, 'exact_union' => true,
+    'expected_test_ids' => $partitionedIds,
+    'observed_test_ids' => $partitionedIds,
+    'total_duration_seconds' => 0.5,
+];
+$partitionedWinappSuccess = audit_evaluate_winapp_report(
+    json_encode($partitionedWinappReport),
+    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.5],
+    false,
+    true,
+);
+audit_test_assert(
+    $partitionedWinappSuccess['status'] === 'PASS'
+        && count($partitionedWinappSuccess['partition_processes']) === 5,
+    'Only exact, disjoint and successful five-way partitions may qualify full discovery.',
+);
+$partitionCorruptions = [
+    'null child success' => static function (array &$report): void {
+        $report['partition_processes'][0]['report_successful'] = null;
+    },
+    'missing observed ID' => static function (array &$report): void {
+        array_pop($report['partition_proof']['observed_test_ids']);
+    },
+    'duplicate observed ID' => static function (array &$report): void {
+        $report['partition_proof']['observed_test_ids'][1] =
+            $report['partition_proof']['observed_test_ids'][0];
+    },
+    'child report differs from proof' => static function (array &$report): void {
+        $report['partition_processes'][0]['observed_test_ids'] = [];
+    },
+    'nonzero child process' => static function (array &$report): void {
+        $report['partition_processes'][0]['exit_code'] = 1;
+    },
+];
+foreach ($partitionCorruptions as $label => $corrupt) {
+    $corruptedPartition = $partitionedWinappReport;
+    $corrupt($corruptedPartition);
+    $corruptedEvaluation = audit_evaluate_winapp_report(
+        json_encode($corruptedPartition),
+        ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.5],
+        false,
+        true,
+    );
+    audit_test_assert(
+        $corruptedEvaluation['status'] !== 'PASS',
+        'Partition validator must reject corruption-only case: ' . $label . '.',
+    );
+}
 
 $invalidWinappCases = [];
 $badWinapp = $winappReport;
@@ -1778,10 +1906,27 @@ audit_test_assert(
             'const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;',
         )
         && php_source_contains(
+            $winappRunner,
+            'const AUDIT_WINAPP_NATIVE_TIMEOUT_SECONDS = 150;',
+        )
+        && php_source_contains(
             $winappRunnerBody,
-            'run_process($command, $root, AUDIT_WINAPP_TIMEOUT_SECONDS)',
+            '$timeoutSeconds = $nativeOnly',
+        )
+        && php_source_contains(
+            $winappRunnerBody,
+            '? AUDIT_WINAPP_NATIVE_TIMEOUT_SECONDS',
+        )
+        && php_source_contains(
+            $winappRunnerBody,
+            ': AUDIT_WINAPP_TIMEOUT_SECONDS;',
+        )
+        && php_source_contains(
+            $winappRunnerBody,
+            'run_process($command, $root, $timeoutSeconds)',
         ),
-    'Central WinApp audit must preserve the existing 90-second discovery owner and consume only its saved structured report.',
+    'Complete WinApp discovery must retain 90 seconds, with a separately '
+        . 'bounded 150-second native Tk diagnostic and mandatory structured evidence.',
 );
 
 $python3Runner = static fn(array $command): array => [
