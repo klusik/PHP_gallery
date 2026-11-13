@@ -1,5 +1,94 @@
 # Patch notes
 
+## Version 1.1.2
+
+Fixed blocked Watcher recovery in WinApp 1.1.2 so accepted screenshots can
+continue in their original session after an explicit review. Preserved FIFO
+ordering, unknown-upload safety and local originals, and made Finish recovery
+and folder inspection clearer.
+
+### Highlights
+
+#### Watcher recovery in the application
+
+- Added a head-specific review with the exact retained local preview, queue
+  position, verified gallery, progress and separately labelled remote evidence.
+  Receipt-only confirmation and an explicit skip kept unknown requests from
+  being blindly resent. [#381](https://github.com/klusik/PHP_gallery/issues/381)
+- Distinguished a new photo blocked before dispatch from the older linked
+  upload whose result was unknown. Reviewing that older operation retained its
+  history and original while allowing the new photo's first dispatch in the
+  same queue. [#381](https://github.com/klusik/PHP_gallery/issues/381)
+- Restored reconciliation and its required final scan after explicit recovery
+  from a failed Stop save, keeping the original cutoff and local originals.
+- Added explicit resumption of safe pending work after a worker restart,
+  including sessions without a retained-stop flag. Preserved the original
+  session, accepted files and retry deadline.
+- Kept decision and close controls visible in short windows while evidence
+  scrolled, and updated recovery messages in English, Czech, German and Swedish.
+
+#### Finish and inspection
+
+- Replaced indefinite Finish waiting on known blocked heads with actionable
+  recovery, Hide and Stop and keep pending. Retained the first stop cutoff,
+  accepted work and local originals, including a late successful response.
+  Kept ownership through cutoff readback and the actual end of an active
+  request. [#381](https://github.com/klusik/PHP_gallery/issues/381)
+- Made the folder magnifier a separate read-only inspection. Its filesystem
+  counts no longer changed the accepted queue, startup exclusions or live
+  Watcher status.
+
+### Technical Details
+
+#### WinApp persistence and safety
+
+- Added `winapp/uploader/watch_recovery.py` and
+  `winapp/uploader/watch_recovery_ui.py` for exact-head decisions, asynchronous
+  previews and same-session continuation.
+- Bound recovery to the current target, mode, scope, session, source generation,
+  held pipeline and linked-target leases. Added durable decision intents and
+  idempotent repair between linked-history and queue publication.
+- Required an exact saved fresh-insert server acknowledgement for receipt
+  confirmation. Kept gallery observations, inventory matches and thumbnails
+  separate from operation receipts.
+- Added a durable user-skip disposition with separate success and skip counts.
+  Preserved support for older queue journals missing optional source-modification
+  and disposition timestamps.
+- Updated the independent `winapp/VERSION` to `1.1.2` and synchronized the
+  permanent recovery documentation in all four manual source editions.
+  Added no database migration or server upload endpoint.
+
+#### Hosted regression coverage
+
+- Added coverage for the confirmed queue item 443, uncertain item 444 and 80
+  later items, older-upload blockers, exact receipts, stale contexts, interrupted
+  publication, source replacement, lease contention and Stop readback.
+- Added native desktop and narrow Windows dialog screenshots, asynchronous
+  control interaction checks and read-only folder-inspection coverage.
+- Activated the owned browser tab before trusted fixture input so native
+  fullscreen checks retained their real browser precondition.
+- Corrected the browser fixture's native/application fullscreen Escape
+  sequence while preserving its HUD, outside-click and close assertions.
+- Added an opt-in browser-only hosted diagnostic that retained central fixture
+  discovery, limits and evidence without replacing integration FULL.
+- Corrected aggregate reporting for the existing five serial WinApp partitions
+  while retaining child provenance, complete discovery and disjointness checks.
+
+### User Impact
+
+#### For WinApp users
+
+- Enabled recovery of the original accepted queue through the application
+  without abandoning the session, relinking the gallery or creating another
+  screenshot just to restart uploads. [#381](https://github.com/klusik/PHP_gallery/issues/381)
+- Kept each unknown dispatched upload subject to its own explicit review.
+  An explicit skip retained the original and uncertainty history.
+
+#### For visitors and administrators
+
+- Left public web and administrator behavior unchanged. This release's
+  application changes addressed the Windows companion and its recovery workflow.
+
 ## Version 1.1.1
 
 Improved Windows Photos recovery after transient local thumbnail cooldowns,
