@@ -1850,6 +1850,38 @@ längre än fem minuter. Verifierat foto-Finish för samma mål fortsätter efte
 omstart; äldre API-nycklar kräver fortsatt separat ny bekräftelse före
 återkallning. Linked-flygrapporter stannar lokalt.
 
+Ett osäkert huvud visar \ui{Åtgärd krävs}. \ui{Återuppta} i Watcher,
+\ui{Tvinga fortsatt granskning} i förloppet och \ui{Granska väntande uploads}
+efter omstart öppnar samma granskning av exakt sparad källgeneration och mål.
+Lokal förhandsvisning och auktoriserad fjärrobservation skiljs åt; en liknande
+bild, galleriposition eller hash är inget upload-kvitto.
+\ui{Bekräfta redan uppladdad} kräver exakt beständig bekräftelse.
+\ui{Hoppa över foto} sparar ett uttryckligt beslut, behåller original och
+osäker historik och tillåter nästa FIFO-post. Överhoppade foton räknas separat
+från lyckade uploads. Avbryt behåller posten väntande. Varje senare osäkert
+huvud kräver ett eget beslut.
+Efter ett beslut döljer \ui{Dölj (sparar beslut)} bara förloppet;
+den redan godkända beständiga skrivningen slutförs normalt.
+I ett lågt fönster kan underlaget rullas medan besluts- och stängningsknapparna
+förblir synliga nedanför.
+Efter en worker-omstart frigör \ui{Återuppta väntande uppladdningar} även säkert
+väntande arbete i samma session; tiden för nästa försök bevaras.
+Uttrycklig återställning efter misslyckad Stop-lagring startar även avstämning
+och den obligatoriska slutskanningen med den ursprungliga gränsen.
+
+En tidigare osäker operation kan blockera första fotot i en ny session innan
+det skickas. Ny länkning och radering av lokala filer rensar inte historiken.
+Granskningen skiljer den äldre osäkra operationen från det aktuella oskickade
+fotot; granskning av den gamla operationen bekräftar ingen ny upload.
+\ui{Inspektera mapp (skrivskyddat)} visar separata filsystemresultat utan att
+ändra kö, startundantag, gräns eller livestatus. \ui{Dölj} är alltid tillgängligt.
+\ui{Stoppa och behåll väntande} stoppar antagning och behåller arbete och gräns
+för uttrycklig återställning. Det återkallar ingen åtkomst och raderar inga
+filer. En pågående begäran behåller ägaren; gränssnittet visar väntan i stället
+för att felaktigt rapportera att arbetet slutförts.
+Ägarskapet behålls tills gränsen har sparats och lästs tillbaka; vid skrivfel
+förblir bearbetningen pausad under samma ägare.
+
 Inventering/upload delar inte längre 60 begäranden per IP under 300~s.
 Upload-grant räknar requests; konto/IP/globalt räknar varje original atomärt,
 även för redan stödd multipart med flera original.
@@ -10364,6 +10396,15 @@ med två, tre och fyra processer förblir misslyckade körningar.
 Den valda processens logg skriver hela felspårningen direkt efter det avslutande
 FAIL/ERROR-inlägget, så att orsaken bevaras om en senare timeout hindrar den
 slutliga JSON-rapporten.
+
+Arbetsflödet \ui{Issue 381 Watcher recovery} har även ett manuellt läge för
+webbläsardiagnostik. Det kör endast det centrala kommandot
+\codeword{php scripts/audit.php --suite=browser-map} på valt feature-SHA
+och behåller rapporter samt skärmbilder. Separat samtidighet hindrar diagnosen
+från att avbryta vanliga source-/WinApp-kontroller. Centrala gränser och
+kontroller bevaras; diagnosen ersätter inte hela integrationsmatrisen FULL.
+Interaktiva fixtures aktiverar sin egen webbläsarflik före betrodd inmatning;
+emulerat DOM-fokus bevisar inte att äkta helskärm har aktiverats.
 
 GitHub Actions är agenternas normala och auktoritativa verifieringsmiljö
 (CI-first). Audit-kommandona nedan beskriver den värdbaserade köraren; agenter

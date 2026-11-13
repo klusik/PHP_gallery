@@ -302,9 +302,41 @@ async function interactPixels(controls) {
         }
         await new Promise(resolve => setTimeout(resolve, interactionPollMs));
     }
-    const result = await controls.evaluate(
-        `document.querySelector('#results')?.textContent || ''`);
-    throw new Error(`Slideshow pixel checkpoints incomplete: ${result}`);
+    const diagnostics = await controls.evaluate(`(() => {
+        const viewer = document.querySelector('[data-lightbox]');
+        const advance = document.querySelector('[data-pixel-advance]');
+        const incoming = viewer?.querySelector('.lightbox-transition-image');
+        const activeImage = viewer?.querySelector('[data-lightbox-img]');
+        const opacity = element => element
+            ? getComputedStyle(element).opacity : null;
+        return {
+            page: location.pathname + location.search,
+            phase: advance?.dataset.pixelPhase || '',
+            result: document.querySelector('#results')?.textContent || '',
+            captured: ${JSON.stringify([...captures.keys()])},
+            fullscreenMode: document.fullscreenElement === viewer ? 'native'
+                : viewer?.classList.contains('is-css-fullscreen')
+                    || viewer?.classList.contains('is-fullscreen') ? 'css' : 'windowed',
+            fullscreenElement: document.fullscreenElement?.className || '',
+            viewerHidden: viewer?.hidden ?? null,
+            viewerClasses: viewer?.className || '',
+            slideshowPressed: viewer?.querySelector(
+                '[data-lightbox-action="slideshow"]')?.getAttribute('aria-pressed') || '',
+            activeImageId: activeImage?.dataset.lightboxImageId || '',
+            incomingImageId: incoming?.dataset.lightboxImageId || '',
+            incomingOpacity: opacity(incoming),
+            outgoingOpacity: opacity(viewer?.querySelector(
+                '[data-lightbox-zoom-surface]')),
+            incomingAnimations: incoming?.getAnimations().map(animation => ({
+                property: animation.transitionProperty || '',
+                state: animation.playState,
+            })) || [],
+            pixelSamples: advance?.dataset.pixelSamples || '',
+            nativeFullscreenAttempt:
+                window.lightboxFullscreenAttemptDiagnostics || null,
+        };
+    })()`);
+    throw new Error(`Slideshow pixel checkpoints incomplete: ${JSON.stringify(diagnostics)}`);
 }
 
 try {

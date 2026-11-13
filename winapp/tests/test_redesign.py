@@ -1901,7 +1901,10 @@ class LinkedUploadHistoryTests(unittest.TestCase):
                 watcher.emit = mock.Mock()
                 watcher.scan_once(root, '')
                 self.assertFalse(watcher.stop_event.is_set())
-                self.assertEqual('uncertain', watcher._queue.head().state)
+                self.assertEqual('blocked', watcher._queue.head().state)
+                self.assertEqual(
+                    'prior_upload_review', watcher._queue.head().phase,
+                )
                 watcher.remote_inventory.refresh.assert_not_called()
 
                 manual = object.__new__(MAIN.ManualUploadThread)

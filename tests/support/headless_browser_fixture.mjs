@@ -166,6 +166,7 @@ export async function readOwnedBrowserValue(send, expression, targetId, origin) 
  * Navigate one fresh owned tab to its loopback fixture and return the result marker.
  * Passive observations survive verified same-tab reload gaps within the original
  * deadlines; other protocol, application and ownership failures remain fatal.
+ * When interaction is supplied, activate the owned page target before dispatching input.
  * @param {string} executable Installed Chromium or Edge executable path.
  * @param {string} url Loopback URL served by the calling fixture.
  * @param {string} profilePrefix Unique disposable profile prefix under cache.
@@ -332,6 +333,9 @@ export async function runHeadlessBrowserFixture(executable, url, profilePrefix, 
         }
         if (!fixtureDocumentReady) throw new Error('Owned loopback fixture document did not become interactive');
         if (options.interact) {
+            // Document focus emulation does not itself activate the browser tab;
+            // native fullscreen is granted only to the active WebContents.
+            await command('Page.bringToFront', {}, sessionId);
             /**
              * Evaluate a page expression and return its structured by-value result.
              * @param {string} expression Expression evaluated in the owned fixture page.

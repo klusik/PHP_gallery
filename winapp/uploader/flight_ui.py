@@ -2214,6 +2214,7 @@ class FlightUI:
                 blockers.append("flight or accepted photo workers")
             if wants_revoke and self.host.semantic_ai_install_running:
                 blockers.append("dependency installation")
+            attention_detail = ""
             if self.operation is not None and blockers:
                 photo_count = 0
                 photo_details: list[str] = []
@@ -2227,7 +2228,9 @@ class FlightUI:
                         photo_count += len(pending)
                         head = next((item for item in row.get('items', [])
                                      if isinstance(item, dict)
-                                     and item.get('state') != 'acknowledged'), None)
+                                     and item.get('state') not in {
+                                         'acknowledged', 'skipped'
+                                     }), None)
                         if head is not None:
                             source = head.get('source', {})
                             name = Path(str(source.get('path', ''))).name
@@ -2235,9 +2238,18 @@ class FlightUI:
                                       f'{head.get("state", "waiting")}')
                             retry = head.get('next_retry_at')
                             if type(retry) in (int, float) and retry > 0:
-                                detail += ' · ' + time.strftime('%H:%M:%S', time.localtime(retry))
+                                detail += ' · ' + self.text("watch_retry_at").format(
+                                    timestamp=time.strftime(
+                                        '%Y-%m-%d %H:%M:%S', time.localtime(retry),
+                                    ),
+                                )
                             if head.get('reason'):
                                 detail += ' · ' + str(head['reason'])
+                            if (head.get('state') in {
+                                    'uncertain', 'blocked', 'missing', 'auth_required'
+                            } or (head.get('state') == 'retry_wait'
+                                  and head.get('phase') == 'source')):
+                                attention_detail = detail
                             progress = row.get('last_change_at')
                             if type(progress) in (int, float) and progress > 0:
                                 detail += ' · progress ' + time.strftime(
@@ -2249,15 +2261,18 @@ class FlightUI:
                     str(photo_count) + " photo(s); "
                     + "; ".join([*photo_details, *blockers]),
                 )
+                if attention_detail:
+                    self.operation.update(
+                        "error", self.text("watch_needs_attention") + ": "
+                        + attention_detail,
+                    )
+                    raise RuntimeError(
+                        self.text("watch_needs_attention") + ": " + attention_detail
+                    )
             if not blockers:
                 break
             queued_workers = [self.host.worker, *self.resume_workers]
-            queue_waiting = any(
-                worker is not None and worker.is_alive()
-                and getattr(worker, 'drain_manifest', None) is not None
-                for worker in queued_workers
-            )
-            if time.monotonic() >= deadline and not queue_waiting:
+            if time.monotonic() >= deadline:
                 raise TimeoutError("Workers did not drain: " + "; ".join(blockers))
             cancel.wait(DRAIN_POLL_SECONDS)
         watched = self.host.worker
@@ -2469,6 +2484,10 @@ class FlightUI:
             ("open_reports", self.open_reports),
             ("hide", self.dialog.withdraw),
         )
+        if callable(getattr(self.host, "open_watch_recovery_review", None)):
+            ordinary_actions += (("force_continue_watch", self.force_continue_watch),)
+        if callable(getattr(self.host, "stop_and_keep_watch_pending", None)):
+            ordinary_actions += (("force_stop_watch", self.force_stop_watch),)
         local_actions = (
             ("retry", self.retry_saved_upload if saved_upload else self.create_local_pdf),
             ("cancel_upload" if saved_upload else "cancel_pdf", self.cancel_local_pdf),
@@ -2538,6 +2557,18 @@ class FlightUI:
         elif self.session_state() == "blocked":
             choices.append("retry")
         choices.append("hide")
+        capture_review = (
+            not self.independent_operation()
+            and (running or self.session_state() in {"pending", "blocked"})
+        )
+        if capture_review and callable(
+            getattr(self.host, "open_watch_recovery_review", None)
+        ):
+            choices.append("force_continue_watch")
+        if capture_review and callable(
+            getattr(self.host, "stop_and_keep_watch_pending", None)
+        ):
+            choices.append("force_stop_watch")
         for label, button in self.progress_buttons.items():
             if label not in choices:
                 button.grid_remove()
@@ -2550,6 +2581,51 @@ class FlightUI:
                 row=index // PROGRESS_ACTION_COLUMNS, column=column,
                 sticky="ew", padx=(0, 4), pady=(0, 4),
             )
+
+    def force_continue_watch(self) -> None:
+        """Open the host's exact-head review without retrying an upload.
+
+        Returns:
+            None: Delegates review to the Watcher-owned recovery coordinator.
+        """
+        review = getattr(self.host, "open_watch_recovery_review", None)
+        if callable(review):
+            review()
+
+    def force_stop_watch(self) -> None:
+        """Request retained Stop and cancel Finish only after durable readback.
+
+        Returns:
+            None: Leaves the waiter active until the app confirms retention.
+        """
+        if getattr(self, "_force_stop_pending", False):
+            return
+        stop = getattr(self.host, "stop_and_keep_watch_pending", None)
+        if not callable(stop):
+            self.detail_var.set(self.text("watch_stop_not_persisted"))
+            return
+        self._force_stop_pending = True
+        self.detail_var.set(self.text("watch_stop_stopping"))
+
+        def persisted(success: bool) -> None:
+            """Apply the host's readback result on its Tk event owner.
+
+            Args:
+                success (bool): Whether durable retained-stop publication passed.
+            Returns:
+                None: Cancels only the finalization waiter after verified persistence.
+            """
+            self._force_stop_pending = False
+            if not success:
+                self.detail_var.set(self.text("watch_stop_not_persisted"))
+                return
+            self.detail_var.set(self.text("watch_finish_retained"))
+            if self.operation is not None and not self.operation.cancel.is_set():
+                self.operation.cancel.set()
+
+        if stop(on_persisted=persisted) is not True:
+            self._force_stop_pending = False
+            self.detail_var.set(self.text("watch_stop_not_persisted"))
 
     def cancel_local_pdf(self) -> None:
         """Cancel queued PDF work and drain running renders, retaining results.
@@ -2859,7 +2935,12 @@ class FlightUI:
             progress = operation.snapshot()
             terminal = progress.phase in {"completed", "error", "cancelled"}
             now = progress.phase_started if terminal else time.monotonic()
+            needs_attention = (
+                progress.phase == "error"
+                and self.text("watch_needs_attention") in progress.detail
+            )
             self.phase_var.set(self.text(
+                "watch_needs_attention" if needs_attention else
                 "report_cancelled" if self.independent_operation()
                 and progress.phase == "cancelled" else "phase_" + progress.phase
             ))

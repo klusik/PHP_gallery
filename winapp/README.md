@@ -50,6 +50,40 @@ upload waits while explicit browsing remains available. These source changes
 require corresponding server deployment and an updated installed client;
 feature BASIC does not establish either installation.
 
+An unknown upload result shows **Needs attention** with its queue position,
+target and retained progress. Open **Resume…** in Watcher or **Force Continue…**
+in Finish to review the exact pending local generation beside the authorized
+remote preview. A latest-gallery observation is identified separately from an
+upload receipt; unavailable sources or media remain visible failures.
+**Confirm already uploaded (receipt)** requires an exact durable acknowledgement.
+**Skip photo** explicitly keeps the original and unknown history while allowing
+the next accepted item to continue. It is counted separately from successful
+uploads. Neither decision silently retries an unknown request. **Cancel / Keep
+pending** changes nothing. Reopen retained work after restart with **Review
+pending uploads…** and the same verified target.
+After submitting a decision, **Hide (saving decision…)** hides its progress
+while the authorized durable write finishes; it does not undo that decision.
+In a short window, scroll the evidence while the decision and close controls
+remain visible at the bottom.
+After a worker restart, **Resume pending uploads** also releases safe pending
+work in that same session; an unresolved dispatched head still needs review.
+
+Finish always offers **Hide**. **Stop and keep pending** stops capture and new
+transfers, retaining the cutoff, accepted files and recovery evidence. A request
+still running keeps its ownership until it really ends; the app reports that
+wait instead of claiming the transfer was cancelled or successfully finished.
+Review and resumption are explicit after a retained stop. Manually uploading a
+matching file does not resolve its old Watcher journal.
+The worker keeps ownership until the retained cutoff has been saved and read
+back. A failed save leaves processing paused under the same owner.
+Explicit recovery after that failure restarts reconciliation and the required
+final scan while preserving the session cutoff.
+
+The magnifier is **Inspect folder (read-only)**. Its separate result counts
+filesystem files, without changing the accepted queue, startup exclusions or
+live Watcher status. It is available during capture and Finish; it does not
+refresh or reconcile the queue.
+
 ## Interface and local feature settings
 
 The compact dark interface uses slate glass panels, cyan actions, an icon
@@ -848,7 +882,7 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 1.0.8)
+## Windows installer (next version: 1.1.2)
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
@@ -1795,6 +1829,11 @@ preserves the uncertainty marker, original and ZIP. The same source path or
 bytes stay blocked after restart, while other eligible sources can continue in
 that gallery. A pending import retains its original target binding.
 
+For a durable Watcher FIFO, use **Resume… / Review pending uploads…** instead:
+the older history-only review does not advance `watch-drain.json`. Its explicit
+skip decision retains that uncertainty while resolving only the displayed
+queue generation. An inventory observation still cannot acknowledge it.
+
 Linking requests have a 12-second total deadline; an unresponsive system DNS
 resolver may still occupy the single transport slot until it returns. Uploads
 have a separate size-based deadline. A partially sent request has an uncertain
@@ -2487,8 +2526,12 @@ the nonmodal notice and immediate process-exit handoff.
 
 ## Verification
 
-Use the central audit from the repository root. During implementation, run quick
-when a verification pass is useful; run full once before handing off changes:
+Hosted CI owns routine implementation verification through the central audit.
+Finish source, tests and documentation, push the authorized feature branch and
+inspect its exact-SHA BASIC and relevant runtime results. Do not run the local
+application, audit, lint, tests or generators for routine agent verification.
+An explicit local request or an allowed concrete CI diagnosis is required for
+the commands below; local results do not replace hosted qualification:
 
 ```bat
 php scripts/audit.php --profile=quick
@@ -2499,8 +2542,8 @@ For release preparation, follow `RELEASE.md` and use the release audit profile
 instead. The central runner owns Python tests and syntax validation as well as
 PHP regression checks. Read its compact summary first.
 
-Direct Python commands are reserved for diagnosing a specific reported failure
-or developing a new test before registration. For example:
+Direct Python commands are reserved for an authorized focused diagnosis of a
+specific failure. They are not a separate routine test registry. For example:
 
 ```bat
 python -m py_compile winapp\uploader\update_ui.py
@@ -2513,6 +2556,15 @@ safety and cleanup, HEIC/DNG capability behavior, durable jobs, pause/cancel
 controls, SimConnect-unavailable handling, AI shutdown isolation, tray callback
 scheduling, update integrity, cancellation, worker admission and helper
 readiness.
+
+For uncertain Watcher recovery, **Issue 381 Watcher recovery** runs the central
+complete WinApp suite in its existing partitions on hosted Linux and Windows,
+alongside source contracts. Windows requires the real Tk recovery fixture and
+retains desktop/narrow screenshots. The fixtures include the 81-item uncertain
+head and a never-sent new head blocked by older target history. See
+`docs/UPLOADER_QUEUE.md` and the recovery section in `TESTING.md` for decision
+and evidence boundaries. No screenshot or source test is installed-client
+acceptance, and feature verification does not publish the 1.1.2 installer.
 
 For a release build, also smoke-test on Windows with the real target gallery,
 tray, local thumbnail runtime, optional SimConnect, and any intentionally

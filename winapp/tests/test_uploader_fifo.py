@@ -30,6 +30,12 @@ from uploader.watch_queue import WatchSource
 # Rationale: Three seconds exposes a deadlock without waiting for production backoff.
 FIFO_FIXTURE_WAIT_SECONDS = 3.0
 
+# Purpose: Keep event polling responsive while bounded worker publication completes.
+# Type: float. Units: seconds. Scope: Force Stop event-consumption regression only.
+# Consumers: Two watcher stop-publication event queue reads.
+# Rationale: Repeated short reads keep the same deadline checks responsive.
+FIFO_EVENT_POLL_SECONDS = 0.05
+
 
 class UploaderFifoTests(unittest.TestCase):
     """Require A to resolve durably before B can begin any network stage."""
@@ -432,3 +438,406 @@ class UploaderFifoTests(unittest.TestCase):
             self.worker.stop()
             self.worker._producer_wake.set()
             self.worker.join(FIFO_FIXTURE_WAIT_SECONDS)
+
+    def test_prior_linked_uncertainty_review_resumes_same_never_sent_head(self) -> None:
+        """Review older A and dispatch B once without a new capture session.
+
+        Returns:
+            None: A remains retained/reviewed while the original B sequence is sent.
+        """
+        prior = self.folder / 'prior-a.png'
+        prior.write_bytes(b'prior-uncertain-a')
+        target = SimpleNamespace(
+            binding=lambda: 'b' * 64,
+            issuer='https://gallery.example.test',
+            gallery_id=7,
+            session=SimpleNamespace(
+                approved_scope=lambda: 'upload', can_upload=lambda: True,
+            ),
+        )
+        state = self.main.LinkedUploadState(target)
+        state.save()
+        state.mark_uncertain(prior, self.main.sha256_file(prior))
+        worker = self.main.WatcherThread(
+            self.main.WatcherConfig(
+                gallery_url='https://gallery.example.test', api_key='',
+                watched_folder=str(self.folder), delete_uploaded_files=False,
+                attach_sim_camera_metadata=False, stable_seconds=0.0,
+            ), queue.Queue(), target,
+        )
+        self.addCleanup(worker._linked_lease.release)
+        session_dir = self.root / 'linked-session'
+        worker.configure_drain(session_dir, [])
+        current = self.create('current-b.png', b'never-sent-b')
+        worker._queue.reconcile([
+            self.main.observe_watch_source(current, self.now),
+        ])
+        worker.stability = mock.Mock()
+        worker.stability.stable.return_value = True
+        worker.remote_inventory = mock.Mock()
+        worker.remote_inventory.refresh.return_value = True
+        worker.remote_inventory.has_hash.return_value = False
+        uploads: list[str] = []
+
+        def upload(
+            url: str, path: Path, metadata: dict[str, str], file_hash: str, size: int,
+        ) -> dict[str, JsonValue]:
+            """Record B's one simulated successful dispatch.
+
+            Args:
+                url (str): Synthetic gallery endpoint.
+                path (Path): Current immutable queue head.
+                metadata (dict[str, str]): Optional simulator metadata.
+                file_hash (str): Hash of the exact dispatched source.
+                size (int): Source size in bytes.
+
+            Returns:
+                dict[str, JsonValue]: Success acknowledgement accepted by the owner.
+            """
+            worker._mark_watch_dispatch()
+            uploads.append(path.name)
+            return {
+                'ok': True, 'upload_evidence': 'fresh_insert_v1',
+                'gallery_id': 7, 'uploaded': 1, 'scanned': 1,
+                'image_ids': [901], 'filenames': ['gallery_901.png'],
+            }
+
+        worker.upload_watched_file = upload
+        pipeline = self.main.UploadPipelineLease(self.root / 'profile')
+        pipeline.acquire()
+        self.addCleanup(pipeline.release)
+        worker._pipeline_lease = pipeline
+        worker.stability = mock.Mock()
+        worker.stability.stable.return_value = True
+        worker._consume_head(self.folder, 'https://gallery.example.test')
+        self.assertEqual('blocked', worker._queue.head().state)
+        self.assertEqual('prior_upload_review', worker._queue.head().phase)
+        worker._initialize_recovery_coordinator(pipeline)
+        worker.recovery_coordinator.repair_interrupted_decision()
+        snapshot = worker.recovery_coordinator.snapshot()
+        self.assertIsNotNone(snapshot)
+        self.assertTrue(snapshot.review_blocked_by_earlier_upload)
+        reviewed = worker.recovery_coordinator.review_earlier_blocker(snapshot)
+        self.assertIsNotNone(reviewed)
+        self.assertEqual('preparing', worker._queue.head().state)
+        self.assertTrue(worker.state.data['failures'][str(prior)]['reviewed'])
+        self.assertEqual('current-b.png', Path(worker._queue.head().source.path).name)
+        worker._consume_head(self.folder, 'https://gallery.example.test')
+        self.assertEqual(['current-b.png'], uploads)
+        self.assertEqual('acknowledged', worker._queue.items()[0].state)
+        self.assertTrue(prior.exists())
+        self.assertTrue(current.exists())
+        self.assertEqual('linked-session', worker._queue.data['session_id'])
+
+    def test_force_stop_during_upload_retains_late_acknowledged_source(self) -> None:
+        """Keep source bytes when Stop arrives before a valid late ACK.
+
+        Returns:
+            None: The exact head is acknowledged, retained and never deleted.
+        """
+        source = self.create('late-ack.png', b'late-ack-source')
+        self.worker.config = replace(self.worker.config, delete_uploaded_files=True)
+        self.worker.stability = mock.Mock()
+        self.worker.stability.stable.return_value = True
+        self.worker.remote_inventory.refresh.return_value = True
+        self.worker.remote_inventory.has_hash.return_value = False
+        item = self.worker._queue.reconcile([
+            self.main.observe_watch_source(source, self.now),
+        ])
+        self.assertEqual(1, item)
+
+        def upload(
+            url: str, path: Path, metadata: dict[str, str], file_hash: str, size: int,
+        ) -> dict[str, JsonValue]:
+            """Persist Stop while the current synthetic request is returning.
+
+            Args:
+                url (str): Synthetic endpoint.
+                path (Path): Current queue head source.
+                metadata (dict[str, str]): Optional camera metadata.
+                file_hash (str): Exact source digest.
+                size (int): Original file size in bytes.
+
+            Returns:
+                dict[str, JsonValue]: Valid late success for the exact request.
+            """
+            self.worker._keep_sources_after_stop = True
+            self.worker._queue.stop_and_retain(self.now)
+            self.worker.stop()
+            self.worker._mark_watch_dispatch()
+            return {'ok': True, 'uploaded': 1, 'scanned': 1}
+
+        self.worker.upload_watched_file = upload
+        self.worker._consume_head(self.folder, 'https://gallery.example.test')
+        self.assertTrue(self.worker._queue.data['retained_stop'])
+        self.assertEqual('acknowledged', self.worker._queue.items()[0].state)
+        self.assertTrue(source.exists())
+
+    def test_force_stop_holds_pipeline_until_cutoff_readback_and_request_end(self) -> None:
+        """Keep both fences through Stop publication and the active late ACK.
+
+        Returns:
+            None: A failed save keeps the owner gated; success stops only after
+                readback and releases the pipeline only after the HTTP owner exits.
+        """
+        source = self.create('owned-stop.png', b'owned-stop-source')
+        entered, release_upload = threading.Event(), threading.Event()
+        upload_result: dict[str, JsonValue] = {
+            'ok': True, 'uploaded': 1, 'scanned': 1,
+        }
+
+        def upload(
+            url: str, path: Path, metadata: dict[str, str], file_hash: str, size: int,
+        ) -> dict[str, JsonValue]:
+            """Hold the exact head after its durable write-ahead boundary.
+
+            Args:
+                url (str): Synthetic endpoint.
+                path (Path): Active source owned by the queue head.
+                metadata (dict[str, str]): Optional camera metadata.
+                file_hash (str): Exact source digest.
+                size (int): Original file size in bytes.
+
+            Returns:
+                dict[str, JsonValue]: Positive late acknowledgement after release.
+            """
+            self.worker._mark_watch_dispatch()
+            entered.set()
+            self.assertTrue(release_upload.wait(FIFO_FIXTURE_WAIT_SECONDS))
+            return upload_result
+
+        self.worker.upload_watched_file = upload
+        self.worker.start()
+        self.addCleanup(self.worker.join, FIFO_FIXTURE_WAIT_SECONDS)
+        self.addCleanup(self.worker.stop)
+        self.addCleanup(release_upload.set)
+        app = object.__new__(self.main.WatcherApp)
+        app.worker = self.worker
+        app.events = self.worker.events
+        app.flights = SimpleNamespace(
+            ui_language=SimpleNamespace(get=lambda: 'en'),
+        )
+        app.status_var = SimpleNamespace(set=lambda value: None)
+        app._set_watcher_recording = lambda active: None
+        self.assertTrue(entered.wait(FIFO_FIXTURE_WAIT_SECONDS))
+
+        original_stop = self.worker._queue.stop_and_retain
+        self.worker._queue.stop_and_retain = lambda cutoff: (_ for _ in ()).throw(
+            OSError('fixture publication failure'),
+        )
+        failed_result: list[bool] = []
+        self.assertTrue(self.main.WatcherApp.stop_and_keep_watch_pending(
+            app, failed_result.append,
+        ))
+        deadline = time.monotonic() + FIFO_FIXTURE_WAIT_SECONDS
+        failure_event = None
+        while time.monotonic() < deadline and failure_event is None:
+            try:
+                event = self.worker.events.get(timeout=FIFO_EVENT_POLL_SECONDS)
+            except queue.Empty:
+                continue
+            if isinstance(event, dict) and event.get('kind') == 'watch_stop_retained':
+                failure_event = event
+        self.assertIsNotNone(failure_event)
+        failure_event['payload']['on_persisted'](False)
+        self.assertEqual([False], failed_result)
+        self.assertTrue(self.worker.is_alive())
+        self.assertFalse(self.worker.stop_event.is_set())
+        first_cutoff = self.worker._retained_stop_cutoff
+        late_source = self.create('after-stop-click.png', b'after-click')
+        self.assertEqual(0, self.worker._reconcile_watch_queue(self.folder))
+        self.assertNotIn(
+            str(late_source),
+            [item.source.path for item in self.worker._queue.items()],
+        )
+
+        contender = self.main.UploadPipelineLease(self.root / 'profile')
+        self.addCleanup(contender.release)
+        with self.assertRaises(self.main.LinkingError):
+            contender.acquire()
+
+        persist_started, persist_release = threading.Event(), threading.Event()
+        persisted_cutoffs: list[float] = []
+
+        def delayed_stop(cutoff: float) -> None:
+            """Hold Stop publication to expose ownership before readback.
+
+            Args:
+                cutoff (float): Stop time captured by the UI request.
+
+            Returns:
+                None: Publishes the original queue boundary after test release.
+            """
+            persist_started.set()
+            self.assertTrue(persist_release.wait(FIFO_FIXTURE_WAIT_SECONDS))
+            persisted_cutoffs.append(cutoff)
+            original_stop(cutoff)
+
+        self.worker._queue.stop_and_retain = delayed_stop
+        saved_result: list[bool] = []
+        self.assertTrue(self.main.WatcherApp.stop_and_keep_watch_pending(
+            app, saved_result.append,
+        ))
+        self.assertTrue(persist_started.wait(FIFO_FIXTURE_WAIT_SECONDS))
+        self.assertEqual(first_cutoff, self.worker._retained_stop_cutoff)
+        self.assertFalse(self.worker.stop_event.is_set())
+        with self.assertRaises(self.main.LinkingError):
+            contender.acquire()
+        persist_release.set()
+
+        deadline = time.monotonic() + FIFO_FIXTURE_WAIT_SECONDS
+        success_event = None
+        while time.monotonic() < deadline and success_event is None:
+            try:
+                event = self.worker.events.get(timeout=FIFO_EVENT_POLL_SECONDS)
+            except queue.Empty:
+                continue
+            if isinstance(event, dict) and event.get('kind') == 'watch_stop_retained':
+                success_event = event
+        self.assertIsNotNone(success_event)
+        self.assertEqual([first_cutoff], persisted_cutoffs)
+        success_event['payload']['on_persisted'](True)
+        self.assertEqual([True], saved_result)
+        self.assertTrue(self.worker.stop_event.is_set())
+        self.assertTrue(self.worker.is_alive())
+        release_upload.set()
+        self.worker.join(FIFO_FIXTURE_WAIT_SECONDS)
+        self.assertFalse(self.worker.is_alive())
+        self.assertTrue(source.exists())
+        self.assertTrue(self.worker._queue.data['retained_stop'])
+        self.assertEqual('acknowledged', self.worker._queue.items()[0].state)
+        contender.acquire()
+        contender.release()
+
+    def test_explicit_resume_after_failed_force_stop_restores_capture_and_finish(self) -> None:
+        """Resume the same Finish owner and producer only after explicit review.
+
+        Returns:
+            None: The pending source drains, a fresh scan completes Finish,
+                and a post-cutoff source stays outside the original session.
+        """
+        source = self.create('resume-after-stop-failure.png', b'pending source')
+        self.worker._queue.reconcile([
+            self.main.observe_watch_source(source, self.now),
+        ])
+        original_cutoff = self.now
+        self.worker._queue.finish(original_cutoff)
+        attempts = 0
+        uploaded: list[str] = []
+
+        def fail_once_then_upload(
+            url: str, path: Path, metadata: dict[str, str],
+            file_hash: str, size: int,
+        ) -> dict[str, JsonValue]:
+            """Keep one safe retry pending, then acknowledge after explicit Resume.
+
+            Args:
+                url (str): Captured synthetic endpoint.
+                path (Path): Exact pending original owned by this queue head.
+                metadata (dict[str, str]): Optional camera metadata fields.
+                file_hash (str): Exact source digest from the production worker.
+                size (int): Original byte size from the source snapshot.
+
+            Returns:
+                dict[str, JsonValue]: Valid fixture acknowledgement after retry.
+
+            Raises:
+                UploadPreparationError: First attempt fails before dispatch.
+            """
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise self.main.UploadPreparationError('Synthetic local preparation failure.')
+            self.worker._mark_watch_dispatch()
+            uploaded.append(path.name)
+            return {'ok': True, 'uploaded': 1, 'scanned': 1}
+
+        self.worker.upload_watched_file = fail_once_then_upload
+        self.worker.start()
+        self.addCleanup(self.worker.join, FIFO_FIXTURE_WAIT_SECONDS)
+        self.addCleanup(self.worker.stop)
+        deadline = time.monotonic() + FIFO_FIXTURE_WAIT_SECONDS
+        while time.monotonic() < deadline:
+            head = self.worker._queue.head()
+            if head is not None and head.state == 'retry_wait':
+                break
+            try:
+                self.worker.events.get(timeout=FIFO_EVENT_POLL_SECONDS)
+            except queue.Empty:
+                pass
+        head = self.worker._queue.head()
+        self.assertIsNotNone(head)
+        self.assertEqual('retry_wait', head.state)
+        self.assertEqual(1, attempts)
+        producer = self.worker._producer_thread
+        self.assertIsNotNone(producer)
+
+        app = object.__new__(self.main.WatcherApp)
+        app.worker = self.worker
+        app.events = self.worker.events
+        app.flights = SimpleNamespace(
+            ui_language=SimpleNamespace(get=lambda: 'en'),
+        )
+        app.status_var = SimpleNamespace(set=lambda value: None)
+        app._set_watcher_recording = lambda active: None
+
+        def failed_publication(cutoff: float) -> None:
+            """Fail retention publication while leaving the live owner fenced.
+
+            Args:
+                cutoff (float): Captured original Force Stop cutoff.
+
+            Returns:
+                None: Simulates a local persistence failure before readback.
+
+            Raises:
+                OSError: The fixture's deliberate publication failure.
+            """
+            raise OSError('Synthetic retained-stop publication failure.')
+
+        self.worker._queue.stop_and_retain = failed_publication
+        stop_result: list[bool] = []
+        self.assertTrue(self.main.WatcherApp.stop_and_keep_watch_pending(
+            app, stop_result.append,
+        ))
+        deadline = time.monotonic() + FIFO_FIXTURE_WAIT_SECONDS
+        while time.monotonic() < deadline and not stop_result:
+            try:
+                event = self.worker.events.get(timeout=FIFO_EVENT_POLL_SECONDS)
+            except queue.Empty:
+                continue
+            if isinstance(event, dict) and event.get('kind') == 'watch_stop_retained':
+                event['payload']['on_persisted'](False)
+        self.assertEqual([False], stop_result)
+        self.assertFalse(self.worker.stop_event.is_set())
+        self.assertTrue(self.worker._recovery_review_only)
+        assert producer is not None
+        producer.join(FIFO_FIXTURE_WAIT_SECONDS)
+        self.assertFalse(producer.is_alive())
+
+        late_source = self.create('arrived-after-finish-cutoff.png', b'late source')
+        self.assertGreater(self.now, original_cutoff)
+        snapshot = self.worker.recovery_coordinator.snapshot()
+        self.assertIsNotNone(snapshot)
+        self.assertFalse(snapshot.retained_stop)
+        self.assertIsNotNone(self.worker.recovery_coordinator.resume_retained(snapshot))
+        self.main.WatcherApp._watch_recovery_resolved(app, self.worker)
+        self.assertFalse(self.worker._force_stop_requested.is_set())
+        self.assertFalse(self.worker._producer_stop.is_set())
+        self.now = max(self.now, head.next_retry_at)
+        self.worker._consumer_wake.set()
+
+        self.worker.join(FIFO_FIXTURE_WAIT_SECONDS)
+        self.assertFalse(self.worker.is_alive())
+        self.assertEqual(['resume-after-stop-failure.png'], uploaded)
+        self.assertTrue(source.exists())
+        self.assertNotIn(
+            str(late_source),
+            [item.source.path for item in self.worker._queue.items()],
+        )
+        self.assertEqual(original_cutoff, self.worker._queue.data['cutoff'])
+        self.assertTrue(self.worker._queue.data['completed'])
+        self.assertGreater(
+            self.worker._queue.data['scan_generation'],
+            self.worker._queue.data['last_change_scan_generation'],
+        )

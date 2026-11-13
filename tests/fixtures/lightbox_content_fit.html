@@ -73,6 +73,11 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     // Type: number. Units: milliseconds. Scope: one fixture checkpoint.
     // Consumers: waitFor. Rationale: 12000 allows decode/layout on hosted Chromium.
     const checkpointMs = 12000;
+    // Purpose: Keep a rejected browser detail bounded in failure diagnostics.
+    // Type: integer. Units: UTF-16 code units. Scope: native fullscreen fixture only.
+    // Consumers: recorded request error name and message fields.
+    // Rationale: 240 retains browser refusal context without duplicating large errors.
+    const fullscreenDiagnosticTextLimit = 240;
     // Geometry comparisons admit sampled JPEG boundary interpolation, not wrong fits.
     // Type: number. Units: relative fraction. Scope: fixture aspect comparisons.
     // Consumers: checkFit. Rationale: 0.025 admits at most 2.5% sample rounding.
@@ -89,6 +94,11 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     const pixels = new URL(location.href).searchParams.has('pixels');
     const nativeFullscreen = new URL(location.href).searchParams.has('native');
     const smart = new URL(location.href).searchParams.has('smart');
+    const fullscreenAttemptDiagnostics = {
+        trustedKeydown: null,
+        request: null,
+    };
+    window.lightboxFullscreenAttemptDiagnostics = fullscreenAttemptDiagnostics;
     if (new URL(location.href).searchParams.has('touch')) {
         Object.defineProperty(navigator, 'maxTouchPoints', {value: 2, configurable: true});
         Object.defineProperty(navigator, 'userAgent', {value: 'Fixture Mobile', configurable: true});
@@ -112,6 +122,53 @@ Rationale: 500 stable / 600 fade keeps an observable multi-frame fade in CI. -->
     // Use the permanent CSS fullscreen fallback without depending on activation.
     if (!nativeFullscreen) {
         viewer.requestFullscreen = () => Promise.reject(new Error('Controlled refusal'));
+    } else {
+        const nativeRequestFullscreen = viewer.requestFullscreen;
+        document.addEventListener('keydown', event => {
+            if (event.key.toLowerCase() !== 's') return;
+            fullscreenAttemptDiagnostics.trustedKeydown = {
+                trusted: event.isTrusted,
+                userActivation: navigator.userActivation?.isActive ?? null,
+                hasFocus: document.hasFocus(),
+                code: event.code,
+                keyCode: event.keyCode,
+            };
+        }, true);
+        // Preserve the native promise and rejection while recording fixture-only evidence.
+        viewer.requestFullscreen = function (...args) {
+            const policy = document.permissionsPolicy || document.featurePolicy;
+            const request = {
+                userActivation: navigator.userActivation?.isActive ?? null,
+                hasFocus: document.hasFocus(),
+                fullscreenAllowed: typeof policy?.allowsFeature === 'function'
+                    ? policy.allowsFeature('fullscreen') : null,
+                options: args[0] || null,
+                outcome: 'pending',
+                errorName: '',
+                errorMessage: '',
+            };
+            fullscreenAttemptDiagnostics.request = request;
+            try {
+                return nativeRequestFullscreen.apply(viewer, args).then(value => {
+                    request.outcome = 'resolved';
+                    return value;
+                }, error => {
+                    request.outcome = 'rejected';
+                    request.errorName = String(error?.name || '');
+                    request.errorMessage = String(error?.message || '').slice(
+                        0, fullscreenDiagnosticTextLimit,
+                    );
+                    throw error;
+                });
+            } catch (error) {
+                request.outcome = 'threw';
+                request.errorName = String(error?.name || '');
+                request.errorMessage = String(error?.message || '').slice(
+                    0, fullscreenDiagnosticTextLimit,
+                );
+                throw error;
+            }
+        };
     }
 
     /**

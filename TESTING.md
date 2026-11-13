@@ -1899,6 +1899,60 @@ and actual hosted acceptance remain separate from a green fixture. See the
 
 ## Central Audit Runner
 
+### Watcher uncertain-head recovery
+
+The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
+SHA through `scripts/audit.php`. It runs `--profile=source-contracts` separately
+from `--suite=winapp-partitioned` on Linux and Windows. The latter keeps the
+central complete discovery and its existing five serial partitions; it is not
+the narrower `winapp-native` viewer diagnostic. It performs no integration,
+release, installer build or production operation. Ordinary feature BASIC remains
+a separate required source result.
+
+A manual dispatch with `browser_diagnostics=true` runs only the central
+`--suite=browser-map` owner on that exact feature SHA. It skips the recovery
+source/WinApp jobs for that dispatch, retains browser reports and screenshots,
+and uses separate concurrency so diagnosis cannot cancel normal recovery
+qualification. The central registry, limits and assertions remain authoritative;
+this focused feedback does not replace the complete integration FULL matrix.
+Interactive fixtures activate their owned tab with `Page.bringToFront` before
+trusted input. Emulated DOM focus alone is not native fullscreen proof: native
+coverage still requires the real `document.fullscreenElement`, and refusal fails.
+
+Aggregate partition reports use the canonical complete-discovery settings even
+when a child fails or is missing. Child-only `partition_selection` remains in
+the original child report; the mandatory partition proof separately records
+incomplete coverage, duplicate IDs and adverse outcomes. Normalizing aggregate
+metadata never changes those failures into successful coverage.
+
+`test_watch_recovery.py` exercises the durable decision model, exact head and
+generation checks, separate skip counts, linked/pipeline ownership, interrupted
+publication repair and preserved originals.
+`test_watch_recovery_integration.py` uses the actual Watcher, linked history and
+native leases with a synthetic transfer boundary, including first dispatch of
+the blocked new source, receipt mismatch and repair after linked publication.
+UI coverage in
+`test_watch_recovery_ui.py` distinguishes receipt confirmation, explicit skip,
+earlier-blocker review and cancellation. The native Windows owner requires Tk
+with `PHP_GALLERY_REQUIRE_WATCH_RECOVERY_TK=1` and retains desktop/narrow PNGs
+under `PHP_GALLERY_WATCH_RECOVERY_QA_DIR`. Source-only assertions and screenshots
+of synthetic fixtures do not establish installed-client or production behavior.
+
+The incident vectors are 81 pending accepted items after last confirmed sequence
+443, with uncertain sequence 444, and a different first item in a new session
+blocked before dispatch by the older target-scoped uncertainty. Inspection must
+compare complete persisted journal bytes before and after, without refreshing,
+starting, finishing or reconciling accepted work. Later items may progress only
+after a head-specific durable decision. A prior-history review must not create
+an acknowledgement for a never-dispatched new item.
+
+Remote evidence must identify the candidate SHA, immutable main merge-base,
+workflow run, per-test results and native screenshots. Report failures, skipped
+native cases and unperformed installed Windows, sleep/power-loss, target-server
+and real ambiguous-response acceptance separately. This task's local application
+and test execution are prohibited; synthetic hosted fixtures use disposable
+sources and profiles.
+
 ### Automatic generated-candidate integration
 
 After the reviewed integration workflow is installed on main,

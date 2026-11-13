@@ -711,6 +711,7 @@ class WatchDrainTests(unittest.TestCase):
             app.config._snapshot_token = object()
             app.config_store = mock.Mock()
             app.mode_owner = mock.Mock()
+            app.mode_owner.view.return_value.state = 'legacy'
             app.events = queue.Queue()
             app.linking_manager = mock.Mock()
             app.linking_manager.linked_upload_mode_selected.return_value = False
