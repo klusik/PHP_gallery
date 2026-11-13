@@ -336,13 +336,14 @@ def merge_reports(
         and all(process["coverage_complete"] for process in processes)
         and classes_are_whole
     )
-    normalized_runtime = runtime
-    if inventory_complete:
-        normalized_runtime = dict(runtime)
-        normalized_runtime["suite_settings"] = {
-            key: value for key, value in settings.items()
-            if key != "partition_selection"
-        }
+    # The aggregate describes the canonical full-suite selection.  Keep each
+    # child's selected-ID marker in the retained child report and partition
+    # proof, but do not copy that child-only setting into aggregate runtime.
+    normalized_runtime = dict(runtime)
+    normalized_runtime["suite_settings"] = {
+        key: value for key, value in settings.items()
+        if key != "partition_selection"
+    }
     fixture_errors = [
         {**item, "id": f"partition-{index}: {item['id']}"}
         for index, report in enumerate(reports, start=1) if report is not None

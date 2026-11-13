@@ -65,8 +65,8 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.1.1}
-\newcommand{\manualdate}{12.~listopadu~2026}
+\newcommand{\version}{1.1.2}
+\newcommand{\manualdate}{13.~listopadu~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1792,6 +1792,38 @@ acknowledgement. Fotografická fronta může čekat déle než pět minut.
 Po restartu pokračuje ověřený Finish stejného cíle automaticky;
 odvolání legacy klíče zachovává samostatné nové potvrzení.
 Linked flight reports zůstávají místně.
+
+Nejistá hlava ukazuje \ui{Vyžaduje pozornost}. \ui{Pokračovat} ve Watcheru,
+\ui{Vynutit pokračování} v~průběhu a~\ui{Zkontrolovat čekající uploady}
+po restartu otevírají stejnou kontrolu konkrétní zachované generace a~cíle.
+Místní náhled a~autorizované pozorování vzdálené fotky jsou odlišeny;
+shodný obrázek, pořadové číslo galerie ani hash nejsou upload receipt.
+\ui{Potvrdit již nahrané} vyžaduje přesný trvalý acknowledgement.
+\ui{Přeskočit fotku} zaznamená výslovné přeskočení, zachová originál
+i~nejistou historii a~pustí další FIFO položku. Přeskočené položky se
+počítají odděleně od úspěšných uploadů. Zrušení nechá položku čekat.
+Každá další nejistá hlava vyžaduje samostatné rozhodnutí.
+Po odeslání rozhodnutí volba \ui{Skrýt (ukládání rozhodnutí)} pouze skryje
+průběh; již potvrzený trvalý zápis normálně doběhne.
+V~nízkém okně lze důkazy posouvat; rozhodovací a~zavírací ovládání zůstává
+viditelné dole.
+Po restartu workeru volba \ui{Pokračovat v~čekajících nahráváních} uvolní
+i~bezpečně čekající práci ve stejné session; zachovává termín dalšího pokusu.
+Výslovná obnova po neúspěšném uložení Stop obnoví také reconciliation
+a~povinný závěrečný scan pod původním cutoff.
+
+Starší nejasný upload může zablokovat i~první fotku nové session ještě
+před odesláním. Nové nalinkování ani smazání místních souborů historii
+nevymaže. Kontrola rozlišuje starší nejistou operaci od aktuální
+neodeslané fotky; review starší operace nepotvrzuje upload nové.
+\ui{Prohlédnout složku (jen čtení)} ukazuje samostatná zjištění ze
+souborového systému, nemění frontu, startup exclusions, cutoff ani živý stav.
+Průběh vždy dovoluje \ui{Skrýt}. \ui{Zastavit a~ponechat čekající}
+zastaví příjem a~uchová přijatou práci s~cutoff pro výslovnou obnovu.
+Neodvolává přístup ani nemaže soubory. Běžící request si drží vlastníka;
+UI přizná čekání místo nepravdivého úspěšného dokončení.
+Vlastnictví zůstává držené do uložení a~zpětného načtení zachovaného cutoff;
+neúspěšný zápis ponechá zpracování pozastavené pod stejným vlastníkem.
 
 Inventory/upload již nesdílejí 60 requestů na IP za 300~s.
 Upload grant počítá requesty; účet/IP/globální rozpočet účtuje atomicky každý
@@ -10062,6 +10094,15 @@ neúspěšnými běhy.
 Log vybraného procesu ihned za~koncovým záznamem FAIL/ERROR vypíše celý
 traceback, takže při pozdějším vypršení limitu zůstane zachován důvod před
 dokončením závěrečného JSON reportu.
+
+Workflow \ui{Issue 381 Watcher recovery} nabízí také ruční režim browser
+diagnostiky. Pro vybrané feature SHA spustí pouze centrální
+\codeword{php scripts/audit.php --suite=browser-map} a~uchová reporty
+i~screenshoty. Samostatná concurrency brání zrušení běžných source/WinApp
+kontrol diagnostickým během. Centrální limity i~ověření zůstávají platné;
+tato zpětná vazba nenahrazuje úplnou integrační matici FULL.
+Interaktivní browser fixtures před trusted input aktivují vlastní tab;
+samotná emulace DOM focus nedokazuje vstup do nativního fullscreenu.
 
 Pro agenty je GitHub Actions výchozí a~autoritativní ověřovací prostředí
 (CI-first). Níže uvedené příkazy popisují hostovaný centrální audit; agent je

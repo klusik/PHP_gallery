@@ -80,6 +80,7 @@ head performs that check. Local ZIP extraction and local preview are retained.
 | auth_required | Retain capture and explain the required authorization action. |
 | uncertain / blocked | Retain the head; no resend or later transfer without resolution. |
 | acknowledged | Only now may the following sequence start its pipeline. |
+| skipped | Explicit user disposition permits the next item; the original and unknown history remain retained. |
 
 Thumbnail/preparation errors before dispatch are retryable. Write-ahead markers
 are created after local preparation, immediately before HTTP dispatch. Linked
@@ -187,6 +188,91 @@ Diagnostics retain current head ID/sequence, counts, producer/consumer state,
 last scan/progress, retry deadline and an independent last failure beyond the
 Activity tail. Refresh requests, coalescing and outcomes are recorded without
 credentials or nonce values.
+
+### Explicit uncertain-head review
+
+**Resume…** and **Force Continue…** open the same head-specific review;
+**Review pending uploads…** exposes retained work after restart. The review
+compares the retained local generation with an authorized remote preview for
+the bound target. A remote observation is labelled separately from an exact
+persisted upload acknowledgement. Missing media, permission failures and absent
+receipt evidence remain explicit unknowns. A thumbnail, gallery ordinal,
+matching hash or inventory absence cannot confirm an upload.
+
+**Confirm already uploaded (receipt)** requires the exact durable acknowledgement
+for that head. **Skip photo** is a separate explicit decision: it records
+`skipped_by_user`, retains the local source and uncertainty history, and counts
+the item separately from successful uploads. No unknown operation is resent by
+either action. Closing or cancelling review keeps the item pending. Each new
+blocked head requires its own decision.
+After an explicit decision is submitted, **Hide (saving decision…)** only hides
+its progress; the already authorized durable publication completes normally.
+It does not imply cancellation or rollback of that decision.
+Preview evidence scrolls vertically in a short window; the decision and close
+controls remain visible below the viewport.
+
+After a worker restart, **Resume pending uploads** explicitly releases a safe
+head for the same session even when no retained-stop flag was recorded. It
+preserves the retry deadline and never resumes an unresolved dispatched head.
+
+Recovery validates the current target, mode, session, item identity and source
+generation under the existing pipeline and linked-target ownership. Decisions
+are serialized with the consumer. A durable decision intent precedes linked
+history review and the final queue transition; restart repairs that same intent
+idempotently before any later item can transfer. A stale dialog cannot resolve
+a replacement head. Readback failure remains unresolved rather than being
+treated as successful publication.
+
+Older version-two journals lack the optional source `modified_ns` and
+`disposition_at` observations. Missing timestamps remain unknown; they are not
+invented during restore. Preview validates the existing generation signature,
+the opened file identity and any recorded content hash. A missing optional
+timestamp alone does not invalidate an otherwise exact retained 1.1.1 source.
+Unknown legacy generations still cannot supply a fabricated preview.
+
+**Inspect folder (read-only)** reports filesystem findings separately from the
+accepted queue. It does not invoke queue refresh, change startup exclusions,
+cutoff, session, accepted items, hashes, receipts or status. Folder file counts
+are not pending-upload counts.
+
+Finish exposes known blocked states as **Needs attention** and keeps **Hide**
+available. **Stop and keep pending** records the first cutoff and an explicit
+retention decision, stops admission and preserves accepted work for review.
+It does not revoke access, acknowledge an unknown upload or delete sources.
+A transport that has not actually ended retains its owner; UI cancellation
+cannot admit a competing writer. A bounded UI wait reports that retained owner
+instead of claiming successful completion. A stopped journal requires explicit
+review/resumption rather than automatically restarting capture.
+Ownership remains held while the retained cutoff is being published and read
+back. A failed publication keeps the consumer paused under that ownership;
+another writer cannot enter through an uncommitted stop.
+After a failed Stop save, explicit recovery also restarts reconciliation so
+Finish can obtain its required fresh final scan under the original cutoff.
+The save failure alone never resumes capture or transfers.
+The immediate stop intent also suppresses optional source deletion for a late
+successful response; the real acknowledgement is retained without discarding
+the original the operator chose to keep.
+
+Manual uploads to the same target do not repair a pending Watcher journal.
+Unresolved matching work requires explicit review under the shared pipeline
+fence, even when the operator can see an apparently matching remote image.
+
+An earlier target-scoped unknown can block a new session's first, never-sent
+head before inventory or upload. The review identifies the earlier operation
+separately. An explicit prior-operation review preserves that unknown source
+and permits only the new head's first dispatch; it never acknowledges or skips
+the new source as if the older receipt belonged to it. Repeated relinking and
+local file deletion do not clear this retained evidence. In older clients,
+history-only **Review retained upload…** refuses active background work and
+cannot reconcile an already uncertain Watcher head. **Keep files locally…**
+deliberately closes the old session; it is distinct from the new retained stop,
+which keeps the queue recoverable within that session.
+
+The operator confirmed temporary installed-1.1.1 recovery by Stop Watcher,
+Keep files locally, Review retained upload, reconnect, Start Watcher and a
+new screenshot created after Start. That observation establishes renewed
+new-source uploads only. It does not resolve the earlier upload or recover
+the old FIFO, and is not the supported 1.1.2 recovery workflow.
 
 ## Verification boundary
 

@@ -345,6 +345,11 @@ class AuditReportingTests(unittest.TestCase):
         self.assertNotIn(
             'partition_selection', merged['runtime']['suite_settings'],
         )
+        self.assertTrue(all(
+            report['runtime']['suite_settings']['partition_selection']
+            == 'selected-id-subset'
+            for report in reports
+        ))
 
         missing, complete = merge_reports(
             [reports[0], None, reports[2], reports[3], reports[4]],
@@ -358,6 +363,9 @@ class AuditReportingTests(unittest.TestCase):
         )
         self.assertFalse(complete)
         self.assertFalse(missing['partition_proof']['complete'])
+        self.assertNotIn(
+            'partition_selection', missing['runtime']['suite_settings'],
+        )
 
         duplicate_report = dict(reports[1])
         duplicate_report['tests'] = list(reports[0]['tests'])
@@ -369,6 +377,10 @@ class AuditReportingTests(unittest.TestCase):
             [reports[0], duplicate_report, reports[2], reports[3], reports[4]],
             duplicate_processes,
             expected_ids, 0.5,
+        )
+        self.assertFalse(duplicate_success)
+        self.assertNotIn(
+            'partition_selection', duplicate['runtime']['suite_settings'],
         )
         self.assertFalse(duplicate_success)
         self.assertFalse(duplicate['partition_proof']['complete'])

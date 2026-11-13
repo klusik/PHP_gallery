@@ -181,6 +181,26 @@ class WatchQueueTests(unittest.TestCase):
         self.assertTrue(self.journal.complete(0.0))
         self.assertTrue(self.journal.data['completed'])
 
+    def test_stop_and_retain_survives_restore_until_explicit_resume(self) -> None:
+        """Retain accepted work and cutoff while blocking automatic admission.
+
+        Returns:
+            None: Restore preserves stop and explicit resume preserves same queue.
+        """
+        source = self.source('retained.png', self.now)
+        self.journal.reconcile([source])
+        self.journal.stop_and_retain(self.now + 1)
+        self.assertEqual(0, self.journal.reconcile([self.source('later.png', self.now + 2)]))
+        recovered = self.store()
+        recovered.restore()
+        self.assertTrue(recovered.data['retained_stop'])
+        self.assertEqual([source.path], recovered.data['pending'])
+        retained_cutoff = recovered.data['cutoff']
+        recovered.resume_retained()
+        self.assertFalse(recovered.data['retained_stop'])
+        self.assertEqual(retained_cutoff, recovered.data['cutoff'])
+        self.assertEqual(source.path, recovered.head().source.path)
+
     def test_failed_persistence_never_reports_acceptance(self) -> None:
         """Retain the last confirmed journal when durable admission cannot be written.
 

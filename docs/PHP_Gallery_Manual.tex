@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.1.1}
-\newcommand{\manualdate}{12 November 2026}
+\newcommand{\version}{1.1.2}
+\newcommand{\manualdate}{13 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1794,6 +1794,37 @@ the~last acknowledgement. Photo queues can~wait beyond five minutes.
 Verified same-target screenshot Finish intent resumes after restart;
 legacy key revocation retains its~separate renewed-confirmation rule.
 Linked flight reports remain local.
+
+An~unknown head shows \ui{Needs attention}. \ui{Resume} in~Watcher,
+\ui{Force Continue} in~progress and~\ui{Review pending uploads} after restart
+open the~same review for~the~exact retained source and~target. Local preview
+and~authorized remote observation are~shown separately; a~matching image,
+gallery number or~hash is~not~an~upload receipt. \ui{Confirm already uploaded}
+requires the~exact durable acknowledgement. \ui{Skip photo} records
+an~explicit skip, keeps the~original and~unknown history, and~allows
+the~next FIFO item. Skips are~counted separately from successful uploads.
+Cancel leaves the~item pending. Each later unknown needs its~own decision.
+After submitting a~decision, \ui{Hide (saving decision)} only hides progress;
+the~already authorized durable publication finishes normally.
+In~a~short window, evidence scrolls while the~decision and~close controls
+remain visible below it.
+After a~worker restart, \ui{Resume pending uploads} also releases safe pending
+work in~the~same session, preserving its~retry deadline.
+Explicit recovery after a~failed Stop save also restores reconciliation
+and~the~required final scan under the~original cutoff.
+
+An~earlier unknown can~also block a~new session's first photo before
+it~is~sent. Relinking and~deleting local files do~not~clear that history.
+Review must distinguish the~older unknown from the~current unsent source;
+reviewing the~older operation cannot acknowledge the~new one.
+\ui{Inspect folder (read-only)} shows separate filesystem findings without
+changing the~queue, startup exclusions, cutoff or~live status.
+Progress always offers \ui{Hide}. \ui{Stop and keep pending} stops admission
+and~retains accepted work and~its~cutoff for~explicit recovery. It~does~not
+revoke access or~delete files. A~request still running keeps its~owner;
+the~UI reports that wait instead of~claiming successful completion.
+Ownership remains held until the~retained cutoff has~been saved and~read back;
+a~failed save keeps processing paused under the~same owner.
 
 Inventory/upload no~longer share 60 requests per IP per 300~s.
 Upload grant budgets count requests; account/IP/global storage budgets charge
@@ -10117,6 +10148,15 @@ three- and~four-partition timeouts remain failed runs.
 Selected-child logs flush the~full failure traceback immediately after each
 FAIL/ERROR terminal record, preserving its~reason if~a~later timeout prevents
 the~final JSON report.
+
+The~\ui{Issue 381 Watcher recovery} workflow also offers a~manual browser
+diagnostics mode. It~runs only the~central
+\codeword{php scripts/audit.php --suite=browser-map} on~the~selected feature
+SHA, retaining reports and~screenshots. Separate concurrency prevents that
+diagnosis from cancelling normal source/WinApp checks. It~preserves central
+limits and~assertions and~does~not replace the~complete integration FULL.
+Interactive fixtures activate their own browser tab before trusted input;
+emulated DOM focus alone does~not prove native fullscreen entry.
 
 For~coding agents, GitHub Actions is~the~default and~authoritative verification
 environment (CI-first). The~central audit commands below describe the~hosted

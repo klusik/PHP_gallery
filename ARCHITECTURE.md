@@ -172,6 +172,15 @@ independent. Explicit Finish owns its cutoff and a new final-scan generation,
 never the last error checkpoint. See the queue contract for chronological,
 legacy-migration and uncertain-operation evidence boundaries.
 
+`watch_recovery.py` owns explicit head-only receipt confirmation and user skip.
+It validates immutable review tokens under the consumer's current upload leases
+and persists a decision intent before linked-history review and queue publication.
+Interrupted decisions are repaired idempotently before advancing FIFO.
+`watch_recovery_ui.py` owns the shared Resume preview; `flight_ui.py` exposes
+blocked Finish, explicit stop/retention and always available Hide. Folder
+inspection reads filesystem observations independently from the capture journal.
+Neither remote preview nor hash inventory is an upload acknowledgement.
+
 The normal WinApp launch selects Photos in the main window. Its workspace
 mounts optional last-complete metadata through `gallery_catalogue_cache.py`
 before refreshing the live link's hierarchy. That persistence owner validates
@@ -706,7 +715,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.1.1';
+const CMS_VERSION = '1.1.2';
 ```
 
 Update-related code uses:

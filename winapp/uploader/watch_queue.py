@@ -68,7 +68,7 @@ WATCH_QUEUE_RETRY_MAX_DOUBLINGS = 6
 
 WATCH_QUEUE_STATES = frozenset({
     'observed', 'stabilizing', 'preparing', 'inventory', 'dispatching',
-    'retry_wait', 'auth_required', 'uncertain', 'blocked', 'acknowledged',
+    'retry_wait', 'auth_required', 'uncertain', 'blocked', 'acknowledged', 'skipped',
 })
 
 
@@ -85,6 +85,7 @@ class WatchSource:
     clock: str
     identity: str = ''
     existence_at: float = 0.0
+    modified_ns: int = 0
 
 
 def observe_watch_source(path: Path, first_seen: float) -> WatchSource:
@@ -136,7 +137,7 @@ def observe_watch_source(path: Path, first_seen: float) -> WatchSource:
     )).encode('ascii')).hexdigest()
     return WatchSource(
         str(path), signature, info.st_size, captured, born, first_seen, clock,
-        generation, float(info.st_ctime),
+        generation, float(info.st_ctime), info.st_mtime_ns,
     )
 
 
@@ -157,6 +158,7 @@ class WatchQueueItem:
     inventory_ready: bool = False
     disposition: str = ''
     last_source_change: float = 0.0
+    disposition_at: float = 0.0
 
 
 def _queue_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
@@ -291,7 +293,7 @@ class WatchQueueStore:
                 'last_change_scan_generation': 0,
                 'last_scan_at': 0.0, 'scan_generation': 0,
                 'error': '', 'last_failure': '', 'completed': False,
-                'order_verified': True,
+                'order_verified': True, 'retained_stop': False,
             }
 
     def initialize(self, initial: list[WatchSource] | None) -> None:
@@ -384,6 +386,7 @@ class WatchQueueStore:
                   or row.get('scope', '') != self.scope
                   or row.get('session_id') != self.path.parent.name):
                 raise ValueError('Capture belongs to another target or queue version.')
+            row.setdefault('retained_stop', False)
             items = row.get('items')
             if not isinstance(items, list) or len(items) > WATCH_QUEUE_MAX_ITEMS:
                 raise ValueError('Capture item collection is malformed.')
@@ -391,6 +394,10 @@ class WatchQueueStore:
             previous_sequence = 0
             for raw in items:
                 item = self._item(raw)
+                if ((item.state == 'skipped') != (item.disposition == 'skipped_by_user')
+                        or item.disposition == 'confirmed_by_receipt'
+                        and item.state != 'acknowledged'):
+                    raise ValueError('Capture disposition and terminal state disagree.')
                 if (item.item_id in identities or item.sequence != previous_sequence + 1
                         or not self._allows_source(item.source.path)):
                     raise ValueError('Capture order or source containment is invalid.')
@@ -409,10 +416,11 @@ class WatchQueueStore:
                     or len(set(row['initial'])) != len(row['initial'])
                     or not isinstance(row.get('initial_sources'), list)
                     or row.get('pending') != [raw['source']['path'] for raw in items
-                                              if raw['state'] != 'acknowledged']
+                                              if raw['state'] not in ('acknowledged', 'skipped')]
                     or type(row.get('frozen')) is not bool
                     or type(row.get('completed')) is not bool
                     or type(row.get('order_verified')) is not bool
+                    or type(row.get('retained_stop')) is not bool
                     or not isinstance(row.get('error'), str)
                     or not isinstance(row.get('last_failure'), str)
                     or not isinstance(row.get('initial_hashes'), dict)
@@ -423,6 +431,41 @@ class WatchQueueStore:
             initial_sources = [self._source(value) for value in row['initial_sources']]
             if [source.path for source in initial_sources] != row['initial']:
                 raise ValueError('Original capture exclusions do not match their sources.')
+            intent = row.get('recovery_intent')
+            if intent is not None:
+                common_intent_keys = {
+                    'item_id', 'sequence', 'signature', 'disposition',
+                }
+                blocker_intent_keys = common_intent_keys | {
+                    'session_id', 'head_sha256', 'blocker_marker',
+                    'blocker_path', 'blocker_sha256', 'target_binding',
+                    'scope', 'mode',
+                }
+                if (not isinstance(intent, dict)
+                        or set(intent) not in (common_intent_keys, blocker_intent_keys)
+                        or intent.get('disposition') not in (
+                            'confirmed_by_receipt', 'skipped_by_user',
+                            'continue_after_prior_review')
+                        or type(intent.get('sequence')) is not int
+                        or not isinstance(intent.get('item_id'), str)
+                        or not isinstance(intent.get('signature'), str)):
+                    raise ValueError('Recovery intent is malformed.')
+                if (intent.get('disposition') == 'continue_after_prior_review'
+                        and (set(intent) != blocker_intent_keys
+                             or not all(isinstance(intent.get(key), str) and intent[key]
+                                        for key in ('session_id', 'blocker_marker',
+                                                    'blocker_path', 'blocker_sha256',
+                                                    'target_binding', 'mode'))
+                             or not isinstance(intent.get('scope'), str)
+                             or not isinstance(intent.get('head_sha256'), str))):
+                    raise ValueError('Prior-review intent is malformed.')
+                current_head = next((raw for raw in items
+                                     if raw['state'] not in ('acknowledged', 'skipped')), None)
+                if (current_head is None or (intent['item_id'], intent['sequence'],
+                                             intent['signature']) != (
+                        current_head['item_id'], current_head['sequence'],
+                        current_head['source']['signature'])):
+                    raise ValueError('Recovery intent does not identify the current head.')
             if (any(key not in row['initial'] for key in row['initial_hashes'])
                     or row['frozen'] != bool(cutoff)
                     or any(type(row.get(key)) not in (int, float)
@@ -433,6 +476,7 @@ class WatchQueueStore:
                            for key in ('scan_generation', 'last_change_scan_generation'))):
                 raise ValueError('Capture boundary or reconciliation evidence is malformed.')
             if (row['completed'] and (row['pending'] or not cutoff or not row['frozen']
+                                      or row['retained_stop']
                                       or row['order_verified'] is not True)):
                 raise ValueError('Completed capture lacks its final queue barrier.')
             self._publish(row)
@@ -471,10 +515,13 @@ class WatchQueueStore:
         try:
             if not isinstance(raw, dict):
                 raise ValueError('Capture source is not an object.')
-            source = WatchSource(**raw)
+            source_row = dict(raw)
+            source_row.setdefault('modified_ns', 0)
+            source = WatchSource(**source_row)
             if (not isinstance(source.path, str) or not Path(source.path).is_absolute()
                     or '..' in Path(source.path).parts
                     or type(source.size) is not int or source.size < 0
+                    or type(source.modified_ns) is not int or source.modified_ns < 0
                     or source.clock not in ('birth', 'first_seen', 'steam_filename_local',
                                             'legacy_unknown', 'accepted_import_order')
                     or any(not isinstance(value, str) or value
@@ -519,8 +566,12 @@ class WatchQueueStore:
                     or type(item.last_source_change) not in (int, float)
                     or not math.isfinite(item.last_source_change)
                     or item.last_source_change < 0
+                    or type(item.disposition_at) not in (int, float)
+                    or not math.isfinite(item.disposition_at)
+                    or item.disposition_at < 0
                     or type(item.inventory_ready) is not bool
-                    or item.disposition not in ('', 'uploaded', 'duplicate')
+            or item.disposition not in ('', 'uploaded', 'duplicate',
+                                        'confirmed_by_receipt', 'skipped_by_user')
                     or not isinstance(item.reason, str) or not isinstance(item.phase, str)
                     or (item.http_status is not None and (
                         type(item.http_status) is not int or not 100 <= item.http_status <= 599))
@@ -611,7 +662,41 @@ class WatchQueueStore:
         Returns:
             WatchQueueItem | None: First unresolved item, or None for an empty FIFO.
         """
-        return next((item for item in self.items() if item.state != 'acknowledged'), None)
+        return next((item for item in self.items()
+                     if item.state not in ('acknowledged', 'skipped')),
+                    None)
+
+    def record_recovery_disposition(
+        self, item: WatchQueueItem, disposition: str,
+    ) -> WatchQueueItem:
+        """Record an explicit head-only receipt confirmation or user skip.
+
+        Args:
+            item (WatchQueueItem): Exact immutable head snapshot being reviewed.
+            disposition (str): ``confirmed_by_receipt`` or ``skipped_by_user``.
+
+        Returns:
+            WatchQueueItem: Readback-verified terminal review record.
+
+        Raises:
+            ValueError: The head changed or disposition is unsupported.
+            OSError: Durable publication could not be confirmed.
+        """
+        if disposition not in ('confirmed_by_receipt', 'skipped_by_user'):
+            raise ValueError('Unsupported recovery disposition.')
+        with self.lock:
+            current = self.head()
+            if current is None or (current.item_id, current.sequence,
+                                   current.source.signature) != (
+                    item.item_id, item.sequence, item.source.signature):
+                raise ValueError('Recovery snapshot is stale.')
+            return self.update(
+                current, state='acknowledged' if disposition == 'confirmed_by_receipt'
+                else 'skipped', disposition=disposition,
+                reason='Confirmed from existing durable receipt.'
+                if disposition == 'confirmed_by_receipt' else 'Skipped by user.',
+                phase='manual_recovery', next_retry_at=0.0,
+            )
 
     def reconcile(self, observations: list[WatchSource]) -> int:
         """Durably append a local discovery batch without renumbering older items.
@@ -629,7 +714,11 @@ class WatchQueueStore:
         """
         with self.lock:
             row = copy.deepcopy(self.data)
+            if row.get('recovery_intent') is not None:
+                raise ValueError('An interrupted recovery decision must be repaired first.')
             if row.get('completed') is True:
+                return 0
+            if row.get('retained_stop') is True:
                 return 0
             cutoff = float(row['cutoff'])
             initial = {value['path']: value['signature']
@@ -667,7 +756,7 @@ class WatchQueueStore:
                             or source.clock == 'steam_filename_local'
                             and float(row['capture_started_at']) <= source.captured_at <= cutoff):
                         continue
-                if (old is not None and old['state'] not in (
+                if (old is not None and old['state'] != 'skipped' and old['state'] not in (
                         'acknowledged', 'dispatching', 'uncertain')):
                     old['source'] = asdict(replace(
                         source, first_seen=old['source']['first_seen'],
@@ -696,7 +785,8 @@ class WatchQueueStore:
                 # Admission, transitions and the final barrier remain durable.
                 return 0
             row['pending'] = [raw['source']['path'] for raw in row['items']
-                              if raw['state'] != 'acknowledged']
+                              if raw['state'] not in ('acknowledged', 'skipped')]
+            row.pop('recovery_intent', None)
             row['last_scan_at'] = now
             row['scan_generation'] = self.scan_generation
             row['checkpoint'] = now
@@ -729,12 +819,17 @@ class WatchQueueStore:
                     or set(changes) - allowed):
                 raise ValueError('Only the current FIFO head may advance.')
             updated = replace(current, **changes)
+            if (updated.state == 'acknowledged'
+                    or updated.disposition in ('confirmed_by_receipt', 'skipped_by_user')):
+                updated = replace(updated, disposition_at=self.clock())
             self._item(asdict(updated))
             row = copy.deepcopy(self.data)
             row['items'] = [asdict(updated) if raw['item_id'] == item.item_id else raw
                             for raw in row['items']]
+            if updated.disposition in ('confirmed_by_receipt', 'skipped_by_user'):
+                row.pop('recovery_intent', None)
             row['pending'] = [raw['source']['path'] for raw in row['items']
-                              if raw['state'] != 'acknowledged']
+                              if raw['state'] not in ('acknowledged', 'skipped')]
             row['checkpoint'] = row['last_change_at'] = self.clock()
             row['last_change_scan_generation'] = self.scan_generation
             row['scan_generation'] = self.scan_generation
@@ -793,6 +888,41 @@ class WatchQueueStore:
             row['scan_generation'] = self.scan_generation
             self._publish(row)
 
+    def stop_and_retain(self, cutoff: float) -> None:
+        """Persist an explicit stop while retaining accepted queue work.
+
+        Args:
+            cutoff (float): Stop time in Unix seconds; an existing cutoff wins.
+
+        Returns:
+            None: Saves a durable stop flag without completion or abandonment.
+        """
+        if not math.isfinite(cutoff) or cutoff <= 0:
+            raise ValueError('Stop cutoff must be a positive finite timestamp.')
+        with self.lock:
+            row = copy.deepcopy(self.data)
+            if not row.get('cutoff'):
+                row['cutoff'] = cutoff
+                row['frozen'] = True
+            row['retained_stop'] = True
+            row['completed'] = False
+            row['checkpoint'] = self.clock()
+            self._publish(row)
+
+    def resume_retained(self) -> None:
+        """Clear only a retained-stop flag after an explicit resume decision.
+
+        Returns:
+            None: Preserves cutoff, session, accepted paths and their order.
+        """
+        with self.lock:
+            if self.data.get('retained_stop') is not True:
+                return
+            row = copy.deepcopy(self.data)
+            row['retained_stop'] = False
+            row['checkpoint'] = self.clock()
+            self._publish(row)
+
     def complete(self, stable_seconds: float) -> bool:
         """Seal an empty finished interval only after a fresh successful final scan.
 
@@ -805,7 +935,8 @@ class WatchQueueStore:
         with self.lock:
             cutoff = float(self.data.get('cutoff', 0.0))
             scanned = self.last_scan_at
-            if (not cutoff or self.head() is not None
+            if (not cutoff or self.data.get('retained_stop') is True
+                    or self.head() is not None
                     or self.data.get('order_verified') is not True
                     or scanned < cutoff + stable_seconds
                     or scanned < float(self.data['last_change_at'])

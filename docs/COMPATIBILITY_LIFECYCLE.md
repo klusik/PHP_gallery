@@ -4263,6 +4263,43 @@ uses 6.1-terra. No new root menu item or storage migration is introduced.
 
 ## WinApp, upload, and downloads
 
+### WINAPP-RECOVERY — Uncertain FIFO heads and retained stops
+
+- **Reason / protected scenario:** Installed WinApp 1.1.1 encountered an
+  ambiguous linked HTTP 503 after queue sequence 443; sequence 444 blocked
+  80 later accepted photos. A gallery ordinal or matching image does not prove
+  that operation committed. Folder inspection changed displayed dry-run labels;
+  a durable queue reset was not established by the incident evidence.
+- **Owner:** `watch_queue.py` retains source generations and explicit
+  dispositions; `watch_recovery.py` coordinates leased, head-specific decisions.
+  Watcher marshals consumer decisions; the shared recovery dialog and FlightUI
+  expose Resume, safe skip, retained stop and Hide.
+- **Compatibility:** Existing v1/v2 journals retain target, session, cutoff and
+  admission order. Recovery never upgrades an observation into a receipt or
+  automatically replays an unknown operation. A skip retains the source and
+  reviewed uncertainty separately from upload success. Durable decision intent
+  permits repair after linked-history publication but before queue publication.
+  An explicit retained stop prevents unattended resumption of that capture.
+  Optional source and acknowledgement timestamps absent in older v2 journals
+  remain unknown. The queue and preview owners retain exact generation/hash
+  validation without requiring the newly recorded timestamp field; installed
+  1.1.1 journals require this compatibility until their retained work drains.
+- **Evidence / limits:** Deterministic fixtures model 81 accepted pending
+  sources and compare persisted journal bytes around read-only inspection.
+  In installed 1.1.1, the operator confirmed that Stop Watcher, Keep files
+  locally, history review, reconnect, Start and a newly created screenshot
+  restored uploads. This closes the old session and does not prove the earlier
+  uncertain operation failed. It is compatibility evidence for the prior-result
+  blocker; the new workflow must preserve the current session instead.
+  Hosted Windows UI evidence is distinct from installed-client and production
+  acceptance. Server 503 cause, cross-version usage, power-loss behavior and
+  non-local filesystem durability remain unknown. No server receipt endpoint or
+  exactly-once retry guarantee is introduced.
+- **Retirement:** Keep legacy journal readers and conservative unknown handling
+  until deployed pending work is proven drained and all supported consumers use
+  an equivalent receipt-bound recovery protocol. Unknown usage is not removal
+  evidence.
+
 ### WINAPP-IMPORT — Manual source retention
 
 - **Reason / protected scenario:** A confirmed manual Import must retain its

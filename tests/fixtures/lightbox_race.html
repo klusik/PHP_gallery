@@ -824,7 +824,13 @@ License: MIT License (see LICENSE file in repository)
                 : 'native-lock-rejected-fallback-verified';
         }
         window.quickTagInputPhase = 'fullscreen-hud-auto-hide-restored';
-        if (document.fullscreenElement === quickTagViewer) {
+        // Native fullscreen owns document.fullscreenElement; application
+        // fullscreen keeps the same viewer state in its CSS classes instead.
+        const quickTagViewerRemainsFullscreen =
+            document.fullscreenElement === quickTagViewer
+            || quickTagViewer.classList.contains('is-css-fullscreen')
+            || quickTagViewer.classList.contains('is-fullscreen');
+        if (quickTagViewerRemainsFullscreen) {
             await waitFor(() => !quickTagViewer.classList.contains('is-ui-visible'),
                 'Closing quick tags did not restore the normal fullscreen HUD auto-hide.');
         }

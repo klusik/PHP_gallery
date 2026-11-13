@@ -97,6 +97,17 @@ WATCHER_EVENT_IDLE_POLL_MS = 200
 # Consumers: WatcherApp.build_watch_tab.
 # Rationale: 420 wraps long retry/review explanations within narrow desktop layouts.
 WATCH_QUEUE_STATUS_WRAP_PIXELS = 420
+# Purpose: Bound authorized gallery traversal used only for a recovery preview.
+# Type: int. Units: pages. Scope: one recovery dialog's observation fallback.
+# Consumers: WatcherApp._load_watch_recovery_remote.
+# Rationale: An incomplete catalogue is reported unavailable instead of guessed latest.
+WATCH_RECOVERY_PREVIEW_PAGE_LIMIT = 32
+# Purpose: Stop admitting recovery preview pages after the elapsed budget.
+# Type: float. Units: seconds. Scope: one recovery dialog's observation fallback.
+# Consumers: WatcherApp._load_watch_recovery_remote.
+# Rationale: One active media request retains its own session timeout; larger
+#   traversals are reported unavailable instead of delaying explicit review.
+WATCH_RECOVERY_PREVIEW_TIME_LIMIT_SECONDS = 15.0
 
 # Dispatch helper/version modes before application configuration or logging.
 if __name__ == "__main__":
@@ -182,6 +193,8 @@ from uploader.watch_queue import (
     WATCH_QUEUE_RECONCILE_SECONDS,
     WATCH_QUEUE_STABILITY_MIN_SECONDS,
 )
+from uploader.watch_recovery import WatchRecoveryCoordinator, WatchRecoverySnapshot
+from uploader.watch_recovery_ui import WatchRecoveryReviewDialog
 from uploader.media import capability_notes, detect_suffix_capabilities, probe_file
 from uploader.models import (
     ActivityEvent,
@@ -202,7 +215,7 @@ from uploader.flight_jobs import (
     WATCHER_CONTINUATION_LIFETIME_SECONDS,
     connection_binding, read_document,
 )
-from uploader.flight_report_translations import tr
+from uploader.flight_report_translations import recovery_text, tr
 from uploader.photos_workspace import (
     PHOTOS_INFO_PANE_WIDTH, PHOTOS_TREE_WIDTH, PhotosWorkspace,
 )
@@ -5087,6 +5100,16 @@ class WatcherThread(threading.Thread):
         self._initial_hash_attempted: Set[str] = set()
         self._expected_source_hashes: Dict[str, str] = {}
         self._queue_directory_override: Optional[Path] = None
+        self._recovery_review_only = False
+        self._force_stop_requested = threading.Event()
+        self._retained_stop_publishing = threading.Event()
+        self._retained_stop_publication_done = threading.Event()
+        self._retained_stop_publication_done.set()
+        self._retained_stop_cutoff = 0.0
+        self._keep_sources_after_stop = False
+        self._recovery_gate = threading.RLock()
+        self._pipeline_lease: UploadPipelineLease | None = None
+        self.recovery_coordinator: WatchRecoveryCoordinator | None = None
 
     def stop(self) -> None:
         """Request cancellation while retaining the durable photograph queue.
@@ -5326,7 +5349,7 @@ class WatcherThread(threading.Thread):
         if journal is not None:
             with journal.lock:
                 self.accepted_paths = {Path(item.source.path) for item in journal.items()
-                                       if item.state != 'acknowledged'}
+                                       if item.state not in ('acknowledged', 'skipped')}
                 if self.drain_error:
                     journal.record_error(self.drain_error)
 
@@ -5365,9 +5388,14 @@ class WatcherThread(threading.Thread):
             return
         with journal.lock:
             self.persist_drain()
+            items = journal.items()
             head = journal.head()
             detail = {
                 'worker': self, 'queued_count': len(self.accepted_paths),
+                'acknowledged_count': sum(
+                    item.state == 'acknowledged' for item in items
+                ),
+                'skipped_count': sum(item.state == 'skipped' for item in items),
                 'session_id': journal.data['session_id'],
                 'target_binding': journal.binding,
                 'snapshot_at': time.time(),
@@ -5439,10 +5467,14 @@ class WatcherThread(threading.Thread):
             ValueError: The original journal or source boundary cannot be verified.
         """
         with self._scan_lock:
+            if self._force_stop_requested.is_set():
+                return 0
             recursive = getattr(self, '_watch_recursive_override', None)
             if recursive is None:
                 recursive = self.config.watch_recursive
             observations = discover_watch_sources(folder, SUPPORTED_SUFFIXES, recursive)
+            if self._force_stop_requested.is_set():
+                return 0
             if self._queue is None:
                 # --once owns a separate resumable queue; it intentionally has
                 # no startup exclusions. GUI capture always configures a session.
@@ -5550,6 +5582,223 @@ class WatcherThread(threading.Thread):
         log_method = getattr(logging, level if level in {"debug", "info", "warning", "error"} else "info")
         log_method(message)
 
+    def _initialize_recovery_coordinator(
+        self, pipeline: UploadPipelineLease,
+    ) -> None:
+        """Bind recovery decisions to this worker's existing upload leases.
+
+        Args:
+            pipeline (UploadPipelineLease): Held pipeline fence owned by run().
+
+        Returns:
+            None: Installs recovery callbacks for the restored exact queue.
+        """
+        journal = self._queue
+        if journal is None:
+            return
+
+        def receipt_lookup(item: WatchQueueItem) -> bool:
+            """Prove exact queue acknowledgement from persisted response history.
+
+            Args:
+                item (WatchQueueItem): Candidate exact queue head.
+
+            Returns:
+                bool: True only for a matching local success response.
+            """
+            return self._has_exact_saved_watch_receipt(item)
+
+        def linked_review(item: WatchQueueItem, disposition: str) -> None:
+            """Review only the marker owned by this exact queue generation.
+
+            Args:
+                item (WatchQueueItem): Exact reviewed queue head.
+                disposition (str): Durable receipt confirmation or explicit skip.
+
+            Returns:
+                None: Retains the linked uncertainty as reviewed evidence.
+            """
+            state = self.state
+            if state is None:
+                return
+            failure = state.data['failures'].get(item.source.path)
+            if (not isinstance(failure, dict)
+                    or failure.get('uncertain') is not True
+                    or failure.get('sha256') != item.sha256):
+                return
+            if failure.get('reviewed') is True:
+                return
+            if disposition == 'confirmed_by_receipt' and not receipt_lookup(item):
+                raise ValueError('Exact durable upload receipt is unavailable.')
+            _, marker = state.recovery_marker()
+            state.review_uncertainty(marker)
+
+        def earlier_blocker_details(
+            item: WatchQueueItem,
+        ) -> tuple[str, str, str]:
+            """Return exact prior uncertain marker identity without changing it.
+
+            Args:
+                item (WatchQueueItem): Current head blocked before dispatch.
+
+            Returns:
+                tuple[str, str, str]: Marker digest, prior path and attempted hash.
+            """
+            state = self.state
+            if state is None:
+                raise ValueError('Earlier linked upload history is unavailable.')
+            intent = journal.data.get('recovery_intent')
+            if isinstance(intent, dict) and intent.get('item_id') == item.item_id:
+                prior_path = intent.get('blocker_path')
+                prior_hash = intent.get('blocker_sha256')
+                prior_marker = intent.get('blocker_marker')
+                failure = state.data['failures'].get(prior_path)
+                if (isinstance(prior_path, str) and isinstance(prior_hash, str)
+                        and isinstance(prior_marker, str)
+                        and isinstance(failure, dict)
+                        and failure.get('uncertain') is True
+                        and failure.get('sha256') == prior_hash):
+                    original = dict(failure)
+                    original.pop('reviewed', None)
+                    encoded = json.dumps(
+                        [prior_path, original], ensure_ascii=True, sort_keys=True,
+                        separators=(',', ':'),
+                    ).encode('ascii')
+                    if hashlib.sha256(encoded).hexdigest() == prior_marker:
+                        return prior_marker, prior_path, prior_hash
+            marker_hash, marker = state.recovery_marker()
+            entry = next(((path, value) for path, value in state.data['failures'].items()
+                          if isinstance(value, dict)
+                          and value.get('uncertain') is True
+                          and value.get('reviewed') is not True
+                          and value.get('sha256') == marker_hash), None)
+            if entry is None:
+                raise ValueError('Earlier linked upload identity is unavailable.')
+            return marker, entry[0], marker_hash
+
+        def earlier_blocker_review(item: WatchQueueItem, marker: str) -> None:
+            """Review the existing older linked uncertainty under its lease.
+
+            Args:
+                item (WatchQueueItem): Never-dispatched current head B.
+                marker (str): Exact earlier uncertainty marker shown to the user.
+
+            Returns:
+                None: Marks only the existing earlier uncertainty as reviewed.
+            """
+            state = self.state
+            if state is None:
+                raise ValueError('Earlier linked upload history is unavailable.')
+            intent = journal.data.get('recovery_intent')
+            if not isinstance(intent, dict):
+                raise ValueError('Earlier linked review intent is unavailable.')
+            prior_path = intent.get('blocker_path')
+            prior_hash = intent.get('blocker_sha256')
+            expected_marker = intent.get('blocker_marker')
+            if not isinstance(prior_path, str) or not isinstance(prior_hash, str):
+                raise ValueError('Earlier linked review identity is unavailable.')
+            if expected_marker != marker:
+                raise ValueError('Earlier linked review marker changed.')
+            failure = state.data['failures'].get(prior_path)
+            if (not isinstance(failure, dict) or failure.get('uncertain') is not True
+                    or failure.get('sha256') != prior_hash):
+                raise ValueError('Earlier linked upload marker changed.')
+            if failure.get('reviewed') is True:
+                reviewed_entry = dict(failure)
+                reviewed_entry.pop('reviewed', None)
+                encoded = json.dumps(
+                    [prior_path, reviewed_entry], ensure_ascii=True, sort_keys=True,
+                    separators=(',', ':'),
+                ).encode('ascii')
+                if hashlib.sha256(encoded).hexdigest() != marker:
+                    raise ValueError('Earlier linked upload marker changed.')
+                return
+            _, current_marker = state.recovery_marker()
+            if current_marker != marker:
+                raise ValueError('Earlier linked upload marker changed.')
+            state.review_uncertainty(marker)
+
+        mode = 'linked' if self.linked_target is not None else 'legacy'
+
+        def current_mode() -> str:
+            """Read the live GUI mode and reject unavailable/stale ownership.
+
+            Returns:
+                str: Current linked/legacy mode, or unavailable on mismatch.
+            """
+            admission = getattr(self, '_gui_admission', None)
+            if admission is None:
+                return mode
+            try:
+                state = admission[0].view().state
+            except (ModeCoordinatorError, RuntimeError):
+                return 'unavailable'
+            if state == 'legacy':
+                return 'legacy'
+            if state == 'linked_active':
+                return 'linked'
+            return 'unavailable'
+
+        def current_binding() -> str:
+            """Checkpoint current worker admission before recovery decisions.
+
+            Returns:
+                str: Exact admitted binding, or unavailable when config changed.
+            """
+            if self._once_work is not None:
+                try:
+                    self._once_work.checkpoint()
+                except (ModeCoordinatorError, ValueError, RuntimeError):
+                    return 'unavailable'
+            return journal.binding if current_mode() == mode else 'unavailable'
+
+        self.recovery_coordinator = WatchRecoveryCoordinator(
+            journal, pipeline, self._linked_lease, receipt_lookup,
+            lambda: (self._pending_transport is not None
+                     and not self._pending_transport.is_set()),
+            current_binding, current_mode, linked_review,
+            earlier_blocker_details=earlier_blocker_details,
+            earlier_blocker_review=earlier_blocker_review,
+            decision_gate=self._recovery_gate,
+        )
+
+    def _has_exact_saved_watch_receipt(self, item: WatchQueueItem) -> bool:
+        """Prove a queue-bound server insertion from durable linked history.
+
+        Args:
+            item (WatchQueueItem): Exact item whose dispatch may have completed.
+
+        Returns:
+            bool: True only for its validated fresh-insert response and image ID.
+        """
+        state = self.state
+        target = self.linked_target
+        if state is None or target is None or not item.sha256:
+            return False
+        record = state.data['uploaded_paths'].get(item.source.path)
+        response = record.get('response', {}) if isinstance(record, dict) else {}
+        image_ids = response.get('image_ids') if isinstance(response, dict) else None
+        filenames = response.get('filenames') if isinstance(response, dict) else None
+        return bool(
+            isinstance(record, dict)
+            and isinstance(response, dict)
+            and record.get('sha256') == item.sha256
+            and response.get('queue_item_id') == item.item_id
+            and response.get('ok') is True
+            and response.get('upload_evidence') == 'fresh_insert_v1'
+            and type(response.get('gallery_id')) is int
+            and response.get('gallery_id') == target.gallery_id
+            and type(response.get('uploaded')) is int
+            and response.get('uploaded') == 1
+            and type(response.get('scanned')) is int
+            and response.get('scanned') >= 0
+            and isinstance(image_ids, list) and len(image_ids) == 1
+            and type(image_ids[0]) is int
+            and 0 < image_ids[0] <= LINKING_GALLERY_ID_MAX
+            and isinstance(filenames, list) and len(filenames) == 1
+            and isinstance(filenames[0], str) and bool(filenames[0])
+        )
+
     def run(self) -> None:
         """Run the watcher while retaining its target lease through shutdown.
 
@@ -5559,6 +5808,7 @@ class WatcherThread(threading.Thread):
         """
         gui_work: Optional[CoordinatedWork] = None
         pipeline = UploadPipelineLease(CONFIG_DIR)
+        self._pipeline_lease = pipeline
         try:
             pipeline.acquire()
             gui_admission = getattr(self, '_gui_admission', None)
@@ -5588,7 +5838,9 @@ class WatcherThread(threading.Thread):
             finally:
                 self.emit('error', self.drain_error)
         finally:
+            self._retained_stop_publication_done.wait()
             pipeline.release()
+            self._pipeline_lease = None
             try:
                 if gui_work is not None:
                     gui_work.close()
@@ -5652,6 +5904,13 @@ class WatcherThread(threading.Thread):
             self.drain_only = self.drain_requested_at > 0
             if self.drain_only:
                 self.drain_event.set()
+        pipeline = self._pipeline_lease
+        if pipeline is not None and self._queue is not None:
+            self._initialize_recovery_coordinator(pipeline)
+            if self.recovery_coordinator is not None:
+                self.recovery_coordinator.repair_interrupted_decision()
+            if self._queue.data.get('retained_stop') is True:
+                self._recovery_review_only = True
         self._diagnostic_phase = 'startup'
         recursive_override = getattr(self, '_watch_recursive_override', None)
         recursive = (self.config.watch_recursive if recursive_override is None
@@ -5752,7 +6011,8 @@ class WatcherThread(threading.Thread):
         if self.stop_event.is_set() or self._update_pause_requested():
             self.persist_drain()
             return
-        self._producer_stop.clear()
+        if not self._force_stop_requested.is_set():
+            self._producer_stop.clear()
         self._ensure_capture_producer(folder)
         try:
             while (not self.stop_event.is_set()
@@ -5823,12 +6083,31 @@ class WatcherThread(threading.Thread):
             before = self._queue.head()
             if before is None:
                 return
+            while (self._recovery_review_only and not self.stop_event.is_set()
+                   and not self._update_pause_requested()):
+                self._consumer_wake.wait(WATCHER_UPDATE_PAUSE_POLL_SECONDS)
+                self._consumer_wake.clear()
             self._consume_head(folder, upload_url)
             after = self._queue.head()
             if after is not None and after.item_id == before.item_id:
                 return
 
     def _consume_head(self, folder: Path, upload_url: str) -> None:
+        """Serialize queue advancement against one explicit recovery decision.
+
+        Args:
+            folder (Path): Original capture folder for direct --once reconciliation.
+            upload_url (str): Captured legacy upload endpoint or linked issuer.
+
+        Returns:
+            None: Advances one head while excluding concurrent review mutation.
+        """
+        with self._recovery_gate:
+            self._consume_head_under_recovery_gate(folder, upload_url)
+
+    def _consume_head_under_recovery_gate(
+        self, folder: Path, upload_url: str,
+    ) -> None:
         """Advance only the oldest durable source generation through its pipeline.
 
         Args:
@@ -5849,6 +6128,9 @@ class WatcherThread(threading.Thread):
             self.drain_error = 'Legacy queue has no provable FIFO order; review required.'
             self.emit_queue_snapshot()
             return
+        if journal.data.get('retained_stop') is True:
+            self._recovery_review_only = True
+            return
         item = journal.head()
         if item is None:
             return
@@ -5858,11 +6140,7 @@ class WatcherThread(threading.Thread):
         if item.state == 'uncertain':
             # A locally saved live acknowledgement can survive a subsequent
             # queue-publication failure. A hash-only inventory match cannot.
-            record = (self.state.data['uploaded_paths'].get(str(path), {})
-                      if self.linked_target is not None else {})
-            result = record.get('response', {})
-            if (record.get('sha256') == item.sha256
-                    and result.get('queue_item_id') == item.item_id):
+            if self._has_exact_saved_watch_receipt(item):
                 self.acknowledge_photo(path)
             return
         if item.state == 'auth_required':
@@ -5908,7 +6186,7 @@ class WatcherThread(threading.Thread):
             item = journal.update(item, sha256=file_hash, state='preparing', phase='hash')
             self._active_queue_item = item
             if self.linked_target is not None and self.state.has_unresolved_upload():
-                journal.update(item, state='uncertain', phase='recovery',
+                journal.update(item, state='blocked', phase='prior_upload_review',
                                reason='Earlier linked upload has an unknown result; review required.')
                 return
             if self.linked_target is not None and self.state.has_uncertain_source(path, file_hash):
@@ -5978,7 +6256,9 @@ class WatcherThread(threading.Thread):
                       f'uploaded={payload.get("uploaded", 0)}, '
                       f'scanned={payload.get("scanned", 0)}, '
                       f'renamed={payload.get("renamed", 0)}')
-            if self.config.delete_uploaded_files:
+            if (self.config.delete_uploaded_files
+                    and not self._keep_sources_after_stop
+                    and journal.data.get('retained_stop') is not True):
                 self.delete_uploaded_file(path, payload, source_snapshot)
         except (ModeCoordinatorError, GalleryKeyRedirectError):
             raise
@@ -6035,6 +6315,10 @@ class WatcherThread(threading.Thread):
         item = self._active_queue_item
         if item is None or not item.sha256:
             raise ValueError('Upload has no owned FIFO head.')
+        if self._force_stop_requested.is_set():
+            raise UploadPreparationError(
+                'Stop was requested before this upload began.'
+            )
         self._queue.update(item, state='dispatching', phase='upload', reason='')
         self._watch_dispatch_started = True
         if self.linked_target is not None:
@@ -8106,6 +8390,7 @@ class WatcherApp:
         self.monitor_detail = "No background worker is active."
         self.log_tags_ready = False
         self.watcher_action_button: Optional["ttk.Button"] = None
+        self.watch_recovery_action_button: Optional["ttk.Button"] = None
         self._contextual_watch_target: LinkedUploadTarget | None = None
         self._contextual_watch_is_flight = False
         self._watcher_key_closing = False
@@ -8700,6 +8985,19 @@ class WatcherApp:
                 and getattr(self, '_resume_retry_available', False)):
             labels[state] = '▶  Resume Watcher'
         self.watcher_action_button.configure(text=labels[state])
+        recovery_button = getattr(self, 'watch_recovery_action_button', None)
+        if recovery_button is not None:
+            worker = self.worker
+            should_resume = (
+                state in ('pending', 'blocked')
+                and (worker is None or not worker.is_alive())
+            )
+            recovery_button.configure(text=(
+                recovery_text(self.flights.ui_language.get(),
+                              'watch_recovery_resume_pending')
+                if should_resume else
+                tr(self.flights.ui_language.get(), 'review_pending_uploads')
+            ))
         indicator = getattr(self, "watcher_capture_label", None)
         if indicator is not None:
             if state == "active":
@@ -9815,16 +10113,22 @@ class WatcherApp:
             actions, '↻', self.refresh_upload_queue,
             tr(self.flights.ui_language.get(), 'watch_queue_refresh_hint'),
         ).pack(side='left', padx=(8, 0))
-        icon_button(
+        ttk.Button(
             actions,
-            "⌕",
-            self.dry_run_watch_folder,
-            "Check existing files without uploading or changing saved state",
-        ).pack(side="left", padx=(8, 0))
+            text=recovery_text(
+                self.flights.ui_language.get(), 'watch_inspection_title',
+            ),
+            command=self.dry_run_watch_folder,
+        ).pack(side='left', padx=(8, 0))
         ttk.Label(
             card, textvariable=self.watch_queue_status_var, style='Muted.TLabel',
             wraplength=WATCH_QUEUE_STATUS_WRAP_PIXELS, justify='left',
         ).grid(row=6, column=0, sticky='w', pady=(4, 0))
+        self.watch_recovery_action_button = ttk.Button(
+            actions, text=tr(self.flights.ui_language.get(), 'review_pending_uploads'),
+            command=self.open_watch_recovery_review,
+        )
+        self.watch_recovery_action_button.pack(side='right')
         utc = ttk.Frame(card, style="Card.TFrame")
         self.watcher_utc_row = utc
         utc.grid(row=5, column=0, sticky="w", pady=(6, 0))
@@ -10891,7 +11195,7 @@ class WatcherApp:
                 self.flights.import_bindings.discard_unbound_preflight(
                     self.job_store, self.manual_plan.job.id,
                 )
-            except (OSError, ValueError, RuntimeError) as exc:
+            except (OSError, ValueError, RuntimeError):
                 messagebox.showwarning("Import recovery", str(exc))
                 return
         self.manual_paths = []
@@ -10947,7 +11251,7 @@ class WatcherApp:
                 self.flights.import_bindings.discard_unbound_preflight(
                     self.job_store, self.manual_plan.job.id,
                 )
-            except (OSError, ValueError, RuntimeError) as exc:
+            except (OSError, ValueError, RuntimeError):
                 messagebox.showwarning("Import recovery", str(exc))
                 return
         self.manual_plan = None
@@ -12943,11 +13247,14 @@ class WatcherApp:
             self._discard_update_resume_intent(explicit=True)
         self._cancel_ordinary_restart_intent()
 
-    def resume_flight_photos(self, directory: Path) -> Optional[WatcherThread]:
+    def resume_flight_photos(
+        self, directory: Path, *, review_only: bool = False,
+    ) -> Optional[WatcherThread]:
         """Resume only unfinished photographs from the bound session queue.
 
         Args:
             directory (Path): Owned, connection-matching flight session folder.
+            review_only (bool): Hold network admission until explicit review action.
 
         Returns:
             Optional[WatcherThread]: Started drain worker, or None for no queue.
@@ -12994,6 +13301,7 @@ class WatcherApp:
         )
         try:
             worker.configure_drain(directory, (), resume=True)
+            worker._recovery_review_only = review_only
             worker.request_drain()
             worker.start()
         except Exception:
@@ -14547,24 +14855,342 @@ class WatcherApp:
         threading.Thread(target=prepare, name='PHPGalleryQueueRecovery', daemon=True).start()
 
     def dry_run_watch_folder(self) -> None:
-        """Inspect an explicitly chosen watch folder without uploading.
+        """Inspect a selected watch folder on a background thread.
 
         Returns:
-            None: Reports existing files or asks for a readable folder.
+            None: Queues separate findings without changing Watcher state.
         """
         selected = self.watched_folder_var.get().strip()
         folder = Path(selected)
         if not selected or not folder.is_dir():
-            messagebox.showwarning("Watch folder", "Choose an existing folder first.")
+            messagebox.showwarning(
+                recovery_text(self.flights.ui_language.get(), 'watch_inspection_title'),
+                recovery_text(
+                    self.flights.ui_language.get(), 'watch_inspection_missing',
+                ).format(folder=selected),
+            )
             return
-        result = discover_folder(folder, SUPPORTED_SUFFIXES, bool(self.watch_recursive_var.get()))
-        supported = len(result.items)
-        unsupported = sum(result.unsupported.values())
-        self.watch_ignored_var.set(f"Would ignore on start: {supported}")
-        self.watch_last_scan_var.set("Last check: " + time.strftime("%Y-%m-%d %H:%M:%S"))
-        detail = f"Watch-folder dry run: {supported} supported existing file(s) would be ignored at watcher start; {unsupported} unsupported file(s) found."
-        self.write_log(detail, "system")
-        self.record_activity("info", detail, "watcher")
+
+        recursive = bool(self.watch_recursive_var.get())
+
+        def inspect() -> None:
+            """Collect read-only findings without touching the active queue.
+
+            Returns:
+                None: Publishes findings or a bounded inspection error.
+            """
+            try:
+                result = discover_folder(folder, SUPPORTED_SUFFIXES, recursive)
+                self.events.put({
+                    'kind': 'watch_folder_inspection_complete',
+                    'payload': {
+                        'folder': str(folder), 'supported': len(result.items),
+                        'unsupported': sum(result.unsupported.values()),
+                        'error': '',
+                    },
+                })
+            except (OSError, ValueError, RuntimeError):
+                self.events.put({
+                    'kind': 'watch_folder_inspection_complete',
+                    'payload': {
+                        'folder': str(folder), 'supported': 0,
+                        'unsupported': 0,
+                        'error': 'failed',
+                    },
+                })
+
+        threading.Thread(
+            target=inspect, name='PHPGalleryFolderInspection', daemon=True,
+        ).start()
+
+    def open_watch_recovery_review(self) -> None:
+        """Open recovery for the worker that still owns the exact session.
+
+        Returns:
+            None: Presents an immutable queue head only when its leases are held.
+        """
+        worker = self.worker
+        coordinator = (getattr(worker, 'recovery_coordinator', None)
+                       if worker is not None else None)
+        if worker is not None and not self._watch_recovery_owner_held(worker):
+            # run() releases both leases before a dead worker can be reviewed.
+            coordinator = None
+        if coordinator is None:
+            if worker is not None and worker.is_alive():
+                self.root.after(
+                    WATCHER_EVENT_IDLE_POLL_MS,
+                    lambda: self._open_recovery_when_ready(worker),
+                )
+                return
+            directory = (worker.drain_manifest.parent
+                         if worker is not None and worker.drain_manifest is not None
+                         else None)
+            if directory is None:
+                try:
+                    plans = self.flights.pending(binding=self.flights.binding())
+                except (OSError, ValueError, RuntimeError):
+                    plans = []
+                if len(plans) == 1:
+                    directory = plans[0].directory
+            if directory is None:
+                self.write_log('No unambiguous pending Watcher session is available.', 'warning')
+                return
+            try:
+                resumed = self.resume_flight_photos(directory, review_only=True)
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.write_log('Pending Watcher session needs review: ' + str(exc), 'warning')
+                return
+            if resumed is None:
+                self.write_log('No pending uploads remain in the original session.', 'info')
+                return
+            self.worker = resumed
+            self.write_log('Resumed the exact pending Watcher session for review.', 'info')
+            self.root.after(
+                WATCHER_EVENT_IDLE_POLL_MS,
+                lambda: self._open_recovery_when_ready(resumed),
+            )
+            return
+        self._show_watch_recovery_dialog(worker, coordinator)
+
+    def _open_recovery_when_ready(self, worker: WatcherThread) -> None:
+        """Wait for restored worker ownership before presenting its review.
+
+        Args:
+            worker (WatcherThread): Exact resumed session requiring review.
+
+        Returns:
+            None: Opens review only after the worker has its shared lease.
+        """
+        if self.worker is not worker or self.exiting:
+            return
+        coordinator = worker.recovery_coordinator
+        if coordinator is None or not self._watch_recovery_owner_held(worker):
+            if worker.is_alive():
+                self.root.after(
+                    WATCHER_EVENT_IDLE_POLL_MS,
+                    lambda: self._open_recovery_when_ready(worker),
+                )
+            return
+        self._show_watch_recovery_dialog(worker, coordinator)
+
+    @staticmethod
+    def _watch_recovery_owner_held(worker: WatcherThread) -> bool:
+        """Check whether the worker still owns every required recovery lease.
+
+        Args:
+            worker (WatcherThread): Current worker associated with a coordinator.
+
+        Returns:
+            bool: True while its pipeline and any linked target lock remain held.
+        """
+        pipeline = getattr(worker, '_pipeline_lease', None)
+        linked = getattr(worker, '_linked_lease', None)
+        return bool(
+            pipeline is not None and pipeline._native is not None
+            and (linked is None or linked._native is not None)
+        )
+
+    def _show_watch_recovery_dialog(
+        self, worker: WatcherThread, coordinator: WatchRecoveryCoordinator,
+    ) -> None:
+        """Present a recovery dialog for one exact worker-owned queue.
+
+        Args:
+            worker (WatcherThread): Session currently owning both local leases.
+            coordinator (WatchRecoveryCoordinator): Lease-bound decision service.
+
+        Returns:
+            None: Opens the localized dialog and binds its wake callback.
+        """
+        target = worker.linked_target
+        target_label = ('Linked gallery' if target is not None else 'Configured gallery')
+        if target is not None:
+            target_label = str(target.title)
+        language = self.flights.ui_language.get()
+        self._watch_recovery_dialog = WatchRecoveryReviewDialog(
+            self.root, coordinator, language, target_label,
+            on_resolved=lambda: self._watch_recovery_resolved(worker),
+            remote_loader=(
+                lambda snapshot: self._load_watch_recovery_remote(worker, snapshot)
+                if worker.linked_target is not None else None
+            ),
+        )
+
+    def _load_watch_recovery_remote(
+        self, worker: WatcherThread, snapshot: WatchRecoverySnapshot,
+    ) -> tuple[bytes, str] | None:
+        """Load the last exact receipt thumbnail or a complete catalog observation.
+
+        Args:
+            worker (WatcherThread): Current exact linked target owner.
+            snapshot (WatchRecoverySnapshot): Immutable current queue snapshot.
+
+        Returns:
+            tuple[bytes, str] | None: Fresh thumbnail and evidence label, or None
+                when authorization, complete traversal or preview bounds fail.
+                Returned bytes are never receipt evidence for a decision.
+        """
+        target = worker.linked_target
+        if target is None or not target.session.can_upload():
+            return None
+        binding = target.binding()
+        items = worker._queue.items() if worker._queue is not None else []
+        confirmed = next((item for item in reversed(items)
+                          if item.state == 'acknowledged'
+                          and item.sequence == snapshot.last_confirmed_sequence), None)
+        photo_id: int | None = None
+        evidence_kind = 'observation'
+        if confirmed is not None and worker.state is not None:
+            record = worker.state.data['uploaded_paths'].get(confirmed.source.path, {})
+            response = record.get('response', {}) if isinstance(record, dict) else {}
+            image_ids = response.get('image_ids') if isinstance(response, dict) else None
+            if (worker._has_exact_saved_watch_receipt(confirmed)
+                    and isinstance(image_ids, list) and len(image_ids) == 1):
+                photo_id = image_ids[0]
+                evidence_kind = 'receipt'
+        if photo_id is None:
+            started = time.monotonic()
+            after_id: int | None = None
+            last_photo = None
+            for _page_index in range(WATCH_RECOVERY_PREVIEW_PAGE_LIMIT):
+                if (time.monotonic() - started
+                        >= WATCH_RECOVERY_PREVIEW_TIME_LIMIT_SECONDS
+                        or target.binding() != binding
+                        or not target.session.can_upload()):
+                    return None
+                page = target.session.media_page(target.gallery_id, after_id)
+                if target.binding() != binding:
+                    return None
+                if page.photos:
+                    last_photo = page.photos[-1]
+                after_id = page.next_after
+                if after_id is None:
+                    break
+            else:
+                return None
+            if last_photo is None:
+                return None
+            photo_id = last_photo.image_id
+        if target.binding() != binding or not target.session.can_upload():
+            return None
+        body, _mime = target.session.media_photo(
+            target.gallery_id, photo_id, True,
+            cache_eligible=False, preload_eligible=False,
+        )
+        if target.binding() != binding:
+            return None
+        return body, evidence_kind
+
+    def _watch_recovery_resolved(self, worker: WatcherThread) -> None:
+        """Refresh queue state and wake only the reviewed original consumer.
+
+        Args:
+            worker (WatcherThread): Exact session owner shown in the dialog.
+
+        Returns:
+            None: Updates compact status and wakes its FIFO consumer.
+        """
+        if self.worker is not worker or worker._queue is None:
+            return
+        if not worker.is_alive() or worker.stop_event.is_set():
+            return
+        resume_stopped_producer = worker._force_stop_requested.is_set()
+        worker._recovery_review_only = bool(
+            worker._queue.data.get('retained_stop') is True
+            or worker._retained_stop_publishing.is_set()
+        )
+        if (not worker._retained_stop_publishing.is_set()
+                and not worker._recovery_review_only):
+            worker._force_stop_requested.clear()
+            worker._retained_stop_cutoff = 0.0
+            if resume_stopped_producer:
+                worker._producer_stop.clear()
+                worker._producer_wake.set()
+        worker.emit_queue_snapshot()
+        if not worker._recovery_review_only:
+            worker._consumer_wake.set()
+        if (not worker._recovery_review_only
+                and getattr(self, '_queue_recovery_finish_requested', False)):
+            self._queue_recovery_finish_requested = False
+            self.flights.begin(
+                False, automatic=True,
+                photos_only=(worker.linked_target is not None
+                             and not self.contextual_watcher_is_flight()),
+            )
+
+    def stop_and_keep_watch_pending(
+        self, on_persisted: Callable[[bool], None] | None = None,
+    ) -> bool:
+        """Persist cutoff and cancellation while retaining any live transport.
+
+        Args:
+            on_persisted (Callable[[bool], None] | None): UI callback receiving
+                the durable readback result after background publication.
+
+        Returns:
+            bool: True when publication was scheduled for the active session.
+        """
+        worker = self.worker
+        if worker is None or worker._queue is None:
+            if on_persisted is not None:
+                on_persisted(False)
+            return False
+        if (not worker.is_alive()
+                or not self._watch_recovery_owner_held(worker)):
+            if on_persisted is not None:
+                on_persisted(False)
+            return False
+        if worker._retained_stop_publishing.is_set():
+            return True
+        if not worker._retained_stop_cutoff:
+            worker._retained_stop_cutoff = time.time()
+        cutoff = worker._retained_stop_cutoff
+        worker._recovery_review_only = True
+        worker._force_stop_requested.set()
+        worker._retained_stop_publishing.set()
+        worker._retained_stop_publication_done.clear()
+        worker._keep_sources_after_stop = True
+        worker._producer_stop.set()
+        worker._producer_wake.set()
+        self._set_watcher_recording(False)
+        self.status_var.set(recovery_text(
+            self.flights.ui_language.get(), 'watch_stop_stopping',
+        ))
+
+        def persist_stop() -> None:
+            """Persist retained cutoff without blocking Tk or releasing transport.
+
+            Returns:
+                None: Reports durable retention outcome to the UI event owner.
+            """
+            try:
+                worker._queue.stop_and_retain(cutoff)
+                worker.stop()
+                payload = {'worker': worker, 'error': ''}
+            except Exception:  # noqa: BLE001
+                payload = {
+                    'worker': worker,
+                    'error': 'Pending uploads could not be retained safely.',
+                }
+            finally:
+                worker._retained_stop_publishing.clear()
+                worker._retained_stop_publication_done.set()
+            payload['on_persisted'] = on_persisted
+            self.events.put({
+                'kind': 'watch_stop_retained', 'payload': payload,
+            })
+
+        try:
+            threading.Thread(
+                target=persist_stop, name='PHPGalleryRetainWatcherStop', daemon=True,
+            ).start()
+        except RuntimeError:
+            worker._retained_stop_publishing.clear()
+            worker._retained_stop_publication_done.set()
+            if on_persisted is not None:
+                on_persisted(False)
+            return False
+        return True
 
     def launch_manual_job(
         self, job: ImportJob, paths: List[Path], config: WatcherConfig,
@@ -15339,6 +15965,58 @@ class WatcherApp:
             if isinstance(event, dict):
                 kind = str(event.get("kind", "") or "")
                 payload = event.get("payload", {}) if isinstance(event.get("payload", {}), dict) else {}
+                if kind == 'watch_folder_inspection_complete':
+                    language = self.flights.ui_language.get()
+                    error_message = str(payload.get('error', '') or '')
+                    if error_message:
+                        messagebox.showwarning(
+                            recovery_text(language, 'watch_inspection_title'),
+                            recovery_text(
+                                language, 'watch_inspection_failed',
+                            ).format(reason=recovery_text(
+                                language, 'watch_inspection_failure_reason',
+                            )),
+                        )
+                    else:
+                        messagebox.showinfo(
+                            recovery_text(language, 'watch_inspection_title'),
+                            recovery_text(language, 'watch_inspection_result').format(
+                                folder=payload.get('folder', ''),
+                                supported=int(payload.get('supported', 0)),
+                                unsupported=int(payload.get('unsupported', 0)),
+                            ),
+                        )
+                    continue
+                if kind == 'watch_stop_retained':
+                    if payload.get('worker') is not self.worker:
+                        continue
+                    callback = payload.get('on_persisted')
+                    if callable(callback):
+                        callback(not bool(payload.get('error')))
+                    if payload.get('error'):
+                        self.status_var.set(str(payload['error']))
+                        self.write_log(str(payload['error']), 'error')
+                    else:
+                        pending = payload['worker']._pending_transport
+                        if pending is not None and not pending.is_set():
+                            self.status_var.set(
+                                recovery_text(
+                                    self.flights.ui_language.get(),
+                                    'watch_stop_transport_active',
+                                ),
+                            )
+                        else:
+                            self.status_var.set(
+                                recovery_text(
+                                    self.flights.ui_language.get(),
+                                    'watch_finish_retained',
+                                ),
+                            )
+                            self.write_log(
+                                'Watcher stopped; queue retained for recovery.', 'warning',
+                            )
+                    self.refresh_watcher_action()
+                    continue
                 if (kind.startswith('watcher_resume_')
                         and 'generation' in payload
                         and payload.get('generation') != getattr(
@@ -15554,6 +16232,15 @@ class WatcherApp:
                             False, self.worker.drain_error
                             or "Watcher stopped before capture began.",
                         )
+                    elif (kind == 'watcher_start_finished'
+                          and self.worker._queue is not None
+                          and self.worker._queue.data.get('retained_stop') is True):
+                        self.status_var.set(
+                            recovery_text(
+                                self.flights.ui_language.get(),
+                                'watch_finish_retained',
+                            ),
+                        )
                     self.refresh_watcher_action()
                     continue
                 if 'preflight_owner' in payload:
@@ -15635,10 +16322,16 @@ class WatcherApp:
                         count = int(payload.get('queued_count', self._watcher_queued_count or 0))
                         filename = str(payload.get('head_file', ''))
                         retry_at = float(payload.get('retry_at', 0) or 0)
+                        acknowledgements = int(payload.get('acknowledged_count', 0) or 0)
+                        skipped = int(payload.get('skipped_count', 0) or 0)
+                        progress_at = float(payload.get('last_progress', 0) or 0)
                         self.watch_queue_status_var.set(
                             f'{count} · #{payload.get("head_sequence", 0)} {filename} · {state}'
                             + (' · ' + time.strftime('%H:%M:%S', time.localtime(retry_at))
                                if retry_at else '')
+                            + f' · {acknowledgements} confirmed / {skipped} skipped'
+                            + (' · progress ' + time.strftime('%H:%M:%S', time.localtime(progress_at))
+                               if progress_at else '')
                             + (' · ' + str(payload['reason']) if payload.get('reason') else '')
                         )
                         if payload.get('last_scan'):

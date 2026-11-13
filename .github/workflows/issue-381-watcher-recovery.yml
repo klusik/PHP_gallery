@@ -1,0 +1,228 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-381-watcher-recovery.yml
+# Module Type: Issue-Scoped Source Qualification Workflow
+# Purpose: Verify Watcher recovery on isolated hosted Linux and Windows runners.
+# Responsibilities:
+#   - Bind central source and complete WinApp evidence to the exact feature SHA
+#   - Offer an opt-in Chromium-only diagnostic without rerunning those owners
+#   - Retain native recovery screenshots and failed child diagnostics
+#   - Perform no protected-branch publication, installer build or deployment
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Issue 381 Watcher recovery
+
+on:
+  push:
+    branches:
+      - feature/381-winapp-1-1-2
+  workflow_dispatch:
+    inputs:
+      browser_diagnostics:
+        description: Run only the required Chromium browser-map diagnostic
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue-381-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.browser_diagnostics == true && 'browser' || 'qualification' }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    if: github.event_name != 'workflow_dispatch' || inputs.browser_diagnostics != true
+    name: Recovery source contracts
+    runs-on: ubuntu-24.04
+    # Type: int. Units: minutes. Scope: one source-contract job.
+    # Consumers: Actions timeout. Rationale: fifteen minutes bounds central
+    # whole-tree scanners without changing their existing per-owner limits.
+    timeout-minutes: 15
+    env:
+      PHP_GALLERY_AUDIT_CANDIDATE: ${{ github.sha }}
+      PHP_GALLERY_SOURCE_OWNER: shared-source-contracts
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_sqlite, curl, gd, zip, dom, mbstring, intl
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Verify immutable source and run central contracts
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          source_base="$(git merge-base HEAD origin/main)"
+          test -n "$source_base"
+          export PHP_GALLERY_SOURCE_BASE="$source_base"
+          php scripts/audit.php --profile=source-contracts
+      - name: Retain source outcomes and child diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-381-source-${{ github.sha }}
+          path: cache/test-audit/**/*
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: source evidence artifact.
+          # Consumers: Actions retention. Rationale: seven days permits review
+          # and focused repair without retaining temporary runner data forever.
+          retention-days: 7
+
+  browser-diagnostics:
+    name: Targeted Chromium browser diagnostics
+    if: github.event_name == 'workflow_dispatch' && inputs.browser_diagnostics == true
+    runs-on: ubuntu-24.04
+    # Type: int. Units: minutes. Scope: one targeted browser diagnostic.
+    # Consumers: Actions timeout. Rationale: matches the required FULL Chromium
+    # owner and bounds browser-map fixtures without changing owner limits.
+    timeout-minutes: 25
+    env:
+      PHP_GALLERY_AUDIT_CANDIDATE: ${{ github.sha }}
+      PHP_GALLERY_BROWSER_REQUIRED: '1'
+      GALLERY_WORKFLOW_BROWSER: disabled
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
+          ini-values: error_reporting=E_ALL, display_errors=On
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Discover and verify required Chromium
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          source_base="$(git merge-base HEAD origin/main)"
+          test -n "$source_base"
+          echo "PHP_GALLERY_SOURCE_BASE=$source_base" >> "$GITHUB_ENV"
+          browser_path=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if browser_path="$(command -v "$candidate")"; then
+              break
+            fi
+          done
+          if [[ -z "$browser_path" || ! -x "$browser_path" ]]; then
+            echo 'BLOCKED required Chromium executable was not found on the runner.' >&2
+            exit 1
+          fi
+          "$browser_path" --version
+          printf 'PHP_GALLERY_BROWSER=%s\n' "$browser_path" >> "$GITHUB_ENV"
+      - name: Run the central browser-map audit
+        run: php scripts/audit.php --suite=browser-map
+      - name: Retain browser diagnostics and audit evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-381-browser-${{ github.sha }}
+          path: |
+            cache/test-audit/**/*
+            cache/test-audit/latest.json
+            cache/test-audit/latest.md
+            cache/test-audit/**/browser-map.log
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: targeted browser evidence artifact.
+          # Consumers: Actions retention. Rationale: seven days supports focused
+          # diagnosis while limiting disposable runner evidence retention.
+          retention-days: 7
+
+  winapp:
+    if: github.event_name != 'workflow_dispatch' || inputs.browser_diagnostics != true
+    name: Complete WinApp recovery (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Type: int. Units: minutes. Scope: one complete WinApp runner.
+    # Consumers: Actions timeout. Rationale: fifteen minutes covers setup and
+    # the existing 480-second serial-partition coordinator, without raising it.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+    env:
+      PHP_GALLERY_REQUIRE_PILLOW: '1'
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      PHP_GALLERY_WATCH_RECOVERY_QA_DIR: cache/test-audit/watch-recovery
+      PHP_GALLERY_REQUIRE_WATCH_RECOVERY_TK: ${{ matrix.os == 'windows-2025' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        id: python
+        with:
+          python-version: '3.14'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+      - name: Install declared image and report dependencies
+        shell: pwsh
+        run: |
+          $requirements = @(
+            Get-Content winapp/requirements.txt |
+              Where-Object { $_ -match '^(Pillow|reportlab|pypdf)' }
+          )
+          # Three source-owned entries cover image and report fixture imports.
+          if ($requirements.Count -ne 3) {
+            throw 'Missing declared image/report fixture requirements.'
+          }
+          python -m pip install @requirements
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run complete central WinApp discovery in existing partitions
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:EXPECTED_SHA) {
+            throw 'Recovery checkout SHA mismatch.'
+          }
+          $sourceBase = git merge-base HEAD origin/main
+          if ($LASTEXITCODE -ne 0 -or -not $sourceBase) {
+            throw 'Immutable source base is unavailable.'
+          }
+          $env:PHP_GALLERY_SOURCE_BASE = $sourceBase.Trim()
+          php scripts/audit.php --suite=winapp-partitioned
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Retain complete outcomes, recovery screenshots and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-381-winapp-${{ matrix.os }}-${{ github.sha }}
+          path: cache/test-audit/**/*
+          if-no-files-found: error
+          # Type: int. Units: days. Scope: native/portable evidence artifact.
+          # Consumers: Actions retention. Rationale: seven days permits source
+          # and screenshot review while keeping disposable evidence bounded.
+          retention-days: 7

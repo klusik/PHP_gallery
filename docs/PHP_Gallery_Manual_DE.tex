@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.1.1}
-\newcommand{\manualdate}{12.~November~2026}
+\newcommand{\version}{1.1.2}
+\newcommand{\manualdate}{13.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1990,6 +1990,40 @@ neuen Abschluss-Scan nach letzter Bestätigung. Fotowarteschlangen können läng
 Minuten warten. Verifiziertes Foto-Finish desselben Ziels wird nach Neustart
 fortgesetzt; Legacy-Schlüsselwiderruf verlangt weiterhin gesonderte neue
 Bestätigung. Linked-Flugberichte bleiben lokal.
+
+Ein ungewisser Kopf zeigt \ui{Aktion erforderlich}. \ui{Fortsetzen} im
+Watcher, \ui{Fortsetzung erzwingen} im Fortschritt und
+\ui{Ausstehende Uploads prüfen} nach Neustart öffnen dieselbe Prüfung der
+exakten gespeicherten Quellgeneration und des Ziels. Lokale Vorschau und
+autorisierte entfernte Beobachtung sind getrennt; ein ähnliches Bild,
+Galerieposition oder Hash ist kein Upload-Beleg. \ui{Bereits hochgeladen
+bestätigen} verlangt die exakte dauerhafte Bestätigung. \ui{Foto überspringen}
+speichert eine ausdrückliche Entscheidung, behält Original und ungewisse
+Historie und lässt den nächsten FIFO-Eintrag zu. Übersprungene Fotos zählen
+getrennt von erfolgreichen Uploads. Abbrechen lässt den Eintrag offen.
+Jeder spätere ungewisse Kopf braucht seine eigene Entscheidung.
+Nach dem Absenden blendet \ui{Ausblenden (Entscheidung wird gespeichert)}
+nur den Fortschritt aus; die bereits genehmigte dauerhafte Speicherung läuft weiter.
+In einem niedrigen Fenster lassen sich die Nachweise scrollen;
+Entscheidungs- und Schließen-Schaltflächen bleiben darunter sichtbar.
+Nach einem Worker-Neustart gibt \ui{Ausstehende Uploads fortsetzen} auch sichere
+wartende Arbeit derselben Sitzung frei; die Wiederholungsfrist bleibt erhalten.
+Ausdrückliche Wiederaufnahme nach fehlgeschlagenem Stop-Speichern startet auch
+den Abgleich und den erforderlichen Abschlussscan mit der ursprünglichen Grenze.
+
+Eine frühere Ungewissheit kann auch das erste Foto einer neuen Sitzung vor
+dem Senden sperren. Erneutes Verknüpfen und Löschen lokaler Dateien löschen
+diese Historie nicht. Die Prüfung unterscheidet die ältere ungewisse Operation
+vom aktuellen ungesendeten Foto; eine Prüfung der alten Operation bestätigt
+keinen neuen Upload. \ui{Ordner prüfen (nur lesen)} zeigt getrennte
+Dateisystemergebnisse ohne Änderung von Warteschlange, Startausschlüssen,
+Grenze oder Live-Status. \ui{Ausblenden} bleibt immer verfügbar.
+\ui{Stoppen und ausstehende Dateien behalten} beendet die Annahme und behält
+Arbeit und Grenze zur ausdrücklichen Wiederherstellung. Es widerruft keinen
+Zugriff und löscht keine Dateien. Ein laufender Request behält seinen
+Eigentümer; die Oberfläche meldet das Warten statt falschen Abschluss.
+Die Eigentümerschaft bleibt bis zum Speichern und Rücklesen der Grenze bestehen;
+bei einem Schreibfehler bleibt die Verarbeitung unter demselben Eigentümer pausiert.
 
 Inventar/Upload teilen nicht mehr 60 Requests je IP in 300~s.
 Upload-Grants zählen Requests; Konto/IP/global zählen atomar jedes Original,
@@ -11046,6 +11080,16 @@ und Vier-Prozess-Timeouts bleiben fehlgeschlagene Läufe.
 Das ausgewählte Prozessprotokoll gibt den vollständigen Fehler-Traceback direkt
 nach dem FAIL/ERROR-Endeintrag aus; so bleibt der Grund erhalten, wenn ein
 späteres Timeout den abschließenden JSON-Bericht verhindert.
+
+Der Workflow \ui{Issue 381 Watcher recovery} bietet auch einen manuellen
+Browser-Diagnosemodus. Er führt nur den zentralen Befehl
+\codeword{php scripts/audit.php --suite=browser-map} auf dem gewählten
+Feature-SHA aus und behält Berichte sowie Screenshots. Getrennte Nebenläufigkeit
+verhindert den Abbruch normaler Source-/WinApp-Prüfungen durch die Diagnose.
+Zentrale Grenzen und Prüfungen bleiben erhalten; dies ersetzt nicht die
+vollständige Integrationsmatrix FULL.
+Interaktive Fixtures aktivieren vor vertrauenswürdiger Eingabe ihren eigenen
+Browser-Tab; emulierter DOM-Fokus beweist keinen nativen Vollbildmodus.
 
 GitHub Actions ist für Agenten die normale und maßgebliche Prüfumgebung
 (CI-first). Die folgenden zentralen Audit-Befehle beschreiben den gehosteten
