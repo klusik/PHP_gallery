@@ -779,16 +779,23 @@ function view_render_admin_sidebar(string $currentPage, array $model = []): void
  *
  * Used by server-rendered view helpers.
  *
- * @param ?array $user User value.
- * @param string $currentPage Current page value.
+ * @param array{id?:int|string,email?:string|null,role?:string,
+ *     support_access?:bool}|null $user Signed-in administrator, or no identity.
+ * @param string $currentPage Current route used to omit authentication pages.
+ * @param string $accountUrl Controller-prepared account email destination; an
+ *     empty value suppresses the notice when email storage is unavailable.
  * @return void Emits the notice when applicable.
  */
 function view_render_missing_admin_email_notice(
     ?array $user,
     string $currentPage,
+    string $accountUrl,
 ): void {
     if (
         !$user
+        || $accountUrl === ''
+        || ($user['role'] ?? '') !== 'admin'
+        || !empty($user['support_access'])
         || $currentPage === 'admin_login'
         || $currentPage === 'admin_logout'
         || $currentPage === 'setup'
@@ -799,7 +806,7 @@ function view_render_missing_admin_email_notice(
         return;
     }
 
-    echo '<div class="notice admin-account-notice">';
+    echo '<div class="notice admin-account-notice" role="status">';
     echo
         '<strong>'
             . e(t(
@@ -812,8 +819,8 @@ function view_render_missing_admin_email_notice(
         'Add an email address to your account so username-or-email login works and the app is ready for future account recovery.',
     ));
     echo
-        ' <a href="'
-            . e(url_for('admin_account'))
+        ' <a class="ui-button" href="'
+            . e($accountUrl)
             . '">'
             . e(t(
                 'admin.account.open_account_settings',

@@ -46,6 +46,42 @@ use function Gallery\Core\render_header;
 use function Gallery\Services\t;
 
 /**
+ * Render the account's alternate control for the canonical Features preference.
+ *
+ * @param array{enabled:bool,endpoint:string,csrf_html:string,factory_label:string}
+ *     $model Saved state
+ *     and authenticated POST destination prepared by the account controller.
+ * @return void Emits a compact switch, native contextual help and POST fallback.
+ */
+function view_render_admin_release_email_settings(array $model): void
+{
+    $label = t('admin.features.release_email_notifications.label');
+    $factory = $model['factory_label'];
+    echo '<section id="account-release-email" class="account-release-email">';
+    echo '<form method="post" action="' . e($model['endpoint'])
+        . '" data-account-release-email data-saving="' . e(t('admin.features.saving'))
+        . '" data-saved="' . e(t('admin.features.saved'))
+        . '" data-failed="' . e(t('admin.features.save_unknown')) . '">'
+        . $model['csrf_html']
+        . '<input type="hidden" name="account_action" value="release_email_preference">';
+    echo '<div class="account-release-email-row"><label title="' . e($factory)
+        . '"><input type="checkbox" class="ui-switch" name="release_email_enabled"'
+        . ' value="1" aria-description="' . e($factory) . '"'
+        . ($model['enabled'] ? ' checked' : '') . '><span>' . e($label)
+        . '</span></label>';
+    echo '<details class="gallery-media-widget account-release-help" data-gallery-media-widget>'
+        . '<summary aria-label="' . e($label) . '">?</summary>'
+        . '<div class="gallery-media-panel" data-gallery-media-panel>'
+        . '<p>' . e(t('admin.features.release_email_notifications.description')) . '</p>'
+        . '</div></details></div>';
+    echo '<span role="status" aria-live="polite" data-release-email-status></span>'
+        . '<a hidden data-release-email-reload href="' . e($model['endpoint'])
+        . '#account-release-email">' . e(t('admin.features.reload_state')) . '</a>'
+        . '<button type="submit" data-release-email-save>'
+        . e(t('admin.features.save')) . '</button></form></section>';
+}
+
+/**
  * Render administrator login.
  *
  * @param array<string,mixed> $viewModel Controller-prepared login presentation state.
@@ -262,7 +298,22 @@ function view_render_admin_reset_password(array $viewModel): void
 /**
  * Render administrator account settings.
  *
- * @param array<string,mixed> $viewModel Controller-prepared account presentation state.
+ * @param array{user:array{id:int|string,username:string,role:string,email?:string|null,
+ *     support_access?:bool},notices:list<string>,error:string,csrf_html:string,
+ *     site_name:string,central_settings_url:string,support_access_url:string,
+ *     app_link_devices_url:string,account_email:string,account_url:string,
+ *     release_email_enabled:bool,release_email_factory_label:string,
+ *     email_schema_available:bool,email_schema_unknown:bool,
+ *     reset_settings:array{enabled:bool,transport:string,from_email:string,
+ *     from_name:string,token_lifetime_minutes:int,smtp_host:string,smtp_port:int,
+ *     smtp_encryption:string,smtp_username:string,smtp_password:string},reset_ready:bool,
+ *     google_ready:bool,google_status:string,google_redirect_uri:string,
+ *     google_linked_account:array<string,scalar|null>|null,google_link_url:string,
+ *     openai_feature_enabled:bool,openai_schema_ready:bool,openai_ready:bool,
+ *     openai_image_input_column_ready:bool,openai_enabled:bool,
+ *     openai_allow_image_input:bool,openai_key_hint:string,openai_model:string,
+ *     openai_models:array<string,array{label:string,badge:string,description:string}>}
+ *     $viewModel Controller-prepared account presentation state.
  * @return void Emits account settings and their available actions.
  */
 function view_render_admin_account(array $viewModel): void
@@ -349,7 +400,7 @@ function view_render_admin_account(array $viewModel): void
     echo '</div></div>';
     echo '<div class="account-settings-grid">';
 
-    echo '<article class="account-settings-card">';
+    echo '<article class="account-settings-card account-profile-settings">';
     echo
         '<div class="account-settings-card-header"><div><h2>'
             . e(t('admin.account.profile_title'))
@@ -369,7 +420,7 @@ function view_render_admin_account(array $viewModel): void
     echo
         '<label>'
             . e(t('admin.account.recovery_email'))
-            . '<input name="email" type="email" autocomplete="email" value="'
+            . '<input id="account-email" name="email" type="email" autocomplete="email" value="'
             . e((string) ($viewModel['account_email'] ?? ''))
             . '" placeholder="admin@example.com"'
             . (!empty($viewModel['email_schema_available']) ? '' : ' disabled')
@@ -427,7 +478,14 @@ function view_render_admin_account(array $viewModel): void
     echo
         '<div class="account-settings-actions"><button type="submit">'
             . e(t('admin.account.save_account'))
-            . '</button></div></form></article>';
+            . '</button></div></form>';
+    view_render_admin_release_email_settings([
+        'enabled' => !empty($viewModel['release_email_enabled']),
+        'endpoint' => (string) ($viewModel['account_url'] ?? ''),
+        'csrf_html' => $csrfHtml,
+        'factory_label' => (string) ($viewModel['release_email_factory_label'] ?? ''),
+    ]);
+    echo '</article>';
 
     echo '<article class="account-settings-card">';
     echo

@@ -5782,6 +5782,22 @@ a~přihlášení magickým odkazem zůstávají nedostupné.
 \index{s00213@SMTP}
 \index{p00181@přihlášení Google}
 
+Správce bez e-mailové adresy po přihlášení uvidí kompaktní připomínku s~odkazem
+přímo na pole e-mailu v~účtu. Existující adresu není nutné zadávat znovu.
+Uložení nové nebo změněné adresy s~aktuálním heslem odešle testovací oznámení
+s~nainstalovanou verzí a~odkazy na vydání a~projekt na GitHubu. Potvrzovací odkaz
+se nevyžaduje; účtů návštěvníků se tato funkce netýká. Stejná krátká šablona se
+odešle po dokončené aktualizaci na novější stabilní verzi, v~naposledy používaném
+jazyku rozhraní správce. Přepínač \ui{E-maily o aktualizaci galerie} je ve
+výchozím stavu zapnutý a~lze jej vypnout ve \ui{Features} i~v~\ui{Účtu}; oba
+ovládají stejné nastavení. Test po výslovném uložení adresy se odešle i~při
+vypnutých automatických oznámeních. Výchozí odesílání automaticky zkusí PHP
+\codeword{mail()} a~bez nastavené adresy odesílatele využije nastavení hostingu.
+SMTP se použije pouze po výběru a~nastavení v~účtu. Obnova hesla má vlastní
+nezávislý přepínač. Selhání pošty nezruší uložení adresy ani dokončenou
+aktualizaci; neúspěšný test je vidět v~účtu. Funkce nemá frontu ani automatické
+opakování odesílání a~přijetí transportem není důkazem doručení do schránky.
+
 Oblast účtu podporuje změny uživatelského jména a~hesla, volitelnou adresu pro
 obnovu, dobu platnosti obnovy hesla a~testovací zprávu. Pošta obnovy může
 používat PHP \codeword{mail()} nebo ověřený transport SMTP s~nastavením

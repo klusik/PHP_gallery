@@ -1,5 +1,44 @@
 # PHP Gallery Architecture
 
+## Administrator release email
+
+`admin_release_email.php` renders one fixed localized version template and reuses
+`configured_mail.php`. The updater calls it only after files, migrations and
+cleanup have produced a durably completed upgrade. Account saves attempt the same
+message for a newly entered or changed address after the profile write succeeds.
+Delivery failure cannot undo either operation. There is no mail queue, retry
+subsystem, confirmation link or viewer-account integration.
+
+The authentication model selects nonempty `users.email` values with role `admin`
+only, after verified email-column readiness. One default-enabled canonical
+`release_email_notifications` capability owns both Features and Account controls;
+the Account switch saves in place through the shared mutation envelope. Existing
+addresses need no re-entry. `translations.php` remembers the administrator
+interface language in `admin_interface_language.<user-id>` when the interface is
+used or its language changes, allowing a background updater to localize without
+a browser session. Missing history uses the installation language; missing
+catalog entries use English. Public language overrides do not replace this value.
+
+Runtime review before preparation: the persisted base plan has 98 modules,
+4,125 direct file entries, 472 unique files and 3,653 duplicates. The module
+allowance of 98 and duplicate ceiling of 3,653 are fully consumed. Mail stays in
+account/updater consumers; passive maintenance readers do not acquire it.
+Setup reuses the existing `http-not-found` owner: its full response closure is
+already contained in Setup, so the edge removes 42 duplicate entries without
+adding loaded files. Setup gains one logical dependency and is outside the nine
+route ratchets; their module counts stay unchanged. Hosted preparation records
+98 modules, 4,090 direct file entries, 473 unique files and 3,617 duplicates:
+one additional PHP service, zero new logical modules and 36 fewer duplicates
+overall. The unchanged ratchets remain authoritative. Hosted preparation also
+produces the final runtime plan, inventory and manifest.
+
+The dispatcher applies the dashboard's existing `require_admin()` boundary
+before loading its presentation module, retaining the controller guard too.
+Anonymous dashboard denials therefore preserve their redirect/JSON contract
+without compiling views that the response will never render. This keeps the
+denied-route memory allowance intact; route identities, roots and limits remain
+unchanged.
+
 ## Public native-client discovery
 
 The public `app_linking_discovery` page uses the standard route table and

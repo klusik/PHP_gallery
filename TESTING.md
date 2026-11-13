@@ -1,5 +1,23 @@
 # Testing Guide
 
+## Administrator release email
+
+`admin_release_email_test.php` uses an in-memory SQLite account table and captured
+mail/socket boundaries. It exercises real administrator-only recipient queries,
+all four localized templates, background-language persistence, default PHP mail
+without an application sender, explicit SMTP, opt-out, schema absence/uncertainty,
+same-version/downgrade suppression, injection refusal and independent password
+recovery. It sends no external email.
+The existing `admin_features_browser_test.mjs` covers the Account switch with
+production styles, scoped autosave, canonical persisted/refused values, uncertain
+response locking, keyboard focus and narrow targets. It retains desktop/narrow
+captures in `cache/test-audit/admin-release-email/` through the existing required
+Chromium artifact. Actual host mail configuration, inbox receipt and a live
+installed-version update remain deployment acceptance, separate from these tests.
+The render fixture uses the layout controller's complete production stylesheet
+list. Existing real-route probes retain strict anonymous dashboard response and
+memory checks; dashboard authentication runs before its presentation load.
+
 ## Gallery consistency
 
 `gallery_consistency_test.php` loads the real report/repair planners and path

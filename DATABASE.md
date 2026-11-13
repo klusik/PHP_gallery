@@ -732,7 +732,7 @@ Important columns:
 | --- | --- |
 | `id` | Primary key. |
 | `username` | Unique admin username. |
-| `email` | Optional unique email used for login/password reset. |
+| `email` | Optional unique email used for login/password reset and administrator release announcements. Saving a new address sends a version sample without verification. |
 | `password_hash` | Password hash created by PHP password functions. |
 | `role` | Currently `admin`. |
 | `created_at`, `updated_at` | Audit timestamps. |
@@ -1683,6 +1683,13 @@ required.
 | `updated_at` | Last update timestamp. |
 
 Use `app/services/app_settings.php` to access this table.
+
+Administrator release mail adds no table or column. The canonical
+`feature_flag.release_email_notifications.enabled` preference defaults to `1`
+unless explicitly saved otherwise. `admin_interface_language.<user-id>` stores
+the last administrator interface language for sessionless version announcements.
+The existing `password_reset_transport`, sender and SMTP settings are shared
+delivery configuration; the password-reset enable switch remains independent.
 
 The canonical optional-capability policy reuses this table and introduces no
 schema migration. Capabilities using the default storage adapter persist

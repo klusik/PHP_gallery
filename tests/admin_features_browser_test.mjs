@@ -10,7 +10,7 @@
  */
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile} from 'node:fs/promises';
+import {mkdir, readFile, writeFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -25,10 +25,17 @@ if (!executable) {
 /**
  * Bound isolated PHP snapshot generation.
  * Type: number. Units: milliseconds. Scope: one fixture child.
- * Consumers: renderState(). Value: 10000.
- * Rationale: Detect hangs before the browser owner deadline.
+ * Consumers: renderState() and screenshot readiness. Value: 10000.
+ * Rationale: Detect snapshot/readiness hangs before the browser owner deadline.
  */
 const RENDER_TIMEOUT_MS = 10000;
+/**
+ * Observe the existing fixture's screenshot boundary without a fixed long wait.
+ * Type: number. Units: milliseconds. Scope: screenshot readiness polling.
+ * Consumers: the browser interaction callback. Value: 20.
+ * Rationale: Let actual requests settle while bounding readiness by RENDER_TIMEOUT_MS.
+ */
+const SCREENSHOT_POLL_MS = 20;
 /**
  * Exercise one, two and three columns plus the wide-screen column cap.
  * Type: Array<{width:number,height:number,columns:number}>.
@@ -48,7 +55,7 @@ const VIEWPORTS = [
  * Run the real policy and controller/view against one isolated settings snapshot.
  * @param {Record<string,string>} settings Persisted app-setting text keyed by setting name.
  * @param {{feature_registry_revision?:string,feature_changes?:Record<string,string>,feature_action?:string}|null} post Scoped request or null for a passive read.
- * @return {{ok:boolean,message:string,registry_revision:string,summary:string,groups_html:string,html:string,settings:Record<string,string>}} Updated settings and authoritative presentation.
+ * @return {{ok:boolean,message:string,registry_revision:string,summary:string,groups_html:string,html:string,stylesheet_files:string[],account_html:string,notice_html:string,account_state:{ok:boolean,message:string,enabled:boolean,mutation:{type:string,entity:string,action:string,entity_ids:number[]},panel:null,contexts:[],fallback:{}},settings:Record<string,string>}} Updated settings and authoritative presentation.
  */
 function renderState(settings, post = null) {
     return JSON.parse(execFileSync(process.env.PHP_BINARY || 'php', [
@@ -61,14 +68,14 @@ let settings = {};
 const initial = renderState(settings);
 const html = String.raw`<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/public/assets/styles/base.css">
-<link rel="stylesheet" href="/public/assets/styles/admin.css">
-<link rel="stylesheet" href="/public/assets/styles/admin-cinematic.css">
-<link rel="stylesheet" href="/public/assets/styles/ui-button.css">
-<link rel="stylesheet" href="/public/assets/styles/ui-switch.css">
-</head><body class="admin-page"><pre id="results"></pre><main>${initial.html}</main>
+${initial.stylesheet_files.map(file => '<link rel="stylesheet" href="/public/' + file + '">').join('\n')}
+</head><body class="admin-page"><pre id="results"></pre>
+<div class="site-main">${initial.notice_html}
+<article class="account-settings-card account-profile-settings">${initial.account_html}</article></div>
+<main>${initial.html}</main>
 <script type="module">
 import {setupAdminFeatures} from '/public/assets/gallery-modules/admin-features.js';
+import {setupGalleryMediaPanels} from '/public/assets/gallery-modules/gallery-media-panels.js';
 /** Bound one real async transition. Type: number. Units: milliseconds. Scope: fixture assertions. Consumers: until(). Value: 10000. Rationale: Includes one isolated PHP render while detecting a stuck operation. */
 const ASSERT_TIMEOUT_MS = 10000;
 /** Yield for DOM and request completion. Type: number. Units: milliseconds. Scope: fixture observation. Consumers: until(). Value: 10. Rationale: Observe actual completion rather than guessing microtask counts. */
@@ -89,7 +96,32 @@ const requests = [];
 let hold = false;
 let release;
 let drop = false;
+let dropAccount = false;
+let refuseAccount = false;
+const accountRequests = [];
 window.fetch = async (url, init = {}) => {
+    if (String(url) === '/account') {
+        const fields = [...init.body];
+        accountRequests.push(fields);
+        check(init.method === 'POST' && init.credentials === 'same-origin'
+            && init.headers.Accept === 'application/json', 'Account lost authenticated JSON contract');
+        check(init.body.get('csrf_token') === 'fixture-csrf', 'Account lost CSRF');
+        const revision = document.querySelector('[name="feature_registry_revision"]').value;
+        const response = await nativeFetch('/fixture-state', {
+            method: 'POST', body: JSON.stringify([
+                ['feature_registry_revision', revision],
+                ['feature_changes[release_email_notifications]',
+                    refuseAccount ? '1' : init.body.has('release_email_enabled') ? '1' : '0'],
+            ]),
+        });
+        const result = await response.json();
+        if (dropAccount) { dropAccount = false; throw new Error('Lost account response'); }
+        const payload = result.account_state;
+        if (refuseAccount) { payload.ok = false; payload.message = 'Preference refused'; }
+        return new Response(JSON.stringify(payload), {
+            status: payload.ok ? 200 : 422, headers: {'Content-Type': 'application/json'},
+        });
+    }
     if (String(url) !== '/features') return nativeFetch(url, init);
     requests.push({method: init.method, fields: init.body ? [...init.body] : []});
     check(init.headers.Accept === 'application/json' && init.credentials === 'same-origin', 'Lost authenticated JSON contract');
@@ -148,6 +180,30 @@ const originalUrl = location.href;
 const expectedColumns = Number(new URL(location.href).searchParams.get('columns'));
 try {
     setupAdminFeatures();
+    setupGalleryMediaPanels();
+    const accountForm = document.querySelector('[data-account-release-email]');
+    const accountInput = accountForm.elements.namedItem('release_email_enabled');
+    const accountStatus = accountForm.querySelector('[role="status"]');
+    check(accountInput.checked && accountInput.classList.contains('ui-switch'),
+        'Existing email accounts must have the canonical enabled default');
+    accountInput.focus(); accountInput.click();
+    await until(() => accountStatus.textContent === 'Saved', 'Account preference did not save');
+    check(!accountInput.checked && document.activeElement === accountInput,
+        'Account did not apply canonical state or restore focus');
+    check(accountRequests[0].every(([key]) => ['csrf_token', 'account_action',
+        'release_email_enabled'].includes(key)), 'Account sent unrelated profile/password drafts');
+    check(!accountForm.querySelector('[data-release-email-save]').getBoundingClientRect().height,
+        'Enhanced preference still requires a second Save');
+    accountInput.click();
+    await until(() => accountInput.checked && !accountInput.disabled, 'Account ON did not save');
+    const accountHelp = document.querySelector('.account-release-help > summary');
+    check(getComputedStyle(accountHelp).backgroundColor === 'rgba(0, 0, 0, 0)',
+        'Account help inherited a filled control');
+    if (innerWidth <= 640) {
+        check(accountInput.closest('label').getBoundingClientRect().height >= TAP_MIN_PX
+            && accountHelp.getBoundingClientRect().height >= TAP_MIN_PX,
+            'Account switch/help lost touch targets');
+    }
     checkLayout(expectedColumns);
     // A narrow panel on a wide viewport must use its own available width.
     view.style.maxWidth = '450px';
@@ -210,10 +266,29 @@ try {
     finalHelp.click();
     await until(() => Boolean(document.querySelector('.admin-feature-help-panel:popover-open')), 'Help did not open');
     document.querySelector('.admin-feature-help-panel:popover-open').hidePopover();
-    document.getElementById('results').textContent = 'BROWSER PASS compact features, scoped autosave, groups, factory reset, dependencies and lost-response recovery';
+    // The existing owned browser session retains desktop/narrow visual evidence.
+    window.__releaseEmailPreviewReady = true;
+    await new Promise(resolve => { window.__releaseEmailPreviewContinue = resolve; });
+    refuseAccount = true;
+    accountInput.click();
+    await until(() => accountStatus.textContent === 'Preference refused', 'Account refusal not shown');
+    check(accountInput.checked && accountInput.disabled,
+        'Authoritative refusal did not apply persisted state and lock its form');
+    // Restore only fixture controls for the independent lost-response case.
+    accountInput.disabled = false; refuseAccount = false; dropAccount = true;
+    const accountWriteCount = accountRequests.length;
+    accountInput.click();
+    await until(() => accountStatus.textContent === accountForm.dataset.failed,
+        'Account lost response offered no passive reload');
+    check(accountInput.disabled && !accountInput.checked
+        && accountRequests.length === accountWriteCount + 1,
+        'Account uncertain write retried or invented rollback');
+    check(location.href === originalUrl, 'Account preference navigated');
+    document.getElementById('results').textContent = 'BROWSER PASS compact features and account release email, scoped autosave, groups, factory reset, dependencies and lost-response recovery';
 } catch (error) { document.getElementById('results').textContent = 'BROWSER FAIL ' + error.stack; }
 </script></body></html>`;
 const files = new Map([
+    ['/public/assets/styles.css', 'public/assets/styles.css'],
     ['/public/assets/styles/base.css', 'public/assets/styles/base.css'],
     ['/public/assets/styles/admin.css', 'public/assets/styles/admin.css'],
     ['/public/assets/styles/admin-cinematic.css', 'public/assets/styles/admin-cinematic.css'],
@@ -240,7 +315,9 @@ const server = createServer(async (request, response) => {
             response.writeHead(result.ok ? 200 : 409, {'Content-Type': 'application/json'});
             response.end(JSON.stringify(result)); return;
         }
-        const file = files.get(pathname);
+        const file = files.get(pathname)
+            || (/^\/public\/assets\/(styles|gallery-modules)\/[a-z0-9-]+\.(css|js)$/.test(pathname)
+                ? pathname.slice(1) : null);
         if (!file) { response.writeHead(404).end(); return; }
         response.setHeader('Content-Type', file.endsWith('.css') ? 'text/css' : 'text/javascript');
         response.end(await readFile(path.join(root, file)));
@@ -252,7 +329,33 @@ try {
         settings = {};
         const {result, exitCode} = await runHeadlessBrowserFixture(executable,
             'http://127.0.0.1:' + server.address().port + '/?columns=' + viewport.columns,
-            'admin-features-', {viewport});
+            'admin-features-', {viewport, interact: async ({evaluate, captureScreenshot}) => {
+                const deadline = Date.now() + RENDER_TIMEOUT_MS;
+                while (!await evaluate('window.__releaseEmailPreviewReady === true')) {
+                    const failure = await evaluate('document.getElementById("results").textContent');
+                    assert.ok(!String(failure).startsWith('BROWSER FAIL'), String(failure));
+                    assert.ok(Date.now() < deadline, 'Release email preview did not become ready');
+                    await new Promise(resolve => setTimeout(resolve, SCREENSHOT_POLL_MS));
+                }
+                if (viewport.width === 1200 || viewport.width === 390) {
+                    await evaluate('window.scrollTo(0, 0); document.querySelector(".account-release-help > summary").click(); true');
+                    assert.equal(await evaluate(`(() => {
+                        const panel = document.querySelector('.account-release-help .gallery-media-panel');
+                        const rect = panel.getBoundingClientRect();
+                        return panel.matches(':popover-open') && rect.left >= 0
+                            && rect.right <= innerWidth && rect.top >= 0
+                            && rect.bottom <= innerHeight;
+                    })()`), true, 'Account help must stay anchored inside the viewport');
+                    await evaluate(`Promise.all(document.querySelector('.account-release-help .gallery-media-panel')
+                        .getAnimations().map(animation => animation.finished)).then(() => true)`);
+                    const evidence = path.join(root, 'cache/test-audit/admin-release-email');
+                    await mkdir(evidence, {recursive: true});
+                    await writeFile(path.join(evidence, viewport.width + '.png'),
+                        Buffer.from(await captureScreenshot({fullPage: false}), 'base64'));
+                    await evaluate('document.querySelector(".account-release-help > summary").click(); true');
+                }
+                await evaluate('window.__releaseEmailPreviewContinue(); true');
+            }});
         console.log(viewport.width + 'px: ' + result);
         assert.equal(exitCode, 0);
         assert.ok(result?.includes('BROWSER PASS'), result || 'Features fixture did not complete');

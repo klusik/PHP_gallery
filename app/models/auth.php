@@ -69,6 +69,23 @@ function auth_model_admin_exists(): bool
 }
 
 /**
+ * Read release-notification destinations from administrator accounts only.
+ *
+ * The service must verify users.email availability before calling this reader.
+ * Viewer accounts and temporary support identities are never recipients.
+ *
+ * @return list<array{id:int|string,email:string}> Saved nonempty admin addresses.
+ */
+function auth_model_release_email_recipients(): array
+{
+    $stmt = db()->query(
+        "SELECT id, email FROM users WHERE role = 'admin'"
+            . " AND email IS NOT NULL AND email <> '' ORDER BY id",
+    );
+    return $stmt->fetchAll();
+}
+
+/**
  * Find a user by case-insensitive email address.
  *
  * @param string $email Email address to match.

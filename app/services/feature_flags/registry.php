@@ -545,6 +545,21 @@ function feature_capability_definitions(): array
             ],
             'fresh_default_enabled' => false,
         ],
+        'release_email_notifications' => [
+            'group' => 'admin_tools',
+            'label' => t('admin.features.release_email_notifications.label',
+                'Gallery update emails'),
+            'description' => t('admin.features.release_email_notifications.description',
+                'Send a short version announcement to saved administrator email addresses after a completed upgrade, in the administrator interface language. Uses Account mail settings.'),
+            'default_enabled' => true,
+            'fresh_default_enabled' => true,
+            'dependencies' => [],
+            'routes' => [],
+            'data_disable_policy' => 'preserve',
+            'behavior_tags' => ['admin-only', 'outbound-network'],
+            'settings_route' => 'admin_account',
+            'settings_fragment' => 'account-release-email',
+        ],
         'built_in_update_installer' => [
             'group' => 'admin_tools',
             'label' => t(

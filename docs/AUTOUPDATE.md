@@ -26,6 +26,33 @@ connection/write admission, without waiting for the child response. A host must
 have enough PHP capacity to serve independent requests. Single-worker built-in
 development servers retain the ordinary visitor-driven fallback.
 
+## Administrator version emails
+
+After the updater durably completes an upgrade to a newer version, it attempts
+one short email to each saved administrator address. The fixed template contains
+the version, its GitHub release link and the project link, in the last remembered
+administrator interface language. The completion receipt prevents ordinary worker
+replay or status reads from sending again. Reinstalling the same version,
+rolling back and beta-commit installs do not announce a new stable version.
+There is no mail queue or automatic delivery retry; interruption during delivery
+can leave an email unsent. Delivery failure never fails a completed upgrade.
+
+The **Gallery update emails** switch defaults ON for existing and new accounts
+and is shared by Features and Account. Accounts with an address get no reminder.
+An administrator without an address sees a compact notice after sign-in; its link
+opens the existing account email field. Saving a newly entered or changed address
+requires the existing current-password check and sends the current-version
+template as a sample, even when automatic announcements are OFF. The address is
+saved regardless of transport acceptance; a failed sample is reported visibly.
+No verification link or viewer-account notification is implemented.
+
+PHP `mail()` is attempted by default, using the host's sender if no application
+sender is configured. SMTP is used only when selected and configured in Account.
+The shared sender/transport settings also serve password recovery, whose enable
+switch remains independent. Transport acceptance is not proof of inbox delivery.
+Missing/unknown email schema suppresses announcements and the address reminder;
+mail configuration and safe delivery events remain in Account and Admin logs.
+
 ## Download source and interrupted transfers
 
 New jobs pin the configured source to one full GitHub commit. The downloader

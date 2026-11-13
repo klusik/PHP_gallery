@@ -1526,7 +1526,8 @@ function translation_interpolate(string $text, array $parameters): string
  * Persist the selected language for the current admin/browser session.
  *
  * @param string $language Requested language code to normalize and validate.
- * @return bool True when the code is supported and persisted to both established session keys.
+ * @return bool True when the code is supported and persisted to both established
+ *     session keys; a signed-in administrator's mail language is remembered too.
  */
 function translation_set_active_language(string $language): bool
 {
@@ -1537,7 +1538,38 @@ function translation_set_active_language(string $language): bool
 
     session_context_set('cms_admin_language', $language);
     session_context_set('cms_language', $language);
+    // Standalone translation consumers have no authentication boundary. They
+    // permanently retain session-only selection; real requests also save the
+    // account language for an updater running without the browser's session.
+    if (function_exists('Gallery\\Core\\current_user')) {
+        $user = current_user();
+        if ($user && ($user['role'] ?? '') === 'admin'
+            && empty($user['support_access'])) {
+            translation_remember_admin_language((int) $user['id'], $language);
+        }
+    }
     return true;
+}
+
+/**
+ * Remember the last administrator interface language for background release mail.
+ *
+ * @param int $userId Persisted administrator identity, never a viewer identity.
+ * @param string $language Validated administrator interface language.
+ * @return void Saves only changed values; optional mail metadata cannot break
+ *     page rendering or the existing browser language preference.
+ */
+function translation_remember_admin_language(int $userId, string $language): void
+{
+    try {
+        $key = 'admin_interface_language.' . $userId;
+        if (app_setting($key) !== $language) {
+            set_app_setting($key, $language);
+        }
+    } catch (\Throwable) {
+        // Older/isolated translation consumers may have no settings storage.
+        // Keep session-only selection until that permanent dependency exists.
+    }
 }
 
 /**

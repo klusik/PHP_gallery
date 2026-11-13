@@ -241,6 +241,7 @@ namespace {
         'complete_gallery_report',
         'development_diagnostics',
         'remote_favicon_discovery',
+        'release_email_notifications',
         'built_in_update_installer',
         'advanced_database_maintenance',
         'media_renamer',
@@ -250,7 +251,9 @@ namespace {
     ];
     $thumbnailBatch = $definitions['thumbnail_batch'] ?? [];
     viewer_feature_wrapper_assert(
-        count($definitions) === 38
+        // The explicit identity vector now contains 39 capabilities, including
+        // administrator release mail; retain the exact completeness assertion.
+        count($definitions) === 39
             && array_keys($definitions) === $expectedFeatureKeys
             && isset(
                 $definitions['automatic_cache_cleanup'],
@@ -277,7 +280,7 @@ namespace {
                 'thumbnail_batch',
                 $thumbnailBatch,
             ) === 'feature_flag.thumbnail_batch.enabled',
-        'Feature registry must include all 38 canonical capabilities and preserve thumbnail-batch Admin ownership.',
+        'Feature registry must include all 39 canonical capabilities and preserve thumbnail-batch Admin ownership.',
     );
     viewer_feature_wrapper_assert(
         !feature_flag_default_enabled('admin_test_runs'),

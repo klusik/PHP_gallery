@@ -324,7 +324,9 @@ function cms_route_handlers(): array
  *
  * @param string $page Resolved page identifier.
  * @param Kernel|null $kernel Optional injected kernel for isolated transport-policy tests.
- * @return void Runs the route's preflight and controller, or emits the centralized refusal/not-found response.
+ * @return void Runs route preflight and controller, or emits the centralized
+ *     refusal/not-found response; dashboard authentication precedes its large
+ *     implementation load while retaining the controller's identical guard.
  */
 function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
 {
@@ -453,6 +455,13 @@ function cms_dispatch_page(string $page, ?Kernel $kernel = null): void
             $kernel,
         );
         return;
+    }
+
+    // Refuse a dashboard request before compiling its presentation closure.
+    // Reuse the same redirect/JSON boundary retained by its controller; loading
+    // all dashboard views must not be a prerequisite for an anonymous denial.
+    if ($page === 'admin') {
+        require_admin();
     }
 
     try {
