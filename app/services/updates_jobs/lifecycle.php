@@ -272,7 +272,7 @@ function application_update_start_rollback_job(
  *
  * @param string $jobId Job identifier.
  * @param float $budgetSeconds Preferred normal-work budget.
- * @return array<string,mixed> Safe job state.
+ * @return array{id:string,operation:string,trigger:string,status:string,stage:string,stage_percent:int,progress:array<string,int|string|float|bool|null>,created_at:int,updated_at:int,started_at:int,finished_at:int,attempts:int,runtime_waiting:bool,integrity_warnings:list<string>,can_reset:bool,error:?array{message?:string,reference?:string,retryable?:bool},result:array<string,int|string|float|bool|null|list<string>|array<string,int|string|float|bool|null|list<string>>>,can_resume:bool,can_cancel:bool,can_rollback:bool,background:bool,runtime_limits:array<string,int|string|bool>} Public-safe job state, including completed update metadata; mail failure cannot change update success.
  */
 function application_update_process_job(
     string $jobId,
@@ -430,6 +430,21 @@ function application_update_process_job(
                 application_update_activation_gate_clear((string) $job['id']);
                 application_update_set_last_job((string) $job['id']);
                 application_update_clear_active_job_if((string) $job['id']);
+                // The completed receipt is already durable: a status read or
+                // worker replay must never resend this best-effort notification.
+                // Reinstalls, beta commits and rollback are not new releases.
+                if (in_array($job['operation'] ?? '',
+                    ['stable_update', 'stable_restore', 'manual_deploy'], true)) {
+                    try {
+                        admin_release_email_notify_update(
+                            (string) ($job['installed_version_at_start'] ?? ''),
+                            (string) ($job['result']['version'] ?? ''),
+                        );
+                    } catch (Throwable) {
+                        // Mail/schema outages cannot fail a completed upgrade.
+                        // No automatic mail retry or queue is created.
+                    }
+                }
                 if (($job['trigger'] ?? '') === 'background'
                     && ($job['operation'] ?? '') === 'stable_update'
                     && function_exists(__NAMESPACE__ . '\\admin_log_event')) {

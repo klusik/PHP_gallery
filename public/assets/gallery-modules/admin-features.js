@@ -11,10 +11,11 @@
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
+import {completeAdminMutation} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 
 /**
  * Bound one authenticated save or state read before reporting uncertainty.
- * Type: number. Units: milliseconds. Scope: Admin Features requests.
+ * Type: number. Units: milliseconds. Scope: Features and account preference requests.
  * Consumers: requestFeatureState(). Value: 15000.
  * Rationale: Ordinary settings writes should finish promptly; timeout never
  * retries a possibly completed mutation and requires an authoritative read.
@@ -74,10 +75,11 @@ async function requestFeatureState(endpoint, body) {
 }
 
 /**
- * Enhance the global feature form with one serialized, delegated save pipeline.
+ * Enhance Features and its account release-mail control with scoped save pipelines.
  * @return {void} Installs autosave, group/reset actions and accessible context help once.
  */
 export function setupAdminFeatures() {
+    setupAccountReleaseEmail();
     const root = document.querySelector('[data-admin-features]');
     if (!root || root.dataset.bound === '1') return;
     root.dataset.bound = '1';
@@ -206,4 +208,51 @@ export function setupAdminFeatures() {
         if (trigger) positionFeatureHelp(panel, trigger);
     }, true);
     prepareControls();
+}
+
+/**
+ * Autosave the account's single Features preference without posting profile drafts.
+ * @return {void} Retains native POST without JavaScript and locks unverified
+ *     writes until passive reload; never retries a potentially committed save.
+ */
+function setupAccountReleaseEmail() {
+    const form = document.querySelector('form[data-account-release-email]');
+    if (!form || form.dataset.bound === '1') return;
+    form.dataset.bound = '1';
+    const input = form.elements.namedItem('release_email_enabled');
+    const feedback = form.querySelector('[data-release-email-status]');
+    const reload = form.querySelector('[data-release-email-reload]');
+    form.querySelector('[data-release-email-save]').hidden = true;
+    form.addEventListener('submit', event => event.preventDefault());
+    input.addEventListener('change', async () => {
+        if (input.disabled) return;
+        const body = new FormData(form);
+        const restoreFocus = document.activeElement === input;
+        input.disabled = true;
+        form.setAttribute('aria-busy', 'true');
+        feedback.textContent = form.dataset.saving;
+        try {
+            const response = await fetch(form.getAttribute('action'), {
+                method: 'POST', body, credentials: 'same-origin', cache: 'no-store',
+                redirect: 'error', headers: {Accept: 'application/json'},
+                signal: AbortSignal.timeout(FEATURE_REQUEST_TIMEOUT_MS),
+            });
+            const result = await response.json();
+            if (typeof result.ok !== 'boolean' || typeof result.enabled !== 'boolean'
+                || typeof result.message !== 'string' || (!response.ok && result.ok)) {
+                throw new Error('Unverified release email preference');
+            }
+            input.checked = result.enabled;
+            if (result.ok) await completeAdminMutation(result);
+            feedback.textContent = result.ok ? form.dataset.saved : result.message;
+            input.disabled = !result.ok;
+            reload.hidden = result.ok;
+        } catch {
+            feedback.textContent = form.dataset.failed;
+            reload.hidden = false;
+        } finally {
+            form.removeAttribute('aria-busy');
+            if (restoreFocus && !input.disabled) input.focus({preventScroll: true});
+        }
+    });
 }

@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.1.2}
-\newcommand{\manualdate}{13 November 2026}
+\newcommand{\version}{1.2.0}
+\newcommand{\manualdate}{14 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -5812,6 +5812,23 @@ login, TOTP, passkeys, and~magic-link login remain unavailable.
 \index{administrator account}
 \index{SMTP}
 \index{Google login}
+
+After sign-in, an~administrator without an~email address sees a~compact notice
+linking to~the~Account email field. Existing addresses need no~re-entry.
+Saving a~new or~changed address with the~current password sends a~sample
+announcement containing the~installed version and~GitHub release/project
+links. No~verification link is~required; viewer accounts are~excluded.
+The~same short template is~sent after a~completed upgrade to~a~newer stable
+version, in~the~last remembered administrator interface language. The~
+\ui{Gallery update emails} preference defaults ON and~can~be~disabled
+in~\ui{Features} or~\ui{Account}; both controls save the~same setting.
+The~explicit address sample still sends when automatic announcements are~OFF.
+PHP \codeword{mail()} is~attempted by~default, using the~hosting sender
+when no~application sender is~set. SMTP is~used only when selected and~configured
+in~Account. Password recovery keeps its separate enable switch. Failed mail
+never undoes a~saved address or~completed update; a~failed sample is~shown
+on~Account. There is~no~mail queue or~automatic retry, and~transport acceptance
+does not~prove inbox delivery.
 
 The~account area supports username and~password changes, an~optional recovery
 address, password-reset lifetime, and~a~test message. Recovery mail can~use PHP

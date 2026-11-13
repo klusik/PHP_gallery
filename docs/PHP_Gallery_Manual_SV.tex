@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.1.2}
-\newcommand{\manualdate}{13~november~2026}
+\newcommand{\version}{1.2.0}
+\newcommand{\manualdate}{14~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -5963,6 +5963,23 @@ otillgängliga.
 \index{a00006@administratörskonto}
 \index{s00228@SMTP}
 \index{g00116@Google-inloggning}
+
+Administratörer utan e-postadress ser efter inloggning en kompakt påminnelse
+med länk till e-postfältet under Konto. Befintliga adresser behöver inte anges
+igen. När en ny eller ändrad adress sparas med aktuellt lösenord skickas ett
+testmeddelande med installerad version och länkar till GitHub-utgåvan och
+projektet. Ingen bekräftelselänk krävs; besökarkonton omfattas inte. Samma korta
+mall skickas efter en slutförd uppgradering till en nyare stabil version, på
+administratörens senast använda gränssnittsspråk.
+\ui{E-post om galleriuppdateringar} är aktiverat som standard och kan stängas av
+under \ui{Features} eller \ui{Konto}; båda styr samma inställning. Ett uttryckligt
+adressprov skickas även när automatiska meddelanden är avstängda. PHP
+\codeword{mail()} används som standard med webbhotellets avsändare när ingen
+programavsändare är inställd. SMTP används bara när det väljs och ställs in
+under Konto. Lösenordsåterställning har ett separat reglage. Leveransfel ångrar
+varken sparandet eller uppdateringen; ett misslyckat test visas under Konto.
+Ingen e-postkö eller automatisk omsändning införs. Att transporten godkänner
+meddelandet bevisar inte att det har nått inkorgen.
 
 Kontoområdet stöder byte av användarnamn och lösenord, en valfri
 återställningsadress, giltighetstid för lösenordsåterställning och ett

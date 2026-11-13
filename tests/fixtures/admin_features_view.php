@@ -31,10 +31,15 @@ namespace Gallery\Core {
     }
 }
 namespace Gallery\Services {
-    /** Resolve English fixture text. @param string $key Catalog key used only when no fallback exists. @param string $fallback English text. @param array<string,string> $parameters Placeholder replacements. @return string Interpolated text. */
+    /** Resolve English fixture text. @param string $key Catalog key. @param string $fallback Text used only without a catalog entry. @param array<string,string> $parameters Placeholder replacements. @return string Interpolated text. */
     function t(string $key, string $fallback = '', array $parameters = []): string
     {
-        return strtr($fallback ?: $key, array_combine(
+        // The fixture is two directories below the repository's active catalogs.
+        static $catalog = null;
+        $catalog ??= json_decode((string) file_get_contents(
+            dirname(__DIR__, 2) . '/app/lang/en.json',
+        ), true, flags: JSON_THROW_ON_ERROR);
+        return strtr($catalog[$key] ?? ($fallback ?: $key), array_combine(
             array_map(static fn(string $key): string => '{' . $key . '}', array_keys($parameters)),
             array_values($parameters),
         ));
@@ -65,6 +70,10 @@ namespace {
     require_once __DIR__ . '/../../app/services/feature_flags.php';
     require_once __DIR__ . '/../../app/controllers/admin_features.php';
     require_once __DIR__ . '/../../app/views/admin_features.php';
+    require_once __DIR__ . '/../../app/views/admin_auth.php';
+    require_once __DIR__ . '/../../app/views/admin_chrome.php';
+    require_once __DIR__ . '/../../app/helpers_mutation.php';
+    require_once __DIR__ . '/../../app/controllers/shared_layout.php';
     $input = json_decode($argv[1] ?? '{}', true, flags: JSON_THROW_ON_ERROR);
     $GLOBALS['feature_fixture_settings'] = $input['settings'] ?? [];
     $message = '';
@@ -85,6 +94,22 @@ namespace {
     ob_start();
     \Gallery\Views\view_render_admin_features_page($model);
     $html = (string) ob_get_clean();
+    $releaseEmailEnabled = \Gallery\Services\feature_capability_configured_enabled(
+        'release_email_notifications',
+    );
+    ob_start();
+    \Gallery\Views\view_render_admin_release_email_settings([
+        'enabled' => $releaseEmailEnabled,
+        'endpoint' => '/account',
+        'csrf_html' => \Gallery\Core\csrf_field(),
+        'factory_label' => 'Factory default: Enabled',
+    ]);
+    $accountHtml = (string) ob_get_clean();
+    ob_start();
+    \Gallery\Views\view_render_missing_admin_email_notice(
+        ['id' => 1, 'role' => 'admin', 'email' => null], 'home', '/account#account-email',
+    );
+    $noticeHtml = (string) ob_get_clean();
     ob_start();
     \Gallery\Views\view_render_admin_feature_groups($model['groups']);
     echo json_encode([
@@ -94,6 +119,12 @@ namespace {
         'summary' => $model['summary'],
         'groups_html' => (string) ob_get_clean(),
         'html' => $html,
+        'stylesheet_files' => \Gallery\Controllers\shared_layout_admin_stylesheet_files(),
+        'account_html' => $accountHtml,
+        'notice_html' => $noticeHtml,
+        'account_state' => \Gallery\Core\admin_mutation_success_envelope(
+            'Saved', \Gallery\Core\admin_mutation_descriptor('settings.update', 'settings', 'update'),
+        ) + ['enabled' => $releaseEmailEnabled],
         'settings' => $GLOBALS['feature_fixture_settings'],
     ], JSON_THROW_ON_ERROR);
 }

@@ -243,8 +243,9 @@ function render_admin_sidebar(string $currentPage): void
 /**
  * Render the admin notice that asks existing admins to add a recovery email.
  *
- * @param ?array{id?:int|string,email?:string} $user Current admin account, or null when unauthenticated.
- * @param string $currentPage Current route name used to suppress the notice on account routes.
+ * @param array{id?:int|string,email?:string|null,role?:string,
+ *     support_access?:bool}|null $user Current admin account, or no identity.
+ * @param string $currentPage Current route used to omit authentication pages.
  * @return void Renders the notice when the admin account has no recovery email.
  */
 function render_missing_admin_email_notice(
@@ -258,5 +259,7 @@ function render_missing_admin_email_notice(
             'Admin account-notice view is unavailable. Ensure app/views.php is loaded before rendering.',
         );
     }
-    view_render_missing_admin_email_notice($user, $currentPage);
+    view_render_missing_admin_email_notice(
+        $user, $currentPage, url_for('admin_account') . '#account-email',
+    );
 }

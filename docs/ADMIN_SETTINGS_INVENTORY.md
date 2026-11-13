@@ -4,6 +4,18 @@ This inventory defines canonical ownership for site-wide PHP Gallery settings.
 The centralized `admin_settings` page is a discovery and safe-editing layer over
 these owners. It is not a second persistence implementation.
 
+## Administrator update email
+
+`release_email_notifications` is a canonical default-enabled feature with one
+storage key, `feature_flag.release_email_notifications.enabled`. Features and
+Account use the same preference; OFF preserves saved addresses and language
+metadata. The account destination is `admin_account#account-release-email`.
+The existing mail-delivery controls on Account own PHP `mail()` (default) or
+explicitly selected/configured SMTP and optional sender information. Password
+recovery's enable switch does not control update announcements. A sample is an
+explicit consequence of saving a changed address, independent of automatic-mail
+opt-out. The shared Features registry supplies centralized discovery.
+
 ## Source audit
 
 The Settings work audited the requested sources and their effective owners:

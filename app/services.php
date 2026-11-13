@@ -258,3 +258,4 @@ require_once __DIR__ . '/services/cooperative_proposals.php';
 
 require_once __DIR__ . '/services/cooperative_content.php';
 require_once __DIR__ . '/services/configured_mail.php';
+require_once __DIR__ . '/services/admin_release_email.php';

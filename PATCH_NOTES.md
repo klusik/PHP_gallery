@@ -1,5 +1,73 @@
 # Patch notes
 
+## Version 1.2.0
+
+Added simple administrator emails for completed gallery upgrades, with localized
+version messages, an email-address reminder and one opt-out shared by Features
+and Account. Kept default delivery through PHP mail and optional configured SMTP.
+
+### Highlights
+
+#### Administrator update announcements
+
+- Added a compact missing-email reminder on signed-in web pages, linking directly
+  to the Account email field. Existing saved addresses required no re-entry.
+- Added the default-enabled Gallery update emails switch in Features and Account.
+  Both controls changed the same preference while preserving saved addresses.
+- Added a sample announcement after saving a new or changed email address with
+  the existing current-password check. Used the same current-version template
+  as update announcements, without introducing an address-confirmation link.
+- Added short English, Czech, German and Swedish messages containing the installed
+  version, GitHub release details and project link. Used the administrator's
+  remembered interface language for background update delivery.
+
+### Technical Details
+
+#### Backend and storage
+
+- Added `app/services/admin_release_email.php` and administrator-only destination
+  reads in `app/models/auth.php`. Reused existing `users.email` and `app_settings`
+  storage without a schema migration or viewer-account notification changes.
+- Reused `app/services/configured_mail.php`: attempted PHP `mail()` by default,
+  allowed the hosting sender when no application sender was configured, and used
+  SMTP only when explicitly selected and configured. Kept password-recovery
+  enablement independent.
+- Added one best-effort announcement attempt after durable updater completion of
+  a newer version. Excluded same-version reinstalls, beta commits and rollbacks;
+  mail failures did not undo an update or account save. Added no queue or automatic
+  mail retry. Kept the explicit address sample independent of automatic-mail opt-out.
+- Remembered interface language in `admin_interface_language.<user-id>`, with the
+  installation language for absent history and English for missing catalog text.
+- Applied the dashboard's existing authentication guard before loading its large
+  presentation module and retained the controller guard. Shared Setup's already
+  contained not-found owner while preserving runtime limits and route identities.
+
+#### Interface, documentation and coverage
+
+- Added the Account switch's scoped autosave, canonical persisted-state feedback
+  and passive reload after an unverified save. Reused compact Theme surfaces,
+  native switches and trigger-anchored help with the ordinary POST fallback.
+- Synchronized Features inventories, Settings/Wizard translations and all four
+  permanent TeX manual source editions.
+- Added isolated SQLite and captured-transport coverage for recipient selection,
+  localization, PHP-mail defaults, SMTP, opt-out, schema uncertainty, injection
+  refusal and independent recovery controls. Extended existing Chromium coverage
+  for the complete production CSS cascade, narrow targets, focus and save outcomes.
+
+### User Impact
+
+#### For administrators
+
+- Enabled update announcements automatically for saved administrator addresses and
+  made disabling them available in either Features or Account.
+- Reported a failed address sample without discarding the saved email. Transport
+  acceptance remained distinct from delivery to the recipient's inbox.
+
+#### For visitors and WinApp users
+
+- Left viewer-account email behavior and the Windows companion unchanged. Kept
+  the independent WinApp version at 1.1.2.
+
 ## Version 1.1.2
 
 Fixed blocked Watcher recovery in WinApp 1.1.2 so accepted screenshots can

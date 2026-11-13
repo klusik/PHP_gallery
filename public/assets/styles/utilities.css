@@ -17,6 +17,22 @@
  * Notes:
  *   - Keep comments and docstrings intact when modifying this file.
  */
+/* Missing-email reminders share the compact visitor bell/PDF/music surface. */
+.site-main > .notice.admin-account-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .55rem;
+    padding: .45rem .65rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: .85rem;
+}
+.site-main > .admin-account-notice a { text-decoration: none; }
+
 /* The date-sort bar follows the visitor bell/PDF/music surface.
    Type: CSS lengths/colors. Units: px, rem, sRGB. Scope: the date-sort bar.
    Consumers: date-sort controls and help.

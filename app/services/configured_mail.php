@@ -8,6 +8,12 @@
  * Responsibilities: Own mail configuration and delivery; retain controller compatibility wrappers.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
+ * @phpstan-type MailDelivery array{sent:bool,transport:string,enabled:bool,
+ *     reason:string,recipient_masked:string,from_email_masked:string,
+ *     expires_at:string,smtp_host?:string,smtp_port?:int,
+ *     smtp_encryption?:string,smtp_username_set?:bool,smtp_password_set?:bool,
+ *     smtp_stage?:string,smtp_last_code?:int,smtp_last_response?:list<string>,
+ *     smtp_errno?:int}
  */
 declare(strict_types=1);
 namespace Gallery\Services;
@@ -417,13 +423,13 @@ function cms_send_smtp_email(
 }
 
 /**
- * Send a plain text email using the configured password reset transport.
+ * Send a password-reset message while retaining its independent enable switch.
  *
- * @param string $recipient Recipient value.
- * @param string $subject Subject value.
- * @param string $body Body value.
- * @param string $expiresAt Expires at value.
- * @return array<string,mixed> Configured settings or bounded delivery metadata for the caller.
+ * @param string $recipient Destination address validated by the shared transport.
+ * @param string $subject Plain-text message subject.
+ * @param string $body UTF-8 plain-text message body.
+ * @param string $expiresAt Optional reset expiry for delivery diagnostics.
+ * @return MailDelivery Transport acceptance or a safe refusal reason.
  */
 function cms_send_configured_password_reset_mail(
     string $recipient,
@@ -431,13 +437,38 @@ function cms_send_configured_password_reset_mail(
     string $body,
     string $expiresAt = '',
 ): array {
+    return cms_send_configured_mail(
+        $recipient, $subject, $body, $expiresAt, true,
+    );
+}
+
+/**
+ * Send plain text through the existing configured SMTP or PHP-mail transport.
+ *
+ * Release notifications share sender/transport credentials, but do not enable
+ * password recovery or inherit its enable switch.
+ *
+ * @param string $recipient Destination address; invalid/header-injected values fail.
+ * @param string $subject Plain-text subject sanitized before header use.
+ * @param string $body UTF-8 plain-text message body.
+ * @param string $expiresAt Optional reset expiry recorded in diagnostics.
+ * @param bool $requirePasswordResetEnabled Whether this is a reset-only delivery.
+ * @return MailDelivery Transport acceptance or a safe refusal reason.
+ */
+function cms_send_configured_mail(
+    string $recipient,
+    string $subject,
+    string $body,
+    string $expiresAt = '',
+    bool $requirePasswordResetEnabled = false,
+): array {
     // $settings stores an intermediate value used by the surrounding gallery workflow.
     $settings = cms_password_reset_settings();
     // $details stores safe delivery metadata for the admin log.
     $details = [
         'sent' => false,
         'transport' => (string) $settings['transport'],
-        'enabled' => (bool) $settings['enabled'],
+        'enabled' => !$requirePasswordResetEnabled || (bool) $settings['enabled'],
         'reason' => '',
         'recipient_masked' => cms_mask_email_for_log($recipient),
         'from_email_masked' => cms_mask_email_for_log(
@@ -446,7 +477,7 @@ function cms_send_configured_password_reset_mail(
         'expires_at' => $expiresAt,
     ];
 
-    if (!$settings['enabled']) {
+    if (!$details['enabled']) {
         $details['reason'] = t('admin.account.password_reset_email_disabled');
         return $details;
     }
@@ -458,9 +489,16 @@ function cms_send_configured_password_reset_mail(
         $details['reason'] = t('admin.account.no_recovery_email');
         return $details;
     }
-    if (!filter_var($settings['from_email'], FILTER_VALIDATE_EMAIL)) {
+    if (($requirePasswordResetEnabled || $settings['transport'] === 'smtp'
+        || $settings['from_email'] !== '')
+        && !filter_var($settings['from_email'], FILTER_VALIDATE_EMAIL)) {
         $details['reason'] = t('admin.account.password_reset_sender_empty');
         return $details;
+    }
+
+    $subject = cms_mail_header_value($subject);
+    if (preg_match('/[^\x20-\x7E]/', $subject)) {
+        $subject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
     }
 
     if ($settings['transport'] === 'smtp') {
@@ -488,7 +526,10 @@ function cms_send_configured_password_reset_mail(
     // $fromEmail stores an intermediate value used by the surrounding gallery workflow.
     $fromEmail = cms_mail_header_value((string) $settings['from_email']);
     // $headers stores an intermediate value used by the surrounding gallery workflow.
-    $headers =
+    // PHP mail may use the host's configured sender when no application sender
+    // is set. This permanent default keeps release mail usable without SMTP;
+    // password resets and explicitly selected SMTP retain their sender check.
+    $headers = $fromEmail !== '' ?
         'From: '
         . $fromName
         . ' <'
@@ -496,8 +537,8 @@ function cms_send_configured_password_reset_mail(
         . ">\r\n"
         . 'Reply-To: '
         . $fromEmail
-        . "\r\n"
-        . "MIME-Version: 1.0\r\n"
+        . "\r\n" : '';
+    $headers .= "MIME-Version: 1.0\r\n"
         . "Content-Type: text/plain; charset=UTF-8\r\n";
     // $extraParameters stores the envelope sender used by many shared hosts for SPF alignment.
     $extraParameters = $fromEmail !== ''
@@ -505,8 +546,8 @@ function cms_send_configured_password_reset_mail(
         : '';
 
     $details['sent'] = $extraParameters !== ''
-        ? mail($recipient, $subject, $body, $headers, $extraParameters)
-        : mail($recipient, $subject, $body, $headers);
+        ? @mail($recipient, $subject, $body, $headers, $extraParameters)
+        : @mail($recipient, $subject, $body, $headers);
     $details['reason'] = $details['sent']
         ? t('admin.account.php_mail_accepted')
         : t('admin.account.php_mail_failed');

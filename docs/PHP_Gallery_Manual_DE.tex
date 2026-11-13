@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.1.2}
-\newcommand{\manualdate}{13.~November~2026}
+\newcommand{\version}{1.2.0}
+\newcommand{\manualdate}{14.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -6426,6 +6426,25 @@ TOTP, Passkeys und Magic-Link-Anmeldung bleiben nicht verfügbar.
 \index{a00009@Administratorkonto}
 \index{s00227@SMTP}
 \index{g00143@Google-Anmeldung}
+
+Administratoren ohne E-Mail-Adresse sehen nach der Anmeldung einen kompakten
+Hinweis mit Link zum E-Mail-Feld im Konto. Vorhandene Adressen müssen nicht
+neu eingegeben werden. Eine neue oder geänderte Adresse erhält nach dem
+Speichern mit aktuellem Passwort eine Testmeldung mit installierter Version
+und Links zum GitHub-Release und Projekt. Kein Bestätigungslink ist nötig;
+Besucherkonten sind ausgeschlossen. Dieselbe kurze Vorlage wird nach einem
+abgeschlossenen Update auf eine neuere stabile Version in der zuletzt
+verwendeten Oberflächensprache des Administrators gesendet.
+\ui{E-Mails zu Galerie-Updates} ist standardmäßig aktiv und kann unter
+\ui{Features} oder \ui{Konto} ausgeschaltet werden; beide steuern dieselbe
+Einstellung. Die ausdrückliche Adressprobe wird auch bei ausgeschalteten
+Automatikmeldungen gesendet. Standardmäßig wird PHP \codeword{mail()} versucht,
+ohne Anwendungsabsender mit dem Absender des Hosters. SMTP wird nur nach Auswahl
+und Einrichtung im Konto verwendet. Die Passwortwiederherstellung behält ihren
+separaten Schalter. Versandfehler machen weder das Speichern noch das Update
+rückgängig; ein fehlgeschlagener Test wird im Konto angezeigt. Es gibt keine
+Mailwarteschlange oder automatische Wiederholung. Transportannahme beweist
+keinen Eingang im Postfach.
 
 Der Kontobereich unterstützt Benutzername- und Passwortänderungen, eine
 optionale Wiederherstellungsadresse, Gültigkeitsdauer der Passwortzurücksetzung

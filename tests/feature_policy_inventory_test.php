@@ -162,6 +162,7 @@ namespace Gallery\Core {
         'complete_gallery_report',
         'development_diagnostics',
         'remote_favicon_discovery',
+        'release_email_notifications',
         'built_in_update_installer',
         'advanced_database_maintenance',
         'media_renamer',

@@ -1,5 +1,13 @@
 # PHP Gallery CMS
 
+Administrator accounts receive a short localized version email after a completed
+upgrade. Missing email addresses are prompted after sign-in; saving a new address
+sends the same template as a sample. Disable automatic announcements in
+**Admin → Features → Gallery update emails** or **Account**. PHP `mail()` is the
+default, using the hosting sender when none is configured; SMTP is used only when
+selected and configured in Account. No email verification link is required.
+Viewer accounts are not recipients. See [update mail](docs/AUTOUPDATE.md#administrator-version-emails).
+
 **Admin → Galleries → Music Manager** provides global song identities, custom
 display titles, direct-usage details, nested logical albums and music tags.
 New audio uses a shared protected repository; galleries select songs or live
@@ -60,7 +68,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 1.1.2
+**Current Version:** 1.2.0
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.

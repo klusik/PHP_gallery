@@ -249,6 +249,11 @@ return [
         // Reuse its existing module when the writer lease is loaded rather
         // than duplicating files or widening this route's actual closure.
         'domain-admin-images-reorder' => ['http-not-found'],
+        // Setup's existing full response closure already contains every file
+        // owned by the not-found renderer. Share that owner without widening
+        // setup's file set; this retains the duplicate ceiling while mail stays
+        // only in account and updater consumers, not passive maintenance reads.
+        'domain-setup' => ['http-not-found'],
         // Theme's gallery picker/preview already contains the complete access
         // policy closure. Reuse its established owner without adding files or
         // logical modules when scoped saves load canonical mutation responses.

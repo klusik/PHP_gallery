@@ -120,6 +120,12 @@ use function Gallery\Services\site_name;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
 use function Gallery\Services\admin_settings_url;
+use function Gallery\Services\admin_release_email_send;
+use function Gallery\Services\feature_capability_configured_enabled;
+use function Gallery\Services\feature_capability_default_enabled;
+use function Gallery\Services\set_feature_capability_enabled;
+use function Gallery\Services\translation_admin_language;
+use const Gallery\Core\CMS_VERSION;
 
 /**
  * Admin authentication controller model.
@@ -1394,7 +1400,42 @@ function cms_admin_account(): void
         // $accountAction stores the submitted account section so profile and mail settings can validate independently.
         $accountAction = (string) ($_POST['account_action'] ?? 'profile');
 
-        if ($accountAction === 'password_reset_settings') {
+        if ($accountAction === 'release_email_preference') {
+            $ok = set_feature_capability_enabled(
+                'release_email_notifications',
+                isset($_POST['release_email_enabled']),
+            );
+            if (\Gallery\Core\admin_wants_json()) {
+                $message = t($ok ? 'admin.features.saved' : 'admin.features.error.save_failed');
+                $mutation = \Gallery\Core\admin_mutation_descriptor(
+                    'settings.update', 'settings', 'update',
+                );
+                $fallback = ['redirect_url' => url_for('admin_account')
+                    . '#account-release-email'];
+                $payload = $ok
+                    ? \Gallery\Core\admin_mutation_success_envelope(
+                        $message, $mutation, null, [], $fallback,
+                    )
+                    : \Gallery\Core\admin_mutation_error_envelope(
+                        $message, 'release_email_preference_refused',
+                        $mutation, $fallback,
+                    );
+                $payload['enabled'] = feature_capability_configured_enabled(
+                    'release_email_notifications',
+                );
+                http_response_code($ok ? 200 : 422);
+                header('Content-Type: application/json; charset=utf-8');
+                header('Cache-Control: private, no-store');
+                echo json_encode($payload,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return;
+            }
+            if ($ok) {
+                redirect_to(url_for('admin_account', ['release_email_saved' => 1])
+                    . '#account-release-email');
+            }
+            $error = t('admin.features.error.save_failed');
+        } elseif ($accountAction === 'password_reset_settings') {
             // $errors stores this steps working value.
             $errors = cms_save_password_reset_settings($_POST);
             if ($errors === []) {
@@ -1657,7 +1698,19 @@ function cms_admin_account(): void
                         ));
                     }
                 }
-                redirect_to(url_for('admin_account', ['saved' => 1]));
+                $redirectParameters = ['saved' => 1];
+                if ($newEmail !== ''
+                    && $newEmail !== auth_account_normalize_email(
+                        (string) ($account['email'] ?? ''),
+                    )) {
+                    // An intentional address save sends one sample even if
+                    // automatic update announcements have been opted out.
+                    $redirectParameters['release_email_test'] = admin_release_email_send(
+                        (int) $user['id'], $newEmail, CMS_VERSION,
+                        translation_admin_language(),
+                    ) ? 'sent' : 'failed';
+                }
+                redirect_to(url_for('admin_account', $redirectParameters));
             }
             // Variable $error stores this steps working value.
             $error = implode(' ', $errors);
@@ -1730,6 +1783,13 @@ function cms_admin_account(): void
         $notices[] = $_GET['test_email'] === 'sent'
             ? t('admin.account.notice_test_email_sent')
             : t('admin.account.notice_test_email_failed');
+    }
+    if (isset($_GET['release_email_saved'])) {
+        $notices[] = t('admin.features.saved');
+    }
+    if (isset($_GET['release_email_test'])) {
+        $notices[] = t($_GET['release_email_test'] === 'sent'
+            ? 'admin.release_email.test_sent' : 'admin.release_email.test_failed');
     }
     if (isset($_GET['openai_saved'])) {
         $notices[] = t(
@@ -1808,6 +1868,14 @@ function cms_admin_account(): void
                 ? request_mount_url('index.php?page=app_linking_devices')
                 : '',
         'account_email' => $accountEmail,
+        'release_email_enabled' => feature_capability_configured_enabled(
+            'release_email_notifications',
+        ),
+        'release_email_factory_label' => t('admin.dashboard.content_factory_tooltip', [
+            'value' => t(feature_capability_default_enabled('release_email_notifications')
+                ? 'admin.features.state_enabled' : 'admin.features.state_disabled'),
+        ]),
+        'account_url' => url_for('admin_account'),
         'email_schema_available' => $emailSchemaAvailable,
         'email_schema_unknown' =>
             schema_inspection_is_unknown($emailSchemaStatus),

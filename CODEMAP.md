@@ -1,5 +1,15 @@
 # PHP Gallery Code Map
 
+- Administrator release mail: `app/services/admin_release_email.php` owns the
+  fixed localized template and best-effort sends; `configured_mail.php` owns
+  shared PHP-mail/SMTP delivery. `app/models/auth.php` selects administrator
+  destinations. `updates_jobs/lifecycle.php` invokes mail after durable update
+  completion, and `controllers/admin_auth.php` invokes the sample after an
+  address change. The canonical feature registry owns opt-out; `admin-features.js`
+  enhances its Account control. `translations.php` retains the interface
+  language for background delivery. No new table, queue or viewer-mail owner is
+  introduced.
+
 - Gallery consistency: `app/controllers/admin_gallery_consistency.php` owns
   authenticated session receipts; `app/models/gallery_consistency.php` owns
   catalog reads; `app/services/gallery_consistency.php` and its private parts own

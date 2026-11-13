@@ -1,5 +1,25 @@
 # Compatibility lifecycle and retirement register
 
+## Administrator release mail
+
+Owners: administrator authentication, translations and the completed updater
+lifecycle. Existing nonempty `users.email` values are retained and receive the
+default-enabled `release_email_notifications` preference without a migration.
+Explicit OFF always wins. The password-reset transport wrapper retains its
+enable and sender requirements; general account mail can use PHP's hosting
+sender without enabling recovery. SMTP remains explicitly selected, never a
+fallback chosen after PHP failure.
+
+The saved `admin_interface_language.<user-id>` is additive metadata. An account
+not yet observed by this implementation uses the installation language; a
+missing/custom catalog entry uses English. Session-only translation consumers
+without account/settings storage remain supported and cannot fail because mail
+metadata could not be remembered. These are permanent defaults for absent
+history and standalone consumers, not evidence that a schema inspection failed
+or a message reached an inbox. Missing/unknown email schema suppresses automatic
+mail and the normal reminder. Production adoption, actual hosting transport and
+first installed-upgrade delivery are unverified until deployment acceptance.
+
 ## Identity linking and legacy uploads
 
 The durable uploader queue supports both linked and existing API-key modes.

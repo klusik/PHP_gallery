@@ -12,6 +12,95 @@
  * License: MIT License (see LICENSE file in repository)
  */
 
+/* Release mail adds one small group inside the existing account profile. */
+.admin-page .account-settings-card.account-profile-settings {
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+}
+.admin-page .account-profile-settings :is(h2, label, p, strong) {
+    color: var(--ink);
+}
+.admin-page .account-profile-settings :is(input:not([type="checkbox"]),
+    .account-settings-callout) {
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+    color: var(--ink);
+}
+.admin-page .account-release-email {
+    padding-top: .6rem;
+    border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    color: var(--ink);
+}
+.admin-page .account-release-email form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .5rem;
+}
+.admin-page .account-release-email-row {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    min-width: 0;
+}
+.admin-page .account-release-email-row > label {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    min-height: 28px;
+    margin: 0;
+    font-size: .85rem;
+    color: var(--ink);
+}
+.admin-page .account-release-email [data-release-email-status]:empty {
+    display: none;
+}
+.admin-page .account-release-email :is([role="status"], a) {
+    font-size: .8rem;
+    text-decoration: none;
+}
+.admin-page .account-release-help > summary {
+    display: grid;
+    place-items: center;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: .85rem;
+    color: var(--ink);
+}
+.admin-page .account-release-help .gallery-media-panel {
+    width: min(24rem, calc(100vw - 1rem));
+    padding: .5rem .65rem;
+    border-color: color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: .8rem;
+}
+.admin-page .account-release-help .gallery-media-panel p { margin: 0; }
+.admin-page .account-release-email-row:has(.gallery-media-panel:not([popover])) {
+    flex-wrap: wrap;
+}
+.admin-page .account-release-help[open]:has(.gallery-media-panel:not([popover])) {
+    flex-basis: 100%;
+}
+.admin-page .account-release-help .gallery-media-panel:not([popover]) {
+    width: 100%;
+}
+@media (max-width: 640px), (pointer: coarse) {
+    .admin-page .account-release-email-row > label,
+    .admin-page .account-release-help > summary { min-height: 44px; }
+    .admin-page .account-release-help > summary { min-width: 44px; }
+}
+
 /* These existing owners bound the migration; other specialist pages keep
  * their own presentation. The ID in :is also defeats legacy Admin controls. */
 .admin-page :is(.admin-settings-page, .admin-smart-galleries-page,

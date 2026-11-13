@@ -90,7 +90,7 @@ import { setupThemeAppearanceWorkspace } from './gallery-modules/admin-theme-app
 import { setupThemeLanguageWorkspace } from './gallery-modules/admin-theme-language-workspace.js?v=20261027-compact-language-v3';
 import { setupAdminTelemetryWorkspace } from './gallery-modules/admin-telemetry-workspace.js?v=20261027-compact-telemetry-v2';
 import { setupAdminTagsWorkspace } from './gallery-modules/admin-tags-workspace.js?v=20261027-compact-tags-v2';
-import { setupAdminFeatures } from './gallery-modules/admin-features.js?v=20261027-compact-factory-v2';
+import { setupAdminFeatures } from './gallery-modules/admin-features.js?v=20261113-account-release-email-v1';
 import { setupAdminSettingsWorkspace } from './gallery-modules/admin-settings-workspace.js?v=20261027-compact-feature-settings-v1';
 import { setupAdminDashboardWorkspace } from './gallery-modules/admin-dashboard-workspace.js?v=20261102-gallery-motion-v1';
 import { setupAdminSetupWizard } from './gallery-modules/admin-setup-wizard.js?v=20261009-visual-editor-overlay-routing';
