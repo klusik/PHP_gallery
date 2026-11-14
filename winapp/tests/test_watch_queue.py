@@ -2,10 +2,10 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/tests/test_watch_queue.py
 # Module Type: Regression Test
-# Purpose: Verify durable FIFO admission, generation identity and Finish boundaries.
+# Purpose: Verify FIFO admission, generation identity and terminal boundaries.
 # Responsibilities:
 #   - Exercise real journal writes using controlled clocks and isolated sources.
-#   - Reject reordered, stale, uncertain and malformed recovery evidence.
+#   - Reject stale transitions and retain force-finished recovery evidence.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Exercise queue state through durable transitions rather than source-string checks."""
@@ -200,6 +200,113 @@ class WatchQueueTests(unittest.TestCase):
         self.assertFalse(recovered.data['retained_stop'])
         self.assertEqual(retained_cutoff, recovered.data['cutoff'])
         self.assertEqual(source.path, recovered.head().source.path)
+
+    def test_force_finish_is_durable_idempotent_and_retains_pending_evidence(self) -> None:
+        """Seal a session without changing pending, acknowledged or source evidence.
+
+        Returns:
+            None: Restart preserves the first cutoff and does not replay pending work.
+        """
+        acknowledged_source = self.source('acknowledged.png', self.now)
+        pending_source = self.source('pending.png', self.now + 1)
+        self.journal.reconcile([acknowledged_source, pending_source])
+        first = self.journal.items()[0]
+        digest = hashlib.sha256(Path(first.source.path).read_bytes()).hexdigest()
+        self.journal.update(first, state='acknowledged', sha256=digest,
+                            disposition='uploaded')
+        self.journal.finish(self.now + 2)
+        pending = self.journal.head()
+        assert pending is not None
+        self.journal.update(pending, state='uncertain', sha256='b' * 64,
+                            phase='upload', reason='Outcome unknown.')
+        before_items = self.journal.items()
+        before_pending = list(self.journal.data['pending'])
+
+        self.journal.force_finish(self.now + 3)
+        self.journal.force_finish(self.now + 4)
+
+        self.assertTrue(self.journal.force_finished)
+        self.assertEqual(self.now + 3, self.journal.force_finished_at)
+        self.assertEqual(self.now + 2, self.journal.data['cutoff'])
+        self.assertFalse(self.journal.data['completed'])
+        self.assertEqual(before_pending, self.journal.data['pending'])
+        self.assertEqual(before_items, self.journal.items())
+        self.assertTrue(Path(acknowledged_source.path).exists())
+        self.assertTrue(Path(pending_source.path).exists())
+        self.assertEqual(1, sum(item.state == 'acknowledged'
+                                for item in self.journal.items()))
+        self.assertEqual(1, sum(item.state == 'uncertain'
+                                for item in self.journal.items()))
+        self.assertEqual(0, self.journal.reconcile([
+            self.source('later.png', self.now + 5),
+        ]))
+        self.journal.finish(self.now + 5)
+        self.assertFalse(self.journal.complete(0.0))
+
+        recovered = self.store()
+        recovered.restore()
+        self.assertTrue(recovered.force_finished)
+        self.assertEqual(self.now + 3, recovered.force_finished_at)
+        self.assertEqual(before_pending, recovered.data['pending'])
+        self.assertEqual('uncertain', recovered.head().state)
+        self.assertTrue(Path(pending_source.path).exists())
+
+    def test_force_finish_keeps_existing_cutoff_and_blocks_non_ack_transitions(self) -> None:
+        """Preserve a prior boundary and reject old-session retry transitions.
+
+        Returns:
+            None: A stale retry cannot advance the permanently closed session.
+        """
+        source = self.source('retained.png', self.now)
+        self.journal.reconcile([source])
+        head = self.journal.head()
+        assert head is not None
+        dispatching = self.journal.update(
+            head, state='dispatching', sha256='a' * 64,
+        )
+        self.journal.force_finish(self.now + 1)
+        with self.assertRaises(ValueError):
+            self.journal.update(dispatching, state='retry_wait',
+                                reason='late timeout')
+        self.assertEqual('dispatching', self.journal.head().state)
+        self.assertEqual(self.now + 1, self.journal.data['cutoff'])
+        self.assertTrue(Path(source.path).exists())
+        restored = self.store()
+        restored.restore()
+        self.assertEqual('uncertain', restored.head().state)
+        self.assertEqual(
+            0, restored.reconcile([observe_watch_source(Path(source.path), self.now)]),
+        )
+
+    def test_force_finish_rejects_malformed_persisted_marker(self) -> None:
+        """Require a strict boolean and matching timestamp in restored journals.
+
+        Returns:
+            None: Contradictory terminal markers cannot authorize session recovery.
+        """
+        row = json.loads(self.journal.path.read_text(encoding='utf-8'))
+        row['force_finished'] = True
+        row['force_finished_at'] = 0.0
+        self.journal.path.write_text(json.dumps(row), encoding='utf-8')
+        with self.assertRaises(ValueError):
+            self.store().restore()
+
+    def test_force_finish_preserves_an_already_completed_queue(self) -> None:
+        """Keep genuine completion evidence instead of downgrading it to force state.
+
+        Returns:
+            None: Host cancellation after completion leaves the verified journal intact.
+        """
+        self.journal.finish(self.now)
+        self.journal.reconcile([])
+        self.assertTrue(self.journal.complete(0.0))
+        before = self.journal.path.read_bytes()
+
+        self.journal.force_finish(self.now + 2)
+
+        self.assertEqual(before, self.journal.path.read_bytes())
+        self.assertTrue(self.journal.data['completed'])
+        self.assertFalse(self.journal.force_finished)
 
     def test_failed_persistence_never_reports_acceptance(self) -> None:
         """Retain the last confirmed journal when durable admission cannot be written.

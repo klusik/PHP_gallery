@@ -1991,6 +1991,20 @@ Minuten warten. Verifiziertes Foto-Finish desselben Ziels wird nach Neustart
 fortgesetzt; Legacy-Schlüsselwiderruf verlangt weiterhin gesonderte neue
 Bestätigung. Linked-Flugberichte bleiben lokal.
 
+\ui{Fertigstellen erzwingen} (Force finish) bleibt im Finish-Fortschritt auch
+bei Fehlern oder Zeitüberschreitung erreichbar. Die Aktion stoppt neue
+Aufnahme und Übertragung und schließt die Sitzung nach dauerhaft gespeichertem
+Endentscheid lokal. Ausstehende Originale, Berichte und Belege ungewisser
+Uploads bleiben erhalten; kein Eintrag gilt dadurch als hochgeladen oder
+übersprungen. Aktualisierung, Zeitablauf und Neustart setzen diese Sitzung
+nicht fort. Eine bereits gesendete Anfrage behält ihren physischen Eigentümer
+bis zum tatsächlichen Ende. Nach Speicherung bleibt normales Beenden zeitlich
+begrenzt; das Beenden restlicher Prozessarbeit beweist kein Serverergebnis.
+Start Watcher erzeugt eine neue Aufnahmegrenze. Normales Finish wartet auf
+eigene Warteschlangen und den Abschluss-Scan, nicht auf einen fremden inaktiven
+Watcher, und wiederholt keinen leeren automatischen Abschluss. Die Diagnose
+unterscheidet Aufnahmesitzung und Worker-Warteschlange.
+
 Ein ungewisser Kopf zeigt \ui{Aktion erforderlich}. \ui{Fortsetzen} im
 Watcher, \ui{Fortsetzung erzwingen} im Fortschritt und
 \ui{Ausstehende Uploads prüfen} nach Neustart öffnen dieselbe Prüfung der

@@ -358,6 +358,7 @@ class FlightUI:
         self._animation_running = False
         self._preparing_progress = False
         self._progress_local_mode = False
+        self._force_finish_pending = False
         self.phase_var = tk.StringVar(value="")
         self.detail_var = tk.StringVar(value="")
         self.time_var = tk.StringVar(value="")
@@ -383,6 +384,7 @@ class FlightUI:
         self.ui_language = tk.StringVar(value=self.preferences.ui_language)
         self.refresh_dispatch_status()
         self._last_terminal = ""
+        self._progress_generation = 0
         host.root.after(PROGRESS_TICK_MS, self.tick)
 
     def text(self, key: str) -> str:
@@ -910,6 +912,7 @@ class FlightUI:
                 is released only after the shared operation completes.
         """
         if self.busy():
+            self._consume_trigger_reason("explicit_finish")
             self.show_progress()
             return
         languages = REPORT_LANGUAGES
@@ -932,6 +935,7 @@ class FlightUI:
                 automatic=True,
             )
         except (OSError, ValueError) as exc:
+            self._consume_trigger_reason("explicit_finish")
             self._dismiss_progress_preparation()
             messagebox.showerror(self.text("finish_pdf"), str(exc), parent=self.dialog_owner())
 
@@ -1315,6 +1319,8 @@ class FlightUI:
                 An already loaded OFP is attached to this explicitly selected
                 flight before rendering without a second confirmation.
         """
+        self._consume_trigger_reason("local_report")
+        trigger_reason = "local_report"
         if self.busy():
             self.show_progress()
             return
@@ -1350,11 +1356,14 @@ class FlightUI:
             # Photo Finish is durable intent, not a five-minute retry budget.
             # Its worker can remain in rate-limit/offline wait while local
             # capture reconciliation continues under the original cutoff.
+            self._progress_generation += 1
             self.operation = FinalizationWorker(
                 [plan], "", "", lambda _cancel, _deadline: None,
                 lambda: None, False, local_reports=True,
                 emit=lambda level, message: self.host.events.put((level, message)),
             )
+            self.operation.flight_generation = self._progress_generation
+            self.operation.trigger_reason = trigger_reason
             self.automatic_operation = self.operation
             self._last_terminal = ""
             self.operation.start()
@@ -1487,6 +1496,7 @@ class FlightUI:
             languages = tuple(dict.fromkeys(code for item in (revision,) + additional for code in item.files))
             plan = replace(SessionPlan.load(row.directory), languages=languages)
             owner, port, upload_url, api_key = self.host.capture_flight_admission()
+            self._progress_generation += 1
             self.operation = FinalizationWorker(
                 [plan], upload_url, api_key, lambda _cancel, _deadline: None,
                 lambda: None, False, saved_revision=revision,
@@ -1495,6 +1505,9 @@ class FlightUI:
                 emit=lambda level, message: self.host.events.put((level, message)),
                 gui_admission=(owner, port), require_gui_admission=True,
             )
+            self.operation.flight_generation = self._progress_generation
+            self._consume_trigger_reason("saved_report_upload")
+            self.operation.trigger_reason = "saved_report_upload"
             self._last_terminal = ""
             self.operation.start()
             self.show_progress()
@@ -1683,14 +1696,33 @@ class FlightUI:
 
         Returns:
             SessionState: Active capture, finishing work, interrupted work,
-                blocked recovery evidence, or an idle workspace. Durable
-                admissions read the queue again before changing it.
+                blocked recovery evidence or retained transport, or an idle
+                workspace. A force-finished transport remains blocked until its
+                lease releases; durable admissions read the queue again.
         """
         if self.busy() or self.host.api_key_revoke_running:
             return "working"
         watcher = self.host.worker
-        if watcher is not None and watcher.is_alive():
+        queue_store = getattr(watcher, "_queue", None)
+        durably_force_finished = (
+            watcher is not None
+            and getattr(queue_store, "force_finished", False) is True
+        )
+        if watcher is not None and watcher.is_alive() and not durably_force_finished:
             return "active"
+        if durably_force_finished:
+            transport_active = getattr(watcher, "_transport_active", None)
+            pending_transport = getattr(watcher, "_pending_transport", None)
+            transport_owned = bool(
+                callable(getattr(transport_active, "is_set", None))
+                and transport_active.is_set()
+            ) or bool(
+                pending_transport is not None
+                and callable(getattr(pending_transport, "is_set", None))
+                and not pending_transport.is_set()
+            )
+            if transport_owned:
+                return "blocked"
         try:
             binding = self.binding()
         except ValueError:
@@ -1703,6 +1735,20 @@ class FlightUI:
                 state = "blocked"
             self._recovery_state = (binding, state)
         return self._recovery_state[1]
+
+    def _consume_trigger_reason(self, fallback: str) -> str:
+        """Consume one App-provided Finish trigger for worker diagnostics.
+
+        Args:
+            fallback (str): Local action reason when the App supplied no trigger.
+        Returns:
+            str: Stable reason label attached to the new finalization worker.
+        """
+        supplied = getattr(self.host, "_next_finish_trigger_reason", "")
+        if not isinstance(supplied, str) or not supplied:
+            return fallback
+        self.host._next_finish_trigger_reason = ""
+        return supplied
 
     def show_recovery(self) -> None:
         """Open recovery for the saved Watcher session, including after restart.
@@ -1959,7 +2005,9 @@ class FlightUI:
             self.abandon()
             return
         if self.automatic_completion():
-            self.begin(self.pending_revoke_intent(), automatic=True)
+            self.begin(
+                self.pending_revoke_intent(), automatic=True, explicit_retry=True,
+            )
         else:
             self.begin(self.pending_revoke_intent())
 
@@ -2015,7 +2063,7 @@ class FlightUI:
 
     def begin(
         self, revoke: bool = False, *, automatic: bool = False,
-        photos_only: bool = False,
+        photos_only: bool = False, explicit_retry: bool = False,
     ) -> None:
         """Start drained Stop or an explicitly authorized captured-key Finish.
 
@@ -2025,11 +2073,17 @@ class FlightUI:
                 skip confirmation and close its views only after verified success.
             photos_only (bool): Persist report suppression for a contextual
                 game capture before draining, including later recovery.
+            explicit_retry (bool): Preserve the existing captured Finish intent
+                when the user deliberately retries a terminal automatic attempt.
 
         Returns:
             None: Starts admitted work and progress. Linked-mode revocation is
                 separate; an active ordinary Stop cannot gain revoke authority.
         """
+        trigger_reason = self._consume_trigger_reason(
+            "explicit_retry" if explicit_retry else
+            "automatic_finish" if automatic else "explicit_finish",
+        )
         linked = self.host.linking_manager.linked_upload_mode_selected()
         if self.host.api_key_revoke_running and not self.busy():
             self.show_progress()
@@ -2047,6 +2101,12 @@ class FlightUI:
                 self.load_error,
                 parent=self.dialog_owner(),
             )
+            return
+        if (automatic and not explicit_retry and not self.independent_operation()
+                and self.operation is not None
+                and (self.operation.abandonment
+                     or self.operation.snapshot().phase in {"error", "cancelled"})):
+            self.show_progress()
             return
         if self.busy() and self.independent_operation():
             self.show_progress()
@@ -2084,6 +2144,12 @@ class FlightUI:
         self._prepare_progress_view()
         try:
             plans = self.pending()
+            if (automatic and not revoke and not self.independent_operation()
+                    and not plans):
+                self.detail_var.set(self.text("automatic_finish_no_work"))
+                self.host.status_var.set(self.text("automatic_finish_no_work"))
+                self._dismiss_progress_preparation()
+                return
             if linked and any(not plan.local_only for plan in plans):
                 raise ValueError("Linked flight work requires local-only reports.")
             photo_worker = self.host.worker
@@ -2134,6 +2200,7 @@ class FlightUI:
                     resumed = self.resume_photos(plan.directory)
                     if resumed is not None:
                         self.resume_workers.append(resumed)
+            self._progress_generation += 1
             self.operation = FinalizationWorker(
                 plans, upload_url, api_key, self.wait_for_workers,
                 self.submit_revoke, revoke,
@@ -2145,6 +2212,8 @@ class FlightUI:
                     if revoke else None
                 ),
             )
+            self.operation.flight_generation = self._progress_generation
+            self.operation.trigger_reason = trigger_reason
             if automatic:
                 self.automatic_operation = self.operation
                 if self.report_dialog is not None and self.report_dialog.winfo_exists():
@@ -2206,10 +2275,50 @@ class FlightUI:
             blockers = (
                 self.host.api_key_request_blockers() if wants_revoke else []
             )
-            extras = [
-                self.host.worker, self.recorder, self.host.utc_sync,
-                *self.resume_workers
+            watched = self.host.worker
+            operation = self.operation
+            plan_queues = {
+                plan.directory / "watch-drain.json"
+                for plan in operation.plans
+            } if operation is not None else set()
+            matched_queue_paths: set[Path] = set()
+
+            def requires_queue_drain(worker: threading.Thread) -> bool:
+                """Check whether an exact owned queue lacks final cutoff proof.
+
+                Args:
+                    worker (threading.Thread): Watcher with a durable manifest.
+                Returns:
+                    bool: True only when the worker matches a captured plan and
+                        its queue has not durably completed the frozen cutoff.
+                """
+                manifest = getattr(worker, "drain_manifest", None)
+                if manifest is None or operation is None:
+                    return False
+                queue_path = Path(manifest)
+                if queue_path not in plan_queues:
+                    return False
+                matched_queue_paths.add(queue_path)
+                if not queue_path.exists():
+                    return True
+                queue_row = read_document(queue_path)
+                return not (
+                    queue_row.get("frozen") is True
+                    and bool(queue_row.get("cutoff"))
+                    and queue_row.get("completed") is True
+                    and not queue_row.get("pending")
+                )
+
+            watcher_blocks_finish = (
+                watched is not None and requires_queue_drain(watched)
+            )
+            resume_extras = [
+                worker for worker in self.resume_workers
+                if worker.is_alive() and requires_queue_drain(worker)
             ]
+            extras = [self.recorder, self.host.utc_sync, *resume_extras]
+            if watcher_blocks_finish:
+                extras.append(watched)
             if any(worker is not None and worker.is_alive() for worker in extras):
                 blockers.append("flight or accepted photo workers")
             if wants_revoke and self.host.semantic_ai_install_running:
@@ -2271,14 +2380,12 @@ class FlightUI:
                     )
             if not blockers:
                 break
-            queued_workers = [self.host.worker, *self.resume_workers]
             if time.monotonic() >= deadline:
                 raise TimeoutError("Workers did not drain: " + "; ".join(blockers))
             cancel.wait(DRAIN_POLL_SECONDS)
-        watched = self.host.worker
-        if watched is not None and getattr(watched, "drain_manifest", None) is None:
-            raise RuntimeError("Watcher has no durable queue; recovery required.")
         operation = self.operation
+        if any(not queue_path.exists() for queue_path in matched_queue_paths):
+            raise RuntimeError("The captured Watcher queue is missing; recovery is required.")
         for plan in operation.plans if operation is not None else self.pending():
             path = plan.directory / "watch-drain.json"
             if path.exists():
@@ -2363,6 +2470,8 @@ class FlightUI:
         """
         if getattr(self, "_preparing_progress", False) is True:
             return
+        self._progress_generation += 1
+        self._force_finish_pending = False
         self._preparing_progress = True
         self.phase_var.set(self.text("phase_preparing"))
         self.detail_var.set(self.text("finish_preparing_detail"))
@@ -2484,6 +2593,8 @@ class FlightUI:
             ("open_reports", self.open_reports),
             ("hide", self.dialog.withdraw),
         )
+        if callable(getattr(self.host, "force_finish_flight", None)):
+            ordinary_actions += (("force_finish", self.force_finish),)
         if callable(getattr(self.host, "open_watch_recovery_review", None)):
             ordinary_actions += (("force_continue_watch", self.force_continue_watch),)
         if callable(getattr(self.host, "stop_and_keep_watch_pending", None)):
@@ -2499,6 +2610,8 @@ class FlightUI:
             ("open_reports", self.open_reports),
             ("hide", self.dialog.withdraw),
         )
+        if callable(getattr(self.host, "force_finish_flight", None)):
+            abandon_actions += (("force_finish", self.force_finish),)
         choices = (
             abandon_actions if abandoning else
             local_actions if local_mode else ordinary_actions
@@ -2506,7 +2619,9 @@ class FlightUI:
         self.progress_buttons = {
             label: ttk.Button(
                 actions, text=self.text(label), command=command,
-                style="Accent.Compact.TButton" if label == "retry" else "Compact.TButton",
+                style=("Accent.Compact.TButton"
+                       if label in {"retry", "force_finish"}
+                       else "Compact.TButton"),
             )
             for label, command in choices
         }
@@ -2534,7 +2649,7 @@ class FlightUI:
         linked = self.host.linking_manager.linked_upload_mode_selected()
         choices: list[str] = []
         if getattr(self, "_preparing_progress", False) is True:
-            choices = []
+            choices = ["hide"]
         elif self.independent_operation():
             if running:
                 choices.append("cancel_upload" if operation.saved_upload else "cancel_pdf")
@@ -2557,6 +2672,12 @@ class FlightUI:
         elif self.session_state() == "blocked":
             choices.append("retry")
         choices.append("hide")
+        if (not self.independent_operation()
+                and callable(getattr(self.host, "force_finish_flight", None))):
+            choices = ["force_finish", "hide"] + [
+                choice for choice in choices
+                if choice not in {"hide", "force_finish"}
+            ]
         capture_review = (
             not self.independent_operation()
             and (running or self.session_state() in {"pending", "blocked"})
@@ -2572,6 +2693,11 @@ class FlightUI:
         for label, button in self.progress_buttons.items():
             if label not in choices:
                 button.grid_remove()
+            elif label == "force_finish":
+                button.configure(
+                    state="disabled" if getattr(self, "_force_finish_pending", False)
+                    else "normal"
+                )
         for index, label in enumerate(choices):
             button = self.progress_buttons[label]
             button.configure(text=self.text(label))
@@ -2591,6 +2717,70 @@ class FlightUI:
         review = getattr(self.host, "open_watch_recovery_review", None)
         if callable(review):
             review()
+
+    def force_finish(self) -> None:
+        """Persist an explicit Finish escape intent through the App owner.
+
+        Returns:
+            None: Keeps Hide available while publication is pending; successful
+                durable publication resolves logical Finish without claiming
+                that a live HTTP request was canceled.
+        """
+        if getattr(self, "_force_finish_pending", False):
+            return
+        publish = getattr(self.host, "force_finish_flight", None)
+        if not callable(publish):
+            self.detail_var.set(self.text("force_finish_unavailable"))
+            return
+        operation = self.operation
+        generation = getattr(self, "_progress_generation", 0)
+        self._force_finish_pending = True
+        self.detail_var.set(self.text("force_finish_saving"))
+        self.refresh_progress_actions()
+
+        def resolved(result: str) -> None:
+            """Apply the host's durable result only to this progress generation.
+
+            Args:
+                result (str): Host result: persisted, pending_transport, or failed.
+            Returns:
+                None: Resolves or preserves Finish according to durable publication.
+            """
+            if (getattr(self, "_progress_generation", 0) != generation
+                    or self.operation is not operation):
+                return
+            self._force_finish_pending = False
+            if result in {"persisted", "pending_transport"}:
+                if operation is not None and not operation.cancel.is_set():
+                    operation.cancel.set()
+                if self.operation is operation:
+                    self.operation = None
+                if self.automatic_operation is operation:
+                    self.automatic_operation = None
+                self._preparing_progress = False
+                self._recovery_state = None
+                self._progress_generation += 1
+                self._last_terminal = "force_finished"
+                key = ("force_finish_transport_active"
+                       if result == "pending_transport"
+                       else "force_finish_saved")
+                self.detail_var.set(self.text(key))
+                if self.dialog is not None and self.dialog.winfo_exists():
+                    self.dialog.withdraw()
+                self.host.status_var.set(self.text(key))
+                return
+            self.detail_var.set(self.text("force_finish_failed"))
+            self.refresh_progress_actions()
+
+        try:
+            queued = publish(on_result=resolved)
+        except Exception:  # noqa: BLE001
+            queued = False
+        if queued is not True:
+            self._force_finish_pending = False
+            self.detail_var.set(self.text("force_finish_failed"))
+            self.refresh_progress_actions()
+
 
     def force_stop_watch(self) -> None:
         """Request retained Stop and cancel Finish only after durable readback.
@@ -2815,6 +3005,7 @@ class FlightUI:
             for worker in workers:
                 if worker is not None and worker.is_alive():
                     worker.stop()
+            self._progress_generation += 1
             self.operation = FinalizationWorker(
                 plans, "" if linked else self.normalize(self.host.config.gallery_url),
                 "" if linked else self.host.config.api_key, self.wait_for_abandonment,
@@ -2822,6 +3013,9 @@ class FlightUI:
                 emit=lambda level, message: self.host.events.put((level, message)),
                 abandon_local=linked,
             )
+            self.operation.flight_generation = self._progress_generation
+            self._consume_trigger_reason("abandon")
+            self.operation.trigger_reason = "abandon"
             self.automatic_operation = self.operation
             self.host.api_key_revoke_thread = self.operation
             self._last_terminal = ""
@@ -2945,6 +3139,8 @@ class FlightUI:
                 and progress.phase == "cancelled" else "phase_" + progress.phase
             ))
             detail = progress.detail or progress.error
+            if getattr(self, "_force_finish_pending", False):
+                detail = self.text("force_finish_saving")
             if detail.startswith("pdf_dependency_missing:"):
                 module = detail.split(":", 1)[1]
                 detail = self.text("pdf_dependency_missing").format(module=module)

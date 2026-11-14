@@ -2,11 +2,12 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/tests/test_watch_recovery_ui.py
 # Module Type: Regression Test
-# Purpose: Verify localized Watcher recovery behavior and native UI layout.
+# Purpose: Verify localized Watcher recovery and Finish UI behavior/layout.
 # Responsibilities:
 #   - Require explicit receipt semantics in every supported locale.
 #   - Keep cancellation and skip copy distinct and source-preserving.
 #   - Exercise native desktop/narrow review states when the display is required.
+#   - Capture the actual Finish progress escape action at desktop and narrow sizes.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Check recovery wording and render the native Watcher recovery dialog."""
@@ -24,6 +25,7 @@ import ctypes
 from ctypes import wintypes
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Callable
 import tkinter as tk
 from tkinter import ttk
 import threading
@@ -38,7 +40,13 @@ from uploader.ui_theme import configure_theme
 from uploader.flight_report_translations import (
     _WATCH_RECOVERY_LABELS,
     recovery_text,
+    tr,
 )
+
+# Purpose: Require visible evidence images to include real window content.
+# Type: int. Units: distinct RGB colors. Scope: native progress screenshot check.
+# Consumers: capture_force_finish_window. Rationale: A varied rendered UI cannot be a blank/console capture.
+FORCE_FINISH_SCREENSHOT_COLOR_MINIMUM = 6
 
 QA_DIR = os.environ.get("PHP_GALLERY_WATCH_RECOVERY_QA_DIR", "")
 REQUIRE_TK = os.environ.get("PHP_GALLERY_REQUIRE_WATCH_RECOVERY_TK") == "1"
@@ -519,6 +527,244 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             root.update()
         root.destroy()
 
+    def test_force_finish_progress_action_desktop_and_narrow(self) -> None:
+        """Render the actual Finish progress window at both supported widths.
+
+        Returns:
+            None: Confirms the escape action remains mapped and captures the
+                themed native progress surface for hosted Windows review.
+        """
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            if REQUIRE_TK:
+                self.fail(f"Required native Tk display is unavailable: {exc}")
+            self.skipTest(f"Tk display is unavailable: {exc}")
+        root.title("Force Finish progress fixture")
+        configure_theme(root)
+        force_callbacks: list[Callable[[str], None]] = []
+        operation = SimpleNamespace(
+            saved_upload=False,
+            abandonment=False,
+            plans=[],
+            cancel=threading.Event(),
+            snapshot=lambda: SimpleNamespace(
+                phase="draining", detail="0 pending · final scan in progress",
+            ),
+        )
+        host = SimpleNamespace(
+            root=root,
+            status_var=tk.StringVar(root, value="Working"),
+            linking_manager=SimpleNamespace(
+                linked_upload_mode_selected=lambda: False,
+                selected_upload_target=lambda: None,
+            ),
+            reconnect_upload_gallery=lambda: None,
+            force_finish_flight=lambda on_result: force_callbacks.append(on_result) or True,
+        )
+        ui = FlightUI.__new__(FlightUI)
+        ui.host = host
+        ui.operation = operation
+        ui.automatic_operation = None
+        ui._progress_generation = 1
+        ui._force_finish_pending = False
+        ui._preparing_progress = False
+        ui._progress_local_mode = False
+        ui._animation_running = False
+        ui.independent_operation = lambda: False
+        ui.session_state = lambda: "working"
+        ui.pending_revoke_intent = lambda: False
+        ui.dialog_owner = lambda: root
+        language = tk.StringVar(root, value="en")
+        ui.ui_language = language
+        host.simulator_presence = SimpleNamespace(
+            flight_detected=False,
+            text=lambda key, selected_language: tr(selected_language, key),
+        )
+        ui.capture_text = FlightUI.capture_text.__get__(ui, FlightUI)
+        ui.text = FlightUI.text.__get__(ui, FlightUI)
+        ui.phase_var = tk.StringVar(root, value="Finishing")
+        ui.detail_var = tk.StringVar(root, value="")
+        ui.time_var = tk.StringVar(root, value="")
+        ui.dialog = None
+        ui.progress_buttons = {}
+        ui.progress_actions = None
+        ui.refresh_tasks = FlightUI.refresh_tasks.__get__(ui, FlightUI)
+        ui.refresh_progress_actions = FlightUI.refresh_progress_actions.__get__(
+            ui, FlightUI,
+        )
+        ui.show_progress = FlightUI.show_progress.__get__(ui, FlightUI)
+        self.addCleanup(
+            self.cleanup_force_finish_progress_fixture,
+            ui, root, force_callbacks,
+        )
+        ui.show_progress()
+        window = ui.dialog
+        self.assertIsNotNone(window)
+        window.geometry("900x650+10+10")
+        root.update()
+        self.assertTrue(ui.progress_buttons["force_finish"].winfo_ismapped())
+        self.assertFalse(ui.task_tree.winfo_manager())
+        self.assertEqual(tr("en", "phase_draining"), ui.phase_var.get())
+        self.assertEqual(tr("en", "hide"), ui.progress_buttons["hide"].cget("text"))
+        self.assertEqual(
+            recovery_text("en", "force_finish"),
+            ui.progress_buttons["force_finish"].cget("text"),
+        )
+        self.assert_progress_controls_inside(window, ui)
+        self.capture_force_finish_window(window, ui, "force-finish-desktop.png")
+
+        window.geometry("390x560+10+10")
+        root.update()
+        self.assertTrue(ui.progress_buttons["force_finish"].winfo_ismapped())
+        self.assertLessEqual(
+            ui.progress_buttons["force_finish"].winfo_rooty()
+            + ui.progress_buttons["force_finish"].winfo_height(),
+            window.winfo_rooty() + window.winfo_height(),
+        )
+        for locale in ("en", "cs", "de", "sv"):
+            language.set(locale)
+            ui.refresh_progress_actions()
+            root.update()
+            self.assertEqual(
+                recovery_text(locale, "force_finish"),
+                ui.progress_buttons["force_finish"].cget("text"),
+            )
+            self.assertEqual(
+                tr(locale, "hide"), ui.progress_buttons["hide"].cget("text"),
+            )
+            self.assert_progress_controls_inside(window, ui)
+        language.set("en")
+        ui.refresh_progress_actions()
+        root.update()
+        self.capture_force_finish_window(window, ui, "force-finish-narrow.png")
+        ui.progress_buttons["force_finish"].invoke()
+        self.assertEqual(1, len(force_callbacks))
+        self.assertTrue(ui._force_finish_pending)
+        self.assertTrue(ui.progress_buttons["hide"].winfo_ismapped())
+        callback = force_callbacks.pop(0)
+        callback("pending_transport")
+        del callback
+        self.assertTrue(operation.cancel.is_set())
+        self.assertIsNone(ui.operation)
+        self.assertEqual(
+            recovery_text("en", "force_finish_transport_active"),
+            host.status_var.get(),
+        )
+
+    def cleanup_force_finish_progress_fixture(
+        self, ui: FlightUI, root: tk.Tk,
+        callbacks: list[Callable[[str], None]],
+    ) -> None:
+        """Break fixture callback/Tk cycles and destroy native widgets on Tk.
+
+        Args:
+            ui (FlightUI): Constructor-bypassed adapter used by the fixture.
+            root (tk.Tk): Main-thread interpreter that owns fixture variables.
+            callbacks (list[Callable[[str], None]]): Host callback references
+                whose closures retain the adapter until the host reports a result.
+        Returns:
+            None: Releases callback and widget references before destroying Tk.
+        """
+        callbacks.clear()
+        window = ui.dialog
+        if window is not None and window.winfo_exists():
+            window.destroy()
+        ui.dialog = None
+        ui.progress_buttons.clear()
+        host = ui.host
+        ui.host = None
+        ui.operation = None
+        ui.automatic_operation = None
+        ui.progress_actions = None
+        ui.task_tree = None
+        ui.progress_detail_label = None
+        ui.bar = None
+        ui.activity_bar = None
+        ui.phase_var = None
+        ui.detail_var = None
+        ui.time_var = None
+        ui.ui_language = None
+        ui.capture_text = None
+        ui.text = None
+        ui.refresh_tasks = None
+        ui.refresh_progress_actions = None
+        ui.show_progress = None
+        ui.dialog_owner = None
+        host.status_var = None
+        host.simulator_presence = None
+        host.linking_manager = None
+        host.root = None
+        root.destroy()
+
+    def assert_progress_controls_inside(
+        self, window: tk.Toplevel, ui: FlightUI,
+    ) -> None:
+        """Keep every currently visible action within its progress toplevel.
+
+        Args:
+            window (tk.Toplevel): Native progress window whose bounds are tested.
+            ui (FlightUI): Progress owner with the rendered action controls.
+        Returns:
+            None: Fails if a visible action is clipped by the current geometry.
+        """
+        left = window.winfo_rootx()
+        top = window.winfo_rooty()
+        right = left + window.winfo_width()
+        bottom = top + window.winfo_height()
+        for label in ("force_finish", "hide"):
+            button = ui.progress_buttons[label]
+            self.assertTrue(button.winfo_ismapped(), label)
+            self.assertGreaterEqual(button.winfo_rootx(), left)
+            self.assertGreaterEqual(button.winfo_rooty(), top)
+            self.assertLessEqual(button.winfo_rootx() + button.winfo_width(), right)
+            self.assertLessEqual(button.winfo_rooty() + button.winfo_height(), bottom)
+
+    def capture_force_finish_window(
+        self, window: tk.Toplevel, ui: FlightUI, filename: str,
+    ) -> None:
+        """Capture a visible progress window directly by its native HWND.
+
+        Args:
+            window (tk.Toplevel): Actual FlightUI progress to capture.
+            ui (FlightUI): Progress owner whose Force finish control is checked.
+            filename (str): PNG artifact name in the hosted QA directory.
+        Returns:
+            None: Saves the rendered window when screenshot evidence is enabled.
+        """
+        window.deiconify()
+        window.attributes("-topmost", True)
+        window.lift()
+        window.focus_force()
+        window.update()
+        window.update_idletasks()
+        button = ui.progress_buttons["force_finish"]
+        self.assertTrue(button.winfo_ismapped())
+        self.assertGreater(button.winfo_width(), 0)
+        self.assertGreater(button.winfo_height(), 0)
+        if not QA_DIR:
+            if REQUIRE_TK:
+                self.fail("Native progress screenshots require PHP_GALLERY_WATCH_RECOVERY_QA_DIR.")
+            return
+        destination = Path(QA_DIR)
+        destination.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            handle = self.native_capture_handle(window)
+            image = ImageGrab.grab(window=handle)
+        else:
+            image = ImageGrab.grab((
+                window.winfo_rootx(), window.winfo_rooty(),
+                window.winfo_rootx() + window.winfo_width(),
+                window.winfo_rooty() + window.winfo_height(),
+            ))
+        self.assertGreater(image.width, 0)
+        self.assertGreater(image.height, 0)
+        self.assertGreater(
+            len(set(image.convert("RGB").getdata())),
+            FORCE_FINISH_SCREENSHOT_COLOR_MINIMUM,
+        )
+        image.save(destination / filename, format="PNG")
+
     def assert_actions_inside(self, dialog: WatchRecoveryReviewDialog) -> None:
         """Verify visible controls remain inside the native window bounds.
 
@@ -554,6 +800,8 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             )[-1],
         )
         adapter = object.__new__(FlightUI)
+        adapter._progress_generation = 0
+        adapter._force_finish_pending = False
         adapter.host = host
         adapter.operation = SimpleNamespace(cancel=cancel)
         adapter.detail_var = SimpleNamespace(set=lambda _value: None)
@@ -565,6 +813,8 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         failed_cancel = threading.Event()
         failed_details: list[str] = []
         failed = object.__new__(FlightUI)
+        failed._progress_generation = 0
+        failed._force_finish_pending = False
         failed.host = SimpleNamespace(
             stop_and_keep_watch_pending=lambda on_persisted: (
                 on_persisted(False), True
@@ -598,7 +848,9 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                 plans=[SimpleNamespace(directory=Path(directory), abandoned=False)],
                 update=lambda phase, detail="": phases.append((phase, detail)),
             )
-            alive_worker = SimpleNamespace(is_alive=lambda: True, drain_manifest=object())
+            alive_worker = SimpleNamespace(
+                is_alive=lambda: True, drain_manifest=queue_path,
+            )
             host = SimpleNamespace(
                 worker=alive_worker,
                 utc_sync=SimpleNamespace(is_alive=lambda: False),
@@ -607,6 +859,8 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                     text=lambda key, language: recovery_text(language, key)),
             )
             adapter = object.__new__(FlightUI)
+            adapter._progress_generation = 0
+            adapter._force_finish_pending = False
             adapter.operation = operation
             adapter.host = host
             adapter.recorder = None

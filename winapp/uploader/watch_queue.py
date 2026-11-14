@@ -5,7 +5,7 @@
 # Purpose: Retain capture admission and immutable FIFO order independently of HTTP.
 # Responsibilities:
 #   - Journal observed source generations before hashing or network work.
-#   - Preserve target binding, explicit Finish intent and retry/unknown outcomes.
+#   - Preserve target binding, Finish/Force intent and retry/unknown outcomes.
 #   - Extend state_store atomic publication without importing desktop UI owners.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
@@ -294,6 +294,7 @@ class WatchQueueStore:
                 'last_scan_at': 0.0, 'scan_generation': 0,
                 'error': '', 'last_failure': '', 'completed': False,
                 'order_verified': True, 'retained_stop': False,
+                'force_finished': False, 'force_finished_at': 0.0,
             }
 
     def initialize(self, initial: list[WatchSource] | None) -> None:
@@ -387,6 +388,8 @@ class WatchQueueStore:
                   or row.get('session_id') != self.path.parent.name):
                 raise ValueError('Capture belongs to another target or queue version.')
             row.setdefault('retained_stop', False)
+            row.setdefault('force_finished', False)
+            row.setdefault('force_finished_at', 0.0)
             items = row.get('items')
             if not isinstance(items, list) or len(items) > WATCH_QUEUE_MAX_ITEMS:
                 raise ValueError('Capture item collection is malformed.')
@@ -421,6 +424,13 @@ class WatchQueueStore:
                     or type(row.get('completed')) is not bool
                     or type(row.get('order_verified')) is not bool
                     or type(row.get('retained_stop')) is not bool
+                    or type(row.get('force_finished')) is not bool
+                    or type(row.get('force_finished_at')) not in (int, float)
+                    or not math.isfinite(row['force_finished_at'])
+                    or row['force_finished_at'] < 0
+                    or row['force_finished'] != (row['force_finished_at'] > 0)
+                    or row['force_finished'] and (cutoff <= 0 or row.get('frozen') is not True
+                                                   or row.get('completed') is True)
                     or not isinstance(row.get('error'), str)
                     or not isinstance(row.get('last_failure'), str)
                     or not isinstance(row.get('initial_hashes'), dict)
@@ -475,7 +485,8 @@ class WatchQueueStore:
                     or any(type(row.get(key)) is not int or row[key] < 0
                            for key in ('scan_generation', 'last_change_scan_generation'))):
                 raise ValueError('Capture boundary or reconciliation evidence is malformed.')
-            if (row['completed'] and (row['pending'] or not cutoff or not row['frozen']
+            if (row['completed'] and (row['force_finished'] or row['pending']
+                                      or not cutoff or not row['frozen']
                                       or row['retained_stop']
                                       or row['order_verified'] is not True)):
                 raise ValueError('Completed capture lacks its final queue barrier.')
@@ -592,6 +603,26 @@ class WatchQueueStore:
         with self.lock:
             return [self._item(raw) for raw in self.data.get('items', [])]
 
+    @property
+    def force_finished(self) -> bool:
+        """Report whether this durable session is permanently force-finished.
+
+        Returns:
+            bool: True when this session must never admit or replay work again.
+        """
+        with self.lock:
+            return self.data.get('force_finished') is True
+
+    @property
+    def force_finished_at(self) -> float:
+        """Return the captured explicit force-finish timestamp.
+
+        Returns:
+            float: First force-finish time in Unix seconds, or zero when unset.
+        """
+        with self.lock:
+            return float(self.data.get('force_finished_at', 0.0))
+
     def capture_initial(
         self, initial: list[WatchSource], hashes: dict[str, str] | None = None,
     ) -> None:
@@ -606,6 +637,8 @@ class WatchQueueStore:
             None: Activates only this original boundary without resetting queue data.
         """
         with self.lock:
+            if self.data.get('force_finished') is True:
+                raise ValueError('Force-finished capture cannot add an initial boundary.')
             if self.data.get('initial_captured') is True:
                 return
             row = copy.deepcopy(self.data)
@@ -628,6 +661,8 @@ class WatchQueueStore:
             None: Updates current error while retaining the last historical failure.
         """
         with self.lock:
+            if self.data.get('force_finished') is True:
+                return
             if self.data.get('error') == reason:
                 return
             row = copy.deepcopy(self.data)
@@ -647,6 +682,8 @@ class WatchQueueStore:
             None: Records only a still-matching original source fingerprint.
         """
         with self.lock:
+            if self.data.get('force_finished') is True:
+                return
             matching = any(value['path'] == source.path
                            and value['signature'] == source.signature
                            for value in self.data.get('initial_sources', []))
@@ -685,6 +722,8 @@ class WatchQueueStore:
         if disposition not in ('confirmed_by_receipt', 'skipped_by_user'):
             raise ValueError('Unsupported recovery disposition.')
         with self.lock:
+            if self.data.get('force_finished') is True:
+                raise ValueError('Force-finished queue cannot record a review disposition.')
             current = self.head()
             if current is None or (current.item_id, current.sequence,
                                    current.source.signature) != (
@@ -714,6 +753,8 @@ class WatchQueueStore:
         """
         with self.lock:
             row = copy.deepcopy(self.data)
+            if row.get('force_finished') is True:
+                return 0
             if row.get('recovery_intent') is not None:
                 raise ValueError('An interrupted recovery decision must be repaired first.')
             if row.get('completed') is True:
@@ -819,6 +860,14 @@ class WatchQueueStore:
                     or set(changes) - allowed):
                 raise ValueError('Only the current FIFO head may advance.')
             updated = replace(current, **changes)
+            if self.data.get('force_finished') is True:
+                live_success = (
+                    current.state == 'dispatching'
+                    and updated.state == 'acknowledged'
+                    and updated.disposition == 'uploaded'
+                )
+                if not live_success:
+                    raise ValueError('Force-finished queue cannot advance this item.')
             if (updated.state == 'acknowledged'
                     or updated.disposition in ('confirmed_by_receipt', 'skipped_by_user')):
                 updated = replace(updated, disposition_at=self.clock())
@@ -879,6 +928,8 @@ class WatchQueueStore:
             None: Preserves the first Finish intent through all retries and restarts.
         """
         with self.lock:
+            if self.data.get('force_finished') is True:
+                return
             if self.data.get('cutoff'):
                 return
             row = copy.deepcopy(self.data)
@@ -901,6 +952,8 @@ class WatchQueueStore:
             raise ValueError('Stop cutoff must be a positive finite timestamp.')
         with self.lock:
             row = copy.deepcopy(self.data)
+            if row.get('force_finished') is True:
+                return
             if not row.get('cutoff'):
                 row['cutoff'] = cutoff
                 row['frozen'] = True
@@ -916,6 +969,8 @@ class WatchQueueStore:
             None: Preserves cutoff, session, accepted paths and their order.
         """
         with self.lock:
+            if self.data.get('force_finished') is True:
+                return
             if self.data.get('retained_stop') is not True:
                 return
             row = copy.deepcopy(self.data)
@@ -935,7 +990,8 @@ class WatchQueueStore:
         with self.lock:
             cutoff = float(self.data.get('cutoff', 0.0))
             scanned = self.last_scan_at
-            if (not cutoff or self.data.get('retained_stop') is True
+            if (not cutoff or self.data.get('force_finished') is True
+                    or self.data.get('retained_stop') is True
                     or self.head() is not None
                     or self.data.get('order_verified') is not True
                     or scanned < cutoff + stable_seconds
@@ -948,3 +1004,35 @@ class WatchQueueStore:
             row['scan_generation'] = self.scan_generation
             self._publish(row)
             return True
+
+    def force_finish(self, cutoff: float) -> None:
+        """Permanently close this session without changing item outcomes.
+
+        Args:
+            cutoff (float): Explicit action time in Unix seconds; an existing
+                Finish cutoff remains the original capture-admission boundary.
+
+        Returns:
+            None: Persists terminal session intent while retaining queue evidence.
+
+        Raises:
+            ValueError: The explicit cutoff is invalid.
+            OSError: Durable publication or readback fails.
+        """
+        if not math.isfinite(cutoff) or cutoff <= 0:
+            raise ValueError('Force-finish cutoff must be a positive finite timestamp.')
+        with self.lock:
+            if self.data.get('force_finished') is True:
+                return
+            if self.data.get('completed') is True:
+                # A real completion is already terminal evidence; preserve it.
+                return
+            row = copy.deepcopy(self.data)
+            if not row.get('cutoff'):
+                row['cutoff'] = cutoff
+            row['frozen'] = True
+            row['force_finished'] = True
+            row['force_finished_at'] = cutoff
+            row['completed'] = False
+            row['checkpoint'] = self.clock()
+            self._publish(row)

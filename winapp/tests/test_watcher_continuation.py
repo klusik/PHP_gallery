@@ -70,6 +70,11 @@ TEST_GATE_TIMEOUT_SECONDS = 0.05
 # Consumers: linked target verification tests. Rationale: the host only
 # schedules work inside this window; no fixture waits for its deadline.
 TEST_RESUME_DEADLINE_SECONDS = 30.0
+# Keep the synthetic queue retry visible as a future deadline for diagnostics.
+# Type: float; Units: seconds; Scope: one live queue snapshot regression.
+# Consumers: test_live_queue_diagnostics_keep_retry_and_prior_failure.
+# Rationale: a named future offset proves retry_at survives without waiting.
+TEST_QUEUE_RETRY_DELAY_SECONDS = 30.0
 
 
 def load_main_module() -> ModuleType:
@@ -113,6 +118,16 @@ def initialize_event_pump_fixture(app: MAIN.WatcherApp) -> None:
     app._update_resume_generation = getattr(app, '_update_resume_generation', 0)
     app._update_resume_cancelled = getattr(app, '_update_resume_cancelled', False)
     app._update_resume_inspecting = getattr(app, '_update_resume_inspecting', False)
+    app._force_finished_workers = getattr(app, '_force_finished_workers', set())
+    app._force_finished_operations = getattr(
+        app, '_force_finished_operations', set(),
+    )
+    app._finish_resume_attempted_sessions = getattr(
+        app, '_finish_resume_attempted_sessions', set(),
+    )
+    app._force_finish_failure_type = getattr(
+        app, '_force_finish_failure_type', '',
+    )
     app._drain_event_batch = MAIN.WatcherApp._drain_event_batch.__get__(
         app, MAIN.WatcherApp,
     )
@@ -329,6 +344,8 @@ class WatcherContinuationTests(unittest.TestCase):
             app._after_update_nonce = None
             app.events = queue.Queue()
             flight_owner = object.__new__(FlightUI)
+            flight_owner._progress_generation = 0
+            flight_owner._force_finish_pending = False
             flight_owner.lease = self.lease
             flight_owner.directory = self.flight_root
             flight_owner.load_error = ""
@@ -1119,7 +1136,7 @@ class WatcherContinuationTests(unittest.TestCase):
         app._resume_retry_available = True
         app.worker = worker
         app.flights = SimpleNamespace(
-            lease=self.lease, stop=mock.Mock(),
+            lease=self.lease, stop=mock.Mock(), operation=None,
             plan=SimpleNamespace(reports_enabled=True),
         )
         app.write_log = mock.Mock()
@@ -1348,6 +1365,8 @@ class WatcherContinuationTests(unittest.TestCase):
         record.save(self.lease, ordinary_restart=True)
 
         flight_owner = object.__new__(FlightUI)
+        flight_owner._progress_generation = 0
+        flight_owner._force_finish_pending = False
         flight_owner.lease = self.lease
         flight_owner.directory = self.flight_root
         flight_owner.load_error = ''
@@ -2089,7 +2108,7 @@ class WatcherContinuationTests(unittest.TestCase):
         app.media_capabilities = {}
         app.activity_events = []
         app.worker = None
-        app.flights = SimpleNamespace(recorder=None)
+        app.flights = SimpleNamespace(recorder=None, operation=None)
         app.linking_manager = SimpleNamespace(
             diagnostics_snapshot=lambda: "stage=discovery; reason=server_unavailable",
         )
@@ -2171,6 +2190,11 @@ class WatcherContinuationTests(unittest.TestCase):
             "shortcut key=f state=0x8",
             render_summary,
             "Update continuation: stage=resume; reason=continuation_unverified",
+            'Finish operation: {"generation": null, "trigger": "none", '
+            '"phase": "idle", "error": "", "sessions": [], '
+            '"worker_running": false, "automatic_retry_guard": 0, '
+            '"force_finish_failure_type": ""}',
+            'Upload queue: {}',
             "Runtime: source",
             "Tk: 8.6.15",
             "Pillow:",
@@ -2185,4 +2209,33 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertIn('Latest failure: phase=media-fetch', snapshot)
         self.assertIn('error_type=ValueError', '\n'.join(logs.output))
         self.assertNotIn('private-render-fixture', '\n'.join(logs.output))
+
+    def test_live_queue_diagnostics_keep_retry_and_prior_failure(self) -> None:
+        """Expose live retry timing separately from the retained failure.
+
+        Returns:
+            None: Current head reason and retry time coexist with the last
+                durable failure after the producer error has cleared.
+        """
+        worker, _events, _dispatched = self.make_watcher()
+        journal = worker._queue
+        if journal is None:
+            raise AssertionError('Watcher fixture did not restore its queue.')
+        head = journal.head()
+        if head is None:
+            raise AssertionError('Watcher fixture has no pending queue head.')
+        retry_at = time.time() + TEST_QUEUE_RETRY_DELAY_SECONDS
+        head = journal.update(
+            head, reason='current head reason', next_retry_at=retry_at,
+        )
+        journal.record_error('historical discovery failure')
+        journal.record_error('')
+
+        snapshot = MAIN.WatcherApp._watch_diagnostic_snapshot(
+            SimpleNamespace(worker=worker),
+        )
+
+        self.assertEqual('current head reason', snapshot['reason'])
+        self.assertIn('historical discovery failure', snapshot['last_failure'])
+        self.assertEqual(retry_at, snapshot['retry_at'])
 

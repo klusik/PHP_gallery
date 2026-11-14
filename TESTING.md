@@ -1964,6 +1964,23 @@ starting, finishing or reconciling accepted work. Later items may progress only
 after a head-specific durable decision. A prior-history review must not create
 an acknowledgement for a never-dispatched new item.
 
+The empty-Finish regression models an installed 1.1.2 report with zero pending,
+206 confirmed photos, a new passive Watcher and an empty Finish identity. A
+different live producer must not hold that Finish for its graceful-drain
+deadline or cause an automatic timeout/resume loop. A matching queue still
+requires its actual final scan and preserves any dispatched request owner.
+Force-finish fixtures cover durable terminal restore, pending/unknown originals,
+new-dispatch fencing, late responses and stale UI callbacks, failed publication,
+repeated clicks, refresh/startup suppression and bounded normal Exit. Native
+Windows desktop/narrow fixtures keep Force finish and Hide reachable in error
+and waiting states. No installed-client or production acceptance is inferred
+from these disposable hosted fixtures.
+`test_watch_force_finish.py` exercises the actual app hook and event pump with
+durable queues, session plans and native upload leases, including a held late
+response and normal Close while its daemon request remains owned. UI projections
+and explicit retry behavior remain in `test_flight_ui.py`; rendered controls
+and all four language labels remain in `test_watch_recovery_ui.py`.
+
 Remote evidence must identify the candidate SHA, immutable main merge-base,
 workflow run, per-test results and native screenshots. Report failures, skipped
 native cases and unperformed installed Windows, sleep/power-loss, target-server

@@ -1793,6 +1793,18 @@ Po restartu pokračuje ověřený Finish stejného cíle automaticky;
 odvolání legacy klíče zachovává samostatné nové potvrzení.
 Linked flight reports zůstávají místně.
 
+V~průběhu Finish je~i~při chybě nebo timeoutu dostupné \ui{Vynutit dokončení}
+(Force finish). Zastaví nové přijímání a~odesílání a~po~trvalém uložení
+rozhodnutí místně ukončí relaci. Neodeslané originály, reporty a~doklady
+nejistého uploadu zůstanou na~disku; nic se~neoznačí za~odeslané ani
+přeskočené. Refresh, timeout ani restart tuto relaci znovu nespustí.
+Již odeslaný request drží skutečného vlastníka až~do~konce. Po~uložení
+rozhodnutí lze aplikaci ukončit s~omezeným čekáním; ukončení práce procesu
+nepotvrzuje výsledek na~serveru. Start Watcher vytvoří novou hranici capture.
+Běžný Finish čeká na~vlastní fronty a~závěrečný scan, nikoli na~cizí idle
+Watcher, a~neopakuje prázdné automatické dokončování. Diagnostika rozlišuje
+relaci capture od~fronty pracovníka.
+
 Nejistá hlava ukazuje \ui{Vyžaduje pozornost}. \ui{Pokračovat} ve Watcheru,
 \ui{Vynutit pokračování} v~průběhu a~\ui{Zkontrolovat čekající uploady}
 po restartu otevírají stejnou kontrolu konkrétní zachované generace a~cíle.

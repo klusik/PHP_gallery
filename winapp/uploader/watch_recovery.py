@@ -286,6 +286,8 @@ class WatchRecoveryCoordinator:
         """
         with self._decision_context():
             with self.store.lock:
+                if self.store.force_finished:
+                    return
                 self._validate_context()
                 intent = self.store.data.get('recovery_intent')
                 if not isinstance(intent, dict):
@@ -457,6 +459,8 @@ class WatchRecoveryCoordinator:
             ValueError: Any expected recovery precondition is absent.
         """
         with self.store.lock:
+            if self.store.force_finished:
+                raise ValueError('Force-finished session cannot accept recovery decisions.')
             self._validate_context()
             current_target = (self.target_binding() if callable(self.target_binding)
                               else self.target_binding)

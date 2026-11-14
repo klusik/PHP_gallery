@@ -220,6 +220,17 @@ blocked Finish, explicit stop/retention and always available Hide. Folder
 inspection reads filesystem observations independently from the capture journal.
 Neither remote preview nor hash inventory is an upload acknowledgement.
 
+Force finish separates logical finalization from physical request ownership.
+The app captures the exact operation and queue generation, fences new dispatch,
+and publishes the queue's terminal decision and capture-plan abandonment off Tk.
+FlightUI clears only that operation after verified persistence. The original
+request retains its native leases until actual termination; late callbacks
+cannot restart finalization or claim another capture. Normal Exit is bounded
+after the durable decision and preserves unknown outcomes. Ordinary Finish
+waits for its captured plans and required final scans, rather than every live
+Watcher thread. Refresh cannot create a new empty Finish or resume a terminal
+session. See the queue contract for retained-file and late-receipt semantics.
+
 The normal WinApp launch selects Photos in the main window. Its workspace
 mounts optional last-complete metadata through `gallery_catalogue_cache.py`
 before refreshing the live link's hierarchy. That persistence owner validates
