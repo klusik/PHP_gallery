@@ -79,6 +79,23 @@ back. A failed save leaves processing paused under the same owner.
 Explicit recovery after that failure restarts reconciliation and the required
 final scan while preserving the session cutoff.
 
+**Force finish** is the escape action in Finish progress, including an error or
+timeout. It closes that capture locally without claiming its uploads succeeded.
+It stops admission and new dispatch, durably records the terminal decision and
+retains originals, pending items, reports and unknown-upload evidence. The old
+session cannot automatically resume Finish after refresh, timeout or restart.
+Start Watcher creates a new capture boundary. A request already sent may still
+return; it keeps its physical ownership until it ends, and its result remains
+subject to exact receipt validation. Force finish does not revoke access or
+delete a retained source. Once the decision is saved, progress and normal Exit
+are available without waiting indefinitely for that request. Exiting terminates
+remaining process work; it does not establish the server-side outcome.
+
+Finish waits for its own captured queues, required final scan and actual
+transport work. A different live Watcher with no work in that Finish is not a
+drain blocker. Queue refresh reconciles its original session; it does not create
+an empty Finish operation or revive a force-finished session.
+
 The magnifier is **Inspect folder (read-only)**. Its separate result counts
 filesystem files, without changing the accepted queue, startup exclusions or
 live Watcher status. It is available during capture and Finish; it does not

@@ -253,6 +253,40 @@ The immediate stop intent also suppresses optional source deletion for a late
 successful response; the real acknowledgement is retained without discarding
 the original the operator chose to keep.
 
+### Force finish and operation ownership
+
+**Force finish** closes logical capture/finalization even when graceful Finish
+times out or a worker does not return. It stops new admission and dispatch
+immediately and publishes a durable, terminal `force_finished` decision for the
+original queue and capture plan off the Tk thread. It retains the first cutoff,
+all pending generations, original files, dispositions and unknown-upload
+history. It never changes unresolved items to uploaded, skipped or successfully
+completed. Older journals without the terminal fields retain their previous
+behavior. Refresh, recovery, timeout and startup cannot resume this old session;
+a deliberate new Start uses a new session and startup boundary.
+
+Publication must not wait on the consumer's network-held recovery lock from Tk.
+The UI leaves finalization only after the durable terminal intent is verified;
+a failed save stays visible with processing paused. Late events are bound to
+their original worker/session and cannot recreate an abandoned Finish or clear
+another operation's state. Diagnostics distinguish terminal logical state from
+a still-live physical request, and identify the current Finish plans and worker
+queue rather than attributing an old failure to current work.
+
+A dispatched request retains its physical pipeline/target leases until it
+actually ends. A late validated acknowledgement may record real success without
+deleting the retained original or dispatching the next item. No concurrent
+writer is admitted through a UI reset. Normal Exit after the durable decision
+is bounded and may terminate remaining process work; a terminated request keeps
+its unknown outcome for later explicit review. Force finish does not revoke
+credentials, erase an upload journal or promise server-side cancellation.
+
+Normal Finish evaluates its captured plan directories and their verified final
+scan, pending items and transport ownership. A live unrelated Watcher is not
+accepted work for that operation. An empty count before the required final scan
+does not prove completion. Automatic Finish continuation is restricted to its
+original nonterminal session and cannot repeatedly finalize an empty operation.
+
 Manual uploads to the same target do not repair a pending Watcher journal.
 Unresolved matching work requires explicit review under the shared pipeline
 fence, even when the operator can see an apparently matching remote image.

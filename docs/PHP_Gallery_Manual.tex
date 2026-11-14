@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.2.0}
+\newcommand{\version}{1.2.1}
 \newcommand{\manualdate}{14 November 2026}
 
 \hypersetup{
@@ -1825,6 +1825,18 @@ revoke access or~delete files. A~request still running keeps its~owner;
 the~UI reports that wait instead of~claiming successful completion.
 Ownership remains held until the~retained cutoff has~been saved and~read back;
 a~failed save keeps processing paused under the~same owner.
+
+\ui{Force finish} is~available in~Finish progress, including after an~error
+or~timeout. It~closes the~capture locally, stops new admission and~dispatch,
+and~saves a~terminal decision before leaving finalization. Pending originals,
+reports and~unknown-upload evidence remain on~disk; no~item is~declared
+uploaded or~skipped. Refresh, timeout and~restart cannot resume that session.
+An~already sent request retains its~physical owner until it~actually ends.
+After the~decision is~saved, normal Exit is~bounded; terminating remaining
+process work does~not~prove the~server outcome. Start Watcher creates a~new
+capture boundary. Normal Finish waits for~its~own queues and~required final
+scan, without waiting for~an~unrelated idle Watcher or~creating an~empty
+automatic Finish loop. Diagnostics identify the~capture and~worker separately.
 
 Inventory/upload no~longer share 60 requests per IP per 300~s.
 Upload grant budgets count requests; account/IP/global storage budgets charge

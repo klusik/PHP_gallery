@@ -556,3 +556,34 @@ class WatchRecoveryTests(unittest.TestCase):
         thread.join(RECOVERY_GATE_FIXTURE_SECONDS[1])
         self.assertFalse(thread.is_alive())
         self.assertTrue(finished.is_set())
+
+    def test_force_finished_session_is_read_only_to_recovery_coordinator(self) -> None:
+        """Keep durable recovery visible while refusing every old-session mutation.
+
+        Returns:
+            None: Forced queue evidence remains unchanged through stale UI decisions.
+        """
+        source = self.add_items(1)[0]
+        head = self.store.head()
+        assert head is not None
+        self.store.update(head, sha256=hashlib.sha256(source.read_bytes()).hexdigest())
+        snapshot = self.coordinator(receipt=True).snapshot()
+        assert snapshot is not None
+        self.store.force_finish(2000.0)
+        before = self.store.path.read_bytes()
+        forced_service = self.coordinator(receipt=True)
+
+        retained = forced_service.snapshot()
+        assert retained is not None
+        self.assertEqual(snapshot.item_id, retained.item_id)
+        self.assertTrue(self.store.force_finished)
+        with self.assertRaises(ValueError):
+            forced_service.confirm_receipt(snapshot)
+        with self.assertRaises(ValueError):
+            forced_service.skip_head(snapshot)
+        with self.assertRaises(ValueError):
+            forced_service.resume_retained(snapshot)
+        forced_service.repair_interrupted_decision()
+        self.assertEqual(before, self.store.path.read_bytes())
+        self.assertEqual('uncertain', self.store.head().state)
+        self.assertTrue(source.exists())

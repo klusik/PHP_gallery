@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.2.0}
+\newcommand{\version}{1.2.1}
 \newcommand{\manualdate}{14~november~2026}
 
 \hypersetup{
@@ -1849,6 +1849,18 @@ och kräver en ny slutlig scan efter sista bekräftelsen. Fotokön får vänta
 längre än fem minuter. Verifierat foto-Finish för samma mål fortsätter efter
 omstart; äldre API-nycklar kräver fortsatt separat ny bekräftelse före
 återkallning. Linked-flygrapporter stannar lokalt.
+
+\ui{Tvinga slutförande} (Force finish) är tillgängligt i Finish-förloppet även
+vid fel eller timeout. Åtgärden stoppar ny insamling och sändning och stänger
+sessionen lokalt efter att slutbeslutet sparats beständigt. Väntande original,
+rapporter och underlag för osäkra uploads behålls; ingen post räknas som
+uppladdad eller överhoppad. Uppdatering, timeout och omstart återupptar inte
+sessionen. En redan skickad begäran behåller sin fysiska ägare tills den
+verkligen avslutats. Efter lagring är normal avslutning tidsbegränsad;
+avslutad process bevisar inget serverresultat. Start Watcher skapar en ny
+insamlingsgräns. Normalt Finish väntar på egna köer och slutskanningen,
+inte på en orelaterad inaktiv Watcher, och upprepar inget tomt automatiskt
+avslut. Diagnostiken skiljer insamlingssessionen från worker-kön.
 
 Ett osäkert huvud visar \ui{Åtgärd krävs}. \ui{Återuppta} i Watcher,
 \ui{Tvinga fortsatt granskning} i förloppet och \ui{Granska väntande uploads}

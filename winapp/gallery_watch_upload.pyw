@@ -5091,6 +5091,7 @@ class WatcherThread(threading.Thread):
         self._producer_error = ''
         self._refresh_pending = False
         self._pending_transport: threading.Event | None = None
+        self._transport_active = threading.Event()
         self._active_queue_item: WatchQueueItem | None = None
         self._watch_dispatch_started = False
         self._dispatch_observer: Optional[Callable[[], None]] = None
@@ -5102,12 +5103,19 @@ class WatcherThread(threading.Thread):
         self._queue_directory_override: Optional[Path] = None
         self._recovery_review_only = False
         self._force_stop_requested = threading.Event()
+        self._force_finish_requested = threading.Event()
+        self._force_finish_publishing = threading.Event()
+        self._force_finish_publication_done = threading.Event()
+        self._force_finish_publication_done.set()
+        self._force_finish_cutoff = 0.0
+        self._force_finish_operation_id = 0
         self._retained_stop_publishing = threading.Event()
         self._retained_stop_publication_done = threading.Event()
         self._retained_stop_publication_done.set()
         self._retained_stop_cutoff = 0.0
         self._keep_sources_after_stop = False
         self._recovery_gate = threading.RLock()
+        self._force_finish_lease_lock = threading.RLock()
         self._pipeline_lease: UploadPipelineLease | None = None
         self.recovery_coordinator: WatchRecoveryCoordinator | None = None
 
@@ -5378,10 +5386,11 @@ class WatcherThread(threading.Thread):
         self._producer_wake.set()
 
     def emit_queue_snapshot(self) -> None:
-        """Publish local producer/consumer state without reading Tk from workers.
+        """Publish exact session, scan, intent and dispatch state without Tk access.
 
         Returns:
-            None: Queues counts, current head, retry and safe historical diagnostics.
+            None: Queues counts, flight/queue identities, cutoff, last scan,
+                current transport identity and retained progress diagnostics.
         """
         journal = getattr(self, '_queue', None)
         if journal is None:
@@ -5397,9 +5406,22 @@ class WatcherThread(threading.Thread):
                 ),
                 'skipped_count': sum(item.state == 'skipped' for item in items),
                 'session_id': journal.data['session_id'],
+                'flight_session_id': (
+                    self.drain_manifest.parent.name
+                    if self.drain_manifest is not None else ''
+                ),
                 'target_binding': journal.binding,
+                'finish_intent': bool(journal.data.get('cutoff')),
+                'force_finished': journal.force_finished,
+                'force_finished_at': journal.force_finished_at,
+                'intent': (
+                    'force_finished' if journal.force_finished else
+                    'finish' if journal.data.get('cutoff') else 'capture'
+                ),
                 'snapshot_at': time.time(),
                 'cutoff': journal.data['cutoff'],
+                'last_scan_generation': journal.scan_generation,
+                'completed': journal.data.get('completed') is True,
                 'head_id': head.item_id if head is not None else '',
                 'head_sequence': head.sequence if head is not None else 0,
                 'head_file': Path(head.source.path).name if head is not None else '',
@@ -5414,6 +5436,20 @@ class WatcherThread(threading.Thread):
                 'last_failure': journal.data['last_failure'],
                 'producer_running': bool(self._producer_thread is not None
                                          and self._producer_thread.is_alive()),
+                'dispatch_active': bool(
+                    self._transport_active.is_set()
+                    or self._pending_transport is not None
+                    and not self._pending_transport.is_set()
+                ),
+                'active_item_id': (
+                    self._active_queue_item.item_id
+                    if self._active_queue_item is not None else ''
+                ),
+                'active_item_sequence': (
+                    self._active_queue_item.sequence
+                    if self._active_queue_item is not None else 0
+                ),
+                'force_finish_pending': self._force_finish_requested.is_set(),
                 'consumer_phase': self._diagnostic_phase,
             }
         self.events.put({'kind': 'watch_queue', 'payload': detail})
@@ -5440,8 +5476,12 @@ class WatcherThread(threading.Thread):
         """Coalesce a manual rescan without changing retry or transport ownership.
 
         Returns:
-            None: Schedules immediate same-session discovery and a safe consumer wake.
+            None: Schedules discovery only for a nonterminal session; never starts
+                Finish or reopens a force-finished queue.
         """
+        if self._queue is not None and self._queue.force_finished:
+            self.emit('warning', 'Force-finished queue is retained and cannot be refreshed.')
+            return
         with self._admission_lock:
             if self._refresh_pending:
                 self.emit('info', 'Queue refresh merged with the pending request.')
@@ -5839,20 +5879,25 @@ class WatcherThread(threading.Thread):
                 self.emit('error', self.drain_error)
         finally:
             self._retained_stop_publication_done.wait()
-            pipeline.release()
-            self._pipeline_lease = None
-            try:
-                if gui_work is not None:
-                    gui_work.close()
-            finally:
-                try:
-                    if self._linked_lease is not None:
-                        self._linked_lease.release()
-                finally:
-                    self.events.put({
-                        "kind": "watcher_start_finished",
-                        "payload": {"worker": self},
-                    })
+            while True:
+                with self._force_finish_lease_lock:
+                    if self._force_finish_publication_done.is_set():
+                        pipeline.release()
+                        self._pipeline_lease = None
+                        try:
+                            if gui_work is not None:
+                                gui_work.close()
+                        finally:
+                            try:
+                                if self._linked_lease is not None:
+                                    self._linked_lease.release()
+                            finally:
+                                self.events.put({
+                                    "kind": "watcher_start_finished",
+                                    "payload": {"worker": self},
+                                })
+                        break
+                self._force_finish_publication_done.wait()
 
     def _unexpected_error_summary(self, error: BaseException) -> str:
         """Describe an unexpected worker error without its sensitive message.
@@ -5891,10 +5936,11 @@ class WatcherThread(threading.Thread):
         )
 
     def _run_owned(self) -> None:
-        """Observe new photographs, then drain a frozen recoverable queue.
+        """Observe sources or drain one recoverable queue until its terminal state.
 
         Returns:
-            None: Pending/error state survives cancellation, timeout and restart.
+            None: Pending/error/force-finished state survives restart; a durable
+                force-finish marker prevents recovery or automatic replay.
         """
         folder = (getattr(self, '_watch_folder_override', None)
                   or Path(self.config.watched_folder))
@@ -5904,6 +5950,15 @@ class WatcherThread(threading.Thread):
             self.drain_only = self.drain_requested_at > 0
             if self.drain_only:
                 self.drain_event.set()
+        if self._queue is not None and self._queue.force_finished:
+            self._force_finish_requested.set()
+            self._force_stop_requested.set()
+            self._producer_stop.set()
+            self.stop_event.set()
+            self._diagnostic_phase = 'force_finished'
+            self.emit_queue_snapshot()
+            self.emit('warning', 'Watcher session was explicitly force-finished; pending sources remain retained.')
+            return
         pipeline = self._pipeline_lease
         if pipeline is not None and self._queue is not None:
             self._initialize_recovery_coordinator(pipeline)
@@ -6115,7 +6170,8 @@ class WatcherThread(threading.Thread):
             upload_url (str): Captured legacy upload endpoint or linked issuer.
 
         Returns:
-            None: Resolves one head or retains its exact blocking/retry state.
+            None: Resolves one head or retains its exact blocking/retry state;
+                a pending force-finish intent prevents any new dispatch.
 
         Raises:
             OSError: Durable queue evidence cannot be published.
@@ -6127,6 +6183,8 @@ class WatcherThread(threading.Thread):
         if journal is None or journal.data.get('order_verified') is not True:
             self.drain_error = 'Legacy queue has no provable FIFO order; review required.'
             self.emit_queue_snapshot()
+            return
+        if self._force_finish_requested.is_set() or journal.force_finished:
             return
         if journal.data.get('retained_stop') is True:
             self._recovery_review_only = True
@@ -6237,6 +6295,7 @@ class WatcherThread(threading.Thread):
             payload = self.upload_watched_file(
                 upload_url, path, metadata, file_hash, size,
             )
+            self._transport_active.clear()
             self._last_upload_payload = payload
             if self._once_work is not None:
                 self._once_work.checkpoint()
@@ -6270,6 +6329,7 @@ class WatcherThread(threading.Thread):
                 self._handle_watch_failure(item, failure, 'upload' if
                                            self._watch_dispatch_started else 'preparation')
         finally:
+            self._transport_active.clear()
             self._active_queue_item = None
             self.emit_queue_snapshot()
 
@@ -6325,6 +6385,7 @@ class WatcherThread(threading.Thread):
             self.state.mark_uncertain(Path(item.source.path), item.sha256)
         if self._dispatch_observer is not None:
             self._dispatch_observer()
+        self._transport_active.set()
 
     def _handle_watch_failure(
         self, item: WatchQueueItem, failure: Exception | None, phase: str,
@@ -8226,6 +8287,10 @@ class WatcherApp:
             lambda: self.config.simconnect_dll_path, CONFIG_DIR
         )
         self.worker: Optional[WatcherThread] = None
+        self._force_finished_workers: set[WatcherThread] = set()
+        self._force_finished_operations: set[FinalizationWorker] = set()
+        self._force_finish_callbacks: dict[int, list[Callable[[str], None]]] = {}
+        self._force_finish_failure_type = ''
         self._after_update_nonce = after_update
         self._gui_mode_ready = False
         self._update_resume_attempted = False
@@ -8248,6 +8313,8 @@ class WatcherApp:
         self._ordinary_restart_prepared = False
         self._ordinary_restart_resuming = False
         self._ordinary_restart_thread: Optional[threading.Thread] = None
+        self._finish_resume_attempted_sessions: set[str] = set()
+        self._finish_resume_generation = 0
         self._discard_update_resume_intent()
         self._resume_retry_available = False
         self.manual_worker: Optional[ManualUploadThread] = None
@@ -13257,7 +13324,8 @@ class WatcherApp:
             review_only (bool): Hold network admission until explicit review action.
 
         Returns:
-            Optional[WatcherThread]: Started drain worker, or None for no queue.
+            Optional[WatcherThread]: Started recoverable drain worker, or None
+                when no queue exists or its durable session was force-finished.
 
         Raises:
             ValueError: A durable queue cannot be interpreted safely.
@@ -13269,6 +13337,8 @@ class WatcherApp:
         pending, frozen = row.get("pending"), row.get("frozen")
         if not isinstance(pending, list) or not isinstance(frozen, bool):
             raise ValueError("Pending photograph queue is malformed.")
+        if row.get('force_finished') is True:
+            return None
         if not pending and frozen and (row.get('schema_version') == 1
                                       or row.get('completed') is True):
             return None
@@ -13967,6 +14037,7 @@ class WatcherApp:
             self.open_connection_dialog()
         elif action == "finish":
             self._cancel_ordinary_restart_for_action()
+            self._next_finish_trigger_reason = 'explicit_finish'
             if (isinstance(getattr(self, "_contextual_watch_target", None),
                            LinkedUploadTarget)
                     and not self.contextual_watcher_is_flight()):
@@ -14362,6 +14433,8 @@ class WatcherApp:
                 canceled, and clears it only before confirmed app teardown.
                 Confirmed teardown also stops the simulator-presence observer
                 and forgets any in-memory linked identity.
+                A durably force-finished daemon request may remain referenced
+                through bounded process exit; its lease is not released early.
                 A clean quit checkpoints an active Watcher asynchronously and
                 preserves only its exact profile-bound restart consent.
                 Update shutdown requires the pre-handoff checkpoint; its existing
@@ -14392,11 +14465,23 @@ class WatcherApp:
                 os._exit(0)
         if getattr(self, "updates", None) is not None and self.updates.request_close():
             return
+        self._prune_force_finished_workers()
+        force_shutdown = any(
+            worker.is_alive() and worker._queue is not None
+            and worker._queue.force_finished
+            for worker in self._force_finished_workers
+        ) or any(operation.is_alive()
+                 for operation in self._force_finished_operations)
         if self.api_key_revoke_running:
+            self.flights.show_progress()
+            force_available = not self.flights.independent_operation()
             messagebox.showwarning(
                 "Finishing current work",
-                "Wait for accepted work and any server response to finish. "
-                "Flight progress shows the remaining tasks.",
+                "Finish is still active. Use Force Finish in the progress panel "
+                "to save pending originals and release the logical Finish guard."
+                if force_available else
+                "An independent report or upload is still active. Wait for its "
+                "current request to finish; its progress remains available.",
             )
             return
         if self.exiting:
@@ -14472,6 +14557,10 @@ class WatcherApp:
             self.manual_worker, self.ai_worker, self.api_key_revoke_thread,
             getattr(self, '_update_resume_context_key_worker', None),
         ):
+            if (force_shutdown and (
+                    worker in self._force_finished_workers
+                    or worker in self._force_finished_operations)):
+                continue
             if worker is None or not worker.is_alive():
                 continue
             remaining = max(0.0, deadline - time.monotonic())
@@ -14493,6 +14582,9 @@ class WatcherApp:
                     self, '_update_resume_context_key_worker', None,
                 )),
             )
+            if not (force_shutdown and (
+                    worker in self._force_finished_workers
+                    or worker in self._force_finished_operations))
             if worker is not None and worker.is_alive()
         ]
         if still_running:
@@ -14501,10 +14593,11 @@ class WatcherApp:
                 ". In-flight network work may still be returning, and durable import state is preserved."
             )
             self.write_log(message, "warning")
-            if self.tray_icon is not None and messagebox.askyesno(
+            if (not force_shutdown and self.tray_icon is not None
+                    and messagebox.askyesno(
                 "Background work is still stopping",
                 message + "\n\nKeep the application running in the tray instead of forcing it closed?",
-            ):
+            )):
                 self.exiting = False
                 self.hide_to_tray()
                 self._sync_watcher_recording()
@@ -14517,7 +14610,8 @@ class WatcherApp:
         self.set_update_available(None)
         self.stop_tray_icon()
         self.simulator_presence.stop()
-        self.linking_manager.close()
+        if not force_shutdown:
+            self.linking_manager.close()
         self._cancel_event_ui_callbacks()
         self.root.destroy()
 
@@ -14740,7 +14834,8 @@ class WatcherApp:
         """Recover durable screenshot Finish intent after verified startup binding.
 
         Returns:
-            None: Checks one original session off Tk and reuses finalization ownership.
+            None: Checks unfinished sessions once per binding without starting
+                a repeated automatic Finish after a failed attempt.
         """
         if (self.exiting or self.updates.blocked() or self.flights.busy()
                 or self.worker is not None and self.worker.is_alive()
@@ -14760,6 +14855,8 @@ class WatcherApp:
             return
         self._finish_resume_checked = binding
         self._finish_resume_inspecting = True
+        self._finish_resume_generation += 1
+        generation = self._finish_resume_generation
 
         def inspect() -> None:
             """Read only same-target Finish evidence without starting an HTTP request.
@@ -14777,16 +14874,19 @@ class WatcherApp:
                     row = read_document(manifest)
                     if (row.get('schema_version') == 2
                             and row.get('binding') == binding
+                            and row.get('force_finished') is not True
                             and type(row.get('cutoff')) in (int, float)
                             and row['cutoff'] > 0 and row.get('completed') is not True):
                         eligible.append(plan.session_id)
                 self.events.put({'kind': 'watch_finish_resume_ready', 'payload': {
                     'binding': binding, 'sessions': eligible,
                     'unambiguous': len(plans) == 1,
+                    'generation': generation,
                 }})
             except (OSError, ValueError, RuntimeError):
                 self.events.put({'kind': 'watch_finish_resume_failed', 'payload': {
                     'binding': binding,
+                    'generation': generation,
                 }})
 
         threading.Thread(target=inspect, name='PHPGalleryFinishRecovery', daemon=True).start()
@@ -14795,11 +14895,18 @@ class WatcherApp:
         """Rescan the original queue and safely wake or replace its stopped owner.
 
         Returns:
-            None: Coalesces refreshes; never clears retry, unknown results or binding.
+            None: Coalesces same-session scans; never starts Finish, clears retry,
+                unknown results or binding, or reopens a force-finished session.
         """
         original = self.worker
         if original is None or original.drain_manifest is None:
             self.write_log('No retained Watcher queue is available to refresh.', 'warning')
+            return
+        if original._queue is not None and original._queue.force_finished:
+            self.write_log(
+                'Force-finished session remains retained; refresh cannot reopen it.',
+                'warning',
+            )
             return
         if original.is_alive():
             original.request_refresh()
@@ -15112,6 +15219,7 @@ class WatcherApp:
         if (not worker._recovery_review_only
                 and getattr(self, '_queue_recovery_finish_requested', False)):
             self._queue_recovery_finish_requested = False
+            self._next_finish_trigger_reason = 'recovery_resolved_finish'
             self.flights.begin(
                 False, automatic=True,
                 photos_only=(worker.linked_target is not None
@@ -15189,6 +15297,293 @@ class WatcherApp:
             worker._retained_stop_publication_done.set()
             if on_persisted is not None:
                 on_persisted(False)
+            return False
+        return True
+
+    def force_finish_flight(
+        self, on_result: Callable[[str], None],
+    ) -> bool:
+        """Persist captured Finish abandonment while retaining transport ownership.
+
+        Args:
+            on_result (Callable[[str], None]): Tk callback receiving persisted,
+                pending_transport or failed after exact durable session readback.
+
+        Returns:
+            bool: True when this exact operation's abandonment was scheduled;
+                False only when the finalization operation is unavailable.
+        """
+        operation = self.flights.operation
+        if operation is None:
+            on_result('failed')
+            return False
+        self._prune_force_finished_workers()
+        cutoff = float(getattr(operation, '_force_finish_cutoff', 0.0) or 0.0)
+        if cutoff <= 0:
+            cutoff = time.time()
+            operation._force_finish_cutoff = cutoff
+        plans = list(operation.plans)
+        current_plan = getattr(self.flights, 'plan', None)
+        if current_plan is not None and all(
+                plan.directory != current_plan.directory for plan in plans):
+            plans.append(current_plan)
+        unique_plans = {
+            plan.directory.resolve(): plan for plan in plans
+        }
+        plan_rows = list(unique_plans.values())
+        flight_lease = self.flights.lease
+        current_worker = self.worker
+        resume_workers = [
+            worker for worker in self.flights.resume_workers
+            if worker is not None and worker.drain_manifest is not None
+            and worker.drain_manifest.parent.resolve() in unique_plans
+        ]
+        capture_workers = list(dict.fromkeys(
+            worker for worker in (current_worker, *resume_workers)
+            if worker is not None
+        ))
+        workers_by_directory = {
+            worker.drain_manifest.parent.resolve(): worker
+            for worker in capture_workers
+            if worker.drain_manifest is not None and worker._queue is not None
+        }
+        session_workers = [
+            worker for worker in capture_workers
+            if worker.drain_manifest is not None and worker._queue is not None
+        ]
+        publishing_workers = [
+            worker for worker in capture_workers
+            if worker._force_finish_publishing.is_set()
+        ]
+        callbacks = self._force_finish_callbacks.setdefault(id(operation), [])
+        if publishing_workers:
+            if all(worker._force_finish_operation_id == id(operation)
+                   for worker in publishing_workers):
+                callbacks.append(on_result)
+                return True
+            self._force_finish_callbacks.pop(id(operation), None)
+            on_result('failed')
+            return False
+        callbacks.append(on_result)
+        for worker in capture_workers:
+            with worker._force_finish_lease_lock:
+                worker._force_finish_publishing.set()
+                worker._force_finish_publication_done.clear()
+                worker._force_finish_operation_id = id(operation)
+                worker._force_finish_requested.set()
+                worker._force_stop_requested.set()
+                worker._keep_sources_after_stop = True
+                worker._producer_stop.set()
+                worker._producer_wake.set()
+                worker._diagnostic_phase = 'force_finish_persisting'
+        if capture_workers:
+            self._set_watcher_recording(False)
+        self._queue_recovery_finish_requested = False
+        self._finish_resume_generation += 1
+        self._cancel_ordinary_restart_for_action()
+        self.flights.stop()
+        self.status_var.set(recovery_text(
+            self.flights.ui_language.get(), 'force_finish_saving',
+        ))
+
+        def persist_force_finish() -> None:
+            """Publish queue and parent flight abandonment off Tk.
+
+            Returns:
+                None: Acquires missing writer fences, then reports after every
+                    captured queue and parent plan verifies.
+            """
+            error = ''
+            error_type = ''
+            temporary_pipeline: UploadPipelineLease | None = None
+            temporary_linked: list[LinkedTargetLease] = []
+            try:
+                queue_targets: Dict[Path, tuple[str, str]] = {}
+                queue_rows: Dict[Path, Dict[str, JsonValue]] = {}
+                for worker in session_workers:
+                    if worker.drain_manifest is None or worker._queue is None:
+                        continue
+                    queue_path = worker.drain_manifest.parent.resolve()
+                    queue_targets[queue_path] = (
+                        worker._queue.binding, worker._queue.scope,
+                    )
+                handled_queues: set[Path] = set()
+                for plan in plan_rows:
+                    manifest = plan.directory / 'watch-drain.json'
+                    queue_path = plan.directory.resolve()
+                    if manifest.exists() and queue_path not in queue_targets:
+                        row = read_document(manifest)
+                        folder = row.get('folder')
+                        recursive = row.get('recursive')
+                        scope = row.get('scope', '')
+                        if (row.get('binding') != plan.binding
+                                or not isinstance(folder, str)
+                                or not Path(folder).is_absolute()
+                                or not isinstance(recursive, bool)
+                                or not isinstance(scope, str)):
+                            raise ValueError('Force Finish queue identity changed.')
+                        queue_rows[queue_path] = row
+                        queue_targets[queue_path] = (plan.binding, scope)
+                if queue_targets:
+                    pipeline_held = False
+                    for worker in capture_workers:
+                        native = getattr(
+                            getattr(worker, '_pipeline_lease', None),
+                            '_native', None,
+                        )
+                        if native is not None:
+                            native.verify()
+                            pipeline_held = True
+                    if not pipeline_held:
+                        temporary_pipeline = UploadPipelineLease(CONFIG_DIR)
+                        temporary_pipeline.acquire()
+                    held_linked: set[str] = set()
+                    for worker in capture_workers:
+                        if worker.linked_target is None:
+                            continue
+                        native = getattr(
+                            getattr(worker, '_linked_lease', None),
+                            '_native', None,
+                        )
+                        if native is not None:
+                            native.verify()
+                            held_linked.add(worker.linked_target.binding())
+                    for binding, scope in queue_targets.values():
+                        if scope and binding not in held_linked:
+                            lease = LinkedTargetLease(CONFIG_DIR, binding)
+                            lease.acquire()
+                            temporary_linked.append(lease)
+                            held_linked.add(binding)
+                for worker in session_workers:
+                    manifest = worker.drain_manifest
+                    store = worker._queue
+                    if manifest is None or store is None:
+                        continue
+                    store.force_finish(cutoff)
+                    if (not store.force_finished
+                            and store.data.get('completed') is not True):
+                        raise OSError('Force-finished queue marker did not read back.')
+                    handled_queues.add(manifest.parent.resolve())
+                for plan in plan_rows:
+                    manifest = plan.directory / 'watch-drain.json'
+                    queue_path = plan.directory.resolve()
+                    if manifest.exists() and queue_path not in handled_queues:
+                        owner = workers_by_directory.get(queue_path)
+                        if owner is not None:
+                            store = owner._queue
+                        else:
+                            row = queue_rows[queue_path]
+                            store = WatchQueueStore(
+                                manifest, plan.binding, Path(str(row['folder'])),
+                                row['recursive'] is True,
+                                scope=str(row.get('scope', '')),
+                            )
+                            store.restore()
+                        store.force_finish(cutoff)
+                        if (not store.force_finished
+                                and store.data.get('completed') is not True):
+                            raise OSError('Force-finished queue marker did not read back.')
+                        handled_queues.add(queue_path)
+                for directory in {
+                    worker.drain_manifest.parent.resolve()
+                    for worker in session_workers
+                    if worker.drain_manifest is not None
+                }:
+                    if any(plan.directory.resolve() == directory
+                           for plan in plan_rows):
+                        continue
+                    completion = directory / 'completion.json'
+                    if not completion.exists():
+                        continue
+                    plan = SessionPlan.load(directory)
+                    worker = workers_by_directory.get(directory)
+                    if (worker is None or worker._queue is None
+                            or plan.binding != worker._queue.binding):
+                        raise ValueError('Force Finish flight identity changed.')
+                    if flight_lease is None:
+                        raise ValueError('Force Finish flight workspace is not owned.')
+                    flight_lease.verify()
+                    abandoned = replace(plan, abandoned=True, completed=True)
+                    abandoned.save()
+                    flight_lease.verify()
+                    saved = SessionPlan.load(abandoned.directory)
+                    if not saved.abandoned or not saved.completed:
+                        raise OSError('Abandoned flight marker did not read back.')
+                for plan in plan_rows:
+                    if flight_lease is None:
+                        raise ValueError('Force Finish flight workspace is not owned.')
+                    flight_lease.verify()
+                    abandoned = replace(
+                        plan, abandoned=True, completed=True,
+                    )
+                    abandoned.save()
+                    flight_lease.verify()
+                    saved = SessionPlan.load(abandoned.directory)
+                    if not saved.abandoned or not saved.completed:
+                        raise OSError('Abandoned flight marker did not read back.')
+            except Exception as exc:  # noqa: BLE001
+                error = 'Force Finish could not be durably recorded.'
+                error_type = type(exc).__name__
+            finally:
+                for lease in reversed(temporary_linked):
+                    try:
+                        lease.release()
+                    except Exception as exc:  # noqa: BLE001
+                        error = 'Force Finish could not release its recovery fence safely.'
+                        error_type = type(exc).__name__
+                if temporary_pipeline is not None:
+                    try:
+                        temporary_pipeline.release()
+                    except Exception as exc:  # noqa: BLE001
+                        error = 'Force Finish could not release its recovery fence safely.'
+                        error_type = type(exc).__name__
+                for worker in capture_workers:
+                    with worker._force_finish_lease_lock:
+                        worker._force_finish_publishing.clear()
+                        worker._force_finish_publication_done.set()
+            pending = any(
+                worker._transport_active.is_set()
+                or worker._pending_transport is not None
+                and not worker._pending_transport.is_set()
+                for worker in capture_workers
+            )
+            if not error:
+                for worker in capture_workers:
+                    worker._diagnostic_phase = 'force_finished'
+                    worker.stop()
+            self.events.put({
+                'kind': 'watch_force_finished',
+                'payload': {
+                    'worker': capture_workers[0] if capture_workers else None,
+                    'workers': capture_workers, 'operation': operation,
+                    'error': error, 'pending_transport': pending,
+                    'error_type': error_type,
+                    'cutoff': cutoff,
+                    'plan_sessions': [plan.session_id for plan in plan_rows],
+                    'operation_generation': getattr(
+                        operation, 'flight_generation', id(operation),
+                    ),
+                    'operation_trigger': getattr(
+                        operation, 'trigger_reason', 'unknown',
+                    ),
+                },
+            })
+
+        try:
+            threading.Thread(
+                target=persist_force_finish,
+                name='PHPGalleryForceFinish', daemon=True,
+            ).start()
+        except RuntimeError:
+            for worker in capture_workers:
+                with worker._force_finish_lease_lock:
+                    worker._force_finish_publishing.clear()
+                    worker._force_finish_publication_done.set()
+            failed_callbacks = self._force_finish_callbacks.pop(
+                id(operation), [],
+            )
+            for callback in failed_callbacks:
+                callback('failed')
             return False
         return True
 
@@ -15605,12 +16000,79 @@ class WatcherApp:
             filename = Path(event.filename).name if event.filename else ""
             self.activity_drawer.insert("", "end", iid=f"event-{index}-{int(event.timestamp * 1000)}", values=(stamp, event.level, filename, event.operation, event.message))
 
-    def copy_diagnostics(self) -> None:
-        """Copy redacted linking, updater, runtime and saved flight diagnostics.
+    def _watch_diagnostic_snapshot(self) -> Dict[str, JsonValue]:
+        """Read current Watcher identity, intent, scan and transport evidence.
 
         Returns:
-            None: Copies bounded support snapshots to the clipboard and records
-                the action without adding credentials or transport text.
+            Dict[str, JsonValue]: Credential-free queue/session IDs, cutoff,
+                latest scan, current producer/consumer, admitted transport,
+                current head retry deadline, and separate retained failure.
+        """
+        worker = self.worker
+        if worker is None or worker._queue is None:
+            return {}
+        journal = worker._queue
+        with journal.lock:
+            items = journal.items()
+            head = journal.head()
+            active = worker._active_queue_item
+            transport_active = (
+                worker._transport_active.is_set()
+                or worker._pending_transport is not None
+                and not worker._pending_transport.is_set()
+            )
+            return {
+                'worker_id': id(worker),
+                'flight_session_id': (
+                    worker.drain_manifest.parent.name
+                    if worker.drain_manifest is not None else ''
+                ),
+                'queue_session_id': str(journal.data.get('session_id', '')),
+                'target_binding': journal.binding,
+                'intent': (
+                    'force_finished' if journal.force_finished else
+                    'finish' if journal.data.get('cutoff') else 'capture'
+                ),
+                'cutoff': journal.data.get('cutoff', 0.0),
+                'force_finished': journal.force_finished,
+                'force_finished_at': journal.force_finished_at,
+                'completed': journal.data.get('completed') is True,
+                'pending_count': sum(
+                    item.state not in ('acknowledged', 'skipped') for item in items
+                ),
+                'acknowledged_count': sum(
+                    item.state == 'acknowledged' for item in items
+                ),
+                'skipped_count': sum(item.state == 'skipped' for item in items),
+                'head_id': head.item_id if head is not None else '',
+                'head_sequence': head.sequence if head is not None else 0,
+                'head_state': head.state if head is not None else 'idle',
+                'head_file': Path(head.source.path).name if head is not None else '',
+                'last_scan': journal.last_scan_at,
+                'last_scan_generation': journal.scan_generation,
+                'last_progress': journal.data.get('last_change_at', 0.0),
+                'last_failure': str(journal.data.get('last_failure', '')),
+                'retry_at': head.next_retry_at if head is not None else 0.0,
+                'producer_running': bool(
+                    worker._producer_thread is not None
+                    and worker._producer_thread.is_alive()
+                ),
+                'worker_running': worker.is_alive(),
+                'dispatch_active': transport_active,
+                'active_item_id': active.item_id if active is not None else '',
+                'active_item_sequence': active.sequence if active is not None else 0,
+                'force_finish_pending': worker._force_finish_requested.is_set(),
+                'force_finish_publishing': worker._force_finish_publishing.is_set(),
+                'consumer_phase': worker._diagnostic_phase,
+                'reason': head.reason if head is not None else journal.data.get('error', ''),
+            }
+
+    def copy_diagnostics(self) -> None:
+        """Copy redacted runtime, current Watcher and Finish diagnostics.
+
+        Returns:
+            None: Copies bounded support snapshots with live session, scan,
+                dispatch, operation generation and trigger fields, without secrets.
         """
         job_summary = self.describe_job(self.current_job) if self.current_job is not None else "No selected job"
         capability_summary = ", ".join(
@@ -15637,6 +16099,19 @@ class WatcherApp:
             photos_snapshot() if callable(photos_snapshot)
             else 'No Photos failure recorded for the current session.'
         )
+        operation = self.flights.operation
+        operation_progress = operation.snapshot() if operation is not None else None
+        finish_diagnostics: Dict[str, JsonValue] = {
+            'generation': getattr(operation, 'flight_generation', None),
+            'trigger': getattr(operation, 'trigger_reason', 'none'),
+            'phase': operation_progress.phase if operation_progress is not None else 'idle',
+            'error': operation_progress.error if operation_progress is not None else '',
+            'sessions': [plan.session_id for plan in operation.plans]
+            if operation is not None else [],
+            'worker_running': bool(operation is not None and operation.is_alive()),
+            'automatic_retry_guard': len(self._finish_resume_attempted_sessions),
+            'force_finish_failure_type': self._force_finish_failure_type,
+        }
         recorder = self.flights.recorder
         flight_progress = (
             recorder.diagnostics_snapshot() if recorder is not None
@@ -15667,7 +16142,10 @@ class WatcherApp:
                 f"Update continuation: {self._update_resume_status}",
                 f"Watcher: {self.watcher_activity_var.get()}",
                 'Upload queue: ' + json.dumps(
-                    getattr(self, '_watch_queue_snapshot', {}), ensure_ascii=False,
+                    self._watch_diagnostic_snapshot(), ensure_ascii=False,
+                ),
+                'Finish operation: ' + json.dumps(
+                    finish_diagnostics, ensure_ascii=False,
                 ),
                 f"UTC synchronization: {self.utc_sync.status()}",
                 f"Import: {self.import_activity_var.get()} | {job_summary}",
@@ -15994,8 +16472,15 @@ class WatcherApp:
                     if callable(callback):
                         callback(not bool(payload.get('error')))
                     if payload.get('error'):
+                        self._force_finish_failure_type = str(
+                            payload.get('error_type', 'PersistenceError'),
+                        )
                         self.status_var.set(str(payload['error']))
-                        self.write_log(str(payload['error']), 'error')
+                        self.write_log(
+                            str(payload['error']) + ' error_type='
+                            + self._force_finish_failure_type,
+                            'error',
+                        )
                     else:
                         pending = payload['worker']._pending_transport
                         if pending is not None and not pending.is_set():
@@ -16016,6 +16501,92 @@ class WatcherApp:
                                 'Watcher stopped; queue retained for recovery.', 'warning',
                             )
                     self.refresh_watcher_action()
+                    continue
+                if kind == 'watch_force_finished':
+                    worker = payload.get('worker')
+                    workers = payload.get('workers', [])
+                    operation = payload.get('operation')
+                    callbacks = self._force_finish_callbacks.pop(
+                        id(operation), [],
+                    ) if operation is not None else []
+                    current_operation = self.flights.operation is operation
+                    if not current_operation:
+                        try:
+                            self.write_log(
+                                'Force Finish completed for a stale operation generation; '
+                                'the newer UI state was left untouched.', 'warning',
+                            )
+                        except Exception:  # noqa: BLE001
+                            pass
+                        continue
+                    if payload.get('error'):
+                        try:
+                            self.status_var.set(str(payload['error']))
+                            self.write_log(str(payload['error']), 'error')
+                        finally:
+                            for callback in callbacks:
+                                try:
+                                    callback('failed')
+                                except Exception:  # noqa: BLE001
+                                    pass
+                        continue
+                    for owned_worker in workers:
+                        if owned_worker.is_alive():
+                            self._force_finished_workers.add(owned_worker)
+                    if operation.is_alive():
+                        self._force_finished_operations.add(operation)
+                    self._force_finish_failure_type = ''
+                    abandoned_sessions = set(payload.get('plan_sessions', []))
+                    current_plan = getattr(self.flights, 'plan', None)
+                    if (current_plan is not None
+                            and current_plan.session_id in abandoned_sessions):
+                        recorder = self.flights.recorder
+                        if (recorder is not None
+                                and recorder.directory == current_plan.directory):
+                            try:
+                                recorder.stop()
+                            except Exception:  # noqa: BLE001
+                                pass
+                            self.flights.recorder = None
+                        self.flights.plan = None
+                    operation.cancel.set()
+                    self.api_key_revoke_running = False
+                    if payload.get('pending_transport') is True:
+                        result = 'pending_transport'
+                        log_message = (
+                            'Force Finish was saved; the admitted HTTP request '
+                            'still owns its transport lease and result remains retained.'
+                        )
+                    else:
+                        result = 'persisted'
+                        log_message = (
+                            'Force Finish was saved; pending source files and upload '
+                            'history remain retained.'
+                        )
+                    try:
+                        self.write_log(log_message, 'warning')
+                    except Exception:  # noqa: BLE001
+                        pass
+                    try:
+                        for owned_worker in workers:
+                            owned_worker.emit_queue_snapshot()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    for callback in callbacks:
+                        try:
+                            callback(result)
+                        except Exception:  # noqa: BLE001
+                            try:
+                                self.write_log(
+                                    'Force Finish UI notification failed after durable publication.',
+                                    'error',
+                                )
+                            except Exception:  # noqa: BLE001
+                                pass
+                    try:
+                        self.refresh_watcher_action()
+                    except Exception:  # noqa: BLE001
+                        pass
                     continue
                 if (kind.startswith('watcher_resume_')
                         and 'generation' in payload
@@ -16162,15 +16733,29 @@ class WatcherApp:
                     continue
                 if kind in ('watch_finish_resume_ready', 'watch_finish_resume_failed'):
                     self._finish_resume_inspecting = False
-                    if kind == 'watch_finish_resume_failed':
-                        self.root.after(UPDATE_CONTINUATION_TARGET_RETRY_MS,
-                                        lambda: setattr(self, '_finish_resume_checked', None))
+                    if payload.get('generation') != self._finish_resume_generation:
                         continue
-                    if (payload.get('sessions') and payload.get('unambiguous') is True
+                    if kind == 'watch_finish_resume_failed':
+                        self.write_log(
+                            'Pending Finish discovery failed; no automatic retry was started.',
+                            'warning',
+                        )
+                        continue
+                    sessions = payload.get('sessions')
+                    if (isinstance(sessions, list) and len(sessions) == 1
+                            and isinstance(sessions[0], str)
+                            and sessions[0] not in self._finish_resume_attempted_sessions
+                            and payload.get('unambiguous') is True
                             and self.flights.binding() == payload.get('binding')
                             and not self.flights.busy()
                             and not (self.worker is not None and self.worker.is_alive())):
-                        self.write_log('Resuming the original pending Finish automatically.', 'info')
+                        session_id = sessions[0]
+                        self._finish_resume_attempted_sessions.add(session_id)
+                        self._next_finish_trigger_reason = 'startup_resume'
+                        self.write_log(
+                            f'Resuming original Finish once: session={session_id}; '
+                            'trigger=startup_resume.', 'info',
+                        )
                         # Disk capture consent never invents legacy Revoke consent.
                         self.flights.begin(False, automatic=True)
                     continue
@@ -16179,9 +16764,10 @@ class WatcherApp:
                     self.write_log('Queue refresh blocked: original state or ownership needs review.', 'warning')
                     if self._queue_recovery_finish_requested:
                         self._queue_recovery_finish_requested = False
-                        self.flights.begin(False, automatic=True,
-                                           photos_only=(self.worker.linked_target is not None
-                                                       and not self.contextual_watcher_is_flight()))
+                        self.status_var.set(
+                            'Finish was not started because queue recovery failed. '
+                            'Review the retained session and retry explicitly.',
+                        )
                     continue
                 if kind == 'watch_queue_recovered':
                     self._queue_recovery_pending = False
@@ -16195,12 +16781,17 @@ class WatcherApp:
                     self.write_log('Queue refresh resumed the same session; FIFO retained.', 'info')
                     if self._queue_recovery_finish_requested:
                         self._queue_recovery_finish_requested = False
+                        self._next_finish_trigger_reason = 'queue_recovered_finish'
                         self.flights.begin(False, automatic=True,
                                            photos_only=(self.worker.linked_target is not None
                                                        and not self.contextual_watcher_is_flight()))
                     self.refresh_watcher_action()
                     continue
                 if kind in ("watcher_start_ready", "watcher_start_finished"):
+                    finished_worker = payload.get('worker')
+                    if (kind == 'watcher_start_finished'
+                            and finished_worker in self._force_finished_workers):
+                        self._retire_force_finished_worker(finished_worker)
                     if payload.get("worker") is not self.worker:
                         continue
                     if kind == "watcher_start_ready":
@@ -16232,6 +16823,12 @@ class WatcherApp:
                             False, self.worker.drain_error
                             or "Watcher stopped before capture began.",
                         )
+                    elif (kind == 'watcher_start_finished'
+                          and self.worker._queue is not None
+                          and self.worker._queue.force_finished):
+                        self.status_var.set(recovery_text(
+                            self.flights.ui_language.get(), 'force_finish_saved',
+                        ))
                     elif (kind == 'watcher_start_finished'
                           and self.worker._queue is not None
                           and self.worker._queue.data.get('retained_stop') is True):
@@ -16584,6 +17181,41 @@ class WatcherApp:
                     self.semantic_ai_install_button.configure(state="normal")
 
         return False
+
+    def _retire_force_finished_worker(self, worker: WatcherThread) -> None:
+        """Retain a force-finished worker reference until its thread exits.
+
+        Args:
+            worker (WatcherThread): Detached worker whose transport lease may
+                still be waiting for its real request owner.
+
+        Returns:
+            None: Removes the App reference only after actual thread termination.
+        """
+        if worker.is_alive():
+            try:
+                self.root.after(
+                    WATCHER_EVENT_IDLE_POLL_MS,
+                    lambda: self._retire_force_finished_worker(worker),
+                )
+            except tk.TclError:
+                pass
+            return
+        self._force_finished_workers.discard(worker)
+
+    def _prune_force_finished_workers(self) -> None:
+        """Drop detached workers only after their actual thread has exited.
+
+        Returns:
+            None: Keeps every live transport owner strongly referenced.
+        """
+        self._force_finished_workers = {
+            worker for worker in self._force_finished_workers if worker.is_alive()
+        }
+        self._force_finished_operations = {
+            operation for operation in self._force_finished_operations
+            if operation.is_alive()
+        }
 
     def configure_log_tags(self) -> None:
         """Configure readable semantic log colors on the dark diagnostics panel.

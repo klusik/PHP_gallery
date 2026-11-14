@@ -16,6 +16,7 @@ on:
   push:
     branches:
       - feature/381-winapp-1-1-2
+      - feature/winapp-force-finish-1-1-3
   workflow_dispatch:
     inputs:
       browser_diagnostics:

@@ -5848,6 +5848,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: A rejected close does not stop recording or clear the offer.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app._force_finished_workers = set()
+        app._force_finished_operations = set()
         app.simulator_presence = mock.Mock()
         app.flights = mock.Mock()
         app.flights.is_alive.return_value = False
@@ -5879,6 +5881,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms the keep-running choice leaves app and offer active.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app._force_finished_workers = set()
+        app._force_finished_operations = set()
         app.simulator_presence = mock.Mock()
         app.flights = mock.Mock()
         app.flights.lease = None
@@ -5956,6 +5960,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
             None: Confirms child cleanup and process exit after admission checks.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app._force_finished_workers = set()
+        app._force_finished_operations = set()
         app.exiting = False
         app._save_ui_layout_now = mock.Mock()
         app._update_checkpoint_ready = True
@@ -5995,6 +6001,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
         for ready, worker_alive in ((False, False), (True, True)):
             with self.subTest(ready=ready, worker_alive=worker_alive):
                 app = object.__new__(MAIN.WatcherApp)
+                app._force_finished_workers = set()
+                app._force_finished_operations = set()
                 app.exiting = False
                 app._save_ui_layout_now = mock.Mock()
                 app._update_checkpoint_ready = ready
@@ -6023,6 +6031,8 @@ class TrayUpdateIndicatorTests(unittest.TestCase):
                 and destroys Tk.
         """
         app = object.__new__(MAIN.WatcherApp)
+        app._force_finished_workers = set()
+        app._force_finished_operations = set()
         app.linking_manager = mock.Mock()
         app.simulator_presence = mock.Mock()
         app.flights = mock.Mock()

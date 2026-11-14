@@ -4320,6 +4320,34 @@ uses 6.1-terra. No new root menu item or storage migration is introduced.
   an equivalent receipt-bound recovery protocol. Unknown usage is not removal
   evidence.
 
+### WINAPP-FORCE-FINISH — Terminal capture and bounded Exit
+
+- **Reason / protected scenario:** In installed 1.1.2, the operator observed
+  zero queued / 206 confirmed photos while an empty Finish waited for a live
+  Watcher. Its 300-second timeout was followed by another automatic Finish, and
+  normal Exit refused to close the app. Queue refresh was the reported trigger;
+  its direct responsibility for starting Finish was not established by the log.
+  The historical HTTP 503 does not prove a current failed transfer.
+- **Owners:** `watch_queue.py` persists terminal force-finish intent;
+  `flight_jobs.py` retains capture-plan abandonment; the app owns dispatch,
+  worker generations, diagnostics and shutdown; FlightUI owns scoped drain and
+  the explicit Force finish action.
+- **Compatibility:** Existing journals default to their previous nonterminal
+  behavior. A terminal session retains accepted originals, pending sources,
+  receipts, uncertainty and the original cutoff, and cannot auto-resume through
+  refresh, recovery, timeout or restart. A live request retains physical leases
+  until actual termination. Local closure is not upload success, server
+  cancellation or credential revocation. New capture uses a new session.
+- **Evidence / limits:** The installed incident establishes a repeated empty
+  wait and blocked Exit. Hosted fixtures exercise scoped drain, durable restore,
+  publication failure, late transport events, preserved sources, normal Exit
+  and native desktop/narrow controls. Installed 1.1.3 acceptance, real ambiguous
+  server responses, power loss and non-local filesystem durability remain
+  unverified until separately exercised.
+- **Retirement:** Terminal records are permanent recovery evidence. Retain
+  backward defaults and conservative unknown-result handling until deployed
+  journals are proven drained; unknown usage does not authorize removal.
+
 ### WINAPP-IMPORT — Manual source retention
 
 - **Reason / protected scenario:** A confirmed manual Import must retain its

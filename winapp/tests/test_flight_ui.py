@@ -2,9 +2,9 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/tests/test_flight_ui.py
 # Module Type: Windows Tooling Regression Test
-# Purpose: Verify flight GUI adapter lifecycle using host fakes without Tk windows.
+# Purpose: Verify flight GUI adapter lifecycle and Finish escape actions.
 # Responsibilities:
-#   - Guard Stop/Revoke worker ownership, asynchronous dispatch and drain scope.
+#   - Guard Stop/Revoke/Force Finish worker ownership, async dispatch and drain scope.
 #   - Exercise late Revoke joining, fail-closed admission and terminal cleanup.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
@@ -109,6 +109,8 @@ class FlightUITests(unittest.TestCase):
         ui.operation = None
         ui.automatic_operation = None
         ui.abandon_previous = None
+        ui._progress_generation = 0
+        ui._force_finish_pending = False
         ui.text = lambda key: key
         ui.recorder = None
         ui.plan = None
@@ -1260,6 +1262,180 @@ class FlightUITests(unittest.TestCase):
         )
         host.api_key_request_blockers.assert_not_called()
 
+    def test_force_finish_waits_for_durable_result_and_clears_only_matching_operation(self) -> None:
+        """Resolve logical Finish only after the host's durable result.
+
+        Returns:
+            None: Pending publication leaves Finish busy; accepted publication
+                releases only its matching operation and preserves transport wording.
+        """
+        callbacks: list[Callable[[str], None]] = []
+        cancel = threading.Event()
+        operation = SimpleNamespace(cancel=cancel)
+        status: list[str] = []
+        details: list[str] = []
+        withdrawn: list[bool] = []
+        ui = SimpleNamespace(
+            host=SimpleNamespace(
+                force_finish_flight=lambda on_result: callbacks.append(on_result) or True,
+                status_var=SimpleNamespace(set=status.append),
+            ),
+            operation=operation,
+            automatic_operation=operation,
+            _progress_generation=4,
+            _preparing_progress=False,
+            detail_var=SimpleNamespace(set=details.append),
+            text=lambda key: key,
+            refresh_progress_actions=Mock(),
+            dialog=SimpleNamespace(
+                winfo_exists=lambda: True,
+                withdraw=lambda: withdrawn.append(True),
+            ),
+        )
+
+        flight_ui.FlightUI.force_finish(ui)
+        self.assertTrue(ui._force_finish_pending)
+        self.assertEqual("force_finish_saving", details[-1])
+        self.assertEqual([], withdrawn)
+        callbacks[0]("pending_transport")
+
+        self.assertFalse(ui._force_finish_pending)
+        self.assertTrue(cancel.is_set())
+        self.assertIsNone(ui.operation)
+        self.assertIsNone(ui.automatic_operation)
+        self.assertFalse(flight_ui.FlightUI.busy(ui))
+        self.assertEqual("force_finish_transport_active", status[-1])
+        self.assertEqual([True], withdrawn)
+
+    def test_force_finish_late_callback_cannot_clear_a_new_operation(self) -> None:
+        """Ignore a durable result from a progress generation already replaced.
+
+        Returns:
+            None: A stale result cannot cancel or hide the new operation's UI.
+        """
+        callbacks: list[Callable[[str], None]] = []
+        old_cancel = threading.Event()
+        old_operation = SimpleNamespace(cancel=old_cancel)
+        new_operation = SimpleNamespace(cancel=threading.Event())
+        status: list[str] = []
+        withdrawn: list[bool] = []
+        ui = SimpleNamespace(
+            host=SimpleNamespace(
+                force_finish_flight=lambda on_result: callbacks.append(on_result) or True,
+                status_var=SimpleNamespace(set=status.append),
+            ),
+            operation=old_operation,
+            automatic_operation=old_operation,
+            _progress_generation=8,
+            _preparing_progress=False,
+            detail_var=SimpleNamespace(set=Mock()),
+            text=lambda key: key,
+            refresh_progress_actions=Mock(),
+            dialog=SimpleNamespace(
+                winfo_exists=lambda: True,
+                withdraw=lambda: withdrawn.append(True),
+            ),
+        )
+        flight_ui.FlightUI.force_finish(ui)
+        ui.operation = new_operation
+        ui._progress_generation += 1
+        callbacks[0]("persisted")
+
+        self.assertFalse(old_cancel.is_set())
+        self.assertIs(ui.operation, new_operation)
+        self.assertEqual([], status)
+        self.assertEqual([], withdrawn)
+
+    def test_empty_finish_ignores_an_unrelated_live_watcher(self) -> None:
+        """Do not wait for the app-wide producer without a captured queue.
+
+        Returns:
+            None: An empty Finish completes its drain independently of an
+                unrelated live Watcher with a different durable manifest.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            unrelated = Path(temporary) / "other" / "watch-drain.json"
+            unrelated.parent.mkdir()
+            ui = self._ui(self._host())
+            ui.operation = SimpleNamespace(
+                wants_revoke=False, plans=[], update=Mock(),
+            )
+            ui.host.worker = SimpleNamespace(
+                is_alive=Mock(return_value=True), drain_manifest=unrelated,
+            )
+            flight_ui.FlightUI.wait_for_workers(
+                ui, threading.Event(), time.monotonic(),
+            )
+            ui.host.worker.is_alive.assert_not_called()
+
+    def test_empty_exact_watcher_waits_for_cutoff_scan_completion(self) -> None:
+        """Keep an exact captured Watcher blocked until scan completion persists.
+
+        Returns:
+            None: An empty but unfrozen queue remains an honest bounded blocker.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "session"
+            directory.mkdir()
+            queue_path = directory / "watch-drain.json"
+            queue_path.write_text(
+                '{"frozen":false,"cutoff":0,"completed":false,"pending":[]}',
+                encoding="utf-8",
+            )
+            ui = self._ui(self._host())
+            ui.operation = SimpleNamespace(
+                wants_revoke=False,
+                plans=[SimpleNamespace(directory=directory, abandoned=False)],
+                update=Mock(),
+            )
+            ui.host.worker = SimpleNamespace(
+                is_alive=Mock(return_value=True), drain_manifest=queue_path,
+            )
+            with self.assertRaises(TimeoutError):
+                flight_ui.FlightUI.wait_for_workers(
+                    ui, threading.Event(), time.monotonic(),
+                )
+
+    def test_session_state_separates_durable_force_finish_from_live_transport(self) -> None:
+        """Project durable Finish separately from active and unknown transports.
+
+        Returns:
+            None: A force-finished queue is no longer active capture, while a
+                still-owned transport remains blocked and visible as pending.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            cases = (
+                (False, "active"),
+                (True, "blocked"),
+            )
+            for index, (force_finished, expected) in enumerate(cases):
+                ui = self._ui(self._host())
+                ui.directory = Path(temporary) / str(index)
+                ui.directory.mkdir()
+                transport = threading.Event()
+                transport.set() if force_finished else None
+                ui.host.worker = SimpleNamespace(
+                    is_alive=lambda: True,
+                    _queue=SimpleNamespace(force_finished=force_finished),
+                    _transport_active=transport,
+                    _pending_transport=None,
+                    _force_finish_requested=threading.Event(),
+                )
+                if not force_finished:
+                    ui.host.worker._force_finish_requested.set()
+                self.assertEqual(expected, flight_ui.FlightUI.session_state(ui))
+
+            ui = self._ui(self._host())
+            ui.directory = Path(temporary) / "completed"
+            ui.directory.mkdir()
+            ui.host.worker = SimpleNamespace(
+                is_alive=lambda: True,
+                _queue=SimpleNamespace(force_finished=True),
+                _transport_active=threading.Event(),
+                _pending_transport=None,
+            )
+            self.assertEqual("idle", flight_ui.FlightUI.session_state(ui))
+
     def test_late_revoke_join_runs_a_second_final_wait(self) -> None:
         """Recheck auth workers when Revoke joins an already draining Stop.
 
@@ -1521,6 +1697,8 @@ class FlightUITests(unittest.TestCase):
                 ui.create_local_pdf()
             self.assertEqual(("", ""), factory.call_args.args[1:3])
             self.assertTrue(factory.call_args.kwargs["local_reports"])
+            self.assertEqual("local_report", operation.trigger_reason)
+            self.assertEqual(ui._progress_generation, operation.flight_generation)
             self.assertEqual(original, (directory / "completion.json").read_bytes())
             operation.start.assert_called_once()
             ui.stop.assert_not_called()
