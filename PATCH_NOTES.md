@@ -1,5 +1,59 @@
 # Patch notes
 
+## Version 1.2.1
+
+Fixed a Watcher Finish loop and added a durable Force finish action for the
+Windows companion. The independent WinApp version advanced to 1.1.3.
+
+### Highlights
+
+#### Watcher Finish recovery
+
+- Fixed empty automatic Finish attempts from repeatedly starting while an
+  unrelated idle Watcher remained active. Scoped Finish waiting to the captured
+  operation and its final scan, and kept the exit path bounded. Addressed
+  [issue #381](https://github.com/klusik/PHP_gallery/issues/381).
+- Added an explicit Force finish action during Finish progress, including after
+  errors. The intent stopped new capture and dispatch immediately; durable
+  terminal publication then released logical Finish while retaining pending
+  originals, queue evidence and unknown upload outcomes for later review. An
+  active HTTP request remained under its live owner.
+
+### Technical Details
+
+#### WinApp and queue recovery
+
+- Added terminal `force_finished` state and timestamp to the Watcher queue
+  journal. Blocked new admission, replay and recovery decisions for that
+  session, while allowing a still-owned live transport to record a validated
+  success. Kept pending and unknown items unresolved for later explicit review.
+- Preserved the original cutoff when Finish had already established one. Applied
+  backward-compatible defaults when loading older queue journals that lacked
+  Force finish fields, and retained the existing queue format.
+- Separated current operation diagnostics from retained historical failure
+  details and tied asynchronous callbacks to the active operation generation.
+  Added localized Force finish progress and outcome messages in English, Czech,
+  German and Swedish.
+- Updated `winapp/VERSION` and `winapp/README.md`; synchronized the architecture,
+  queue, compatibility and testing documentation and all four TeX manual
+  sources. Added native and source-fixture coverage for empty Finish, durable
+  Force finish, retained work, diagnostics and desktop/narrow controls.
+- Added no SQL migration.
+
+### User Impact
+
+#### For visitors and administrators
+
+- Left web, public gallery and administrator behavior unchanged.
+
+#### For WinApp users
+
+- Allowed users to end a stuck Finish session and exit within the existing
+  bounded shutdown path. Force finish retained local pending originals and
+  unresolved upload evidence; a fresh capture used a new session boundary. A
+  live HTTP request remained under its owner and was not remotely canceled.
+  The independent companion version was 1.1.3.
+
 ## Version 1.2.0
 
 Added simple administrator emails for completed gallery upgrades, with localized
