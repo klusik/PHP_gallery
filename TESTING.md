@@ -1917,6 +1917,28 @@ and actual hosted acceptance remain separate from a green fixture. See the
 
 ## Central Audit Runner
 
+### WinApp gallery controls
+
+The issue-scoped **Issue 385 gallery controls** workflow runs central source
+contracts, complete partitioned WinApp discovery on Linux and Windows, required
+Chromium and complete disposable MySQL PHP regressions. It prepares canonical generated
+outputs only on hosted runners and retains them for feature-branch persistence.
+BASIC remains independent. No job publishes protected refs or builds installers.
+
+`test_gallery_controls.py` covers complete reverse paging and newly inserted
+photos and resumable quota waits, persistent gallery/account isolation,
+fresh full editor baselines,
+single-use revisions and non-replay after conflicts/lost replies.
+`app_linking_gallery_edit_test.php` exercises the real metadata service with
+isolated persistence boundaries: one-field saves, unchanged peer columns,
+pre-commit rollback, revocation and post-commit sidecar uncertainty. Existing
+disposable linking tests retain real SQL/grant qualification.
+The native Windows fixture exercises actual anchored editors and grouped
+menus, retains a conflicting draft, and captures desktop/narrow menu and
+information screenshots under `cache/test-audit/gallery-controls/`.
+These fixtures do not establish an installed-client upgrade, target-host
+sidecar failure recovery or production account consent.
+
 ### Watcher uncertain-head recovery
 
 The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
@@ -9630,3 +9652,12 @@ wider directory cannot yet continue across requests. Counts and completed
 results remain snapshots, not import authorization; the final import fence is
 inactive and visibility stays disabled. Source fixtures are unqualified; hosted
 tests and real interruption, concurrency and filesystem evidence are required.
+
+The linked-access regression cases cover day-v1 access sliding across more than
+a week of simulated regular API use without refresh rotation, failure not
+extending authority, old-server conservative behavior, uncertain renewal
+closing readiness, expired-link local unlink, direct Connect cleanup followed
+by browser approval, and idle Watcher empty-inventory key maintenance. The real
+MySQL linking fixture verifies sliding access/family/key deadlines and keeps
+expired/revoked/wrong-key refusal assertions. Native information-card coverage
+checks effective Listed off for private galleries and the public hide override.

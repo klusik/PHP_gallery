@@ -2074,6 +2074,45 @@ their existing presentation. Choices stay local to~WinApp, separately for~each
 gallery and~verified site/account. Website and~upload settings stay independent.
 A~small \textbf{!} indicates a~local save failure; the~chosen view remains
 applied and~the~tooltip explains how to~retry. Switching uses retained previews.
+The~arrow before the~aspect controls selects oldest or~newest upload records
+first. This local rule is~saved per~gallery and~verified site/account,
+independently of~the~card format. Every refresh applies it~again, placing new
+uploads first in~newest-first mode. Grid, lightbox and~slideshow share the~order;
+the~website stores no~view preference. Newest-first reads the~complete bounded
+metadata sequence before local paging, without preloading image bytes.
+After a~quota wait, Retry resumes the~validated metadata cursor.
+
+Both gallery menus use compact information/access, local-cache, tools and
+creation groups. In~\ui{Gallery information}, visibility reuses the~existing
+Public/Private/Unpublished selector; NSFW Guard and~the~public listing override save directly
+to~the~online gallery. Click the~heading or~its~pencil to~edit the~title, or~the
+description pencil to~edit complete multiline text. Each editor first reads
+the~current server value and~revision. Save with Enter for~a~title or
+Control+Enter for~a~description; Escape cancels. A~concurrent web edit refuses
+the~stale save. An~unconfirmed result retains a~locked draft and~offers explicit
+server reload without replaying the~write. Confirmed titles update the~tree
+and~heading while physical folders and~stable URLs remain unchanged.
+
+These metadata changes require a~current server and~separate browser approval
+of~\texttt{gallery:edit}. Existing grants retain their permissions. Inventory,
+dates and~thumbnail-quality summaries remain read-only. Descriptions use their
+complete stored text rather than the~short information preview. Deployment and
+installed-account behavior require separate acceptance.
+
+Listed is~automatic: Public is~listed unless \ui{Hide from public listings}
+is~enabled; Private and~Unpublished always show Listed off. The~override is
+editable only while Public and~survives temporary visibility changes.
+A~hidden listing still permits direct links according to~normal access policy.
+On~a~day-v1 server, every authenticated API request slides access by~24 hours
+and~the~inactivity window by~seven days, including browsing and~uploads.
+A~running Watcher checks its~exact capture key every five idle minutes;
+other idle live links use the~identity API. Expired access renews through
+the~existing saved credential. If~renewal cannot be~verified, \ui{Connect}
+removes the~unusable local credential and~starts fresh browser approval.
+\ui{Unlink} also works after expiry; remote revocation cannot block local
+recovery. Pending originals and~destination history remain preserved.
+
+
 Photos and~thumbnails have a~separate
 five-minute limit of~600 requests per IP and~3,600 globally. On~HTTP~429,
 Photos displays the~limit and~pauses speculative requests until \ui{Retry}. Source launches use Pillow

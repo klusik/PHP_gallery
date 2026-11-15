@@ -13,7 +13,7 @@
 """Main-window gallery hierarchy and embedded photo workspace."""
 
 from collections import OrderedDict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 import queue
 import threading
@@ -27,10 +27,11 @@ from .app_linking import (
     LINKING_GALLERY_ID_MAX,
     NATIVE_MEDIA_DELETE_BATCH_MAX,
     NATIVE_MEDIA_MAX_BYTES,
-    LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage, LinkedGalleryTree,
+    LinkedGallery, LinkedGalleryDetail, LinkedGalleryEditSnapshot,
+    LinkedGalleryPage, LinkedGalleryTree, LinkingRevisionConflict,
     LinkedMediaDetails,
     LinkedMediaGalleryInfo, LinkedPhoto, LinkingSession,
-    LinkingMediaThrottled, LinkingResponseError,
+    LinkingMediaThrottled, LinkingResponseError, gallery_edit_text_valid,
 )
 from .app_linking_ui import LinkingManager
 from .gallery_catalogue_cache import (
@@ -382,6 +383,19 @@ _StorageObservation: TypeAlias = tuple[
 ]
 
 
+# Purpose: Keep multiline edits compact while allowing native text scrolling.
+# Type: int. Units: text rows. Scope: one anchored description editor.
+# Consumers: PhotosWorkspace._show_gallery_editor. Rationale: five rows leave
+# confirm/cancel visible in a narrow workspace without a modal window.
+PHOTOS_GALLERY_EDITOR_ROWS = 5
+
+# Purpose: Give title and description fields a useful compact preferred width.
+# Type: int. Units: average text columns. Scope: one anchored metadata editor.
+# Consumers: PhotosWorkspace._show_gallery_editor. Rationale: forty columns fit
+# ordinary gallery names while the context owner clamps the actual panel width.
+PHOTOS_GALLERY_EDITOR_COLUMNS = 40
+
+
 class PhotosWorkspace(ttk.Frame):
     """Own a linked gallery tree, media viewer and photo information pane.
 
@@ -411,6 +425,10 @@ class PhotosWorkspace(ttk.Frame):
             Load a local format for this verified account and gallery.
         save_card_format (Callable[[LinkingSession, int, str], bool] | None):
             Save a local format; True confirms persistence and False refuses it.
+        load_photo_order (Callable[[LinkingSession, int], str] | None):
+            Load the persistent local order for this account/gallery.
+        save_photo_order (Callable[[LinkingSession, int, str], bool] | None):
+            Persist only the local order; False leaves a visible warning.
         catalogue_cache (_CatalogueCacheFactory | None): Create the account-and-
             scope-bound structure cache, or omit optional local persistence.
         load_tree_width (Callable[[], int | None] | None):
@@ -446,6 +464,8 @@ class PhotosWorkspace(ttk.Frame):
         save_selected_gallery: Callable[[LinkingSession, int], None] | None = None,
         load_card_format: Callable[[LinkingSession, int], str] | None = None,
         save_card_format: Callable[[LinkingSession, int, str], bool] | None = None,
+        load_photo_order: Callable[[LinkingSession, int], str] | None = None,
+        save_photo_order: Callable[[LinkingSession, int, str], bool] | None = None,
         catalogue_cache: _CatalogueCacheFactory | None = None,
         load_tree_width: Callable[[], int | None] | None = None,
         save_tree_width: Callable[[int], None] | None = None,
@@ -484,6 +504,10 @@ class PhotosWorkspace(ttk.Frame):
                 Optional reader for the gallery's local card-format key.
             save_card_format (Callable[[LinkingSession, int, str], bool] | None):
                 Optional writer returning True only after local persistence.
+            load_photo_order (Callable[[LinkingSession, int], str] | None):
+                Load the persistent local order for this account/gallery.
+            save_photo_order (Callable[[LinkingSession, int, str], bool] | None):
+                Persist only the local order; False leaves a visible warning.
             catalogue_cache (_CatalogueCacheFactory | None): Optional verified
                 identity cache factory; file access
                 occurs only on background workers.
@@ -519,6 +543,10 @@ class PhotosWorkspace(ttk.Frame):
         self._save_tree_state = save_tree_state
         self._load_selected_gallery = load_selected_gallery
         self._save_selected_gallery = save_selected_gallery
+        self._load_photo_order = load_photo_order
+        self._save_photo_order = save_photo_order
+        self._photo_order_overrides: dict[int, str] = {}
+        self._photo_order_unsaved: set[int] = set()
         self._load_card_format = load_card_format
         self._save_card_format = save_card_format
         self._card_format_overrides: dict[int, str] = {}
@@ -1000,6 +1028,16 @@ class PhotosWorkspace(ttk.Frame):
             self._gallery_heading, style="Card.TFrame",
         )
         self._card_format_controls.grid(row=0, column=1, sticky="w")
+        self._photo_order_hint = tk.StringVar(self, self._text('order_oldest'))
+        self._photo_order_button = ttk.Button(
+            self._card_format_controls, text='↑', width=-1,
+            style='Photos.Icon.TButton', state='disabled',
+            command=self._toggle_photo_order, takefocus=True,
+        )
+        self._photo_order_button.grid(row=0, column=0, sticky='ew', padx=(0, 4))
+        attach_inline_tooltip(
+            self._photo_order_button, self._photo_order_hint, self.viewer_pane,
+        )
         self._card_format_buttons: dict[str, ttk.Button] = {}
         self._card_format_images: dict[tuple[str, bool], ThemeImage | None] = {}
         self._card_format_hint = tk.StringVar(self, self._text("card_format_hint"))
@@ -1018,7 +1056,7 @@ class PhotosWorkspace(ttk.Frame):
                 takefocus=True, width=-1,
                 command=lambda value=key: self._activate_card_format(value),
             )
-            button.grid(row=0, column=index, sticky="ew")
+            button.grid(row=0, column=index + 1, sticky="ew")
             attach_inline_tooltip(button, self._card_format_hint, self.viewer_pane)
             self._card_format_buttons[key] = button
         self._card_format_notice = tk.StringVar(self, "")
@@ -1026,9 +1064,9 @@ class PhotosWorkspace(ttk.Frame):
             self._card_format_controls, textvariable=self._card_format_notice,
             style="Card.TLabel",
         )
-        notice.grid(row=0, column=len(PHOTO_CARD_FORMATS))
+        notice.grid(row=0, column=len(PHOTO_CARD_FORMATS) + 1)
         self._card_format_notice_label = notice
-        self._card_format_columns = len(PHOTO_CARD_FORMATS)
+        self._card_format_columns = len(PHOTO_CARD_FORMATS) + 1
         attach_inline_tooltip(notice, self._card_format_hint, self.viewer_pane)
         self._recording_heading = ttk.Label(
             self._heading_title, text="", style="Card.TLabel",
@@ -1036,9 +1074,18 @@ class PhotosWorkspace(ttk.Frame):
         self._recording_heading.pack(side="left", padx=(0, 4))
         self._gallery_title_label = ttk.Label(
             self._heading_title, textvariable=self._gallery_title,
-            style="Section.TLabel", justify="left",
+            style="Section.TLabel", justify="left", cursor="hand2",
+            takefocus=True,
         )
-        self._gallery_title_label.pack(side="left", fill="x", expand=True)
+        self._gallery_title_label.pack(side="left", fill="x")
+        self._gallery_title_label.bind('<Button-1>', lambda event: self._open_title_editor(event))
+        self._gallery_title_label.bind('<Return>', lambda event: self._open_title_editor(event))
+        self._gallery_title_label.bind('<space>', lambda event: self._open_title_editor(event))
+        self._title_edit_button = icon_button(
+            self._heading_title, '✎', lambda: self._open_title_editor(),
+            self._text('edit_title'),
+        )
+        self._title_edit_button.pack(side='left', padx=(2, 4))
         self._preload_strip = ttk.Frame(self._gallery_heading, style='Card.TFrame')
         self._preload_strip.columnconfigure(0, weight=1)
         self._preload_text = tk.StringVar(self)
@@ -1346,6 +1393,9 @@ class PhotosWorkspace(ttk.Frame):
                 Preload progress remains below every occupied heading row.
         """
         buttons = list(self._card_format_buttons.values())
+        order_button = getattr(self, '_photo_order_button', None)
+        if order_button is not None:
+            buttons.insert(0, order_button)
         columns = len(buttons)
         while columns > 1:
             needed = sum(
@@ -1578,6 +1628,8 @@ class PhotosWorkspace(ttk.Frame):
             self._session = session
         if session is not None:
             session.set_upload_pipeline_waiting(self._upload_pipeline_waiting)
+        self._photo_order_overrides.clear()
+        self._photo_order_unsaved.clear()
         self._card_format_overrides.clear()
         self._card_format_unsaved.clear()
         self._tree_state = (
@@ -1662,6 +1714,9 @@ class PhotosWorkspace(ttk.Frame):
         for button in self._card_format_buttons.values():
             button.configure(state="disabled")
         self._card_format_notice.set("")
+        order_button = getattr(self, '_photo_order_button', None)
+        if order_button is not None:
+            order_button.configure(state='disabled')
         self._gallery_title.set("")
         self._recording_heading.configure(image="")
         self._recording_rows.clear()
@@ -3340,6 +3395,7 @@ class PhotosWorkspace(ttk.Frame):
             return
         self._selected_gallery_id = gallery.gallery_id
         self._restore_card_format(session, gallery.gallery_id)
+        self._restore_photo_order(session, gallery.gallery_id)
         if not implicit and not restore:
             self._user_selected_gallery = True
             self._selection_saved = False
@@ -3374,6 +3430,9 @@ class PhotosWorkspace(ttk.Frame):
                 gallery,
                 self._language,
                 show_title=False,
+                **({'newest_first': True} if self._photo_order_overrides.get(
+                    gallery.gallery_id, 'oldest',
+                ) == 'newest' else {}),
                 thumbnail_memory=self._thumbnail_memory,
                 context_menu=lambda photo, event: self._viewer_context(
                     gallery.gallery_id, photo, event,
@@ -3428,6 +3487,63 @@ class PhotosWorkspace(ttk.Frame):
         self._refresh_cache_widgets(gallery.gallery_id)
         if self._preload_last is not None:
             self._show_preload_progress(self._preload_last)
+
+    def _restore_photo_order(self, session: LinkingSession, gallery_id: int) -> None:
+        """Restore this gallery's order on every navigation without remote writes.
+
+        Args:
+            session (LinkingSession): Exact verified site/account session.
+            gallery_id (int): Physical gallery whose local order is restored.
+        Returns:
+            None: Updates the compact direction control and persistence warning.
+        """
+        overrides = getattr(self, '_photo_order_overrides', None)
+        if overrides is None:
+            self._photo_order_overrides = overrides = {}
+        if gallery_id not in overrides:
+            reader = getattr(self, '_load_photo_order', None)
+            try:
+                value = reader(session, gallery_id) if reader is not None else 'oldest'
+            except (OSError, TypeError, ValueError):
+                value = 'oldest'
+            overrides[gallery_id] = 'newest' if value == 'newest' else 'oldest'
+        button = getattr(self, '_photo_order_button', None)
+        if button is not None:
+            newest = overrides[gallery_id] == 'newest'
+            unsaved = gallery_id in self._photo_order_unsaved
+            button.configure(
+                state='normal', text=('↓' if newest else '↑') + (' !' if unsaved else ''),
+                style='Photos.Icon.TButton',
+            )
+            self._photo_order_hint.set(self._text(
+                'order_unsaved' if unsaved else 'order_newest' if newest else 'order_oldest',
+            ))
+
+    def _toggle_photo_order(self) -> None:
+        """Persist and apply the opposite local order to the selected gallery.
+
+        Returns:
+            None: Remounts one ordered viewer; future refreshes retain the rule.
+        """
+        session = self._session
+        gallery_id = self._selected_gallery_id
+        gallery = self._galleries.get(gallery_id)
+        if session is None or gallery is None or self._session_provider() is not session:
+            return
+        value = ('oldest' if self._photo_order_overrides.get(gallery_id) == 'newest'
+                 else 'newest')
+        self._photo_order_overrides[gallery_id] = value
+        saved = False
+        if self._save_photo_order is not None:
+            try:
+                saved = self._save_photo_order(session, gallery_id, value) is True
+            except (OSError, TypeError, ValueError):
+                pass
+        if saved:
+            self._photo_order_unsaved.discard(gallery_id)
+        else:
+            self._photo_order_unsaved.add(gallery_id)
+        self._select_gallery(gallery)
 
     def _restore_card_format(
         self, session: LinkingSession, gallery_id: int,
@@ -4138,6 +4254,19 @@ class PhotosWorkspace(ttk.Frame):
         self._place_context(card)
         return "break"
 
+    def _context_group(self, card: GlassCard, key: str) -> None:
+        """Separate compact action categories with a quiet single-line heading.
+
+        Args:
+            card (GlassCard): Current trigger-anchored gallery menu.
+            key (str): Localized category key within the Photos catalogue.
+        Returns:
+            None: Adds a small muted label without nesting another menu or card.
+        """
+        ttk.Label(card, text=self._text(key), style='Muted.TLabel').pack(
+            fill='x', pady=(4, 0),
+        )
+
     def _gallery_context(
         self, gallery_id: int | None, event: tk.Event, *,
         creation_only: bool = False, allow_root: bool = False,
@@ -4167,6 +4296,7 @@ class PhotosWorkspace(ttk.Frame):
             heading += "\n" + self._text("create_requires_approval")
         self._context_content(card, heading)
         if gallery_id is not None and not creation_only:
+            self._context_group(card, 'menu_information')
             self._gallery_info(card, session, gallery_id)
             if session.can_change_gallery_visibility():
                 self._context_action(
@@ -4180,7 +4310,16 @@ class PhotosWorkspace(ttk.Frame):
         gallery = self._galleries.get(gallery_id) if gallery_id is not None else None
         if gallery is not None:
             if not creation_only and session.can_read_media():
+                self._context_group(card, 'menu_local_cache')
                 self._add_cache_actions(card, session, gallery)
+            editor = getattr(self._manager, 'open_photos_gallery_editor', None)
+            host_actions = (
+                self._start_watcher is not None and session.can_upload()
+                or self._simbrief_action is not None
+                and self._simbrief_available is not None and self._simbrief_available()
+            )
+            if not creation_only and (callable(editor) or host_actions):
+                self._context_group(card, 'menu_tools')
             if not creation_only and self._manager is not None:
                 open_editor = getattr(
                     self._manager, 'open_photos_gallery_editor', None,
@@ -4193,6 +4332,7 @@ class PhotosWorkspace(ttk.Frame):
                         ),
                     )
             self._add_host_gallery_actions(card, session, gallery)
+        self._context_group(card, 'menu_create')
         self._add_gallery_creation_action(card, session, gallery_id)
         if gallery_id is not None and allow_root:
             self._add_gallery_creation_action(card, session, None)
@@ -5855,6 +5995,300 @@ class PhotosWorkspace(ttk.Frame):
         )
         return ('PIN ' if self._gallery_pins.get(gallery_id) is True else '') + glyph
 
+    def _open_title_editor(self, event: tk.Event | None = None) -> str:
+        """Open a server-synchronized title editor beside the visible heading.
+
+        Args:
+            event (tk.Event | None): Pointer/keyboard activation or pencil action.
+        Returns:
+            str: Tk break after opening an anchored editor for the exact gallery.
+        """
+        session = self._session
+        gallery_id = self._selected_gallery_id
+        if session is not None and gallery_id is not None:
+            anchor = self._context_event(self._gallery_title_label)
+            card = self._open_context(anchor)
+            self._begin_gallery_edit(card, session, gallery_id, 'title')
+        return 'break'
+
+    def _begin_gallery_edit(
+        self, card: GlassCard, session: LinkingSession, gallery_id: int, field: str,
+    ) -> None:
+        """Fetch complete current server text before presenting an editable value.
+
+        Args:
+            card (GlassCard): Exact anchored editing surface.
+            session (LinkingSession): Captured verified site/account session.
+            gallery_id (int): Exact gallery whose metadata is edited.
+            field (str): title or description selected by the pencil action.
+        Returns:
+            None: Shows fresh text/revision or an explicit approval/read failure.
+        """
+        if (card is not self._context_card or session is not self._session
+                or session is not self._session_provider()):
+            return
+        if not getattr(session, 'can_edit_gallery_metadata', lambda: False)():
+            self._context_content(card, self._text('edit_requires_approval'))
+            if self._manager is not None:
+                self._context_action(card, self._text('approve_edit'), self._approve_admin)
+            self._place_context(card)
+            return
+        cancel = self._cancel
+
+        def read() -> Callable[[], None]:
+            """Fetch a fresh one-use revision and full untruncated text.
+
+            Returns:
+                Callable[[], None]: Tk callback presenting only that server snapshot.
+            """
+            snapshot = session.read_gallery_edit(gallery_id, cancelled=cancel)
+            return lambda: self._show_gallery_editor(card, session, snapshot, field)
+
+        self._run_context(card, read, lambda: self._context_status(card, 'info_unavailable'))
+
+    def _apply_gallery_edit_snapshot(self, snapshot: LinkedGalleryEditSnapshot) -> None:
+        """Refresh local labels from a confirmed server read without remounting.
+
+        Args:
+            snapshot (LinkedGalleryEditSnapshot): Fresh canonical metadata snapshot.
+        Returns:
+            None: Updates the exact tree row, selected heading and catalogue cache.
+        """
+        gallery = self._galleries.get(snapshot.gallery_id)
+        if gallery is None:
+            return
+        gallery = replace(gallery, title=snapshot.title)
+        self._galleries[snapshot.gallery_id] = gallery
+        self._render_tree([snapshot.gallery_id])
+        if self._selected_gallery_id == snapshot.gallery_id:
+            self._gallery_title.set(snapshot.title or self._text('untitled'))
+            if self._viewer is not None:
+                self._viewer._gallery_viewer_controller.gallery = gallery
+        self._remember_catalogue_progress()
+
+    def _show_gallery_editor(
+        self, card: GlassCard, session: LinkingSession,
+        snapshot: LinkedGalleryEditSnapshot, field: str, *,
+        draft: str | None = None, failure: str | None = None,
+    ) -> None:
+        """Render a compact explicit text editor or retained unconfirmed draft.
+
+        Args:
+            card (GlassCard): Current trigger-anchored editing surface.
+            session (LinkingSession): Exact session that read this snapshot.
+            snapshot (LinkedGalleryEditSnapshot): Full authoritative baseline.
+            field (str): title or description being edited.
+            draft (str | None): Retained user text after failure; None uses server text.
+            failure (str | None): Localized conflict/uncertain key; None permits Save.
+        Returns:
+            None: Confirm/cancel stay visible; failed writes require passive reload.
+        """
+        if (card is not self._context_card or session is not self._session
+                or session is not self._session_provider()):
+            return
+        locked = failure in ('edit_conflict', 'edit_uncertain')
+        if failure is None:
+            self._apply_gallery_edit_snapshot(snapshot)
+        self._context_content(card, self._text('edit_' + field))
+        value = getattr(snapshot, field) if draft is None else draft
+        width = max(1, min(PHOTOS_INFO_CARD_MAX_WIDTH, self.winfo_width() - 40))
+        if field == 'description':
+            editor = tk.Text(
+                card, height=PHOTOS_GALLERY_EDITOR_ROWS,
+                width=PHOTOS_GALLERY_EDITOR_COLUMNS, wrap='word', undo=True,
+                background=_PALETTE['surface_alt'], foreground=_PALETTE['ink'],
+                insertbackground=_PALETTE['ink'], relief='flat',
+            )
+            editor.insert('1.0', value)
+            read_value = lambda: editor.get('1.0', 'end-1c')
+        else:
+            variable = tk.StringVar(card, value=value)
+            editor = ttk.Entry(
+                card, textvariable=variable, width=PHOTOS_GALLERY_EDITOR_COLUMNS,
+            )
+            editor._gallery_title_variable = variable
+            read_value = variable.get
+        editor.pack(fill='x', pady=(4, 4))
+        self._tag_context_widget(editor)
+        status = ttk.Label(
+            card, text=self._text(failure) if failure else self._text('edit_online'),
+            style='Muted.TLabel', wraplength=width,
+        )
+        status.pack(fill='x')
+        self._tag_context_widget(status)
+        if locked:
+            editor.configure(state='disabled')
+            self._context_action(
+                card, self._text('edit_reload'),
+                lambda: self._begin_gallery_edit(card, session, snapshot.gallery_id, field),
+            )
+        else:
+            save = lambda: self._submit_gallery_edit(
+                card, session, snapshot, field, read_value(),
+            )
+            self._context_action(card, self._text('edit_confirm'), save)
+            if field == 'title':
+                editor.bind('<Return>', lambda _event: (save(), 'break')[1])
+            else:
+                editor.bind('<Control-Return>', lambda _event: (save(), 'break')[1])
+        self._context_action(card, self._text('cancel'), self._dismiss_context)
+        self._place_context(card)
+        if not locked:
+            editor.focus_set()
+
+    def _submit_gallery_edit(
+        self, card: GlassCard, session: LinkingSession,
+        snapshot: LinkedGalleryEditSnapshot, field: str, value: str,
+    ) -> None:
+        """Send one explicit text change without replaying conflicts or uncertainty.
+
+        Args:
+            card (GlassCard): Exact editor containing the submitted draft.
+            session (LinkingSession): Captured current site/account session.
+            snapshot (LinkedGalleryEditSnapshot): Reviewed one-use server revision.
+            field (str): title or description selected by the user.
+            value (str): Complete submitted text, including description line breaks.
+        Returns:
+            None: Reports canonical completion or retains a locked recoverable draft.
+        """
+        if (card is not self._context_card or session is not self._session
+                or session is not self._session_provider()):
+            return
+        if not gallery_edit_text_valid(field, value):
+            self._show_gallery_editor(
+                card, session, snapshot, field, draft=value, failure='edit_invalid',
+            )
+            return
+        if value == getattr(snapshot, field):
+            self._gallery_edit_saved(card, session, snapshot)
+            return
+        cancel = self._cancel
+
+        def write() -> Callable[[], None]:
+            """Submit the captured field once and retain the exact draft on failure.
+
+            Returns:
+                Callable[[], None]: Tk callback for confirmed, conflicting or unknown state.
+            """
+            try:
+                updated = session.save_gallery_edit(snapshot, field, value, cancelled=cancel)
+            except LinkingRevisionConflict:
+                return lambda: self._show_gallery_editor(
+                    card, session, snapshot, field, draft=value, failure='edit_conflict',
+                )
+            except Exception:
+                return lambda: self._show_gallery_editor(
+                    card, session, snapshot, field, draft=value, failure='edit_uncertain',
+                )
+            return lambda: self._gallery_edit_saved(card, session, updated)
+
+        self._run_context(
+            card, write, lambda: self._show_gallery_editor(
+                card, session, snapshot, field, draft=value, failure='edit_uncertain',
+            ),
+        )
+
+    def _save_gallery_switch(
+        self, card: GlassCard, session: LinkingSession, gallery_id: int,
+        field: str, value: bool,
+    ) -> None:
+        """Apply an explicit information-card switch against fresh server state.
+
+        Args:
+            card (GlassCard): Current information card.
+            session (LinkingSession): Exact current site/account session.
+            gallery_id (int): Exact gallery whose setting was toggled.
+            field (str): nsfw or listed server-owned boolean setting.
+            value (bool): Explicit desired state shown by the switch.
+        Returns:
+            None: Saves once, preserving all other current settings and revision checks.
+        """
+        if (card is not self._context_card or session is not self._session
+                or session is not self._session_provider()):
+            return
+        cancel = self._cancel
+
+        def write() -> Callable[[], None]:
+            """Read current peer state and submit only the chosen boolean.
+
+            Returns:
+                Callable[[], None]: Tk callback for canonical completion.
+            """
+            snapshot = session.read_gallery_edit(gallery_id, cancelled=cancel)
+            if field == 'listed' and snapshot.visibility != 'public':
+                return lambda: self._gallery_switch_saved(card, session, snapshot)
+            if getattr(snapshot, field) != value:
+                snapshot = session.save_gallery_edit(snapshot, field, value, cancelled=cancel)
+            return lambda: self._gallery_switch_saved(card, session, snapshot)
+
+        self._run_context(
+            card, write, lambda: self._gallery_switch_unconfirmed(card, session, gallery_id),
+        )
+
+    def _gallery_switch_saved(
+        self, card: GlassCard, session: LinkingSession,
+        snapshot: LinkedGalleryEditSnapshot,
+    ) -> None:
+        """Return a confirmed direct switch to fresh gallery information in place.
+
+        Args:
+            card (GlassCard): Originating information surface.
+            session (LinkingSession): Exact current site/account session.
+            snapshot (LinkedGalleryEditSnapshot): Canonical confirmed saved values.
+        Returns:
+            None: Applies confirmed labels and reloads read-only information.
+        """
+        if (card is not self._context_card or session is not self._session
+                or session is not self._session_provider()):
+            return
+        self._apply_gallery_edit_snapshot(snapshot)
+        self._fetch_gallery_info(card, session, snapshot.gallery_id)
+
+    def _gallery_switch_unconfirmed(
+        self, card: GlassCard, session: LinkingSession, gallery_id: int,
+    ) -> None:
+        """Offer passive information reload after an unconfirmed switch write.
+
+        Args:
+            card (GlassCard): Originating information surface.
+            session (LinkingSession): Captured site/account session.
+            gallery_id (int): Gallery whose result must be checked.
+        Returns:
+            None: Offers no automatic write or implicit rollback.
+        """
+        if card is not self._context_card:
+            return
+        self._context_content(card, self._text('edit_uncertain'))
+        self._context_action(
+            card, self._text('edit_reload'),
+            lambda: self._fetch_gallery_info(card, session, gallery_id),
+        )
+        self._place_context(card)
+
+    def _gallery_edit_saved(
+        self, card: GlassCard, session: LinkingSession,
+        snapshot: LinkedGalleryEditSnapshot,
+    ) -> None:
+        """Display confirmed server values and offer the refreshed information card.
+
+        Args:
+            card (GlassCard): Originating edit surface.
+            session (LinkingSession): Captured site/account session.
+            snapshot (LinkedGalleryEditSnapshot): Canonical confirmed stored values.
+        Returns:
+            None: Updates labels and presents server-confirmed completion in place.
+        """
+        if (card is not self._context_card or session is not self._session
+                or session is not self._session_provider()):
+            return
+        self._apply_gallery_edit_snapshot(snapshot)
+        self._context_content(card, self._text('saved'))
+        self._context_action(
+            card, self._text('gallery_info'),
+            lambda: self._fetch_gallery_info(card, session, snapshot.gallery_id),
+        )
+        self._place_context(card)
+
     def _gallery_info(
         self, card: GlassCard, session: LinkingSession, gallery_id: int,
     ) -> None:
@@ -6020,7 +6454,11 @@ class PhotosWorkspace(ttk.Frame):
             ("photos_workspace_group_access", [
                 ("photos_workspace_field_visibility", fields.get("visibility")),
                 ("photos_workspace_field_nsfw", fields.get("nsfw")),
-                ("photos_workspace_field_listed", fields.get("listed")),
+                ("photos_workspace_field_listed",
+                 fields.get("visibility") == "public" and fields.get("listed") is True),
+                ("photos_workspace_field_hide_listing",
+                 not fields["listed"] if fields.get("visibility") == "public"
+                 and type(fields.get("listed")) is bool else None),
             ]),
             ("photos_workspace_group_thumbnail", [
                 ("photos_workspace_field_thumbnail_settings",
@@ -6033,9 +6471,38 @@ class PhotosWorkspace(ttk.Frame):
             suffix += "\n" + self._text("details_fallback")
         if self._probe_cancel is not None:
             self._probe_cancel = None
+        session = self._session
+        actions: dict[str, Callable[[], None]] = {}
+        switches: dict[str, tuple[bool, Callable[[bool], None]]] = {}
+        if session is not None:
+            for field in ('title', 'description'):
+                actions['photos_workspace_field_' + field] = (
+                    lambda field=field: self._begin_gallery_edit(
+                        card, session, gallery_id, field,
+                    )
+                )
+            if session.can_change_gallery_visibility():
+                actions['photos_workspace_field_visibility'] = (
+                    lambda: self._gallery_visibility(card, session, gallery_id)
+                )
+            if getattr(session, 'can_edit_gallery_metadata', lambda: False)():
+                if type(fields.get('nsfw')) is bool:
+                    switches['photos_workspace_field_nsfw'] = (
+                        fields['nsfw'], lambda value: self._save_gallery_switch(
+                            card, session, gallery_id, 'nsfw', value,
+                        ),
+                    )
+                if (fields.get('visibility') == 'public'
+                        and type(fields.get('listed')) is bool):
+                    switches['photos_workspace_field_hide_listing'] = (
+                        not fields['listed'],
+                        lambda value: self._save_gallery_switch(
+                            card, session, gallery_id, 'listed', not value,
+                        ),
+                    )
         self._render_info_card(
             card, self._text("gallery_info"), groups,
-            suffix=suffix,
+            suffix=suffix, actions=actions, switches=switches,
         )
 
     def _show_details(
@@ -6145,6 +6612,8 @@ class PhotosWorkspace(ttk.Frame):
     def _render_info_card(
         self, card: GlassCard, title: str, groups: list[_InfoGroup], *,
         suffix: str = "",
+        actions: dict[str, Callable[[], None]] | None = None,
+        switches: dict[str, tuple[bool, Callable[[bool], None]]] | None = None,
     ) -> None:
         """Replace a context menu with compact, wrapped metadata rows.
 
@@ -6153,6 +6622,10 @@ class PhotosWorkspace(ttk.Frame):
             title (str): Localized heading.
             groups (list[_InfoGroup]): Ordered localized headings and rows.
             suffix (str): Optional cache state or compatibility note.
+            actions (dict[str, Callable[[], None]] | None): Field keys mapped to
+                explicit edit actions; None keeps all rows read-only.
+            switches (dict[str, tuple[bool, Callable[[bool], None]]] | None):
+                Field keys mapped to current booleans and explicit save actions.
 
         Returns:
             None: Rows wrap to fit the current Photos workspace width.
@@ -6245,13 +6718,44 @@ class PhotosWorkspace(ttk.Frame):
             for key, value in rows:
                 label = self._text(key.removeprefix("photos_workspace_"))
                 rendered = self._format_detail_value(key, value)
-                ttk.Label(
-                    content, text=label + ": " + rendered,
-                    style="Card.TLabel", wraplength=width,
-                    justify="left",
-                ).pack(fill="x", anchor="w")
-                self._tag_context_widget(content.winfo_children()[-1])
-                bind_scroll(content.winfo_children()[-1])
+                if switches and key in switches:
+                    state, command = switches[key]
+                    variable = tk.BooleanVar(card, value=state)
+                    control = ttk.Checkbutton(
+                        content, text=label, style='Card.TCheckbutton',
+                        variable=variable,
+                        command=lambda var=variable, save=command: save(var.get()),
+                    )
+                    control._gallery_setting_variable = variable
+                    control.pack(fill='x', anchor='w')
+                    self._tag_context_widget(control)
+                    bind_scroll(control)
+                elif actions and key in actions:
+                    row = ttk.Frame(content, style='Card.TFrame')
+                    row.pack(fill='x', anchor='w')
+                    text = ttk.Label(
+                        row, text=label + ': ' + rendered, style='Card.TLabel',
+                        wraplength=max(1, width - 32), justify='left',
+                    )
+                    text.pack(side='left', fill='x', expand=True)
+                    edit = ttk.Button(
+                        row, text='▾' if key.endswith('_visibility') else '✎',
+                        style='Action.Photos.Icon.TButton', width=-1,
+                        command=actions[key], takefocus=True,
+                    )
+                    edit.pack(side='right')
+                    attach_inline_tooltip(edit, label, card)
+                    for widget in (row, text, edit):
+                        self._tag_context_widget(widget)
+                        bind_scroll(widget)
+                else:
+                    ttk.Label(
+                        content, text=label + ": " + rendered,
+                        style="Card.TLabel", wraplength=width,
+                        justify="left",
+                    ).pack(fill="x", anchor="w")
+                    self._tag_context_widget(content.winfo_children()[-1])
+                    bind_scroll(content.winfo_children()[-1])
         if suffix:
             ttk.Label(
                 content, text=suffix, style="Muted.TLabel",

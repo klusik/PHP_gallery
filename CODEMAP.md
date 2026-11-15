@@ -624,6 +624,7 @@ tag controller through the pagination and description-layout services.
 | WinApp browser link and startup resume | `winapp/uploader/app_linking_ui.py`, `winapp/uploader/session_resume.py`, `winapp/uploader/offline_linking.py` |
 | App Linking rolling expiry and refresh replay | `app/services/app_linking.php`, `app/services/app_linking_refresh.php`, `app/models/app_linking_refresh.php`, `tests/app_linking_database_test.php` |
 | Linked binary media rate limits | `app/controllers/app_linking/media.php`, `app/services/app_linking_rate_limits.php` |
+| WinApp local gallery order and synchronized metadata editing | `winapp/uploader/gallery_view_order.py`, `winapp/uploader/gallery_view_preferences.py`, `winapp/uploader/photos_workspace.py`; server mutation owner `app/services/app_linking_gallery_edit.php` |
 | WinApp Photos, local playback and media cache | `winapp/uploader/native_gallery_viewer.py`, `winapp/uploader/gallery_lightbox.py`, `winapp/uploader/gallery_media_cache.py` |
 | WinApp thumbnail accounting and process RAM | `winapp/uploader/thumbnail_cache_index.py`, `winapp/uploader/process_memory.py`; shared quota via `winapp/uploader/config.py`, snapshot/UI in `winapp/uploader/photos_workspace.py` |
 | WinApp gallery preload, retained bytes and Admin private-media opt-in | `winapp/uploader/gallery_preload.py`, `winapp/uploader/gallery_media_cache.py`, `winapp/uploader/app_linking.py`; server media owner in `app/services/app_linking_media.php` and ancestry policy in `app/services/gallery_access.php` |

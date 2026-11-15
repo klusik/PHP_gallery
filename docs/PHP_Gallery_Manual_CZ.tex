@@ -2063,6 +2063,44 @@ zachovají své zobrazení. Volba se ukládá pouze místně ve WinApp, samostat
 pro každou galerii a~ověřený web/účet. Nastavení webu ani nahrávání nemění.
 Malé \textbf{!} označuje chybu místního uložení; zvolený pohled zůstává použitý
 a~tooltip vysvětlí opakování. Změna využívá již načtené náhledy.
+Šipka před poměry náhledů přepíná nejstarší nebo nejnovější nahrané fotky
+jako první. Toto místní pravidlo se ukládá pro každou galerii a~ověřený web/účet,
+nezávisle na poměru náhledů. Každé obnovení je použije znovu: v~režimu nejnovějších
+první se nová fotka zařadí na začátek. Mřížka, lightbox i~slideshow sdílejí pořadí;
+web si tuto volbu neukládá. Obrácené řazení nejprve načte celý omezený seznam
+metadat a~poté jej stránkuje místně, bez přednačítání obrázků. Po čekání
+na limit pokračuje Retry od ověřeného kurzoru metadat.
+
+Obě menu galerie mají kompaktní skupiny informací/přístupu, lokální cache,
+nástrojů a~vytváření. V~\ui{Informacích o~galerii} viditelnost používá stávající
+volbu veřejná/soukromá/nezveřejněná; přepínače NSFW Guard a~zařazení do výpisů
+ukládají stav rovnou i~online. Kliknutí na název nebo jeho tužku upraví název,
+tužka u~popisu otevře celý víceřádkový text. Editor nejprve načte aktuální
+serverovou hodnotu i~revizi. Enter uloží název, Control+Enter popis; Escape ruší.
+Souběžná webová změna odmítne zastaralé uložení. Nepotvrzený výsledek ponechá
+uzamčený rozepsaný text a~nabídne výslovné načtení ze serveru bez opakování zápisu.
+Potvrzený název aktualizuje strom i~záhlaví; fyzické složky a~stabilní URL zůstávají.
+
+Tyto úpravy metadat vyžadují aktuální server a~samostatné schválení oprávnění
+\texttt{gallery:edit} v~prohlížeči. Stávající oprávnění se nerozšiřují. Inventář,
+data a~souhrn kvality náhledů zůstávají jen ke čtení. Popis používá celý uložený
+text, nikoli zkrácený informační náhled. Nasazení a~chování instalovaného klienta
+vyžadují samostatné ověření.
+
+Listed je automatické: Public je ve výpisech, pokud není zapnuto
+\ui{Skrýt z~veřejných výpisů}; Private a~Unpublished mají Listed vždy vypnuté.
+Výjimku lze měnit jen u~Public a~přetrvá dočasnou změnu viditelnosti.
+Skrytí z~výpisů samo nezakazuje přímé odkazy.
+Na serveru day-v1 každý ověřený API požadavek posune přístup o~24 hodin
+a~limit neaktivity o~sedm dní, včetně prohlížení a~uploadů.
+Běžící Watcher každých pět minut bez přenosu ověří svůj přesný dočasný klíč;
+ostatní nečinná připojení používají identity API. Vypršelý přístup obnoví
+stávající uložené oprávnění. Nelze-li obnovu ověřit, \ui{Připojit} odstraní
+nepoužitelné místní připojení a~otevře nové schválení v~prohlížeči.
+\ui{Odpojit} funguje i~po vypršení; nedostupné odvolání na serveru neblokuje
+místní obnovu. Čekající originály a~historie cíle zůstávají zachované.
+
+
 Fotografie a~náhledy mají
 samostatný limit 600 požadavků na IP a~3\,600 celkem za pět minut.
 Při HTTP~429 aplikace zobrazí upozornění a~pozastaví načítání dopředu do

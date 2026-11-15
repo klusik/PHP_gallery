@@ -31,7 +31,8 @@ from .app_linking import (
     LINKING_RECOVERY_MAX_FILE_BYTES,
     ADMIN_PRELOAD_CAPABILITY,
     GALLERY_TREE_CAPABILITY,
-    THUMBNAIL_BATCH_CAPABILITY,
+    THUMBNAIL_BATCH_CAPABILITY, SLIDING_ACCESS_CAPABILITY,
+    LINKING_KEEPALIVE_SECONDS,
     ADMIN_MEDIA_SCOPE_SUFFIX, ADMIN_PRESENTATION_SCOPE_SUFFIX,
     MEDIA_SCOPE_SUFFIX, PRESENTATION_SCOPE_SUFFIX, ROLLING_SCOPE_SUFFIX,
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryPage,
@@ -601,6 +602,10 @@ class LinkingManager:
         self._attempt: LinkingAttempt | None = None
         self._session: LinkingSession | None = None
         self._session_issuer = ''
+        self._reconnect_issuers: set[str] = set()
+        self._keepalive_worker: threading.Thread | None = None
+        self._keepalive_next = 0.0
+        self._watch_target: LinkedUploadTarget | None = None
         self._session_user_id = 0
         self._owner: object | None = None
         self._direct_owner: object | None = None
@@ -620,7 +625,7 @@ class LinkingManager:
                   | tuple[object, LinkedGalleryPage | None]
                   | LinkedGalleryPage | LinkedGalleryDetail | LinkedGallery | CreateIntent
                   | BoundCreateReceipt | OfflineBinding | _PhotosUploadUpgrade
-                  | _PhotosWatchStart | LinkingResponseError | LinkingUnavailable
+                  | _PhotosWatchStart | _LinkedSite | LinkingResponseError | LinkingUnavailable
                   | Callable[[str], None] | None]
         ] = queue.Queue()
         self._handoff: PushedAuthorization | None = None
@@ -889,6 +894,7 @@ class LinkingManager:
                     thumbnail_batch_supported=(
                         THUMBNAIL_BATCH_CAPABILITY in capabilities
                     ),
+                    sliding_access_supported=(SLIDING_ACCESS_CAPABILITY in capabilities),
                 )
                 identity = session.identity()
                 if identity.user_id != grant.account_id:
@@ -1110,9 +1116,12 @@ class LinkingManager:
             confirm.state(['disabled'] if busy else ['!disabled'])
             confirm.configure(text=self._text('linking_open_saved_link')
                               if not manage and issuer in live else title)
-            unlink_button.state(['!disabled'] if issuer in live and not busy else ['disabled'])
+            disconnectable = (issuer in live or issuer in self._reconnect_issuers
+                              or (self._offline_binding is not None
+                                  and self._offline_binding.issuer == issuer))
+            unlink_button.state(['!disabled'] if disconnectable and not busy else ['disabled'])
             forget_button.state(['!disabled'] if issuer in recent and not busy else ['disabled'])
-            for button, visible in ((unlink_button, issuer in live),
+            for button, visible in ((unlink_button, disconnectable),
                                     (forget_button, issuer in recent)):
                 if visible:
                     button.pack(side='left')
@@ -1176,6 +1185,9 @@ class LinkingManager:
             self._status.set('Enter a valid address in Gallery URL.')
             return
         self._refresh(self._current_issuer)
+        if issuer in self._reconnect_issuers:
+            self._remove_saved_link(issuer, reconnect=True)
+            return
         site = self._live_link(issuer)
         if site is not None:
             if self._session is not site.session:
@@ -1205,7 +1217,8 @@ class LinkingManager:
             None: Starts approval while preserving the current live link.
         """
         session = self.photos_session()
-        if session is not None and not session.can_read_admin_media():
+        if session is not None and (not session.can_read_admin_media()
+                or not getattr(session, 'can_edit_gallery_metadata', lambda: False)()):
             self._start(self._session_issuer, direct=True, replace_photos=True)
 
     def start_photos_watcher(
@@ -1319,6 +1332,7 @@ class LinkingManager:
                 self._temporary_watch_selection = (target, selected)
             self._notify_target_changed()
             if request.start(target):
+                self._watch_target = target
                 return True
         except Exception:  # noqa: BLE001
             pass
@@ -1335,6 +1349,8 @@ class LinkingManager:
             None: Detaches its temporary selection without changing linked mode
                 or the browser-approved site session.
         """
+        if self._watch_target is target:
+            self._watch_target = None
         owned = self._temporary_watch_selection
         if owned is None or owned[0] is not target:
             return
@@ -2117,6 +2133,7 @@ class LinkingManager:
         self._parked_links = tuple(
             link for link in self._parked_links if link.issuer != site.issuer
         )
+        self._reconnect_issuers.discard(site.issuer)
         self._session = site.session
         self._session_issuer = self._current_issuer = site.issuer
         self._session_user_id = site.user_id
@@ -2516,7 +2533,8 @@ class LinkingManager:
             ['!disabled'] if self._handoff is not None else ['disabled'],
         )
         self._revoke_button.state(
-            ['!disabled'] if self._session is not None and not busy
+            ['!disabled'] if not busy and (self._session is not None
+                                          or self._offline_binding is not None)
             else ['disabled'],
         )
 
@@ -3138,6 +3156,18 @@ class LinkingManager:
                 owner, kind, payload = self._events.get_nowait()
             except queue.Empty:
                 break
+            if kind == 'keepalive_error' and isinstance(payload, _LinkedSite):
+                if (self._session is not payload.session
+                        and not any(site.session is payload.session
+                                    for site in self._parked_links)):
+                    continue
+                if not payload.session.available():
+                    self._reconnect_issuers.add(payload.issuer)
+                    self._status.set(self._text('linking_reconnect_needed'))
+                    self._notify_target_changed()
+                else:
+                    self._status.set(self._text('linking_connection_retry'))
+                continue
             if (owner is not self._owner
                     or self._window is None and owner is not self._direct_owner):
                 if (kind in ('connected', 'resumed')
@@ -3416,11 +3446,28 @@ class LinkingManager:
                     'Could not reach the saved gallery renewal service. Try again when it is available.',
                 )
             elif kind == 'offline_error':
-                self._status.set(
-                    'Saved link could not be verified. Do not retry an uncertain '
-                    'refresh; forget it locally and review gallery links before '
-                    'authorizing again.',
-                )
+                issuer, approve = (payload if isinstance(payload, tuple)
+                                   else (self._current_issuer, False))
+                self._reconnect_issuers.add(issuer)
+                self._status.set(self._text('linking_reconnect_needed'))
+                if approve:
+                    if self._worker is not None and self._worker.is_alive():
+                        self._events.put((owner, kind, payload))
+                        break
+                    self._remove_saved_link(issuer, reconnect=True)
+            elif kind == 'saved_link_removed' and isinstance(payload, tuple):
+                issuer, reconnect = payload
+                self._offline_binding = None
+                self._reconnect_issuers.discard(issuer)
+                if reconnect:
+                    if self._worker is not None and self._worker.is_alive():
+                        self._events.put((owner, kind, payload))
+                        break
+                    self._start(issuer, direct=True)
+                else:
+                    self._status.set(self._text('linking_unlinked_locally'))
+            elif kind == 'saved_link_remove_error':
+                self._status.set(self._text('linking_local_remove_failed'))
             elif kind == 'unlink_cleanup_error':
                 self._status.set(
                     'The saved secure reconnect could not be removed. '
@@ -3537,6 +3584,7 @@ class LinkingManager:
         if (self._gallery_search_waiting and self._gallery_search_job is None
                 and self._events.empty()):
             self._run_gallery_search()
+        self._keep_links_alive()
         # Check the queue after observing worker termination: the worker may
         # have posted its final event just after the drain above and exited.
         if ((self._worker is not None and self._worker.is_alive())
@@ -3545,6 +3593,135 @@ class LinkingManager:
         else:
             if self._session is not None or self._parked_links:
                 self._schedule_poll(LINKING_IDLE_POLL_INTERVAL_MS)
+
+    def _keep_links_alive(self) -> None:
+        """Check idle live links through the existing read-only identity route.
+
+        Returns:
+            None: Starts at most one worker per five-minute round. Real API use
+                suppresses identity keepalive; capture keys receive their own
+                check. No failed mutation is replayed.
+        """
+        if (self._shutting_down or time.monotonic() < self._keepalive_next
+                or self._keepalive_worker is not None
+                and self._keepalive_worker.is_alive()):
+            return
+        watch_target = self._watch_target
+        sites = tuple(site for site in self._live_links()
+                      if site.session.keepalive_due() is True or (watch_target is not None
+                          and site.session is watch_target.session))
+        if not sites:
+            return
+        self._keepalive_next = time.monotonic() + LINKING_KEEPALIVE_SECONDS
+
+        def worker() -> None:
+            """Renew idle server deadlines without touching Tk or uploads.
+
+            Returns:
+                None: Queues a recoverable connection error for the UI owner.
+            """
+            for site in sites:
+                try:
+                    if watch_target is not None and site.session is watch_target.session:
+                        watch_target.inventory([])
+                    elif site.session.identity().user_id != site.user_id:
+                        site.session.close()
+                        raise LinkingError('Gallery account changed.')
+                except (RuntimeError, OSError):
+                    self._events.put((site.session, 'keepalive_error', site))
+
+        self._keepalive_worker = threading.Thread(
+            target=worker, name='PHPGalleryConnectionKeepalive', daemon=True,
+        )
+        try:
+            self._keepalive_worker.start()
+        except RuntimeError:
+            self._keepalive_worker = None
+
+    def _remove_saved_link(self, issuer: str, *, reconnect: bool) -> None:
+        """Detach an expired saved link without depending on a live bearer.
+
+        Args:
+            issuer (str): Exact canonical address selected by the user.
+            reconnect (bool): Continue the explicit Connect action with fresh
+                browser consent after the local credential is removed.
+        Returns:
+            None: Preserves recent addresses, pending originals and destinations;
+                remote revocation is best effort and never blocks local recovery.
+        """
+        if self._worker is not None and self._worker.is_alive():
+            return
+        for site in self._live_links():
+            if site.issuer == issuer:
+                site.session.close()
+        if self._session_issuer == issuer:
+            if self._session is not None:
+                self._session.close()
+            self._clear_session_display()
+        self._parked_links = tuple(site for site in self._parked_links
+                                   if site.issuer != issuer)
+        target = self._active_upload_target
+        if target is not None and target.issuer == issuer:
+            target.session.close()
+            self._active_upload_target = None
+            self._notify_target_changed()
+        owner = object()
+        self._owner = self._direct_owner = owner
+        self._current_issuer = issuer
+        self._status.set(self._text('linking_reconnecting' if reconnect
+                                   else 'linking_disconnecting'))
+
+        def worker() -> None:
+            """Remove the exact local binding before requesting fresh approval.
+
+            Returns:
+                None: Reports verified local removal independently of the server.
+            """
+            try:
+                binding = self._saved_offline_binding(issuer)
+                if binding is not None:
+                    store = self._native_offline_store()
+                    if store is None:
+                        raise LinkingError('Secure storage is unavailable.')
+                    record = remove_saved_offline_link(
+                        store, self._offline_binding_path(binding), binding,
+                        capture_refresh=True,
+                    )
+                    # Reauthorization must not wait on an unreachable server.
+                    # A separate best-effort revocation owns only this old token.
+                    if record is not None:
+                        def revoke() -> None:
+                            """Try closing the old grant without blocking reconnect.
+
+                            Returns:
+                                None: Server failure leaves only its old grant.
+                            """
+                            try:
+                                revoke_saved_refresh(binding, record)
+                            except (RuntimeError, OSError):
+                                pass
+                        try:
+                            threading.Thread(
+                                target=revoke, name='PHPGalleryOldLinkRevoke', daemon=True,
+                            ).start()
+                        except RuntimeError:
+                            pass
+                if sys.platform == 'darwin':
+                    delete_transient(issuer)
+                self._events.put((owner, 'saved_link_removed', (issuer, reconnect)))
+            except (RuntimeError, OSError):
+                self._events.put((owner, 'saved_link_remove_error', None))
+
+        self._worker = threading.Thread(
+            target=worker, name='PHPGalleryReconnectCleanup', daemon=True,
+        )
+        try:
+            self._worker.start()
+        except RuntimeError:
+            self._worker = None
+            self._status.set(self._text('linking_local_remove_failed'))
+            return
+        self._schedule_poll()
 
     def _restore_offline(
         self, *, silent: bool = False, approve_if_expired: bool = False,
@@ -3600,6 +3777,7 @@ class LinkingManager:
                     thumbnail_batch_supported=(
                         THUMBNAIL_BATCH_CAPABILITY in capabilities
                     ),
+                    sliding_access_supported=(SLIDING_ACCESS_CAPABILITY in capabilities),
                 )
                 identity = session.identity()
                 if (identity.user_id != binding.account_id
@@ -3618,7 +3796,9 @@ class LinkingManager:
                     owner, 'offline_expired', (binding.issuer, approve_if_expired),
                 ))
             except Exception:  # noqa: BLE001
-                self._events.put((owner, 'offline_error', None))
+                self._events.put((
+                    owner, 'offline_error', (binding.issuer, approve_if_expired),
+                ))
             finally:
                 if session is not None:
                     session.close()
@@ -4660,8 +4840,11 @@ class LinkingManager:
             None: Starts one revocation or reports why the link cannot close.
                 The site remains available in recent addresses.
         """
-        site = self._live_link(self._session_issuer if issuer is None else issuer)
+        address = (self._session_issuer or self._current_issuer) if issuer is None else issuer
+        site = self._live_link(address)
         if site is None:
+            if address:
+                self._remove_saved_link(address, reconnect=False)
             return
         session = site.session
         if self._worker is not None and self._worker.is_alive():

@@ -550,6 +550,69 @@ class OfflineLinkingTests(unittest.TestCase):
         request.assert_not_called()
         self.assertFalse(session.available())
 
+    def test_day_access_slides_across_active_days_without_rotation(self) -> None:
+        """Keep real API use live across multiple original access deadlines.
+
+        Returns:
+            None: Day-v1 slides one day from request start while old servers,
+                failures and local cache access cannot manufacture authority.
+        """
+        scope = linking.ROLLING_GALLERIES_SCOPE
+        clock = [time.monotonic()]
+        with patch.object(linking.time, 'monotonic', side_effect=lambda: clock[0]):
+            session = linking.LinkingSession(
+                self.issuer, self.access, clock[0] + offline.OFFLINE_ACCESS_MAX_SECONDS,
+                scope, sliding_access_supported=True,
+            )
+            self.addCleanup(session.close)
+            renew = MagicMock()
+            session.enable_renewal(renew)
+            identity = {'user': {'id': self.account, 'username': 'admin'}, 'scope': scope}
+            with patch.object(linking, '_request_json', return_value=identity):
+                # Multiple days of regular use must exceed both the initial
+                # fifteen-minute access and the original seven-day family age.
+                # Seventeen half-day vectors exercise eight full active days.
+                for _ in range(17):
+                    self.assertEqual(self.account, session.identity().user_id)
+                    self.assertEqual(clock[0] + linking.LINKING_MAX_TOKEN_LIFETIME_SECONDS,
+                                     session._expires_at)
+                    clock[0] += linking.LINKING_MAX_TOKEN_LIFETIME_SECONDS / 2
+            renew.assert_not_called()
+            deadline = session._expires_at
+            with patch.object(linking, '_request_json', side_effect=linking.LinkingError('Offline')):
+                with self.assertRaises(linking.LinkingError):
+                    session.identity()
+            self.assertEqual(deadline, session._expires_at)
+            old = linking.LinkingSession(
+                self.issuer, self.access, deadline, scope,
+            )
+            self.addCleanup(old.close)
+            old._access_used(clock[0])
+            self.assertEqual(deadline, old._expires_at)
+
+    def test_uncertain_renewal_stops_ready_state_and_never_retries(self) -> None:
+        """Expose a fenced refresh as reconnect-required instead of ready.
+
+        Returns:
+            None: The callback executes once; later requests cannot repeat it.
+        """
+        session = linking.LinkingSession(
+            self.issuer, self.access, time.monotonic() + offline.OFFLINE_ACCESS_MAX_SECONDS,
+            linking.ROLLING_GALLERIES_SCOPE,
+        )
+        self.addCleanup(session.close)
+        session._expires_at = time.monotonic()
+        renew = MagicMock(side_effect=linking.LinkingReconnectRequired('Sign in again'))
+        session.enable_renewal(renew)
+        with patch.object(linking, '_request_json') as request:
+            for _ in range(2):
+                with self.assertRaises(linking.LinkingError):
+                    session.gallery_page()
+        renew.assert_called_once()
+        request.assert_not_called()
+        self.assertFalse(session.available())
+        self.assertFalse(session.can_upload())
+
     def test_storage_failure_never_exposes_new_access(self) -> None:
         """Retain the fence when replacement storage has uncertain outcome.
 

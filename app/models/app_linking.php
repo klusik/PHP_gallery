@@ -162,7 +162,7 @@ function app_link_model_watch_key_close(int $grantId, int $galleryId, string $ke
 }
 
 /**
- * Check an unexpired key against the exact currently authenticated grant/gallery.
+ * Renew an unexpired key after exact authenticated capture activity.
  * @param int $grantId Authenticated grant identifier.
  * @param int $userId Authenticated grant owner.
  * @param string $tokenHash Current access credential hash.
@@ -170,7 +170,8 @@ function app_link_model_watch_key_close(int $grantId, int $galleryId, string $ke
  * @param string $scope Exact authenticated scope.
  * @param int $galleryId Selected physical gallery identifier.
  * @param string $keyHash Supplied key digest.
- * @return bool True only while the exact stored generation remains unexpired.
+ * @return bool True after the exact live generation receives another day.
+ *     Expired, replaced or revoked keys cannot be revived by this check.
  */
 function app_link_model_watch_key_valid(
     int $grantId,
@@ -183,20 +184,22 @@ function app_link_model_watch_key_valid(
 ): bool {
     app_link_model_assert_hash($keyHash);
     $statement = db()->prepare(
-        'SELECT 1 FROM app_linking_watch_keys wk '
+        'UPDATE app_linking_watch_keys wk '
             . 'INNER JOIN app_link_grants ag ON ag.id = wk.grant_id '
             . 'INNER JOIN users u ON u.id = ag.user_id '
+            . 'SET wk.expires_at = DATE_ADD(UTC_TIMESTAMP(6), INTERVAL '
+            . APP_LINKING_WATCH_KEY_TTL_SECONDS . ' SECOND) '
             . 'WHERE wk.grant_id = ? AND wk.gallery_id = ? AND wk.key_hash = ? '
             . 'AND ag.user_id = ? AND BINARY ag.access_token_hash = BINARY ? '
             . 'AND BINARY ag.issuer = BINARY ? AND BINARY ag.scope = BINARY ? '
             . 'AND wk.expires_at > UTC_TIMESTAMP(6) AND ag.revoked_at IS NULL '
             . 'AND ag.access_expires_at > UTC_TIMESTAMP(6) '
-            . "AND BINARY u.role = BINARY 'admin' LIMIT 1",
+            . "AND BINARY u.role = BINARY 'admin'",
     );
     $statement->execute([
         $grantId, $galleryId, $keyHash, $userId, $tokenHash, $issuer, $scope,
     ]);
-    return $statement->fetchColumn() !== false;
+    return $statement->rowCount() === 1;
 }
 
 /**

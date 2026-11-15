@@ -54,6 +54,7 @@ _JSON_ROUTE_CATEGORIES = {
     'app_linking_gallery_visibility': 'gallery_visibility',
     'app_linking_photo_visibility': 'photo_visibility',
     'app_linking_media_delete': 'media_delete',
+    'app_linking_gallery_metadata': 'gallery_metadata',
     'app_linking_thumbnail_batch': 'thumbnail_batch',
 }
 

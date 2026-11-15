@@ -350,8 +350,8 @@ function app_linking_media_photo_mutation(): void
             app_linking_json_error(415, 'unsupported_media_type');
             return;
         }
-        $raw = file_get_contents('php://input', false, null, 0, APP_LINKING_CREATE_REQUEST_MAX_BYTES + 1);
-        if (!is_string($raw) || $raw === '' || strlen($raw) > APP_LINKING_CREATE_REQUEST_MAX_BYTES) {
+        $raw = file_get_contents('php://input', false, null, 0, \Gallery\Services\APP_LINKING_GALLERY_EDIT_REQUEST_MAX_BYTES + 1);
+        if (!is_string($raw) || $raw === '' || strlen($raw) > \Gallery\Services\APP_LINKING_GALLERY_EDIT_REQUEST_MAX_BYTES) {
             app_linking_json_error(400, 'invalid_request');
             return;
         }
@@ -367,6 +367,15 @@ function app_linking_media_photo_mutation(): void
             return;
         }
         $action = $input['action'] ?? null;
+        if (in_array($action, ['gallery_edit_read', 'gallery_edit'], true)) {
+            app_linking_media_gallery_edit($identity, $token, $issuer, $input);
+            return;
+        }
+        // Preserve the established request budget for existing photo actions.
+        if (strlen($raw) > APP_LINKING_CREATE_REQUEST_MAX_BYTES) {
+            app_linking_json_error(400, 'invalid_request');
+            return;
+        }
         if ($action === 'delete') {
             app_linking_media_photo_delete($identity, $token, $issuer, $input);
             return;
@@ -450,5 +459,50 @@ function app_linking_media_photo_delete(
         app_linking_json_error(409, 'target_unavailable');
     } catch (Throwable) {
         app_linking_json_error(503, 'operation_outcome_unknown');
+    }
+}
+
+/**
+ * Read or edit a single gallery field under separately approved metadata scope.
+ *
+ * @param array{grant_id:int,user_id:int,username:string,scope:string} $identity Current bearer identity.
+ * @param string $token Presented bearer, never retained.
+ * @param string $issuer Verified exact installation issuer.
+ * @param array<string,int|string|bool> $input Bounded decoded operation object.
+ * @return void Emits a canonical snapshot, exact pre-write conflict or refusal.
+ */
+function app_linking_media_gallery_edit(
+    array $identity, string $token, string $issuer, array $input,
+): void {
+    if (!\Gallery\Services\app_linking_scope_allows_gallery_edit($identity['scope'])) {
+        app_linking_json_error(403, 'insufficient_scope');
+        return;
+    }
+    $read = $input['action'] === 'gallery_edit_read';
+    if (!is_int($input['gallery_id'] ?? null) || $input['gallery_id'] <= 0
+        || ($read && count($input) !== 2)
+        || (!$read && (count($input) !== 5
+            || !is_string($input['expected_revision'] ?? null)
+            || !in_array($input['field'] ?? null, ['title', 'description', 'nsfw', 'listed'], true)
+            || (!is_string($input['value'] ?? null) && !is_bool($input['value'] ?? null))))) {
+        app_linking_json_error(400, 'invalid_request');
+        return;
+    }
+    try {
+        $gallery = $read
+            ? \Gallery\Services\app_linking_gallery_edit_read(
+                $identity, $token, $issuer, $input['gallery_id'],
+            )
+            : \Gallery\Services\app_linking_gallery_edit_save(
+                $identity, $token, $issuer, $input['gallery_id'],
+                $input['expected_revision'], $input['field'], $input['value'],
+            );
+        app_linking_security_headers();
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['gallery' => $gallery], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    } catch (\Gallery\Services\LinkedGalleryVisibilityConflict) {
+        app_linking_json_error(409, 'revision_conflict');
+    } catch (Throwable) {
+        app_linking_json_error(503, $read ? 'temporarily_unavailable' : 'operation_outcome_unknown');
     }
 }

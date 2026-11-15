@@ -73,6 +73,7 @@ from .gallery_lightbox import (
 from .ui_theme import GALLERY_TILE_BORDER_INSET, _attach_tooltip, icon_button
 from .tk_scroll_input import vertical_scroll_delta
 from .gallery_view_preferences import normalize_card_format
+from .gallery_view_order import GalleryViewOrder
 
 try:
     from PIL import Image, ImageTk
@@ -794,6 +795,7 @@ class _NativeGalleryViewer:
         diagnostic_callback: Callable[[str], None] | None = None,
         photo_selected: Callable[[LinkedPhoto], None] | None = None,
         observation_callback: Callable[[str], None] | None = None,
+        newest_first: bool = False,
     ) -> None:
         """Create the embedded view and start its first bounded page load.
 
@@ -815,6 +817,7 @@ class _NativeGalleryViewer:
                 Tk-thread receiver for a selected photo descriptor.
             observation_callback (Callable[[str], None] | None): Optional
                 receiver for bounded, non-failure observation summaries.
+            newest_first (bool): Reverse the complete metadata sequence locally.
 
         Returns:
             None: The viewer owns the returned child frame until it is destroyed.
@@ -824,6 +827,9 @@ class _NativeGalleryViewer:
         self.language = language
         self._preview_result = preview_result
         self._show_title = show_title
+        self._view_order = (
+            GalleryViewOrder(session, gallery.gallery_id) if newest_first else None
+        )
         self._owns_thumbnail_memory = thumbnail_memory is None
         self._thumbnail_memory = thumbnail_memory or GalleryThumbnailMemory()
         self._context_menu = context_menu
@@ -2735,8 +2741,8 @@ class _NativeGalleryViewer:
                 target_count + NATIVE_MEDIA_LEGACY_PAGE_SIZE - 1
             ) // NATIVE_MEDIA_LEGACY_PAGE_SIZE)
             for _page_number in range(page_limit):
-                page = self.session.media_page(
-                    self.gallery.gallery_id, after_id=cursor,
+                page = self._read_photo_page(
+                    after_id=cursor,
                     cancelled=operation_cancelled,
                 )
                 pages.append(page)
@@ -2744,7 +2750,10 @@ class _NativeGalleryViewer:
                 next_cursor = page.next_after
                 if next_cursor is None or count >= target_count:
                     return tuple(pages)
-                if not page.photos or (cursor is not None and next_cursor <= cursor):
+                if (not page.photos or (cursor is not None
+                        and (next_cursor == cursor or (
+                            getattr(self, '_view_order', None) is None
+                            and next_cursor < cursor)))):
                     raise ValueError('Gallery refresh cursor did not advance.')
                 cursor = next_cursor
             raise ValueError('Gallery refresh exceeded its loaded page extent.')
@@ -2991,6 +3000,29 @@ class _NativeGalleryViewer:
         )
         self._thumbnail_resume_after_id = self.window.after(delay_ms, resume)
 
+    def _read_photo_page(
+        self, after_id: int | None = None,
+        cancelled: threading.Event | None = None,
+    ) -> LinkedMediaPage:
+        """Read metadata in this viewer's persistent local presentation order.
+
+        Args:
+            after_id (int | None): Exclusive display cursor, or fresh first page.
+            cancelled (threading.Event | None): Refresh signal or viewer lifetime.
+        Returns:
+            LinkedMediaPage: Existing ascending page or a full-snapshot reverse page.
+        """
+        order = getattr(self, '_view_order', None)
+        if order is not None:
+            return order.page(after_id, cancelled or self._cancelled)
+        if after_id is None:
+            return self.session.media_page(
+                self.gallery.gallery_id, cancelled=cancelled,
+            )
+        return self.session.media_page(
+            self.gallery.gallery_id, after_id=after_id, cancelled=cancelled,
+        )
+
     def _load_first_page(self) -> None:
         """Show recent session metadata and refresh it through the same owner.
 
@@ -3002,7 +3034,9 @@ class _NativeGalleryViewer:
         self._page_request_cursor = None
         self._page_request_mode = 'initial'
         recent = getattr(self.session, 'recent_media_page', None)
-        page = recent(self.gallery.gallery_id) if callable(recent) else None
+        page = (recent(self.gallery.gallery_id)
+                if callable(recent) and getattr(self, '_view_order', None) is None
+                else None)
         if (isinstance(page, LinkedMediaPage) and not self._closed
                 and self._worker is None and self._events.empty()):
             # Deliver after mounting, so implicit-preview callbacks and cache
@@ -3021,8 +3055,7 @@ class _NativeGalleryViewer:
                 tuple[LinkedMediaPage, LinkedPresentation | None]: Page and
                     no presentation until its later owned request.
             """
-            page = self.session.media_page(
-                self.gallery.gallery_id,
+            page = self._read_photo_page(
                 cancelled=self._cancelled,
             )
             return page, None
@@ -3080,8 +3113,7 @@ class _NativeGalleryViewer:
             Returns:
                 LinkedMediaPage: Validated page from the linked session.
             """
-            return self.session.media_page(
-                self.gallery.gallery_id,
+            return self._read_photo_page(
                 after_id=after_id,
                 cancelled=self._cancelled,
             )
@@ -6117,6 +6149,7 @@ class _NativeGalleryViewer:
             self._lightbox.dismiss()
             self._lightbox.close()
         self._photos = ()
+        self._view_order = None
         self._tracks = ()
         self._presentation = None
         self._pending_detail_index = None
@@ -6199,6 +6232,7 @@ def mount_native_gallery_view(
     diagnostic_callback: Callable[[str], None] | None = None,
     photo_selected: Callable[[LinkedPhoto], None] | None = None,
     observation_callback: Callable[[str], None] | None = None,
+    newest_first: bool = False,
 ) -> ttk.Frame:
     """Mount an inline, bounded gallery reader for a selected gallery.
 
@@ -6220,6 +6254,7 @@ def mount_native_gallery_view(
             Tk-thread receiver for the focused photo descriptor.
         observation_callback (Callable[[str], None] | None): Optional thread-safe
             receiver for allowlisted non-failure observations.
+        newest_first (bool): Apply a local reverse order on all metadata refreshes.
 
     Returns:
         ttk.Frame: Child view whose destruction releases worker and UI resources.
@@ -6236,5 +6271,6 @@ def mount_native_gallery_view(
         diagnostic_callback=diagnostic_callback,
         photo_selected=photo_selected,
         observation_callback=observation_callback,
+        newest_first=newest_first,
     )
     return viewer.frame

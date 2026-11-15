@@ -2507,7 +2507,15 @@ class VisibilitySessionTests(unittest.TestCase):
         self.assertEqual(
             admin_delete_rolling, linking.ROLLING_ADMIN_DELETE_SCOPES,
         )
-        self.assertEqual(admin_delete_rolling, offline_linking._OFFLINE_SCOPES[69:])
+        self.assertEqual(admin_delete_rolling, offline_linking._OFFLINE_SCOPES[69:117])
+        # Metadata consent appends 96 entries after all 117 historic records.
+        metadata_rolling = tuple(
+            scope.replace(' rolling_access offline_access',
+                          ' gallery:edit rolling_access offline_access')
+            for scope in (*admin_rolling, *admin_delete_rolling)
+        )
+        self.assertEqual(metadata_rolling, linking.ROLLING_ADMIN_EDIT_SCOPES)
+        self.assertEqual(metadata_rolling, offline_linking._OFFLINE_SCOPES[117:])
         for bundles, has_presentation in ((rolling, False), (presentation, True)):
             for scope, base, has_search in zip(bundles, (
                 linking.GALLERIES_SCOPE, linking.UPLOAD_SCOPE,
@@ -6292,6 +6300,24 @@ class NativeMediaTransportTests(unittest.TestCase):
             read.assert_not_called()
 
 
+def _manager_without_widgets() -> 'LinkingManager':
+    """Initialize shared connection lifecycle for fixtures bypassing Tk setup.
+
+    Returns:
+        LinkingManager: Widget-free manager; each fixture supplies the remaining
+            state used by its exercised operation.
+    """
+    manager = object.__new__(LinkingManager)
+    manager._reconnect_issuers = set()
+    manager._keepalive_worker = None
+    manager._keepalive_next = 0.0
+    manager._watch_target = None
+    manager._shutting_down = False
+    manager._session = None
+    manager._parked_links = ()
+    return manager
+
+
 @unittest.skipIf(LinkingManager is None, 'Tkinter is unavailable')
 class LinkingDeliveryTests(unittest.TestCase):
     """Exercise worker-event delivery without opening a Tk window."""
@@ -6322,7 +6348,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 'secret token=value body=private path=C:\\private\\file',
             )
             session.gallery_create_request.side_effect = response_error
-            manager = object.__new__(LinkingManager)
+            manager = _manager_without_widgets()
             manager._diagnostic_callback = None
             manager._diagnostics_snapshot = ''
             manager._latest_diagnostic = ''
@@ -6355,7 +6381,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         """
         owner = object()
         callback = mock.Mock()
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._events = queue.Queue()
         manager._owner = owner
         manager._direct_owner = owner
@@ -6444,7 +6470,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 session.available.return_value = True
                 session.can_list_galleries.return_value = True
                 session.matches_issuer.return_value = True
-                manager = object.__new__(LinkingManager)
+                manager = _manager_without_widgets()
                 manager._shutting_down = False
                 manager._session = session
                 manager._session_issuer = issuer
@@ -6469,7 +6495,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 session.available.return_value = True
                 session.can_list_galleries.return_value = True
                 session.matches_issuer.return_value = True
-                manager = object.__new__(LinkingManager)
+                manager = _manager_without_widgets()
                 manager._shutting_down = False
                 manager._session = session
                 manager._session_issuer = 'http://localhost/Galerie'
@@ -6488,7 +6514,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         session.available.return_value = True
         session.can_list_galleries.return_value = True
         session.matches_issuer.return_value = True
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._shutting_down = False
         manager._session = mock.Mock(spec=linking.LinkingSession)
         manager._session_issuer = 'http://localhost/Galerie'
@@ -6513,7 +6539,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         session.available.return_value = True
         session.can_list_galleries.return_value = True
         session.matches_issuer.return_value = True
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._shutting_down = False
         manager._session = session
         manager._session_issuer = 'http://localhost/Galerie'
@@ -6566,7 +6592,7 @@ class LinkingDeliveryTests(unittest.TestCase):
             ('Link gallery', 'user@gallery.example/Galerie', ''),
         ):
             with self.subTest(action=action, value=value):
-                manager = object.__new__(LinkingManager)
+                manager = _manager_without_widgets()
                 manager._root = mock.Mock()
                 manager._worker = None
                 manager._window = None
@@ -6806,6 +6832,137 @@ class LinkingDeliveryTests(unittest.TestCase):
                     factory.call_args.kwargs['thumbnail_batch_supported'],
                 )
                 manager._queue_initial_gallery_page.assert_called_once()
+
+    def test_uncertain_saved_link_connect_cleans_locally_then_reapproves(self) -> None:
+        """Recover an uncertain saved rotation with the same explicit Connect.
+
+        Returns:
+            None: No old refresh is replayed and new browser consent follows
+                verified local removal, including after a failed startup restore.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        binding = offline_linking.OfflineBinding(issuer, 7, linking.ROLLING_GALLERIES_SCOPE)
+        with (
+            mock.patch('uploader.app_linking_ui.tk.StringVar'),
+            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
+            mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+            mock.patch('uploader.app_linking_ui.discover_linking_capabilities',
+                       return_value=frozenset({'rolling_access'})),
+            mock.patch('uploader.app_linking_ui.rotate_saved_offline_access',
+                       side_effect=RuntimeError('Uncertain rotation')) as rotate,
+            mock.patch('uploader.app_linking_ui.remove_saved_offline_link') as remove,
+        ):
+            thread.return_value.is_alive.return_value = False
+            manager = LinkingManager(mock.Mock())
+            manager._saved_offline_binding = mock.Mock(return_value=binding)
+            store = mock.Mock()
+            manager._native_offline_store = mock.Mock(return_value=store)
+            manager._refresh = mock.Mock()
+            manager._start = mock.Mock()
+            manager.link(issuer)
+            thread.call_args.kwargs['target']()
+            manager._poll()
+            # The explicit Connect now owns cleanup instead of a second rotate.
+            thread.call_args.kwargs['target']()
+            manager._poll()
+            rotate.assert_called_once()
+            remove.assert_called_once_with(
+                store, manager._offline_binding_path(binding), binding,
+                capture_refresh=True,
+            )
+            manager._start.assert_called_once_with(issuer, direct=True)
+
+    def test_unlink_expired_saved_link_does_not_require_a_live_session(self) -> None:
+        """Allow local disconnect when expiry already removed the live session.
+
+        Returns:
+            None: The current binding is removed without a token request;
+                saved upload mode and queued work are never replaced.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        binding = offline_linking.OfflineBinding(issuer, 7, linking.ROLLING_GALLERIES_SCOPE)
+        with (
+            mock.patch('uploader.app_linking_ui.tk.StringVar'),
+            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
+            mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+            mock.patch('uploader.app_linking_ui.remove_saved_offline_link', return_value=None) as remove,
+        ):
+            thread.return_value.is_alive.return_value = False
+            manager = LinkingManager(mock.Mock())
+            manager._current_issuer = issuer
+            manager._offline_binding = binding
+            manager._saved_offline_binding = mock.Mock(return_value=binding)
+            manager._native_offline_store = mock.Mock(return_value=mock.Mock())
+            manager._refresh = mock.Mock()
+            manager._start = mock.Mock()
+            manager.unlink()
+            thread.call_args.kwargs['target']()
+            manager._poll()
+            remove.assert_called_once()
+            manager._start.assert_not_called()
+            self.assertIsNone(manager._offline_binding)
+            self.assertEqual(issuer, manager.address())
+
+    def test_old_keepalive_error_cannot_poison_a_new_connection(self) -> None:
+        """Ignore an old worker's failure after fresh consent replaced its link.
+
+        Returns:
+            None: New authority stays usable and no reconnect or target-change
+                action is attributed to the discarded session.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        with (
+            mock.patch('uploader.app_linking_ui.tk.StringVar'),
+            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
+        ):
+            manager = LinkingManager(mock.Mock())
+            old = mock.Mock(spec=linking.LinkingSession)
+            old.available.return_value = False
+            current = mock.Mock(spec=linking.LinkingSession)
+            current.available.return_value = True
+            current.keepalive_due.return_value = False
+            manager._session = current
+            manager._session_issuer = manager._current_issuer = issuer
+            manager._session_user_id = 7
+            manager._refresh = mock.Mock()
+            manager._notify_target_changed = mock.Mock()
+            manager._events.put((old, 'keepalive_error', _LinkedSite(issuer, old, 7)))
+            manager._poll()
+            self.assertIs(current, manager._session)
+            self.assertNotIn(issuer, manager._reconnect_issuers)
+            manager._notify_target_changed.assert_not_called()
+            current.close.assert_not_called()
+
+    def test_idle_watcher_keepalive_checks_the_exact_temporary_key(self) -> None:
+        """Refresh idle capture authority through its existing empty inventory.
+
+        Returns:
+            None: One bounded read uses the exact target; no key is reopened,
+                photo dispatched or authorization scope changed.
+        """
+        with (
+            mock.patch('uploader.app_linking_ui.tk.StringVar'),
+            mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses', return_value=()),
+            mock.patch('uploader.app_linking_ui.threading.Thread') as thread,
+        ):
+            thread.return_value.is_alive.return_value = False
+            manager = LinkingManager(mock.Mock())
+            session = mock.Mock(spec=linking.LinkingSession)
+            session.available.return_value = True
+            session.keepalive_due.return_value = False
+            manager._session = session
+            manager._session_issuer = 'https://gallery.example/Galerie'
+            manager._session_user_id = 7
+            target = mock.Mock(spec=LinkedUploadTarget)
+            target.session = session
+            manager._watch_target = target
+            manager._keep_links_alive()
+            thread.call_args.kwargs['target']()
+            target.inventory.assert_called_once_with([])
+            session.identity.assert_not_called()
+            session.open_watch_key.assert_not_called()
+            manager._keep_links_alive()
+            self.assertEqual(1, thread.call_count)
 
     def test_photos_watcher_key_stays_out_of_selected_upload_mode(self) -> None:
         """Use the exact issued key only for the contextual Watcher handoff.
@@ -7071,7 +7228,7 @@ class LinkingDeliveryTests(unittest.TestCase):
             None: Management asks for the issuer when none is known, without
                 starting a new approval attempt or selecting a legacy address.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._window = None
         manager._worker = None
         manager.open_address_dialog = mock.Mock()
@@ -7097,7 +7254,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         ), None)
         for mode in ('direct', 'listing', 'identity', 'listing_error'):
             with self.subTest(mode=mode):
-                manager = object.__new__(LinkingManager)
+                manager = _manager_without_widgets()
                 manager._session = None
                 manager._session_issuer = ''
                 manager._linked_address = mock.Mock()
@@ -7217,7 +7374,7 @@ class LinkingDeliveryTests(unittest.TestCase):
             None: The queued handoff opens once automatically and again only
                 when the user retries the browser action.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._polling = False
         manager._owner = object()
         manager._window = mock.Mock()
@@ -7257,7 +7414,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: A manager follows changes made after it was constructed.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         selected = ['en']
         manager._language = lambda: selected[0]
         english = manager._text('linking_title')
@@ -7275,7 +7432,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         """
         for closed in (False, True):
             with self.subTest(closed=closed):
-                manager = object.__new__(LinkingManager)
+                manager = _manager_without_widgets()
                 manager._polling = False
                 manager._owner = object()
                 manager._direct_owner = None
@@ -7303,7 +7460,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         marker = 'a' * 64
         for confirm, change_target in ((False, False), (True, True), (True, False)):
             with self.subTest(confirm=confirm, change_target=change_target):
-                manager = object.__new__(LinkingManager)
+                manager = _manager_without_widgets()
                 manager._window = mock.Mock()
                 manager._worker = None
                 manager._gallery_status = mock.Mock()
@@ -7327,7 +7484,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Cancellation and a changed account never dispatch a resume.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_create_gallery.return_value = True
         issuer = 'https://gallery.example/Galerie'
@@ -7377,7 +7534,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: The confirmation warns about artifacts and passes the intent.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_create_gallery.return_value = True
         issuer = 'https://gallery.example/Galerie'
@@ -7416,7 +7573,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Closure only updates the status and never starts another create.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._owner = object()
         manager._window = mock.Mock()
         manager._session = None
@@ -7446,7 +7603,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: A rejected guard or expired session leaves the target alone.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -7501,7 +7658,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Unknown status never invokes the target-change guard.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -7542,7 +7699,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: The persistent selection is not falsely rolled back by Tk failure.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -7585,7 +7742,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: No stale result can select a target or pass the host guard.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -7622,7 +7779,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: An identical gallery projection cannot bypass the binding.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._polling = False
         manager._owner = object()
         manager._window = mock.Mock()
@@ -7667,7 +7824,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: A stale status cannot reach the host target-change guard.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -7714,7 +7871,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: The status offers acknowledgement without offering upload.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._polling = False
         manager._owner = object()
         manager._window = mock.Mock()
@@ -7747,7 +7904,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: A changed session leaves the saved receipt unselected.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._polling = False
         manager._owner = object()
         manager._window = mock.Mock()
@@ -7775,7 +7932,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: The current status names explicit closure and storage review.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._polling = False
         manager._owner = object()
         manager._window = mock.Mock()
@@ -7801,7 +7958,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Reuses each button across narrow and desktop layout changes.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._wrapping_labels = (mock.Mock(), mock.Mock())
         manager._dialog_wrap_width = 0
         manager._dialog_layout_columns = 0
@@ -7855,7 +8012,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Offline scope and fenced save are explicit and ordered.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._session = None
         manager._worker = None
         manager._offline_store = mock.MagicMock()
@@ -7907,7 +8064,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Only the current selected gallery's stored fields are shown.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._browse_var = mock.Mock()
         manager._upload_var = mock.Mock()
         manager._upload_var.get.return_value = False
@@ -7958,7 +8115,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Selection changes and uncertain replies cannot reuse detail.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_change_gallery_visibility.return_value = True
         session.available.return_value = True
@@ -8006,7 +8163,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Forced visibility is refused without a linking attempt or POST.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._visibility_var = mock.Mock()
         manager._visibility_var.get.return_value = True
         manager._upload_var = mock.Mock()
@@ -8035,7 +8192,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Schedules another poll and closes the stale linked session.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._root = mock.Mock()
         manager._polling = True
         manager._shutting_down = False
@@ -8078,7 +8235,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Leaves the current connection and completed receipt untouched.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_list_galleries.return_value = True
         session.can_upload.return_value = True
@@ -8118,7 +8275,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Keeps the original receipt and connection without host calls.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -8172,7 +8329,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Stores the selected stable ID on the session manager alone.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._session = mock.Mock()
         manager._session.can_list_galleries.return_value = True
         manager._session.can_upload.return_value = False
@@ -8331,7 +8488,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: New consent is selected; existing sessions retain exact scope.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._session = None
         manager._session_issuer = ''
         self.assertTrue(manager._listing_scope_selected('https://gallery.example'))
@@ -8349,7 +8506,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Cancels only the picker request and keeps the live link.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._session = mock.Mock()
         manager._cancel = threading.Event()
         manager._create_dispatch = None
@@ -8380,7 +8537,7 @@ class LinkingDeliveryTests(unittest.TestCase):
             'https://gallery.example/Galerie', token,
             time.monotonic() + 120, linking.UPLOAD_SCOPE,
         )
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._session = session
         manager._session_issuer = manager._current_issuer = 'https://gallery.example/Galerie'
         manager._worker = None
@@ -8412,7 +8569,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: A failed explicit key transition leaves the mode selected.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._active_upload_target = None
         manager._saved_linked_selected = lambda: True
         manager._gallery_status = mock.Mock()
@@ -8439,7 +8596,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: The local target is not changed before worker verification.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_list_galleries.return_value = True
         session.can_upload.return_value = True
@@ -8489,7 +8646,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Only the current approved target can replace a local choice.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -8543,7 +8700,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Neither an old gallery nor the saved legacy key is selected.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -8615,7 +8772,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: The worker cannot publish upload mode before Tk admission.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.can_create_gallery.return_value = True
@@ -8668,7 +8825,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         """
         for mismatch in (True, False):
             with self.subTest(mismatch=mismatch):
-                manager = object.__new__(LinkingManager)
+                manager = _manager_without_widgets()
                 session = mock.Mock(spec=linking.LinkingSession)
                 session.can_upload.return_value = True
                 session.can_create_gallery.return_value = True
@@ -8717,7 +8874,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: No receipt lease or persistent publication follows cancellation.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.can_create_gallery.return_value = True
@@ -8763,7 +8920,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: Neither the host mode owner nor local target changes.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.matches_issuer.return_value = True
@@ -8798,7 +8955,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: No fallback to either the former gallery or saved API key.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.can_create_gallery.return_value = True
@@ -8844,7 +9001,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: A stale scope never enters receipt or mode publication.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         session = mock.Mock(spec=linking.LinkingSession)
         session.can_upload.return_value = True
         session.can_create_gallery.return_value = True
@@ -8878,7 +9035,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         Returns:
             None: The independent shortcut gate retains prior mode and receipt.
         """
-        manager = object.__new__(LinkingManager)
+        manager = _manager_without_widgets()
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
         manager._gallery_cancel = threading.Event()

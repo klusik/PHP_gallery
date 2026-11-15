@@ -632,6 +632,24 @@ namespace {
         $storedWatchHash->execute([$grantId, $galleryId]);
         check($storedWatchHash->fetchColumn() === $watchDigest,
             'Watcher storage must retain only the supplied key digest.');
+        $shortWatch = $pdo->prepare(
+            'UPDATE app_linking_watch_keys SET expires_at = '
+                . 'DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND) '
+                . 'WHERE grant_id = ? AND gallery_id = ?',
+        );
+        $shortWatch->execute([
+            \Gallery\Services\APP_LINKING_ACCESS_TTL_SECONDS, $grantId, $galleryId,
+        ]);
+        check($watchValid($grantId, $uploadToken, $watchDigest),
+            'Authenticated capture use must renew the exact unexpired key.');
+        $watchRemaining = $pdo->prepare(
+            'SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(6), expires_at) '
+                . 'FROM app_linking_watch_keys WHERE grant_id = ? AND gallery_id = ?',
+        );
+        $watchRemaining->execute([$grantId, $galleryId]);
+        check((int) $watchRemaining->fetchColumn()
+            > \Gallery\Services\APP_LINKING_ACCESS_TTL_SECONDS,
+            'Capture activity must extend the key beyond the shortened deadline.');
         check(!app_link_model_watch_key_open(
             $grantId, $userId, hash('sha256', 'fixture-wrong-token'), $issuer,
             $uploadScope, $galleryId, hash('sha256', 'fixture-rejected-open'),
@@ -1082,6 +1100,7 @@ namespace {
             \Gallery\Models\app_link_refresh_model_extend_on_access(
                 $rollingId, $userId, $access, $client, $origin, $rollingScope,
                 $rollingTtl,
+                \Gallery\Services\APP_LINKING_ROLLING_ACCESS_TTL_SECONDS,
             );
         check(!$renewRolling($rollingAccess, $issuer),
             'Wrong issuer must not extend a rolling family.');
@@ -1095,6 +1114,15 @@ namespace {
         check($renewed['expires_at'] > $shortened['expires_at']
             && $renewed['expires_at'] === $renewed['idle_expires_at'],
             'Authenticated use must extend both deadlines together.');
+        $accessRemaining = $pdo->prepare(
+            'SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(6), access_expires_at) '
+                . 'FROM app_link_grants WHERE id = ?',
+        );
+        $accessRemaining->execute([$rollingId]);
+        $remainingSeconds = (int) $accessRemaining->fetchColumn();
+        check($remainingSeconds > $shortWindow
+            && $remainingSeconds <= \Gallery\Services\APP_LINKING_ROLLING_ACCESS_TTL_SECONDS,
+            'Every authenticated rolling API use must slide access to one day.');
         $storedRefresh->execute([$rollingId]);
         check($storedRefresh->fetchAll(\PDO::FETCH_COLUMN) === [$rollingRefresh],
             'Using a bearer must preserve the current active refresh hash.');

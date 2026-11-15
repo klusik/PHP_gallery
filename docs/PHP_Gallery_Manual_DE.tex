@@ -2278,7 +2278,52 @@ Die Wahl bleibt lokal in WinApp, getrennt nach Galerie und bestätigter
 Website/Konto. Web- und Upload-Einstellungen bleiben unabhängig.
 Ein kleines \textbf{!} meldet einen lokalen Speicherfehler; die Ansicht bleibt
 angewendet und der Tooltip erklärt den neuen Versuch. Der Wechsel nutzt
-bereits geladene Vorschaubilder. Für Fotos und Vorschaubilder gilt ein
+bereits geladene Vorschaubilder.
+Der Pfeil vor den Formatreglern wählt älteste oder neueste Uploads zuerst.
+Diese lokale Regel wird je Galerie und bestätigter Website/Konto unabhängig
+vom Vorschauformat gespeichert. Jede Aktualisierung wendet sie erneut an:
+Neue Fotos erscheinen bei neuester Reihenfolge vorne. Raster, Lightbox und
+Diashow teilen die Reihenfolge; die Website speichert diese Wahl nicht.
+Die umgekehrte Ansicht liest zuerst die vollständige begrenzte Metadatenfolge
+und blättert dann lokal, ohne Bilddateien vorzuladen. Nach einer Quotenpause
+setzt Retry am bestätigten Metadatencursor fort.
+
+Beide Galeriemenüs gruppieren Informationen/Zugriff, lokalen Cache, Werkzeuge
+und Erstellung kompakt. In~\ui{Galerieinformationen} verwendet die Sichtbarkeit
+die bestehende Auswahl Öffentlich/Privat/Unveröffentlicht; NSFW Guard und
+die öffentliche Auflistungsausnahme speichern ihren Zustand direkt online. Der Titel oder sein Stift
+öffnet die Titelbearbeitung, der Beschreibungsstift den vollständigen Text.
+Jeder Editor liest zuerst den aktuellen Serverwert und die Revision. Enter
+speichert Titel, Control+Enter Beschreibungen; Escape bricht ab. Gleichzeitige
+Webänderungen verweigern veraltete Schreibversuche. Unbestätigte Ergebnisse
+behalten den gesperrten Entwurf und bieten ein ausdrückliches Neuladen ohne
+Wiederholung des Schreibens. Bestätigte Titel aktualisieren Baum und Kopf;
+physische Ordner und stabile URLs bleiben erhalten.
+
+Metadatenänderungen benötigen einen aktuellen Server und eine eigene
+Browserfreigabe für \texttt{gallery:edit}. Bestehende Rechte werden nicht
+erweitert. Inventar, Datumswerte und Qualitätsübersichten bleiben schreibgeschützt.
+Beschreibungen verwenden den vollständigen gespeicherten Text, nicht die kurze
+Informationsvorschau. Bereitstellung und installierte Konten erfordern eine
+separate Abnahme.
+
+Listed folgt automatisch der Sichtbarkeit: Öffentlich ist gelistet, außer
+\ui{Aus öffentlichen Listen ausblenden} ist aktiv. Privat und Unveröffentlicht
+zeigen Listed aus. Die Ausnahme ist nur bei Öffentlich änderbar und bleibt
+bei vorübergehenden Sichtbarkeitswechseln erhalten. Direkte Links folgen
+weiter der normalen Zugriffspolitik.
+Auf einem day-v1-Server verlängert jeder authentifizierte API-Aufruf den Zugriff
+um 24 Stunden und die Inaktivitätsfrist um sieben Tage, auch beim Anzeigen und
+Hochladen. Ein laufender Watcher prüft seinen genauen temporären Schlüssel alle
+fünf untätigen Minuten; andere untätige Verbindungen nutzen die Identitäts-API.
+Abgelaufener Zugriff erneuert sich mit dem vorhandenen gespeicherten Nachweis.
+Bei unbestätigter Erneuerung entfernt \ui{Verbinden} den unbrauchbaren lokalen
+Zustand und startet eine neue Browserfreigabe. \ui{Trennen} funktioniert auch
+nach Ablauf; ein nicht erreichbarer Server blockiert die lokale Wiederherstellung
+nicht. Ausstehende Originale und der Zielverlauf bleiben erhalten.
+
+
+Für Fotos und Vorschaubilder gilt ein
 separates Limit von 600 Anfragen je IP und 3\,600 insgesamt in fünf Minuten.
 Bei HTTP~429 zeigt Photos die Begrenzung an und pausiert das Vorabladen
 bis zur Auswahl von \ui{Retry}.

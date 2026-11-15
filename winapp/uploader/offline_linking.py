@@ -42,13 +42,14 @@ from .app_linking import (
     UPLOAD_CREATE_VISIBILITY_OFFLINE_SCOPE,
     ROLLING_GALLERIES_SCOPE, ROLLING_UPLOAD_SCOPE, ROLLING_SCOPE_SUFFIX,
     ROLLING_ADMIN_MEDIA_SCOPES, ROLLING_ADMIN_DELETE_SCOPES,
+    ROLLING_ADMIN_EDIT_SCOPES,
     ROLLING_GALLERY_SEARCH_SCOPES, ROLLING_PRESENTATION_SCOPES,
     TOKEN_PREFIX,
     UPLOAD_SCOPE,
     _canonical_256bit,
     _issuer_valid,
     _request_json,
-    LinkingError, LinkingRefreshRejected, LinkingSession,
+    LinkingError, LinkingReconnectRequired, LinkingRefreshRejected, LinkingSession,
     discover_linking_capabilities,
 )
 from .credential_store import CREDENTIAL_ACCOUNT_ID_MAX, NativeCredentialStore
@@ -87,6 +88,7 @@ _OFFLINE_SCOPES = (
     *ROLLING_PRESENTATION_SCOPES,
     *ROLLING_ADMIN_MEDIA_SCOPES,
     *ROLLING_ADMIN_DELETE_SCOPES,
+    *ROLLING_ADMIN_EDIT_SCOPES,
 )
 
 
@@ -650,7 +652,7 @@ def enable_rolling_renewal(
         return
 
     def renew(cancelled: Event) -> tuple[str, float]:
-        """Verify current support and rotate a single credential generation.
+        """Rotate one consented credential generation on its fixed trusted route.
 
         Args:
             cancelled (Event): Session shutdown cancellation.
@@ -659,19 +661,19 @@ def enable_rolling_renewal(
             tuple[str, float]: Verified access bearer and monotonic deadline.
 
         Raises:
-            LinkingError: Discovery, binding or fenced refresh failed.
+            LinkingError: The binding, secure storage or fenced refresh failed.
         """
         try:
-            # Failed discovery leaves the existing refresh and fence untouched.
-            if 'rolling_access' not in discover_linking_capabilities(
-                binding.issuer, cancelled,
-            ):
-                raise LinkingError('Saved gallery renewal is unavailable.')
+            # Consent already fixed the trusted issuer, route and exact scope.
+            # A separate anonymous discovery request cannot renew authority and
+            # must not become a second availability dependency on every rotation.
             access = rotate_saved_offline_access(store, path, binding, cancelled)
             return access.token, access.expires_at
         except LinkingRefreshRejected:
             raise
         except (RuntimeError, OSError):
-            raise LinkingError('Saved gallery renewal is unavailable.') from None
+            # A rotation can have committed remotely. Stop this session rather
+            # than repeatedly treating a fenced credential as ready for uploads.
+            raise LinkingReconnectRequired('Sign in to the gallery again.') from None
 
     session.enable_renewal(renew)

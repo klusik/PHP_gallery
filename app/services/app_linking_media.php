@@ -15,6 +15,7 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 require_once __DIR__ . '/app_linking_passive_profile.php';
+require_once __DIR__ . '/app_linking_gallery_edit.php';
 
 require_once __DIR__ . '/../models/cooperative_galleries.php';
 
