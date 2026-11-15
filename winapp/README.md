@@ -899,14 +899,14 @@ from the corrected 0.3.2 executable use the repaired helper. Retain the original
 0.3.1 installer and its update metadata; the new installer has distinct metadata
 at `winapp/dist/0.3.2/winapp-update.json`.
 
-## Windows installer (next version: 1.1.2)
+## Windows installer
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **1.0.8**; this source version
+Gallery CMS release. The current source targets **1.2.2**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/1.0.8/`. Existing version outputs and other version folders remain
+`winapp/dist/1.2.2/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -1804,55 +1804,51 @@ to drain its screenshots, or finish a flight to save its available reports
 locally. Finishing revokes the temporary capture key and leaves the website
 linked. This action requires the server's temporary Watcher key migration.
 
-Before sending a new gallery, Photos checks for an earlier creation in this
-local profile. It checks a pending result with the original site and Admin
-account; another site's pending work offers reconnection to that site. This
-status check never repeats a create request. A completed earlier gallery offers
-an explicit **Continue** action before the next creation. That action retires
-only the matching local completion, then rechecks the current connection and
-selected parent. It does not change the earlier gallery or select it for upload.
-Submitting the same title and parent for the same site and account instead
-rechecks the completed result and avoids creating a duplicate. An unreadable
-record or failed confirmation stays blocked with a plain explanation and safe
-diagnostics; it is not deleted automatically.
+To create a root or child gallery in Photos, enter its name and choose
+**Create gallery**. The application takes over a confirmed result automatically;
+there is no mandatory Done, Continue, Check again or Manage link step. The new
+row is immediately usable. A failed request keeps the editable name in the
+same anchored form with the ordinary Create action.
 
-The source also contains an experimental **Create gallery** workflow that
-requires separate `galleries:create` browser consent and verified server scope
-storage. It records a local pending intent before sending and keeps an uncertain
-result for manual **Check create status**. **Resume original creation** first
-shows the original title and parent for confirmation, then resends the same
-operation key and inputs to the same HTTPS issuer and verified Admin account.
-The server admits a missing claim once; existing pending or reconciliation
-claims remain blocked and may require an administrator to reconcile them.
-There is no automatic retry. Deduplication requires the original server ledger;
-restoring an older database backup can remove its history.
-**Close unresolved creation** shows the original title and parent and requests
-explicit confirmation before closing the original operation key on the server.
-The unconfirmed-creation message points to both explicit original-request
-resume and closure after gallery and storage review; it never retries automatically.
-The local intent is removed only after the server confirms its durable closure;
-an unavailable or unknown response leaves it in place. Closure does not prove
-that a pending server operation has stopped; the server refuses to close a
-pending claim. Closure also does not prove
-that no gallery or files were created or that an earlier worker has stopped.
-Verify the original work has stopped and inspect the gallery and its storage
-before starting a separate creation; none is started automatically. If the server
-instead verifies a completed result, its receipt remains for acknowledgement.
-If the closure reply is lost, the same explicit action can be repeated for the
-original key; no replacement key is generated for that request.
-An unreadable or invalid local intent cannot supply a trustworthy key; it stays
-blocked and requires administrator assistance rather than automatic deletion.
-A confirmed receipt is kept until **Acknowledge creation**. Choose **Use created
-gallery** to use the child for Watcher and Import. WinApp rechecks the original
-receipt, account and exact gallery independently before publishing the target;
-this requires separately approved upload permission and an admitted local
-profile. The server checks
-the original ID, title and parent against the current gallery. A renamed
-gallery yields unknown; a moved, deleted or unverifiable reference can be
-reported as unavailable. A missing or unsafely redirected gallery directory or
-sidecar also leaves the result unknown; the server verifies current safe files
-rather than requiring their original inode. The client keeps the receipt and does
-not create another gallery automatically.
+Creation evidence is bound to the exact HTTPS issuer, verified Admin account,
+normalized title and direct parent. A previous request for another gallery or
+account does not block this draft or supply authority for it. Existing matching
+legacy evidence is reused in place with its original operation key; unrelated
+old evidence is retained. All journal writes still share the profile lease.
+When a write reply is lost, the application checks the original key once.
+Submitting that same draft again checks its status and, if still unknown,
+attempts one same-key resume with the original inputs. It never replaces an
+uncertain key with a fresh key. The server still refuses real pending or
+reconciliation claims and unsafe or occupied storage. Deduplication needs the
+original server ledger; restoring an older database can remove its history.
+
+Gallery creation requires separate `galleries:create` browser consent and
+verified server scope storage. Cancelling the form before dispatch prevents
+the write; a dispatched request retains its recovery evidence. A confirmed
+Photos receipt is consumed locally without asking the user to acknowledge it.
+If the context closed or the connection changed before the result returned,
+the receipt stays available to recover that same draft.
+If cleanup fails, the confirmed gallery remains usable and exact evidence is
+retained for recovery. Invalid local records are not deleted automatically.
+
+Advanced management still exposes read-only **Check create status** and
+explicit **Resume original creation** / **Close unresolved creation** for
+legacy profile-wide requests. Resume requires review of the original title
+and parent and keeps the same key, issuer and Admin account. Closure requires
+explicit review, and removes local evidence only after the server confirms
+durable closure of the original key. The server refuses to close a pending
+claim. A lost closure reply can be checked by repeating that original action.
+Closure does not prove that a worker stopped or that no gallery/files exist;
+inspect the original work and storage before using these recovery tools.
+
+Management may retain a completed result for **Use created gallery** or optional
+**Dismiss result**; neither is a prerequisite for another Create action.
+Selecting it for Watcher and Import independently rechecks the original receipt,
+live account and exact gallery under the shared lease before target publication.
+This requires separately approved upload permission and an admitted local
+profile. A renamed, moved, deleted or unverifiable gallery/directory/sidecar
+cannot provide current upload authority and never starts replacement creation.
+Validation checks current safe files rather than their original inode.
 The server source refuses occupied paths, catalog drift and catalogs larger
 than 10,000 rows including the proposed gallery. Slug search checks at most
 128 candidates; these limits do not bound elapsed time. A local file flush

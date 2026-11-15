@@ -5,11 +5,11 @@
 # Purpose: Persist a non-secret create intent before a single remote mutation.
 # Responsibilities:
 #   - Serialize all profile creation attempts using the existing local lease.
-#   - Retain uncertain requests for status, same-key resume or explicit closure.
+#   - Isolate unrelated requests while retaining uncertain original keys.
 #   - Bind reconciliation to the verified issuer and Admin account.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
-"""Fail-closed local gallery creation intent; no tokens are persisted."""
+"""Request-bound gallery creation evidence; no tokens are persisted."""
 
 import hashlib
 import hmac
@@ -31,10 +31,10 @@ from .linked_upload import LinkedTargetLease
 from .server_discovery import _unique_object
 from .state_store import linked_upload_state_path
 
-# Purpose: Protect one unresolved create across all issuers of a user profile.
+# Purpose: Serialize creation journal writes across issuers of a user profile.
 # Type: str. Units: lowercase SHA-256 hex. Scope: one uploader profile.
 # Consumers: GalleryCreateJournal. Rationale: a fixed domain-separated binding
-# prevents changing issuer or account from bypassing an unresolved operation.
+# keeps concurrent request-scoped journal writes under the same profile lease.
 _CREATE_LEASE_BINDING = hashlib.sha256(b'php-gallery-create-journal-v1').hexdigest()
 
 # Purpose: Bound local untrusted pending-intent parsing.
@@ -231,7 +231,7 @@ def _intent_fingerprint(intent: CreateIntent) -> str:
 
 
 class GalleryCreateJournal:
-    """Serialize profile-wide creation and retain any unconfirmed intent."""
+    """Serialize profile writes while isolating independent creation requests."""
 
     def __init__(self, config_dir: Path) -> None:
         """Select the uploader profile without opening the file or network.
@@ -243,6 +243,60 @@ class GalleryCreateJournal:
             None: Saves only the profile path for subsequent explicit actions.
         """
         self._config_dir = config_dir
+        self._binding = _CREATE_LEASE_BINDING
+
+    def for_request(
+        self, issuer: str, account_id: int, title: str, parent_id: int | None,
+    ) -> 'GalleryCreateJournal':
+        """Select exact-request evidence without blocking on unrelated work.
+
+        Args:
+            issuer (str): Canonical installation for the approved request.
+            account_id (int): Verified positive Admin account identity.
+            title (str): Current explicitly submitted gallery title.
+            parent_id (int | None): Exact direct parent, or root.
+        Returns:
+            GalleryCreateJournal: Request-scoped owner, or the existing legacy
+                owner when its saved intent matches this same request.
+        Raises:
+            LinkingError: Input or existing local evidence is invalid.
+        """
+        try:
+            valid = (
+                isinstance(issuer, str) and _issuer_valid(issuer)
+                and type(account_id) is int
+                and 0 < account_id <= LINKING_GALLERY_ID_MAX
+                and isinstance(title, str) and bool(title.strip(' \t\n\r\x00\x0b'))
+                and len(title.encode('utf-8')) <= LINKING_CREATE_TITLE_MAX_BYTES
+                and not any(ord(char) < 32 or ord(char) == 127 for char in title)
+                and (parent_id is None or type(parent_id) is int
+                     and 0 < parent_id <= LINKING_GALLERY_ID_MAX)
+            )
+        except UnicodeError:
+            valid = False
+        if not valid:
+            raise LinkingError('Invalid gallery creation input.')
+        fields = {
+            'issuer': issuer, 'account_id': account_id,
+            'title': title.strip(' \t\n\r\x00\x0b'), 'parent_id': parent_id,
+        }
+        # Domain separation keeps these paths distinct from upload histories.
+        payload = json.dumps(fields, sort_keys=True, ensure_ascii=True).encode('ascii')
+        scoped = GalleryCreateJournal(self._config_dir)
+        scoped._binding = hashlib.sha256(
+            b'php-gallery-create-request-v1\0' + payload,
+        ).hexdigest()
+        if scoped.inspect().state != 'empty':
+            return scoped
+        legacy = self.inspect()
+        if (legacy.state != 'empty' and legacy.issuer == issuer
+                and legacy.account_id == account_id and legacy.parent_id == parent_id
+                and legacy.title is not None
+                and legacy.title.strip(' \t\n\r\x00\x0b') == fields['title']):
+            # Legacy matching keys stay in place for replay protection. An old
+            # unrelated intent remains available to its original account.
+            return self
+        return scoped
 
     def _path(self) -> Path:
         """Resolve the journal under the existing validated local state owner.
@@ -253,7 +307,7 @@ class GalleryCreateJournal:
         Raises:
             ValueError: A state directory or target was redirected.
         """
-        return linked_upload_state_path(self._config_dir, _CREATE_LEASE_BINDING)
+        return linked_upload_state_path(self._config_dir, self._binding)
 
     def _receipt_path(self) -> Path:
         """Resolve the separate completion record without replacing the intent.
@@ -575,6 +629,69 @@ class GalleryCreateJournal:
         finally:
             lease.release()
 
+    def create_or_resume(
+        self, session: LinkingSession, issuer: str, account_id: int,
+        title: str, parent_id: int | None, dispatch: CreateDispatch | None = None,
+    ) -> BoundCreateReceipt:
+        """Finish one submitted request without requiring journal-management UI.
+
+        Args:
+            session (LinkingSession): Current approved creation session.
+            issuer (str): Exact installation selected by the user.
+            account_id (int): Previously verified Admin account identity.
+            title (str): Current explicitly submitted title.
+            parent_id (int | None): Exact selected parent, or root.
+            dispatch (CreateDispatch | None): Context cancellation fence.
+        Returns:
+            BoundCreateReceipt: Fresh creation or verified original result.
+        Raises:
+            LinkingError: Authority, cancellation, evidence or completion could
+                not be verified. The original uncertain key is retained.
+        """
+        if dispatch is not None and dispatch.cancelled.is_set():
+            raise LinkingError('Gallery creation was cancelled before sending.')
+        snapshot = self.inspect()
+        if snapshot.state == 'empty':
+            try:
+                return self.create(session, issuer, account_id, title, parent_id, dispatch)
+            except LinkingError:
+                # A lost write reply can still have a completed server receipt.
+                # Inspect once without resending; retain uncertainty otherwise.
+                if dispatch is None or not dispatch.cancelled.is_set():
+                    saved = self.inspect()
+                    if (saved.intent_fingerprint is not None
+                            and saved.issuer == issuer and saved.account_id == account_id
+                            and saved.parent_id == parent_id and saved.title is not None
+                            and saved.title.strip(' \t\n\r\x00\x0b')
+                            == title.strip(' \t\n\r\x00\x0b')):
+                        recovered = self.reconcile(
+                            session, issuer, account_id,
+                            expected_intent_fingerprint=saved.intent_fingerprint,
+                        )
+                        if recovered is not None:
+                            return recovered
+                raise
+        if (snapshot.issuer != issuer or snapshot.account_id != account_id
+                or snapshot.parent_id != parent_id or snapshot.title is None
+                or snapshot.title.strip(' \t\n\r\x00\x0b')
+                != title.strip(' \t\n\r\x00\x0b')
+                or snapshot.intent_fingerprint is None):
+            raise LinkingError('Gallery creation request changed.')
+        result = self.reconcile(
+            session, issuer, account_id,
+            expected_intent_fingerprint=snapshot.intent_fingerprint,
+        )
+        if result is not None:
+            return result
+        intent = self.pending_intent(issuer, account_id)
+        if not hmac.compare_digest(
+            _intent_fingerprint(intent), snapshot.intent_fingerprint,
+        ):
+            raise LinkingError('Gallery creation request changed.')
+        # Only an already-authorized identical request is resumed, with its
+        # original key. Server pending/reservation/refusal rules stay decisive.
+        return self.resume(session, intent, dispatch)
+
     def pending_intent(self, issuer: str, account_id: int) -> CreateIntent:
         """Read the original unresolved intent for an explicit resume prompt.
 
@@ -882,13 +999,13 @@ class GalleryCreateJournal:
     def acknowledge(
         self, issuer: str, account_id: int, bound: BoundCreateReceipt,
     ) -> None:
-        """Clear a completed receipt only after an explicit user acknowledgement.
+        """Retire an exact completed receipt after its consumer accepts the result.
 
         Args:
             issuer (str): Exact selected HTTPS installation issuer.
             account_id (int): Previously verified current Admin account ID.
             bound (BoundCreateReceipt): Exact completed operation and gallery
-                the user acknowledged.
+                accepted by the application or explicitly acknowledged by a user.
 
         Returns:
             None: Both matching records are removed, or a refusal is raised.

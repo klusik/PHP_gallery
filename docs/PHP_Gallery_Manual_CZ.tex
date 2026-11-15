@@ -2359,7 +2359,7 @@ souhlas a~ověřené úložiště oprávnění. Jeho zdroj odmítá obsazené c�
 nesoulad kanonického katalogu a~katalog nad
 10\,000~řádků včetně nové galerie; při hledání slugu zkontroluje nejvýše
 128~kandidátů. Nejde o~časové limity. Při nejasném výsledku
-se čekající záměr automaticky neopakuje.
+se původní klíč nenahrazuje novým.
 Čekající rezervace propojeného vytvoření dočasně blokuje Admin import složek,
 přesun objevených fotek, odstranění objevených složek, kopírování výběru,
 přesun galerií do koše i~obnovu z~něj, přesuny organizátoru metadat,
@@ -2374,35 +2374,30 @@ uloženému účtu správce. Přerušení může
 zanechat starý zámek blokující práci; Windows a~výpadek napájení nejsou
 kvalifikovány. Údržbové CLI umí ze soukromého vstupu ověřit pouze shodu
 v~registru; nedokazuje zastavení původní práce ani neopravňuje k~novému
-vytvoření. \ui{Resume original creation} zobrazí
-původní název a~rodiče k~výslovnému potvrzení a~odešle stejný klíč a~vstupy
-stejnému HTTPS issueru a~ověřenému účtu správce. Existující čekající či nevyřešený
-serverový záznam zůstává blokovaný a~může vyžadovat řešení správcem. Ochrana
-vyžaduje původní serverový registr; obnova starší databázové zálohy jej může
-odstranit. Hlášení o~nejasném výsledku nabízí výslovné obnovení nebo po kontrole
-galerie a~úložiště \ui{Close unresolved creation}. Tato akce zobrazí původní název a~rodiče
-k~výslovnému potvrzení. Lokální záměr odstraní až po potvrzení trvalého uzavření
-stejného klíče serverem; neurčitá odpověď jej zachová. Server čekající claim
-uzavřít odmítne. Uzavření nedokazuje, že
-galerie nebo soubory nevznikly ani že původní práce už skončila. Před novým
-vytvořením ověřte její ukončení a~zkontrolujte galerii i~úložiště; nic se
-nespustí automaticky. Pokud server místo toho ověří dokončený
-výsledek, klient jej uchová k~potvrzení. Nečitelný nebo neplatný lokální záměr
-zůstává blokovaný a~vyžaduje pomoc správce, protože jeho klíč nelze ověřit.
-Před odesláním nové galerie Photos zkontroluje předchozí práci ve stejném
-místním profilu. Čekající výsledek ověřuje pouze s~původním webem a~účtem
-správce; u~jiného webu nabídne opětovné připojení. Tato kontrola vytvoření
-neopakuje. U~dříve dokončené galerie potvrďte \ui{Pokračovat} pro vytvoření
-další. Uzavře se pouze přesný místní záznam; původní galerie ani cíl uploadu
-se nezmění. Aktuální propojení a~vybraný rodič se znovu ověří. Stejný název
-a~rodič pro stejný web a~účet místo toho ověří dokončený výsledek bez vytvoření
-duplikátu. Neurčitý výsledek nebo neúspěšné místní potvrzení zachová uloženou
-práci pro další kontrolu.
-Potvrzený výsledek zůstává uložený až do výslovného převzetí. Klient před
-výhradním zveřejněním zapíše a~ověří úplné dočasné potvrzení; nejistota
-zachová záměr i~případné zveřejněné potvrzení. Lokální vazba na původní záměr
-brání starému výběru či převzetí ovlivnit jinou operaci se stejnými údaji
-galerie; operační klíč se nezobrazuje. Kontroly nevylučují cizí zásahy do
+vytvoření.
+Ve Photos zadejte název a~zvolte \ui{Vytvořit galerii}. Potvrzená galerie je
+ihned použitelná bez \ui{Pokračovat}, správy stavu nebo povinného převzetí.
+Při chybě zůstane upravitelný název se stejným tlačítkem Vytvořit. Starší
+požadavek pro jiný název, rodiče, web či účet nový návrh neblokuje. Shodný
+starší požadavek zachová původní klíč. Po ztracené odpovědi aplikace jednou
+ověří původní stav. Opětovné odeslání stejného návrhu ověří stav a~může jednou
+obnovit požadavek se stejným klíčem a~přesnými původními vstupy. Skutečný
+čekající nebo nevyřešený serverový záznam server dál odmítá. Ochrana vyžaduje
+původní serverový registr; starší databázová záloha může jeho historii odstranit.
+Pokročilá správa zachovává \ui{Resume original creation} a~
+\ui{Close unresolved creation} pro starší nevyřešené požadavky. Před použitím
+zkontrolujte původní název, rodiče a~úložiště. Uzavření vyžaduje výslovné
+potvrzení a~odstraní místní záznam až po potvrzení trvalého uzavření původního
+klíče serverem; čekající claim server odmítne. Neurčitá odpověď záznam zachová.
+Uzavření nedokazuje ukončení práce ani nepřítomnost galerie či souborů.
+Photos převezme potvrzený výsledek automaticky. Selhání místního úklidu zachová
+přesný záznam, potvrzenou galerii však neblokuje. Správa může uchovat potvrzení
+pro \ui{Použít vytvořenou galerii} nebo nepovinné \ui{Dismiss result}; další
+vytvoření na těchto akcích nezávisí. Před výhradním zveřejněním klient zapíše
+a~ověří úplné potvrzení. Vazba na původní záměr brání starému převzetí nebo
+výběru ovlivnit jinou operaci se stejnými údaji; klíč se nezobrazuje. Neplatné
+záznamy zůstanou zachované a~vyžadují pomoc správce.
+Kontroly nevylučují cizí zásahy do
 souborů ani nedokazují trvanlivost po výpadku napájení. V~podporovaném místním
 profilu volba \ui{Použít vytvořenou galerii} znovu ověří potvrzení
 i~galerii před výběrem pro Watcher a~Import. Vyžaduje samostatný souhlas

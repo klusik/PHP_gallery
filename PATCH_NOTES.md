@@ -1,5 +1,59 @@
 # Patch notes
 
+## Version 1.2.4
+
+Simplified gallery creation in the Windows companion so one Create action
+finishes ordinary creation and recovery. The independent WinApp version
+advanced to 1.2.2.
+
+### Highlights
+
+#### Gallery creation
+
+- Removed mandatory Continue, Done acknowledgement and status-management
+  detours from the Photos creation flow. Made confirmed galleries immediately
+  available for browsing and Watcher. Addressed
+  [issue #390](https://github.com/klusik/PHP_gallery/issues/390).
+- Kept the entered name editable after a failed request and allowed another
+  gallery to be created without resolving an unrelated older local request.
+- Recovered matching earlier results automatically and retained the original
+  request key after a lost reply or a closed creation form.
+
+### Technical Details
+
+#### WinApp
+
+- Bound creation journals to the installation, verified Admin account,
+  normalized name and direct parent. Reused matching legacy evidence in place
+  and retained unrelated evidence under the existing shared profile lease.
+- Checked the original status after a lost reply and used the original key and
+  exact inputs when resuming the same draft. Preserved live identity,
+  cancellation, receipt and server storage checks.
+- Consumed confirmed Photos receipts automatically. Preserved confirmed
+  success if local cleanup failed and kept optional management results from
+  blocking another creation.
+- Updated the README, compatibility and testing references, and all four
+  maintained TeX manual sources.
+
+#### Tests
+
+- Covered unrelated legacy requests, original-key recovery, cleanup failure,
+  cancellation, consecutive creation and immediate Watcher use.
+- Added desktop and narrow captures of the retained editable retry form.
+
+### User Impact
+
+#### For WinApp users
+
+- Allowed entering a gallery name and choosing Create without managing
+  internal confirmation state. Kept a failed draft available for ordinary
+  retry.
+
+#### For administrators
+
+- Preserved server authorization, duplicate-request protection and genuine
+  pending-operation or unsafe-storage refusals. Added no database migration.
+
 ## Version 1.2.3
 
 Fixed a dismissed preload result reappearing in WinApp after cancellation or

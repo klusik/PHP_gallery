@@ -2449,47 +2449,40 @@ konsistensreparationer och vanlig skapning
 även för andra sökvägar. Ta inte bort reservationen:
 säker automatisk rensning finns ännu inte. Uppladdning med API-nyckel finns
 kvar. Skyddet i samma databas ersätter inte ett filsystemlås.
-Ett osäkert ärende upprepas inte automatiskt. Före skapning eller kontroll av
+Ett osäkert ärende ersätts aldrig med en ny nyckel. Före skapning eller kontroll av
 en sparad avsikt kräver klienten aktuell serveridentitet för det valda eller
 sparade administratörskontot. Före sändning verifierar
 klienten en fullständig förberedd avsikt och publicerar den exklusivt utan att
 ersätta en annan nyckel. Avbrott kan lämna ett blockerande gammalt lås;
 Windows och strömavbrott är inte kvalificerade. Underhålls-CLI kan jämföra
 privata ursprungsdata från standard in med registret; det bevisar inte att
-arbetaren har stoppat och tillåter inte ny skapning. \ui{Resume original creation}
-visar den ursprungliga titeln och föräldern för uttrycklig bekräftelse och
-skickar samma nyckel och indata till samma HTTPS-utfärdare och verifierade
-administratörskonto. Befintliga väntande eller oklara serverposter förblir
-blockerade och kan kräva administratörens avstämning. Skyddet kräver det
-ursprungliga serverregistret; en äldre databaskopia kan sakna dess historik.
-Det oklara statusmeddelandet erbjuder uttrycklig återupptagning eller
-\ui{Close unresolved creation} efter granskning av galleriet och lagringen.
-Åtgärden visar ursprunglig titel och förälder för
-uttrycklig bekräftelse. Den lokala avsikten tas bort först när servern bekräftat
-att samma nyckel stängts varaktigt; ett oklart svar lämnar den kvar. Servern
-vägrar stänga en väntande claim. Stängningen
-bevisar inte att galleri eller filer saknas eller att tidigare arbete har slutat.
-Kontrollera att arbetet har slutat samt granska galleriet och lagringen innan
-du startar en separat skapning; ingen startas automatiskt. Om servern i
-stället verifierar ett slutfört resultat sparas kvittot för bekräftelse.
-En ogiltig eller oläsbar lokal avsikt förblir blockerad och kräver hjälp av en
-administratör eftersom dess nyckel inte kan verifieras.
-Innan ett nytt galleri skickas kontrollerar Photos tidigare arbete i samma
-lokala profil. Ett väntande resultat kontrolleras bara med den ursprungliga
-webbplatsen och administratörskontot; för en annan webbplats erbjuds
-återanslutning. Kontrollen upprepar aldrig skapandet. För ett tidigare skapat
-galleri bekräftar du \ui{Fortsätt} innan nästa skapas. Bara den exakta lokala
-slutförandeposten tas bort; det tidigare galleriet och uppladdningsmålet
-förblir oförändrade. Aktuell anslutning och vald förälder kontrolleras igen.
-Samma titel och förälder för samma webbplats och konto kontrollerar i stället
-det färdiga resultatet utan att skapa en dubblett. Ett okänt resultat eller en
-misslyckad lokal bekräftelse bevarar det sparade arbetet för en ny kontroll.
-Ett bekräftat kvitto sparas tills användaren uttryckligen kvitterar det. Före
-exklusiv publicering skriver och kontrollerar klienten ett fullständigt
-förberett kvitto; vid osäkerhet bevaras avsikten och ett eventuellt publicerat
-kvitto. En lokal bindning till den ursprungliga avsikten hindrar ett gammalt val
-eller kvitto från att påverka en annan åtgärd med samma galleriuppgifter;
-åtgärdsnyckeln visas inte. Externa filändringar utesluts inte och beständighet
+arbetaren har stoppat och tillåter inte ny skapning.
+I Photos anger du namnet och väljer \ui{Skapa galleri}. Det bekräftade galleriet
+kan användas direkt utan \ui{Fortsätt}, statushantering eller obligatorisk
+kvittering. Vid fel behålls ett redigerbart namn med samma Skapa-åtgärd.
+Tidigare anrop för andra namn, föräldrar, webbplatser eller konton blockerar
+inte utkastet. Matchande äldre bevis behåller den ursprungliga nyckeln.
+Efter ett förlorat svar kontrollerar WinApp ursprunglig status en gång.
+Om samma utkast skickas igen kontrolleras status och det kan återupptas en
+gång med samma nyckel och exakta ursprungliga indata. Verkliga väntande eller
+oklara serverposter kan fortfarande avvisas. Skyddet behöver det ursprungliga
+serverregistret; en äldre databasbackup kan sakna dess historik.
+Avancerad hantering behåller \ui{Resume original creation} och
+\ui{Close unresolved creation} för äldre oklara anrop. Granska ursprunglig
+titel, förälder och lagring innan verktygen används. Stängning kräver uttrycklig
+bekräftelse och tar bort lokala bevis först efter varaktig serverbekräftelse
+för ursprungsnyckeln; väntande claims avvisas. Ett okänt svar behåller bevis.
+Stängning bevisar inte att arbetet har stoppat eller att galleri eller filer
+saknas.
+Photos kvitterar bekräftade resultat automatiskt. Misslyckad lokal städning
+behåller exakta bevis utan att blockera det bekräftade galleriet. Hanteringen
+kan behålla ett kvitto för \ui{Använd skapat galleri} eller valfritt
+\ui{Dismiss result}; nästa skapande kräver ingen av dessa åtgärder.
+Före exklusiv publicering skriver och kontrollerar klienten hela kvittot.
+Bindningen till den ursprungliga avsikten hindrar gammal kvittering eller
+val av en annan åtgärd med samma galleriuppgifter; nyckeln visas inte.
+Ogiltiga bevis behålls och kräver administratörens hjälp.
+Externa filändringar utesluts inte och beständighet
 efter strömavbrott är inte verifierad. I en lokal profil som stöds
 kontrollerar \ui{Använd skapat galleri} kvittot och galleriet igen innan det
 väljs för Watcher och Import. Det kräver separat uppladdningsbehörighet.

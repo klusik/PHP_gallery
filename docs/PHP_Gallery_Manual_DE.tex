@@ -2643,7 +2643,7 @@ ausdrückliche Zustimmung und geprüften Berechtigungsspeicher. Ihr Quelltext
 lehnt belegte Ziele, Abweichungen im kanonischen
 Katalog und mehr als 10.000~Zeilen einschließlich der neuen Galerie ab;
 die Slug-Suche prüft höchstens 128~Kandidaten. Dies sind keine Zeitgrenzen.
-Ein unklarer Vorgang wird nicht automatisch wiederholt.
+Ein unklarer Vorgang wird niemals durch einen neuen Schlüssel ersetzt.
 Eine ausstehende Reservierung blockiert vorübergehend Admin-Ordnerimporte,
 das Verschieben entdeckter Fotos, das Löschen entdeckter Ordner, das Kopieren
 von Auswahlen, Verschieben in den Papierkorb und Wiederherstellung daraus,
@@ -2662,42 +2662,34 @@ und Stromausfall sind nicht qualifiziert.
 Das Wartungs-CLI kann private Originaldaten über die Standardeingabe nur mit
 dem Register abgleichen; es beweist weder das Ende des ursprünglichen Workers
 noch erlaubt es eine neue Erstellung.
-\ui{Resume original creation} zeigt den ursprünglichen Titel und das Elternziel
-zur ausdrücklichen Bestätigung und sendet denselben Schlüssel und dieselben
-Eingaben an denselben HTTPS-Issuer und dasselbe geprüfte Administratorkonto.
-Bestehende ausstehende oder ungeklärte Servereinträge bleiben blockiert und
-können eine Klärung durch den Administrator erfordern. Der Schutz setzt das
-ursprüngliche Serverregister voraus; eine ältere Datenbanksicherung kann diese
-Historie entfernen. Die Meldung bietet die ausdrückliche Fortsetzung oder nach
-Prüfung von Galerie und Speicher \ui{Close unresolved creation}. Die Aktion zeigt den ursprünglichen
-Titel und das Elternziel zur ausdrücklichen Bestätigung. Die lokale Absicht wird
-erst nach bestätigtem dauerhaftem Abschluss desselben Schlüssels auf dem Server
-entfernt; bei unklarem Ergebnis bleibt sie erhalten. Ein ausstehender Claim wird
-vom Server nicht geschlossen. Der Abschluss beweist nicht,
-dass keine Galerie oder Dateien entstanden sind oder die frühere Arbeit endete.
-Prüfen Sie vor einer separaten Erstellung das Ende der ursprünglichen Arbeit,
-Galerie und Speicher; automatisch startet keine. Bestätigt
-der Server stattdessen ein abgeschlossenes Ergebnis, bleibt dessen Beleg zur
-Bestätigung erhalten. Eine ungültige oder nicht lesbare lokale Absicht bleibt
-blockiert und erfordert Hilfe des Administrators, da ihr Schlüssel nicht geprüft
-werden kann. Vor einer neuen Galerie prüft Photos frühere Arbeit im selben
-lokalen Profil. Ein ausstehendes Ergebnis wird nur mit der ursprünglichen
-Website und dem Administratorkonto geprüft; bei einer anderen Website wird
-eine erneute Verbindung angeboten. Diese Prüfung wiederholt keine Erstellung.
-Bei einer früher fertiggestellten Galerie bestätigen Sie \ui{Fortfahren}, um die
-nächste zu erstellen. Nur der genaue lokale Abschluss wird entfernt; die
-frühere Galerie und das Upload-Ziel bleiben unverändert. Aktuelle Verbindung
-und ausgewählte Elterngalerie werden erneut geprüft. Gleicher Titel und
-Elternteil für dieselbe Website und dasselbe Konto prüfen stattdessen das
-fertige Ergebnis, ohne ein Duplikat anzulegen. Unklare Ergebnisse oder eine
-fehlgeschlagene lokale Bestätigung erhalten die gespeicherte Arbeit.
-Ein bestätigter Beleg bleibt bis zur ausdrücklichen Bestätigung
-gespeichert. Vor der exklusiven Veröffentlichung schreibt und prüft der Client
-einen vollständigen vorbereiteten Beleg; bei Ungewissheit bleiben Absicht und
-ein eventuell veröffentlichter Beleg erhalten. Eine lokale Bindung an die
-ursprüngliche Absicht verhindert, dass eine veraltete Auswahl oder Bestätigung
-eine andere Operation mit gleichen Galeriedaten betrifft; der Schlüssel wird
-nicht angezeigt. Fremde Dateizugriffe sind nicht ausgeschlossen, die Beständigkeit
+In Photos geben Sie den Namen ein und wählen \ui{Galerie erstellen}.
+Die bestätigte Galerie ist sofort nutzbar, ohne \ui{Fortfahren},
+Statusverwaltung oder verpflichtende Bestätigung. Bei Fehlern bleibt der Name
+mit derselben Erstellen-Aktion bearbeitbar. Frühere Anfragen für andere Namen,
+Eltern, Websites oder Konten blockieren diesen Entwurf nicht. Passende ältere
+Nachweise behalten ihren ursprünglichen Schlüssel. Nach verlorener Antwort
+prüft WinApp einmal den ursprünglichen Status. Erneutes Senden desselben
+Entwurfs prüft den Status und kann einmal mit demselben Schlüssel und den
+exakten ursprünglichen Eingaben fortsetzen. Echte ausstehende oder ungeklärte
+Servereinträge bleiben abweisbar. Der Schutz benötigt das ursprüngliche
+Serverregister; eine ältere Datenbanksicherung kann dessen Historie entfernen.
+Die erweiterte Verwaltung behält \ui{Resume original creation} und
+\ui{Close unresolved creation} für ältere ungeklärte Anfragen. Prüfen Sie
+ursprünglichen Titel, Elternziel und Speicher vor Verwendung. Der Abschluss
+verlangt ausdrückliche Bestätigung und entfernt lokale Nachweise erst nach
+dauerhafter Serverbestätigung für den ursprünglichen Schlüssel; ausstehende
+Claims werden abgewiesen. Ein unbekanntes Ergebnis erhält Nachweise. Abschluss
+beweist weder das Ende der Arbeit noch das Fehlen von Galerien oder Dateien.
+Photos übernimmt bestätigte Belege automatisch. Fehlgeschlagene lokale
+Bereinigung erhält genaue Nachweise, blockiert aber die bestätigte Galerie
+nicht. Die Verwaltung kann einen Beleg für \ui{Erstellte Galerie verwenden}
+oder optionales \ui{Dismiss result} behalten; weitere Erstellung hängt davon
+nicht ab. Vor exklusiver Veröffentlichung schreibt und prüft der Client den
+vollständigen Beleg. Die Bindung an die ursprüngliche Absicht verhindert
+veraltete Bestätigung oder Auswahl einer anderen Operation mit gleichen
+Galeriedaten; der Schlüssel wird nicht angezeigt. Ungültige Nachweise bleiben
+erhalten und benötigen Hilfe des Administrators.
+Fremde Dateizugriffe sind nicht ausgeschlossen, die Beständigkeit
 nach Stromausfall ist nicht nachgewiesen. Im unterstützten lokalen
 Profil prüft \ui{Erstellte Galerie verwenden} Beleg und Galerie vor
 der Auswahl für Watcher und Import erneut. Das erfordert eine separate

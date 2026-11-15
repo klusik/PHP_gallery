@@ -9503,20 +9503,29 @@ Windows captures remain in the existing `photos-storage-compact-*.png`
 diagnostic artifacts. These isolated Tk checks do not exercise an installed
 application or the user's cache.
 
-The native Photos owner also drives creation of a first root and a child through
-the real asynchronous context, acknowledges the receipt and invokes the actual
-gallery or Watcher-rail button without another catalogue request. A recovered
-same-account receipt must reach that action without another create request.
+The native Photos owner drives root and child creation through the real
+asynchronous context and invokes the actual gallery or Watcher-rail button
+without acknowledgement or another catalogue request. A recovered receipt
+reaches the same action. The ordinary failure form retains the draft and only
+offers Create; desktop/narrow geometry and screenshots are retained in
+`photos-create-retry-*.png`. Dismissal before admission cancels the captured
+dispatch and repeated submission cannot replace an active gate.
+Portable journal and manager fixtures retain unrelated legacy pending bytes,
+isolate request paths by site/account/title/parent, recover a lost reply through
+one original-key status read, and resume only the original exact request.
+They also cover automatic consumption and local cleanup failure without
+misreporting confirmed server success. Existing file-identity, stale receipt,
+lease, authority and server-refusal tests remain required.
 An equal descriptor replaced during catalogue renewal keeps its open action
-usable; a descriptor whose values changed is refused.
-Negative cases cover cached-only, removed and replaced rows, expired or changed
-sessions, lost upload permission and an unavailable host callback. Refusals
-remain visible in the existing anchored card; desktop and narrow geometry and
-screenshots are retained in the Windows diagnostic artifact. Late creation
-receipts cannot publish rows or freshness into a different or expired session.
-These cases use synthetic server responses and a captured host callback. Hosted
-WinApp diagnostics execute them on Windows; BASIC checks only source contracts.
-Installed-client capture and a real screenshot upload remain separate acceptance.
+usable; a descriptor whose values changed is refused. Negative cases cover
+cached-only, removed and replaced rows, expired or changed sessions, lost upload
+permission and an unavailable host callback. Refusals remain in the anchored
+card; Windows desktop/narrow screenshots are retained. Late creation receipts
+cannot publish rows or freshness into a different or expired session.
+These cases use synthetic server responses and a captured host callback.
+Hosted WinApp diagnostics execute them on Windows; BASIC checks only source
+contracts. Installed-client capture and real server creation/upload remain
+separate acceptance.
 The same native owner checks that an immediate cache probe cancels its pending
 delayed callback before clearing the timer reference. Closing the workspace must
 leave no obsolete Tcl command scheduled on the surviving root.
