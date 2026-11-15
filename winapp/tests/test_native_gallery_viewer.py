@@ -5502,7 +5502,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
 
         Returns:
             None: Switching away hides the old gallery's status and returning
-                to that gallery restores its retained terminal outcome.
+                to that gallery restores its retained terminal outcome until
+                explicitly dismissed.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -5551,7 +5552,82 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._selected_gallery_id = TEST_PARENT_GALLERY_ID
         workspace._show_preload_progress(progress)
         workspace._selected_gallery_id = TEST_GALLERY_ID
+        workspace._show_preload_progress(progress)
         self.assertEqual('', workspace._preload_strip.winfo_manager())
+        workspace.destroy()
+
+    def test_dismissed_preload_results_stay_closed_until_a_new_operation(self) -> None:
+        """Keep acknowledged results hidden through polls, remounts and resizes.
+
+        Returns:
+            None: Every terminal phase stays closed while cache reconciliation
+                continues; an explicit new preload restores visible progress.
+        """
+        from PIL import ImageGrab
+
+        ui_theme.configure_theme(self.root)
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Preload dismissal album')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        self._wait_until(
+            lambda: TEST_GALLERY_ID in workspace._galleries,
+            'The preload dismissal gallery did not load.',
+        )
+        gallery = workspace._galleries[TEST_GALLERY_ID]
+        worker = mock.Mock(spec=photos_workspace.GalleryPreloadWorker)
+        worker.is_alive.return_value = False
+        with mock.patch.object(photos_workspace, 'GalleryPreloadWorker', return_value=worker):
+            for phase in ('cancelled', 'complete', 'partial', 'error'):
+                with self.subTest(phase=phase):
+                    workspace._select_gallery(gallery)
+                    workspace._open_cache_context()
+                    workspace._launch_preload(workspace._context_card, session, gallery)
+                    # Explicit launch must show new work even after the prior
+                    # operation was acknowledged; no fixture resets its flag.
+                    self.assertEqual('grid', workspace._preload_strip.winfo_manager())
+                    progress = photos_workspace.PreloadProgress(
+                        phase, TEST_GALLERY_ID, TEST_PRELOAD_STATUS_PHOTO_COUNT,
+                        1, 1, 0, 0, False, '', cache_state='partial',
+                    )
+                    worker.snapshot.return_value = progress
+                    workspace._poll_cache_work()
+                    self.assertIn(workspace._text('preload_' + phase),
+                                  workspace._preload_text.get())
+                    workspace._cancel_preload()
+                    self.assertEqual('', workspace._preload_strip.winfo_manager())
+                    workspace._poll_cache_work()
+                    self.assertEqual(
+                        (1, TEST_PRELOAD_STATUS_PHOTO_COUNT, True),
+                        workspace._cache_counts[TEST_GALLERY_ID],
+                    )
+                    for label, size in (
+                        ('desktop', (840, 620)), ('narrow', TEST_VIEWER_MINIMUM_SIZE),
+                    ):
+                        self.root.geometry(f'{size[0]}x{size[1]}')
+                        workspace._poll_cache_work()
+                        workspace._selected_gallery_id = TEST_PARENT_GALLERY_ID
+                        workspace._show_preload_progress(progress)
+                        workspace._select_gallery(gallery)
+                        workspace._poll_cache_work()
+                        self.root.update()
+                        self.assertEqual('', workspace._preload_strip.winfo_manager())
+                        self.assertIs(progress, workspace._preload_last)
+                        if phase == 'cancelled':
+                            bounds = (
+                                self.root.winfo_rootx(), self.root.winfo_rooty(),
+                                self.root.winfo_rootx() + self.root.winfo_width(),
+                                self.root.winfo_rooty() + self.root.winfo_height(),
+                            )
+                            evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+                            evidence.mkdir(parents=True, exist_ok=True)
+                            with ImageGrab.grab(bbox=bounds) as captured:
+                                captured.save(evidence / f'preload-dismissed-{label}.png')
+            self.assertEqual(4, worker.start.call_count)
         workspace.destroy()
 
     def test_inspector_sash_restores_independently_across_recreation(self) -> None:

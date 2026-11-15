@@ -1919,11 +1919,12 @@ and actual hosted acceptance remain separate from a green fixture. See the
 
 ### WinApp gallery controls
 
-The issue-scoped **Issue 385 gallery controls** workflow runs central source
-contracts, complete partitioned WinApp discovery on Linux and Windows, required
-Chromium and complete disposable MySQL PHP regressions. It prepares canonical generated
-outputs only on hosted runners and retains them for feature-branch persistence.
-BASIC remains independent. No job publishes protected refs or builds installers.
+The central complete WinApp discovery covers gallery controls. The existing
+read-only **Issue 381 Watcher recovery** workflow can run its serial partitions
+on Linux and Windows for an exact selected feature SHA and retain native
+screenshots. Protected integration separately owns canonical preparation,
+independent BASIC, shared source contracts, Chromium and real database coverage.
+The temporary Issue 385 development workflow was retired after qualification.
 
 `test_gallery_controls.py` covers complete reverse paging and newly inserted
 photos and resumable quota waits, persistent gallery/account isolation,
@@ -1938,6 +1939,13 @@ menus, retains a conflicting draft, and captures desktop/narrow menu and
 information screenshots under `cache/test-audit/gallery-controls/`.
 These fixtures do not establish an installed-client upgrade, target-host
 sidecar failure recovery or production account consent.
+
+The native preload-dismissal regression closes cancelled, complete, partial and
+failed results, repeats worker polling, gallery remounts and desktop/narrow
+resizing, and verifies that an explicit new preload restores progress. Final
+cache accounting still runs after dismissal. Screenshots are retained as
+`cache/test-audit/preload-dismissed-desktop.png` and
+`cache/test-audit/preload-dismissed-narrow.png`.
 
 ### Watcher uncertain-head recovery
 
