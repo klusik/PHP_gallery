@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.2.4}
+\newcommand{\version}{1.2.5}
 \newcommand{\manualdate}{15 November 2026}
 
 \hypersetup{
@@ -1793,7 +1793,24 @@ waits for~eligible unfinished sources and~requires a~new final scan after
 the~last acknowledgement. Photo queues can~wait beyond five minutes.
 Verified same-target screenshot Finish intent resumes after restart;
 legacy key revocation retains its~separate renewed-confirmation rule.
-Linked flight reports remain local.
+New linked flight sessions attach their~PDF reports to~the~original upload
+gallery through its~live upload-scoped account link. Every edition requires
+a~verified checksum receipt before completion. Failed delivery retains local
+PDFs for~Retry; older servers require an~upgrade. Previously completed
+or~explicitly local reports remain local.
+
+Finish progress, flight settings, saved reports and~upload recovery use overlays
+inside the~main window. Their~actions remain visible without resizing;
+long task/evidence lists scroll inside the~panel. Successful progress announces
+closure after three seconds. \ui{Keep open} cancels the~countdown. Errors
+and~recovery decisions remain visible until dismissed.
+
+In~Admin, \ui{Edit gallery > Media management > PDF}, the~pencil beside
+a~document title opens a~prefilled input. Enter or~leaving the~input saves
+immediately; Escape cancels. The~actual PDF on~disk is~renamed, including
+legacy OFPs, and~the~same filename is~used for~display, download and~ZIP export.
+The~PDF extension is~added when omitted. Collisions and~unsafe names
+are~refused; original bytes and~document identity remain intact.
 
 An~unknown head shows \ui{Needs attention}. \ui{Resume} in~Watcher,
 \ui{Force Continue} in~progress and~\ui{Review pending uploads} after restart

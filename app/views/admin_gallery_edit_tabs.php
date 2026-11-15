@@ -1773,7 +1773,7 @@ function view_render_admin_gallery_editor_notices(array $viewModel): void
  * @param array{gallery?:array{id?:int,title?:string},has_pdf?:bool,occupied?:bool,
  *     prefill?:array{has_snapshot?:bool,fields?:array<string,array{value?:string,
  *     source?:string}>},action_url?:string,csrf_html?:string,provenance?:string,
- *     pdf_view_url?:string,pdf_download_url?:string} $viewModel Prepared gallery,
+ *     pdf_view_url?:string,pdf_download_url?:string,pdf_filename?:string} $viewModel Prepared gallery,
  *     safe dispatch values and validated document actions.
  * @return void Safe, accessible admin-only document controls.
  */
@@ -1896,7 +1896,7 @@ function view_render_admin_simbrief_legacy_panel(array $viewModel): void
                     . '"'
                     . (
                         $icon === 'download'
-                            ? ' download="simbrief-ofp.pdf"'
+                            ? ' download="' . e((string) ($viewModel['pdf_filename'] ?? 'simbrief-ofp.pdf')) . '"'
                             : ' target="_blank" rel="noopener noreferrer"'
                     )
                     . '>'

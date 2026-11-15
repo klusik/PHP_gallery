@@ -18,6 +18,7 @@ namespace Gallery\Controllers;
 
 use Throwable;
 use function Gallery\Core\request_method;
+use function Gallery\Core\cms_runtime_kernel;
 use function Gallery\Services\app_linking_authenticate;
 use function Gallery\Services\app_linking_inventory_confirm_indexed;
 use function Gallery\Services\app_linking_recovery_probe;
@@ -37,6 +38,9 @@ use function Gallery\Services\upload_automation_inventory_candidates;
 use function Gallery\Services\upload_automation_sim_camera_metadata;
 use function Gallery\Services\upload_automation_store_images;
 use function Gallery\Services\upload_automation_uploaded_files;
+use function Gallery\Services\upload_automation_with_gallery_lock;
+use function Gallery\Services\upload_flight_report_status;
+use function Gallery\Services\upload_flight_report_attach;
 use const Gallery\Services\APP_LINKING_UPLOAD_SCOPE;
 use const Gallery\Services\APP_LINKING_READ_UPLOAD_SCOPE;
 use const Gallery\Services\APP_LINKING_UPLOAD_CREATE_SCOPE;
@@ -201,6 +205,11 @@ function cms_app_linking_inventory(): void
                 'action' => $payload['action'],
                 'gallery_id' => $galleryId,
             ], JSON_THROW_ON_ERROR);
+            return;
+        }
+        if (is_array($payload)
+            && ($payload['action'] ?? null) === 'flight_report_status') {
+            app_linking_handle_flight_report($auth, $payload, false);
             return;
         }
         if (!is_array($payload) || array_diff(array_keys($payload), [
@@ -390,12 +399,19 @@ function cms_app_linking_upload(): void
         $rawId = $_POST['gallery_id'] ?? null;
         if (!is_string($rawId) || preg_match('/\A[1-9][0-9]{0,18}\z/D', $rawId) !== 1
             || (string) (int) $rawId !== $rawId
-            || (isset($_POST['action']) && $_POST['action'] !== 'upload')
+            || (isset($_POST['action'])
+                && !in_array($_POST['action'], ['upload', 'flight_report'], true))
             || isset($_POST['api_key'])) {
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         $galleryId = (int) $rawId;
+        if (($_POST['action'] ?? null) === 'flight_report') {
+            app_linking_handle_flight_report(
+                $auth, array_replace($_POST, ['gallery_id' => $galleryId]), true,
+            );
+            return;
+        }
         $watchKey = $_SERVER['HTTP_X_PHP_GALLERY_WATCH_KEY'] ?? null;
         if ($watchKey !== null && (!is_string($watchKey)
             || preg_match('/\Apgw_[a-f0-9]{64}\z/D', $watchKey) !== 1)) {
@@ -524,4 +540,103 @@ function cms_app_linking_upload(): void
         // Failure after a write is ambiguous; clients must not replay blindly.
         app_linking_json_error(503, 'temporarily_unavailable');
     }
+}
+
+/**
+ * Reconcile or attach a PDF using the exact live delegated upload target.
+ *
+ * @param array{issuer:string,token:string,identity:array{grant_id:int,user_id:int,scope:string}} $auth Verified upload admission.
+ * @param array{action?:string,gallery_id?:int,report_id?:string,session_id?:string,language?:string,sha256?:string} $payload Untrusted report fields checked before storage.
+ * @param bool $upload True for multipart attachment, false for JSON status.
+ * @return void Sends a same-gallery receipt or a bounded refusal.
+ */
+function app_linking_handle_flight_report(
+    array $auth, array $payload, bool $upload,
+): void {
+    $action = $upload ? 'flight_report' : 'flight_report_status';
+    $allowed = ['action', 'gallery_id', 'report_id', 'language', 'sha256'];
+    if ($upload) {
+        $allowed[] = 'session_id';
+    }
+    if (array_diff(array_keys($payload), $allowed) !== []
+        || ($payload['action'] ?? null) !== $action
+        || !is_int($payload['gallery_id'] ?? null) || $payload['gallery_id'] <= 0) {
+        app_linking_json_error(400, 'invalid_request');
+        return;
+    }
+    foreach (array_diff($allowed, ['gallery_id']) as $field) {
+        if (!is_string($payload[$field] ?? null) || $payload[$field] === '') {
+            app_linking_json_error(400, 'invalid_request');
+            return;
+        }
+    }
+    $galleryId = $payload['gallery_id'];
+    $watchKey = $_SERVER['HTTP_X_PHP_GALLERY_WATCH_KEY'] ?? null;
+    if ($watchKey !== null && (!is_string($watchKey)
+        || preg_match('/\Apgw_[a-f0-9]{64}\z/D', $watchKey) !== 1)) {
+        app_linking_json_error(401, 'invalid_token');
+        return;
+    }
+    if (app_linking_upload_target(
+        $auth['token'], $auth['issuer'], $galleryId, $watchKey,
+    ) === null) {
+        app_linking_json_error(404, 'target_unavailable');
+        return;
+    }
+    if (!app_linking_admit_upload_target(
+        $auth, $upload ? 'upload' : 'inventory', $galleryId,
+    )) {
+        return;
+    }
+    $source = '';
+    if ($upload) {
+        $file = $_FILES['report'] ?? null;
+        if (array_diff(array_keys($_FILES), ['report']) !== []
+            || !is_array($file) || ($file['error'] ?? null) !== UPLOAD_ERR_OK
+            || !is_string($file['tmp_name'] ?? null)
+            || !is_uploaded_file($file['tmp_name'])) {
+            app_linking_json_error(422, 'invalid_file');
+            return;
+        }
+        $source = $file['tmp_name'];
+    }
+    // Load the existing attachment owner only after delegated authorization.
+    cms_runtime_kernel()->load('gallery-pdf-documents');
+    try {
+        $result = upload_automation_with_gallery_lock(
+            $galleryId,
+            static function () use (
+                $auth, $galleryId, $watchKey, $upload, $source, $payload,
+            ): ?array {
+                $gallery = app_linking_upload_feature_enabled()
+                    ? app_linking_upload_target(
+                        $auth['token'], $auth['issuer'], $galleryId, $watchKey,
+                    ) : null;
+                if ($gallery === null) {
+                    return null;
+                }
+                return $upload ? upload_flight_report_attach(
+                    $gallery, $source, $payload['report_id'],
+                    $payload['session_id'], $payload['language'], $payload['sha256'],
+                ) : upload_flight_report_status(
+                    $gallery, $payload['report_id'],
+                    $payload['language'], $payload['sha256'],
+                );
+            },
+        );
+    } catch (Throwable) {
+        app_linking_json_error(422, 'report_unavailable');
+        return;
+    }
+    if ($result === null) {
+        app_linking_json_error(401, 'invalid_token');
+        return;
+    }
+    clear_response_cache_headers();
+    app_linking_security_headers();
+    header('Content-Type: application/json; charset=utf-8');
+    // Conflicts remain a valid status observation, never permission to replace.
+    echo json_encode([
+        'ok' => true, 'action' => $action, 'gallery_id' => $galleryId,
+    ] + $result, JSON_THROW_ON_ERROR);
 }

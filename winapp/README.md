@@ -103,6 +103,14 @@ refresh or reconcile the queue.
 
 ## Interface and local feature settings
 
+Finish progress, flight settings, saved reports and uncertain-upload review
+are overlays inside the main window. They fit its current size without a
+separate popup or resize handle. Progress keeps details and its action footer
+visible; longer task/evidence lists scroll within their own viewport.
+Successful progress announces **Closes in 3 s** and hides automatically.
+**Keep open** cancels that countdown. Errors, cancelled work and recovery
+decisions remain visible until dismissed; hiding never cancels a worker.
+
 The compact dark interface uses slate glass panels, cyan actions, an icon
 navigation rail and borderless contextual icons. Hover over an icon to
 discover its action; the selected screen remains highlighted. Tooltips appear
@@ -133,7 +141,7 @@ shows the upload gallery, chosen folder and primary Start/Stop control.
 the picker and open-folder action. Settings gears sit immediately beside their
 gallery, folder or flight control. Record flight is the only flight preference
 on the main screen. Its
-gear opens a local settings sheet containing automatic report creation, report
+gear opens an in-window settings overlay containing automatic report creation, report
 languages, interface language, progress and the report folder. Closing the sheet
 never starts a flight or finalization operation. Interface language uses four
 visible language segments. Tooltips, menus and secondary windows share the dark
@@ -403,8 +411,8 @@ completion cannot clear another key or report successful cleanup. Finish must
 wait for an already running ordinary Stop to complete; Stop cannot gain
 revocation authority by changing its active worker. Use the separate confirmed
 Revoke action when only ending that saved connection afterward. Linked reports
-stay local
-and their temporary Photos credential has its separate lifecycle.
+are attached to the original upload gallery through its live upload-scoped
+account link. Its temporary Photos credential is released after completion.
 Separate Finish/create-PDF controls retain the saved key.
 
 | Watcher state | How it starts | Next action |
@@ -1862,8 +1870,13 @@ uploads**. WinApp verifies the account and gallery on the server before
 storing the choice separately from the saved API key. After restart, reconnect
 to the same account and explicitly select that gallery before resuming pending
 work. Use the gear beside **Upload gallery**, then **Use saved API key**, to
-select the saved key explicitly. Linked flight reports stay local; AI and
-flight upload actions use the legacy mode.
+select the saved key explicitly. Newly recorded linked flight reports are
+automatically attached to that same gallery after its photographs drain.
+Each edition requires an exact checksum receipt before completion; errors
+retain local PDFs and pending delivery for Retry. The server must support
+delegated report delivery. Older servers fail visibly rather than silently
+claiming delivery. Existing explicitly local/finished records stay local.
+Independent saved-PDF upload and AI still use the legacy mode.
 
 Linked uploads use a target-specific history and an exclusive local lease.
 Use an unredirected profile on a fixed local Windows drive or an

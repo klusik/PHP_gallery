@@ -16,12 +16,42 @@ import json
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Protocol, Tuple
 from urllib.parse import urlsplit
 
 from uploader.diagnostics import redact_text
 from uploader.models import JsonValue
 from uploader.server_discovery import _unique_object
+
+
+class ReportRequest(Protocol):
+    """Describe a report request using either legacy or delegated authority."""
+
+    def __call__(
+        self, url: str, api_key: str,
+        payload: dict[str, JsonValue] | None = None,
+        pdf_path: Path | None = None, fields: dict[str, str] | None = None,
+        emit: Callable[[int, int], None] | None = None, file_size: int = 0,
+        before_request: Callable[[], None] | None = None,
+    ) -> dict[str, JsonValue]:
+        """Send one status probe or one replay-prohibited PDF request.
+
+        Args:
+            url (str): Legacy endpoint; empty for a captured linked target.
+            api_key (str): Legacy key; empty for a captured linked target.
+            payload (dict[str, JsonValue] | None): Report status action,
+                report_id, language and sha256, or None for multipart.
+            pdf_path (Path | None): Retained PDF, or None for JSON.
+            fields (dict[str, str] | None): Report action, session_id,
+                report_id, language and sha256, or None for JSON.
+            emit (Callable[[int, int], None] | None): Sent/total PDF bytes.
+            file_size (int): Exact PDF byte count; zero for JSON.
+            before_request (Callable[[], None] | None): Current work guard.
+        Returns:
+            dict[str, JsonValue]: Verified JSON envelope with action,
+                found/conflict flags and an optional attachment receipt.
+        """
+        ...
 
 
 # Purpose: Bound one report to the existing gallery PDF service policy.
@@ -581,6 +611,7 @@ def deliver_report(
     emit: Optional[Callable[[int, int], None]] = None,
     expected_sha256: Optional[str] = None,
     before_request: Optional[Callable[[], None]] = None,
+    request: ReportRequest | None = None,
 ) -> Dict[str, Any]:
     """Deliver one report after status reconciliation and return its receipt.
 
@@ -597,6 +628,8 @@ def deliver_report(
             when the caller has not independently captured it.
         before_request (Optional[Callable[[], None]]): Host-owned checkpoint
             before each status, upload and reconciliation request, or None.
+        request (ReportRequest | None): Captured delegated transport, or None
+            for the established gallery API-key transport.
 
     Returns:
         Dict[str, Any]: Receipt containing attachment id and sha256, plus
@@ -610,6 +643,7 @@ def deliver_report(
         FlightRequestAdmissionError: The host denied an attempt. An earlier
             upload may still have committed and requires reconciliation.
     """
+    perform = request or _perform_request
     language, session_id = _validate_identity(
         session_id, report_id, language
     )
@@ -629,7 +663,7 @@ def deliver_report(
     request_options = (
         {'before_request': before_request} if before_request is not None else {}
     )
-    status = _perform_request(upload_url, api_key, status_payload, **request_options)
+    status = perform(upload_url, api_key, status_payload, **request_options)
     if _status_found(status):
         receipt = _receipt(status, report_id.strip(), language, digest, size, True)
         _verify_report_unchanged(pdf, digest, size)
@@ -643,7 +677,7 @@ def deliver_report(
         "sha256": digest,
     }
     try:
-        uploaded = _perform_request(
+        uploaded = perform(
             upload_url,
             api_key,
             pdf_path=pdf,
@@ -675,7 +709,7 @@ def deliver_report(
     # A reset or server error may follow a committed file write. Reconcile the
     # stable identity before exposing failure so the caller never duplicates it.
     try:
-        reconciled = _perform_request(
+        reconciled = perform(
             upload_url, api_key, status_payload, **request_options,
         )
         found = _status_found(reconciled)

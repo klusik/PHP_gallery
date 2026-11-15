@@ -163,6 +163,7 @@ class FlightUITests(unittest.TestCase):
         ui._last_terminal = ""
         ui.activity_bar = None
         ui.task_tree = None
+        ui.task_frame = Mock()
         ui._animation_running = False
         ui._preparing_progress = False
         ui.pending = Mock(return_value=[])
@@ -551,7 +552,8 @@ class FlightUITests(unittest.TestCase):
 
         Returns:
             None: Saving-key, failed and cancelled operations never hide their
-                progress view; completed cleanup hides it without a dialog.
+                progress view; completed cleanup hides it after the announced
+                three-second countdown rather than on its first terminal tick.
         """
         # These four lifecycle boundaries separate acknowledgement from success.
         for phase in ("saving_key", "error", "cancelled", "completed"):
@@ -570,11 +572,19 @@ class FlightUITests(unittest.TestCase):
                 ui.dialog = Mock()
                 ui.refresh_tasks = Mock()
                 ui.refresh_reports = Mock()
+                ui.refresh_progress_actions = Mock()
+                ui.autoclose_frame = Mock()
+                ui.completion_var = Mock()
+                ui.progress_actions = Mock()
                 ui.tick()
+                ui.dialog.withdraw.assert_not_called()
                 if phase == "completed":
+                    ui.completion_var.set.assert_called_once_with('progress_autoclose')
+                    with patch.object(flight_ui.time, 'monotonic', return_value=now + 4):
+                        ui.refresh_autoclose()
                     ui.dialog.withdraw.assert_called_once_with()
                 else:
-                    ui.dialog.withdraw.assert_not_called()
+                    ui.completion_var.set.assert_not_called()
 
     def test_saved_pdf_upload_uses_current_key_without_stopping_live_flight(self) -> None:
         """Upload an old local revision with a new explicitly confirmed key.
@@ -890,11 +900,11 @@ class FlightUITests(unittest.TestCase):
         with self.assertRaises(ValueError):
             flight_ui.FlightUI.binding(ui)
 
-    def test_linked_flight_report_is_local_and_target_bound(self) -> None:
-        """Bind a linked flight to its target and never schedule PDF delivery.
+    def test_linked_flight_report_is_delivered_and_target_bound(self) -> None:
+        """Bind linked report delivery to the explicitly selected gallery.
 
         Returns:
-            None: The actual persisted plan remains local-only for that target.
+            None: The actual persisted plan requires delivery to that target.
         """
         with tempfile.TemporaryDirectory() as temporary:
             host = self._host()
@@ -916,7 +926,7 @@ class FlightUITests(unittest.TestCase):
                 directory = flight_ui.FlightUI.start_session(ui)
             plan = SessionPlan.load(directory)
             self.assertEqual('b' * 64, plan.binding)
-            self.assertTrue(plan.local_only)
+            self.assertFalse(plan.local_only)
             self.assertNotEqual(connection_binding(host.config.gallery_url,
                                                    host.config.api_key), plan.binding)
             recorder.start.assert_called_once_with()
@@ -1768,7 +1778,7 @@ class FlightUITests(unittest.TestCase):
                 seen = []
                 operation = Mock(local_reports=True)
                 operation.start.side_effect = lambda: seen.append(load_dispatch(directory))
-                with patch.object(flight_ui.messagebox, "askyesnocancel") as confirm, patch.object(
+                with patch.object(flight_ui.messagebox, "askyesno") as confirm, patch.object(
                     flight_ui, "FinalizationWorker", return_value=operation,
                 ) as factory:
                     ui.create_local_pdf()

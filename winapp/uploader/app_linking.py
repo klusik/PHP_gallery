@@ -8893,6 +8893,52 @@ class LinkingSession:
             raise LinkingError('Recovery observation was not accepted.')
         return str(data['result'])
 
+    def flight_report_request(
+        self, gallery_id: int, payload: dict[str, JsonValue] | None,
+        body: Iterable[bytes] | None, boundary: str | None,
+        content_length: int | None, *, watch_key: str | None = None,
+    ) -> dict[str, JsonValue]:
+        """Send one delegated PDF request through the existing upload grant.
+
+        Args:
+            gallery_id (int): Exact positive physical gallery identifier.
+            payload (dict[str, JsonValue] | None): Status action, report_id,
+                language and sha256; None for multipart upload.
+            body (Iterable[bytes] | None): One-shot PDF MIME body or None.
+            boundary (str | None): MIME boundary or None for status.
+            content_length (int | None): Exact MIME size or None for status.
+            watch_key (str | None): Captured supplemental Watcher credential.
+        Returns:
+            dict[str, JsonValue]: Same-gallery status or attachment envelope.
+        Raises:
+            LinkingError: Scope, input, target, request or response is invalid.
+        """
+        if not _native_media_id(gallery_id) or not self.can_upload():
+            raise LinkingError('Flight report upload access is unavailable.')
+        if payload is not None:
+            if body is not None or payload.get('action') != 'flight_report_status':
+                raise LinkingError('Invalid flight report request.')
+            encoded = json.dumps(
+                {**payload, 'gallery_id': gallery_id}, separators=(',', ':'),
+            ).encode('utf-8')
+            data = self._request(
+                'app_linking_inventory', body=encoded, watch_key=watch_key,
+            )
+            action = 'flight_report_status'
+        else:
+            if body is None or boundary is None or content_length is None:
+                raise LinkingError('Invalid flight report upload.')
+            data = self._request(
+                'app_linking_upload', body=body, multipart_boundary=boundary,
+                content_length=content_length, watch_key=watch_key,
+            )
+            action = 'flight_report'
+        if (data.get('ok') is not True or data.get('action') != action
+                or type(data.get('gallery_id')) is not int
+                or data['gallery_id'] != gallery_id):
+            raise LinkingError('Flight report target was not confirmed.')
+        return data
+
     def upload_multipart(
         self, gallery_id: int, body: Iterable[bytes], boundary: str,
         content_length: int, *, watch_key: str | None = None,

@@ -158,7 +158,10 @@ function view_render_gallery_pdf_documents(array $model): void
             . '-'
             . ($model['editor'] ? 'editor' : 'public');
         echo
-            '<tr><th scope="row" class="gallery-pdf-name"><a href="'
+            '<tr><th scope="row" class="gallery-pdf-name">'
+                . ($model['editor'] && $model['admin']
+                    ? '<div class="gallery-pdf-title" data-pdf-title>' : '')
+                . '<a data-pdf-title-link href="'
                 . e($document['view_url'])
                 . '" title="'
                 . e($document['title'])
@@ -167,6 +170,25 @@ function view_render_gallery_pdf_documents(array $model): void
                 . '">'
                 . e($document['title'])
                 . '</a>';
+        if ($model['editor'] && $model['admin']) {
+            $renameLabel = t('pdf.rename', 'Rename PDF');
+            echo '<form method="post" action="' . e($model['action_url'])
+                . '" data-pdf-title-form>' . $model['csrf_html']
+                . '<input type="hidden" name="id" value="' . (int) $model['gallery_id']
+                . '"><input type="hidden" name="document_id" value="' . e($document['id'])
+                . '"><input type="hidden" name="pdf_action" value="rename">'
+                . '<input type="hidden" name="expected_title" value="' . e($document['title'])
+                . '"><input type="hidden" name="pdf_ui_language" value="' . e($model['language'])
+                . '"><input data-pdf-title-input type="text" name="pdf_title" hidden required'
+                . ' value="' . e($document['title']) . '" aria-label="'
+                . e(t('pdf.title', 'Document title')) . '">'
+                . '<button type="button" class="gallery-pdf-icon" data-pdf-title-edit'
+                . ' title="' . e($renameLabel) . '" aria-label="' . e($renameLabel) . '">'
+                . view_gallery_pdf_icon('rename') . '</button>'
+                . '<output data-pdf-title-status role="status" aria-live="polite"></output>'
+                . '</form>';
+        }
+        if ($model['editor'] && $model['admin']) echo '</div>';
         if (!empty($document['hidden'])) {
             echo
                 '<small class="visually-hidden">'
@@ -174,9 +196,11 @@ function view_render_gallery_pdf_documents(array $model): void
                     . '</small>';
         }
         echo
-            '</th><td class="gallery-pdf-number">'
+            '</th><td class="gallery-pdf-number" data-label="'
+                . e(t('pdf.size', 'Size')) . '">'
                 . e(format_bytes($document['size']))
-                . '</td><td class="gallery-pdf-number">'
+                . '</td><td class="gallery-pdf-number" data-label="'
+                . e(t('pdf.pages', 'Pages')) . '">'
                 . '<span data-pdf-page-count data-pdf-url="'
                 . e($document['view_url'])
                 . '" data-pdf-version="'
@@ -455,12 +479,13 @@ function view_render_gallery_pdf_documents(array $model): void
 /**
  * Return a decorative text-sized SVG for one gallery PDF action.
  * @param string $action View, download, convert, upload, replace, cancel,
- *     delete, locked, show or hide action identifier.
+ *     delete, locked, show, hide or rename action identifier.
  * @return string Static SVG markup; accessible names belong to the enclosing control.
  */
 function view_gallery_pdf_icon(string $action): string
 {
     $path = match ($action) {
+        'rename' => '<path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14v6Z"/>',
         'upload' => '<path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5"/>',
         'replace'
             => '<path d="M4 10a8 8 0 0 1 14-4l2 2M20 3v5h-5M20 14a8 8 0 0 1-14 4l-2-2M4 21v-5h5"/>',

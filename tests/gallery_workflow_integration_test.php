@@ -1650,7 +1650,10 @@ try {
                 && $smartPdfXpath->query('//*[@data-pdf-page-total]')->length
                     === 1
                 && str_contains($smartPdfPage['body'], 'Stored attachment')
-                && str_contains($smartPdfPage['body'], 'SimBrief OFP'),
+                && $smartPdfXpath->query(
+                    '//section[@data-gallery-pdf-documents]//a[@data-pdf-title-link]'
+                        . '[normalize-space(.)="simbrief-ofp.pdf"]',
+                )->length === 1,
             'Pagination/filtering lost source PDF summaries or the OFP.',
         );
         foreach ($smartPdfXpath->query(

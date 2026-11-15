@@ -42,6 +42,76 @@ use function Gallery\Core\storage_observer_call;
 
 require_once __DIR__ . '/gallery_pdf_settings.php';
 
+/** Bound the trusted OFP manifest during reads and filename commits.
+ * Type: int. Units: bytes. Scope: one gallery OFP manifest.
+ * Consumers: simbrief_ofp_local_pdf_path and simbrief_ofp_rename_pdf.
+ * Rationale: 32 KiB retains the existing manifest reader's maximum.
+ */
+const SIMBRIEF_OFP_MANIFEST_MAX_BYTES = 32768;
+
+/** Rename a registered OFP original and its manifest under source ownership.
+ * @param array{id:int,folder_path:string} $gallery Authorized physical gallery.
+ * @param string $filename Validated requested portable PDF basename.
+ * @param string|null $expectedTitle Previously displayed disk name, or null for an internal caller.
+ * @return bool True after disk and manifest agree; false when no valid OFP exists.
+ * @throws \RuntimeException When the source, target, locks or manifest cannot be safely committed.
+ */
+function simbrief_ofp_rename_pdf(array $gallery, string $filename, ?string $expectedTitle = null): bool
+{
+    $filename = gallery_pdf_filename_for_title($filename);
+    $root = gallery_pdf_documents_gallery_directory($gallery);
+    if ($root === null) return false;
+    $usageLock = gallery_pdf_documents_usage_source_lock($gallery);
+    $stage = '';
+    $source = '';
+    $target = '';
+    $moved = false;
+    $committed = false;
+    try {
+        $source = simbrief_ofp_local_pdf_path($gallery) ?? '';
+        if ($source === '') return false;
+        if ($expectedTitle !== null && $expectedTitle !== basename($source))
+            throw new \RuntimeException('The PDF filename changed. Reload the document list.');
+        $target = $root . DIRECTORY_SEPARATOR . $filename;
+        if ($source === $target) return true;
+        if (file_exists($target) || is_link($target))
+            throw new \RuntimeException('A file with that name already exists.');
+        $manifestPath = $root . '/simbrief-ofp-manifest.json';
+        if (is_link($manifestPath)) throw new \RuntimeException('OFP manifest is unsafe.');
+        $manifest = simbrief_ofp_gallery_manifest($gallery);
+        if (($manifest['ofp_pdf_file'] ?? '') !== basename($source))
+            throw new \RuntimeException('The registered OFP filename could not be verified.');
+        $manifest['ofp_pdf_file'] = $filename;
+        $json = json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if (!is_string($json) || strlen($json) + 1 > SIMBRIEF_OFP_MANIFEST_MAX_BYTES)
+            throw new \RuntimeException('OFP manifest exceeds its storage limit.');
+        $stage = tempnam($root, '.ofp-rename-');
+        if (!is_string($stage) || dirname($stage) !== $root)
+            throw new \RuntimeException('OFP filename change could not be staged.');
+        if (file_put_contents($stage, $json . "\n", LOCK_EX) !== strlen($json) + 1)
+            throw new \RuntimeException('OFP filename change could not be staged.');
+        $revision = gallery_pdf_documents_usage_begin($gallery, 'simbrief_ofp_rename');
+        if (!@rename($source, $target))
+            throw new \RuntimeException('The OFP file could not be renamed.');
+        $moved = true;
+        if (!@rename($stage, $manifestPath))
+            throw new \RuntimeException('The OFP filename could not be committed.');
+        $stage = '';
+        $committed = true;
+        $index = gallery_pdf_documents_read_index_state($root);
+        gallery_pdf_documents_usage_publish(
+            $gallery, $revision, $index['documents'], $index['ofp_hidden'], $manifest,
+        );
+        return true;
+    } finally {
+        if ($moved && !$committed && $source !== '' && $target !== ''
+            && !file_exists($source) && is_file($target)) @rename($target, $source);
+        if (is_string($stage) && $stage !== '' && is_file($stage)) @unlink($stage);
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
+    }
+}
+
 /**
  * Detect gallery-owned document metadata before loading its presentation module.
  *
@@ -140,7 +210,7 @@ function simbrief_ofp_local_pdf_path(array $gallery): ?string
         ))
         || (int) storage_observer_call('fs.filesize', static fn(): int|false => filesize(
             $manifestPath,
-        )) > 32768
+        )) > SIMBRIEF_OFP_MANIFEST_MAX_BYTES
     ) {
         return null;
     }
@@ -153,11 +223,12 @@ function simbrief_ofp_local_pdf_path(array $gallery): ?string
         !is_array($manifest)
         || ($manifest['format'] ?? '')
             !== 'php_gallery_simbrief_ofp_manifest_v1'
-        || ($manifest['ofp_pdf_file'] ?? '') !== 'simbrief-ofp.pdf'
+        || !is_string($manifest['ofp_pdf_file'] ?? null)
+        || !gallery_pdf_filename_valid($manifest['ofp_pdf_file'])
     ) {
         return null;
     }
-    $candidate = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
+    $candidate = $root . DIRECTORY_SEPARATOR . $manifest['ofp_pdf_file'];
     if (
         !storage_observer_call('fs.is_file', static fn(): bool => is_file(
             $candidate,
@@ -634,7 +705,10 @@ function simbrief_ofp_attach_manual_pdf(
         if (!flock($lock, LOCK_EX)) {
             throw new \RuntimeException('OFP attachment storage is busy.');
         }
-        $pdf = $root . '/simbrief-ofp.pdf';
+        $registeredName = simbrief_ofp_gallery_manifest($gallery)['ofp_pdf_file'] ?? '';
+        $pdfName = is_string($registeredName) && gallery_pdf_filename_valid($registeredName)
+            ? $registeredName : 'simbrief-ofp.pdf';
+        $pdf = $root . DIRECTORY_SEPARATOR . $pdfName;
         $manifestPath = $root . '/simbrief-ofp-manifest.json';
         if (is_link($pdf) || is_link($manifestPath)) {
             throw new \RuntimeException('OFP attachment storage is unsafe.');
@@ -662,7 +736,7 @@ function simbrief_ofp_attach_manual_pdf(
         if ($manifest === []) {
             $manifest = ['format' => 'php_gallery_simbrief_ofp_manifest_v1'];
         }
-        $manifest['ofp_pdf_file'] = 'simbrief-ofp.pdf';
+        $manifest['ofp_pdf_file'] = basename($pdf);
         $manifest['ofp_pdf_url'] = '';
         $manifest['pdf_provenance'] = $provenance;
         $manifest['pdf_attached_at'] = gmdate('Y-m-d\TH:i:s\Z');
@@ -851,7 +925,10 @@ function simbrief_ofp_delete_manual_pdf(
         if (!flock($lock, LOCK_EX)) {
             throw new \RuntimeException('OFP attachment storage is busy.');
         }
-        $pdf = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
+        $registeredName = simbrief_ofp_gallery_manifest($gallery)['ofp_pdf_file'] ?? '';
+        $pdfName = is_string($registeredName) && gallery_pdf_filename_valid($registeredName)
+            ? $registeredName : 'simbrief-ofp.pdf';
+        $pdf = $root . DIRECTORY_SEPARATOR . $pdfName;
         $manifestPath =
             $root . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
         if (is_link($pdf) || is_link($manifestPath)) {
@@ -871,7 +948,7 @@ function simbrief_ofp_delete_manual_pdf(
                 'The existing OFP manifest is invalid and was preserved.',
             );
         }
-        if (($manifest['ofp_pdf_file'] ?? '') !== 'simbrief-ofp.pdf') {
+        if (($manifest['ofp_pdf_file'] ?? '') !== basename($pdf)) {
             throw new \RuntimeException(
                 'The PDF attachment is not registered in the OFP manifest.',
             );

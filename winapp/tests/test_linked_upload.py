@@ -16,20 +16,82 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 
 WINAPP_DIR = Path(__file__).resolve().parents[1]
 if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
-from uploader.app_linking import LinkingError
+from uploader.app_linking import LinkingError, LinkingSession
+from uploader.flight_delivery import deliver_report, FlightDeliveryError
 from uploader.linked_upload import (
-    LinkedMultipart, LinkedTargetLease, capture_linked_source,
+    LinkedMultipart, LinkedTargetLease, LinkedUploadTarget, capture_linked_source,
     delete_verified_linked_source, verify_linked_source,
 )
 
 
 class LinkedUploadTests(unittest.TestCase):
     """Exercise one-shot transfer and cooperative cross-process ownership."""
+
+    def test_linked_reports_reconcile_and_stream_only_to_the_captured_gallery(self) -> None:
+        """Use the existing receipt owner with delegated rather than legacy keys.
+
+        Returns:
+            None: Verifies status-before-upload, exact PDF MIME bytes, target
+                binding, one-shot replay refusal and same-gallery receipts.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            pdf = Path(temporary) / 'flight.pdf'
+            content = b'%PDF-1.4\nsynthetic flight report\n%%EOF\n'
+            pdf.write_bytes(content)
+            digest = hashlib.sha256(content).hexdigest()
+            session = LinkingSession.__new__(LinkingSession)
+            session.can_upload = Mock(return_value=True)
+            session.matches_issuer = Mock(return_value=True)
+            session._request = Mock(side_effect=[
+                {'ok': True, 'action': 'flight_report_status', 'gallery_id': 7,
+                 'found': False, 'conflict': False, 'report': None},
+                {'ok': True, 'action': 'flight_report', 'gallery_id': 7,
+                 'found': True, 'conflict': False, 'report': {
+                     'id': 'a' * 32, 'sha256': digest, 'size': len(content),
+                     'filename': 'flight-report.pdf',
+                 }},
+            ])
+            target = LinkedUploadTarget(session, 'https://gallery.test', 1, 7, 'Fixture')
+            receipt = deliver_report('', '', pdf, 'session', 'en', 'revision',
+                                     request=target.report_request)
+            self.assertEqual(digest, receipt['sha256'])
+            status, upload = session._request.call_args_list
+            self.assertEqual('app_linking_inventory', status.args[0])
+            self.assertIn(b'"gallery_id":7', status.kwargs['body'])
+            self.assertEqual('app_linking_upload', upload.args[0])
+            body = upload.kwargs['body']
+            wire = b''.join(body)
+            self.assertEqual(len(wire), upload.kwargs['content_length'])
+            self.assertIn(content, wire)
+            self.assertIn(b'name="report"', wire)
+            self.assertNotIn(b'name="images[]"', wire)
+            with self.assertRaises(LinkingError):
+                b''.join(body)
+            with self.assertRaises(FlightDeliveryError):
+                target.report_request('https://legacy.test', 'legacy-secret')
+            self.assertEqual(2, session._request.call_count)
+
+    def test_linked_report_receipt_from_another_gallery_is_rejected(self) -> None:
+        """Refuse a mismatched target even when its report envelope looks valid.
+
+        Returns:
+            None: A foreign-gallery acknowledgement never authorizes completion.
+        """
+        session = LinkingSession.__new__(LinkingSession)
+        session.can_upload = Mock(return_value=True)
+        session._request = Mock(return_value={
+            'ok': True, 'action': 'flight_report_status', 'gallery_id': 8,
+        })
+        with self.assertRaises(LinkingError):
+            session.flight_report_request(
+                7, {'action': 'flight_report_status'}, None, None, None,
+            )
 
     def test_linked_source_rejects_replacement_or_changed_bytes(self) -> None:
         """Recheck one captured source before a linked duplicate skip.

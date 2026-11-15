@@ -4,13 +4,48 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: app/services/gallery_pdf_settings.php
  * Module Type: Service
- * Purpose: Own PDF conversion settings and durable attachment accounting.
- * Responsibilities: Validate DPI, publish category totals and invalidate snapshots.
+ * Purpose: Own PDF filename policy, conversion settings and attachment accounting.
+ * Responsibilities: Validate names/DPI, publish totals and invalidate snapshots.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
 declare(strict_types=1);
 namespace Gallery\Services;
+
+/** Bound portable PDF basenames used by attachment metadata and disk storage.
+ * Type: int. Units: UTF-8 bytes. Scope: one PDF basename including its extension.
+ * Consumers: gallery_pdf_filename_valid and gallery_pdf_filename_for_title.
+ * Rationale: 240 bytes preserves the existing attachment filename bound.
+ */
+const GALLERY_PDF_FILENAME_MAX_BYTES = 240;
+
+/** Validate a direct portable PDF filename without admitting a path or device.
+ * @param string $filename Candidate physical basename, including the PDF extension.
+ * @return bool True for one non-hidden portable PDF basename; false for unsafe input.
+ */
+function gallery_pdf_filename_valid(string $filename): bool
+{
+    return $filename !== '' && strlen($filename) <= GALLERY_PDF_FILENAME_MAX_BYTES
+        && $filename === trim($filename) && !str_starts_with($filename, '.')
+        && preg_match('/[\x00-\x1F\x7F<>:"\/\\\\|?*]/u', $filename) === 0
+        && preg_match('/\A(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i', $filename) !== 1
+        && preg_match('/\.pdf\z/iD', $filename) === 1;
+}
+
+/** Normalize an inline PDF rename into its actual portable disk basename.
+ * @param string $title Requested name, with an optional PDF extension.
+ * @return string Valid basename with a PDF extension, also used for display/download.
+ * @throws \RuntimeException When the name is empty, unsafe or outside the byte bound.
+ */
+function gallery_pdf_filename_for_title(string $title): string
+{
+    $filename = trim($title);
+    if (preg_match('/\.pdf\z/iD', $filename) !== 1) $filename .= '.pdf';
+    if (!gallery_pdf_filename_valid($filename)) {
+        throw new \RuntimeException('Choose a PDF filename without path separators or reserved characters (up to 240 UTF-8 bytes).');
+    }
+    return $filename;
+}
 
 if (!function_exists(
     'Gallery\\Models\\gallery_attachment_storage_model_store',

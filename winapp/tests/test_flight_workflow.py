@@ -450,6 +450,37 @@ class FlightWorkflowTests(unittest.TestCase):
             revoke.assert_called_once_with()
             self.assertEqual("saving_key", worker.snapshot().phase)
 
+    def test_linked_finish_requires_durable_report_receipts(self) -> None:
+        """Deliver a linked flight through its captured target and retain failures.
+
+        Returns:
+            None: Both editions persist receipts on success; a failed upload
+                leaves the plan pending without using legacy credentials.
+        """
+        for failure in (False, True):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temporary:
+                plan = self._plan(Path(temporary) / 'linked')
+                delivery, report = self._report_modules()
+                target = SimpleNamespace(binding=lambda: plan.binding, report_request=Mock())
+                if failure:
+                    delivery.deliver_report.side_effect = RuntimeError('Linked upload failed')
+                worker = workflow.FinalizationWorker(
+                    [plan], '', '', lambda cancel, deadline: None, Mock(), False,
+                    linked_target=target,
+                )
+                with patch.object(workflow, 'analyze_session', return_value=self._analysis()), \
+                        patch.dict('sys.modules', {
+                            'uploader.flight_delivery': delivery,
+                            'uploader.flight_report': report,
+                        }):
+                    worker.run()
+                delivery.check_report_capability.assert_not_called()
+                self.assertIs(delivery.deliver_report.call_args.kwargs['request'], target.report_request)
+                self.assertEqual(not failure, SessionPlan.load(plan.directory).completed)
+                self.assertEqual('error' if failure else 'completed', worker.snapshot().phase)
+                if failure:
+                    self.assertEqual({}, SessionPlan.load(plan.directory).receipts)
+
     def test_local_only_report_skips_server_digest_policy(self) -> None:
         """Keep local finalization independent of server PDF upload limits.
 

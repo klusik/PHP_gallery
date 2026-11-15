@@ -170,14 +170,19 @@ function admin_edit_gallery_simbrief_legacy_panel_html(array $gallery): string
     }
     require_once __DIR__ . '/../../services/simbrief_ofp_attachments.php';
     $root = \Gallery\Services\simbrief_ofp_gallery_directory($gallery);
-    $hasPdf = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery) !== null;
+    $pdfPath = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
+    $hasPdf = $pdfPath !== null;
+    $manifest = \Gallery\Services\simbrief_ofp_gallery_manifest($gallery);
+    $registeredName = $manifest['ofp_pdf_file'] ?? '';
+    $registeredName = is_string($registeredName)
+        && \Gallery\Services\gallery_pdf_filename_valid($registeredName)
+        ? $registeredName : 'simbrief-ofp.pdf';
     $occupied =
         $root !== null
         && (
-            file_exists($root . '/simbrief-ofp.pdf')
-            || is_link($root . '/simbrief-ofp.pdf')
+            file_exists($root . '/' . $registeredName)
+            || is_link($root . '/' . $registeredName)
         );
-    $manifest = \Gallery\Services\simbrief_ofp_gallery_manifest($gallery);
     $flightMap = null;
     if (
         feature_capability_effective_enabled('flight_maps')
@@ -205,6 +210,7 @@ function admin_edit_gallery_simbrief_legacy_panel_html(array $gallery): string
             'download' => 1,
         ]),
         'has_pdf' => $hasPdf,
+        'pdf_filename' => $pdfPath !== null ? basename($pdfPath) : 'simbrief-ofp.pdf',
         'occupied' => $occupied,
         'provenance' => (string) (
             $manifest['pdf_provenance']

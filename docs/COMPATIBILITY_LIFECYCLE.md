@@ -1,5 +1,39 @@
 # Compatibility lifecycle and retirement register
 
+## Linked flight report delivery and document titles
+
+Owners: delegated upload controller, existing PDF attachment service and WinApp
+flight finalization. On 2026-11-15 the Palermo–Prague session retained all four
+PDFs locally but had `local_only=true` and no receipts. Its legacy UI still
+displayed an uploading phase; this was not evidence of a server request.
+New linked sessions require same-gallery PDF receipts through the existing
+upload grant. Read-only links and saved legacy keys cannot grant that authority.
+The target is reauthorized under the gallery lock. Lost replies use the shared
+report identity/checksum reconciliation rather than blind upload replay.
+
+Older servers reject delegated report actions visibly and preserve pending
+files. Previously completed/explicitly local plans are not retrospectively
+uploaded. This permanent compatibility protects deliberate local retention;
+an installed-client/server upgrade and a fresh real-flight acceptance remain
+unverified until deployment. The user is manually attaching the incident PDFs.
+
+PDF rename is disk-first: it moves the actual original, updates its index or
+OFP manifest and uses that same basename for display, download and ZIP export.
+IDs, bytes, provenance and visibility remain intact. Portable filename and
+collision checks refuse overwrites; expected-title comparison refuses stale
+edits. A failed index/manifest commit restores the prior disk name. A lost
+Admin response retains the draft and requires passive reload.
+
+The existing v1 manual index adds `storage_filename` after an explicit rename.
+Absent values permanently retain the historical `<id>.pdf` layout; there is no
+automatic filesystem migration. Reads, replacement, deletion and storage counts
+resolve both layouts through the existing owner. Named OFPs use the existing
+`ofp_pdf_file` manifest field; the reader validates a direct portable PDF
+basename instead of assuming `simbrief-ofp.pdf`. Regeneration preserves that
+name. Named records require the current server readers; older-server downgrade
+and power-loss interruption remain unqualified. Normal source tests do not
+establish installed adoption or production acceptance.
+
 ## Native gallery metadata consent and local order
 
 Owners: linked-client scope registration, native media authorization and the

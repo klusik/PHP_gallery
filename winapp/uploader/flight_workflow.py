@@ -30,6 +30,7 @@ from uploader.flight_jobs import (
 from uploader.models import JsonValue
 from uploader.mode_coordinator import CoordinatedWork, GuiModeOwner, ModeConfigPort
 from uploader.state_store import atomic_write_json
+from uploader.linked_upload import LinkedUploadTarget
 
 # Let graceful requests finish while retaining state on slow/disconnected hosts.
 # Type: float; Units: seconds; Scope: one finalization operation.
@@ -79,6 +80,7 @@ class FinalizationWorker(threading.Thread):
         require_gui_admission: bool = False,
         abandon_local: bool = False,
         config_generation: object | None = None,
+        linked_target: LinkedUploadTarget | None = None,
     ) -> None:
         """Capture connection-bound finalization or one independent local source.
 
@@ -117,6 +119,9 @@ class FinalizationWorker(threading.Thread):
                 with no inspected attributes; compare object identity only.
                 Captured on Tk for exact post-revocation cleanup, or None for
                 non-GUI workers and operations without key cleanup.
+            linked_target (LinkedUploadTarget | None): Captured upload-scoped
+                account/gallery target for linked PDF delivery; None uses the
+                established legacy or explicitly local workflow.
 
         Returns:
             None: Initializes an idle, cancellable finalization thread.
@@ -136,6 +141,12 @@ class FinalizationWorker(threading.Thread):
         self._revocation_cleanup_pending = False
         self.server_revocation_confirmed = False
         self.config_generation = config_generation
+        self.linked_target = linked_target
+        if linked_target is not None and (
+            upload_url or api_key or gui_admission is not None or wants_revoke
+            or any(plan.binding != linked_target.binding() for plan in plans)
+        ):
+            raise ValueError('Linked reports require the original captured gallery.')
         self.wait_for_workers = wait_for_workers
         self.revoke = revoke
         self.wants_revoke = wants_revoke
@@ -459,13 +470,16 @@ class FinalizationWorker(threading.Thread):
 
         Returns:
             dict[str, Callable[[], None]]: The before_request callback, or an
-                empty mapping for established non-GUI callers.
+                empty mapping for established non-GUI callers. Linked work uses
+                cancellation while its captured session checks live authority.
 
         Raises:
             RuntimeError: A required GUI work lifetime was not admitted.
         """
         if self._gui_work is not None:
             return {'before_request': self._gui_work.checkpoint}
+        if self.linked_target is not None:
+            return {'before_request': self.check_cancelled}
         if self.require_gui_admission:
             raise RuntimeError('Flight report connection could not be verified.')
         return {}
@@ -738,9 +752,10 @@ class FinalizationWorker(threading.Thread):
         from uploader.flight_report import (
             REPORT_TEMPLATE_VERSION,
         )
-        if not plan.local_only and not check_report_capability(
+        if (not plan.local_only and self.linked_target is None
+                and not check_report_capability(
             self.upload_url, self.api_key, **self._request_options(),
-        ):
+        )):
             raise RuntimeError(
                 "Gallery does not support flight_reports_v1. Update the gallery "
                 "or explicitly keep this session locally before revoking."
@@ -781,6 +796,8 @@ class FinalizationWorker(threading.Thread):
                         revision,
                         self.transfer_progress,
                         expected_sha256=checksum,
+                        **({'request': self.linked_target.report_request}
+                           if self.linked_target is not None else {}),
                         **self._request_options(),
                     )
                     if (receipt.get("sha256") != checksum

@@ -52,6 +52,8 @@ return [
         // a separate music root would exceed the consumed module allowance.
         // Music-tag titles and Trash catalog snapshots load it only on demand.
         'gallery-pdf-documents' => [
+            'Gallery\\Services\\upload_flight_report_status',
+            'Gallery\\Services\\upload_flight_report_attach',
             'Gallery\\Services\\find_gallery_by_public_path',
             'Gallery\\Services\\resolve_public_gallery_path',
             'Gallery\\Services\\simbrief_ofp_local_pdf_path',
@@ -316,6 +318,20 @@ return [
     // Injected loaders execute before deferred worker calls. Guarded diagnostics
     // hooks are supplied by the opt-in request-diagnostics lifecycle module.
     'deferred_calls' => [
+        // Both authenticated transports load the existing attachment owner.
+        // This moves the report service into that owner without adding a module
+        // or eagerly loading PDF storage for account/ordinary photo requests.
+        'Gallery\\Controllers\\app_linking_handle_flight_report' => [
+            'Gallery\\Core\\cms_runtime_kernel',
+            'Gallery\\Services\\upload_flight_report_status',
+            'Gallery\\Services\\upload_flight_report_attach',
+        ],
+        'Gallery\\Controllers\\upload_automation_handle_flight_report_status' => [
+            'Gallery\\Services\\upload_flight_report_status',
+        ],
+        'Gallery\\Controllers\\upload_automation_handle_flight_report_upload' => [
+            'Gallery\\Services\\upload_flight_report_attach',
+        ],
         'Gallery\\Controllers\\cms_app_linking_discovery' => [
             'Gallery\\Core\\cms_runtime_kernel',
             'Gallery\\Controllers\\app_linking_discovery_model',
@@ -532,6 +548,13 @@ return [
         'Gallery\\Services\\upload_flight_report_attach' => [
             'Gallery\\Services\\gallery_pdf_documents_validate_pdf_source',
             'Gallery\\Services\\gallery_pdf_documents_attach',
+        ],
+        // The OFP reader's file explicitly requires gallery_pdf_settings.php
+        // before declaring this function, including for standalone consumers.
+        // Its portable filename policy therefore needs no additional public
+        // route-plan ownership or eager attachment-module load.
+        'Gallery\\Services\\simbrief_ofp_local_pdf_path' => [
+            'Gallery\\Services\\gallery_pdf_filename_valid',
         ],
         // Reserved PDF children and attached documents load these modules before use.
         'Gallery\\Services\\gallery_effective_visibility' => [

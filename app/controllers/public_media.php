@@ -926,6 +926,7 @@ function cms_gallery_ofp_pdf(): void
         }
     } else {
         $path = \Gallery\Services\simbrief_ofp_local_pdf_path($gallery);
+        if ($path !== null) $filename = basename($path);
         if (
             \Gallery\Services\gallery_pdf_documents_hidden($gallery, 'ofp')
             && !$isAdmin

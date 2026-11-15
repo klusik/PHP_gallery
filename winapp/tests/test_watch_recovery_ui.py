@@ -34,6 +34,7 @@ from types import SimpleNamespace
 from PIL import Image, ImageGrab
 from uploader.watch_recovery_ui import WatchRecoveryReviewDialog
 from uploader.flight_ui import FlightUI
+from uploader.flight_workflow import FlightProgress
 from uploader.watch_queue import observe_watch_source
 from uploader.ui_theme import configure_theme
 
@@ -305,7 +306,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             coordinator = FakeCoordinator(make_snapshot(source))
             dialog = WatchRecoveryReviewDialog(
                 root, coordinator, "en", "Gallery 021")
-            dialog.window.geometry("740x520+30+30")
+            dialog.window.winfo_toplevel().geometry("740x520+30+30")
             root.update()
             deadline = time.time() + UI_ASYNC_WAIT_SECONDS
             while not hasattr(dialog.local_image, "image") and time.time() < deadline:
@@ -321,10 +322,10 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                 time.sleep(UI_POLL_INTERVAL_SECONDS)
             self.assertEqual(1, coordinator.skips)
             coordinator.skips = 0
-            dialog.window.geometry("390x560+30+30")
+            dialog.window.winfo_toplevel().geometry("390x560+30+30")
             root.update()
             deadline = time.time() + NARROW_RESIZE_WAIT_SECONDS
-            while dialog.window.winfo_width() < 390 and time.time() < deadline:
+            while root.winfo_width() < 390 and time.time() < deadline:
                 root.update()
                 time.sleep(UI_POLL_INTERVAL_SECONDS)
             self.capture(dialog, "narrow.png")
@@ -433,7 +434,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             prior_preview.join(UI_ASYNC_WAIT_SECONDS)
             self.assertFalse(prior_preview.is_alive())
             dialog.poll_worker_results()
-            dialog.window.geometry("740x600+30+30")
+            dialog.window.winfo_toplevel().geometry("740x600+30+30")
             root.update()
             self.capture(dialog, "prior-desktop.png")
             prior_status = dialog.status.get()
@@ -444,7 +445,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             self.assertIn("target-021", prior_status)
             self.assertNotIn(dialog.confirm_button, dialog.visible_action_buttons)
             self.assertNotIn(dialog.skip_button, dialog.visible_action_buttons)
-            dialog.window.geometry("390x650+30+30")
+            dialog.window.winfo_toplevel().geometry("390x650+30+30")
             root.update()
             self.capture(dialog, "prior-narrow.png")
             self.assert_actions_inside(dialog)
@@ -481,12 +482,12 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                 dialog.status.get(),
             )
             self.assertIn("Retry scheduled after a rate limit.", dialog.status.get())
-            dialog.window.geometry("740x600+30+30")
+            dialog.window.winfo_toplevel().geometry("740x600+30+30")
             root.update()
             self.capture(dialog, "retained-desktop.png")
             self.assertIn(dialog.resume_button, dialog.visible_action_buttons)
             self.assertNotIn(dialog.skip_button, dialog.visible_action_buttons)
-            dialog.window.geometry("390x650+30+30")
+            dialog.window.winfo_toplevel().geometry("390x650+30+30")
             root.update()
             self.capture(dialog, "retained-narrow.png")
             self.assert_actions_inside(dialog)
@@ -543,14 +544,22 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         root.title("Force Finish progress fixture")
         configure_theme(root)
         force_callbacks: list[Callable[[str], None]] = []
+        progress = FlightProgress(
+            phase='draining', detail='0 pending · final scan in progress',
+            done=2, total=10, render_session='fixture-flight',
+            rendering_languages=('en', 'cs', 'de', 'sv'),
+        )
         operation = SimpleNamespace(
             saved_upload=False,
+            local_reports=False,
             abandonment=False,
-            plans=[],
+            plans=[SimpleNamespace(
+                session_id='fixture-flight', reports_enabled=True,
+                languages=('en', 'cs', 'de', 'sv'), receipts={},
+                completed=False, local_only=False,
+            )],
             cancel=threading.Event(),
-            snapshot=lambda: SimpleNamespace(
-                phase="draining", detail="0 pending · final scan in progress",
-            ),
+            snapshot=lambda: progress,
         )
         host = SimpleNamespace(
             root=root,
@@ -561,6 +570,8 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             ),
             reconnect_upload_gallery=lambda: None,
             force_finish_flight=lambda on_result: force_callbacks.append(on_result) or True,
+            open_watch_recovery_review=lambda: None,
+            stop_and_keep_watch_pending=lambda on_persisted: False,
         )
         ui = FlightUI.__new__(FlightUI)
         ui.host = host
@@ -601,10 +612,10 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ui.show_progress()
         window = ui.dialog
         self.assertIsNotNone(window)
-        window.geometry("900x650+10+10")
+        window.winfo_toplevel().geometry("900x650+10+10")
         root.update()
         self.assertTrue(ui.progress_buttons["force_finish"].winfo_ismapped())
-        self.assertFalse(ui.task_tree.winfo_manager())
+        self.assertFalse(ui.task_frame.winfo_manager())
         self.assertEqual(tr("en", "phase_draining"), ui.phase_var.get())
         self.assertEqual(tr("en", "hide"), ui.progress_buttons["hide"].cget("text"))
         self.assertEqual(
@@ -614,7 +625,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         self.assert_progress_controls_inside(window, ui)
         self.capture_force_finish_window(window, ui, "force-finish-desktop.png")
 
-        window.geometry("390x560+10+10")
+        window.winfo_toplevel().geometry("390x560+10+10")
         root.update()
         self.assertTrue(ui.progress_buttons["force_finish"].winfo_ismapped())
         self.assertLessEqual(
@@ -638,6 +649,44 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ui.refresh_progress_actions()
         root.update()
         self.capture_force_finish_window(window, ui, "force-finish-narrow.png")
+        self.assertFalse(any(isinstance(child, tk.Toplevel) for child in root.winfo_children()))
+        progress.phase = 'generating'
+        ui.phase_var.set(tr('en', 'phase_generating'))
+        ui.bar['value'] = progress.done * 100 / progress.total
+        ui.activity_bar.start()
+        ui.detail_var.set('EN, CS, DE, SV (2/10)')
+        ui.time_var.set('Elapsed time: 27s · Time in this phase: 3s · Estimating…')
+        ui.refresh_tasks()
+        root.update()
+        self.assertEqual(4, len(ui.task_tree.get_children()))
+        self.assertTrue(ui.task_tree.winfo_ismapped())
+        self.assert_progress_controls_inside(window, ui)
+        last_row = ui.task_tree.bbox(ui.task_tree.get_children()[-1])
+        self.assertTrue(last_row, 'The last report edition must remain visible.')
+        self.assertLessEqual(last_row[1] + last_row[3], ui.task_tree.winfo_height())
+        self.capture_force_finish_window(window, ui, 'finish-reports-narrow.png')
+        window.winfo_toplevel().geometry('900x650+10+10')
+        root.update()
+        self.capture_force_finish_window(window, ui, 'finish-reports-desktop.png')
+        progress.phase = 'completed'
+        progress.done = progress.total
+        operation.plans[0].completed = True
+        operation.plans[0].receipts = {code: 'fixture-digest' for code in ('en', 'cs', 'de', 'sv')}
+        ui.phase_var.set(tr('en', 'phase_completed'))
+        ui.bar['value'] = 100
+        ui.activity_bar.stop()
+        ui.activity_bar.grid_remove()
+        ui.refresh_tasks()
+        ui.refresh_progress_actions()
+        ui.refresh_autoclose()
+        root.update()
+        self.assertIn('3', ui.completion_var.get())
+        self.assertTrue(ui.autoclose_frame.winfo_ismapped())
+        self.capture_force_finish_window(window, ui, 'finish-completed-countdown.png')
+        ui.keep_progress_open()
+        self.assertFalse(ui.autoclose_frame.winfo_manager())
+        progress.phase = 'draining'
+        ui.refresh_progress_actions()
         ui.progress_buttons["force_finish"].invoke()
         self.assertEqual(1, len(force_callbacks))
         self.assertTrue(ui._force_finish_pending)
@@ -678,6 +727,9 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ui.automatic_operation = None
         ui.progress_actions = None
         ui.task_tree = None
+        ui.task_frame = None
+        ui.autoclose_frame = None
+        ui.completion_var = None
         ui.progress_detail_label = None
         ui.bar = None
         ui.activity_bar = None
@@ -698,12 +750,12 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         root.destroy()
 
     def assert_progress_controls_inside(
-        self, window: tk.Toplevel, ui: FlightUI,
+        self, window: tk.Misc, ui: FlightUI,
     ) -> None:
         """Keep every currently visible action within its progress toplevel.
 
         Args:
-            window (tk.Toplevel): Native progress window whose bounds are tested.
+            window (tk.Misc): Native progress window whose bounds are tested.
             ui (FlightUI): Progress owner with the rendered action controls.
         Returns:
             None: Fails if a visible action is clipped by the current geometry.
@@ -712,33 +764,37 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         top = window.winfo_rooty()
         right = left + window.winfo_width()
         bottom = top + window.winfo_height()
-        for label in ("force_finish", "hide"):
-            button = ui.progress_buttons[label]
-            self.assertTrue(button.winfo_ismapped(), label)
+        labels = ('hide',) if ui.operation.snapshot().phase == 'completed' else ('force_finish', 'hide')
+        for label in labels:
+            self.assertTrue(ui.progress_buttons[label].winfo_ismapped(), label)
+        for label, button in ui.progress_buttons.items():
+            if not button.winfo_ismapped():
+                continue
             self.assertGreaterEqual(button.winfo_rootx(), left)
             self.assertGreaterEqual(button.winfo_rooty(), top)
             self.assertLessEqual(button.winfo_rootx() + button.winfo_width(), right)
             self.assertLessEqual(button.winfo_rooty() + button.winfo_height(), bottom)
+            self.assertGreaterEqual(button.winfo_width(), button.winfo_reqwidth(), label)
 
     def capture_force_finish_window(
-        self, window: tk.Toplevel, ui: FlightUI, filename: str,
+        self, window: tk.Misc, ui: FlightUI, filename: str,
     ) -> None:
         """Capture a visible progress window directly by its native HWND.
 
         Args:
-            window (tk.Toplevel): Actual FlightUI progress to capture.
+            window (tk.Misc): Actual FlightUI progress to capture.
             ui (FlightUI): Progress owner whose Force finish control is checked.
             filename (str): PNG artifact name in the hosted QA directory.
         Returns:
             None: Saves the rendered window when screenshot evidence is enabled.
         """
         window.deiconify()
-        window.attributes("-topmost", True)
+        window.winfo_toplevel().attributes("-topmost", True)
         window.lift()
         window.focus_force()
         window.update()
         window.update_idletasks()
-        button = ui.progress_buttons["force_finish"]
+        button = ui.progress_buttons["hide"]
         self.assertTrue(button.winfo_ismapped())
         self.assertGreater(button.winfo_width(), 0)
         self.assertGreater(button.winfo_height(), 0)
@@ -892,7 +948,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         destination.mkdir(parents=True, exist_ok=True)
         window = dialog.window
         window.deiconify()
-        window.attributes("-topmost", True)
+        window.winfo_toplevel().attributes("-topmost", True)
         window.lift()
         window.focus_force()
         window.update()
@@ -924,7 +980,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                     x, y, x + window.winfo_width(), y + window.winfo_height(),
                 ))
         finally:
-            window.attributes("-topmost", False)
+            window.winfo_toplevel().attributes("-topmost", False)
         self.assertGreater(image.width, 0)
         self.assertGreater(image.height, 0)
         colors = image.convert("RGB").getdata()
@@ -950,11 +1006,11 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ), "Captured window image has no recovery preview marker.")
         image.save(destination / filename)
 
-    def native_capture_handle(self, window: tk.Toplevel) -> int:
+    def native_capture_handle(self, window: tk.Misc) -> int:
         """Resolve and validate the actual top-level Windows window handle.
 
         Args:
-            window (tk.Toplevel): Native recovery dialog to capture.
+            window (tk.Misc): Native recovery dialog to capture.
         Returns:
             int: Valid top-level HWND accepted by Pillow ImageGrab.
         Raises:

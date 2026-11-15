@@ -1,5 +1,109 @@
 # Patch notes
 
+## Version 1.2.5
+
+Improved flight completion in the Windows companion and fixed automatic
+delivery of generated flight reports through a linked account. Added inline
+PDF renaming that updates the original file on disk, including legacy OFP
+attachments. The independent WinApp version advanced to 1.2.3.
+
+### Highlights
+
+#### Flight completion overlays
+
+- Replaced flight progress, report, settings and pending-upload review popups
+  with panels contained in the existing application window. Added responsive
+  action rows, wrapped details and scrollable report or recovery evidence.
+- Added a three-second countdown after successful completion and a Keep open
+  action. Kept failures and cancellation available for explicit recovery.
+
+#### Automatic flight report delivery
+
+- Fixed newly captured linked-account flights retaining their generated PDFs
+  locally without attaching them to the selected gallery. Required verified
+  attachment receipts before completing delivery.
+- Retained generated files and pending state when upload or verification
+  failed, and preserved existing explicitly local plans during continuation.
+
+#### PDF filename editing
+
+- Added a pencil beside each PDF title in the gallery editor. Opened a
+  prefilled input and saved on Enter or leaving the field; Escape cancelled
+  the edit.
+- Renamed the physical PDF and its registered filename together, including
+  the legacy OFP. Updated display and download names while preserving the
+  document identity, original bytes and provenance.
+
+### Technical Details
+
+#### Backend
+
+- Added delegated `flight_report_status` handling to `app_linking_inventory`
+  and multipart `flight_report` handling to `app_linking_upload`. Reused
+  existing report storage and checksum receipts, and rechecked gallery access
+  inside the upload lock.
+- Added portable PDF basename validation, automatic `.pdf` extension
+  completion, collision refusal and expected-title checks. Staged attachment
+  index or OFP manifest updates and added guarded rollback after a failed
+  index publication.
+- Added optional `storage_filename` support for renamed manual attachments
+  while retaining older opaque-id PDF records. Updated readers, replacement,
+  deletion, accounting, conversion and ZIP consumers to resolve named files.
+- Preserved a renamed OFP filename during subsequent attachment replacement
+  and SimBrief regeneration, and used its actual basename in protected
+  downloads and Smart Gallery summaries.
+
+#### WinApp
+
+- Added `winapp/uploader/overlay.py` with host-sized panels, persistent close
+  controls and responsive action placement. Scoped successful autoclose to
+  the current operation and allowed completed results to be reopened.
+- Routed linked reports through the common delivery reconciler and streamed
+  multipart transport. Preserved account/gallery binding, cancellation,
+  checksum verification and durable receipts. Retained legacy API-key report
+  transport and explicitly local historical plans.
+
+#### Frontend
+
+- Added isolated title autosave in
+  `public/assets/gallery-modules/admin-pdf-documents.js`. Coalesced Enter and
+  blur into one request, applied acknowledged canonical names and retained
+  the draft with a reload action after an unverified response.
+- Added full-width title editing and labeled metadata rows on narrow screens,
+  with touch-sized PDF actions and the existing Theme surfaces.
+- Added English, Czech, German and Swedish labels for renaming and completion
+  notices.
+
+#### Tests and documentation
+
+- Covered linked report transport, receipt persistence, foreign-target
+  refusal and grant revocation inside the gallery lock.
+- Covered physical PDF/OFP rename, unchanged bytes, stale titles, unsafe names,
+  collisions, index rollback, named HTTP downloads and Smart PDF summaries.
+- Added native desktop/narrow progress and completion screenshots, including
+  four visible report rows and all actions at 390 by 560 pixels. Covered
+  countdown cancellation, pencil editing, Enter/blur deduplication, Escape
+  and refused or lost save replies with production browser styles.
+- Updated the WinApp README, testing and compatibility references, and all
+  four maintained TeX manual sources.
+
+### User Impact
+
+#### For WinApp users
+
+- Made flight completion readable inside the current window and closed
+  successful progress panels automatically. Allowed results to remain open
+  for inspection through the Keep open action.
+- Attached newly generated reports to the linked gallery and kept failed
+  uploads available for recovery.
+
+#### For administrators and visitors
+
+- Allowed renaming PDFs directly from their titles and used the chosen
+  physical filename in subsequent downloads and gallery ZIPs.
+- Preserved existing document links and attachment visibility while names
+  changed.
+
 ## Version 1.2.4
 
 Simplified gallery creation in the Windows companion so one Create action

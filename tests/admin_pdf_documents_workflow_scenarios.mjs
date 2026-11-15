@@ -266,9 +266,9 @@ async function makeWorkflowHarness(responseFor, waitForCancel = false, failUploa
     const cancel = form => {
         const button = {closest: selector => selector === '[data-pdf-cancel]' ? button : selector === 'form' ? form : null};
         const event = {target: button, preventDefault: () => {}};
-        const listener = (listeners.get('click') || [])[0]?.callback;
-        if (!listener) throw new Error('PDF workflow did not install its delegated cancel listener.');
-        listener(event);
+        const clickListeners = listeners.get('click') || [];
+        if (!clickListeners.length) throw new Error('PDF workflow did not install its delegated cancel listener.');
+        clickListeners.forEach(listener => listener.callback(event));
     };
 
     const attachOnly = async (operation, file, convertPages = false) => {

@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.2.4}
+\newcommand{\version}{1.2.5}
 \newcommand{\manualdate}{15.~listopadu~2026}
 
 \hypersetup{
@@ -1791,7 +1791,24 @@ rozpracované soubory a~vyžaduje nový závěrečný scan po posledním
 acknowledgement. Fotografická fronta může čekat déle než pět minut.
 Po restartu pokračuje ověřený Finish stejného cíle automaticky;
 odvolání legacy klíče zachovává samostatné nové potvrzení.
-Linked flight reports zůstávají místně.
+Nové lety v~propojeném režimu přikládají PDF rozbory do původní upload galerie
+přes živé oprávnění propojeného účtu. Dokončení vyžaduje potvrzený checksum
+každé jazykové verze. Chyba zachová lokální PDF pro opakování; starší server
+vyžaduje aktualizaci. Dříve dokončené nebo výslovně lokální reporty se
+zpětně neodesílají.
+
+Průběh dokončení, nastavení letu, uložené reporty a~obnova uploadu používají
+overlaye uvnitř hlavního okna. Akce zůstávají viditelné bez roztahování;
+dlouhé seznamy a~podklady mají vlastní posouvání. Úspěšný průběh oznámí
+zavření za tři sekundy. \ui{Ponechat otevřené} odpočet zruší.
+Chyby a~rozhodnutí obnovy zůstávají viditelné do ručního zavření.
+
+V~Adminu, \ui{Upravit galerii > Správa médií > PDF}, tužka vedle názvu
+otevře předvyplněné pole. Enter nebo opuštění pole změnu ihned uloží;
+Escape ji zruší. Podle pravidla disk-first se přejmenuje skutečné PDF na disku,
+včetně staršího OFP. Stejný název se používá při zobrazení, stažení a~v~ZIPu.
+Chybějící přípona PDF se doplní. Kolize a~nebezpečné názvy se odmítnou;
+původní obsah PDF a~identita dokumentu zůstávají zachovány.
 
 V~průběhu Finish je~i~při chybě nebo timeoutu dostupné \ui{Vynutit dokončení}
 (Force finish). Zastaví nové přijímání a~odesílání a~po~trvalém uložení

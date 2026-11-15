@@ -16,12 +16,14 @@ import sqlite3
 import sys
 import threading
 import time
+from math import ceil
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Protocol
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, ttk
+from uploader import overlay as messagebox
 
 from uploader.flight_jobs import (
     REPORT_LANGUAGES,
@@ -53,6 +55,7 @@ from uploader.flight_simbrief import (
 )
 from uploader.flight_navdata import remember_plan
 from uploader.ui_theme import GlassCard, icon_button, place_dialog
+from uploader.overlay import OverlayPanel, layout_actions
 from uploader.simconnect_flight import (
     METRES_PER_FOOT,
     METRES_PER_SECOND_PER_FPM,
@@ -83,6 +86,24 @@ REPORT_VISIBLE_ROWS = 7
 # Consumers: FlightUI.refresh_progress_actions.
 # Rationale: two compact columns leave room for translated recovery actions.
 PROGRESS_ACTION_COLUMNS = 2
+# Purpose: Let successful work dismiss itself after a readable completion notice.
+# Type: int. Units: seconds. Scope: one successful visible progress generation.
+# Consumers: FlightUI.refresh_autoclose. Rationale: three seconds matches the
+# requested acknowledgement window; errors and pending work never start it.
+SUCCESS_AUTOCLOSE_SECONDS = 3
+# Purpose: Show one current edition per language without a large empty table.
+# Type: int. Units: rows. Scope: progress task viewport.
+# Consumers: FlightUI.show_progress. Rationale: four rows fit the four editions;
+# additional saved flights remain reachable through the attached scrollbar.
+PROGRESS_TASK_ROWS = 4
+# Purpose: Preserve task/status readability as the overlay narrows.
+# Type: tuple[int, int]. Units: pixels. Scope: progress task columns.
+# Consumers: FlightUI.show_progress. Rationale: 150/180 px share a narrow panel.
+PROGRESS_TASK_WIDTHS = (150, 180)
+# Purpose: Let the task viewport shrink while preserving an identifiable status.
+# Type: tuple[int, int]. Units: pixels. Scope: progress task column minimums.
+# Consumers: FlightUI.show_progress. Rationale: 50/100 px leave the footer intact.
+PROGRESS_TASK_MIN_WIDTHS = (50, 100)
 # Keep identity help and validation readable without a desktop-sized dialog.
 # Type: int; Units: pixels; Scope: SimBrief identity sheet.
 # Consumers: prompt_simbrief_identity. Rationale: 360 px fits its single input.
@@ -338,9 +359,9 @@ class FlightUI:
         self.simbrief_status_var = tk.StringVar(value="")
         self.report_sort_column = "started"
         self.report_sort_descending = True
-        self.dialog: tk.Toplevel | None = None
-        self.settings_dialog: tk.Toplevel | None = None
-        self.report_dialog: tk.Toplevel | None = None
+        self.dialog: OverlayPanel | None = None
+        self.settings_dialog: OverlayPanel | None = None
+        self.report_dialog: OverlayPanel | None = None
         self.report_tree: ttk.Treeview | None = None
         self.report_rows: dict[str, SavedFlight] = {}
         self.report_files: dict[str, tuple[str, ReportRevision, str]] = {}
@@ -355,6 +376,7 @@ class FlightUI:
         self.bar: ttk.Progressbar | None = None
         self.activity_bar: ttk.Progressbar | None = None
         self.task_tree: ttk.Treeview | None = None
+        self.task_frame: ttk.Frame | None = None
         self._animation_running = False
         self._preparing_progress = False
         self._progress_local_mode = False
@@ -382,6 +404,7 @@ class FlightUI:
             for code in ("en", "cs", "de", "sv")
         }
         self.ui_language = tk.StringVar(value=self.preferences.ui_language)
+        self.host.root._flight_ui_language = self.ui_language
         self.refresh_dispatch_status()
         self._last_terminal = ""
         self._progress_generation = 0
@@ -811,15 +834,12 @@ class FlightUI:
             self.settings_dialog.focus_set()
             return
         owner = self.dialog_owner()
-        dialog = tk.Toplevel(owner)
-        dialog.withdraw()
+        dialog = OverlayPanel(owner, self.capture_text("flight_settings"))
         self.settings_dialog = dialog
-        dialog.title(self.capture_text("flight_settings"))
-        dialog.transient(self.host.root)
-        dialog.configure(background="#131B26")
-        dialog.resizable(False, False)
-        panel = GlassCard(dialog, padding=(24, 20))
+        dialog.protocol('WM_DELETE_WINDOW', dialog.destroy)
+        panel = GlassCard(dialog.body, padding=(12, 8))
         panel.pack(fill="both", expand=True, padx=12, pady=12)
+        panel.columnconfigure(0, weight=1)
         ttk.Label(
             panel, text=self.capture_text("flight_settings"),
             style="Section.TLabel",
@@ -867,7 +887,6 @@ class FlightUI:
             panel, text=self.text("finish_pdf"), command=self.finish_report,
         ).grid(row=7, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
-        place_dialog(dialog, owner)
         dialog.deiconify()
         dialog.focus_set()
 
@@ -966,19 +985,23 @@ class FlightUI:
             self.refresh_reports()
             return
         owner = self.dialog_owner()
-        self.report_dialog = tk.Toplevel(owner)
-        self.report_dialog.withdraw()
-        self.report_dialog.title(self.text("saved_reports"))
-        self.report_dialog.transient(self.host.root)
-        panel = GlassCard(self.report_dialog, padding=(16, 12))
+        self.report_dialog = OverlayPanel(owner, self.text("saved_reports"))
+        panel = GlassCard(self.report_dialog.body, padding=(8, 4))
         panel.pack(fill="both", expand=True, padx=10, pady=10)
-        ttk.Label(
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(1, weight=1)
+        hint = ttk.Label(
             panel, text=self.text("report_actions_hint"), wraplength=620,
             style="Muted.TLabel",
-        ).pack(anchor="w", pady=(0, 10))
+        )
+        hint.grid(row=0, column=0, sticky='ew', pady=(0, 10))
+        viewport = ttk.Frame(panel)
+        viewport.grid(row=1, column=0, sticky='nsew')
+        viewport.columnconfigure(0, weight=1)
+        viewport.rowconfigure(0, weight=1)
         columns = ("started", "samples", "pdfs", "created", "pages", "state")
         self.report_tree = ttk.Treeview(
-            panel, columns=columns, show="tree headings", height=REPORT_VISIBLE_ROWS,
+            viewport, columns=columns, show="tree headings", height=REPORT_VISIBLE_ROWS,
             selectmode="extended",
         )
         self.report_tree.heading("#0", text=self.text("saved_reports"))
@@ -988,17 +1011,30 @@ class FlightUI:
             self.report_tree.heading(name, text=self.text("column_" + name),
                                      command=lambda column=name: self.sort_reports(column))
             self.report_tree.column(name, width=width, minwidth=40)
-        self.report_tree.pack(fill="both", expand=True)
+        self.report_tree.grid(row=0, column=0, sticky='nsew')
+        vertical = ttk.Scrollbar(viewport, command=self.report_tree.yview)
+        vertical.grid(row=0, column=1, sticky='ns')
+        horizontal = ttk.Scrollbar(viewport, orient='horizontal', command=self.report_tree.xview)
+        horizontal.grid(row=1, column=0, sticky='ew')
+        self.report_tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
         self.report_tree.bind("<<TreeviewSelect>>", lambda _event: self.select_report())
         self.report_tree.bind("<Double-1>", lambda _event: self.open_selected_pdf())
-        ttk.Label(
+        detail_label = ttk.Label(
             panel, textvariable=self.report_detail_var, wraplength=620,
             style="Muted.TLabel",
-        ).pack(anchor="w", fill="x", pady=(8, 4))
-        actions = ttk.Frame(panel, style="Card.TFrame")
+        )
+        detail_label.grid(row=2, column=0, sticky='ew', pady=(8, 4))
+        panel.bind('<Configure>', lambda event: (
+            hint.configure(wraplength=max(1, event.width - 16)),
+            detail_label.configure(wraplength=max(1, event.width - 16)),
+        ))
+        actions = ttk.Frame(self.report_dialog.footer, style="Card.TFrame")
         actions.pack(fill="x", pady=(8, 0))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
+        actions.bind('<Configure>', lambda _event: layout_actions(
+            actions, [button for button in actions.winfo_children() if isinstance(button, ttk.Button)],
+        ))
         ttk.Button(
             actions, text=self.text("finish_pdf"), command=self.finish_report,
         ).grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 4))
@@ -1017,19 +1053,21 @@ class FlightUI:
         ttk.Button(
             actions, text=self.text("open_pdf"), command=self.open_selected_pdf,
         ).grid(row=1, column=1, sticky="ew")
-        tools = ttk.Frame(panel, style="Card.TFrame")
+        tools = ttk.Frame(self.report_dialog.footer, style="Card.TFrame")
         tools.pack(fill="x", pady=(8, 0))
+        tools.bind('<Configure>', lambda _event: layout_actions(
+            tools, [button for button in tools.winfo_children() if isinstance(button, ttk.Button)],
+        ))
         ttk.Button(
             tools, text=self.text("refresh_reports"), command=self.refresh_reports,
-        ).pack(side="left", padx=(0, 6))
+        ).grid(row=0, column=0, sticky='ew')
         ttk.Button(
             tools, text=self.text("open_app_log"), command=self.host.open_log_file,
-        ).pack(side="left")
+        ).grid(row=0, column=1, sticky='ew')
         ttk.Button(
             tools, text=self.text("upload_saved_pdf"), command=self.upload_saved_pdf,
-        ).pack(side="left", padx=(6, 0))
+        ).grid(row=1, column=0, sticky='ew')
         self.refresh_reports()
-        place_dialog(self.report_dialog, owner)
         self.report_dialog.deiconify()
 
     def sort_reports(self, column: str) -> None:
@@ -1840,14 +1878,8 @@ class FlightUI:
             reports_enabled=(
                 not photos_only and self.preferences.reports and self.preferences.recording
             ),
-            local_only=linked,
+            local_only=False,
         )
-        if linked and self.plan.reports_enabled:
-            self.host.events.put((
-                "info",
-                "[flight-report] Linked galleries retain flight reports locally; "
-                "PDF delivery is not authorized by this connection.",
-            ))
         self.plan.save()
         self._recovery_state = None
         self.recorder.start()
@@ -2150,8 +2182,14 @@ class FlightUI:
                 self.host.status_var.set(self.text("automatic_finish_no_work"))
                 self._dismiss_progress_preparation()
                 return
-            if linked and any(not plan.local_only for plan in plans):
-                raise ValueError("Linked flight work requires local-only reports.")
+            linked_target = (
+                self.host.linking_manager.selected_upload_target() if linked else None
+            )
+            if linked and any(not plan.local_only for plan in plans) and (
+                linked_target is None
+                or any(plan.binding != linked_target.binding() for plan in plans)
+            ):
+                raise ValueError(self.text("linked_target_unavailable"))
             photo_worker = self.host.worker
             watching = photo_worker is not None and photo_worker.is_alive()
             if linked and not watching:
@@ -2172,7 +2210,7 @@ class FlightUI:
             gui_admission = None
             upload_url = ''
             api_key = ''
-            if remote_reports or revoke:
+            if (remote_reports and not linked) or revoke:
                 owner, port, upload_url, api_key = self.host.capture_flight_admission()
                 binding = connection_binding(upload_url, api_key)
                 if any(plan.binding != binding for plan in plans):
@@ -2206,7 +2244,8 @@ class FlightUI:
                 self.submit_revoke, revoke,
                 emit=lambda level, message: self.host.events.put((level, message)),
                 gui_admission=gui_admission,
-                require_gui_admission=remote_reports or revoke,
+                require_gui_admission=(remote_reports and not linked) or revoke,
+                linked_target=linked_target if remote_reports else None,
                 config_generation=(
                     getattr(self.host.config, '_snapshot_token', None)
                     if revoke else None
@@ -2481,7 +2520,7 @@ class FlightUI:
             self.activity_bar.start(PROGRESS_TICK_MS)
             self._animation_running = True
         if self.bar is not None:
-            self.bar.pack_forget()
+            self.bar.grid_remove()
         if self.dialog is not None:
             # Paint the phase, body and activity before any local history read.
             # update_idletasks excludes user input and cannot duplicate Finish.
@@ -2546,43 +2585,72 @@ class FlightUI:
                 self.refresh_progress_actions()
                 self.dialog.deiconify()
                 self.dialog.lift()
+                if self.operation is not None and self.operation.snapshot().phase == 'completed':
+                    self.keep_progress_open()
                 return
             self.dialog.destroy()
             self._animation_running = False
         self._progress_local_mode = mode
         owner = self.dialog_owner()
-        self.dialog = tk.Toplevel(owner)
-        self.dialog.withdraw()
-        self.dialog.configure(background=self.host.root.cget("background"))
-        self.dialog.title(self.capture_text("flight_progress"))
-        self.dialog.transient(self.host.root)
-        frame = GlassCard(self.dialog, padding=(16, 12))
-        frame.pack(fill="both", expand=True, padx=8, pady=8)
+        self.dialog = OverlayPanel(owner, self.capture_text("flight_progress"))
+        frame = self.dialog.body
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(3, weight=1)
         ttk.Label(
             frame, textvariable=self.phase_var, style="Section.TLabel"
-        ).pack(anchor="w")
+        ).grid(row=0, column=0, sticky="ew")
         self.bar = ttk.Progressbar(frame, maximum=100, length=440)
-        self.bar.pack(fill="x", pady=(12, 8))
+        # Compact gutters preserve room for every report edition on short hosts.
+        self.bar.grid(row=1, column=0, sticky="ew", pady=(8, 4))
         self.activity_bar = ttk.Progressbar(
             frame, mode="indeterminate", length=440
         )
-        self.activity_bar.pack(fill="x", pady=(0, 8))
+        self.activity_bar.grid(row=2, column=0, sticky="ew", pady=(0, 4))
+        self.task_frame = ttk.Frame(frame)
+        self.task_frame.grid(row=3, column=0, sticky="nsew", pady=(0, 4))
+        self.task_frame.columnconfigure(0, weight=1)
+        self.task_frame.rowconfigure(0, weight=1)
         self.task_tree = ttk.Treeview(
-            frame, columns=("state",), show="tree headings", height=6
+            self.task_frame, columns=("state",), show="tree headings", height=PROGRESS_TASK_ROWS
         )
         self.task_tree.heading("#0", text=self.capture_text("flight_progress"))
         self.task_tree.heading("state", text=self.text("phase_idle"))
-        self.task_tree.column("#0", width=250)
-        self.task_tree.column("state", width=230)
-        self.task_tree.pack(fill="both", expand=True, pady=(4, 8))
+        for column, width, minimum in zip(
+            ('#0', 'state'), PROGRESS_TASK_WIDTHS, PROGRESS_TASK_MIN_WIDTHS, strict=True,
+        ):
+            self.task_tree.column(column, width=width, minwidth=minimum)
+        self.task_tree.grid(row=0, column=0, sticky="nsew")
+        task_scroll = ttk.Scrollbar(
+            self.task_frame, orient="vertical", command=self.task_tree.yview,
+        )
+        task_scroll.grid(row=0, column=1, sticky="ns")
+        self.task_tree.configure(yscrollcommand=task_scroll.set)
         self.progress_detail_label = ttk.Label(
             frame, textvariable=self.detail_var, wraplength=520
         )
-        self.progress_detail_label.pack(anchor="w", fill="x")
-        ttk.Label(frame, textvariable=self.time_var).pack(anchor="w", pady=8)
-        actions = ttk.Frame(frame)
-        actions.pack(fill="x", pady=(8, 0))
+        self.progress_detail_label.grid(row=4, column=0, sticky="ew")
+        timing_label = ttk.Label(frame, textvariable=self.time_var, wraplength=520)
+        timing_label.grid(row=5, column=0, sticky="ew", pady=4)
+        frame.bind('<Configure>', lambda event: (
+            self.progress_detail_label.configure(wraplength=max(1, event.width - 32)),
+            timing_label.configure(wraplength=max(1, event.width - 32)),
+        ))
+        self.completion_var = tk.StringVar(self.host.root, value='')
+        self.autoclose_frame = ttk.Frame(self.dialog.footer)
+        self.autoclose_frame.pack(fill='x')
+        ttk.Label(
+            self.autoclose_frame, textvariable=self.completion_var,
+            style='Muted.TLabel',
+        ).pack(side='left')
+        ttk.Button(
+            self.autoclose_frame, text=self.text('keep_open'),
+            command=self.keep_progress_open, style='Compact.TButton',
+        ).pack(side='right')
+        self.autoclose_frame.pack_forget()
+        actions = ttk.Frame(self.dialog.footer)
+        actions.pack(fill="x", pady=(4, 0))
         self.progress_actions = actions
+        actions.bind('<Configure>', lambda _event: self.refresh_progress_actions())
         ordinary_actions = (
             ("retry", self.retry_finalization),
             ("keep_local", self.keep_local),
@@ -2629,10 +2697,52 @@ class FlightUI:
         self.refresh_progress_actions()
         self.dialog.protocol("WM_DELETE_WINDOW", self.dialog.withdraw)
         self.dialog.bind("<Escape>", lambda _event: self.dialog.withdraw())
-        place_dialog(self.dialog, owner)
         self.dialog.deiconify()
         if preparing:
             self.dialog.update_idletasks()
+
+    def keep_progress_open(self) -> None:
+        """Cancel only the current presentation countdown.
+
+        Returns:
+            None: Keeps completed results visible without touching worker state.
+        """
+        self._autoclose_cancelled = True
+        self._autoclose_operation = self.operation
+        self._autoclose_deadline = None
+        if hasattr(self, 'autoclose_frame'):
+            self.autoclose_frame.pack_forget()
+
+    def refresh_autoclose(self) -> None:
+        """Dismiss successful progress after its visible three-second notice.
+
+        Returns:
+            None: Errors, cancellation, hidden views and replacement operations
+                never inherit an earlier operation's countdown.
+        """
+        operation = self.operation
+        if getattr(self, '_autoclose_operation', None) is not operation:
+            self._autoclose_operation = operation
+            self._autoclose_deadline = None
+            self._autoclose_cancelled = False
+        dialog = self.dialog
+        if (operation is None or dialog is None or not dialog.winfo_exists()
+                or not hasattr(self, 'autoclose_frame')):
+            return
+        if (operation.snapshot().phase != 'completed'
+                or self._autoclose_cancelled or not dialog.winfo_ismapped()):
+            self.autoclose_frame.pack_forget()
+            return
+        now = time.monotonic()
+        if self._autoclose_deadline is None:
+            self._autoclose_deadline = now + SUCCESS_AUTOCLOSE_SECONDS
+        remaining = max(0, ceil(self._autoclose_deadline - now))
+        if remaining == 0:
+            self.keep_progress_open()
+            dialog.withdraw()
+            return
+        self.completion_var.set(self.text('progress_autoclose').format(seconds=remaining))
+        self.autoclose_frame.pack(fill='x', before=self.progress_actions)
 
     def refresh_progress_actions(self) -> None:
         """Show only actions usable for the current progress or recovery state.
@@ -2669,10 +2779,13 @@ class FlightUI:
             if self.pending_revoke_intent():
                 choices.append("cancel_revoke")
             choices.append("keep_watched_files" if linked else "abandon")
+        elif phase == "completed":
+            choices.append("open_reports")
         elif self.session_state() == "blocked":
             choices.append("retry")
         choices.append("hide")
         if (not self.independent_operation()
+                and phase != "completed"
                 and callable(getattr(self.host, "force_finish_flight", None))):
             choices = ["force_finish", "hide"] + [
                 choice for choice in choices
@@ -2698,15 +2811,10 @@ class FlightUI:
                     state="disabled" if getattr(self, "_force_finish_pending", False)
                     else "normal"
                 )
-        for index, label in enumerate(choices):
+        for label in choices:
             button = self.progress_buttons[label]
             button.configure(text=self.text(label))
-            column = index % PROGRESS_ACTION_COLUMNS
-            actions.columnconfigure(column, weight=1)
-            button.grid(
-                row=index // PROGRESS_ACTION_COLUMNS, column=column,
-                sticky="ew", padx=(0, 4), pady=(0, 4),
-            )
+        layout_actions(actions, [self.progress_buttons[label] for label in choices], PROGRESS_ACTION_COLUMNS)
 
     def force_continue_watch(self) -> None:
         """Open the host's exact-head review without retrying an upload.
@@ -2854,19 +2962,15 @@ class FlightUI:
         if tree is None or not tree.winfo_exists():
             return
         if getattr(self, "_preparing_progress", False) is True:
-            tree.pack_forget()
+            self.task_frame.grid_remove()
             return
         if operation is None or (
             not self.independent_operation()
             and operation.snapshot().phase == "draining"
         ):
-            tree.pack_forget()
+            self.task_frame.grid_remove()
             return
-        if not tree.winfo_manager():
-            tree.pack(
-                fill="both", expand=True, pady=(4, 8),
-                before=self.progress_detail_label,
-            )
+        self.task_frame.grid()
         progress = operation.snapshot()
         rows: list[tuple[str, str, str]] = []
         if operation.saved_upload is True:
@@ -3172,7 +3276,7 @@ class FlightUI:
             self.time_var.set(timing)
             if self.bar is not None and self.bar.winfo_exists():
                 if not self.bar.winfo_manager():
-                    self.bar.pack(fill="x", pady=(12, 8), before=self.activity_bar)
+                    self.bar.grid()
                 self.bar.configure(mode="determinate")
                 self.bar["value"] = (
                     progress.done * 100 / progress.total if progress.total else 0
@@ -3180,10 +3284,12 @@ class FlightUI:
             if self.activity_bar is not None and self.activity_bar.winfo_exists():
                 if terminal:
                     self.activity_bar.stop()
+                    self.activity_bar.grid_remove()
                     self._animation_running = False
                 elif not self._animation_running:
                     # Animation means an unknown-duration unit is active, not
                     # a fabricated completion percentage or countdown.
+                    self.activity_bar.grid()
                     self.activity_bar.start(PROGRESS_TICK_MS)
                     self._animation_running = True
             self.refresh_tasks()
@@ -3211,10 +3317,6 @@ class FlightUI:
                         release_watcher()
                 self.refresh_reports()
                 self.host.refresh_connection_controls()
-                if (
-                    progress.phase == "completed" and self.automatic_completion()
-                    and self.dialog is not None and self.dialog.winfo_exists()
-                ):
-                    self.dialog.withdraw()
         self.refresh_progress_actions()
+        self.refresh_autoclose()
         self.host.root.after(PROGRESS_TICK_MS, self.tick)
