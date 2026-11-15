@@ -633,7 +633,8 @@
     color: var(--admin-ink, #182230);
     font-weight: 500;
 }
-#admin-edit-media .gallery-pdf-name > a {
+#admin-edit-media .gallery-pdf-name > a,
+#admin-edit-media .gallery-pdf-name [data-pdf-title-link] {
     display: block;
     max-width: 100%;
     overflow: hidden;
@@ -641,6 +642,36 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+#admin-edit-media .gallery-pdf-title {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+}
+#admin-edit-media [data-pdf-title-link] { flex: 1; min-width: 0; }
+#admin-edit-media [data-pdf-title-form] {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0;
+}
+#admin-edit-media [data-pdf-title-form][data-pdf-title-editing="1"] { flex: 1; min-width: 0; }
+#admin-edit-media [data-pdf-title-input] {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    padding: 0.2rem 0.35rem;
+    font: inherit;
+    color: var(--admin-ink, #182230);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+    border-radius: 0.3rem;
+}
+#admin-edit-media [data-pdf-title-status]:empty { display: none; }
+#admin-edit-media [data-pdf-title-status] { flex-basis: 100%; font-size: 0.75rem; }
+#admin-edit-media .gallery-pdf-title [hidden] { display: none; }
 #admin-edit-media .gallery-pdf-table tbody tr:nth-child(even) {
     background: color-mix(in srgb, var(--admin-border, #ccd7e3) 14%, white);
 }
@@ -745,6 +776,62 @@
 }
 #admin-edit-media .gallery-pdf-upload-advanced[open] > summary {
     flex-basis: 100%;
+}
+/* Use the existing narrow Admin breakpoint for readable names and touch actions. */
+@media (max-width: 640px) {
+    #admin-edit-media .gallery-pdf-inline-editor {
+        /* Purpose: Match the shared narrow Admin action target.
+         * Type: CSS length. Units: CSS pixels. Scope: narrow inline PDF rows.
+         * Consumers: PDF row icons and title inputs.
+         * Rationale: 44px permits touch editing without crowded actions.
+         */
+        --gallery-pdf-touch-target: 44px;
+    }
+    #admin-edit-media .gallery-pdf-inline-editor :is(table, tbody) { display: block; }
+    #admin-edit-media .gallery-pdf-table colgroup { display: none; }
+    /* Retain column headers for assistive readers while rows stack. */
+    #admin-edit-media .gallery-pdf-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+    #admin-edit-media .gallery-pdf-table tbody > tr:not([data-pdf-controls]) {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border-bottom: 1px solid var(--admin-border, #ccd7e3);
+    }
+    #admin-edit-media .gallery-pdf-table tbody > tr > :is(th, td) {
+        min-width: 0;
+        border-bottom: 0;
+    }
+    #admin-edit-media .gallery-pdf-table :is(.gallery-pdf-name, td:last-child) {
+        grid-column: 1 / -1;
+    }
+    #admin-edit-media .gallery-pdf-name [data-pdf-title-link] {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    #admin-edit-media .gallery-pdf-number::before {
+        content: attr(data-label) ": ";
+        color: var(--admin-muted-text, #52616f);
+    }
+    #admin-edit-media .gallery-pdf-actions { flex-wrap: wrap; }
+    #admin-edit-media .gallery-pdf-inline-editor .gallery-pdf-icon {
+        flex-basis: var(--gallery-pdf-touch-target);
+        width: var(--gallery-pdf-touch-target);
+        height: var(--gallery-pdf-touch-target);
+        min-width: var(--gallery-pdf-touch-target);
+        min-height: var(--gallery-pdf-touch-target);
+    }
+    #admin-edit-media [data-pdf-title-input] {
+        box-sizing: border-box;
+        min-height: var(--gallery-pdf-touch-target);
+    }
+    #admin-edit-media [data-pdf-controls]:not([hidden]),
+    #admin-edit-media [data-pdf-controls] > td { display: block; }
 }
 #admin-edit-media .gallery-presentation-settings header {
     flex: 1 0 100%;

@@ -152,6 +152,9 @@ function ofp_http_prepare_gallery(
     ?string $pdf,
 ): void {
     $directory = $root . '/galleries/' . $folder;
+    // The public vector uses a renamed original to exercise actual download
+    // names through the production route; other fixtures retain legacy names.
+    $filename = $folder === 'public' ? 'Dispatch LICJ-LKPR.pdf' : 'simbrief-ofp.pdf';
     ofp_http_assert(
         is_dir($directory) || mkdir($directory, 0700, true),
         'Could not create fixture gallery.',
@@ -160,13 +163,13 @@ function ofp_http_prepare_gallery(
         file_put_contents($directory
             . '/simbrief-ofp-manifest.json', json_encode([
             'format' => 'php_gallery_simbrief_ofp_manifest_v1',
-            'ofp_pdf_file' => 'simbrief-ofp.pdf',
+            'ofp_pdf_file' => $filename,
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)) !== false,
         'Cannot write OFP fixture manifest.',
     );
     if ($pdf !== null) {
         ofp_http_assert(
-            file_put_contents($directory . '/simbrief-ofp.pdf', $pdf) !== false,
+            file_put_contents($directory . '/' . $filename, $pdf) !== false,
             'Cannot write saved OFP fixture PDF.',
         );
     }
@@ -835,6 +838,10 @@ try {
                     'attachment',
                 ),
             'Fresh anonymous PDF download must return the identical saved bytes.',
+        );
+        ofp_http_assert(
+            ofp_http_header_contains($download, 'Content-Disposition', 'Dispatch%20LICJ-LKPR.pdf'),
+            'A renamed OFP must download using its actual disk filename.',
         );
 
         $head = ofp_http_request($origin . $urls['view'], 'HEAD');

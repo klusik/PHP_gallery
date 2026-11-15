@@ -105,8 +105,8 @@ function gallery_pdf_documents_view_model(
         $query = ['page' => 'gallery_ofp_pdf', 'id' => $id];
         $documents[] = [
             'id' => 'ofp',
-            'title' => 'SimBrief OFP',
-            'filename' => 'simbrief-ofp.pdf',
+            'title' => \Gallery\Services\gallery_pdf_documents_ofp_title($gallery),
+            'filename' => basename($ofpPath),
             'size' => (int) @filesize($ofpPath),
             'hidden' => $ofpHidden,
             'archive_in_zip' => isset($archiveItems['ofp']),

@@ -70,7 +70,7 @@ import { setupSimbriefDescriptionGenerator } from './gallery-modules/admin-simbr
 import { setupSimbriefOfpViewer } from './gallery-modules/simbrief-ofp-viewer.js?v=20261012-gallery-pdf-documents';
 import {
     setupGalleryPdfDocuments,
-} from './gallery-modules/admin-pdf-documents.js?v=20261029-manual-zip-v1';
+} from './gallery-modules/admin-pdf-documents.js?v=20261115-pdf-title-v2';
 import { setupGalleryMusic } from './gallery-modules/admin-gallery-music.js?v=20261102-repeat-modes-v1';
 import { setupAdminMusic } from './gallery-modules/admin-music.js?v=20261102-album-song-edit';
 import {
@@ -136,7 +136,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261107-gallery-editor-link-v1';
+} from './gallery-modules/admin-operations.js?v=20261115-pdf-title-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.

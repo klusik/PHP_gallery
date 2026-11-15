@@ -27,7 +27,8 @@ from typing import TYPE_CHECKING, Callable
 from uploader.watch_recovery import WatchRecoveryCoordinator, WatchRecoverySnapshot
 from uploader.watch_queue import observe_watch_source
 from uploader.flight_report_translations import recovery_text
-from uploader.ui_theme import GlassCard, place_dialog
+from uploader.ui_theme import GlassCard
+from uploader.overlay import OverlayPanel
 
 if TYPE_CHECKING:
     from PIL import Image as PILImage
@@ -68,6 +69,11 @@ EVIDENCE_WRAP_PX = 220
 # Type: int. Units: pixels. Scope: recovery dialog status wrapping.
 # Consumers: WatchRecoveryReviewDialog. Rationale: 440 px aligns with two evidence columns.
 STATUS_WRAP_PX = 440
+# Purpose: Leave a small inset inside each label's measured width when wrapping.
+# Type: int. Units: pixels. Scope: recovery evidence and status labels.
+# Consumers: WatchRecoveryReviewDialog.wrap_evidence_label.
+# Rationale: 4 px leaves room for native theme borders without clipping glyphs.
+LABEL_WRAP_INSET_PX = 4
 # Purpose: Keep full file and receipt identity visible without a tall log.
 # Type: int. Units: text lines. Scope: recovery metadata field.
 # Consumers: WatchRecoveryReviewDialog. Rationale: Seven lines fit the identity summary.
@@ -143,20 +149,14 @@ class WatchRecoveryReviewDialog:
         self._receipt_available = False
         self._preview_generation = 0
         self._preview_workers: list[threading.Thread] = []
-        self.window = tk.Toplevel(parent)
-        self.window.title(self.text("watch_recovery_title"))
-        self.window.transient(parent.winfo_toplevel())
+        self.window = OverlayPanel(parent, self.text("watch_recovery_title"))
         self.window.protocol("WM_DELETE_WINDOW", self.close)
-        self.window.minsize(*DIALOG_MIN_SIZE)
-        self.body = GlassCard(self.window, padding=DIALOG_PADDING)
+        self.body = GlassCard(self.window.body, padding=DIALOG_PADDING)
         self.body.pack(fill="both", expand=True)
         self.body.columnconfigure((0, 1), weight=1, uniform="preview")
-        self.body.rowconfigure(1, weight=1)
-        ttk.Label(self.body, text=self.text("watch_recovery_title"),
-                  style="Title.TLabel").grid(row=0, column=0, columnspan=2,
-                                              sticky="w", pady=(0, 8))
+        self.body.rowconfigure(0, weight=1)
         self.viewport = ttk.Frame(self.body)
-        self.viewport.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        self.viewport.grid(row=0, column=0, columnspan=2, sticky="nsew")
         self.viewport.columnconfigure(0, weight=1)
         self.viewport.rowconfigure(0, weight=1)
         self.canvas = tk.Canvas(
@@ -225,9 +225,13 @@ class WatchRecoveryReviewDialog:
             self.evidence, textvariable=self.status, wraplength=STATUS_WRAP_PX,
             justify="left")
         self.status_label.grid(row=3, column=0, columnspan=2, sticky="ew")
+        # Label allocation can settle after the canvas/evidence Configure event.
+        # Follow each actual label allocation rather than its previous width.
+        for label in (self.remote_label, self.local_label, self.status_label):
+            label.bind('<Configure>', self.wrap_evidence_label, add='+')
         buttons = ttk.Frame(self.body)
         self.buttons = buttons
-        buttons.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        buttons.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         buttons.columnconfigure((0, 1, 2, 3, 4), weight=1)
         self.confirm_button = ttk.Button(
             buttons, text=self.text("watch_recovery_confirm"), command=self.confirm)
@@ -251,9 +255,18 @@ class WatchRecoveryReviewDialog:
                                self.cancel_button)
         self.visible_action_buttons = list(self.action_buttons)
         self.window.bind("<Configure>", self.layout_buttons)
+        self.canvas.bind('<Configure>', self.layout_buttons, add='+')
+        self.evidence.bind('<Configure>', self.layout_buttons, add='+')
         self.populate()
+        # Child frames do not receive descendant wheel events like toplevels.
+        # Bind only evidence widgets, preserving native Text/Treeview scrolling.
+        descendants = [self.evidence]
+        while descendants:
+            widget = descendants.pop()
+            widget.bind('<MouseWheel>', self.scroll_evidence, add='+')
+            descendants.extend(widget.winfo_children())
         self.window.after(PREVIEW_POLL_MS, self.poll_worker_results)
-        place_dialog(self.window, parent)
+        self.window.deiconify()
         if self._snapshot_pending:
             snapshot_thread = threading.Thread(
                 target=self.load_snapshot, name="watch-recovery-snapshot", daemon=True)
@@ -391,18 +404,40 @@ class WatchRecoveryReviewDialog:
             self.window.after_idle(self.update_responsive_layout)
 
     def update_responsive_layout(self) -> None:
-        """Set wrapping from the actual evidence and status label widths.
+        """Stack evidence cards when the viewport cannot fit two columns.
 
         Returns:
-            None: Prevents text clipping after the dialog changes width.
+            None: Places previews and details within the current viewport.
         """
         self._layout_pending = False
         if self._closed or not self.window.winfo_exists():
             return
-        for label in (self.remote_label, self.local_label, self.status_label):
-            width = max(1, label.winfo_width() - 4)
-            if int(label.cget("wraplength")) != width:
-                label.configure(wraplength=width)
+        stacked = self.canvas.winfo_width() < NARROW_LAYOUT_BREAKPOINT_PX
+        for column, (label, image) in enumerate((
+            (self.remote_label, self.remote_image),
+            (self.local_label, self.local_image),
+        )):
+            label.grid_configure(row=column * 2 if stacked else 0,
+                                 column=0 if stacked else column,
+                                 columnspan=2 if stacked else 1)
+            image.grid_configure(row=column * 2 + 1 if stacked else 1,
+                                 column=0 if stacked else column,
+                                 columnspan=2 if stacked else 1)
+        self.details.master.grid_configure(row=4 if stacked else 2)
+        self.status_label.grid_configure(row=5 if stacked else 3)
+
+    def wrap_evidence_label(self, event: tk.Event) -> None:
+        """Wrap text after its own label receives its final allocated width.
+
+        Args:
+            event (tk.Event): Configure event from an evidence or status label.
+        Returns:
+            None: Keeps text within its label after parent geometry settles.
+        """
+        label = event.widget
+        width = max(1, event.width - LABEL_WRAP_INSET_PX)
+        if int(label.cget("wraplength")) != width:
+            label.configure(wraplength=width)
 
     def reflow_buttons(self) -> None:
         """Place the current action set using the window's responsive width.

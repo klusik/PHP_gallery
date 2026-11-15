@@ -670,6 +670,16 @@ namespace {
                 'Explicit replacement did not preserve JSON and gallery isolation.',
             );
 
+            $beforeRename = (string) file_get_contents($legacyPdf);
+            ofp_document_assert(
+                \Gallery\Services\simbrief_ofp_rename_pdf($historical, 'Dispatch LICJ–LKPR.pdf', 'simbrief-ofp.pdf')
+                    && !file_exists($legacyPdf)
+                    && \Gallery\Services\simbrief_ofp_local_pdf_path($historical)
+                        === $legacyFolder . '/Dispatch LICJ–LKPR.pdf'
+                    && file_get_contents($legacyFolder . '/Dispatch LICJ–LKPR.pdf') === $beforeRename,
+                'Renaming the legacy OFP must move its original and update its manifest-backed public route.',
+            );
+            \Gallery\Services\simbrief_ofp_rename_pdf($historical, 'simbrief-ofp.pdf', 'Dispatch LICJ–LKPR.pdf');
             $legacyJs = (string) file_get_contents(
                 dirname(__DIR__)
                     . '/public/assets/gallery-modules/admin-simbrief-description.js',

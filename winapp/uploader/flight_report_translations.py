@@ -3352,3 +3352,12 @@ for _control_language, _control_labels in _GALLERY_CONTROL_LABELS.items():
     _TRANSLATIONS[_control_language].update({
         "photos_workspace_" + key: value for key, value in _control_labels.items()
     })
+
+_COMPLETION_LABELS = {
+    'en': {'progress_autoclose': 'Completed. Closes in {seconds} s.', 'keep_open': 'Keep open'},
+    'cs': {'progress_autoclose': 'Hotovo. Zavře se za {seconds} s.', 'keep_open': 'Ponechat otevřené'},
+    'de': {'progress_autoclose': 'Fertig. Schließt in {seconds} s.', 'keep_open': 'Geöffnet lassen'},
+    'sv': {'progress_autoclose': 'Klart. Stängs om {seconds} s.', 'keep_open': 'Behåll öppet'},
+}
+for _completion_language, _completion_labels in _COMPLETION_LABELS.items():
+    _TRANSLATIONS[_completion_language].update(_completion_labels)

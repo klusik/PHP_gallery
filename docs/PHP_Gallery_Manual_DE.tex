@@ -1989,7 +1989,27 @@ die erste Grenze, wartet auf zulässige unfertige Quellen und verlangt einen
 neuen Abschluss-Scan nach letzter Bestätigung. Fotowarteschlangen können länger als fünf
 Minuten warten. Verifiziertes Foto-Finish desselben Ziels wird nach Neustart
 fortgesetzt; Legacy-Schlüsselwiderruf verlangt weiterhin gesonderte neue
-Bestätigung. Linked-Flugberichte bleiben lokal.
+Bestätigung. Neue verknüpfte Flugsitzungen hängen PDF-Berichte über die aktive
+Upload-Berechtigung des Kontos an die ursprüngliche Galerie an.
+Jede Sprachversion benötigt vor Abschluss einen bestätigten Prüfsummenbeleg.
+Fehler erhalten lokale PDFs für einen neuen Versuch; ältere Server benötigen
+ein Update. Bereits abgeschlossene oder ausdrücklich lokale Berichte werden
+nicht nachträglich hochgeladen.
+
+Abschluss, Flugeinstellungen, gespeicherte Berichte und Upload-Wiederherstellung
+erscheinen als Overlays im Hauptfenster. Aktionen bleiben ohne Vergrößern
+sichtbar; lange Listen und Nachweise besitzen einen eigenen Scrollbereich.
+Erfolgreiche Vorgänge kündigen das Schließen nach drei Sekunden an.
+\ui{Geöffnet lassen} stoppt den Countdown. Fehler und Wiederherstellungsentscheidungen
+bleiben bis zum manuellen Schließen sichtbar.
+
+Unter \ui{Galerie bearbeiten > Medienverwaltung > PDF} öffnet der Stift neben
+einem Dokumenttitel ein vorausgefülltes Eingabefeld. Enter oder Verlassen
+des Felds speichert sofort; Escape verwirft die Änderung. Die tatsächliche PDF
+auf dem Datenträger wird umbenannt, auch beim älteren OFP. Anzeige, Download
+und ZIP verwenden denselben Dateinamen. Die PDF-Endung wird bei Bedarf ergänzt.
+Kollisionen und unsichere Namen werden abgewiesen; Inhalt und Dokumentidentität
+bleiben erhalten.
 
 \ui{Fertigstellen erzwingen} (Force finish) bleibt im Finish-Fortschritt auch
 bei Fehlern oder Zeitüberschreitung erreichbar. Die Aktion stoppt neue

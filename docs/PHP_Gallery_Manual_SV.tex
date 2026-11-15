@@ -1848,7 +1848,24 @@ bevaras. Finish sparar första gränsen, väntar på tillåtna ofärdiga källor
 och kräver en ny slutlig scan efter sista bekräftelsen. Fotokön får vänta
 längre än fem minuter. Verifierat foto-Finish för samma mål fortsätter efter
 omstart; äldre API-nycklar kräver fortsatt separat ny bekräftelse före
-återkallning. Linked-flygrapporter stannar lokalt.
+återkallning. Nya länkade flygsessioner bifogar PDF-rapporter till den ursprungliga galleriet
+via kontots aktiva uppladdningsbehörighet. Varje språkversion kräver ett
+bekräftat kontrollsumme-kvitto före slutförande. Fel bevarar lokala PDF-filer
+för nytt försök; äldre servrar behöver uppdateras. Redan avslutade eller
+uttryckligen lokala rapporter laddas inte upp i efterhand.
+
+Slutförande, flyginställningar, sparade rapporter och uppladdningsåterställning
+visas som overlays i huvudfönstret. Åtgärder förblir synliga utan förstoring;
+långa listor och underlag har egen rullning. Slutförda förlopp meddelar
+stängning efter tre sekunder. \ui{Behåll öppet} avbryter nedräkningen.
+Fel och återställningsbeslut visas tills användaren stänger dem.
+
+I \ui{Redigera galleri > Mediehantering > PDF} öppnar pennan vid dokumenttiteln
+ett förifyllt fält. Enter eller att lämna fältet sparar direkt; Escape avbryter.
+Den faktiska PDF-filen på disken byter namn, även för äldre OFP. Visning,
+nedladdning och ZIP använder samma filnamn. PDF-filändelsen läggs till om den
+saknas. Kollisioner och osäkra namn avvisas; innehåll och dokumentidentitet
+bevaras.
 
 \ui{Tvinga slutförande} (Force finish) är tillgängligt i Finish-förloppet även
 vid fel eller timeout. Åtgärden stoppar ny insamling och sändning och stänger

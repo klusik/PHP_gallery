@@ -79,6 +79,21 @@ function admin_edit_gallery_handle_pdf_action(array $gallery): void
                 $gallery,
                 (string) ($_POST['pdf_surface'] ?? 'editor') !== 'public',
             );
+        } elseif ($action === 'rename') {
+            if (!is_string($_POST['pdf_title'] ?? null)
+                || !is_string($_POST['expected_title'] ?? null)) {
+                throw new \RuntimeException('Provide the current and requested document titles.');
+            }
+            if (!\Gallery\Services\gallery_pdf_documents_update_metadata(
+                $gallery, $documentId, null,
+                $_POST['pdf_title'], $_POST['expected_title'],
+            )) {
+                throw new \RuntimeException('The PDF document no longer exists. Reload the editor.');
+            }
+            $result['document_id'] = $documentId;
+            $result['title'] = $documentId === 'ofp'
+                ? \Gallery\Services\gallery_pdf_documents_ofp_title($gallery)
+                : \Gallery\Services\gallery_pdf_documents_read($gallery, $documentId)['metadata']['title'];
         } elseif ($action === 'visibility') {
             $hiddenValue = (string) ($_POST['hidden'] ?? '');
             if (!in_array($hiddenValue, ['0', '1'], true)) {

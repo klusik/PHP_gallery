@@ -10,13 +10,85 @@
  */
 import {scanPdfPageCountCells} from './gallery-pdf-metadata.js?v=20261017-media-summary-v1';
 import {createPdfPngUploadStream} from './admin-pdf-conversion.js?v=20261012-pdf-dpi-warning-v3';
-import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261029-manual-zip-v1';
+import {uploadBrowserFileStream} from './admin-browser-upload.js?v=20261115-pdf-title-v2';
 import {beginAdminOperation, finishAdminOperation, assertAdminOperationCurrent} from './admin-operation-keys.js?v=20261012-pdf-files-v1';
 import {completeAdminMutation} from './admin-mutation-completion.js?v=20261021-smart-photo-tag-refresh-v1';
 import {i18nForElement, appendUploadProgressLog} from './admin-core.js?v=20261003-scoped-i18n-v1';
 
 /** @type {WeakMap<HTMLFormElement, AbortController>} Active conversion cancellation owners. */
 const conversions = new WeakMap();
+
+/**
+ * Bound one inline title save while preserving uncertainty after a lost reply.
+ * Type: number. Units: milliseconds. Scope: one PDF title request.
+ * Consumers: savePdfTitle. Rationale: 15000 matches isolated Admin autosaves.
+ */
+const PDF_TITLE_SAVE_TIMEOUT_MS = 15000;
+
+/**
+ * Restore the canonical link after a completed or cancelled title edit.
+ * @param {HTMLFormElement} form Exact document's title form.
+ * @returns {void} Hides its input and restores its pencil without a mutation.
+ */
+function closePdfTitleEditor(form) {
+    form.dataset.pdfTitleEditing = '0';
+    const input = form.querySelector('[data-pdf-title-input]');
+    input.hidden = true;
+    form.closest('[data-pdf-title]').querySelector('[data-pdf-title-link]').hidden = false;
+    form.querySelector('[data-pdf-title-edit]').hidden = false;
+}
+
+/**
+ * Persist one exact document title on Enter or leaving the input.
+ * @param {HTMLFormElement} form Server-rendered form with CSRF and prior title.
+ * @returns {Promise<void>} Applies only acknowledged canonical text; failures retain the draft.
+ */
+async function savePdfTitle(form) {
+    if (form.dataset.pdfTitleEditing !== '1' || form.dataset.pdfTitleState) return;
+    const input = form.querySelector('[data-pdf-title-input]');
+    const prior = form.elements.namedItem('expected_title');
+    const status = form.querySelector('[data-pdf-title-status]');
+    input.value = input.value.trim();
+    if (input.value === prior.value) { closePdfTitleEditor(form); return; }
+    if (!input.reportValidity()) return;
+    const body = new FormData(form);
+    form.dataset.pdfTitleState = 'saving';
+    input.disabled = true;
+    status.textContent = i18nForElement(form, 'pdf.renaming', 'Renaming…');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PDF_TITLE_SAVE_TIMEOUT_MS);
+    try {
+        const result = await pdfRequest(form, body, controller.signal);
+        if (typeof result.title !== 'string' || !result.title
+            || result.document_id !== body.get('document_id')) throw new Error(
+                i18nForElement(form, 'pdf.rename_unknown', 'The title save could not be confirmed. Reload the document list.'));
+        const link = form.closest('[data-pdf-title]').querySelector('[data-pdf-title-link]');
+        link.textContent = result.title;
+        link.title = result.title;
+        input.value = result.title;
+        prior.value = result.title;
+        const download = form.closest('tr')?.querySelector('a[download]');
+        if (download) document.querySelectorAll('a[download]').forEach(anchor => {
+            if (anchor.href === download.href) anchor.download = result.title;
+        });
+        closePdfTitleEditor(form);
+        status.textContent = '';
+        await completeAdminMutation(result, {refreshPanel: async () => true});
+        delete form.dataset.pdfTitleState;
+        input.disabled = false;
+    } catch (error) {
+        // The server may have committed. Keep intent and prevent another write
+        // until a passive reload establishes its persisted title.
+        form.dataset.pdfTitleState = 'unverified';
+        status.textContent = (error instanceof Error ? error.message : String(error)) + ' ';
+        const reload = document.createElement('a');
+        reload.href = new URL(form.getAttribute('action'), window.location.href).href;
+        reload.textContent = i18nForElement(form, 'common.reload', 'Reload');
+        status.append(reload);
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 /**
  * Retain each selected original and its acknowledged stages for an exact upload retry.
@@ -184,8 +256,49 @@ export function setupGalleryPdfDocuments() {
     scanPdfPageCountCells(document);
     if (document.body.dataset.pdfDocumentsBound === '1') return;
     document.body.dataset.pdfDocumentsBound = '1';
+    document.addEventListener('click', event => {
+        const pencil = event.target instanceof Element ? event.target.closest('[data-pdf-title-edit]') : null;
+        if (!pencil) return;
+        const form = pencil.closest('[data-pdf-title-form]');
+        if (!(form instanceof HTMLFormElement) || form.dataset.pdfTitleState) return;
+        event.preventDefault();
+        const input = form.querySelector('[data-pdf-title-input]');
+        form.dataset.pdfTitleEditing = '1';
+        form.closest('[data-pdf-title]').querySelector('[data-pdf-title-link]').hidden = true;
+        pencil.hidden = true;
+        input.hidden = false;
+        input.focus();
+        input.select();
+    });
+    document.addEventListener('keydown', event => {
+        if (!(event.target instanceof HTMLInputElement) || !event.target.matches('[data-pdf-title-input]')) return;
+        const form = event.target.closest('form');
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            if (form.dataset.pdfTitleState) return;
+            event.target.value = form.elements.namedItem('expected_title').value;
+            closePdfTitleEditor(form);
+            form.querySelector('[data-pdf-title-edit]').focus();
+        } else if (event.key === 'Enter' && !event.isComposing) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            void savePdfTitle(form);
+        }
+    }, true);
+    document.addEventListener('focusout', event => {
+        if (event.target instanceof HTMLInputElement && event.target.matches('[data-pdf-title-input]')) {
+            void savePdfTitle(event.target.closest('form'));
+        }
+    });
     document.addEventListener('submit', async event => {
         const form = event.target;
+        if (form instanceof HTMLFormElement && form.matches('[data-pdf-title-form]')) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            await savePdfTitle(form);
+            return;
+        }
         if (!(form instanceof HTMLFormElement) || !form.matches('[data-pdf-attachment-form], [data-pdf-convert-form]')) return;
         event.preventDefault();
         event.stopImmediatePropagation();

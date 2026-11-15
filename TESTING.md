@@ -1,5 +1,27 @@
 # Testing Guide
 
+## Flight completion overlays and PDF titles
+
+The existing central owners cover this batch. `test_watch_recovery_ui.py`
+renders real in-window progress/recovery widgets on hosted Windows with synthetic
+flight data: all four report rows visible at 390×560, desktop/narrow action bounds
+and the successful three-second countdown. The Watcher-recovery workflow retains its PNGs without
+using a live profile or gallery. Portable WinApp tests cover same-target linked
+report transport, durable receipts, retained failures and presentation-only close.
+
+The PDF service regression covers physical filename changes, unchanged original
+bytes/provenance, stale-title and collision/traversal refusal, and rollback after
+an injected index publication failure. OFP fixtures verify manifest-backed rename
+and real HTTP download filenames; the gallery workflow verifies actual OFP disk
+names in Smart PDF summaries. The delegated-report controller fixture checks
+same-gallery receipts, foreign inputs and revocation inside the gallery lock.
+The Admin Gallery Music browser owner also exercises the actual PDF view/module
+under production CSS: pencil/prefill, Enter+blur deduplication, Escape, blur save
+and refused/lost replies, plus a usable full-row rename input on narrow screens.
+Its evidence includes `pdf-title-desktop.png` and
+`pdf-title-mobile.png`. Installed-client delivery, deployed-server attachment
+and real-flight acceptance remain separate checks.
+
 ## Administrator release email
 
 `admin_release_email_test.php` uses an in-memory SQLite account table and captured

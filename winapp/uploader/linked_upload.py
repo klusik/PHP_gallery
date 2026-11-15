@@ -674,6 +674,7 @@ class LinkedMultipart:
         self._segments: list[bytes | _FileSegment] = []
         self._lock = threading.Lock()
         self._consumed = False
+        self.file_progress: Callable[[int, int], None] | None = None
 
         def text_field(name: str, value: str) -> None:
             """Append one validated local form field to this one-shot body.
@@ -765,6 +766,8 @@ class LinkedMultipart:
                     if digest is not None:
                         digest.update(chunk)
                     yield chunk
+                    if self.file_progress is not None:
+                        self.file_progress(segment.size - remaining, segment.size)
                 if digest is not None and digest.hexdigest() != segment.expected_sha256:
                     raise LinkingError('Upload source content changed during transfer.')
                 after = os.fstat(source.fileno())
@@ -772,6 +775,43 @@ class LinkedMultipart:
                         or after.st_ino != segment.inode
                         or after.st_mtime_ns != segment.modified_ns):
                     raise LinkingError('Upload source changed during transfer.')
+
+
+class LinkedReportMultipart(LinkedMultipart):
+    """Reuse the one-shot source checks for a gallery-bound PDF attachment."""
+
+    def __init__(
+        self, gallery_id: int, pdf: Path, fields: dict[str, str],
+        emit: Callable[[int, int], None] | None,
+    ) -> None:
+        """Frame one PDF without buffering or weakening its source checks.
+
+        Args:
+            gallery_id (int): Exact server-owned target identifier.
+            pdf (Path): Complete PDF validated by the report delivery owner.
+            fields (dict[str, str]): action, session_id, report_id, language
+                and sha256 values validated by the shared report owner.
+            emit (Callable[[int, int], None] | None): Sent/total PDF bytes.
+        Returns:
+            None: Creates a fresh one-shot MIME body with an exact byte length.
+        """
+        self.boundary = 'PHPGalleryReport' + uuid.uuid4().hex
+        self.gallery_id = gallery_id
+        self._lock = threading.Lock()
+        self._consumed = False
+        self.file_progress = emit
+        self._segments = [
+            _text_part(self.boundary, 'gallery_id', str(gallery_id)),
+            *(_text_part(self.boundary, key, value)
+              for key, value in fields.items()),
+            _file_header(self.boundary, 'report', pdf),
+            _file_segment(pdf, fields['sha256']), b'\r\n',
+            f'--{self.boundary}--\r\n'.encode('ascii'),
+        ]
+        self.content_length = sum(
+            len(segment) if isinstance(segment, bytes) else segment.size
+            for segment in self._segments
+        )
 
 
 def linked_target_binding(issuer: str, account_id: int, gallery_id: int) -> str:
@@ -811,6 +851,54 @@ class LinkedUploadTarget:
     gallery_id: int
     title: str
     watch_key: str | None = field(default=None, repr=False, compare=False)
+
+    def report_request(
+        self, url: str, api_key: str,
+        payload: dict[str, JsonValue] | None = None,
+        pdf_path: Path | None = None, fields: dict[str, str] | None = None,
+        emit: Callable[[int, int], None] | None = None, file_size: int = 0,
+        before_request: Callable[[], None] | None = None,
+    ) -> dict[str, JsonValue]:
+        """Adapt shared PDF reconciliation to this exact delegated target.
+
+        Args:
+            url (str): Must be empty; legacy endpoints grant no authority here.
+            api_key (str): Must be empty; legacy keys never cross modes.
+            payload (dict[str, JsonValue] | None): Status action, report_id,
+                language and sha256; None for a PDF upload.
+            pdf_path (Path | None): Retained PDF, or None for a status read.
+            fields (dict[str, str] | None): Multipart action, session_id,
+                report_id, language and sha256; None for a status read.
+            emit (Callable[[int, int], None] | None): Sent/total PDF bytes.
+            file_size (int): Shared owner's exact PDF size; zero for status.
+            before_request (Callable[[], None] | None): Live work checkpoint.
+        Returns:
+            dict[str, JsonValue]: Target-bound status or attachment receipt.
+        Raises:
+            FlightDeliveryError: Authority or transport could not be verified;
+                the shared owner reconciles an ambiguous upload before retry.
+        """
+        from .flight_delivery import FlightDeliveryError
+
+        if url or api_key:
+            raise FlightDeliveryError('Legacy credentials cannot deliver linked reports.')
+        if before_request is not None:
+            before_request()
+        body = None
+        if pdf_path is not None and fields is not None:
+            body = LinkedReportMultipart(self.gallery_id, pdf_path, fields, emit)
+            if pdf_path.stat().st_size != file_size:
+                raise FlightDeliveryError('The local report changed before delivery.')
+            body.before_dispatch = before_request
+        try:
+            return self.session.flight_report_request(
+                self.gallery_id, payload, body,
+                body.boundary if body is not None else None,
+                body.content_length if body is not None else None,
+                watch_key=self.watch_key,
+            )
+        except LinkingError as exc:
+            raise FlightDeliveryError(str(exc)) from exc
 
     def __post_init__(self) -> None:
         """Require a live upload scope and an exact installation binding.

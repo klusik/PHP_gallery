@@ -84,6 +84,12 @@ const MUSIC_QUERY_LIMIT_BYTES = 120;
  * Rationale: fractional borders and device-independent layout can differ by one pixel without consuming or clipping available width. Value: 2.
  */
 const PDF_EDITOR_WIDTH_TOLERANCE_PX = 2;
+/** Keep the filename editor useful rather than merely within the viewport.
+ * Type: integer. Units: CSS pixels. Scope: the 390px Admin PDF rename input.
+ * Consumers: native narrow title-input geometry assertion.
+ * Rationale: 240px leaves room to inspect a meaningful filename while editing.
+ */
+const PDF_TITLE_MOBILE_MIN_WIDTH_PX = 240;
 /** Match the compact production Admin action hitbox used by Music and PDF controls.
  * Type: integer. Units: CSS pixels. Scope: visible editor icon controls.
  * Consumers: computed-style assertion in the prepared Admin Media fixture.
@@ -206,6 +212,7 @@ window.addEventListener('unhandledrejection', event => {
 </script>
 <script type="module">
 import {setupGalleryMusic} from '/public/assets/gallery-modules/admin-gallery-music.js?v=20261102-repeat-modes-v1';
+import {setupGalleryPdfDocuments} from '/public/assets/gallery-modules/admin-pdf-documents.js?v=20261115-pdf-title-v2';
 import {setupGalleryMusicPlayback} from '/public/assets/gallery-modules/gallery-music-player.js?v=20261102-repeat-modes-v1';
 import {setupAdminNestedTabs} from '/public/assets/gallery-modules/admin-nested-tabs.js';
 import {setupAdminGalleryMigration} from '/public/assets/gallery-modules/admin-gallery-migration.js?v=20260920-gallery-migration-policy-v3';
@@ -335,6 +342,8 @@ let musicRevisionNumber = 7;
 let activePreferenceWrites = 0;
 let maximumConcurrentPreferenceWrites = 0;
 const importActions = [];
+const pdfTitleWrites = [];
+let pdfTitleFailure = '';
 let refuseImport = false;
 const importCompletions = [];
 document.addEventListener('php-gallery:auxiliary-mutation-success', event => {
@@ -453,6 +462,24 @@ window.fetch = /** Mock same-origin catalog and mutation endpoints while preserv
  */
 async (input, options = {}) => {
     const requestUrl = new URL(String(input), location.href);
+    if (requestUrl.pathname.endsWith('.pdf')) return new Response('', {status: 404});
+    if (options.body instanceof FormData && options.body.get('pdf_action') === 'rename') {
+        const body = options.body;
+        check(requestUrl.origin === location.origin && options.method === 'POST'
+            && options.credentials === 'same-origin'
+            && body.get('csrf_token') === 'fixture-csrf'
+            && body.get('id') === '42', 'Inline PDF titles must retain scoped POST/CSRF.');
+        pdfTitleWrites.push(body.get('pdf_title'));
+        if (pdfTitleFailure === 'refused') return new Response(JSON.stringify({
+            ok: false, error: 'Title changed in another editor. Reload the list.',
+        }), {status: 409, headers: {'Content-Type': 'application/json'}});
+        if (pdfTitleFailure === 'unknown') throw new TypeError('Simulated lost title response');
+        return new Response(JSON.stringify({
+            ok: true, title: body.get('pdf_title').endsWith('.pdf') ? body.get('pdf_title') : body.get('pdf_title') + '.pdf', document_id: body.get('document_id'),
+            mutation: {type: 'gallery.pdf.rename', entity: 'gallery', action: 'update', entity_ids: [42]},
+            contexts: [], panel: {workflow: 'gallery-edit', keep_open: true}, fallback: {},
+        }), {headers: {'Content-Type': 'application/json'}});
+    }
     if (requestUrl.searchParams.get('page') === 'admin_gallery_migration') {
         const body = options.body;
         check(options.method === 'POST' && body instanceof FormData
@@ -596,6 +623,7 @@ try {
     setupAdminNestedTabs(document);
     setupAdminGalleryMigration();
     setupGalleryMusic();
+    setupGalleryPdfDocuments();
     setupGalleryMusicPlayback();
     const manager = document.querySelector(
         '#admin-gallery-media-music [data-gallery-music][data-music-editor="1"]',
@@ -758,6 +786,64 @@ try {
     check(iconStylesAreCompact(adminPdfIcons, ADMIN_ICON_HITBOX_PX),
         'Admin PDF action icons must remain visible compact SVG controls without filled button blocks: '
             + JSON.stringify(adminPdfIcons));
+    const titleForm = pdfEditor.querySelector('[data-pdf-title-form]');
+    const titleInput = titleForm.querySelector('[data-pdf-title-input]');
+    const titleLink = pdfEditor.querySelector('[data-pdf-title-link]');
+    titleForm.querySelector('[data-pdf-title-edit]').click();
+    check(document.activeElement === titleInput && !titleInput.hidden
+        && titleInput.value === 'Admin fixture PDF' && titleLink.hidden,
+    'The PDF pencil must replace the displayed title with its prefilled input.');
+    titleInput.value = 'LICJ → LKPR analysis.pdf';
+    titleInput.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}));
+    titleInput.dispatchEvent(new FocusEvent('focusout', {bubbles: true}));
+    const titleDeadline = Date.now() + ACTION_TIMEOUT_MS;
+    while (titleForm.dataset.pdfTitleState && Date.now() < titleDeadline) {
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    check(pdfTitleWrites.length === 1 && titleLink.textContent === 'LICJ → LKPR analysis.pdf'
+        && titleInput.hidden && !titleLink.hidden && !titleLink.querySelector('analysis'),
+    'Enter plus blur must save exactly once and display the canonical title as text.');
+    titleForm.querySelector('[data-pdf-title-edit]').click();
+    titleInput.value = 'Cancelled draft';
+    titleInput.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+    check(pdfTitleWrites.length === 1 && titleInput.hidden
+        && titleLink.textContent === 'LICJ → LKPR analysis.pdf', 'Escape must cancel without saving.');
+    titleForm.querySelector('[data-pdf-title-edit]').click();
+    titleInput.value = 'Palermo to Prague · Czech report';
+    titleInput.blur();
+    const blurDeadline = Date.now() + ACTION_TIMEOUT_MS;
+    while (titleForm.dataset.pdfTitleState && Date.now() < blurDeadline) {
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    check(pdfTitleWrites.length === 2 && titleInput.hidden
+        && titleLink.textContent === 'Palermo to Prague · Czech report.pdf',
+    'Leaving the input must save without a confirmation or Save control.');
+    titleInput.setAttribute('value', titleInput.value);
+    const acknowledgedTitleMarkup = titleForm.outerHTML;
+    let currentTitleForm = titleForm;
+    for (const failure of ['refused', 'unknown']) {
+        pdfTitleFailure = failure;
+        currentTitleForm.querySelector('[data-pdf-title-edit]').click();
+        const draft = currentTitleForm.querySelector('[data-pdf-title-input]');
+        draft.value = 'Unverified ' + failure;
+        draft.blur();
+        const failureDeadline = Date.now() + ACTION_TIMEOUT_MS;
+        while (currentTitleForm.dataset.pdfTitleState === 'saving' && Date.now() < failureDeadline) {
+            await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+        }
+        check(currentTitleForm.dataset.pdfTitleState === 'unverified'
+            && draft.disabled && !draft.hidden
+            && currentTitleForm.querySelector('[data-pdf-title-status] a')
+            && titleLink.textContent === 'Palermo to Prague · Czech report.pdf',
+        'A refused/lost reply must retain intent and offer passive reload without another write.');
+        const passiveReload = document.createElement('template');
+        passiveReload.innerHTML = acknowledgedTitleMarkup;
+        const restoredForm = passiveReload.content.firstElementChild;
+        currentTitleForm.replaceWith(restoredForm);
+        currentTitleForm = restoredForm;
+        titleLink.hidden = false;
+    }
+    pdfTitleFailure = '';
     presentationTab?.click();
     const presentation = presentationPanel?.querySelector(
         '[data-gallery-presentation-editor]',
@@ -1496,6 +1582,12 @@ try {
                 assert.equal(desktop.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
                 assert.equal(desktop.readUInt32BE(16), DESKTOP_VIEWPORT_WIDTH);
                 await writeFile(path.join(evidenceDirectory, 'desktop.png'), desktop);
+                await evaluate(`(() => {
+                    document.querySelector('[data-admin-subtab-target="admin-gallery-media-pdf"]').click();
+                    document.querySelector('#admin-gallery-media-pdf [data-pdf-title-edit]').click();
+                })()`);
+                await writeFile(path.join(evidenceDirectory, 'pdf-title-desktop.png'),
+                    Buffer.from(await captureScreenshot(), 'base64'));
                 await setViewport({
                     width: MOBILE_VIEWPORT_WIDTH,
                     height: VIEWPORT_HEIGHT,
@@ -1595,6 +1687,21 @@ try {
                 const mobile = Buffer.from(await captureScreenshot(), 'base64');
                 assert.equal(mobile.readUInt32BE(16), MOBILE_VIEWPORT_WIDTH);
                 await writeFile(path.join(evidenceDirectory, 'mobile.png'), mobile);
+                await evaluate(`(() => {
+                    document.querySelector('[data-admin-subtab-target="admin-gallery-media-pdf"]').click();
+                    document.querySelector('#admin-gallery-media-pdf [data-pdf-title-edit]').click();
+                })()`);
+                const titleLayout = await evaluate(`(() => {
+                    const field = document.querySelector('#admin-gallery-media-pdf [data-pdf-title-input]');
+                    const box = field.getBoundingClientRect();
+                    return {visible: !field.hidden, width: box.width, right: box.right,
+                        viewport: innerWidth, radius: getComputedStyle(field).borderRadius};
+                })()`);
+                assert.ok(titleLayout.visible && titleLayout.width >= PDF_TITLE_MOBILE_MIN_WIDTH_PX
+                    && titleLayout.right <= titleLayout.viewport,
+                'The inline PDF title must fit the real narrow Admin cascade: ' + JSON.stringify(titleLayout));
+                await writeFile(path.join(evidenceDirectory, 'pdf-title-mobile.png'),
+                    Buffer.from(await captureScreenshot(), 'base64'));
             },
         },
     );

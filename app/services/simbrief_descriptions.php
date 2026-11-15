@@ -42,6 +42,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_pdf_settings.php';
+
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\cms_current_version;
@@ -855,7 +857,11 @@ function simbrief_description_save_ofp_for_gallery(
         $ofpPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.json';
         $manifestPath =
             $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp-manifest.json';
-        $pdfPath = $galleryRoot . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
+        $previousManifest = simbrief_ofp_gallery_manifest($gallery);
+        $previousPdf = $previousManifest['ofp_pdf_file'] ?? '';
+        $pdfFilename = is_string($previousPdf) && gallery_pdf_filename_valid($previousPdf)
+            ? $previousPdf : 'simbrief-ofp.pdf';
+        $pdfPath = $galleryRoot . DIRECTORY_SEPARATOR . $pdfFilename;
         $pdfEnabled = feature_capability_effective_enabled('gallery_pdf_documents');
         $pdfUrl = $pdfEnabled ? simbrief_description_pdf_url($payload) : '';
         $pdfResult = $pdfUrl !== ''
@@ -863,7 +869,7 @@ function simbrief_description_save_ofp_for_gallery(
             : [
                 'saved' => false,
                 'path' => '',
-                'filename' => 'simbrief-ofp.pdf',
+                'filename' => $pdfFilename,
                 'url' => '',
                 'error' => '',
             ];
@@ -922,7 +928,6 @@ function simbrief_description_save_ofp_for_gallery(
         $now = function_exists('Gallery\\Core\\now_sql')
             ? now_sql()
             : gmdate('Y-m-d H:i:s');
-        $previousManifest = simbrief_ofp_gallery_manifest($gallery);
         $manifest = [
             'format' => 'php_gallery_simbrief_ofp_manifest_v1',
             'saved_at' => $now,
@@ -943,7 +948,7 @@ function simbrief_description_save_ofp_for_gallery(
             // route JSON can still be refreshed without fetching any PDF bytes.
             'ofp_pdf_file' => !empty($pdfResult['saved'])
             || (!$pdfEnabled && is_file($pdfPath))
-                ? 'simbrief-ofp.pdf'
+                ? $pdfFilename
                 : '',
             'ofp_pdf_sha256' => !empty($pdfResult['saved'])
                 ? (string) ($pdfResult['sha256'] ?? '')
@@ -986,7 +991,7 @@ function simbrief_description_save_ofp_for_gallery(
                 'filename' => 'simbrief-ofp.json',
                 'pdf_saved' => !empty($pdfResult['saved']),
                 'pdf_path' => (string) ($pdfResult['path'] ?? ''),
-                'pdf_filename' => 'simbrief-ofp.pdf',
+                'pdf_filename' => $pdfFilename,
                 'pdf_url' => (string) ($pdfResult['url'] ?? ''),
                 'pdf_error' => (string) ($pdfResult['error'] ?? ''),
                 'error' => 'Could not write simbrief-ofp-manifest.json.',
@@ -996,7 +1001,7 @@ function simbrief_description_save_ofp_for_gallery(
         if ((int) ($gallery['id'] ?? 0) > 0) {
             require_once __DIR__ . '/gallery_pdf_settings.php';
             // A disabled PDF feature retains the existing original and its bytes.
-            $pdfSize = $manifest['ofp_pdf_file'] === 'simbrief-ofp.pdf'
+            $pdfSize = $manifest['ofp_pdf_file'] === $pdfFilename
             && !is_link($pdfPath)
                 ? @filesize($pdfPath)
                 : false;
@@ -1031,7 +1036,7 @@ function simbrief_description_save_ofp_for_gallery(
             'filename' => 'simbrief-ofp.json',
             'pdf_saved' => !empty($pdfResult['saved']),
             'pdf_path' => (string) ($pdfResult['path'] ?? ''),
-            'pdf_filename' => 'simbrief-ofp.pdf',
+            'pdf_filename' => $pdfFilename,
             'pdf_url' => (string) ($pdfResult['url'] ?? ''),
             'pdf_error' => (string) ($pdfResult['error'] ?? ''),
             'error' => '',
@@ -1213,7 +1218,7 @@ function simbrief_description_save_pdf_for_gallery(
         return [
             'saved' => false,
             'path' => '',
-            'filename' => 'simbrief-ofp.pdf',
+            'filename' => basename($targetPath),
             'url' => '',
             'error' => 'Gallery PDF documents are disabled.',
         ];
@@ -1223,7 +1228,7 @@ function simbrief_description_save_pdf_for_gallery(
         return [
             'saved' => false,
             'path' => '',
-            'filename' => 'simbrief-ofp.pdf',
+            'filename' => basename($targetPath),
             'url' => '',
             'error' => 'SimBrief PDF URL was not trusted.',
         ];
@@ -1238,7 +1243,7 @@ function simbrief_description_save_pdf_for_gallery(
         return [
             'saved' => false,
             'path' => '',
-            'filename' => 'simbrief-ofp.pdf',
+            'filename' => basename($targetPath),
             'url' => $safeUrl,
             'error' => $exception->getMessage(),
         ];
@@ -1252,7 +1257,7 @@ function simbrief_description_save_pdf_for_gallery(
         return [
             'saved' => false,
             'path' => '',
-            'filename' => 'simbrief-ofp.pdf',
+            'filename' => basename($targetPath),
             'url' => $safeUrl,
             'error' => 'SimBrief PDF was invalid or exceeded the size limit.',
         ];
@@ -1270,7 +1275,7 @@ function simbrief_description_save_pdf_for_gallery(
             return [
                 'saved' => false,
                 'path' => '',
-                'filename' => 'simbrief-ofp.pdf',
+                'filename' => basename($targetPath),
                 'url' => $safeUrl,
                 'error' => 'Could not stage the downloaded PDF.',
             ];
@@ -1279,7 +1284,7 @@ function simbrief_description_save_pdf_for_gallery(
             return [
                 'saved' => false,
                 'path' => '',
-                'filename' => 'simbrief-ofp.pdf',
+                'filename' => basename($targetPath),
                 'url' => $safeUrl,
                 'error' => 'Could not atomically replace the saved PDF.',
             ];
@@ -1295,7 +1300,7 @@ function simbrief_description_save_pdf_for_gallery(
     return [
         'saved' => true,
         'path' => $targetPath,
-        'filename' => 'simbrief-ofp.pdf',
+        'filename' => basename($targetPath),
         'url' => $safeUrl,
         'error' => '',
         'sha256' => hash('sha256', $body),

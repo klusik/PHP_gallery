@@ -99,7 +99,7 @@ function gallery_attachment_storage_summary(
         foreach ($entries as $entry) {
             storage_observer_add('counts.' . $kind . '_originals_checked');
             $relative = $kind === 'pdf'
-                ? '/.gallery-pdf-documents/' . $entry['id'] . '.pdf'
+                ? '/.gallery-pdf-documents/' . gallery_pdf_documents_storage_name($entry)
                 : '/.gallery-music/' . $entry['id'] . '.bin';
             $bytes = gallery_attachment_storage_file_size($root, $relative);
             if ($bytes === null) {
@@ -118,7 +118,7 @@ function gallery_attachment_storage_summary(
     if ($ofp !== null) {
         $bytes = gallery_attachment_storage_file_size(
             $root,
-            '/simbrief-ofp.pdf',
+            '/' . basename($ofp),
         );
         if ($bytes === null) {
             $summary['errors']++;
@@ -126,13 +126,15 @@ function gallery_attachment_storage_summary(
             $summary['pdf_count']++;
             $summary['pdf_bytes'] += $bytes;
         }
-    } elseif (
-        storage_observer_call('fs.file_exists', static fn(): bool => file_exists($root
-            . '/simbrief-ofp.pdf'))
-        || storage_observer_call('fs.is_link', static fn(): bool => is_link($root
-            . '/simbrief-ofp.pdf'))
-    ) {
-        $summary['errors']++;
+    } else {
+        $registeredOfp = simbrief_ofp_gallery_manifest($gallery)['ofp_pdf_file'] ?? '';
+        if ($registeredOfp !== ''
+            || storage_observer_call('fs.file_exists', static fn(): bool => file_exists($root
+                . '/simbrief-ofp.pdf'))
+            || storage_observer_call('fs.is_link', static fn(): bool => is_link($root
+                . '/simbrief-ofp.pdf'))) {
+            $summary['errors']++;
+        }
     }
     return $summary;
 }
@@ -183,6 +185,31 @@ function gallery_attachment_storage_file_size(
  * Rationale: Match the existing OFP attachment limit and bound gallery storage use.
  */
 const GALLERY_PDF_DOCUMENT_MAX_BYTES = 26214400;
+
+/**
+ * Bound a document's display title in the existing attachment index.
+ * Type: int. Units: UTF-8 bytes. Scope: manual and legacy OFP titles.
+ * Consumers: attachment creation and metadata updates.
+ * Rationale: 240 bytes preserves the established title limit.
+ */
+const GALLERY_PDF_DOCUMENT_TITLE_MAX_BYTES = 240;
+
+/** Resolve an index entry's current physical PDF basename.
+ * @param array{id:string,storage_filename?:string} $entry Trusted document identity and optional named storage.
+ * @return string Named PDF basename, or the historical opaque-id basename for an older record.
+ * @throws RuntimeException When a named-storage value cannot safely identify a direct PDF.
+ */
+function gallery_pdf_documents_storage_name(array $entry): string
+{
+    if (isset($entry['storage_filename'])) {
+        if (!gallery_pdf_filename_valid($entry['storage_filename']))
+            throw new RuntimeException('PDF document filename is unsafe.');
+        return $entry['storage_filename'];
+    }
+    // Older indexes used opaque disk names. Retain their existing bytes until
+    // an explicit rename safely moves them and commits a named-storage entry.
+    return $entry['id'] . '.pdf';
+}
 
 /** Permissions for the shared PDF/OFP source-mutation lock.
  * Type: int. Units: POSIX permission bits.
@@ -295,7 +322,7 @@ function gallery_pdf_documents_validate_pdf_source(string $source): array
  * Read document metadata and reserved legacy-OFP visibility from the trusted index.
  *
  * @param string $root Existing confined gallery directory.
- * @return array{documents:array<string,array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool}>,ofp_hidden:bool} Valid manual records and the legacy OFP visibility value.
+ * @return array{documents:array<string,array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool,storage_filename?:string}>,ofp_hidden:bool} Valid manual records and the legacy OFP visibility value.
  * @throws RuntimeException When the index or storage directory is unsafe.
  */
 function gallery_pdf_documents_read_index_state(string $root): array
@@ -367,6 +394,9 @@ function gallery_pdf_documents_read_index_state(string $root): array
             || !is_string($entry['provenance'] ?? null)
             || !is_string($entry['created_at'] ?? null)
             || !is_string($entry['updated_at'] ?? null)
+            || (isset($entry['storage_filename'])
+                && (!is_string($entry['storage_filename'])
+                    || !gallery_pdf_filename_valid($entry['storage_filename'])))
             || (
                 array_key_exists('hidden', $entry)
                 && !is_bool($entry['hidden'])
@@ -388,7 +418,7 @@ function gallery_pdf_documents_read_index_state(string $root): array
 /**
  * Read only manual PDF records from the gallery attachment index.
  * @param string $root Existing confined gallery directory.
- * @return array<string,array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool}> Valid records keyed by opaque id.
+ * @return array<string,array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool,storage_filename?:string}> Valid records keyed by opaque id.
  * @throws RuntimeException When the index or storage directory is unsafe.
  */
 function gallery_pdf_documents_read_index(string $root): array
@@ -471,7 +501,7 @@ function gallery_pdf_documents_usage_source_lock(array $gallery): mixed
 /** Publish current PDF sidecar state using the token from before its mutation.
  * @param array{id:int,folder_path:string} $gallery Persisted physical gallery.
  * @param string|null $revision Dirty generation token, or null for legacy schema.
- * @param array<string,array{id:string,sha256:string,hidden:bool}> $documents Trusted current manual PDF rows keyed by opaque ID.
+ * @param array<string,array{id:string,sha256:string,hidden:bool,storage_filename?:string}> $documents Trusted current manual PDF rows keyed by opaque ID.
  * @param bool $ofpHidden Whether the legacy OFP PDF is hidden from visitors.
  * @param array{ofp_pdf_file?:string,ofp_pdf_sha256?:string}|null $ofpManifest Current or just-committed OFP manifest, or null to read it from its trusted owner.
  * @return void Leaves usage dirty when digest state is incomplete or publication loses its CAS token.
@@ -521,7 +551,7 @@ function gallery_pdf_documents_usage_publish(
             return;
         }
     }
-    if (($ofpManifest['ofp_pdf_file'] ?? '') === 'simbrief-ofp.pdf') {
+    if (is_string($ofpManifest['ofp_pdf_file'] ?? null) && gallery_pdf_filename_valid($ofpManifest['ofp_pdf_file'])) {
         $digest = $ofpManifest['ofp_pdf_sha256'] ?? null;
         if (!is_string($digest) || preg_match('/^[a-f0-9]{64}$/D', $digest) !== 1) {
             error_log('PDF attachment usage projection remained dirty pending the legacy OFP digest.');
@@ -555,7 +585,7 @@ function gallery_pdf_documents_usage_publish(
  * List valid general PDF document metadata for one physical gallery.
  *
  * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
- * @return list<array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool}> Ordered document metadata; an unsafe or missing gallery has no entries.
+ * @return list<array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool,storage_filename?:string}> Ordered document metadata; an unsafe or missing gallery has no entries.
  */
 function gallery_pdf_documents_list(array $gallery): array
 {
@@ -571,8 +601,7 @@ function gallery_pdf_documents_list(array $gallery): array
             . DIRECTORY_SEPARATOR
             . '.gallery-pdf-documents'
             . DIRECTORY_SEPARATOR
-            . $id
-            . '.pdf';
+            . gallery_pdf_documents_storage_name($metadata);
         if (
             is_link($path)
             || !is_file($path)
@@ -599,7 +628,7 @@ function gallery_pdf_documents_list(array $gallery): array
  * @param string $provenance Short origin label describing how the PDF was obtained.
  * @param ?string $replaceId Existing opaque document id to replace, or null to add.
  * @param bool $confirmed Whether the caller received explicit replacement confirmation.
- * @return array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool} Saved document metadata.
+ * @return array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool,storage_filename?:string} Saved document metadata.
  * @throws RuntimeException When validation, confirmation, locking or atomic publication fails.
  */
 function gallery_pdf_documents_attach(
@@ -628,7 +657,7 @@ function gallery_pdf_documents_attach(
     if (
         $filename === ''
         || $title === ''
-        || strlen($title) > 240
+        || strlen($title) > GALLERY_PDF_DOCUMENT_TITLE_MAX_BYTES
         || $provenance === ''
         || strlen($provenance) > 80
     ) {
@@ -717,6 +746,12 @@ function gallery_pdf_documents_attach(
             'created_at' => is_array($old) ? $old['created_at'] : $now,
             'updated_at' => $now,
         ];
+        if (is_array($old) && isset($old['storage_filename'])) {
+            // Confirmed replacement preserves a previously chosen disk name.
+            $entry['storage_filename'] = gallery_pdf_documents_storage_name($old);
+            $entry['filename'] = $entry['storage_filename'];
+            $entry['title'] = $entry['storage_filename'];
+        }
         $documents[$id] = $entry;
         $json = json_encode(
             [
@@ -732,7 +767,7 @@ function gallery_pdf_documents_attach(
             );
         }
         $suffix = bin2hex(random_bytes(12));
-        $targetPdf = $directory . DIRECTORY_SEPARATOR . $id . '.pdf';
+        $targetPdf = $directory . DIRECTORY_SEPARATOR . gallery_pdf_documents_storage_name($entry);
         $indexPath = $directory . DIRECTORY_SEPARATOR . 'index.json';
         if (is_link($targetPdf) || is_link($indexPath)) {
             throw new RuntimeException('PDF document storage is unsafe.');
@@ -895,7 +930,7 @@ function gallery_pdf_documents_copy_source(
  *
  * @param array{id:int,folder_path:string} $gallery Persisted physical gallery row.
  * @param string $id Opaque 32-character lowercase hexadecimal document id.
- * @return ?array{path:string,metadata:array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool}} Confined original path and trusted metadata, or null when unavailable.
+ * @return ?array{path:string,metadata:array{id:string,size:int,sha256:string,filename:string,title:string,provenance:string,created_at:string,updated_at:string,hidden:bool,storage_filename?:string}} Confined original path and trusted metadata, or null when unavailable.
  */
 function gallery_pdf_documents_read(array $gallery, string $id): ?array
 {
@@ -912,7 +947,7 @@ function gallery_pdf_documents_read(array $gallery, string $id): ?array
         return null;
     }
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
-    $path = $directory . DIRECTORY_SEPARATOR . $id . '.pdf';
+    $path = $directory . DIRECTORY_SEPARATOR . gallery_pdf_documents_storage_name($metadata);
     $resolvedDirectory = realpath($directory);
     $resolved = realpath($path);
     if (
@@ -947,13 +982,46 @@ function gallery_pdf_documents_set_hidden(
     string $id,
     bool $hidden,
 ): bool {
+    return gallery_pdf_documents_update_metadata($gallery, $id, $hidden);
+}
+
+/**
+ * Change a PDF's disk filename and index, or only its visibility, under one lock.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery.
+ * @param string $id Opaque manual document id, or ofp for the legacy attachment.
+ * @param bool|null $hidden New visibility, or null to preserve its current value.
+ * @param string|null $title Requested disk/display filename, or null to preserve it.
+ * @param string|null $expectedTitle Previously displayed title, or null for visibility-only callers.
+ * @return bool True after persistence; false when the document is absent.
+ * @throws RuntimeException When storage, title or the prior title cannot be verified.
+ */
+function gallery_pdf_documents_update_metadata(
+    array $gallery, string $id, ?bool $hidden = null,
+    ?string $title = null, ?string $expectedTitle = null,
+): bool {
+    if ($title !== null) {
+        $title = gallery_pdf_filename_for_title($title);
+        if ($id === 'ofp') return simbrief_ofp_rename_pdf($gallery, $title, $expectedTitle);
+    }
     $root = gallery_pdf_documents_gallery_directory($gallery);
-    if ($root === null || preg_match('/^[a-f0-9]{32}$/D', $id) !== 1)
+    if ($root === null || ($id !== 'ofp' && preg_match('/^[a-f0-9]{32}$/D', $id) !== 1))
+        return false;
+    if ($id === 'ofp' && simbrief_ofp_local_pdf_path($gallery) === null)
         return false;
     $directory = $root . DIRECTORY_SEPARATOR . '.gallery-pdf-documents';
-    if (is_link($directory) || !is_dir($directory))
-        return false;
     $usageLock = gallery_pdf_documents_usage_source_lock($gallery);
+    if ($id === 'ofp' && !is_link($directory) && !is_dir($directory)) {
+        if (!@mkdir($directory, 0700)) {
+            flock($usageLock, LOCK_UN);
+            fclose($usageLock);
+            throw new RuntimeException('PDF document storage is unavailable.');
+        }
+    }
+    if (is_link($directory) || !is_dir($directory)) {
+        flock($usageLock, LOCK_UN);
+        fclose($usageLock);
+        return false;
+    }
     $lockPath = $directory . DIRECTORY_SEPARATOR . '.lock';
     if (is_link($lockPath)) {
         flock($usageLock, LOCK_UN);
@@ -967,16 +1035,44 @@ function gallery_pdf_documents_set_hidden(
         throw new RuntimeException('PDF document storage cannot be locked.');
     }
     $stage = '';
+    $renamedFrom = '';
+    $renamedTo = '';
+    $moved = false;
+    $committed = false;
     $usageRevision = null;
     try {
         if (!flock($lock, LOCK_EX))
             throw new RuntimeException('PDF document storage is busy.');
         $indexState = gallery_pdf_documents_read_index_state($root);
         $documents = $indexState['documents'];
-        if (!isset($documents[$id]))
+        if ($id !== 'ofp' && !isset($documents[$id]))
             return false;
-        $documents[$id]['hidden'] = $hidden;
-        $documents[$id]['updated_at'] = gmdate('Y-m-d\\TH:i:s\\Z');
+        $currentTitle = $id === 'ofp'
+            ? gallery_pdf_documents_ofp_title($gallery)
+            : $documents[$id]['title'];
+        if ($expectedTitle !== null && $expectedTitle !== $currentTitle) {
+            throw new RuntimeException('The document title changed. Reload the document list.');
+        }
+        if ($id === 'ofp') {
+            if ($hidden !== null) $indexState['ofp_hidden'] = $hidden;
+        } else {
+            if ($hidden !== null) $documents[$id]['hidden'] = $hidden;
+            if ($title !== null) {
+                $original = gallery_pdf_documents_read($gallery, $id);
+                if ($original === null)
+                    throw new RuntimeException('The original PDF could not be verified.');
+                $renamedFrom = $original['path'];
+                $renamedTo = $directory . DIRECTORY_SEPARATOR . $title;
+                if ($renamedFrom !== $renamedTo
+                    && (file_exists($renamedTo) || is_link($renamedTo))) {
+                    throw new RuntimeException('A PDF with that filename already exists.');
+                }
+                $documents[$id]['title'] = $title;
+                $documents[$id]['filename'] = $title;
+                $documents[$id]['storage_filename'] = $title;
+            }
+            $documents[$id]['updated_at'] = gmdate('Y-m-d\\TH:i:s\\Z');
+        }
         $json = json_encode(
             [
                 'format' => 'php_gallery_pdf_documents_v1',
@@ -1010,11 +1106,17 @@ function gallery_pdf_documents_set_hidden(
             'gallery_pdf_documents_visibility',
         );
         @chmod($stage, 0600);
+        if ($renamedFrom !== '' && $renamedFrom !== $renamedTo) {
+            if (!@rename($renamedFrom, $renamedTo))
+                throw new RuntimeException('The PDF file could not be renamed.');
+            $moved = true;
+        }
         if (!@rename($stage, $indexPath))
             throw new RuntimeException(
                 'Updated PDF visibility could not be installed.',
             );
         $stage = '';
+        $committed = true;
         gallery_pdf_documents_usage_publish(
             $gallery,
             $usageRevision,
@@ -1023,6 +1125,12 @@ function gallery_pdf_documents_set_hidden(
         );
         return true;
     } finally {
+        if ($moved && !$committed && $renamedFrom !== '' && $renamedFrom !== $renamedTo
+            && !file_exists($renamedFrom) && is_file($renamedTo)) {
+            // A failed index commit retains the original mapping and restores
+            // its file. Never unlink a PDF when rollback cannot be confirmed.
+            @rename($renamedTo, $renamedFrom);
+        }
         if ($stage !== '' && is_file($stage))
             @unlink($stage);
         flock($lock, LOCK_UN);
@@ -1030,6 +1138,17 @@ function gallery_pdf_documents_set_hidden(
         flock($usageLock, LOCK_UN);
         fclose($usageLock);
     }
+}
+
+/**
+ * Read the legacy OFP's actual disk filename for display and editing.
+ * @param array{id:int,folder_path:string} $gallery Persisted physical gallery.
+ * @return string Actual PDF basename, or SimBrief OFP when no valid source exists.
+ */
+function gallery_pdf_documents_ofp_title(array $gallery): string
+{
+    $path = simbrief_ofp_local_pdf_path($gallery);
+    return $path === null ? 'SimBrief OFP' : basename($path);
 }
 
 /**
@@ -1200,7 +1319,7 @@ function gallery_pdf_documents_delete(
         $documents = $indexState['documents'];
         if (!isset($documents[$id]))
             return false;
-        $path = $directory . DIRECTORY_SEPARATOR . $id . '.pdf';
+        $path = $directory . DIRECTORY_SEPARATOR . gallery_pdf_documents_storage_name($documents[$id]);
         $indexPath = $directory . DIRECTORY_SEPARATOR . 'index.json';
         if (is_link($path) || is_link($indexPath) || !is_file($path)) {
             throw new RuntimeException(

@@ -16,6 +16,8 @@ declare(strict_types=1);
 
 namespace Gallery\Services;
 
+require_once __DIR__ . '/gallery_pdf_settings.php';
+
 /**
  * Bound gallery snapshots inspected by one manual or automatic worker step.
  * Type: int. Units: galleries. Scope: one resumable worker call.
@@ -315,7 +317,8 @@ function gallery_attachment_usage_requires_legacy_digest(array $gallery): bool
         throw new \RuntimeException('The OFP manifest owner is unavailable.');
     }
     $manifest = simbrief_ofp_gallery_manifest($gallery);
-    return ($manifest['ofp_pdf_file'] ?? '') === 'simbrief-ofp.pdf'
+    return is_string($manifest['ofp_pdf_file'] ?? null)
+        && gallery_pdf_filename_valid($manifest['ofp_pdf_file'])
         && (
             !is_string($manifest['ofp_pdf_sha256'] ?? null)
             || preg_match('/^[a-f0-9]{64}$/D', $manifest['ofp_pdf_sha256']) !== 1
@@ -351,8 +354,8 @@ function gallery_attachment_usage_pdf_items(
         throw new \RuntimeException('The OFP manifest owner is unavailable.');
     }
     $ofp = simbrief_ofp_gallery_manifest($gallery);
-    if (($ofp['ofp_pdf_file'] ?? '') === 'simbrief-ofp.pdf') {
-        $path = $root . DIRECTORY_SEPARATOR . 'simbrief-ofp.pdf';
+    if (is_string($ofp['ofp_pdf_file'] ?? null) && gallery_pdf_filename_valid($ofp['ofp_pdf_file'])) {
+        $path = $root . DIRECTORY_SEPARATOR . $ofp['ofp_pdf_file'];
         if (is_link($path) || !is_file($path)) {
             throw new \RuntimeException('Legacy OFP attachment is unsafe.');
         }
@@ -420,7 +423,7 @@ function gallery_attachment_usage_store_ofp_digest(
         if (
             !is_array($manifest)
             || ($manifest['format'] ?? '') !== 'php_gallery_simbrief_ofp_manifest_v1'
-            || ($manifest['ofp_pdf_file'] ?? '') !== 'simbrief-ofp.pdf'
+            || ($manifest['ofp_pdf_file'] ?? '') !== basename($pdfPath)
         ) {
             throw new \RuntimeException('Legacy OFP manifest is invalid.');
         }

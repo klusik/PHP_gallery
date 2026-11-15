@@ -530,7 +530,7 @@ function gallery_archive_media_original(
                 return null;
             }
             $path = simbrief_ofp_local_pdf_path($gallery) ?? '';
-            $filename = 'simbrief-ofp.pdf';
+            $filename = basename($path);
             if ($path === '') {
                 return null;
             }

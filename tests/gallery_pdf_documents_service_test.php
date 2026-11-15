@@ -32,6 +32,19 @@ namespace Gallery\Core {
 }
 
 namespace Gallery\Services {
+    /** Inject one failed index publication while preserving actual file renames.
+     * @param string $source Source file created by this fixture.
+     * @param string $target Destination selected by the actual storage owner.
+     * @return bool Native rename result, or false for the requested one-shot index failure.
+     */
+    function rename(string $source, string $target): bool
+    {
+        if (!empty($GLOBALS['pdf_fail_index_commit']) && basename($target) === 'index.json') {
+            $GLOBALS['pdf_fail_index_commit'] = false;
+            return false;
+        }
+        return \rename($source, $target);
+    }
     /**
      * Resolve one gallery-relative fixture path beneath the test galleries root.
      * @param string $relative Gallery-relative folder path.
@@ -353,6 +366,69 @@ namespace {
                     $first['id'],
                 ),
             'New documents must default to visible in metadata and visibility reads.',
+        );
+        $oldPhysical = \Gallery\Services\gallery_pdf_documents_read($gallery, $first['id'])['path'];
+        gallery_pdf_documents_test_assert(
+            \Gallery\Services\gallery_pdf_documents_update_metadata(
+                $gallery, $first['id'], null, 'Renamed report', 'Original scan',
+            ),
+            'An inline rename must persist without replacing its original.',
+        );
+        $renamed = \Gallery\Services\gallery_pdf_documents_read($gallery, $first['id']);
+        gallery_pdf_documents_test_assert(
+            $renamed['metadata']['title'] === 'Renamed report.pdf'
+                && $renamed['metadata']['sha256'] === $first['sha256']
+                && $renamed['metadata']['provenance'] === $first['provenance']
+                && $renamed['metadata']['filename'] === 'Renamed report.pdf'
+                && basename($renamed['path']) === 'Renamed report.pdf'
+                && !file_exists($oldPhysical)
+                && file_get_contents($renamed['path']) === $firstBytes,
+            'Renaming must change the actual disk and download names while preserving exact bytes, identity and provenance.',
+        );
+        try {
+            \Gallery\Services\gallery_pdf_documents_update_metadata(
+                $gallery, $first['id'], null, 'Stale edit', 'Original scan',
+            );
+            throw new \LogicException('A stale title edit must not overwrite another writer.');
+        } catch (\RuntimeException) {
+            gallery_pdf_documents_test_assert(
+                \Gallery\Services\gallery_pdf_documents_read($gallery, $first['id'])['metadata']['title']
+                    === 'Renamed report.pdf',
+                'A refused stale edit must preserve the acknowledged title.',
+            );
+        }
+        $occupiedPdf = dirname($renamed['path']) . '/Occupied.pdf';
+        file_put_contents($occupiedPdf, 'unrelated retained bytes');
+        foreach (['Occupied.pdf', '../escape.pdf', 'CON.pdf', 'bad<report>.pdf'] as $invalidName) {
+            try {
+                \Gallery\Services\gallery_pdf_documents_update_metadata(
+                    $gallery, $first['id'], null, $invalidName, 'Renamed report.pdf',
+                );
+                throw new \LogicException('A colliding or unsafe filename was accepted.');
+            } catch (\RuntimeException) {
+                gallery_pdf_documents_test_assert(
+                    file_get_contents($occupiedPdf) === 'unrelated retained bytes'
+                        && file_get_contents($renamed['path']) === $firstBytes,
+                    'Filename refusal must not overwrite any original or target.',
+                );
+            }
+        }
+        unlink($occupiedPdf);
+        $GLOBALS['pdf_fail_index_commit'] = true;
+        try {
+            \Gallery\Services\gallery_pdf_documents_update_metadata(
+                $gallery, $first['id'], null, 'Rollback', 'Renamed report.pdf',
+            );
+            throw new \LogicException('A failed index commit was reported as success.');
+        } catch (\RuntimeException) {
+            gallery_pdf_documents_test_assert(
+                \Gallery\Services\gallery_pdf_documents_read($gallery, $first['id'])['path'] === $renamed['path']
+                    && !file_exists(dirname($renamed['path']) . '/Rollback.pdf'),
+                'An index failure must restore the original disk name and mapping.',
+            );
+        }
+        \Gallery\Services\gallery_pdf_documents_update_metadata(
+            $gallery, $first['id'], null, 'Original scan', 'Renamed report.pdf',
         );
         $resolved = \Gallery\Services\gallery_pdf_documents_read(
             $gallery,

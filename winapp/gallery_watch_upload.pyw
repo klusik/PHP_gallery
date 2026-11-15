@@ -12034,7 +12034,9 @@ class WatcherApp:
                     mode_view = self.mode_owner.view()
                     mode_record = mode_view.record
                     if (plan.completed or plan.abandoned
-                            or plan.local_only != (saved.mode == 'linked')
+                            # Delivery preference is not a mode identity:
+                            # linked sessions may now require PDF receipts.
+                            or (saved.mode == 'legacy' and plan.local_only)
                             or queue_row.get('initial_captured') is not True
                             or queue_row.get('frozen') is not False
                             or queue_row.get('cutoff') != 0 or queue_row.get('error')):
@@ -12481,7 +12483,7 @@ class WatcherApp:
                     raise ValueError('The original linked scope changed.')
             plan = SessionPlan.load(self.flights.directory / record.session_id)
             if (plan.binding != record.binding or plan.completed or plan.abandoned
-                    or plan.local_only != (record.mode == 'linked')
+                    or (record.mode == 'legacy' and plan.local_only)
                     or (target is not None and target.binding() != record.binding)
                     or record.contextual and (
                         target is None or target.watch_key is None
