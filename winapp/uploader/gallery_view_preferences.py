@@ -2,7 +2,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/uploader/gallery_view_preferences.py
 # Module Type: Local Gallery View Preferences
-# Purpose: Persist WinApp photo-card formats independently of upload settings.
+# Purpose: Persist WinApp photo-card formats and order independently of uploads.
 # Responsibilities:
 #   - Validate supported card formats and bounded per-account local preferences.
 #   - Atomically save one gallery choice while preserving other gallery choices.
@@ -49,14 +49,14 @@ def normalize_card_format(value: str) -> str:
     return value if value in PHOTO_CARD_FORMATS else "default"
 
 
-def _read_preferences(path: Path) -> dict[str, str]:
-    """Read validated local format choices without inventing saved state.
+def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
+    """Read independent local format and order choices without remote state.
 
     Args:
         path (Path): Credential-free file for one verified site/account.
     Returns:
-        dict[str, str]: Canonical positive gallery-ID strings mapped to supported
-            explicit format keys; an absent file produces an empty mapping.
+        dict[str, dict[str, str]]: card_formats and photo_orders maps keyed by
+            canonical positive gallery IDs; a missing file has empty maps.
     Raises:
         OSError: The file cannot be read.
         ValueError: The file is unsafe, oversized, malformed or unsupported.
@@ -68,7 +68,7 @@ def _read_preferences(path: Path) -> dict[str, str]:
             # One extra byte distinguishes the exact limit from an overflow.
             encoded = source.read(GALLERY_VIEW_PREFERENCES_MAX_BYTES + 1)
     except FileNotFoundError:
-        return {}
+        return {"card_formats": {}, "photo_orders": {}}
     if len(encoded) > GALLERY_VIEW_PREFERENCES_MAX_BYTES:
         raise ValueError("Gallery view preferences exceed their size limit.")
     try:
@@ -80,17 +80,25 @@ def _read_preferences(path: Path) -> dict[str, str]:
             or payload["version"] != 1
             or not isinstance(payload.get("card_formats"), dict)):
         raise ValueError("Unsupported gallery view preferences.")
-    rows = payload["card_formats"]
-    if len(rows) > GALLERY_VIEW_PREFERENCES_MAX_GALLERIES:
-        raise ValueError("Too many gallery view preferences.")
-    result: dict[str, str] = {}
-    for raw_id, value in rows.items():
-        if (not isinstance(raw_id, str) or not raw_id.isdecimal()
-                or not isinstance(value, str) or value not in PHOTO_CARD_FORMATS):
-            continue
-        gallery_id = int(raw_id)
-        if 0 < gallery_id <= LINKING_GALLERY_ID_MAX and value != "default":
-            result[str(gallery_id)] = value
+    # Version 1 files predating photo order have only card_formats. This
+    # permanent additive reader preserves those existing user choices.
+    result: dict[str, dict[str, str]] = {}
+    for field, choices, default in (
+        ("card_formats", PHOTO_CARD_FORMATS, "default"),
+        ("photo_orders", ("oldest", "newest"), "oldest"),
+    ):
+        rows = payload.get(field, {})
+        if (not isinstance(rows, dict)
+                or len(rows) > GALLERY_VIEW_PREFERENCES_MAX_GALLERIES):
+            raise ValueError("Invalid gallery view preferences.")
+        result[field] = {}
+        for raw_id, value in rows.items():
+            if (not isinstance(raw_id, str) or not raw_id.isdecimal()
+                    or not isinstance(value, str) or value not in choices):
+                continue
+            gallery_id = int(raw_id)
+            if 0 < gallery_id <= LINKING_GALLERY_ID_MAX and value != default:
+                result[field][str(gallery_id)] = value
     return result
 
 
@@ -106,7 +114,7 @@ def load_gallery_card_format(path: Path, gallery_id: int) -> str:
     if type(gallery_id) is not int or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX:
         return "default"
     try:
-        return _read_preferences(path).get(str(gallery_id), "default")
+        return _read_preferences(path)["card_formats"].get(str(gallery_id), "default")
     except (OSError, ValueError):
         return "default"
 
@@ -127,7 +135,8 @@ def save_gallery_card_format(path: Path, gallery_id: int, value: str) -> bool:
             or value not in PHOTO_CARD_FORMATS):
         return False
     try:
-        rows = _read_preferences(path)
+        preferences = _read_preferences(path)
+        rows = preferences["card_formats"]
         key = str(gallery_id)
         if value == "default":
             rows.pop(key, None)
@@ -136,7 +145,56 @@ def save_gallery_card_format(path: Path, gallery_id: int, value: str) -> bool:
         if len(rows) > GALLERY_VIEW_PREFERENCES_MAX_GALLERIES:
             return False
         # Version 1 is the structural local-view document schema, not a policy.
-        atomic_write_json(path, {"version": 1, "card_formats": rows})
+        atomic_write_json(path, {"version": 1, **preferences})
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def load_gallery_photo_order(path: Path, gallery_id: int) -> str:
+    """Restore the persistent WinApp order for one verified gallery.
+
+    Args:
+        path (Path): Local file scoped to the verified site and account.
+        gallery_id (int): Selected physical gallery identity.
+    Returns:
+        str: newest or the original oldest order for absent/unreadable state.
+    """
+    if type(gallery_id) is not int or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX:
+        return "oldest"
+    try:
+        return _read_preferences(path)["photo_orders"].get(str(gallery_id), "oldest")
+    except (OSError, ValueError):
+        # The local preference owner keeps browsing usable on damaged storage;
+        # saves still refuse that file. This is permanent source-mode support.
+        return "oldest"
+
+
+def save_gallery_photo_order(path: Path, gallery_id: int, value: str) -> bool:
+    """Persist order without changing formats, other galleries or the server.
+
+    Args:
+        path (Path): Local file scoped to the verified site and account.
+        gallery_id (int): Selected physical gallery identity.
+        value (str): oldest or newest; oldest removes the explicit override.
+    Returns:
+        bool: True after atomic persistence; False preserves unreadable state.
+    """
+    if (type(gallery_id) is not int
+            or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX
+            or value not in ("oldest", "newest")):
+        return False
+    try:
+        preferences = _read_preferences(path)
+        rows = preferences["photo_orders"]
+        key = str(gallery_id)
+        if value == "oldest":
+            rows.pop(key, None)
+        else:
+            rows[key] = value
+        if len(rows) > GALLERY_VIEW_PREFERENCES_MAX_GALLERIES:
+            return False
+        atomic_write_json(path, {"version": 1, **preferences})
         return True
     except (OSError, ValueError):
         return False

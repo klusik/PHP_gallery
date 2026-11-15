@@ -33,6 +33,8 @@
  */
 
 return [
+    'app_linking.consent.gallery_edit_scope' => 'WinApp can change gallery titles, descriptions, NSFW Guard and listing settings on this site.',
+    'app_linking.devices.gallery_edit_scope' => 'Edit gallery metadata',
     'admin.metadata_organizer.move_uncertain' => 'The move result is uncertain. The organizer retained both galleries; inspect their contents before retrying.',
     'app_linking.consent.read_visibility_scope' => 'This permits listing all galleries, reading stored visibility and access settings, and changing gallery visibility, including for private and unpublished galleries. It does not permit uploads or gallery creation.',
     'app_linking.consent.read_upload_visibility_scope' => 'This permits listing all galleries, reading stored visibility and access settings, changing gallery visibility, and uploading images, including to private and unpublished galleries. It does not permit gallery creation.',

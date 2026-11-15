@@ -185,6 +185,9 @@ function view_render_app_linking_start(
         . '</p><p id="scope-admin-media" hidden>'
         . e(t('app_linking.consent.admin_media_scope',
             'WinApp can browse restricted gallery photos, including private, unpublished and NSFW photos. Restricted photos are kept in memory for viewing. If gallery visibility changes are approved, WinApp can also change photo visibility.'))
+        . '</p><p id="scope-gallery-edit" hidden>'
+        . e(t('app_linking.consent.gallery_edit_scope',
+            'WinApp can change gallery titles, descriptions, NSFW Guard and listing settings on this site.'))
         . '</p><p id="scope-presentation" hidden>'
         . e(t('app_linking.consent.presentation_scope',
             'WinApp can read presentation settings and play visible music in listed public galleries. '
@@ -230,6 +233,7 @@ function view_render_app_linking_start(
     const mediaScope = document.getElementById('scope-media');
     const adminMediaScope = document.getElementById('scope-admin-media');
     const deleteScope = document.getElementById('scope-delete');
+    const galleryEditScope = document.getElementById('scope-gallery-edit');
     const presentationScope = document.getElementById('scope-presentation');
     const approve = document.getElementById('approve');
     const deny = document.getElementById('deny');
@@ -280,7 +284,8 @@ function view_render_app_linking_start(
             ' media:admin media:delete',
             ' media:read presentation:read', ' media:read',
             ' media:admin presentation:read', ' media:admin',
-        ];
+        ].flatMap(suffix => suffix.startsWith(' media:admin')
+            ? [suffix + ' gallery:edit', suffix] : [suffix]);
         const mediaSuffix = mediaSuffixes.find(
             suffix => scopeWithoutRenewal.endsWith(suffix),
         );
@@ -342,6 +347,7 @@ function view_render_app_linking_start(
         mediaScope.hidden = baseScope === 'link:identity' || !adminMediaScope.hidden;
         presentationScope.hidden = !presentationRequested;
         deleteScope.hidden = !adminMediaRequested;
+        galleryEditScope.hidden = !adminMediaRequested || !mediaSuffix.includes(' gallery:edit');
         attempt = result.attempt;
         consent.hidden = false;
         consent.focus();

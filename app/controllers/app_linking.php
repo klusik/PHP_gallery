@@ -1387,6 +1387,9 @@ function cms_app_linking_devices(): void
                     ? t('app_linking.devices.media_visibility_scope', 'Change gallery and photo visibility')
                     : t('app_linking.devices.visibility_scope', 'Change gallery visibility'));
             }
+            if (\Gallery\Services\app_linking_scope_allows_gallery_edit($grant['scope'])) {
+                $scope .= ' · ' . t('app_linking.devices.gallery_edit_scope', 'Edit gallery metadata');
+            }
             if ($adminMedia) {
                 $scope .= ' · ' . t('app_linking.devices.admin_media_scope', 'Admin photo access');
             } elseif (app_linking_scope_allows_gallery_listing($grant['scope'])) {

@@ -53,6 +53,16 @@ const APP_LINKING_CODE_TTL_SECONDS = 120;
 const APP_LINKING_ACCESS_TTL_SECONDS = 900;
 
 /**
+ * Keep a rolling bearer usable for one day after authenticated API activity.
+ * Type: int. Units: seconds. Scope: one browser-approved rolling grant.
+ * Consumers: app_linking_authenticate and the locked access renewal model.
+ * Rationale: 86400 tolerates idle capture and network gaps without frequent
+ * rotation. The 900-second exchange hint remains for older clients; day-v1
+ * clients adopt this sliding deadline after their first authenticated response.
+ */
+const APP_LINKING_ROLLING_ACCESS_TTL_SECONDS = 86400;
+
+/**
  * Bound one native gallery listing or search response.
  * Type: int. Units: gallery rows. Scope: one linking API response.
  * Consumers: app_linking_gallery_page, app_linking_gallery_picker_results.
@@ -287,6 +297,9 @@ function app_linking_discovery_capabilities(
             // A failed optional observation hides only its own operation.
         }
     }
+    if (in_array('rolling_access', $capabilities, true)) {
+        $capabilities[] = 'rolling_access:day-v1';
+    }
     if (in_array('galleries:list', $capabilities, true)) {
         $capabilities[] = 'galleries:tree-v1';
         try {
@@ -329,6 +342,9 @@ function app_linking_discovery_capabilities(
         )) {
             $capabilities[] = 'media:admin';
             $capabilities[] = 'media:admin-preload-v1';
+            if (app_linking_gallery_edit_ready()) {
+                $capabilities[] = 'gallery:edit';
+            }
             if (app_linking_admin_media_delete_ready() && app_linking_scope_allowed(
                 APP_LINKING_WINAPP_CLIENT_ID,
                 APP_LINKING_GALLERIES_SCOPE . APP_LINKING_ADMIN_MEDIA_SUFFIX
@@ -599,6 +615,7 @@ function app_linking_authenticate(string $token, string $issuer): ?array
                 $identity['grant_id'], $identity['user_id'], $hash,
                 APP_LINKING_WINAPP_CLIENT_ID, $issuer, $identity['scope'],
                 APP_LINK_REFRESH_IDLE_TTL_SECONDS,
+                APP_LINKING_ROLLING_ACCESS_TTL_SECONDS,
             )) {
                 return null;
             }

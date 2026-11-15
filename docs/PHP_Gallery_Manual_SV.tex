@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.2.1}
-\newcommand{\manualdate}{14~november~2026}
+\newcommand{\version}{1.2.2}
+\newcommand{\manualdate}{15~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2128,6 +2128,44 @@ i WinApp, separat för varje galleri och verifierad webbplats/konto.
 Webb- och uppladdningsinställningar är oberoende. Ett litet \textbf{!}
 visar ett lokalt sparfel; den valda vyn behålls och tooltipen förklarar
 ett nytt försök. Bytet använder redan laddade miniatyrer.
+Pilen före formatreglagen väljer äldsta eller nyaste uppladdningar först.
+Den lokala regeln sparas per galleri och verifierad webbplats/konto oberoende
+av kortformatet. Varje uppdatering använder den igen: nya foton hamnar först
+när nyaste först är valt. Rutnät, lightbox och bildspel delar ordningen;
+webbplatsen lagrar inte valet. Omvänd visning läser först hela den begränsade
+metadatasekvensen och bläddrar sedan lokalt utan att förladda bildfiler.
+Efter en kvotpaus fortsätter Retry från den verifierade metadatamarkören.
+
+Båda gallerimenyerna grupperar information/åtkomst, lokal cache, verktyg och
+skapande kompakt. I~\ui{Galleriinformation} använder synlighet den befintliga
+väljaren Offentlig/Privat/Opublicerad; NSFW Guard och undantaget för offentlig listning sparas direkt
+online. Titeln eller dess penna öppnar titelredigering, beskrivningspennan hela
+texten. Varje editor läser först aktuellt servervärde och revision. Enter sparar
+titeln, Control+Enter beskrivningen; Escape avbryter. Samtidiga webbändringar
+avvisar en gammal revision. Ett obekräftat resultat behåller det låsta utkastet
+och erbjuder uttrycklig serverinläsning utan att upprepa skrivningen. Bekräftade
+titlar uppdaterar träd och rubrik; fysiska mappar och stabila URL:er behålls.
+
+Metadataändringar kräver en aktuell server och separat webbläsargodkännande
+för \texttt{gallery:edit}. Befintliga rättigheter utökas inte. Inventering,
+datum och kvalitetsöversikter är skrivskyddade. Beskrivningar använder hela den
+lagrade texten, inte den korta informationsförhandsvisningen. Driftsättning och
+installerade konton kräver separat acceptans.
+
+Listed följer synligheten: Offentlig listas om inte \ui{Dölj från offentliga
+listor} är aktivt. Privat och Opublicerad visar alltid Listed av. Undantaget
+kan bara ändras för Offentlig och behålls vid tillfälliga synlighetsbyten.
+Direktlänkar följer fortfarande den vanliga åtkomstpolicyn.
+På en day-v1-server förlänger varje autentiserat API-anrop åtkomsten med
+24 timmar och inaktivitetsgränsen med sju dagar, även vid visning och uppladdning.
+En aktiv Watcher kontrollerar sin exakta tillfälliga nyckel var femte inaktiv
+minut; andra inaktiva anslutningar använder identitets-API:t. Utgången åtkomst
+förnyas med den sparade behörigheten. Vid obekräftad förnyelse tar \ui{Anslut}
+bort det oanvändbara lokala tillståndet och startar ett nytt webbläsargodkännande.
+\ui{Koppla från} fungerar även efter utgång; fjärråterkallelse kan inte blockera
+lokal återställning. Väntande original och målhistorik behålls.
+
+
 Foton och miniatyrer har en separat gräns på 600
 begäranden per IP och 3\,600 totalt under fem minuter. Vid HTTP~429 visar
 Photos att gränsen har nåtts och pausar förhämtning tills du väljer

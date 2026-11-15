@@ -305,13 +305,30 @@ ADMIN_MEDIA_DELETE_SCOPES = {
     for renewal in ('', ROLLING_SCOPE_SUFFIX)
 }
 ADMIN_MEDIA_SCOPES.update(ADMIN_MEDIA_DELETE_SCOPES)
+# Purpose: Add metadata authority only after explicit browser approval.
+# Type: str. Units: ordered scope suffix. Scope: Admin Photos bundles.
+# Consumers: registration and preferred linking scope selection.
+# Rationale: gallery:edit keeps existing grants and consent unchanged.
+GALLERY_EDIT_SCOPE_SUFFIX = ' gallery:edit'
+ADMIN_GALLERY_EDIT_SCOPES = {
+    (scope.removesuffix(ROLLING_SCOPE_SUFFIX) + GALLERY_EDIT_SCOPE_SUFFIX
+     + (ROLLING_SCOPE_SUFFIX if scope.endswith(ROLLING_SCOPE_SUFFIX) else '')): base
+    for scope, base in ADMIN_MEDIA_SCOPES.items()
+}
+ADMIN_MEDIA_SCOPES.update(ADMIN_GALLERY_EDIT_SCOPES)
 ROLLING_ADMIN_MEDIA_SCOPES = tuple(
     scope for scope in ADMIN_MEDIA_SCOPES
     if scope.endswith(ROLLING_SCOPE_SUFFIX)
     and ADMIN_DELETE_SCOPE_SUFFIX not in scope
+    and GALLERY_EDIT_SCOPE_SUFFIX not in scope
 )
 ROLLING_ADMIN_DELETE_SCOPES = tuple(
     scope for scope in ADMIN_MEDIA_DELETE_SCOPES
+    if scope.endswith(ROLLING_SCOPE_SUFFIX)
+)
+# Append these after both historical groups in persisted vault records.
+ROLLING_ADMIN_EDIT_SCOPES = tuple(
+    scope for scope in ADMIN_GALLERY_EDIT_SCOPES
     if scope.endswith(ROLLING_SCOPE_SUFFIX)
 )
 
@@ -620,6 +637,12 @@ LINKING_GALLERY_TREE_RESPONSE_MAX_BYTES = 4 * 1024 * 1024
 # to five 255-character titles including JSON escapes and row fields.
 LINKING_PICKER_RESPONSE_MAX_BYTES = 512 * 1024
 
+# Purpose: Preserve complete database TEXT values in a bounded metadata response.
+# Type: int. Units: bytes. Scope: one linked gallery edit response.
+# Consumers: _request_json_once. Rationale: 512 KiB holds a 65,535-byte TEXT
+# value even with six-byte JSON escapes and the canonical revision envelope.
+GALLERY_EDIT_RESPONSE_MAX_BYTES = 512 * 1024
+
 # Purpose: Bound one linked inventory or upload JSON response.
 # Type: int. Units: bytes. Scope: one delegated upload API response.
 # Consumers: _request_json_once. Rationale: four MiB accommodates a bounded
@@ -721,6 +744,20 @@ LINKING_CREATE_TITLE_MAX_BYTES = 255
 # Rationale: 86400 seconds rejects implausible server lifetimes beyond one day.
 LINKING_MAX_TOKEN_LIFETIME_SECONDS = 86400
 
+# Purpose: Negotiate sliding access without assuming support on older servers.
+# Type: str. Units: capability identifier. Scope: one trusted discovery result.
+# Consumers: LinkingAttempt, LinkingManager and LinkingSession.
+# Rationale: day-v1 promises a 24-hour access deadline on authenticated API use.
+SLIDING_ACCESS_CAPABILITY = 'rolling_access:day-v1'
+
+# Purpose: Keep an idle live capture connected without rotating its bearer.
+# Type: int. Units: seconds. Scope: one rolling session's read-only keepalive.
+# Consumers: LinkingSession.keepalive_due and LinkingManager._poll.
+# Rationale: 300 seconds bounds stale revocation status and refreshes the server
+# only after five minutes without real API use; normal browsing adds no traffic.
+LINKING_KEEPALIVE_SECONDS = 300
+
+
 # Purpose: Bound a returned Admin name to its existing database column width.
 # Type: int. Units: Unicode characters. Scope: one identity response.
 # Consumers: LinkingSession.identity. Rationale: users.username holds 190 chars.
@@ -736,6 +773,7 @@ _LinkingDiagnosticRoute = Literal[
     'app_linking_gallery_create', 'app_linking_gallery_create_status',
     'app_linking_gallery_create_abandon', 'app_linking_gallery_visibility',
     'app_linking_photo_visibility', 'app_linking_media_delete',
+    'app_linking_gallery_metadata',
     'app_linking_media', 'app_linking_thumbnail_batch',
 ]
 _LinkingDiagnosticContent = Literal['json', 'html', 'other']
@@ -1045,6 +1083,7 @@ class LinkingResponseError(LinkingError):
                     'app_linking_gallery_create_abandon',
                     'app_linking_gallery_visibility',
                     'app_linking_photo_visibility', 'app_linking_media_delete',
+                    'app_linking_gallery_metadata',
                     'app_linking_media', 'app_linking_thumbnail_batch',
                 )
                 or (status is not None and (
@@ -1269,6 +1308,10 @@ class LinkingGrantRejected(LinkingError):
     """Report a revoked or expired authenticated linking grant."""
 
     status = 401
+
+
+class LinkingReconnectRequired(LinkingError):
+    """Require fresh browser approval after an unconfirmed credential rotation."""
 
 
 class LinkingRefreshRejected(LinkingError):
@@ -1736,7 +1779,8 @@ def _discovery_admits_linking(
         # advertise the legacy HTTPS-only offline capability.
         required.remove('offline_access')
     if (scope in ROLLING_PRESENTATION_SCOPES
-            or (scope in (*ROLLING_ADMIN_MEDIA_SCOPES, *ROLLING_ADMIN_DELETE_SCOPES)
+            or (scope in (*ROLLING_ADMIN_MEDIA_SCOPES, *ROLLING_ADMIN_DELETE_SCOPES,
+                          *ROLLING_ADMIN_EDIT_SCOPES)
                 and scope_allows_presentation(scope))):
         required.add('presentation:rolling')
     return 'linking' in granted and required.issubset(granted)
@@ -1773,10 +1817,11 @@ def _preferred_admin_media_scope(
                 ADMIN_PRESENTATION_SCOPE_SUFFIX, ADMIN_MEDIA_SCOPE_SUFFIX,
             ) if presentation else (ADMIN_MEDIA_SCOPE_SUFFIX,):
                 for search in (GALLERY_SEARCH_SUFFIX, ''):
-                    scope = candidate + search + media + renewal
-                    if (scope_allows_admin_media(scope)
-                            and _discovery_admits_linking(discovery, issuer, scope)):
-                        return scope
+                    for edit in (GALLERY_EDIT_SCOPE_SUFFIX, ''):
+                        scope = candidate + search + media + edit + renewal
+                        if (scope_allows_admin_media(scope)
+                                and _discovery_admits_linking(discovery, issuer, scope)):
+                            return scope
     return None
 
 
@@ -2495,7 +2540,7 @@ def _request_json(
         'app_linking_gallery_create', 'app_linking_gallery_create_status',
         'app_linking_gallery_create_abandon',
         'app_linking_gallery_visibility', 'app_linking_photo_visibility',
-        'app_linking_media_delete',
+        'app_linking_media_delete', 'app_linking_gallery_metadata',
     ],
     method: Literal['GET', 'POST'],
     body: bytes | Iterable[bytes] | None,
@@ -2550,7 +2595,7 @@ def _request_json(
                 or after_id is not None))
             or (route in (
                 'app_linking_gallery_visibility', 'app_linking_photo_visibility',
-                'app_linking_media_delete',
+                'app_linking_media_delete', 'app_linking_gallery_metadata',
             ) and (
                 method != 'POST' or not isinstance(body, bytes)
                 or gallery_id is not None or after_id is not None))
@@ -2872,7 +2917,7 @@ def _request_json_once(
         'app_linking_gallery_create', 'app_linking_gallery_create_status',
         'app_linking_gallery_create_abandon',
         'app_linking_gallery_visibility', 'app_linking_photo_visibility',
-        'app_linking_media_delete',
+        'app_linking_media_delete', 'app_linking_gallery_metadata',
     ],
     method: Literal['GET', 'POST'],
     body: bytes | Iterable[bytes] | None,
@@ -2915,7 +2960,8 @@ def _request_json_once(
     parsed = urlsplit(issuer)
     wire_route = 'app_linking_galleries' if route == 'app_linking_gallery_tree' else (
         'app_linking_media' if route in (
-        'app_linking_photo_visibility', 'app_linking_media_delete',
+            'app_linking_photo_visibility', 'app_linking_media_delete',
+            'app_linking_gallery_metadata',
         ) else route
     )
     path = parsed.path + '/index.php?page=' + wire_route
@@ -2948,7 +2994,7 @@ def _request_json_once(
                    'app_linking_gallery_create_status',
                    'app_linking_gallery_create_abandon',
                    'app_linking_gallery_visibility', 'app_linking_photo_visibility',
-                   'app_linking_media_delete'):
+                   'app_linking_media_delete', 'app_linking_gallery_metadata'):
         headers['Content-Type'] = 'application/json; charset=utf-8'
     elif route == 'app_linking_upload':
         headers['Content-Type'] = 'multipart/form-data; boundary=' + str(multipart_boundary)
@@ -3032,7 +3078,8 @@ def _request_json_once(
                 for directive in header.split(',')
             }
             visibility_conflict = (route in ('app_linking_gallery_visibility',
-                                             'app_linking_photo_visibility')
+                                             'app_linking_photo_visibility',
+                                             'app_linking_gallery_metadata')
                                    and response.status == 409)
             if response.status != expected_status and not visibility_conflict:
                 # Only this exact no-store application refusal attests that
@@ -3081,7 +3128,9 @@ def _request_json_once(
                     'response_policy',
                 )
             # One extra byte distinguishes the exact configured size boundary.
-            max_bytes = (LINKING_GALLERY_TREE_RESPONSE_MAX_BYTES
+            max_bytes = (GALLERY_EDIT_RESPONSE_MAX_BYTES
+                         if route == 'app_linking_gallery_metadata' else
+                         LINKING_GALLERY_TREE_RESPONSE_MAX_BYTES
                          if route == 'app_linking_gallery_tree' else
                          LINKING_PICKER_RESPONSE_MAX_BYTES
                          if route == 'app_linking_galleries' and method == 'POST' else
@@ -3120,7 +3169,8 @@ def _request_json_once(
                 raise LinkingError('Linking response was not accepted.')
             # This local marker is only created for an exact pre-write 409.
             return {'__client_visibility_conflict': data['error']}
-        if (route in ('app_linking_gallery_visibility', 'app_linking_photo_visibility')
+        if (route in ('app_linking_gallery_visibility', 'app_linking_photo_visibility',
+                      'app_linking_gallery_metadata')
                 and '__client_visibility_conflict' in data):
             raise LinkingError('Linking response was not accepted.')
         if (control.server_timing_out is not None
@@ -3169,6 +3219,7 @@ class LinkingAttempt:
         self._admin_preload_supported = False
         self._gallery_tree_supported = False
         self._thumbnail_batch_supported = False
+        self._sliding_access_supported = False
         self._state = secrets.token_urlsafe(ATTEMPT_RANDOM_BYTES)
         self._verifier = secrets.token_urlsafe(ATTEMPT_RANDOM_BYTES)
         self._code = ''
@@ -3274,6 +3325,10 @@ class LinkingAttempt:
             self._admin_preload_supported = (
                 isinstance(capabilities, list)
                 and ADMIN_PRELOAD_CAPABILITY in capabilities
+            )
+            self._sliding_access_supported = (
+                isinstance(capabilities, list)
+                and SLIDING_ACCESS_CAPABILITY in capabilities
             )
             self._thumbnail_batch_supported = (
                 isinstance(capabilities, list)
@@ -3520,7 +3575,8 @@ class LinkingAttempt:
                                ROLLING_GALLERIES_SCOPE, ROLLING_UPLOAD_SCOPE,
                                *ROLLING_GALLERY_SEARCH_SCOPES,
                                *ROLLING_PRESENTATION_SCOPES,
-                               *ROLLING_ADMIN_MEDIA_SCOPES):
+                               *ROLLING_ADMIN_MEDIA_SCOPES,
+                               *ROLLING_ADMIN_EDIT_SCOPES):
             raise LinkingError('Offline scope was not requested.')
         session, refresh, lifetime = self._exchange_approved(True)
         if refresh is None or lifetime is None:
@@ -3589,6 +3645,7 @@ class LinkingAttempt:
                 admin_preload_supported=self._admin_preload_supported,
                 gallery_tree_supported=self._gallery_tree_supported,
                 thumbnail_batch_supported=self._thumbnail_batch_supported,
+                sliding_access_supported=self._sliding_access_supported,
             )
             return session, refresh, refresh_lifetime
 
@@ -3675,6 +3732,84 @@ class LinkedGalleryDetail:
     visibility: str
     access_mode: str
     access_listing: str
+
+
+# Purpose: Preserve a complete TEXT description without unbounded allocation.
+# Type: int. Units: UTF-8 bytes. Scope: one native gallery editor.
+# Consumers: snapshot validation and save. Rationale: 65,535 is the server TEXT capacity.
+GALLERY_EDIT_DESCRIPTION_MAX_BYTES = 65535
+
+
+@dataclass(frozen=True)
+class LinkedGalleryEditSnapshot:
+    """Hold complete server metadata and the revision reviewed for one edit."""
+
+    gallery_id: int
+    title: str
+    description: str
+    revision: str
+    visibility: str
+    listed: bool
+    nsfw: bool
+
+
+def gallery_edit_text_valid(field: str, value: str) -> bool:
+    """Validate complete editor text using the native server-column contract.
+
+    Args:
+        field (str): title or description text field selected for editing.
+        value (str): Complete candidate text, including description line breaks.
+    Returns:
+        bool: True for encodable text within its field's persisted capacity.
+    """
+    try:
+        encoded = value.encode('utf-8')
+    except UnicodeError:
+        return False
+    if field == 'description':
+        return len(encoded) <= GALLERY_EDIT_DESCRIPTION_MAX_BYTES
+    return (field == 'title' and bool(value.strip())
+            and len(value) <= LINKING_GALLERY_TITLE_MAX_CHARS
+            and not any(ord(char) < 32 or ord(char) == 127 for char in value))
+
+
+def _gallery_edit_snapshot(
+    data: dict[str, JsonValue], gallery_id: int,
+) -> LinkedGalleryEditSnapshot:
+    """Validate a complete metadata snapshot without substituting cached values.
+
+    Args:
+        data (dict[str, JsonValue]): JSON envelope with exactly one gallery row.
+        gallery_id (int): Exact physical gallery expected by the editor.
+    Returns:
+        LinkedGalleryEditSnapshot: Complete text, settings and canonical revision.
+    Raises:
+        LinkingError: Any identity, type, encoding, field or bound is invalid.
+    """
+    row = data.get('gallery')
+    if (set(data) != {'gallery'} or not isinstance(row, dict)
+            or set(row) != {'id', 'title', 'description', 'revision',
+                            'visibility', 'listed', 'nsfw'}
+            or type(row['id']) is not int or row['id'] != gallery_id
+            or not isinstance(row['title'], str)
+            or len(row['title']) > LINKING_GALLERY_TITLE_MAX_CHARS
+            or not isinstance(row['description'], str)
+            or not isinstance(row['revision'], str)
+            or re.fullmatch(r'[1-9][0-9]{0,19}', row['revision']) is None
+            or int(row['revision']) > LINKING_GALLERY_REVISION_MAX
+            or row['visibility'] not in ('public', 'private', 'draft', 'unpublished')
+            or type(row['listed']) is not bool or type(row['nsfw']) is not bool):
+        raise LinkingError('Gallery edit snapshot was not accepted.')
+    try:
+        row['title'].encode('utf-8')
+        if len(row['description'].encode('utf-8')) > GALLERY_EDIT_DESCRIPTION_MAX_BYTES:
+            raise ValueError('Oversized gallery description.')
+    except (UnicodeError, ValueError) as error:
+        raise LinkingError('Gallery text was not accepted.') from error
+    return LinkedGalleryEditSnapshot(
+        gallery_id, row['title'], row['description'], row['revision'],
+        row['visibility'], row['listed'], row['nsfw'],
+    )
 
 
 @dataclass(frozen=True)
@@ -4144,7 +4279,8 @@ class LinkedMediaPage:
     Args:
         gallery_id (int): Requested gallery identity.
         parent_id (int | None): Public hierarchy parent, or None at root.
-        photos (tuple[LinkedPhoto, ...]): Increasing positive photo IDs.
+        photos (tuple[LinkedPhoto, ...]): Ordered positive photo IDs; transport
+            pages ascend and WinApp-only reverse snapshots descend.
         next_after (int | None): Exclusive continuation or None at the end.
     """
 
@@ -5023,6 +5159,7 @@ class LinkingSession:
         scope: str = IDENTITY_SCOPE, *, admin_preload_supported: bool = False,
         gallery_tree_supported: bool = False,
         thumbnail_batch_supported: bool = False,
+        sliding_access_supported: bool = False,
     ) -> None:
         """Create a transient session from a validated token response.
 
@@ -5037,6 +5174,8 @@ class LinkingSession:
                 optional complete catalogue tree protocol.
             thumbnail_batch_supported (bool): Whether discovery advertised the
                 optional framed thumbnail batch protocol.
+            sliding_access_supported (bool): Whether discovery promises the
+                day-v1 rolling access deadline after real authenticated traffic.
 
         Returns:
             None: Owns one token solely for the life of this object.
@@ -5050,6 +5189,7 @@ class LinkingSession:
                 or scope_base(scope) is None
                 or type(admin_preload_supported) is not bool
                 or type(gallery_tree_supported) is not bool
+                or type(sliding_access_supported) is not bool
                 or type(thumbnail_batch_supported) is not bool
                 or not math.isfinite(expires_at)
                 or expires_at <= time.monotonic()):
@@ -5063,6 +5203,7 @@ class LinkingSession:
         self._cancelled = threading.Event()
         self._pending_gallery_cancels: set[threading.Event] = set()
         self._visibility_snapshot: LinkedGalleryDetail | None = None
+        self._gallery_edit_snapshot: LinkedGalleryEditSnapshot | None = None
         self._recent_media_pages: OrderedDict[
             int, tuple[float, LinkedMediaPage]
         ] = OrderedDict()
@@ -5093,6 +5234,10 @@ class LinkingSession:
         self._admin_preload_supported = admin_preload_supported
         self._gallery_tree_supported = gallery_tree_supported
         self._thumbnail_batch_supported = thumbnail_batch_supported
+        self._sliding_access_supported = (
+            sliding_access_supported and scope.endswith(ROLLING_SCOPE_SUFFIX)
+        )
+        self._last_authenticated_at = time.monotonic()
         self._thumbnail_batch_disabled_reason = ''
         self._thumbnail_batch_cooldown_until = 0.0
         self._thumbnail_batch_cooldown_source: _ThumbnailCooldownSource = 'unknown'
@@ -5193,7 +5338,7 @@ class LinkingSession:
         try:
             self._media_connection_pool.discard()
             token, expires_at = renew(self._cancelled)
-        except LinkingRefreshRejected:
+        except (LinkingRefreshRejected, LinkingReconnectRequired):
             self.close()
             raise
         with self._lock:
@@ -5206,6 +5351,35 @@ class LinkingSession:
             self._public_media_descriptors.clear()
             self._public_unverified_confirmations.clear()
             self._private_preload_proofs.clear()
+
+    def _access_used(self, started: float) -> None:
+        """Slide only negotiated rolling access after a real authenticated reply.
+
+        Args:
+            started (float): Monotonic request start, conservatively before the
+                server renewed its access and refresh inactivity deadlines.
+        Returns:
+            None: Cached bytes, failed requests and closed sessions grant no time.
+        """
+        with self._lock:
+            if not self._closed:
+                self._last_authenticated_at = max(self._last_authenticated_at, started)
+                if self._sliding_access_supported:
+                    self._expires_at = max(
+                        self._expires_at, started + LINKING_MAX_TOKEN_LIFETIME_SECONDS,
+                    )
+
+    def keepalive_due(self) -> bool:
+        """Check whether a rolling link needs a read-only idle activity check.
+
+        Returns:
+            bool: True after five minutes without an authenticated response;
+                this local check sends nothing and never revives a closed grant.
+        """
+        with self._lock:
+            return (not self._closed and self._renew is not None
+                    and time.monotonic() - self._last_authenticated_at
+                    >= LINKING_KEEPALIVE_SECONDS)
 
     def available(self) -> bool:
         """Check the local deadline without claiming remote authorization.
@@ -5228,7 +5402,7 @@ class LinkingSession:
             'app_linking_gallery_create', 'app_linking_gallery_create_status',
             'app_linking_gallery_create_abandon',
             'app_linking_gallery_visibility', 'app_linking_photo_visibility',
-            'app_linking_media_delete',
+            'app_linking_media_delete', 'app_linking_gallery_metadata',
         ],
         after_id: int | None = None,
         body: bytes | Iterable[bytes] | None = None,
@@ -5344,7 +5518,7 @@ class LinkingSession:
                     and not (scope_allows_admin_media(self._scope)
                              and scope_allows_gallery_visibility(self._scope))):
                 raise LinkingError('Photo visibility was not approved.')
-            if (route == 'app_linking_media_delete'
+            if (route in ('app_linking_media_delete', 'app_linking_gallery_metadata')
                     and not scope_allows_admin_media(self._scope)):
                 raise LinkingError('Photo deletion requires an Admin Photos link.')
             self._busy = True
@@ -5389,12 +5563,12 @@ class LinkingSession:
                            'app_linking_gallery_create_status',
                            'app_linking_gallery_create_abandon',
                            'app_linking_gallery_visibility', 'app_linking_photo_visibility',
-                           'app_linking_media_delete'):
+                           'app_linking_media_delete', 'app_linking_gallery_metadata'):
                 data = _request_json(
                     self._issuer, route, 'POST', body, token,
                     cancelled=(gallery_cancel if route in (
                         'app_linking_inventory', 'app_linking_gallery_create',
-                        'app_linking_gallery_visibility', 'app_linking_media_delete',
+                        'app_linking_gallery_visibility', 'app_linking_media_delete', 'app_linking_gallery_metadata',
                         'app_linking_gallery_create_abandon', 'app_linking_photo_visibility')
                                and gallery_cancel is not None else self._cancelled),
                     **watch_options,
@@ -5431,6 +5605,8 @@ class LinkingSession:
                     'http_status' if diagnostic_status == 409 else 'ok'
                 )
                 diagnostic_attempts = 1
+            if route != 'app_linking_revoke':
+                self._access_used(diagnostic_started)
             if diagnostic_status == 200 and php_response:
                 self._server_timing_window.observe(
                     linking_route_category(route),
@@ -5755,6 +5931,7 @@ class LinkingSession:
                         )
                         diagnostic_status = 304 if result[0] is None else 200
                         diagnostic_reason = 'ok'
+                        self._access_used(diagnostic_started)
                     except LinkingResponseError as error:
                         diagnostic_status = error.status
                         diagnostic_reason = error.reason
@@ -7215,6 +7392,7 @@ class LinkingSession:
                     route='app_linking_thumbnail_batch', timings=timings,
                 )
                 status, reason = 200, 'ok'
+                self._access_used(route_started)
             except LinkingResponseError as error:
                 status, reason = error.status, error.reason
                 raise
@@ -8208,6 +8386,95 @@ class LinkingSession:
         """
         return scope_allows_gallery_read(self._scope) and self.available()
 
+    def can_edit_gallery_metadata(self) -> bool:
+        """Check separately approved metadata authority without a server write.
+
+        Returns:
+            bool: True only for a live or renewable gallery:edit Photos grant.
+        """
+        return self.available() and self._scope in ADMIN_GALLERY_EDIT_SCOPES
+
+    def read_gallery_edit(
+        self, gallery_id: int, cancelled: threading.Event | None = None,
+    ) -> 'LinkedGalleryEditSnapshot':
+        """Read a complete current edit baseline, never the truncated info card.
+
+        Args:
+            gallery_id (int): Physical gallery selected for explicit editing.
+            cancelled (threading.Event | None): Owning card/session cancellation.
+        Returns:
+            LinkedGalleryEditSnapshot: Fresh complete server values and revision.
+        Raises:
+            LinkingError: Authority, target, transport or snapshot is unavailable.
+        """
+        if not self.can_edit_gallery_metadata() or not _native_media_id(gallery_id):
+            raise LinkingError('Gallery editing was not approved.')
+        with self._lock:
+            self._gallery_edit_snapshot = None
+        body = json.dumps({
+            'action': 'gallery_edit_read', 'gallery_id': gallery_id,
+        }).encode('utf-8')
+        data = self._request(
+            'app_linking_gallery_metadata', body=body, gallery_cancel=cancelled,
+        )
+        snapshot = _gallery_edit_snapshot(data, gallery_id)
+        with self._lock:
+            if self._closed or (cancelled is not None and cancelled.is_set()):
+                raise LinkingError('Gallery editor is no longer current.')
+            self._gallery_edit_snapshot = snapshot
+        return snapshot
+
+    def save_gallery_edit(
+        self, snapshot: 'LinkedGalleryEditSnapshot', field: str, value: str | bool,
+        cancelled: threading.Event | None = None,
+    ) -> 'LinkedGalleryEditSnapshot':
+        """Submit one field once against its exact reviewed server revision.
+
+        Args:
+            snapshot (LinkedGalleryEditSnapshot): Current one-use edit baseline.
+            field (str): title, description, nsfw or listed; unrelated fields stay.
+            value (str | bool): Complete desired text or explicit boolean state.
+            cancelled (threading.Event | None): Owning card/session cancellation.
+        Returns:
+            LinkedGalleryEditSnapshot: Canonical confirmed stored snapshot.
+        Raises:
+            LinkingRevisionConflict: The server refused a stale revision.
+            LinkingError: Refusal or unknown completion; never retry this write.
+        """
+        if field == 'listed' and snapshot.visibility != 'public':
+            raise LinkingError('Listing can only be changed for a public gallery.')
+        if field in ('nsfw', 'listed'):
+            valid = type(value) is bool
+        elif field in ('title', 'description') and isinstance(value, str):
+            valid = gallery_edit_text_valid(field, value)
+        else:
+            valid = False
+        if not valid or not self.can_edit_gallery_metadata():
+            raise LinkingError('Invalid gallery edit.')
+        with self._lock:
+            if (getattr(self, '_gallery_edit_snapshot', None) is not snapshot
+                    or self._closed or int(snapshot.revision) >= LINKING_GALLERY_REVISION_MAX
+                    or (cancelled is not None and cancelled.is_set())):
+                raise LinkingError('Fresh gallery edit is unavailable.')
+            self._gallery_edit_snapshot = None
+        body = json.dumps({
+            'action': 'gallery_edit', 'gallery_id': snapshot.gallery_id,
+            'expected_revision': snapshot.revision, 'field': field, 'value': value,
+        }, ensure_ascii=False).encode('utf-8')
+        data = self._request(
+            'app_linking_gallery_metadata', body=body, gallery_cancel=cancelled,
+        )
+        if data == {'__client_visibility_conflict': 'revision_conflict'}:
+            raise LinkingRevisionConflict('Gallery revision changed.')
+        current = _gallery_edit_snapshot(data, snapshot.gallery_id)
+        if (current.revision != str(int(snapshot.revision) + 1)
+                or getattr(current, field) != value):
+            raise LinkingError('Gallery edit was not confirmed.')
+        for other in ('title', 'description', 'visibility', 'listed', 'nsfw'):
+            if other != field and getattr(current, other) != getattr(snapshot, other):
+                raise LinkingError('Unrelated gallery metadata changed.')
+        return current
+
     def can_change_gallery_visibility(self) -> bool:
         """Check explicit visibility consent without asserting server access.
 
@@ -9039,6 +9306,8 @@ class LinkingSession:
                 pending.set()
             self._closed = True
             self._token = ''
+            self._gallery_edit_snapshot = None
+            self._visibility_snapshot = None
             self._private_preload_generation += 1
             self._recent_media_pages.clear()
             self._public_media_descriptors.clear()

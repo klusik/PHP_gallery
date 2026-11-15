@@ -1,5 +1,24 @@
 # Compatibility lifecycle and retirement register
 
+## Native gallery metadata consent and local order
+
+Owners: linked-client scope registration, native media authorization and the
+WinApp gallery workspace. Existing read/visibility/delete grants never acquire
+`gallery:edit`; current clients request that exact extra permission only when
+discovery advertises it and the user approves a new browser request. Older
+servers retain their existing browsing and visibility flows; metadata pencils
+explain the missing current-server/consent requirement. This compatibility is
+permanent while supported installations can have older server/client versions.
+Deployment and installed-account adoption remain unknown until acceptance.
+
+The existing local view file retains version 1 with an additive `photo_orders`
+map. Absent maps preserve oldest-first behavior and old card-format choices.
+Unreadable files use the existing display default but refuse overwrite; a failed
+save retains session intent with a visible warning. Both are permanent local
+storage failure behavior. Vault scope indices 0–116 retain their original
+meaning; new metadata-consent records append afterward. Tests pin both ranges.
+No credentials, descriptions or view settings are migrated to the website.
+
 ## Administrator release mail
 
 Owners: administrator authentication, translations and the completed updater
@@ -5187,3 +5206,26 @@ ancestor spellings; a single child repair preserves unselected existing parents.
 The real HTTP nested fixture compares the shown child path to the actual folder,
 while the Node preview fixture covers parent/child selection combinations and
 strict sibling-prefix boundaries. Both retain separators and hierarchy.
+
+## Rolling WinApp access and local recovery
+
+Day-v1 discovery explicitly promises a 24-hour sliding access deadline after
+successful authenticated API use, alongside the existing seven-day rolling
+refresh window. All authenticated routes share the existing authentication
+service. Native JSON, media, conditional reads and streamed thumbnail batches
+advance the client deadline only after real accepted network responses.
+Local cache reads and failed operations do not manufacture server activity.
+The original 900-second exchange/refresh hint is retained for older clients;
+new clients adopt one day only after an authenticated day-v1 response. Older
+servers keep their existing renewal behavior. No schema, scope or credential
+format changes are needed. This compatibility path remains supported while
+older installed clients exist; target-host acceptance is still unverified.
+An idle running Watcher uses bounded empty inventory checks for its exact key;
+other live idle sessions use identity checks. Valid capture activity slides its
+one-day key expiry, but cannot revive an expired/replaced/revoked generation.
+An unconfirmed credential rotation closes usable session state without replay.
+Explicit Connect clears that local credential before fresh browser consent;
+Unlink also removes expired saved links without requiring a live bearer.
+Local removal preserves queued originals and exact destination history and is
+independent of best-effort server revocation. The original installed failure's
+precise transport/storage cause is unknown from the supplied diagnostic report.

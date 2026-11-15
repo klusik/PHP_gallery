@@ -1251,7 +1251,11 @@ macOS profile it also requests image uploads when offered. Consent shows the
 actual permissions, including access to private and unpublished galleries.
 On compatible servers, the browser also asks you to approve rolling access.
 The approval lasts seven days from the last successful authenticated use or
-refresh. WinApp renews its 15-minute access token with a credential kept in
+refresh. On a day-v1 server, each authenticated API request also slides access
+by 24 hours, including catalogue, metadata, image, conditional-image and upload
+requests. A running Watcher checks its exact temporary key every five idle
+minutes through the existing inventory API. Other idle live links use identity.
+An expired access token can still renew with the approved credential in
 macOS Keychain or Windows Credential Manager. This works over verified HTTPS
 or direct `http://localhost`. Older servers use a temporary link lasting up
 to 15 minutes. Expiry or revocation requires new browser approval. Browser
@@ -1504,6 +1508,49 @@ upload configuration. There is no Save step. A small **!** reports a local
 save failure; the chosen view remains applied and its tooltip explains retry.
 Changing the format reuses retained previews without requesting their media
 again. The default preserves the existing natural-preview grid.
+The compact arrow immediately before the aspect-ratio controls switches
+between oldest and newest upload records first. This is a persistent local
+rule for each verified site/account/gallery, independent of its card format.
+Every refresh applies it again: a newly uploaded photo appears at the beginning
+in newest-first mode. The grid, lightbox and slideshow share that order. No
+ordering preference is sent to the website. Newest-first first reads the full
+metadata sequence through the existing read-only API (up to 100,000 photos),
+then pages it locally; it does not preload images. Large catalogues can therefore
+take longer to open. HTTP 429 retains the validated metadata cursor so Retry
+can continue across a quota window without starting the scan again.
+Cancellation or an incomplete catalogue never reports a
+partial reversal as a complete ordered view. A local **!** means the rule is
+applied for this session but its disk save failed.
+
+Both gallery-menu triggers share compact Information & access, Local cache,
+Edit & tools and Create categories. **Gallery information** keeps inventory,
+dates and thumbnail-quality summaries read-only. Its visibility action reuses
+the existing fresh-revision Public / Private / Unpublished selector. NSFW Guard
+saves directly to the online gallery under separately approved metadata
+authority. Listed is effective only for Public galleries. **Hide from public
+listings** is available only while Public and saves the inverse listing override
+online. Private/Unpublished always show Listed off; returning to Public restores
+the saved override. Hiding from lists does not itself block direct links.
+
+Click the gallery title or its pencil to edit its name; use the description
+pencil in Gallery information for multiline text. WinApp reads complete current
+server text and its edit revision before opening either editor. Confirm with
+Save (Enter for a title, Control+Enter for a description), or cancel with Escape
+or Cancel. A save sends only that one field and the reviewed revision. A web
+edit made meanwhile refuses the stale save; a lost reply remains unconfirmed.
+The draft stays visible and locked until an explicit server reload; writes are
+never automatically replayed. Confirmed server titles update the tree and
+heading. Display-title edits preserve physical folders and stable URLs.
+
+Metadata edits require a server advertising **gallery:edit** and a new browser
+approval; an old read, visibility or deletion grant gains no new permission.
+The app offers that approval from the pencil action when needed. Descriptions
+retain their complete database TEXT value (up to 65,535 UTF-8 bytes); the shorter
+read-only information preview is never used as the edit baseline. Existing
+visibility consent remains separate. These changes require matching deployed
+server/client code and installed-account acceptance; source CI does not prove
+that deployment or upgrade.
+
 Photo and thumbnail downloads have a separate five-minute
 quota of 600 requests per IP and 3,600 globally. If the server returns HTTP 429, Photos
 shows the limit and pauses speculative requests until **Retry**.
@@ -1890,8 +1937,11 @@ server explicitly rejects an expired or revoked rolling credential, WinApp
 discards that saved credential. Choose **Link gallery** to approve a new link
 in the browser. Startup leaves browser approval to you. An uncertain response
 or storage failure blocks reuse of the old credential.
-Review the gallery's linked-device list, then use **Forget saved link** and
-relink if needed. Forgetting removes the local binding and credential only; it
+Click **Connect** to remove the unusable local credential and continue with
+fresh browser approval. Startup never opens approval automatically.
+**Unlink** also works when the live session has expired. Local cleanup does not
+wait for remote revocation; the old server grant can be reviewed separately
+in **Manage gallery links**. Pending originals and destination history remain. Forgetting removes the local binding and credential only; it
 does not revoke the server grant, and an active session may continue. Use
 **Manage gallery links** for server-side revocation. The secure-storage and
 crash-recovery paths have not been qualified on real Windows or after power

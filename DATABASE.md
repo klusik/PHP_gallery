@@ -23,6 +23,18 @@ Database leases coordinate only cooperating writers on the same database.
 Old runtimes, connection-loss races, unrelated filesystem writers and backups
 with mismatched database/filesystem state are outside this guard.
 
+## Native gallery metadata edits
+
+Separately consented `gallery:edit` uses existing `galleries.title`,
+`description`, `nsfw_enabled`, `access_listing` and `edit_revision`; it creates
+no schema objects. The existing live-grant transaction and gallery writer
+lease protect one selected-field update. A stale revision changes no stored
+field. The service verifies that unrelated columns remain identical and
+advances the application-owned revision through `gallery_model_update_fields`.
+The display title does not move a folder or change its URL. Sidecar publication
+and content invalidation follow commit; failure there remains explicitly
+unconfirmed to WinApp. Local order/card-format preferences never enter SQL.
+
 ## Explicit media consistency reports
 
 Gallery consistency adds no table or migration. Its model reads physical gallery
@@ -114,7 +126,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 1.2.1. Version 0.97 adds the recoverable gallery-trash
+application version 1.2.2. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -2867,3 +2879,9 @@ or cron registration is introduced. The canonical capability declares fresh ON;
 the existing fresh-default seeder preserves explicit preferences. The installer
 fixture checks installation ON, missing-preference upgrade ON and replay after
 explicit OFF against its own disposable database.
+
+Rolling WinApp authentication extends the live access deadline by 24 hours and
+both refresh-family deadlines by seven days in the same existing locked
+transaction. It never revives an expired or revoked grant. Valid use of a
+contextual Watcher key extends that exact generation by one day; a stale key
+cannot replace or renew the current generation. No schema change is required.

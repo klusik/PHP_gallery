@@ -33,6 +33,8 @@
  */
 
 return [
+    'app_linking.consent.gallery_edit_scope' => 'WinApp může na tomto webu měnit názvy a popisy galerií, NSFW Guard a zařazení do výpisů.',
+    'app_linking.devices.gallery_edit_scope' => 'Úprava metadat galerie',
     'admin.metadata_organizer.move_uncertain' => 'Výsledek přesunu není jistý. Organizátor zachoval obě galerie; před dalším pokusem zkontrolujte jejich obsah.',
     'app_linking.consent.read_visibility_scope' => 'Povoluje se výpis všech galerií, čtení uložené viditelnosti a nastavení přístupu a změna viditelnosti galerií včetně soukromých a nezveřejněných. Nahrávání obrázků ani vytváření galerií se nepovoluje.',
     'app_linking.consent.read_upload_visibility_scope' => 'Povoluje se výpis všech galerií, čtení uložené viditelnosti a nastavení přístupu, změna viditelnosti a nahrávání obrázků včetně soukromých a nezveřejněných galerií. Vytváření galerií se nepovoluje.',

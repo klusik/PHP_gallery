@@ -91,6 +91,14 @@ const APP_LINKING_ADMIN_MEDIA_SUFFIX = ' media:admin';
 const APP_LINKING_ADMIN_DELETE_SUFFIX = ' media:delete';
 
 /**
+ * Require separate browser approval for native descriptive gallery edits.
+ * Type: string. Units: ordered scope suffix. Scope: Admin Photos bundles.
+ * Consumers: registration, consent and metadata authorization.
+ * Rationale: gallery:edit keeps old read/visibility/delete grants unchanged.
+ */
+const APP_LINKING_GALLERY_EDIT_SUFFIX = ' gallery:edit';
+
+/**
  * Include explicitly approved public presentation playback in an Admin link.
  * Type: string. Units: ordered scope suffix. Scope: native photo and music grants.
  * Consumers: app_linking_admin_media_scopes and presentation authorization.
@@ -691,6 +699,9 @@ function app_linking_admin_media_scopes(): array
                 $scope = $base . $search . $media;
                 $scopes[$scope] = $base;
                 $scopes[$scope . APP_LINKING_ROLLING_SUFFIX] = $base;
+                $edit = $scope . APP_LINKING_GALLERY_EDIT_SUFFIX;
+                $scopes[$edit] = $base;
+                $scopes[$edit . APP_LINKING_ROLLING_SUFFIX] = $base;
             }
         }
     }
@@ -925,7 +936,9 @@ function app_linking_scope_allowed(string $clientId, string $scope): bool
     }
     if ($scope !== app_linking_scope_without_media($scope)) {
         try {
-            if (!app_linking_media_ready(app_linking_scope_allows_presentation($scope))
+            if ((str_contains($scope, APP_LINKING_GALLERY_EDIT_SUFFIX)
+                    && !app_linking_gallery_edit_ready())
+                || !app_linking_media_ready(app_linking_scope_allows_presentation($scope))
                 || (app_linking_scope_allows_admin_media($scope)
                     && !app_linking_admin_media_ready())
                 || !schema_inspection_is_available(app_linking_wide_scope_schema_status())) {

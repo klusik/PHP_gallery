@@ -1,5 +1,91 @@
 # Patch notes
 
+## Version 1.2.2
+
+Improved gallery browsing and editing in the Windows companion and hardened
+saved connections against inactivity and failed renewal. The independent
+WinApp version advanced to 1.2.0.
+
+### Highlights
+
+#### Gallery controls in WinApp
+
+- Added a compact oldest/newest-first control before the aspect-ratio buttons.
+  Saved the choice locally for each gallery and verified site/account. Applied
+  the selected rule again on refresh, including newly uploaded photos, and
+  shared the order across the grid, lightbox and slideshow. Kept website
+  ordering independent. Addressed
+  [issue #385](https://github.com/klusik/PHP_gallery/issues/385).
+- Grouped both gallery menus into compact information/access, local cache,
+  tools and creation categories.
+- Added title and description editors with pencil actions and reused the
+  existing visibility selector in Gallery information. Loaded complete current
+  server text before editing and protected each save with its exact revision.
+  Preserved the draft after conflicts or uncertain replies without replaying
+  a write.
+- Added online NSFW Guard changes and a public-only Hide from public listings
+  override. Showed Listed off automatically for Private and Unpublished,
+  while preserving the saved override across temporary visibility changes.
+
+#### Connection and Watcher recovery
+
+- Added a 24-hour sliding access deadline for negotiated rolling connections.
+  Renewed access and the seven-day inactivity window on authenticated API use,
+  including browsing, images and uploads. Kept an idle running Watcher's exact
+  temporary key alive through bounded existing inventory checks. Addressed
+  [issue #386](https://github.com/klusik/PHP_gallery/issues/386).
+- Stopped treating an uncertain credential rotation as ready for uploads.
+  Allowed Connect to clear unusable local credentials and continue with fresh
+  browser approval, and allowed local Unlink after the live session expired.
+  Kept remote revocation independent from local recovery and retained queued
+  originals and destination history.
+- Ignored late keepalive failures belonging to replaced sessions.
+
+### Technical Details
+
+#### Backend and compatibility
+
+- Added the scoped metadata service in
+  `app/services/app_linking_gallery_edit.php` on the existing media route.
+  Reused model-owned persistence, the gallery writer lease, live grant checks,
+  revision comparison, canonical sidecar publication and content invalidation.
+  Kept display-title edits independent of physical folders and stable URLs.
+- Added explicit `gallery:edit` browser consent without extending old grants.
+  Required conclusively available metadata/access/NSFW schema for writes;
+  missing or unknown support did not grant editing authority.
+- Negotiated `rolling_access:day-v1` before extending client access deadlines.
+  Preserved conservative exchange hints for older clients, existing renewal
+  behavior for older servers, historical vault scope indexes and credential
+  formats. Refused revival of expired, replaced or revoked credentials.
+- Extended the existing locked authentication model without adding SQL tables
+  or migrations. Kept access, authorization and replay checks in place.
+
+#### Client and verification
+
+- Added bounded complete metadata ordering through the existing ascending
+  read-only API, with resumable quota waits and no image preload requirement.
+  Preserved existing per-gallery card-format preferences.
+- Added regression cases for local order persistence, new-photo placement,
+  full-text editing, revisions, listing behavior, sliding access, failed
+  renewal, direct reconnect, expired unlink and stale worker results.
+- Updated English, Czech, German and Swedish labels, permanent documentation
+  and all four TeX manual sources.
+
+### User Impact
+
+#### For WinApp users
+
+- Added persistent local viewing choices and direct online gallery edits.
+  Reduced routine reauthorization and provided a direct recovery path when
+  saved access could not be verified. Kept pending originals and unresolved
+  upload outcomes available for explicit review.
+
+#### For visitors and administrators
+
+- Kept WinApp viewing preferences local. Applied confirmed title, description,
+  visibility, NSFW and public-listing changes to the online gallery. Hiding a
+  public gallery from listings did not itself block direct links.
+
 ## Version 1.2.1
 
 Fixed a Watcher Finish loop and added a durable Force finish action for the

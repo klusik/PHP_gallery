@@ -39,6 +39,27 @@ without compiling views that the response will never render. This keeps the
 denied-route memory allowance intact; route identities, roots and limits remain
 unchanged.
 
+## Native gallery presentation and single-field editing
+
+WinApp keeps per-gallery order and aspect choices in its existing verified
+site/account `.view.json` file. `gallery_view_order.py` reverses a complete
+bounded read-only catalogue and pages it locally; fresh snapshots reapply the
+rule to new uploads. The server receives no presentation preference.
+
+`app_linking_gallery_edit.php` extends the existing fixed media POST with
+`gallery_edit_read` and `gallery_edit`. An exact Admin Photos scope must include
+new browser-approved `gallery:edit` authority. A full text/revision snapshot is
+read before editing. Writes carry exactly one of title, description, NSFW or
+listing plus the reviewed revision. The existing model owns SQL, the service
+owns the shared writer lease, live-grant transaction, revision comparison,
+unrelated-field guard, content invalidation and canonical sidecar publication.
+A post-commit sidecar/readback failure is unconfirmed, never a rollback or an
+automatic retry. Display-title edits retain physical folders and stable URLs.
+Visibility retains its existing specialized mutation and recovery protocol.
+No new route, migration or logical runtime module is introduced. Runtime-plan
+impact is estimated at one new service file within the existing Admin-auth
+closure; hosted preparation must verify actual counts and unchanged ratchets.
+
 ## Public native-client discovery
 
 The public `app_linking_discovery` page uses the standard route table and
@@ -765,7 +786,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.2.1';
+const CMS_VERSION = '1.2.2';
 ```
 
 Update-related code uses:

@@ -38,6 +38,8 @@ if str(WINAPP_DIR) not in sys.path:
 from uploader.app_linking import (
     LinkedGallery,
     LinkedGalleryPage,
+    LinkedGalleryEditSnapshot,
+    LinkingRevisionConflict,
     LinkedGalleryTree,
     LinkedMediaPage,
     LinkedPhoto,
@@ -3620,6 +3622,211 @@ class NativeGalleryViewerTests(unittest.TestCase):
             for child in self.root.winfo_children()
         ))
 
+    def test_gallery_controls_use_fresh_text_and_render_both_menu_sizes(self) -> None:
+        """Exercise real anchored editors, shared menus and preserved conflict drafts.
+
+        Returns:
+            None: Hosted Windows captures desktop/narrow controls and proves that
+                edits use fresh server values, preserve drafts and do not replay.
+        """
+        from PIL import ImageGrab
+        from uploader.ui_theme import configure_theme
+
+        configure_theme(self.root)
+
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Cached title')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        session.can_read_admin_media.return_value = True
+        session.can_edit_gallery_metadata.return_value = True
+        session.can_change_gallery_visibility.return_value = True
+        snapshot = LinkedGalleryEditSnapshot(
+            TEST_GALLERY_ID, 'Title changed on the website',
+            'Complete server description\n' * 40, '11', 'public', True, False,
+        )
+        session.read_gallery_edit.return_value = snapshot
+        session.media_gallery_details.return_value = {
+            'gallery_id': TEST_GALLERY_ID, 'title': snapshot.title,
+            'description': 'Information-card description',
+            'visibility': 'public', 'listed': True, 'nsfw': False,
+            'photo_count': len(page.photos), 'file_count': len(page.photos),
+        }
+        def save(
+            baseline: LinkedGalleryEditSnapshot, field: str, value: str | bool,
+            cancelled: threading.Event | None = None,
+        ) -> LinkedGalleryEditSnapshot:
+            """Apply one mock server field while retaining a canonical fresh read.
+
+            Args:
+                baseline (LinkedGalleryEditSnapshot): Exact reviewed server revision.
+                field (str): Explicit title, description or boolean field.
+                value (str | bool): Explicit desired field value.
+                cancelled (threading.Event | None): Captured editor cancellation.
+            Returns:
+                LinkedGalleryEditSnapshot: Updated canonical server state.
+            """
+            updated = replace(
+                baseline, **{field: value, 'revision': str(int(baseline.revision) + 1)},
+            )
+            session.read_gallery_edit.return_value = updated
+            session.media_gallery_details.return_value.update({
+                'title': updated.title, 'description': updated.description,
+                'nsfw': updated.nsfw, 'listed': updated.listed,
+            })
+            return updated
+
+        session.save_gallery_edit.side_effect = save
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: session, mock.Mock(), lambda: 'en',
+            start_watcher=lambda _session, _gallery: None,
+            load_photo_order=lambda _session, _gallery_id: 'newest',
+            save_photo_order=lambda _session, _gallery_id, _order: True,
+        )
+        workspace.pack(fill='both', expand=True)
+
+        def controls(kind: str) -> list[tk.Misc]:
+            """Find controls below the current anchored card by native widget class.
+
+            Args:
+                kind (str): Native Tk class name such as TEntry or Text.
+            Returns:
+                list[tk.Misc]: Current descendants matching that class.
+            """
+            pending = [workspace._context_card] if workspace._context_card else []
+            found: list[tk.Misc] = []
+            while pending:
+                widget = pending.pop()
+                pending.extend(widget.winfo_children())
+                if widget.winfo_class() == kind:
+                    found.append(widget)
+            return found
+
+        self._wait_until(
+            lambda: workspace._selected_gallery_id == TEST_GALLERY_ID
+            and workspace._viewer is not None,
+            'The gallery-controls fixture did not select its gallery.',
+        )
+        self.assertEqual('newest', workspace._photo_order_overrides[TEST_GALLERY_ID])
+        workspace._open_title_editor()
+        self._wait_until(lambda: bool(controls('TEntry')), 'The synchronized title editor did not open.')
+        entry = controls('TEntry')[0]
+        self.assertEqual(snapshot.title, entry.get())
+        self.assertEqual(snapshot.title, workspace._gallery_title.get())
+        entry.delete(0, 'end')
+        entry.insert(0, 'Edited in WinApp')
+        workspace._submit_gallery_edit(
+            workspace._context_card, session, snapshot, 'title', entry.get(),
+        )
+        self._wait_until(
+            lambda: workspace._gallery_title.get() == 'Edited in WinApp',
+            'The canonical saved title did not update the heading.',
+        )
+        self.assertEqual(snapshot, session.save_gallery_edit.call_args.args[0])
+        self.assertEqual('title', session.save_gallery_edit.call_args.args[1])
+        self.assertEqual('Edited in WinApp', session.save_gallery_edit.call_args.args[2])
+        self.assertEqual('Edited in WinApp', workspace._galleries[TEST_GALLERY_ID].title)
+        snapshot = session.read_gallery_edit.return_value
+
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'gallery-controls'
+        evidence.mkdir(parents=True, exist_ok=True)
+        for width, height in TEST_TREE_REFRESH_VIEWPORTS:
+            self.root.geometry(
+                f'{min(width, self.root.winfo_screenwidth() - TEST_TREE_REFRESH_SCREEN_MARGIN)}'
+                f'x{min(height, self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN)}+0+0'
+            )
+            self.root.update()
+            workspace._dismiss_context(restore=False)
+            workspace._open_cache_context()
+            labels = [str(widget.cget('text')) for widget in controls('TLabel')]
+            for expected in ('Information & access', 'Local cache', 'Edit & tools', 'Create'):
+                self.assertIn(expected, labels)
+            self.root.update()
+            card = workspace._context_card
+            self.assertGreaterEqual(card.winfo_rootx(), workspace.winfo_rootx())
+            self.assertLessEqual(
+                card.winfo_rootx() + card.winfo_width(),
+                workspace.winfo_rootx() + workspace.winfo_width(),
+            )
+            self.assertLessEqual(
+                card.winfo_rooty() + card.winfo_height(),
+                workspace.winfo_rooty() + workspace.winfo_height(),
+            )
+            bounds = (
+                self.root.winfo_rootx(), self.root.winfo_rooty(),
+                self.root.winfo_rootx() + self.root.winfo_width(),
+                self.root.winfo_rooty() + self.root.winfo_height(),
+            )
+            with ImageGrab.grab(bbox=bounds) as captured:
+                captured.save(evidence / f'gallery-menu-{width}.png')
+            workspace._fetch_gallery_info(card, session, TEST_GALLERY_ID)
+            self._wait_until(
+                lambda: len(controls('TCheckbutton')) == 2,
+                'Gallery information did not expose the two direct switches.',
+            )
+            self.assertIn('Hide from public listings', [
+                widget.cget('text') for widget in controls('TCheckbutton')
+            ])
+            public_fields = dict(session.media_gallery_details.return_value)
+            workspace._show_gallery_details(
+                card, TEST_GALLERY_ID, {**public_fields, 'visibility': 'private'},
+                None, 'unknown', None,
+            )
+            self.assertEqual(1, len(controls('TCheckbutton')))
+            self.assertTrue(any('Listed: No' in str(widget.cget('text'))
+                                for widget in controls('TLabel')))
+            workspace._show_gallery_details(
+                card, TEST_GALLERY_ID, public_fields, None, 'unknown', None,
+            )
+            self.root.update()
+            with ImageGrab.grab(bbox=bounds) as captured:
+                captured.save(evidence / f'gallery-information-{width}.png')
+            if width == TEST_TREE_REFRESH_VIEWPORTS[0][0]:
+                switch = next(widget for widget in controls('TCheckbutton')
+                              if widget.cget('text') == 'NSFW Guard')
+                previous_saves = session.save_gallery_edit.call_count
+                switch.invoke()
+                self._wait_until(
+                    lambda: session.save_gallery_edit.call_count > previous_saves
+                    and len(controls('TCheckbutton')) == 2,
+                    'The direct NSFW switch did not return to information after saving.',
+                )
+                self.assertEqual(('nsfw', True), session.save_gallery_edit.call_args.args[1:])
+                self.assertTrue(session.read_gallery_edit.return_value.nsfw)
+            workspace._begin_gallery_edit(card, session, TEST_GALLERY_ID, 'description')
+            self._wait_until(lambda: bool(controls('Text')), 'The description editor did not render.')
+            self.root.update()
+            with ImageGrab.grab(bbox=bounds) as captured:
+                captured.save(evidence / f'gallery-description-editor-{width}.png')
+
+        workspace._dismiss_context(restore=False)
+        workspace._open_title_editor()
+        self._wait_until(lambda: bool(controls('TEntry')), 'The fresh editor did not reopen.')
+        # Cancel and re-open a description editor using a newer web revision.
+        card = workspace._context_card
+        snapshot = replace(snapshot, title='Latest website title', revision='13')
+        session.read_gallery_edit.return_value = snapshot
+        workspace._begin_gallery_edit(card, session, TEST_GALLERY_ID, 'description')
+        self._wait_until(lambda: bool(controls('Text')), 'The full description editor did not open.')
+        text = controls('Text')[0]
+        self.assertEqual(snapshot.description, text.get('1.0', 'end-1c'))
+        text.delete('1.0', 'end')
+        text.insert('1.0', 'Retain this conflicting draft')
+        session.save_gallery_edit.side_effect = LinkingRevisionConflict('Web edit')
+        before_reads = session.read_gallery_edit.call_count
+        workspace._submit_gallery_edit(
+            card, session, snapshot, 'description', text.get('1.0', 'end-1c'),
+        )
+        self._wait_until(
+            lambda: bool(controls('Text')) and controls('Text')[0].cget('state') == 'disabled',
+            'The conflicting draft was not retained in a locked editor.',
+        )
+        self.assertEqual('Retain this conflicting draft', controls('Text')[0].get('1.0', 'end-1c'))
+        self.assertEqual(before_reads, session.read_gallery_edit.call_count)
+        self.assertFalse(any('Save' in str(button.cget('text')) for button in controls('TButton')))
+        self.assertTrue(any('Reload' in str(button.cget('text')) for button in controls('TButton')))
+        workspace.destroy()
+
     def _session(
         self,
         page: LinkedMediaPage,
@@ -3646,6 +3853,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session.server_timing_summary.return_value = ''
         session.can_reuse_cached_media.return_value = True
         session.can_read_admin_media.return_value = False
+        session.can_edit_gallery_metadata.return_value = False
         session.private_preload_user_id.return_value = None
         session.private_preload_cache_identity.return_value = None
         session.can_read_presentation.return_value = True

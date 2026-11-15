@@ -227,6 +227,7 @@ from uploader.app_linking import (
 from uploader.gallery_catalogue_cache import GalleryCatalogueCache
 from uploader.gallery_view_preferences import (
     load_gallery_card_format, save_gallery_card_format,
+    load_gallery_photo_order, save_gallery_photo_order,
 )
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS, FinalizationWorker
 from uploader.flight_recorder import FlightRecorder
@@ -9647,6 +9648,8 @@ class WatcherApp:
             save_tree_state=self.save_photos_tree_state,
             load_selected_gallery=self.load_photos_selected_gallery,
             save_selected_gallery=self.save_photos_selected_gallery,
+            load_photo_order=self.load_photos_photo_order,
+            save_photo_order=self.save_photos_photo_order,
             load_card_format=self.load_photos_card_format,
             save_card_format=self.save_photos_card_format,
             catalogue_cache=self.photos_catalogue_cache,
@@ -9717,6 +9720,43 @@ class WatcherApp:
             )
         except (OSError, TypeError, ValueError, LinkingError):
             return None
+
+    def load_photos_photo_order(
+        self, session: LinkingSession, gallery_id: int,
+    ) -> str:
+        """Load local order for the verified Photos site/account/gallery.
+
+        Args:
+            session (LinkingSession): Current approved site/account session.
+            gallery_id (int): Selected gallery's positive identity.
+        Returns:
+            str: newest or the original oldest order when local state is absent.
+        """
+        account_path = self._photos_tree_state_path(session)
+        if account_path is None:
+            return 'oldest'
+        return load_gallery_photo_order(
+            account_path.with_name(account_path.stem + '.view.json'), gallery_id,
+        )
+
+    def save_photos_photo_order(
+        self, session: LinkingSession, gallery_id: int, order: str,
+    ) -> bool:
+        """Persist only local presentation order without changing upload settings.
+
+        Args:
+            session (LinkingSession): Current approved site/account session.
+            gallery_id (int): Selected gallery's positive identity.
+            order (str): oldest or newest local presentation direction.
+        Returns:
+            bool: True after the verified account's atomic local preference write.
+        """
+        account_path = self._photos_tree_state_path(session)
+        if account_path is None:
+            return False
+        return save_gallery_photo_order(
+            account_path.with_name(account_path.stem + '.view.json'), gallery_id, order,
+        )
 
     def load_photos_card_format(
         self, session: LinkingSession, gallery_id: int,

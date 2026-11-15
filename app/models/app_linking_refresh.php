@@ -132,6 +132,8 @@ function app_link_refresh_model_issue_initial_owned(
  * @param string $issuer Exact trusted installation issuer and mount.
  * @param string $scope Exact previously authenticated rolling scope bundle.
  * @param int $rollingTtl Positive family inactivity period in seconds.
+ * @param int $accessTtl Sliding bearer lifetime in seconds, or zero to retain
+ *     the original deadline for compatibility callers.
  * @return bool True when the live rolling family was renewed, otherwise false.
  * @throws Throwable When transaction or persistence fails after rollback.
  */
@@ -143,10 +145,11 @@ function app_link_refresh_model_extend_on_access(
     string $issuer,
     string $scope,
     int $rollingTtl,
+    int $accessTtl = 0,
 ): bool {
     app_link_model_assert_hash($accessHash);
     $pdo = db();
-    if ($pdo->inTransaction() || $grantId <= 0 || $userId <= 0 || $rollingTtl <= 0) {
+    if ($pdo->inTransaction() || $grantId <= 0 || $userId <= 0 || $rollingTtl <= 0 || $accessTtl < 0) {
         throw new RuntimeException('Rolling access requires a bounded transaction.');
     }
     $pdo->beginTransaction();
@@ -203,6 +206,21 @@ function app_link_refresh_model_extend_on_access(
         if ($renew->rowCount() !== 1) {
             $pdo->rollBack();
             return false;
+        }
+        if ($accessTtl > 0) {
+            // Keep each row-count assertion exact: updating two tables at once
+            // reports two changed rows on MySQL, not one renewed grant.
+            $access = $pdo->prepare(
+                'UPDATE app_link_grants SET access_expires_at = '
+                    . 'DATE_ADD(UTC_TIMESTAMP(6), INTERVAL ? SECOND) '
+                    . 'WHERE id = ? AND access_expires_at > UTC_TIMESTAMP(6) '
+                    . 'AND revoked_at IS NULL AND BINARY access_token_hash = BINARY ?',
+            );
+            $access->execute([$accessTtl, $grantId, $accessHash]);
+            if ($access->rowCount() !== 1) {
+                $pdo->rollBack();
+                return false;
+            }
         }
         $pdo->commit();
         return true;
