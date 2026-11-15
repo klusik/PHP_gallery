@@ -1,5 +1,57 @@
 # Patch notes
 
+## Version 1.2.3
+
+Fixed a dismissed preload result reappearing in WinApp after cancellation or
+other terminal outcomes. The independent WinApp version advanced to 1.2.1.
+
+### Highlights
+
+#### Preload result dismissal
+
+- Kept a preload result closed after the user dismissed it with ×, including
+  cancelled, completed, partial and failed operations. Prevented background
+  polling, gallery navigation and view changes from restoring the same
+  acknowledged message. Addressed
+  [issue #388](https://github.com/klusik/PHP_gallery/issues/388).
+- Kept a newly started preload's progress visible and cleared the previous
+  result when switching gallery sessions.
+
+### Technical Details
+
+#### WinApp
+
+- Added operation-scoped dismissal state to
+  `winapp/uploader/photos_workspace.py`. Applied it at the existing terminal
+  status-rendering boundary after storage observations, so final cache and
+  storage accounting continued after the message was closed.
+- Preserved active Stop behavior, background worker ownership, cached files and
+  retention choices. Added no server endpoint, database migration or persistent
+  preference format.
+- Updated the WinApp README and all four maintained TeX manual sources.
+
+#### Tests
+
+- Added a native regression covering all terminal phases, repeated worker
+  polling, gallery remounts, desktop/narrow resizing and a fresh preload
+  launch. Strengthened the earlier terminal-status test to render again after
+  returning to the original gallery.
+- Added desktop and narrow screenshot evidence for the dismissed state and
+  updated the central test documentation.
+
+### User Impact
+
+#### For WinApp users
+
+- Allowed closing a finished preload message once and continuing normal
+  browsing without that old message returning. Preserved the cached work and
+  showed progress normally for a new preload.
+
+#### For visitors and administrators
+
+- Left online gallery behavior and settings unchanged; the correction affected
+  the local WinApp status display.
+
 ## Version 1.2.2
 
 Improved gallery browsing and editing in the Windows companion and hardened
