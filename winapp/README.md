@@ -1419,6 +1419,19 @@ Diagnostics separate metadata/preload work, foreground wait, transport phases,
 bytes and cache operations; cumulative overlapping times are not wall-time sums.
 The default-on **Subgalleries**
 switch shows direct child folder cards above the selected gallery's photos.
+Folder cards wrap to the pane width; overflow scrolls vertically, with no
+horizontal scrollbar. Mixed galleries reserve space for photos and separate
+the sections with a thin line. The folder row has its own identical seven-ratio
+selector and oldest/newest record-order arrow. Photo controls sit directly above
+the photos when both sections are visible. Empty sections have no format/order
+controls; hiding folders also hides their controls, while the switch remains
+available to show them again. The switch is omitted when there are no children.
+Both formats and both orders are independent local preferences on this computer;
+none are written to the website. Folder covers reuse the ordinary verified
+thumbnail disk pool. A current session descriptor can display a matching cached
+cover before background metadata refresh; after restart, fresh authorized
+metadata is required before disk reuse. Permission, validator, cancellation and
+private-media checks remain owned by the linking session.
 Each folder uses its first authorized direct thumbnail as a cover. When no
 eligible image is available, the card shows a neutral folder. Photos keeps
 listings in memory and uses the current link grant. If the smallest thumbnail

@@ -46,7 +46,15 @@ permanent while supported installations can have older server/client versions.
 Deployment and installed-account adoption remain unknown until acceptance.
 
 The existing local view file retains version 1 with an additive `photo_orders`
-map. Absent maps preserve oldest-first behavior and old card-format choices.
+map. The additive `folder_formats` and `folder_orders` maps keep independent
+folder presentation on this computer. Absent maps preserve oldest-first behavior
+and old card-format choices. The local preference owner permanently supports
+older version 1 files; no adoption or safe retirement is assumed. Folder covers
+use the existing session-authorized thumbnail pool rather than an unscoped cache.
+Public proof expiry, private-media authorization, revocation and cancellation
+remain enforced; no offline permission is inferred from a saved thumbnail.
+Installed-client/server acceptance and real-host performance remain unverified
+until a separate user review and deployment.
 Unreadable files use the existing display default but refuse overwrite; a failed
 save retains session intent with a visible warning. Both are permanent local
 storage failure behavior. Vault scope indices 0–116 retain their original

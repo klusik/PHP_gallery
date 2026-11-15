@@ -28,6 +28,46 @@ from uploader import gallery_view_preferences as preferences
 class GalleryViewPreferenceTests(unittest.TestCase):
     """Verify local view choices without a server, Tk window or live profile."""
 
+    def test_folder_and_photo_preferences_survive_independent_writes(self) -> None:
+        """Round-trip separate folder and photo choices in one local file.
+
+        Returns:
+            None: Repeated writes and resets preserve the other section/account.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'account.json'
+            other = Path(directory) / 'other-account.json'
+            # Gallery 1 exercises four independent maps within one identity.
+            self.assertTrue(preferences.save_gallery_card_format(path, 1, '16:9'))
+            self.assertTrue(preferences.save_gallery_photo_order(path, 1, 'newest'))
+            for value in preferences.PHOTO_CARD_FORMATS:
+                self.assertTrue(preferences.save_gallery_card_format(path, 1, value, folders=True))
+                self.assertEqual(value, preferences.load_gallery_card_format(path, 1, folders=True))
+                self.assertEqual('16:9', preferences.load_gallery_card_format(path, 1))
+            self.assertTrue(preferences.save_gallery_photo_order(path, 1, 'newest', folders=True))
+            self.assertTrue(preferences.save_gallery_photo_order(path, 1, 'oldest'))
+            self.assertEqual('newest', preferences.load_gallery_photo_order(path, 1, folders=True))
+            self.assertEqual('oldest', preferences.load_gallery_photo_order(path, 1))
+            self.assertEqual('default', preferences.load_gallery_card_format(other, 1, folders=True))
+            self.assertEqual('oldest', preferences.load_gallery_photo_order(other, 1, folders=True))
+
+    def test_legacy_view_file_keeps_photo_choices_when_folders_are_added(self) -> None:
+        """Accept additive folder maps without migrating old photo preferences.
+
+        Returns:
+            None: A folder save preserves prior photo state; corrupt state refuses writes.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'account.json'
+            path.write_text('{"version":1,"card_formats":{"1":"21:9"}}', encoding='utf-8')
+            self.assertEqual('default', preferences.load_gallery_card_format(path, 1, folders=True))
+            self.assertTrue(preferences.save_gallery_card_format(path, 1, '4:3', folders=True))
+            self.assertEqual('21:9', preferences.load_gallery_card_format(path, 1))
+            self.assertEqual('4:3', preferences.load_gallery_card_format(path, 1, folders=True))
+            path.write_text('{broken', encoding='utf-8')
+            self.assertFalse(preferences.save_gallery_photo_order(path, 1, 'newest', folders=True))
+            self.assertEqual('{broken', path.read_text(encoding='utf-8'))
+
     def test_absent_and_invalid_choices_keep_natural_default(self) -> None:
         """Keep previous presentation for absent preferences and invalid input.
 

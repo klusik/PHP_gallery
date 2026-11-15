@@ -506,8 +506,12 @@ def create_smooth_icon(
             try:
                 import io
                 with Image.open(io.BytesIO(cover)) as source:
-                    preview = ImageOps.fit(source.convert("RGB"),
-                                           (102 * scale, 48 * scale))
+                    # Preserve the folder rim for every local aspect ratio.
+                    # Insets 5/12/8 are silhouette geometry, not cache policy.
+                    preview = ImageOps.fit(source.convert("RGB"), (
+                        max(1, (width - 10) * scale),
+                        max(1, (height - 20) * scale),
+                    ))
                     canvas.paste(preview, (5 * scale, 12 * scale))
             except (OSError, ValueError):
                 pass

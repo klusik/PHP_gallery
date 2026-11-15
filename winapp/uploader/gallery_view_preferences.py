@@ -55,8 +55,8 @@ def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
     Args:
         path (Path): Credential-free file for one verified site/account.
     Returns:
-        dict[str, dict[str, str]]: card_formats and photo_orders maps keyed by
-            canonical positive gallery IDs; a missing file has empty maps.
+        dict[str, dict[str, str]]: Independent card_formats, photo_orders,
+            folder_formats and folder_orders keyed by positive gallery IDs.
     Raises:
         OSError: The file cannot be read.
         ValueError: The file is unsafe, oversized, malformed or unsupported.
@@ -68,7 +68,9 @@ def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
             # One extra byte distinguishes the exact limit from an overflow.
             encoded = source.read(GALLERY_VIEW_PREFERENCES_MAX_BYTES + 1)
     except FileNotFoundError:
-        return {"card_formats": {}, "photo_orders": {}}
+        return {key: {} for key in (
+            'card_formats', 'photo_orders', 'folder_formats', 'folder_orders',
+        )}
     if len(encoded) > GALLERY_VIEW_PREFERENCES_MAX_BYTES:
         raise ValueError("Gallery view preferences exceed their size limit.")
     try:
@@ -80,12 +82,14 @@ def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
             or payload["version"] != 1
             or not isinstance(payload.get("card_formats"), dict)):
         raise ValueError("Unsupported gallery view preferences.")
-    # Version 1 files predating photo order have only card_formats. This
-    # permanent additive reader preserves those existing user choices.
+    # The local preference owner permanently supports additive version 1 maps:
+    # older files omit order/folder fields and retain their existing photo view.
     result: dict[str, dict[str, str]] = {}
     for field, choices, default in (
         ("card_formats", PHOTO_CARD_FORMATS, "default"),
         ("photo_orders", ("oldest", "newest"), "oldest"),
+        ("folder_formats", PHOTO_CARD_FORMATS, "default"),
+        ("folder_orders", ("oldest", "newest"), "oldest"),
     ):
         rows = payload.get(field, {})
         if (not isinstance(rows, dict)
@@ -102,30 +106,37 @@ def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
     return result
 
 
-def load_gallery_card_format(path: Path, gallery_id: int) -> str:
+def load_gallery_card_format(
+    path: Path, gallery_id: int, *, folders: bool = False,
+) -> str:
     """Restore one gallery's local presentation without changing its source.
 
     Args:
         path (Path): Credential-free file for one verified site/account.
         gallery_id (int): Positive gallery identity selected in Photos.
+        folders (bool): Read the independent child-folder format when True.
     Returns:
         str: Saved supported key, or default when missing, invalid or unreadable.
     """
     if type(gallery_id) is not int or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX:
         return "default"
     try:
-        return _read_preferences(path)["card_formats"].get(str(gallery_id), "default")
+        field = 'folder_formats' if folders else 'card_formats'
+        return _read_preferences(path)[field].get(str(gallery_id), "default")
     except (OSError, ValueError):
         return "default"
 
 
-def save_gallery_card_format(path: Path, gallery_id: int, value: str) -> bool:
+def save_gallery_card_format(
+    path: Path, gallery_id: int, value: str, *, folders: bool = False,
+) -> bool:
     """Save one local choice atomically while preserving other galleries.
 
     Args:
         path (Path): Credential-free file for one verified site/account.
         gallery_id (int): Positive gallery identity selected in Photos.
         value (str): Supported format key; default removes an explicit override.
+        folders (bool): Save only the independent child-folder format when True.
     Returns:
         bool: True after atomic persistence; False for invalid input, full state
             or a failed read/write. Unreadable existing choices are preserved.
@@ -136,7 +147,7 @@ def save_gallery_card_format(path: Path, gallery_id: int, value: str) -> bool:
         return False
     try:
         preferences = _read_preferences(path)
-        rows = preferences["card_formats"]
+        rows = preferences['folder_formats' if folders else 'card_formats']
         key = str(gallery_id)
         if value == "default":
             rows.pop(key, None)
@@ -151,32 +162,39 @@ def save_gallery_card_format(path: Path, gallery_id: int, value: str) -> bool:
         return False
 
 
-def load_gallery_photo_order(path: Path, gallery_id: int) -> str:
+def load_gallery_photo_order(
+    path: Path, gallery_id: int, *, folders: bool = False,
+) -> str:
     """Restore the persistent WinApp order for one verified gallery.
 
     Args:
         path (Path): Local file scoped to the verified site and account.
         gallery_id (int): Selected physical gallery identity.
+        folders (bool): Read child-gallery record order instead of photo order.
     Returns:
         str: newest or the original oldest order for absent/unreadable state.
     """
     if type(gallery_id) is not int or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX:
         return "oldest"
     try:
-        return _read_preferences(path)["photo_orders"].get(str(gallery_id), "oldest")
+        field = 'folder_orders' if folders else 'photo_orders'
+        return _read_preferences(path)[field].get(str(gallery_id), "oldest")
     except (OSError, ValueError):
         # The local preference owner keeps browsing usable on damaged storage;
         # saves still refuse that file. This is permanent source-mode support.
         return "oldest"
 
 
-def save_gallery_photo_order(path: Path, gallery_id: int, value: str) -> bool:
+def save_gallery_photo_order(
+    path: Path, gallery_id: int, value: str, *, folders: bool = False,
+) -> bool:
     """Persist order without changing formats, other galleries or the server.
 
     Args:
         path (Path): Local file scoped to the verified site and account.
         gallery_id (int): Selected physical gallery identity.
         value (str): oldest or newest; oldest removes the explicit override.
+        folders (bool): Save only the independent child-gallery record order.
     Returns:
         bool: True after atomic persistence; False preserves unreadable state.
     """
@@ -186,7 +204,7 @@ def save_gallery_photo_order(path: Path, gallery_id: int, value: str) -> bool:
         return False
     try:
         preferences = _read_preferences(path)
-        rows = preferences["photo_orders"]
+        rows = preferences['folder_orders' if folders else 'photo_orders']
         key = str(gallery_id)
         if value == "oldest":
             rows.pop(key, None)

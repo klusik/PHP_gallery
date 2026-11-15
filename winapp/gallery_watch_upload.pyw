@@ -9652,6 +9652,18 @@ class WatcherApp:
             save_photo_order=self.save_photos_photo_order,
             load_card_format=self.load_photos_card_format,
             save_card_format=self.save_photos_card_format,
+            load_folder_format=lambda session, gallery_id: self.load_photos_card_format(
+                session, gallery_id, folders=True,
+            ),
+            save_folder_format=lambda session, gallery_id, value: self.save_photos_card_format(
+                session, gallery_id, value, folders=True,
+            ),
+            load_folder_order=lambda session, gallery_id: self.load_photos_photo_order(
+                session, gallery_id, folders=True,
+            ),
+            save_folder_order=lambda session, gallery_id, value: self.save_photos_photo_order(
+                session, gallery_id, value, folders=True,
+            ),
             catalogue_cache=self.photos_catalogue_cache,
             load_tree_width=lambda: preferred_tree_width,
             save_tree_width=self.save_photos_tree_width,
@@ -9723,12 +9735,14 @@ class WatcherApp:
 
     def load_photos_photo_order(
         self, session: LinkingSession, gallery_id: int,
+        *, folders: bool = False,
     ) -> str:
         """Load local order for the verified Photos site/account/gallery.
 
         Args:
             session (LinkingSession): Current approved site/account session.
             gallery_id (int): Selected gallery's positive identity.
+            folders (bool): Use independent local child-folder preferences.
         Returns:
             str: newest or the original oldest order when local state is absent.
         """
@@ -9736,11 +9750,12 @@ class WatcherApp:
         if account_path is None:
             return 'oldest'
         return load_gallery_photo_order(
-            account_path.with_name(account_path.stem + '.view.json'), gallery_id,
+            account_path.with_name(account_path.stem + '.view.json'), gallery_id, folders=folders,
         )
 
     def save_photos_photo_order(
         self, session: LinkingSession, gallery_id: int, order: str,
+        *, folders: bool = False,
     ) -> bool:
         """Persist only local presentation order without changing upload settings.
 
@@ -9748,6 +9763,7 @@ class WatcherApp:
             session (LinkingSession): Current approved site/account session.
             gallery_id (int): Selected gallery's positive identity.
             order (str): oldest or newest local presentation direction.
+            folders (bool): Use independent local child-folder preferences.
         Returns:
             bool: True after the verified account's atomic local preference write.
         """
@@ -9755,17 +9771,19 @@ class WatcherApp:
         if account_path is None:
             return False
         return save_gallery_photo_order(
-            account_path.with_name(account_path.stem + '.view.json'), gallery_id, order,
+            account_path.with_name(account_path.stem + '.view.json'), gallery_id, order, folders=folders,
         )
 
     def load_photos_card_format(
         self, session: LinkingSession, gallery_id: int,
+        *, folders: bool = False,
     ) -> str:
         """Load a local grid preference for the verified Photos identity.
 
         Args:
             session (LinkingSession): Current approved site/account session.
             gallery_id (int): Selected gallery's positive identity.
+            folders (bool): Use independent local child-folder preferences.
         Returns:
             str: Supported saved format, or default without verified local state.
         """
@@ -9773,10 +9791,11 @@ class WatcherApp:
         if account_path is None:
             return "default"
         view_path = account_path.with_name(account_path.stem + ".view.json")
-        return load_gallery_card_format(view_path, gallery_id)
+        return load_gallery_card_format(view_path, gallery_id, folders=folders)
 
     def save_photos_card_format(
         self, session: LinkingSession, gallery_id: int, card_format: str,
+        *, folders: bool = False,
     ) -> bool:
         """Persist a WinApp-only grid choice without touching upload settings.
 
@@ -9784,6 +9803,7 @@ class WatcherApp:
             session (LinkingSession): Current approved site/account session.
             gallery_id (int): Selected gallery's positive identity.
             card_format (str): Supported local card-format key.
+            folders (bool): Use independent local child-folder preferences.
         Returns:
             bool: True only after the verified account's atomic local write;
                 False when identity or persistence cannot be confirmed.
@@ -9792,7 +9812,7 @@ class WatcherApp:
         if account_path is None:
             return False
         view_path = account_path.with_name(account_path.stem + ".view.json")
-        return save_gallery_card_format(view_path, gallery_id, card_format)
+        return save_gallery_card_format(view_path, gallery_id, card_format, folders=folders)
 
     def _schedule_ui_layout_save(self, event: "tk.Event") -> None:
         """Debounce visible main-window geometry updates on the Tk owner.

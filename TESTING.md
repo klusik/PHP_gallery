@@ -9499,6 +9499,25 @@ most 32 visible MP3/WAV tracks. See `docs/APP_LINKING_PHASE_0.md` for the
 ancestor and visibility restrictions.
 
 Current viewer source coverage lives in
+The **WinApp gallery sections** workflow runs on an isolated Windows runner,
+bound to its exact SHA and the immutable main merge-base. Push feedback uses
+the existing central `winapp-native` diagnostic after an observed native failure.
+Explicit dispatch defaults to the complete unchanged `winapp-partitioned` owner;
+its optional `native_only` input selects the focused diagnostic. Native-only
+evidence never substitutes for complete qualification. The native section fixture retains all four
+photo/folder combinations at desktop and narrow widths under
+`cache/test-audit/gallery-sections/`. It checks actual wrapping and vertical-only
+scrolling, hidden empty/disabled sections, separate local ratios/order and no
+metadata/visibility mutation. A second native fixture reopens the real thumbnail
+pool and displays an authorized disk cover while background metadata is held;
+an empty refreshed child removes the old pixels. Portable preferences cover
+additive legacy files and independent folder/photo writes. The screenshot fixture
+uses the established GUI pump cadence for synthetic cover polling and waits for
+every visible cover/photo, respecting virtualized offscreen image release.
+Synthetic authorized media makes these screenshots reproducible without a real
+account; this does not establish installed-client/server acceptance or production
+performance.
+
 `winapp/tests/test_native_gallery_viewer.py` and
 `winapp/tests/test_app_linking.py`. It checks responsive grid columns, selected
 photo detail, tile Return activation, keyboard navigation across a page cursor,
