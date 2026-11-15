@@ -599,6 +599,7 @@ class PhotosWorkspace(ttk.Frame):
         self._preload_worker: GalleryPreloadWorker | None = None
         self._preload_generation = 0
         self._preload_last: PreloadProgress | None = None
+        self._preload_status_dismissed = False
         self._preload_unpin = False
         self._preload_foreground = threading.Event()
         self._preload_foreground_reason = ''
@@ -1614,8 +1615,9 @@ class PhotosWorkspace(ttk.Frame):
         """Switch to the current live gallery session and reload its tree.
 
         Returns:
-            None: Releases stale reads, decoded media and contextual actions;
-                safe failure history resets only when the live session changes.
+            None: Releases stale reads, decoded media, contextual actions and old
+                preload results; safe failure history resets only when the live
+                session changes.
         """
         if self._destroyed:
             return
@@ -1658,6 +1660,8 @@ class PhotosWorkspace(ttk.Frame):
         self._clear_photo_inspector()
         if self._preload_worker is not None:
             self._preload_worker.stop()
+        self._preload_last = None
+        self._preload_status_dismissed = False
         self._preload_strip.grid_remove()
         self._preload_bar.stop()
         self._set_preload_activity(False)
@@ -5318,7 +5322,8 @@ class PhotosWorkspace(ttk.Frame):
                 preserving the original full-preload completion semantics.
 
         Returns:
-            None: Starts work off Tk; disabling retention performs no download.
+            None: Starts work off Tk with a fresh, visible operation status;
+                disabling retention performs no download.
         """
         if (self._context_card is not card or self._session is not session
                 or self._session_provider() is not session
@@ -5346,6 +5351,7 @@ class PhotosWorkspace(ttk.Frame):
         )
         self._preload_generation = diagnostic_generation
         self._preload_last = None
+        self._preload_status_dismissed = False
         self._preload_unpin = pinned is False
         self._preload_text.set(self._text('preload_listing'))
         self._preload_strip.grid(
@@ -5423,7 +5429,8 @@ class PhotosWorkspace(ttk.Frame):
 
         Returns:
             None: Keeps active work/cancellation visible across navigation;
-                terminal results stay scoped to the exact selected gallery.
+                terminal results stay scoped to the exact selected gallery
+                until explicitly dismissed for this preload operation.
         """
         terminal = progress.phase in ('complete', 'partial', 'cancelled', 'error')
         previous_storage_witness = self._storage_preload_witness
@@ -5444,7 +5451,7 @@ class PhotosWorkspace(ttk.Frame):
         if storage_progress_changed or new_terminal_snapshot:
             self._request_storage_refresh()
         different_gallery = self._selected_gallery_id != progress.gallery_id
-        if different_gallery and terminal:
+        if terminal and (different_gallery or self._preload_status_dismissed):
             self._preload_strip.grid_remove()
             self._set_preload_activity(False)
             return
@@ -5969,13 +5976,16 @@ class PhotosWorkspace(ttk.Frame):
         """Cancel new reads, or dismiss a completed preload status strip.
 
         Returns:
-            None: Keeps any explicitly pinned bytes and existing cache contents.
+            None: Keeps any explicitly pinned bytes and existing cache contents;
+                acknowledges an inactive operation's result across polling and
+                navigation until an explicit new preload starts.
         """
         if self._preload_worker is not None and self._preload_worker.is_alive():
             self._preload_worker.stop()
             self._preload_text.set(self._text('preload_cancelling'))
             self._preload_cancel.state(['disabled'])
         else:
+            self._preload_status_dismissed = True
             self._preload_strip.grid_remove()
             self._set_preload_activity(False)
             self._preload_last = None

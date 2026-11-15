@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.2.2}
+\newcommand{\version}{1.2.3}
 \newcommand{\manualdate}{15.~November~2026}
 
 \hypersetup{
@@ -2327,6 +2327,13 @@ Für Fotos und Vorschaubilder gilt ein
 separates Limit von 600 Anfragen je IP und 3\,600 insgesamt in fünf Minuten.
 Bei HTTP~429 zeigt Photos die Begrenzung an und pausiert das Vorabladen
 bis zur Auswahl von \ui{Retry}.
+
+Das Schließen eines abgeschlossenen, teilweisen, abgebrochenen oder
+fehlgeschlagenen Vorladeergebnisses mit \ui{×} bestätigt diese Meldung. Aktualisierung,
+Galeriewechsel und Ansichtsänderungen öffnen sie nicht erneut. Ein ausdrücklich
+neu gestarteter Vorgang zeigt seinen eigenen Fortschritt. Gespeicherte Dateien,
+Aufbewahrung und abschließende Cache-Erfassung bleiben erhalten.
+
 Das responsive Raster scrollt durchgehend und fordert nur sichtbare
 Vorschaubilder an, ohne separate Detailbilder zu laden. Die ausdrückliche Aktion
 \ui{Galerie vorladen} lädt Vorschaubilder und Lightbox-Varianten. Ein~Klick wählt

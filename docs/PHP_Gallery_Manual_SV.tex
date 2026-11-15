@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.2.2}
+\newcommand{\version}{1.2.3}
 \newcommand{\manualdate}{15~november~2026}
 
 \hypersetup{
@@ -2249,6 +2249,14 @@ en gång före ett svar inom samma tidsgräns. Den första vilogränsen är
 15~sekunder; verkligt hostingstöd och latens återstår att mäta.
 Diagnostiken skiljer requests, anslutningar och TLS-handshakes, inklusive
 kastat arbete, samt context, DNS, TCP, TLS, headers och body.
+
+Att stänga ett avslutat, delvis slutfört, avbrutet eller misslyckat
+förladdningsresultat med
+\ui{×} bekräftar meddelandet för den åtgärden. Uppdatering, galleribyte och
+visningsändringar öppnar det inte igen. En uttryckligen startad ny förladdning
+visar sitt eget förlopp. Sparade filer, bevarande och slutlig cacheräkning
+behålls.
+
 Cachemenyn erbjuder \textbf{Förladda endast miniatyrer} för valt direkt
 galleri. Den återupptar aktuella auktoriserade cachedater, lämnar plats för
 bläddring, följer Retry-After och hämtar varken fulla foton eller undergallerier.

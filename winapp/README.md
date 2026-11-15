@@ -1366,6 +1366,13 @@ private media still requires the account's explicit saved opt-in. A switched-awa
 view withdraws cancelled admission tickets; obsolete detail/prefetch reads are
 cancelled when a new selection takes priority. Foreground photo/page requests
 lead background refresh and adjacent lightbox preparation leads grid thumbnails.
+
+Closing a completed, cancelled, partial or failed preload result with **×**
+acknowledges that operation. Polling, gallery navigation and view changes keep
+it closed; an explicitly started new preload shows its own progress normally.
+Closing the message preserves cached files, retention choices and final cache
+and storage accounting.
+
 The gallery's cache menu also offers **Preload thumbnails only**. This explicit,
 cancellable action lists only the selected gallery's direct photos, resumes
 from current authorized cache proofs and requests only thumbnail renditions. It

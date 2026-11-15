@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.2.2}
+\newcommand{\version}{1.2.3}
 \newcommand{\manualdate}{15.~listopadu~2026}
 
 \hypersetup{
@@ -2179,6 +2179,12 @@ je možný před odpovědí v~původním deadline. Počáteční idle limit je
 15~sekund; skutečnou podporu hostingu a~latenci je třeba změřit.
 Diagnostika zvlášť počítá requests, connections a~TLS handshakes včetně
 zahozené práce a~odděluje context, DNS, TCP, TLS, hlavičky a~body.
+
+Zavření výsledku dokončeného, částečného, zrušeného či neúspěšného přednačtení tlačítkem
+\ui{×} potvrdí zprávu dané operace. Obnovování, navigace mezi galeriemi ani změna
+zobrazení ji znovu neotevřou; výslovně spuštěné nové přednačtení zobrazí vlastní
+průběh. Uložené soubory, připnutí i~konečné účtování cache zůstávají zachované.
+
 Nabídka cache má volbu \textbf{Přednačíst pouze náhledy} vybrané přímé galerie.
 Pokračuje z~aktuální schválené cache, ustupuje procházení, respektuje Retry-After
 a~nestahuje full photos ani podgalerie. Dokončení neznamená připravený lightbox;

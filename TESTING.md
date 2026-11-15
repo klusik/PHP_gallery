@@ -1668,7 +1668,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.2.2. Release verification uses the
+This guide applies to PHP Gallery Version 1.2.3. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1919,11 +1919,12 @@ and actual hosted acceptance remain separate from a green fixture. See the
 
 ### WinApp gallery controls
 
-The issue-scoped **Issue 385 gallery controls** workflow runs central source
-contracts, complete partitioned WinApp discovery on Linux and Windows, required
-Chromium and complete disposable MySQL PHP regressions. It prepares canonical generated
-outputs only on hosted runners and retains them for feature-branch persistence.
-BASIC remains independent. No job publishes protected refs or builds installers.
+The central complete WinApp discovery covers gallery controls. The existing
+read-only **Issue 381 Watcher recovery** workflow can run its serial partitions
+on Linux and Windows for an exact selected feature SHA and retain native
+screenshots. Protected integration separately owns canonical preparation,
+independent BASIC, shared source contracts, Chromium and real database coverage.
+The temporary Issue 385 development workflow was retired after qualification.
 
 `test_gallery_controls.py` covers complete reverse paging and newly inserted
 photos and resumable quota waits, persistent gallery/account isolation,
@@ -1938,6 +1939,13 @@ menus, retains a conflicting draft, and captures desktop/narrow menu and
 information screenshots under `cache/test-audit/gallery-controls/`.
 These fixtures do not establish an installed-client upgrade, target-host
 sidecar failure recovery or production account consent.
+
+The native preload-dismissal regression closes cancelled, complete, partial and
+failed results, repeats worker polling, gallery remounts and desktop/narrow
+resizing, and verifies that an explicit new preload restores progress. Final
+cache accounting still runs after dismissal. Screenshots are retained as
+`cache/test-audit/preload-dismissed-desktop.png` and
+`cache/test-audit/preload-dismissed-narrow.png`.
 
 ### Watcher uncertain-head recovery
 
