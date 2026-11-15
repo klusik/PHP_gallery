@@ -4,8 +4,8 @@
 # Module Type: Regression Test
 # Purpose: Preserve uncertain gallery creation intents across client restarts.
 # Responsibilities:
-#   - Block another mutation after any unconfirmed response.
-#   - Permit account-bound status and explicit same-key resume only.
+#   - Preserve the original key for matching unconfirmed requests.
+#   - Keep unrelated requests independent without widening account authority.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Portable gallery-creation journal checks without Windows APIs."""
@@ -34,6 +34,169 @@ from uploader.linked_upload import LinkedTargetLease
 
 class GalleryCreateJournalTests(unittest.TestCase):
     """Exercise the durable intent boundary with a fake linked session."""
+
+    def test_unrelated_legacy_pending_does_not_block_a_new_gallery(self) -> None:
+        """Keep old evidence while admitting an independently named gallery.
+
+        Returns:
+            None: Original bytes survive; the new request has a distinct key,
+                shared profile lease and independently consumable receipt.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            journal = GalleryCreateJournal(root)
+            issuer = 'https://gallery.example'
+            session = mock.Mock(spec=LinkingSession)
+            session.matches_issuer.return_value = True
+            session.can_create_gallery.return_value = True
+            session.identity.return_value = LinkedIdentity(7, 'admin')
+            session.gallery_create_request.return_value = None
+            with self.assertRaises(LinkingError):
+                journal.create(session, issuer, 7, 'Earlier', None)
+            original = journal._path().read_bytes()
+            old_key = journal.pending_intent(issuer, 7).operation_key
+            scoped = journal.for_request(issuer, 7, 'Current', 9)
+            gallery = LinkedGallery(42, 9, 'Current')
+
+            def complete(key: str, title: str, parent_id: int | None) -> LinkedGallery:
+                """Observe the shared lease while returning the exact server row.
+
+                Args:
+                    key (str): Newly admitted operation key.
+                    title (str): Submitted name.
+                    parent_id (int | None): Submitted direct parent or root.
+                Returns:
+                    LinkedGallery: Matching confirmed server row.
+                """
+                self.assertNotEqual(old_key, key)
+                self.assertEqual(('Current', 9), (title, parent_id))
+                contender = LinkedTargetLease(root, linked_create._CREATE_LEASE_BINDING)
+                with self.assertRaises(LinkingError):
+                    contender.acquire()
+                return gallery
+
+            session.gallery_create_request.side_effect = complete
+            bound = scoped.create_or_resume(session, issuer, 7, 'Current', 9)
+            self.assertEqual(gallery, bound.gallery)
+            scoped.acknowledge(issuer, 7, bound)
+            self.assertEqual('empty', scoped.inspect().state)
+            self.assertEqual(original, journal._path().read_bytes())
+            self.assertIs(journal, journal.for_request(issuer, 7, 'Earlier', None))
+
+    def test_request_paths_bind_site_account_parent_and_normalized_title(self) -> None:
+        """Separate independent requests without depending on their display title.
+
+        Returns:
+            None: Exact semantic requests share a path; changed authority or
+                gallery inputs do not share evidence.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = GalleryCreateJournal(Path(temporary))
+            issuer = 'https://gallery.example'
+            first = journal.for_request(issuer, 7, 'Title', None)._path()
+            self.assertEqual(
+                first, journal.for_request(issuer, 7, ' Title ', None)._path(),
+            )
+            # These fixed vectors change one binding dimension at a time.
+            for site, account, title, parent in (
+                ('https://other.example', 7, 'Title', None),
+                (issuer, 8, 'Title', None), (issuer, 7, 'Other', None),
+                (issuer, 7, 'Title', 9),
+            ):
+                self.assertNotEqual(
+                    first, journal.for_request(site, account, title, parent)._path(),
+                )
+
+    def test_foreign_legacy_completion_does_not_gate_the_current_account(self) -> None:
+        """Keep a foreign completed result out of current creation authority.
+
+        Returns:
+            None: The current request succeeds independently; foreign intent
+                and receipt bytes remain untouched for their original owner.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = GalleryCreateJournal(Path(temporary))
+            session = mock.Mock(spec=LinkingSession)
+            session.matches_issuer.return_value = True
+            session.can_create_gallery.return_value = True
+            session.identity.return_value = LinkedIdentity(11, 'earlier admin')
+            session.gallery_create_request.return_value = LinkedGallery(41, None, 'Earlier')
+            journal.create(session, 'https://earlier.example', 11, 'Earlier', None)
+            pending = journal._path().read_bytes()
+            receipt = journal._receipt_path().read_bytes()
+            issuer = 'https://current.example'
+            session.identity.return_value = LinkedIdentity(7, 'current admin')
+            session.gallery_create_request.return_value = LinkedGallery(42, None, 'Current')
+            scoped = journal.for_request(issuer, 7, 'Current', None)
+            current = scoped.create_or_resume(session, issuer, 7, 'Current', None)
+            self.assertEqual('Current', current.gallery.title)
+            self.assertEqual(pending, journal._path().read_bytes())
+            self.assertEqual(receipt, journal._receipt_path().read_bytes())
+
+    def test_matching_legacy_request_recovers_without_replacement_key(self) -> None:
+        """Recover the old operation automatically when the same draft is sent.
+
+        Returns:
+            None: Status and one admitted resume use the original exact inputs
+                and key; no newly generated request bypasses server decisions.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = GalleryCreateJournal(Path(temporary))
+            issuer = 'https://gallery.example'
+            session = mock.Mock(spec=LinkingSession)
+            session.matches_issuer.return_value = True
+            session.can_create_gallery.return_value = True
+            session.identity.return_value = LinkedIdentity(7, 'admin')
+            session.gallery_create_request.return_value = None
+            with self.assertRaises(LinkingError):
+                journal.create(session, issuer, 7, ' Original ', 9)
+            key = journal.pending_intent(issuer, 7).operation_key
+            gallery = LinkedGallery(42, 9, 'Original')
+            session.gallery_create_request.reset_mock()
+            session.gallery_create_request.side_effect = [None, gallery]
+            dispatch = CreateDispatch()
+            scoped = journal.for_request(issuer, 7, 'Original', 9)
+            bound = scoped.create_or_resume(session, issuer, 7, 'Original', 9, dispatch)
+            self.assertEqual(gallery, bound.gallery)
+            self.assertEqual([
+                mock.call(key),
+                mock.call(key, ' Original ', 9, cancelled=dispatch.cancelled),
+            ], session.gallery_create_request.call_args_list)
+            scoped.acknowledge(issuer, 7, bound)
+            self.assertEqual('empty', journal.inspect().state)
+
+    def test_lost_reply_is_checked_once_without_another_create(self) -> None:
+        """Consume a committed result even when its original write reply is lost.
+
+        Returns:
+            None: One POST and one original-key status read return the gallery.
+                A cancelled or changed request cannot reuse that receipt.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = GalleryCreateJournal(Path(temporary))
+            issuer = 'https://gallery.example'
+            journal = root.for_request(issuer, 7, 'New', None)
+            session = mock.Mock(spec=LinkingSession)
+            session.matches_issuer.return_value = True
+            session.can_create_gallery.return_value = True
+            session.identity.return_value = LinkedIdentity(7, 'admin')
+            gallery = LinkedGallery(42, None, 'New')
+            session.gallery_create_request.side_effect = [LinkingError('lost reply'), gallery]
+            bound = journal.create_or_resume(session, issuer, 7, 'New', None)
+            calls = session.gallery_create_request.call_args_list
+            self.assertEqual(2, len(calls))
+            key = calls[0].args[0]
+            self.assertEqual((key, 'New', None), calls[0].args)
+            self.assertEqual(mock.call(key), calls[1])
+            self.assertEqual(gallery, bound.gallery)
+            session.gallery_create_request.reset_mock()
+            with self.assertRaises(LinkingError):
+                journal.create_or_resume(session, issuer, 7, 'Other', None)
+            cancelled = CreateDispatch()
+            cancelled.cancel()
+            with self.assertRaises(LinkingError):
+                journal.create_or_resume(session, issuer, 7, 'New', None, cancelled)
+            session.gallery_create_request.assert_not_called()
 
     def test_stale_bound_receipt_cannot_acknowledge_another_operation(self) -> None:
         """Reject an old acknowledgement even for an identical gallery projection.

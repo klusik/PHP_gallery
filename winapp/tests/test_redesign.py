@@ -713,7 +713,6 @@ class PhotosWatcherHandoffTests(unittest.TestCase):
         workspace._session = session
         workspace._session_provider.return_value = session
         workspace._context_card = card
-        workspace._create_receipt = None
         workspace._selected_gallery_id = None
         workspace._galleries = {}
         workspace._fresh_catalogue_ids = set()
@@ -726,44 +725,46 @@ class PhotosWatcherHandoffTests(unittest.TestCase):
         return workspace, session, card
 
     def test_confirmed_receipts_reach_watcher_without_catalogue_reload(self) -> None:
-        """Use production receipt and handoff methods for root and child results.
+        """Admit consecutive root and child results without acknowledgement.
 
         Returns:
-            None: New and recovered receipts admit only their exact gallery,
-                and only the later explicit Watcher action calls the host.
+            None: Each confirmed row is immediately usable. Only the later
+                explicit Watcher action calls the host, without a reload.
         """
-        # Positive synthetic IDs distinguish a parent from its newly created row.
+        # Positive synthetic IDs distinguish the parent and two new rows.
         for parent_id in (None, 1):
-            for recovered in (False, True):
-                with self.subTest(parent_id=parent_id, recovered=recovered):
-                    workspace, session, card = self._workspace()
-                    gallery = LinkedGallery(2, parent_id, 'Confirmed capture')
+            with self.subTest(parent_id=parent_id):
+                workspace, session, card = self._workspace()
+                if parent_id is not None:
+                    workspace._galleries[parent_id] = LinkedGallery(
+                        parent_id, None, 'Parent',
+                    )
+                    workspace._fresh_catalogue_ids.add(parent_id)
+                    workspace._selected_gallery_id = parent_id
+                for gallery_id in (2, 3):
+                    gallery = LinkedGallery(gallery_id, parent_id, 'Confirmed capture')
                     receipt = BoundCreateReceipt(gallery, 'a' * 64)
-                    if parent_id is not None:
-                        workspace._galleries[parent_id] = LinkedGallery(
-                            parent_id, None, 'Parent',
-                        )
-                        workspace._fresh_catalogue_ids.add(parent_id)
-                        workspace._selected_gallery_id = parent_id
                     photos_workspace.PhotosWorkspace._creation_completed(
                         workspace, card, session, receipt,
-                        already_exists=recovered,
                     )
-                    self.assertIs(receipt, workspace._create_receipt)
-                    self.assertEqual(gallery, workspace._galleries[gallery.gallery_id])
+                    self.assertEqual(gallery, workspace._galleries[gallery_id])
+                    self.assertIn(gallery_id, workspace._fresh_catalogue_ids)
+                    workspace._context_action.assert_called_with(
+                        card, 'close', workspace._dismiss_context,
+                    )
                     workspace._start_watcher.assert_not_called()
-                    photos_workspace.PhotosWorkspace._launch_watcher(
-                        workspace, card, session, gallery,
-                    )
-                    workspace._start_watcher.assert_called_once_with(session, gallery)
-                    workspace._dismiss_context.assert_called_once_with()
-                    workspace.refresh_session.assert_not_called()
+                photos_workspace.PhotosWorkspace._launch_watcher(
+                    workspace, card, session, gallery,
+                )
+                workspace._start_watcher.assert_called_once_with(session, gallery)
+                workspace._dismiss_context.assert_called_once_with()
+                workspace.refresh_session.assert_not_called()
 
     def test_stale_receipts_never_publish_a_current_gallery(self) -> None:
         """Reject receipt publication after session replacement or expiry.
 
         Returns:
-            None: The catalogue, freshness set and pending receipt stay empty.
+            None: The catalogue and freshness set stay empty.
         """
         gallery = LinkedGallery(2, None, 'Late capture')
         receipt = BoundCreateReceipt(gallery, 'b' * 64)
@@ -781,7 +782,6 @@ class PhotosWatcherHandoffTests(unittest.TestCase):
                 )
                 self.assertEqual({}, workspace._galleries)
                 self.assertEqual(set(), workspace._fresh_catalogue_ids)
-                self.assertIsNone(workspace._create_receipt)
                 workspace._render_tree.assert_not_called()
 
     def test_open_watcher_action_requires_current_authority(self) -> None:

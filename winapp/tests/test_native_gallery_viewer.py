@@ -37,6 +37,7 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader.app_linking import (
     LinkedGallery,
+    LinkingError,
     LinkedGalleryPage,
     LinkedGalleryEditSnapshot,
     LinkingRevisionConflict,
@@ -54,7 +55,7 @@ from uploader.app_linking import (
     READ_SCOPE,
 )
 from uploader.flight_report_translations import tr
-from uploader.linked_create import BoundCreateReceipt, CreateJournalSnapshot
+from uploader.linked_create import BoundCreateReceipt, CreateDispatch
 from uploader.gallery_catalogue_cache import GalleryCatalogueSnapshot
 from uploader.gallery_media_cache import GalleryMediaCache
 
@@ -4778,85 +4779,42 @@ class NativeGalleryViewerTests(unittest.TestCase):
         ))
         workspace.destroy()
 
-    def test_foreign_completed_create_requires_continue_before_new_post(self) -> None:
-        """Acknowledge a foreign completion locally only after Continue.
+    def test_earlier_completed_create_does_not_require_continue(self) -> None:
+        """Submit a current draft without showing another operation's result.
 
         Returns:
-            None: The old gallery never enters the current tree and exactly one
-                request is sent for the explicitly entered current draft.
+            None: One Create action admits only the requested gallery; no
+                profile-wide preflight or prior acknowledgement is required.
         """
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
-        old_gallery = LinkedGallery(
-            TEST_PARENT_GALLERY_ID + 9000, None, 'Earlier gallery',
-        )
-        old_receipt = BoundCreateReceipt(old_gallery, 'a' * 64)
-        snapshot = CreateJournalSnapshot(
-            'completed', 'https://earlier.example/photos', 11,
-            old_gallery.title, None, old_receipt.intent_fingerprint, old_receipt,
-        )
-        new_gallery = LinkedGallery(
-            TEST_GALLERY_ID + 10000, parent.gallery_id, 'Current draft title',
-        )
-        new_receipt = BoundCreateReceipt(new_gallery, 'b' * 64)
+        created = LinkedGallery(TEST_GALLERY_ID, parent.gallery_id, 'Current draft')
         manager = mock.Mock()
-        manager.inspect_photos_gallery_creation.return_value = snapshot
-        manager.create_photos_gallery.return_value = new_receipt
+        manager.create_photos_gallery.return_value = BoundCreateReceipt(created, 'b' * 64)
         workspace, session, card = self._photos_create_context(manager, parent)
-        workspace._create_gallery(
-            card, session, parent.gallery_id, 'Current draft title',
-        )
-
-        def continue_button() -> ttk.Button | None:
-            """Find the explicit confirmation after the preflight completes.
-
-            Returns:
-                ttk.Button | None: Continue action if the prompt is visible.
-            """
-            for child in card.winfo_children():
-                if (isinstance(child, ttk.Button)
-                        and child.cget('text') == tr(
-                            'en', 'photos_workspace_create_continue',
-                        )):
-                    return child
-            return None
-
+        workspace._create_gallery(card, session, parent.gallery_id, created.title)
         self._wait_until(
-            lambda: continue_button() is not None,
-            'A prior completed gallery did not require an explicit Continue.',
+            lambda: workspace.tree.exists(str(created.gallery_id)),
+            'One Create action did not admit the current gallery.',
         )
-        prompt = next(
-            child.cget('text') for child in card.winfo_children()
-            if isinstance(child, ttk.Label)
-        )
-        self.assertIn('Earlier gallery', prompt)
-        self.assertIn('Current draft title', prompt)
-        self.assertIn('https://earlier.example/photos', prompt)
-        manager.create_photos_gallery.assert_not_called()
-        manager.acknowledge_prior_photos_gallery.assert_not_called()
-
-        button = continue_button()
-        assert button is not None
-        button.invoke()
-        self._wait_until(
-            lambda: manager.create_photos_gallery.call_count == 1
-            and workspace.tree.exists(str(new_gallery.gallery_id)),
-            'Continue did not create the current gallery exactly once.',
-        )
-        manager.acknowledge_prior_photos_gallery.assert_called_once_with(
-            snapshot, session, 'https://current.example/photos', 7,
-        )
-        create_args = manager.create_photos_gallery.call_args.args
+        manager.create_photos_gallery.assert_called_once()
         self.assertEqual(
-            (session, 'Current draft title', parent.gallery_id), create_args[:3],
+            (session, created.title, parent.gallery_id),
+            manager.create_photos_gallery.call_args.args[:3],
         )
-        self.assertNotIn(old_gallery.gallery_id, workspace._galleries)
+        manager.inspect_photos_gallery_creation.assert_not_called()
+        manager.acknowledge_prior_photos_gallery.assert_not_called()
+        self.assertEqual(
+            [workspace._text('close')],
+            [child.cget('text') for child in card.winfo_children()
+             if isinstance(child, ttk.Button)],
+        )
         workspace.destroy()
 
     def test_created_gallery_starts_watcher_without_catalogue_reload(self) -> None:
         """Create root and child galleries, then invoke their real Watcher action.
 
         Returns:
-            None: Acknowledged receipts work through gallery and rail menus
+            None: Confirmed receipts work through gallery and rail menus
                 without another catalogue request or changing an existing selection.
         """
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
@@ -4868,11 +4826,6 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 )
                 receipt = BoundCreateReceipt(created, 'e' * 64)
                 manager = mock.Mock()
-                manager.inspect_photos_gallery_creation.return_value = (
-                    CreateJournalSnapshot(
-                        'empty', None, None, None, None, None, None,
-                    )
-                )
                 manager.create_photos_gallery.return_value = receipt
                 start = mock.Mock()
                 workspace, session, card = self._photos_create_context(
@@ -4902,19 +4855,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     created.gallery_id if parent_id is None else previous_selection,
                     workspace._selected_gallery_id,
                 )
-                done = next(
-                    child for child in card.winfo_children()
-                    if isinstance(child, ttk.Button)
-                    and child.cget('text') == workspace._text('create_done')
-                )
-                done.invoke()
-                self._wait_until(
-                    lambda: workspace._create_receipt is None,
-                    'The creation receipt was not acknowledged.',
-                )
-                manager.acknowledge_photos_gallery.assert_called_once_with(
-                    session, receipt,
-                )
+                manager.acknowledge_photos_gallery.assert_not_called()
                 if parent_id is not None:
                     workspace._select_gallery(created)
                 self._watcher_action_button(
@@ -5061,59 +5002,27 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     created.gallery_id, workspace._fresh_catalogue_ids,
                 )
                 self.assertFalse(workspace.tree.exists(str(created.gallery_id)))
-                self.assertIsNone(workspace._create_receipt)
                 workspace.destroy()
 
-    def test_same_account_completed_title_is_reconciled_without_new_post(self) -> None:
-        """Show the existing same-account gallery instead of duplicating it.
+    def test_recovered_creation_is_immediately_usable_for_watcher(self) -> None:
+        """Treat an automatically recovered receipt like an ordinary creation.
 
         Returns:
-            None: Fresh status makes the existing gallery usable for Watcher
-                without creating a duplicate or reloading the catalogue. An
-                equal replacement row cannot invalidate its open action.
+            None: A recovered row reaches Watcher without acknowledgement or
+                catalogue reload, including after an equal row replacement.
         """
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
-        existing = LinkedGallery(
-            TEST_GALLERY_ID + 11000, parent.gallery_id, 'Same title',
-        )
-        receipt = BoundCreateReceipt(existing, 'c' * 64)
-        snapshot = CreateJournalSnapshot(
-            'completed', 'https://current.example/photos', 7,
-            existing.title, parent.gallery_id, receipt.intent_fingerprint, receipt,
-        )
+        existing = LinkedGallery(TEST_GALLERY_ID, parent.gallery_id, 'Same title')
         manager = mock.Mock()
-        manager.inspect_photos_gallery_creation.return_value = snapshot
-        manager.reconcile_photos_gallery_creation.return_value = receipt
+        manager.create_photos_gallery.return_value = BoundCreateReceipt(existing, 'c' * 64)
         start = mock.Mock()
-        workspace, session, card = self._photos_create_context(
-            manager, parent, start,
-        )
+        workspace, session, card = self._photos_create_context(manager, parent, start)
         session.can_upload.return_value = True
         catalogue_reads = session.gallery_page.call_count
-        workspace._create_gallery(card, session, parent.gallery_id, 'Same title')
+        workspace._create_gallery(card, session, parent.gallery_id, existing.title)
         self._wait_until(
-            lambda: any(
-                isinstance(child, ttk.Button)
-                and child.cget('text') == tr(
-                    'en', 'photos_workspace_create_done',
-                )
-                for child in card.winfo_children()
-            ),
-            'The matching completed gallery was not shown after status check.',
-        )
-        manager.reconcile_photos_gallery_creation.assert_called_once_with(
-            session, snapshot,
-        )
-        manager.create_photos_gallery.assert_not_called()
-        self.assertIn(existing.gallery_id, workspace._galleries)
-        self.assertEqual(
-            tr('en', 'photos_workspace_create_already_exists').format(
-                title=existing.title,
-            ),
-            next(
-                child.cget('text') for child in card.winfo_children()
-                if isinstance(child, ttk.Label)
-            ),
+            lambda: workspace.tree.exists(str(existing.gallery_id)),
+            'The recovered gallery was not made usable.',
         )
         button = self._watcher_action_button(workspace, existing)
         # A catalogue refresh may recreate the same immutable descriptor.
@@ -5125,170 +5034,153 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertEqual(catalogue_reads, session.gallery_page.call_count)
         workspace.destroy()
 
-    def test_unknown_pending_photos_create_check_again_stays_read_only(self) -> None:
-        """Keep repeated status checks read-only while a result is unknown.
+    def test_failed_creation_keeps_an_editable_draft_and_one_create_action(self) -> None:
+        """Keep ordinary retry in the name form instead of journal management.
 
         Returns:
-            None: Check again issues another status request but no new create.
+            None: Desktop and narrow error cards fit; the draft survives and
+                its next Create succeeds without Check again or Manage link.
         """
+        from PIL import ImageGrab
+
+        ui_theme.configure_theme(self.root)
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
-        snapshot = CreateJournalSnapshot(
-            'pending', 'https://current.example/photos', 7,
-            'Unconfirmed title', parent.gallery_id, 'd' * 64, None,
-        )
+        gallery = LinkedGallery(TEST_GALLERY_ID, parent.gallery_id, 'Draft title')
         manager = mock.Mock()
-        manager.inspect_photos_gallery_creation.return_value = snapshot
-        manager.reconcile_photos_gallery_creation.return_value = None
+        manager.create_photos_gallery.side_effect = [
+            LinkingError('lost reply'), BoundCreateReceipt(gallery, 'd' * 64),
+        ]
         workspace, session, card = self._photos_create_context(manager, parent)
-        workspace._create_gallery(
-            card, session, parent.gallery_id, 'Unconfirmed title',
-        )
-
-        def check_again_button() -> ttk.Button | None:
-            """Find the current status-only action.
-
-            Returns:
-                ttk.Button | None: Check again action if unresolved status is shown.
-            """
-            for child in card.winfo_children():
-                if (isinstance(child, ttk.Button)
-                        and child.cget('text') == tr(
-                            'en', 'photos_workspace_create_check_again',
-                        )):
-                    return child
-            return None
-
+        workspace._create_gallery(card, session, parent.gallery_id, gallery.title)
         self._wait_until(
-            lambda: check_again_button() is not None,
-            'An unknown create result did not expose a status-only retry.',
+            lambda: not workspace._context_busy
+            and any(isinstance(child, ttk.Entry) for child in card.winfo_children()),
+            'A failed create did not restore its editable draft.',
         )
-        check_again_button().invoke()
+        entry = next(child for child in card.winfo_children() if isinstance(child, ttk.Entry))
+        self.assertEqual(gallery.title, entry.get())
+        buttons = [child for child in card.winfo_children() if isinstance(child, ttk.Button)]
+        self.assertEqual([workspace._text('create')], [button.cget('text') for button in buttons])
+        for width, height in ((840, 620), TEST_VIEWER_MINIMUM_SIZE):
+            self.root.geometry(f'{width}x{height}')
+            self.root.update()
+            workspace._place_context(card)
+            self.root.update_idletasks()
+            self.assertGreaterEqual(card.winfo_x(), 0)
+            self.assertGreaterEqual(card.winfo_y(), 0)
+            self.assertLessEqual(card.winfo_x() + card.winfo_width(), workspace.winfo_width())
+            self.assertLessEqual(card.winfo_y() + card.winfo_height(), workspace.winfo_height())
+            bounds = (
+                self.root.winfo_rootx(), self.root.winfo_rooty(),
+                self.root.winfo_rootx() + self.root.winfo_width(),
+                self.root.winfo_rooty() + self.root.winfo_height(),
+            )
+            evidence = WINAPP_DIR.parent / 'cache' / 'test-audit'
+            evidence.mkdir(parents=True, exist_ok=True)
+            with ImageGrab.grab(bbox=bounds) as captured:
+                captured.save(evidence / f'photos-create-retry-{width}.png')
+        buttons[0].invoke()
         self._wait_until(
-            lambda: manager.reconcile_photos_gallery_creation.call_count == 2,
-            'Check again did not reconcile the original pending operation.',
+            lambda: workspace.tree.exists(str(gallery.gallery_id)),
+            'The normal Create action did not recover its retained draft.',
         )
-        manager.create_photos_gallery.assert_not_called()
+        self.assertEqual(2, manager.create_photos_gallery.call_count)
+        self.root.geometry('840x620')
         workspace.destroy()
 
-    def test_dismissing_create_context_during_preflight_never_posts(self) -> None:
-        """Refuse a late empty-journal callback after its card was dismissed.
+    def test_dismissing_create_before_admission_cancels_dispatch(self) -> None:
+        """Cancel the captured request while its worker waits before admission.
 
         Returns:
-            None: A stale context cannot admit a gallery create request.
+            None: The dismissed card cannot admit an HTTP create or stale row.
         """
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
         entered = threading.Event()
         release = threading.Event()
+        self.addCleanup(release.set)
         manager = mock.Mock()
-        manager.photos_site_identity.return_value = (
-            'https://current.example/photos', 7,
-        )
 
-        def inspect() -> CreateJournalSnapshot:
-            """Hold inspection so the test can dismiss before its result.
+        def create(
+            session: LinkingSession, title: str, parent_id: int | None,
+            dispatch: CreateDispatch,
+        ) -> BoundCreateReceipt:
+            """Hold admission until the context has been dismissed.
 
+            Args:
+                session (LinkingSession): Exact submitted session.
+                title (str): Captured user draft.
+                parent_id (int | None): Captured parent or root.
+                dispatch (CreateDispatch): Gate tied to the current card.
             Returns:
-                CreateJournalSnapshot: Empty state after the gate is released.
+                BoundCreateReceipt: Unreachable because the gate is cancelled.
             """
             entered.set()
             release.wait(TEST_GUI_WAIT_SECONDS)
-            return CreateJournalSnapshot(
-                'empty', None, None, None, None, None, None,
-            )
+            self.assertFalse(dispatch.admit())
+            raise LinkingError('cancelled before sending')
 
-        manager.inspect_photos_gallery_creation.side_effect = inspect
+        manager.create_photos_gallery.side_effect = create
         workspace, session, card = self._photos_create_context(manager, parent)
         workspace._create_gallery(card, session, parent.gallery_id, 'New title')
         self.assertTrue(entered.wait(TEST_GUI_WAIT_SECONDS))
+        dispatch = workspace._create_dispatch
+        self.assertIsNotNone(dispatch)
         workspace._dismiss_context(restore=False)
+        self.assertTrue(dispatch.cancelled.is_set())
         release.set()
         self._wait_until(
             lambda: not workspace._context_busy,
-            'The dismissed preflight did not finish its queued result.',
+            'The dismissed create did not finish its queued result.',
         )
-        manager.create_photos_gallery.assert_not_called()
+        session.gallery_create_request.assert_not_called()
+        self.assertIsNone(workspace._context_card)
         workspace.destroy()
 
-    def test_dismissal_during_prior_ack_cancels_new_create_dispatch(self) -> None:
-        """Finish explicit old-record cleanup without posting a stale draft.
+    def test_double_create_does_not_start_a_second_worker(self) -> None:
+        """Keep a second submit from replacing the active request gate.
 
         Returns:
-            None: Dismissing the card while local acknowledgement waits prevents
-                the new create request from being admitted.
+            None: Exactly the first draft is dispatched and admitted to the tree.
         """
         parent = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Parent')
-        old_receipt = BoundCreateReceipt(
-            LinkedGallery(TEST_PARENT_GALLERY_ID + 12000, None, 'Earlier'),
-            'e' * 64,
-        )
-        snapshot = CreateJournalSnapshot(
-            'completed', 'https://earlier.example/photos', 11,
-            'Earlier', None, old_receipt.intent_fingerprint, old_receipt,
-        )
-        ack_started = threading.Event()
-        release_ack = threading.Event()
-        ack_arguments: list[tuple[CreateJournalSnapshot, LinkingSession, str, int]] = []
+        gallery = LinkedGallery(TEST_GALLERY_ID, parent.gallery_id, 'First draft')
+        entered = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
         manager = mock.Mock()
-        manager.inspect_photos_gallery_creation.return_value = snapshot
 
-        def acknowledge(
-            received: CreateJournalSnapshot, session: LinkingSession,
-            issuer: str, account_id: int,
-        ) -> None:
-            """Hold the exact local acknowledgement while the card is dismissed.
+        def create(
+            session: LinkingSession, title: str, parent_id: int | None,
+            dispatch: CreateDispatch,
+        ) -> BoundCreateReceipt:
+            """Hold the first response while a second submit is attempted.
 
             Args:
-                received (CreateJournalSnapshot): Confirmed prior completion.
-                session (LinkingSession): Current approved session.
-                issuer (str): Current canonical site.
-                account_id (int): Current verified account.
-
+                session (LinkingSession): Exact submitted session.
+                title (str): Captured first user draft.
+                parent_id (int | None): Captured parent or root.
+                dispatch (CreateDispatch): Gate owned by the first draft.
             Returns:
-                None: Releases only after the UI cancellation signal is set.
+                BoundCreateReceipt: Confirmed first gallery after release.
             """
-            ack_arguments.append((received, session, issuer, account_id))
-            ack_started.set()
-            release_ack.wait(TEST_GUI_WAIT_SECONDS)
+            entered.set()
+            release.wait(TEST_GUI_WAIT_SECONDS)
+            return BoundCreateReceipt(gallery, 'e' * 64)
 
-        manager.acknowledge_prior_photos_gallery.side_effect = acknowledge
+        manager.create_photos_gallery.side_effect = create
         workspace, session, card = self._photos_create_context(manager, parent)
-        workspace._create_gallery(
-            card, session, parent.gallery_id, 'Current draft title',
-        )
-
-        def continue_button() -> ttk.Button | None:
-            """Find the explicit old-record continuation control.
-
-            Returns:
-                ttk.Button | None: Continue action once the old result is shown.
-            """
-            return next((
-                child for child in card.winfo_children()
-                if isinstance(child, ttk.Button)
-                and child.cget('text') == tr(
-                    'en', 'photos_workspace_create_continue',
-                )
-            ), None)
-
+        workspace._create_gallery(card, session, parent.gallery_id, gallery.title)
+        self.assertTrue(entered.wait(TEST_GUI_WAIT_SECONDS))
+        first_dispatch = workspace._create_dispatch
+        workspace._create_gallery(card, session, parent.gallery_id, 'Second draft')
+        self.assertIs(first_dispatch, workspace._create_dispatch)
+        release.set()
         self._wait_until(
-            lambda: continue_button() is not None,
-            'The old completed gallery did not ask before continuing.',
+            lambda: workspace.tree.exists(str(gallery.gallery_id)),
+            'The first create did not complete after a duplicate submit.',
         )
-        button = continue_button()
-        assert button is not None
-        button.invoke()
-        self.assertTrue(ack_started.wait(TEST_GUI_WAIT_SECONDS))
-        workspace._dismiss_context(restore=False)
-        release_ack.set()
-        self._wait_until(
-            lambda: not workspace._context_busy,
-            'The cancelled Photos create did not finish its local callback.',
-        )
-        self.assertEqual(
-            [(snapshot, session, 'https://current.example/photos', 7)],
-            ack_arguments,
-        )
-        manager.create_photos_gallery.assert_not_called()
+        manager.create_photos_gallery.assert_called_once()
+        self.assertEqual(gallery.title, manager.create_photos_gallery.call_args.args[1])
         workspace.destroy()
 
     def test_cache_icons_update_from_viewer_without_information_request(self) -> None:

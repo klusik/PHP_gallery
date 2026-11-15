@@ -433,18 +433,29 @@ pending intent and any published receipt for explicit reconciliation. This
 does not atomically exclude unrelated local writers or qualify Windows,
 hardlink behavior or directory durability after power loss.
 
-Photos now preflights this existing profile-wide journal before a new create.
-A pending operation is reconciled read-only only with its original issuer and
-Admin account. A completed operation can be acknowledged locally after an
-explicit user action, including when it belongs to a different site. This
-reuses the exact bound-receipt check and profile lease; the foreign gallery
-never supplies current gallery or upload authority. The current session,
-account and selected direct parent must still match before a new dispatch.
-A same-site/account request with the same normalized title and parent checks
-the completed result instead of sending a replacement. Corrupt data, failed
-acknowledgement and an unknown server result remain retained. This recovery
-keeps the journal format and server ledger unchanged and does not establish
-safe automatic retry, installer migration or power-loss durability.
+Photos creation now selects an exact-request journal by a domain-separated
+digest of issuer, verified Admin account, normalized title and direct parent.
+The original intent/receipt formats and shared profile lease are unchanged.
+Matching legacy evidence stays at its old path with the same key; unrelated
+legacy requests remain retained without blocking a new draft. This is permanent
+compatibility for existing profiles: no reliable deployment or usage evidence
+supports deleting their original keys.
+
+The ordinary Create action recovers a matching completed result automatically.
+After a lost write reply it performs one status read; a later submission of the
+same draft may resume once with the original key and exact inputs. Server
+pending/reservation and current identity checks remain decisive. A confirmed
+Photos result is consumed without a user acknowledgement gate. Cleanup failure
+or a closed/replaced context retains the exact original key for recovery.
+Cleanup failure preserves confirmed success. Management receipts
+remain independently verifiable for upload selection and optional dismissal;
+they do not gate other requests. Corrupt or inconsistent evidence is retained,
+and genuine server ambiguity is an inline error with an editable draft.
+Portable fixtures cover legacy matching/isolation, status recovery, original-key
+replay, cancellation, authority changes and cleanup failure. Native fixtures
+cover immediate tree/Watcher use and compact retry forms. These synthetic
+checks do not qualify installed-client migration, real HTTPS/filesystem
+ambiguity, Windows power loss or database-ledger restoration.
 
 Explicit linked-create abandonment records a permanent key tombstone without
 claiming no filesystem effects. An older runtime may report this new ledger

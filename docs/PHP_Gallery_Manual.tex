@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.2.3}
+\newcommand{\version}{1.2.4}
 \newcommand{\manualdate}{15 November 2026}
 
 \hypersetup{
@@ -2380,7 +2380,7 @@ The~experimental separate \texttt{galleries:create} permission requires
 explicit consent and~verified scope storage. Its~source refuses occupied targets, canonical catalog drift and
 catalogs over 10,000~rows including the~new gallery; slug search checks at~most
 128~candidates. Neither is~a~time limit.
-A~pending intent is~not automatically repeated after an~uncertain result.
+A~pending intent is~never replaced by~a~new key after an~uncertain result.
 A~pending linked-create reservation temporarily blocks Admin folder imports,
 moving discovered photos, deleting discovered folders, copying selections,
 moving galleries to~or~restoring them from Trash, metadata-organizer moves,
@@ -2396,37 +2396,31 @@ or~authorize another creation.
 Before sending, the~client verifies a~complete staged intent and~publishes it
 without replacing another key. An~interruption may leave a~stale lease that
 blocks work; Windows filesystem and~power-loss behavior remain unqualified.
-\ui{Resume original creation} shows the~original title and~parent for~explicit
-confirmation, then sends the~same operation key and~inputs to~the~same HTTPS
-issuer and~verified Admin account. Existing pending or~reconciliation claims remain
-blocked and~can~require administrator reconciliation. This protection requires
-the~original server ledger; restoring an~older database backup can~remove it.
-The~unconfirmed status offers explicit resume or~\ui{Close unresolved creation}
-after reviewing the~gallery and~storage. Closure shows the~original title and~parent for~explicit
-confirmation. It~removes the~local intent only after the~server confirms a~durable
-closure of~the~same key. An~unknown result leaves the~intent in~place. Closure
-is~refused while the~server claim is~pending. Closure
-does not~prove that no~gallery or~files exist or~that earlier work has stopped.
-Verify the~original work has stopped and~inspect the~gallery and~storage before
-starting a~separate creation. None starts automatically; a~verified
-completed result instead remains as~a~receipt for~acknowledgement.
-An~invalid or~unreadable local intent remains blocked and~requires administrator
-assistance because its original key cannot be~verified.
-Before sending a~new gallery, Photos checks earlier work in~the~same local
-profile. A~pending result is~checked only with~the~original site and~Admin
-account; another site offers reconnection. This check never repeats creation.
-For~a~completed earlier gallery, confirm \ui{Continue} before creating
-the~next one. Only the~exact local completion is~retired; the~earlier gallery
-and~upload target stay unchanged. The~current connection and~selected parent
-are~checked again. Submitting the~same title and~parent on~the~same site
-and~account instead checks the~completed result without creating a~duplicate.
-An~unknown result or~failed local confirmation keeps the~saved work
-for~another check.
-A~confirmed receipt remains until explicit acknowledgement. The~client writes
-and~checks a~complete staged receipt before exclusive publication; uncertainty
-retains the~intent and~any published receipt. A~local binding to~the~original
-intent prevents a~stale selection or~acknowledgement from~applying to~another
-operation with~the~same gallery details; the~operation key is~not~displayed.
+In~Photos, enter the~name and~choose \ui{Create gallery}. The~confirmed gallery
+becomes immediately usable without \ui{Continue}, status management
+or~mandatory acknowledgement. Failure retains an~editable draft with~the~same
+Create action. A~previous request for~another name, parent, site or~account
+does~not~block this draft. Matching older evidence keeps its original key.
+After a~lost reply, WinApp checks the~original status once. Resubmitting
+the~same draft checks status and~may resume once with~the~same key and~exact
+inputs. A~real pending or~reconciliation claim remains subject to~server
+refusal. The~original server ledger is~required; an~older database backup
+can~remove its history.
+Advanced management retains \ui{Resume original creation} and~
+\ui{Close unresolved creation} for~legacy unresolved requests. Review
+the~original title, parent and~storage before using these tools. Closure needs
+explicit confirmation and~removes local evidence only after durable server
+confirmation for~the~original key; pending claims are~refused. An~unknown
+reply keeps evidence. Closure does~not~prove that earlier work stopped
+or~that no~gallery or~files exist.
+Photos consumes confirmed receipts automatically. Cleanup failure retains
+exact evidence without blocking the~confirmed gallery. Management may keep
+a~receipt for~\ui{Use created gallery} or~optional \ui{Dismiss result};
+neither gates another Create action. Before exclusive publication, the~client
+writes and~checks the~complete receipt. Its binding to~the~original intent
+prevents stale acceptance or~selection of~a~different operation with~the~same
+gallery details; operation keys are~not~displayed. Invalid evidence is~retained
+and~requires administrator assistance.
 These checks do~not~exclude unrelated filesystem changes or~prove power-loss
 durability. On~a~supported local profile, \ui{Use created gallery}
 rechecks the~receipt and~gallery before selecting it~for~Watcher and~Import.

@@ -1393,7 +1393,7 @@ class LinkingManager:
         self, session: LinkingSession, title: str, parent_id: int | None,
         dispatch: CreateDispatch | None = None,
     ) -> BoundCreateReceipt:
-        """Journal an explicit Photos creation without applying an upload target.
+        """Finish an explicit Photos creation and consume its verified receipt.
 
         Args:
             session (LinkingSession): Live link captured when the user submitted.
@@ -1403,6 +1403,7 @@ class LinkingManager:
 
         Returns:
             BoundCreateReceipt: Authoritative completed gallery and intent binding.
+                Local cleanup failure does not undo confirmed server success.
 
         Raises:
             LinkingError: The session, input or result could not be verified.
@@ -1410,9 +1411,22 @@ class LinkingManager:
         issuer, account = self._session_issuer, self._session_user_id
         if session is not self.photos_session() or not session.can_create_gallery():
             raise LinkingError('Photos gallery creation is unavailable.')
-        return self._create_journal.create(
+        journal = self._create_journal.for_request(issuer, account, title, parent_id)
+        receipt = journal.create_or_resume(
             session, issuer, account, title, parent_id, dispatch,
         )
+        if ((dispatch is not None and dispatch.cancelled.is_set())
+                or session is not self.photos_session()):
+            # A closed or replaced context may not present this result. Keep
+            # its original key so submitting that same draft can recover it.
+            return receipt
+        try:
+            journal.acknowledge(issuer, account, receipt)
+        except Exception as error:
+            # The server result is confirmed. Retain exact local evidence for
+            # recovery without turning successful creation into a UI failure.
+            self.record_photos_creation_failure('acknowledge', error)
+        return receipt
 
     def inspect_photos_gallery_creation(self) -> CreateJournalSnapshot:
         """Read key-free saved creation state for the Photos workspace.
@@ -1446,6 +1460,7 @@ class LinkingManager:
                 or not isinstance(snapshot.issuer, str)
                 or type(snapshot.account_id) is not int
                 or snapshot.account_id <= 0
+                or not isinstance(snapshot.title, str)
                 or not isinstance(snapshot.intent_fingerprint, str)
                 or session is not self.photos_session()
                 or not session.can_create_gallery()
@@ -1454,7 +1469,10 @@ class LinkingManager:
                 or not session.matches_issuer(snapshot.issuer)
                 or session.identity().user_id != snapshot.account_id):
             raise LinkingError('Saved gallery creation is not current.')
-        return self._create_journal.reconcile(
+        journal = self._create_journal.for_request(
+            snapshot.issuer, snapshot.account_id, snapshot.title, snapshot.parent_id,
+        )
+        return journal.reconcile(
             session, snapshot.issuer, snapshot.account_id,
             expected_intent_fingerprint=snapshot.intent_fingerprint,
         )
@@ -1483,6 +1501,7 @@ class LinkingManager:
                 or not isinstance(snapshot.issuer, str)
                 or type(snapshot.account_id) is not int
                 or snapshot.account_id <= 0
+                or not isinstance(snapshot.title, str)
                 or snapshot.intent_fingerprint != snapshot.receipt.intent_fingerprint
                 or session is not self.photos_session()
                 or self._session_issuer != issuer
@@ -1492,7 +1511,10 @@ class LinkingManager:
                 or not session.matches_issuer(issuer)
                 or session.identity().user_id != account_id):
             raise LinkingError('The current gallery connection changed.')
-        self._create_journal.acknowledge(
+        journal = self._create_journal.for_request(
+            snapshot.issuer, snapshot.account_id, snapshot.title, snapshot.parent_id,
+        )
+        journal.acknowledge(
             snapshot.issuer, snapshot.account_id, snapshot.receipt,
         )
 
@@ -1549,7 +1571,7 @@ class LinkingManager:
     def acknowledge_photos_gallery(
         self, session: LinkingSession, receipt: BoundCreateReceipt,
     ) -> None:
-        """Clear the completed Photos receipt after explicit acknowledgement.
+        """Consume an exact Photos receipt for compatibility callers.
 
         Args:
             session (LinkingSession): Live link that completed the creation.
@@ -1564,7 +1586,10 @@ class LinkingManager:
         issuer, account = self._session_issuer, self._session_user_id
         if session is not self.photos_session() or session.identity().user_id != account:
             raise LinkingError('Photos gallery receipt is unavailable.')
-        self._create_journal.acknowledge(issuer, account, receipt)
+        journal = self._create_journal.for_request(
+            issuer, account, receipt.gallery.title, receipt.gallery.parent_id,
+        )
+        journal.acknowledge(issuer, account, receipt)
 
     def photos_session(self) -> LinkingSession | None:
         """Return the exact live current link that can list gallery photos.
@@ -1905,7 +1930,7 @@ class LinkingManager:
             command=self._use_created_gallery, style='Compact.TButton',
         )
         self._ack_created_button = ttk.Button(
-            self._gallery_actions, text='Acknowledge creation',
+            self._gallery_actions, text='Dismiss result',
             command=self._acknowledge_created_gallery, style='Compact.TButton',
         )
         gallery_status_label = ttk.Label(
@@ -2421,18 +2446,15 @@ class LinkingManager:
         can_create = (can_list and self._session is not None
                       and self._session.can_create_gallery())
         created = self._created_gallery
-        unacknowledged = (created is not None and self._session is created[1]
-                          and self._session_issuer == issuer == created[2]
-                          and self._session_user_id == created[3])
         self._create_button.state(
-            ['!disabled'] if can_create and not unacknowledged else ['disabled'],
+            ['!disabled'] if can_create else ['disabled'],
         )
         self._create_status_button.state(['!disabled'] if can_create else ['disabled'])
         self._create_resume_button.state(
-            ['!disabled'] if can_create and not unacknowledged else ['disabled'],
+            ['!disabled'] if can_create else ['disabled'],
         )
         self._create_abandon_button.state(
-            ['!disabled'] if can_create and not unacknowledged else ['disabled'],
+            ['!disabled'] if can_create else ['disabled'],
         )
         can_use_created = (LINKING_UPLOAD_TARGET_READY and LINKING_CREATED_TARGET_READY
                            and not busy and created is not None
@@ -3320,9 +3342,9 @@ class LinkingManager:
                         next_action = self._text('linking_created_next')
                     elif upload_allowed:
                         next_action = ('Linked upload selection is temporarily unavailable. '
-                                       'Acknowledge the creation to continue.')
+                                       'You can create another gallery.')
                     else:
-                        next_action = 'Acknowledge the creation to continue.'
+                        next_action = 'You can create another gallery.'
                     self._gallery_status.set(
                         'Created ' + _gallery_label(bound.gallery) + '. ' + next_action,
                     )
@@ -3350,6 +3372,11 @@ class LinkingManager:
                     'to the same account and check status. Explicitly Resume '
                     'original creation, or review the gallery and storage and '
                     'use Close unresolved creation.',
+                )
+            elif kind == 'create_failed':
+                self._gallery_status.set(
+                    'Could not create the gallery. Check the connection or try '
+                    'another name. Using the same name resumes its saved request.',
                 )
             elif kind in ('create_resume_preview', 'create_abandon_preview') and isinstance(payload, CreateIntent):
                 session = self._session
@@ -3951,13 +3978,17 @@ class LinkingManager:
                 elif title is None:
                     bound = self._create_journal.reconcile(session, issuer, account)
                 else:
-                    bound = self._create_journal.create(
+                    journal = self._create_journal.for_request(
+                        issuer, account, title, parent_id,
+                    )
+                    bound = journal.create_or_resume(
                         session, issuer, account, title, parent_id, dispatch,
                     )
                 self._events.put((owner, 'create_completed' if bound else 'create_unknown',
                                   (bound, session, issuer, account) if bound else None))
             except Exception:  # noqa: BLE001
-                self._events.put((owner, 'create_unknown', None))
+                self._events.put((owner, 'create_failed' if title is not None
+                                  else 'create_unknown', None))
 
         self._worker = threading.Thread(
             target=worker, name='PHPGalleryCreate', daemon=True,
@@ -4031,7 +4062,7 @@ class LinkingManager:
         self._schedule_poll()
 
     def _acknowledge_created_gallery(self) -> None:
-        """Acknowledge a completed receipt before permitting another create.
+        """Optionally discard the displayed completed creation receipt.
 
         Returns:
             None: Starts local cleanup for the current verified account.
@@ -4056,7 +4087,10 @@ class LinkingManager:
                 None: Queues success or a bounded refusal for the dialog.
             """
             try:
-                self._create_journal.acknowledge(issuer, account, bound)
+                journal = self._create_journal.for_request(
+                    issuer, account, bound.gallery.title, bound.gallery.parent_id,
+                )
+                journal.acknowledge(issuer, account, bound)
                 self._events.put((owner, 'create_acknowledged', None))
             except Exception:  # noqa: BLE001
                 self._events.put((owner, 'create_ack_error', None))
@@ -4421,7 +4455,10 @@ class LinkingManager:
                 None: Queues only one owner-bound, freshly verified result.
             """
             try:
-                current = self._create_journal.reconcile(session, issuer, account)
+                journal = self._create_journal.for_request(
+                    issuer, account, bound.gallery.title, bound.gallery.parent_id,
+                )
+                current = journal.reconcile(session, issuer, account)
                 if cancel.is_set() or current != bound:
                     raise LinkingError('Gallery creation status changed.')
                 target = verify_linked_upload_target(
@@ -4541,7 +4578,10 @@ class LinkingManager:
             return True
 
         try:
-            accepted = self._create_journal.apply_receipt(
+            journal = self._create_journal.for_request(
+                issuer, account, bound.gallery.title, bound.gallery.parent_id,
+            )
+            accepted = journal.apply_receipt(
                 issuer, account, bound, apply,
             )
         except Exception:  # noqa: BLE001

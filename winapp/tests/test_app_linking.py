@@ -11,6 +11,7 @@
 """Focused tests for the browser-approved linking transport."""
 
 import base64
+from contextlib import nullcontext
 import hashlib
 import http.client
 import http.server
@@ -46,7 +47,7 @@ from uploader.diagnostics import (
 )
 from uploader.flight_report_translations import tr
 from uploader.linked_create import (
-    BoundCreateReceipt, CreateIntent, GalleryCreateJournal,
+    BoundCreateReceipt, CreateDispatch, CreateIntent, GalleryCreateJournal,
 )
 from uploader.linked_upload import LinkedUploadTarget
 from uploader.state_store import load_recent_gallery_addresses
@@ -6322,6 +6323,110 @@ def _manager_without_widgets() -> 'LinkingManager':
 class LinkingDeliveryTests(unittest.TestCase):
     """Exercise worker-event delivery without opening a Tk window."""
 
+    def test_photos_create_consumes_receipts_without_blocking_other_drafts(self) -> None:
+        """Finish creation even when cleanup fails or an old request is pending.
+
+        Returns:
+            None: Both new galleries become usable without user acknowledgement;
+                original unrelated evidence survives and cleanup stays local.
+        """
+        for cleanup_fails in (False, True):
+            with self.subTest(cleanup_fails=cleanup_fails), TemporaryDirectory() as temporary:
+                journal = GalleryCreateJournal(Path(temporary))
+                issuer = 'https://gallery.example'
+                session = mock.Mock(spec=linking.LinkingSession)
+                session.matches_issuer.return_value = True
+                session.can_create_gallery.return_value = True
+                session.identity.return_value = linking.LinkedIdentity(7, 'admin')
+                session.gallery_create_request.return_value = None
+                with self.assertRaises(linking.LinkingError):
+                    journal.create(session, issuer, 7, 'Earlier', None)
+                original = journal._path().read_bytes()
+                manager = _manager_without_widgets()
+                manager._session_issuer = manager._current_issuer = issuer
+                manager._session_user_id = 7
+                manager.photos_session = mock.Mock(return_value=session)
+                manager._create_journal = journal
+                manager.record_photos_creation_failure = mock.Mock()
+                first = linking.LinkedGallery(42, None, 'First')
+                second = linking.LinkedGallery(43, 9, 'Second')
+                session.gallery_create_request.reset_mock()
+                session.gallery_create_request.side_effect = [first, second]
+                if cleanup_fails:
+                    cleanup = mock.patch.object(
+                        GalleryCreateJournal, 'acknowledge',
+                        side_effect=linking.LinkingError('local cleanup unavailable'),
+                    )
+                else:
+                    cleanup = nullcontext()
+                with cleanup:
+                    self.assertEqual(
+                        first, manager.create_photos_gallery(session, first.title, None).gallery,
+                    )
+                    self.assertEqual(
+                        second, manager.create_photos_gallery(session, second.title, 9).gallery,
+                    )
+                self.assertEqual(2, session.gallery_create_request.call_count)
+                self.assertEqual(original, journal._path().read_bytes())
+                self.assertEqual(
+                    'completed' if cleanup_fails else 'empty',
+                    journal.for_request(issuer, 7, first.title, None).inspect().state,
+                )
+                self.assertEqual(
+                    2 if cleanup_fails else 0, manager.record_photos_creation_failure.call_count,
+                )
+
+    def test_closed_photos_create_keeps_the_confirmed_key_for_recovery(self) -> None:
+        """Retain a result that arrives after the name form was cancelled.
+
+        Returns:
+            None: Reopening the same draft recovers the original server result
+                through status instead of generating another operation key.
+        """
+        with TemporaryDirectory() as temporary:
+            journal = GalleryCreateJournal(Path(temporary))
+            issuer = 'https://gallery.example'
+            session = mock.Mock(spec=linking.LinkingSession)
+            session.matches_issuer.return_value = True
+            session.can_create_gallery.return_value = True
+            session.identity.return_value = linking.LinkedIdentity(7, 'admin')
+            gallery = linking.LinkedGallery(42, None, 'Created')
+            dispatch = CreateDispatch()
+
+            def complete_after_close(
+                key: str, title: str, parent_id: int | None,
+                *, cancelled: threading.Event,
+            ) -> linking.LinkedGallery:
+                """Cancel the form after dispatch and return confirmed success.
+
+                Args:
+                    key (str): Original server operation key.
+                    title (str): Submitted gallery title.
+                    parent_id (int | None): Submitted direct parent or root.
+                    cancelled (threading.Event): Context cancellation signal.
+                Returns:
+                    linking.LinkedGallery: Confirmed server result.
+                """
+                dispatch.cancel()
+                return gallery
+
+            session.gallery_create_request.side_effect = complete_after_close
+            manager = _manager_without_widgets()
+            manager._session_issuer = manager._current_issuer = issuer
+            manager._session_user_id = 7
+            manager.photos_session = mock.Mock(return_value=session)
+            manager._create_journal = journal
+            first = manager.create_photos_gallery(session, gallery.title, None, dispatch)
+            scoped = journal.for_request(issuer, 7, gallery.title, None)
+            self.assertEqual('completed', scoped.inspect().state)
+            key = scoped._read()[0].operation_key
+            session.gallery_create_request.reset_mock()
+            session.gallery_create_request.side_effect = None
+            session.gallery_create_request.return_value = gallery
+            self.assertEqual(first, manager.create_photos_gallery(session, gallery.title, None))
+            session.gallery_create_request.assert_called_once_with(key)
+            self.assertEqual('empty', scoped.inspect().state)
+
     def test_photos_create_diagnostic_keeps_safe_http_and_source_facts(self) -> None:
         """Retain the useful response cause without saved request contents.
 
@@ -7501,6 +7606,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._events = queue.Queue()
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.pending_intent.return_value = intent
         manager._refresh = mock.Mock()
         manager._schedule_poll = mock.Mock()
@@ -7551,6 +7657,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._events = queue.Queue()
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.pending_intent.return_value = intent
         manager._refresh = mock.Mock()
         manager._schedule_poll = mock.Mock()
@@ -7618,6 +7725,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._created_gallery = (bound, session, issuer, 7)
         manager._gallery_cancel = threading.Event()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.apply_receipt.side_effect = (
             lambda _issuer, _account, _bound, apply: apply()
         )
@@ -7674,6 +7782,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._worker = None
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.reconcile.return_value = None
         manager._events = queue.Queue()
         manager._refresh = mock.Mock()
@@ -7722,6 +7831,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._commit_linked_target = mock.Mock(return_value=True)
         manager._notify_target_changed = mock.Mock(side_effect=[RuntimeError('UI error'), None])
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.apply_receipt.side_effect = (
             lambda _issuer, _account, _bound, apply: apply()
         )
@@ -7759,6 +7869,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._worker = None
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.reconcile.return_value = second
         manager._events = queue.Queue()
         manager._refresh = mock.Mock()
@@ -7800,6 +7911,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         target = LinkedUploadTarget(session, manager._current_issuer, 7, 42, 'Created')
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._gallery_cancel = threading.Event()
         manager._commit_linked_target = mock.Mock()
         manager._events = queue.Queue()
@@ -7844,6 +7956,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._handoff = None
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.reconcile.return_value = bound
         manager._create_journal.apply_receipt.side_effect = linking.LinkingError('changed')
         manager._events = queue.Queue()
@@ -7865,11 +7978,11 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._create_journal.apply_receipt.assert_called_once()
 
     @mock.patch('uploader.app_linking_ui.LINKING_CREATED_TARGET_READY', False)
-    def test_create_completion_explains_disabled_upload_and_allows_acknowledgement(self) -> None:
+    def test_create_completion_allows_another_gallery_without_acknowledgement(self) -> None:
         """Keep the receipt and describe available actions with the gate closed.
 
         Returns:
-            None: The status offers acknowledgement without offering upload.
+            None: The status permits another creation without offering upload.
         """
         manager = _manager_without_widgets()
         manager._polling = False
@@ -7895,7 +8008,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         self.assertIs(bound, manager._created_gallery[0])
         status = manager._gallery_status.set.call_args.args[0]
         self.assertIn('Linked upload selection is temporarily unavailable', status)
-        self.assertIn('Acknowledge the creation to continue', status)
+        self.assertIn('You can create another gallery', status)
         self.assertNotIn('Use it for upload', status)
 
     def test_create_completion_requires_the_original_session(self) -> None:
@@ -8255,6 +8368,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._selected_gallery = None
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._target_refusal = mock.Mock()
         manager._notify_target_changed = mock.Mock()
         manager._select_gallery()
@@ -8296,6 +8410,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._notify_target_changed = mock.Mock()
         manager._commit_linked_target = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
 
         def delayed(_issuer: str, _account: int, _bound: BoundCreateReceipt,
                     apply: Callable[[], bool]) -> bool:
@@ -8789,6 +8904,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._worker = None
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.reconcile.return_value = bound
         manager._events = queue.Queue()
         manager._refresh = mock.Mock()
@@ -8842,6 +8958,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 manager._worker = None
                 manager._gallery_status = mock.Mock()
                 manager._create_journal = mock.Mock()
+                manager._create_journal.for_request.return_value = manager._create_journal
                 manager._create_journal.reconcile.return_value = bound
                 manager._events = queue.Queue()
                 manager._refresh = mock.Mock()
@@ -8897,6 +9014,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._gallery_cancel = threading.Event()
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._commit_linked_target = mock.Mock()
         manager._events = queue.Queue()
         manager._refresh = mock.Mock()
@@ -8978,6 +9096,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._commit_linked_target = mock.Mock(return_value=False)
         manager._notify_target_changed = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._create_journal.apply_receipt.side_effect = (
             lambda _issuer, _account, _bound, apply: apply()
         )
@@ -9019,6 +9138,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager._gallery_cancel = threading.Event()
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._commit_linked_target = mock.Mock()
         manager._apply_created_gallery(
             bound, target, session, issuer, 7, linking.UPLOAD_SCOPE,
@@ -9038,6 +9158,7 @@ class LinkingDeliveryTests(unittest.TestCase):
         manager = _manager_without_widgets()
         manager._gallery_status = mock.Mock()
         manager._create_journal = mock.Mock()
+        manager._create_journal.for_request.return_value = manager._create_journal
         manager._gallery_cancel = threading.Event()
         manager._active_upload_target = None
         manager._target_refusal = mock.Mock()
