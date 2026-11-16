@@ -615,6 +615,7 @@ tag controller through the pagination and description-layout services.
 | Upload API | `app/controllers/upload_automation.php`, handler `cms_upload_automation_upload` |
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
 | Windows watcher | `winapp/gallery_watch_upload.pyw` |
+| Compact responsive application header | `winapp/uploader/app_header.py`; live action/link wiring in `winapp/gallery_watch_upload.pyw` |
 | Durable FIFO capture and head-only consumer contract | `winapp/uploader/watch_queue.py`, `winapp/uploader/discovery.py`, `winapp/uploader/state_store.py`; `docs/UPLOADER_QUEUE.md` |
 | Explicit uncertain-head decisions, retained stop and shared Resume preview | `winapp/uploader/watch_recovery.py`, `winapp/uploader/watch_recovery_ui.py`, Watcher integration in `winapp/gallery_watch_upload.pyw`, Finish actions in `winapp/uploader/flight_ui.py` |
 | Terminal Force finish, scoped drain and bounded Exit | Queue terminal persistence in `winapp/uploader/watch_queue.py`, capture plan in `winapp/uploader/flight_jobs.py`, app-owned cancellation/diagnostics in `winapp/gallery_watch_upload.pyw`, progress controls in `winapp/uploader/flight_ui.py` |
@@ -630,6 +631,7 @@ tag controller through the pagination and description-layout services.
 | WinApp gallery preload, retained bytes and Admin private-media opt-in | `winapp/uploader/gallery_preload.py`, `winapp/uploader/gallery_media_cache.py`, `winapp/uploader/app_linking.py`; server media owner in `app/services/app_linking_media.php` and ancestry policy in `app/services/gallery_access.php` |
 | WinApp window/divider view state and background activity persistence | `winapp/gallery_watch_upload.pyw`, `winapp/uploader/photos_workspace.py`, `winapp/uploader/state_store.py` |
 | WinApp installed fonts, generated icons and Windows DPI bootstrap | `winapp/uploader/ui_theme.py`, `winapp/uploader/windows_display.py` |
+| WinApp inherited component library and all ttk styles | `winapp/uploader/ui_theme.py`: `Button`/`SmoothIconButton`, shared `_RoundedSurface`, `GlassCard`/`DialogSurface`/`MetricCard`, `Dialog`, parent-aware `Slider` and icon variants; `winapp/uploader/overlay.py` derives in-window dialogs; `winapp/tests/test_ui_library.py` rejects consumer bypasses. |
 | WinApp macOS extended-range photo surface | `winapp/uploader/gallery_hdr_macos.py` |
 | Windows watcher installer | `winapp/install.bat`, `winapp/run_gallery_watcher.bat` |
 | Uploader release discovery and verified download | `winapp/uploader/self_update.py`, `winapp/tests/test_self_update.py` |

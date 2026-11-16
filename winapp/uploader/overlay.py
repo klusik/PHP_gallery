@@ -12,7 +12,7 @@ from typing import Callable
 import tkinter as tk
 from tkinter import ttk
 
-from uploader.ui_theme import icon_button, hide_inline_tooltip
+from uploader.ui_theme import Button, DialogSurface, icon_button, hide_inline_tooltip
 from uploader.flight_report_translations import tr
 
 # Purpose: Leave a visible edge of the owning workspace around a panel.
@@ -65,7 +65,7 @@ def layout_actions(
             row, column = row + 1, 0
 
 
-class OverlayPanel(tk.Frame):
+class OverlayPanel(DialogSurface):
     """Present one contextual surface without creating an OS popup window."""
 
     def __init__(
@@ -83,12 +83,7 @@ class OverlayPanel(tk.Frame):
             None: Creates a hidden panel with no native toplevel or size grip.
         """
         self.owner = owner.winfo_toplevel()
-        style = ttk.Style(owner)
-        super().__init__(
-            self.owner, background=style.lookup('TFrame', 'background'),
-            highlightbackground=style.lookup('TEntry', 'bordercolor') or '#41586a',
-            highlightthickness=1,
-        )
+        super().__init__(self.owner)
         self._preferred = (width, height)
         self._visible = False
         self._close: Callable[[], None] = self.withdraw
@@ -245,10 +240,10 @@ def _message(
     # for standalone message callers without that controller.
     selected_language = getattr(parent.winfo_toplevel(), '_flight_ui_language', None)
     language = selected_language.get() if isinstance(selected_language, tk.StringVar) else 'en'
-    ttk.Button(panel.footer, text=tr(language, 'yes') if question else 'OK',
+    Button(panel.footer, text=tr(language, 'yes') if question else 'OK',
                command=confirm, style='Accent.Compact.TButton').pack(side='right')
     if question:
-        ttk.Button(panel.footer, text=tr(language, 'cancel'),
+        Button(panel.footer, text=tr(language, 'cancel'),
                    command=panel.destroy).pack(side='right', padx=8)
     panel.protocol('WM_DELETE_WINDOW', panel.destroy)
     panel.deiconify()

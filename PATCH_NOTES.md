@@ -1,5 +1,125 @@
 # Patch notes
 
+## Version 1.2.6
+
+Improved gallery browsing in the Windows companion with wrapped subgallery
+cards, independent display controls and a movable divider. Reduced header
+height, added dismissal of photo information and unified shared controls to
+prevent dark corner artifacts. The independent WinApp version advanced to
+1.3.0.
+
+### Highlights
+
+#### Separate subgallery and photo sections
+
+- Replaced the horizontal subgallery strip with cards that wrapped to the
+  available width and scrolled vertically when needed.
+- Added independent aspect-ratio selectors and oldest/newest record ordering
+  for folders and photographs. Placed each control row beside its section
+  and hid controls for absent or hidden content.
+- Added a thin draggable divider between folders and photographs. Restored
+  its relative position for each gallery from local storage and supported
+  keyboard adjustment and a return to automatic sizing.
+- Reused verified thumbnail cache entries for folder covers before background
+  refresh when current session metadata allowed it. Required fresh authorized
+  metadata before reusing disk covers after restart.
+
+#### More room for gallery content
+
+- Placed the application title, version, linked site and live controls beside
+  each other in wide windows. Wrapped the link group only when needed and
+  removed empty connection-feedback rows.
+- Added a Close control to photo information. Returned its space to the grid
+  without changing the selection or reloading the gallery, and prevented a
+  late metadata response from reopening a dismissed pane.
+- Matched the compact height of the Watcher and cache information badges.
+
+#### Consistent shared controls
+
+- Centralized action buttons, native child dialogs, in-window dialog surfaces
+  and sliders in one inherited component library.
+- Fixed dark rectangular corners on rounded cards and compact header badges,
+  including cards nested on a lighter surface and controls after resizing.
+- Matched unboxed actions and slider artwork to their actual parent surface.
+  Added a shared thin slider track and round thumb while retaining native
+  pointer and keyboard input.
+
+### Technical Details
+
+#### WinApp presentation and local storage
+
+- Updated `winapp/uploader/gallery_folders.py` to wrap cards, retain decoded
+  covers across ratio changes and use the existing session-authorized
+  thumbnail pool. Preserved permission, private-media, cancellation and
+  cache-validator checks.
+- Extended `winapp/uploader/gallery_view_preferences.py` with independent
+  `folder_formats`, `folder_orders` and `folder_splits` maps in the existing
+  version-1 local view file. Preserved older files and unrelated preferences,
+  bounded divider values and complete file size, and refused to replace
+  malformed or unreadable files.
+- Added divider ownership and persistence in
+  `winapp/uploader/photos_workspace.py`. Cancelled a drag when its gallery,
+  session or visible section changed and prevented a stale release event from
+  saving a different gallery's position.
+- Added `winapp/uploader/app_header.py` for responsive header composition and
+  kept the version and live controls available as the window narrowed.
+- Updated `winapp/uploader/native_gallery_viewer.py` and the workspace to
+  dismiss photo information while preserving the selected photograph.
+
+#### Shared component ownership
+
+- Made `Button` and `GlassCard` inherit the shared `_RoundedSurface`
+  lifecycle in `winapp/uploader/ui_theme.py`. Centralized native clipping,
+  resize handling, region cleanup and the flat themed fallback.
+- Made `SmoothIconButton` inherit `Button`, `DialogSurface` inherit
+  `GlassCard`, and `OverlayPanel` inherit `DialogSurface`. Routed native child
+  windows through `Dialog` and ranges through `Slider`.
+- Moved runtime ttk style definitions into the shared theme. Made selected
+  and placeholder photo styles inherit the gallery-button style and rejected
+  unregistered component skins.
+- Shared metric padding and icon sizing between header badges. Avoided
+  reshaping each gallery thumbnail window when its opaque artwork already
+  matched the exact Card background.
+
+#### Tests and documentation
+
+- Added native desktop and narrow-window coverage for photo-only, mixed,
+  folder-only and hidden-folder galleries, independent display controls,
+  cached covers, divider dragging and restoration, header layout and
+  information-pane dismissal.
+- Added actual corner-pixel comparisons on App and Card backgrounds, before
+  and after resizing, alongside native-region ownership and fallback tests.
+- Added `winapp/tests/test_ui_library.py` to reject direct toolkit action,
+  slider and child-dialog constructors, raw subclasses and external style
+  writes, including alias-based bypasses.
+- Extended local preference tests for legacy files, isolation, invalid data,
+  capacity limits and failed writes.
+- Split complete WinApp regression execution into six serial groups and
+  loaded only each selected child's test modules. Retained canonical discovery,
+  exact disjoint coverage and the existing child and aggregate time limits.
+- Updated the design contract, testing and compatibility references, WinApp
+  README and all four maintained manual source editions.
+
+### User Impact
+
+#### For WinApp users
+
+- Made large subgallery lists usable without horizontal scrolling and allowed
+  folders and photographs to use different local display preferences.
+- Allowed the folder/photo space allocation and information-pane visibility
+  to be adjusted without leaving the current gallery.
+- Kept display preferences and divider positions on this computer; no online
+  gallery settings were written for these choices.
+- Reduced header space and kept shared controls visually consistent across
+  their surrounding surfaces.
+
+#### For administrators, visitors and maintainers
+
+- Left public website and web-administration behavior and the database schema
+  unchanged; the browsing improvements applied to the Windows companion.
+- Added regression coverage and a central component contract to detect corner
+  artifacts and duplicated local styling before future integration.
+
 ## Version 1.2.5
 
 Improved flight completion in the Windows companion and fixed automatic

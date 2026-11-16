@@ -4811,6 +4811,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         title_widget = mock.Mock()
         with (
             mock.patch.object(MAIN, "ttk", widgets),
+            mock.patch.object(MAIN, "Button", widgets.Button),
             mock.patch.object(
                 MAIN, "GalleryIdentityLabel", return_value=title_widget,
             ) as title_factory,

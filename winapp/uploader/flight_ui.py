@@ -54,7 +54,7 @@ from uploader.flight_simbrief import (
     DispatchPlan, fetch_dispatch, identity_query, import_dispatch, load_dispatch,
 )
 from uploader.flight_navdata import remember_plan
-from uploader.ui_theme import GlassCard, icon_button, place_dialog
+from uploader.ui_theme import Button, Dialog, GlassCard, icon_button, place_dialog
 from uploader.overlay import OverlayPanel, layout_actions
 from uploader.simconnect_flight import (
     METRES_PER_FOOT,
@@ -476,10 +476,9 @@ class FlightUI:
         """
         owner = self.dialog_owner()
         previous_grab, previous_focus = owner.grab_current(), owner.focus_get()
-        dialog = tk.Toplevel(owner)
+        dialog = Dialog(owner)
         dialog.withdraw()
         dialog.title("SimBrief")
-        dialog.configure(background="#131B26")
         dialog.resizable(False, False)
         panel = GlassCard(dialog, padding=(24, 20))
         panel.pack(fill="both", expand=True, padx=12, pady=12)
@@ -526,8 +525,8 @@ class FlightUI:
 
         actions = ttk.Frame(panel, style="Card.TFrame")
         actions.pack(fill="x", pady=(14, 0))
-        ttk.Button(actions, text=self.text("simbrief_cancel"), command=close).pack(side="left")
-        ttk.Button(actions, text=self.text("simbrief_load"), command=submit,
+        Button(actions, text=self.text("simbrief_cancel"), command=close).pack(side="left")
+        Button(actions, text=self.text("simbrief_load"), command=submit,
                    style="Primary.TButton").pack(side="right", padx=(12, 0))
         dialog.protocol("WM_DELETE_WINDOW", close)
         dialog.bind("<Escape>", lambda _event: close())
@@ -880,10 +879,10 @@ class FlightUI:
         icon_button(
             actions, "↗", self.open_reports, self.text("open_reports"),
         ).pack(side="left", padx=(6, 0))
-        ttk.Button(
+        Button(
             actions, text=self.text("saved_reports"), command=self.show_reports,
         ).pack(side="left", padx=(10, 0))
-        ttk.Button(
+        Button(
             panel, text=self.text("finish_pdf"), command=self.finish_report,
         ).grid(row=7, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
@@ -1035,22 +1034,22 @@ class FlightUI:
         actions.bind('<Configure>', lambda _event: layout_actions(
             actions, [button for button in actions.winfo_children() if isinstance(button, ttk.Button)],
         ))
-        ttk.Button(
+        Button(
             actions, text=self.text("finish_pdf"), command=self.finish_report,
         ).grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 4))
-        self.report_button = ttk.Button(
+        self.report_button = Button(
             actions, text=self.text("create_local_pdf"), command=self.create_local_pdf,
         )
         self.report_button.grid(row=0, column=1, sticky="ew", pady=(0, 4))
-        ttk.Button(actions, text=self.text("simbrief_load"),
+        Button(actions, text=self.text("simbrief_load"),
             command=lambda: self.load_simbrief(saved=True),
         ).grid(row=2, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
-        ttk.Button(actions, text=self.text("simbrief_file"), command=self.attach_ofp_file,
+        Button(actions, text=self.text("simbrief_file"), command=self.attach_ofp_file,
         ).grid(row=2, column=1, sticky="ew", pady=(6, 0))
-        ttk.Button(
+        Button(
             actions, text=self.text("open_reports"), command=self.open_selected_reports,
         ).grid(row=1, column=0, sticky="ew", padx=(0, 6))
-        ttk.Button(
+        Button(
             actions, text=self.text("open_pdf"), command=self.open_selected_pdf,
         ).grid(row=1, column=1, sticky="ew")
         tools = ttk.Frame(self.report_dialog.footer, style="Card.TFrame")
@@ -1058,13 +1057,13 @@ class FlightUI:
         tools.bind('<Configure>', lambda _event: layout_actions(
             tools, [button for button in tools.winfo_children() if isinstance(button, ttk.Button)],
         ))
-        ttk.Button(
+        Button(
             tools, text=self.text("refresh_reports"), command=self.refresh_reports,
         ).grid(row=0, column=0, sticky='ew')
-        ttk.Button(
+        Button(
             tools, text=self.text("open_app_log"), command=self.host.open_log_file,
         ).grid(row=0, column=1, sticky='ew')
-        ttk.Button(
+        Button(
             tools, text=self.text("upload_saved_pdf"), command=self.upload_saved_pdf,
         ).grid(row=1, column=0, sticky='ew')
         self.refresh_reports()
@@ -2642,7 +2641,7 @@ class FlightUI:
             self.autoclose_frame, textvariable=self.completion_var,
             style='Muted.TLabel',
         ).pack(side='left')
-        ttk.Button(
+        Button(
             self.autoclose_frame, text=self.text('keep_open'),
             command=self.keep_progress_open, style='Compact.TButton',
         ).pack(side='right')
@@ -2685,7 +2684,7 @@ class FlightUI:
             local_actions if local_mode else ordinary_actions
         )
         self.progress_buttons = {
-            label: ttk.Button(
+            label: Button(
                 actions, text=self.text(label), command=command,
                 style=("Accent.Compact.TButton"
                        if label in {"retry", "force_finish"}

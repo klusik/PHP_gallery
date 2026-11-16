@@ -70,6 +70,45 @@ then scroll the notification list, with the heading and bulk actions retained.
   choices remain governed by Theme settings.
 - Do not underline Admin UI text, labels, links, or controls. Use color,
   spacing, icons, and borders to communicate hierarchy and interaction.
+- Every rounded surface must expose its actual surrounding surface outside
+  its outline. Black or mismatched rectangular corner blocks are defects,
+  including on nested cards, loading/metric badges and compact header controls.
+  WinApp uses shared native clipping from `_RoundedSurface` through `GlassCard`
+  and `Button` on Windows; there is no per-caller corner opt-in. Do not limit
+  this to contextual popups. If shaping is unavailable, use the
+  flat opaque themed fallback. Do not remove a working control to hide a
+  rendering defect. Keep screenshots of complete desktop/narrow production
+  composition and assert all four rendered corner pixels against the actual
+  parent before/after resize, on both App and Card surfaces. Screenshot creation
+  alone is not a visual assertion. The native owner is
+  `winapp/tests/test_native_gallery_viewer.py`; retain native-region ownership
+  and failure/fallback coverage alongside the pixel comparisons.
+
+WinApp's component and style authority is `winapp/uploader/ui_theme.py`.
+`Button` is the action base, `SmoothIconButton` derives from it, and both
+`Button` and `GlassCard` inherit the same native rounded-surface lifecycle.
+`Dialog` owns native child-window appearance; `DialogSurface` derives from
+`GlassCard`, and `OverlayPanel` derives from `DialogSurface` for in-window
+dialogs. `Slider` uses the central horizontal/vertical `TScale` styles.
+Consumers own commands, values, text and layout and select registered semantic
+variants. They never create raw toolkit buttons/scales/child windows or define
+ttk styles locally. New variants inherit the appropriate central suffix style
+and override only their semantic differences. The portable
+`winapp/tests/test_ui_library.py` contract includes negative controls for direct
+constructors, aliases, raw subclasses and local style writes. Platform file and
+message dialogs retain the operating system's native appearance.
+
+Unboxed actions and range artwork resolve their backing automatically from
+the actual parent Theme token; moving an App icon onto a Card surface must not
+leave a dark rectangular tile. Range controls use one thin track and small
+round thumb with native pointer/keyboard input. `MetricCard` supplies the shared
+header padding, and the compact metric action style keeps Watcher and cache
+cards equally short. Gallery tile artwork already composited onto the exact
+Card backing avoids per-thumbnail HWND reshaping; other parents retain shared
+native clipping. Both paths require rendered corner assertions.
+Smooth glyph dimensions inherit the central `icon_size` style token; component
+names never decide whether an icon is compact. Header metric text fallback and
+artwork use the same compact sizing contract as the cache badge.
 
 ## Gallery inventory controls
 

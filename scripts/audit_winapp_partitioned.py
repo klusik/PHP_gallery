@@ -50,7 +50,7 @@ CHILD_TEST_ID_LIMIT = 4096
 CHILD_REASON_LIMIT = 16384
 
 # Purpose: Isolate the observed long-running viewer test module in one child.
-# Type: frozenset[str]. Units: unittest module names. Scope: five WinApp shards.
+# Type: frozenset[str]. Units: unittest module names. Scope: six WinApp shards.
 # Consumers: partition_test_ids(). Rationale: hosted timings showed the viewer
 # module alone approaches the existing per-child limit; keep all its classes
 # separate from every isolated benchmark and the remaining canonical inventory.
@@ -58,13 +58,15 @@ PARTITION_ISOLATED_MODULES = frozenset({"test_native_gallery_viewer"})
 
 # Purpose: Isolate measured benchmark and preload classes in separate children.
 # Type: tuple[str, ...]. Units: unittest module/class identities.
-# Scope: five WinApp shards. Consumers: partition_test_ids().
+# Scope: six WinApp shards. Consumers: partition_test_ids().
 # Rationale: the two filesystem cohorts and real-session preload benchmark each
 # approach the existing child deadline and must not share another slow owner.
+# The durable dense-return case has the same filesystem cost and its own class.
 PARTITION_ISOLATED_CLASSES = (
     "test_gallery_read_linking.ThumbnailCacheSmallBenchmarkTests",
     "test_gallery_read_linking.ThumbnailCacheLargeBenchmarkTests",
     "test_gallery_preload.GalleryPreloadWorkerTests",
+    "test_native_gallery_dense_return.NativeGalleryDenseReturnTests",
 )
 
 

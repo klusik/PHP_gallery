@@ -6716,6 +6716,8 @@ class LinkingDeliveryTests(unittest.TestCase):
                 with (
                     mock.patch('uploader.app_linking_ui.tk') as tk,
                     mock.patch('uploader.app_linking_ui.ttk') as widgets,
+                    mock.patch('uploader.app_linking_ui.Button') as build_button,
+                    mock.patch('uploader.app_linking_ui.Dialog') as build_dialog,
                     mock.patch('uploader.app_linking_ui.GlassCard'),
                     mock.patch('uploader.app_linking_ui._LinkAddressChoices'),
                     mock.patch('uploader.app_linking_ui.icon_button'),
@@ -6723,9 +6725,9 @@ class LinkingDeliveryTests(unittest.TestCase):
                     mock.patch('uploader.app_linking_ui.sys') as platform,
                 ):
                     platform.platform = 'linux'
-                    widgets.Button.side_effect = [confirm, mock.Mock()]
+                    build_button.side_effect = [confirm, mock.Mock()]
                     widgets.Label.side_effect = [mock.Mock(), hint]
-                    dialog = tk.Toplevel.return_value
+                    dialog = build_dialog.return_value
                     # Supply the dimensions of a compact native prompt.
                     dialog.winfo_reqwidth.return_value = 380
                     dialog.winfo_reqheight.return_value = 220
@@ -6735,7 +6737,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                     tk.StringVar.assert_called_once_with(dialog, value=known)
                     command = next(
                         call.kwargs['command']
-                        for call in widgets.Button.call_args_list
+                        for call in build_button.call_args_list
                         if call.kwargs['text'] == action
                     )
                     manager._start.assert_not_called()

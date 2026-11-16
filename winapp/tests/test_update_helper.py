@@ -483,6 +483,7 @@ class UpdateHelperTests(unittest.TestCase):
                 result_options = {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}
                 with (
                     mock.patch.dict("sys.modules", {"tkinter": tkinter, "tkinter.ttk": ttk}),
+                    mock.patch('uploader.ui_theme.Button', ttk.Button),
                     mock.patch.object(helper, "load_ticket", return_value=self.ticket),
                     mock.patch.object(helper, "installed_identity"),
                     mock.patch.object(helper, "WindowsBackend"),

@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.2.5}
-\newcommand{\manualdate}{15.~November~2026}
+\newcommand{\version}{1.2.6}
+\newcommand{\manualdate}{16.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2087,11 +2087,28 @@ Beim normalen Start öffnet sich \ui{Fotos}; die Reihenfolge lautet
 und öffnet rechts automatisch eine erste Galerie. Einzelne Zweige und der
 gesamte Baum lassen sich ein- und ausklappen. Die Galerieauswahl zeigt
 ihre Fotos im selben Fenster.
+Die Kopfzeile stellt Marke, Version, verbundene Website und Live-Steuerung
+nebeneinander, solange sie passen. Bei schmalen Fenstern verschwindet zuerst
+der dekorative Untertitel; die Version bleibt sichtbar. Die Verbindungsgruppe
+wechselt nur bei Bedarf in eine weitere Zeile und lässt der Galerie mehr Höhe.
+Die vollständige Adresse ist beim Überfahren sichtbar. Verbindungsmeldungen
+belegen nur dann Platz, wenn tatsächlich eine Meldung vorliegt.
+
 Die standardmäßig eingeschaltete Option \ui{Untergalerien} zeigt direkte
 Unterordnerkarten über den Fotos. Als Titelbild dient das erste autorisierte
 direkte Vorschaubild. Fehlt es, erscheint ein neutrales Ordnersymbol.
 Fotos hält Galerielisten im Arbeitsspeicher und verwendet die aktuelle
 Berechtigung der Verknüpfung.
+Ordnerkarten umbrechen an der Panelbreite und scrollen nur vertikal. Eine
+feine ziehbare Linie trennt Ordner und Fotos. Ordner haben eine eigene Auswahl der
+sieben Seitenverhältnisse und einen Pfeil für älteste/neueste Einträge.
+Bei gemischten Galerien stehen die Foto-Steuerelemente direkt über den Fotos.
+Leere oder ausgeblendete Bereiche haben keine Ansichtssteuerung; ohne Kinder
+entfällt auch der Ordnerschalter. Beide Formate und Reihenfolgen werden nur
+in WinApp auf diesem Computer gespeichert, niemals online. Titelbilder
+verwenden den verifizierten Thumbnail-Diskcache. Aktuelle autorisierte
+Sitzungsmetadaten erlauben die Anzeige vor der Hintergrundaktualisierung;
+nach einem Neustart ist vor der Cache-Nutzung eine neue Autorisierung nötig.
 Ohne Verknüpfung öffnet \ui{Verbinden} den
 vorhandenen Adressdialog und die Zustimmung im Browser. Die aktive
 Verknüpfung erlaubt anschließend das direkte Anzeigen öffentlicher Fotos.
@@ -2106,9 +2123,19 @@ Galerien bleiben während der angezeigten Fortsetzung benutzbar. Bei Fehlern
 stoppt der Ablauf und bietet einen manuellen neuen Versuch; normales Blättern
 benötigt keinen Klick auf \ui{Mehr laden}. Kontextpanels behalten das Schließen
 per Tastatur und Außenklick bei.
-Windows beschneidet ihre abgerundete Kontur ohne dunkle äußere Eckblöcke.
+Die Trennlinie zwischen Ordnern und Fotos lässt sich vertikal ziehen. Ihre
+relative Position wird nur auf diesem Computer je Galerie gespeichert und nach
+Navigation oder Neustart wiederhergestellt. Auf/Ab ändert die fokussierte Linie;
+Pos1 stellt die automatische kompakte Höhe wieder her. Bei ausgeblendeten
+Ordnern oder reinen Ordnergalerien entfällt die Linie.
+Windows beschneidet alle gemeinsamen Glaskarten, auch normale Karten und
+Kopfzeilenanzeigen, ohne dunkle äußere Eckblöcke.
 Ist native Formgebung nicht verfügbar, bleibt ein flaches undurchsichtiges
-Panel im aktuellen Design benutzbar.
+Panel im aktuellen Design benutzbar. Alle Schaltflächen, Dialoge und Schieberegler
+erben ihr Aussehen aus der zentralen WinApp-Komponentenbibliothek.
+Watcher- und Cache-Anzeigen haben dieselbe kompakte Höhe. Rahmenlose Symbole
+und Schieberegler passen ihren Hintergrund automatisch an das übergeordnete
+Panel an; Regler verwenden eine dünne Linie und einen kleinen runden Griff.
 Ladestatus und ein kleiner geglätteter Drehring stehen über dem Baum. Sie zeigen
 anfängliche und fortgesetzte Abfragen an und enden bei Abschluss, Fehler oder
 Trennung, ohne einen Prozentwert zu schätzen.
@@ -2358,6 +2385,10 @@ Das responsive Raster scrollt durchgehend und fordert nur sichtbare
 Vorschaubilder an, ohne separate Detailbilder zu laden. Die ausdrückliche Aktion
 \ui{Galerie vorladen} lädt Vorschaubilder und Lightbox-Varianten. Ein~Klick wählt
 ein~Foto und~zeigt seine Metadaten im~anpassbaren rechten Bereich.
+Das Kreuz rechts oben schließt ihn und gibt der Galerie Platz zurück, ohne
+die Auswahl zu ändern oder das Album neu zu laden. Ein weiterer Klick auf
+dasselbe Foto öffnet die Informationen erneut. Eine verspätete Metadatenantwort
+kann den geschlossenen Bereich nicht wieder öffnen.
 Doppelklick oder Enter öffnet die~Lightbox. Pfeile bewegen die~Auswahl;
 die~Leertaste schaltet ein~Foto um. Control-Klick (Command-Klick unter macOS)
 schaltet einzelne Auswahlen um; Shift-Klick oder Shift-Pfeil wählt einen
@@ -10994,6 +11025,13 @@ als~informative Prüfung. Alle erforderlichen Jobs und~das~Gate für~das~exakte
 SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier
 PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder
 Entwicklungsänderung.
+
+Der WinApp-Partitionskoordinator ermittelt das vollständige Testinventar einmal.
+Jeder Kindprozess lädt nur seine zugewiesenen lokalen Module und muss jede
+ausgewählte Identität melden. Modul-/Klassen-Fixtures, der vollständige disjunkte
+Identitätsnachweis und die bisherigen Prozess-/Koordinatorfristen bleiben Pflicht.
+Sechs serielle Gruppen isolieren den unveränderten dichten Cache-Rückkehrfall
+vom Viewer; jeder Prozess erhält explizite Quell-/Test-Importpfade.
 
 Der gehostete portable WinApp-Job installiert die vorhandene Pillow-Anforderung
 in den für das Audit ausgewählten Python-Interpreter, damit der Pixeltest für

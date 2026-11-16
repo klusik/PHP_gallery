@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.2.5}
-\newcommand{\manualdate}{15 November 2026}
+\newcommand{\version}{1.2.6}
+\newcommand{\manualdate}{16 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1886,10 +1886,25 @@ The~normal launch opens on~\ui{Photos}; the~navigation order is~\ui{Photos},
 With an~active gallery link, Photos loads the~gallery tree on~the~left
 and~opens an~initial gallery on~the~right. Expand or~collapse a~branch or
 the~whole tree. Selecting a~gallery shows its~photos in~the~same window.
+The~application header puts branding, version, linked site and~live controls
+beside each other when they fit. As~the~window narrows, the~decorative tagline
+is~hidden first; the~version stays visible. The~link group wraps only when
+needed, freeing vertical space for~Photos. The~full linked address remains
+available on~hover. Connection feedback adds height only while present.
+
 The~default-on \ui{Subgalleries} switch shows direct child-folder cards above
 the~photos. Each cover uses the~first authorized direct thumbnail. When none
 is~available, the~card shows a~neutral folder. Photos keeps gallery listings
 in~memory and~uses the~current link grant.
+Folder cards wrap to the~pane width and~scroll only vertically. A~thin draggable line
+separates folders from photos. Folders have their own seven-ratio selector
+and~oldest/newest record-order arrow; mixed galleries place the~photo controls
+below, directly above the~photos. Absent or~hidden sections have no~view controls.
+The~folder switch disappears when no~children exist. Both formats and~orders
+are~saved only in~WinApp on~this computer; nothing is~written online.
+Covers use the~ordinary verified thumbnail disk cache. Current authorized
+session metadata can show a~cached cover before background refresh; after
+restart fresh authorization is~required before disk reuse.
 When disconnected, \ui{Connect} opens the~existing address and~browser
 approval flow. The~active link can then browse public photos directly.
 Choose the~independent upload destination with \ui{Use for uploads}.
@@ -1931,10 +1946,18 @@ Maintainer diagnostics can~select \texttt{native\_only} in~the~hosted WinApp
 workflow. The~central \texttt{winapp-native} suite records its~narrower native
 viewer scope and~cannot qualify complete WinApp coverage. Default complete
 discovery and~its~existing time limit remain unchanged.
-Contextual panels keep their existing keyboard and~outside
-click dismissal. Windows clips their rounded boundary without dark outer
-corner blocks; if~native shaping is~unavailable, a~flat opaque themed panel
-remains usable.
+Drag the~folder/photo divider vertically to~allocate space. Its~relative position
+is~saved only on~this computer for~that gallery and~restored after navigation
+or~restart. Up/Down adjusts the~focused divider; Home restores automatic compact
+height. Hidden or~folder-only sections have no~divider.
+Contextual panels keep their existing keyboard and~outside click dismissal.
+Windows clips every shared glass card, including ordinary cards and~header
+metrics, without dark outer corner blocks. If~native shaping is~unavailable,
+a~flat opaque themed panel remains usable. All buttons, dialogs and~sliders
+inherit the~central WinApp component library and~its~theme.
+Watcher and~cache information badges share the~same compact height. Unboxed
+icons and~range controls automatically match their parent surface; ranges use
+a~thin line and~small round thumb.
 
 The~Watcher screen shows the~gallery target. A~verified API-mode title survives
 refreshes of~the~same saved connection; credential or~upload-mode changes
@@ -2067,7 +2090,10 @@ the~rejected reply never grants access to~stale image bytes.
 The~responsive grid scrolls continuously and~requests only visible thumbnails;
 it~does not request detail photos while browsing. Explicit \ui{Preload gallery}
 downloads both thumbnails and~lightbox renditions. Click a~photo to~select it
-and~show its~metadata in~the~adjustable right pane. Double-click or~press Enter
+and~show its~metadata in~the~adjustable right pane. Close it~with the~top-right
+cross to~return space to~the~gallery without changing the~selection or~reloading
+the~album. Click the~same photo again to~reopen its~information. A~late metadata
+reply cannot reopen a~dismissed pane. Double-click or~press Enter
 to~open the~lightbox. Arrows navigate the~grid; Space toggles a~photo.
 Control-click (Command-click on~macOS) toggles individual selections;
 Shift-click or~Shift-arrow selects an~anchored range within the~64-photo limit.
@@ -10063,6 +10089,13 @@ Linux/Windows package checks; macOS runs independently as~an~advisory check.
 Every mandatory job and~the~exact-SHA gate must pass. The~release workflow
 compiles all~four PDF manuals once after the~final source edits, not~during
 routine development.
+
+The~WinApp partition coordinator discovers the~complete test inventory once.
+Each child loads only its~assigned local modules and~must report every selected
+identity. Module/class fixtures, the~complete disjoint identity proof and~the
+existing child/coordinator deadlines remain required.
+Six serial groups isolate the~unchanged durable dense-return fixture from
+the~viewer batch; each process receives explicit source/test import roots.
 
 The~hosted portable WinApp job installs the~existing Pillow requirement into
 the~Python interpreter selected for~the~audit, so~tray-badge pixel coverage

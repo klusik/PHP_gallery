@@ -463,7 +463,7 @@ def report_suite(
     }
     suite_settings: SuiteSettingsReport = {
         "start_directory": "winapp/tests",
-        "pattern": "test_native_gallery_viewer.py" if native_only else "test_*.py",
+        "pattern": "test_native_gallery_*.py" if native_only else "test_*.py",
         "runner": "unittest.TextTestRunner",
         "verbosity": 1,
     }
@@ -496,6 +496,21 @@ def report_suite(
     }
 
 
+def _test_directory() -> Path:
+    """Install explicit source/test imports for every independent audit process.
+
+    Returns:
+        Path: Canonical WinApp test directory after its source and test roots
+            were added to sys.path without relying on alphabetical import order.
+    """
+    winapp_directory = Path(__file__).resolve().parents[1] / 'winapp'
+    test_directory = winapp_directory / 'tests'
+    for directory in (winapp_directory, test_directory):
+        if str(directory) not in sys.path:
+            sys.path.insert(0, str(directory))
+    return test_directory
+
+
 def discover_canonical_suite(*, native_only: bool = False) -> unittest.TestSuite:
     """Discover the complete WinApp suite or its explicit native diagnostic.
 
@@ -506,9 +521,8 @@ def discover_canonical_suite(*, native_only: bool = False) -> unittest.TestSuite
     Returns:
         unittest.TestSuite: Standard-library discovery result for ``winapp/tests``.
     """
-    project_root = Path(__file__).resolve().parents[1]
-    test_directory = project_root / "winapp" / "tests"
-    pattern = 'test_native_gallery_viewer.py' if native_only else 'test_*.py'
+    test_directory = _test_directory()
+    pattern = 'test_native_gallery_*.py' if native_only else 'test_*.py'
     return unittest.defaultTestLoader.discover(str(test_directory), pattern=pattern)
 
 
@@ -531,6 +545,40 @@ def flatten_suite(suite: unittest.TestSuite) -> list[unittest.case.TestCase]:
                 f"Canonical discovery produced unsupported leaf: {type(item).__name__}"
             )
     return cases
+
+
+def discover_selected_suite(test_ids: list[str]) -> unittest.TestSuite:
+    """Load only modules owned by an explicitly selected partition.
+
+    Args:
+        test_ids (list[str]): Nonempty unique canonical unittest identities from
+            the complete parent inventory, each beginning with a test_ module.
+    Returns:
+        unittest.TestSuite: Exactly the requested cases in canonical module/test
+            order. The parent still discovers and proves the complete inventory.
+    Raises:
+        ValueError: IDs are empty, duplicated, unsafe or absent from their module.
+    """
+    if (not test_ids or not all(isinstance(value, str) for value in test_ids)
+            or len(test_ids) != len(set(test_ids))):
+        raise ValueError('Selected test identities must be nonempty and unique.')
+    modules = sorted({value.partition('.')[0] for value in test_ids})
+    if any(not name.startswith('test_') or not name.isidentifier() for name in modules):
+        raise ValueError('Selected tests must belong to local test_ modules.')
+    test_directory = _test_directory()
+    suite = unittest.TestSuite()
+    for module in modules:
+        # Keep standard discovery and its module/class fixture handling, but do
+        # not instantiate every unrelated test in each bounded child process.
+        suite.addTests(unittest.defaultTestLoader.discover(
+            str(test_directory), pattern=module + '.py',
+        ))
+    cases = flatten_suite(suite)
+    selected = set(test_ids)
+    by_id = {test.id(): test for test in cases}
+    if not selected.issubset(by_id):
+        raise ValueError('Selected test identities are absent from their modules.')
+    return unittest.TestSuite(test for test in cases if test.id() in selected)
 
 
 def write_complete_report(output_path: Path, report: AuditReport) -> None:
@@ -590,21 +638,15 @@ def main(arguments: list[str]) -> int:
     if output_path.exists():
         return 2
     try:
-        suite = discover_canonical_suite(native_only=native_only)
         if ids_value is not None:
             requested = json.loads(Path(ids_value).read_text(encoding='utf-8'))
             if (not isinstance(requested, list)
                     or not all(isinstance(test_id, str) for test_id in requested)
                     or len(requested) != len(set(requested))):
                 return 2
-            cases = flatten_suite(suite)
-            selected = set(requested)
-            by_id = {test.id(): test for test in cases}
-            if not selected or not selected.issubset(by_id):
-                return 2
-            suite = unittest.TestSuite(
-                test for test in cases if test.id() in selected
-            )
+            suite = discover_selected_suite(requested)
+        else:
+            suite = discover_canonical_suite(native_only=native_only)
         report = report_suite(
             suite, sys.stderr, native_only=native_only,
             partition_child=ids_value is not None,

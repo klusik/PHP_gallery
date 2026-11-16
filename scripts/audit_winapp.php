@@ -22,10 +22,10 @@ namespace PhpGallery\Audit;
  * @var int
  * Units: child processes. Scope: the optional partitioned WinApp full suite.
  * Consumers: audit_validate_winapp_report() and audit.php's coordinator call.
- * Rationale: five serial class groups isolate measured slow owners while
+ * Rationale: six serial class groups isolate measured slow owners while
  * retaining the exact complete canonical test inventory.
  */
-const AUDIT_WINAPP_PARTITION_COUNT = 5;
+const AUDIT_WINAPP_PARTITION_COUNT = 6;
 
 /**
  * Validate a complete version-one WinApp unittest evidence document.
@@ -36,10 +36,10 @@ const AUDIT_WINAPP_PARTITION_COUNT = 5;
  * The default requires complete discovery; only an explicit diagnostic caller
  * may require the narrower native-viewer pattern instead.
  *
- * @param array<string,mixed> $report Untrusted schema-1 object with exactly `schema_version:int`, `successful:bool`, `runtime:{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:{start_directory:'winapp/tests',pattern:'test_*.py'|'test_native_gallery_viewer.py',runner:'unittest.TextTestRunner',verbosity:1}}`, `counts:{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int}`, `tests:list<{id:string,status:'PASS'|'FAIL'|'ERROR'|'SKIP'|'EXPECTED_FAILURE'|'UNEXPECTED_SUCCESS',duration_seconds:int|float,reason:?string,subtests:list<{id:string,status:'FAIL'|'ERROR'|'SKIP',reason:string}>}>`, `fixture_errors:list<{phase:'setUpClass'|'tearDownClass'|'setUpModule'|'tearDownModule',id:string,reason:string}>` and same-shaped `fixture_skips`; partitioned mode additionally requires exactly five ordered process records and proof identity lists.
+ * @param array<string,mixed> $report Untrusted schema-1 object with exactly `schema_version:int`, `successful:bool`, `runtime:{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:{start_directory:'winapp/tests',pattern:'test_*.py'|'test_native_gallery_*.py',runner:'unittest.TextTestRunner',verbosity:1}}`, `counts:{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int}`, `tests:list<{id:string,status:'PASS'|'FAIL'|'ERROR'|'SKIP'|'EXPECTED_FAILURE'|'UNEXPECTED_SUCCESS',duration_seconds:int|float,reason:?string,subtests:list<{id:string,status:'FAIL'|'ERROR'|'SKIP',reason:string}>}>`, `fixture_errors:list<{phase:'setUpClass'|'tearDownClass'|'setUpModule'|'tearDownModule',id:string,reason:string}>` and same-shaped `fixture_skips`; partitioned mode additionally requires exactly six ordered process records and proof identity lists.
  * @return array{valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes?:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof?:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>} Validated schema-v1 evidence with calculated counts and coverage.
  * @param bool $nativeOnly Require the explicit native-viewer diagnostic pattern instead of complete discovery; default false never accepts a diagnostic as full evidence.
- * @param bool $partitioned Require the complete five-partition full-discovery proof; default false retains the original schema contract.
+ * @param bool $partitioned Require the complete six-partition full-discovery proof; default false retains the original schema contract.
  */
 function audit_validate_winapp_report(
     array $report,
@@ -294,7 +294,7 @@ function audit_validate_winapp_report(
     $suiteSettings = $runtime['suite_settings'];
     $expectedSuiteSettings = [
         'start_directory' => 'winapp/tests',
-        'pattern' => $nativeOnly ? 'test_native_gallery_viewer.py' : 'test_*.py',
+        'pattern' => $nativeOnly ? 'test_native_gallery_*.py' : 'test_*.py',
         'runner' => 'unittest.TextTestRunner',
         'verbosity' => 1,
     ];
@@ -708,7 +708,7 @@ function audit_validate_winapp_report(
  * @param array{exit_code:?int,timed_out:bool,duration_seconds:int|float} $process Bounded process result returned by the central audit runner.
  * @return array{status:string,valid:bool,reason:?string,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,counts:array{total:int,passed:int,failed:int,errors:int,skipped:int,expected_failures:int,unexpected_successes:int,subtest_failures:int,subtest_errors:int,subtest_skips:int,fixture_errors:int,fixture_skips:int},tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes?:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof?:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},problems:list<string>} Normalized status and validated evidence.
  * @param bool $nativeOnly Validate only explicitly requested native-viewer diagnostic evidence; default false retains complete-suite qualification.
- * @param bool $partitioned Validate five child processes and complete/disjoint full-discovery identities.
+ * @param bool $partitioned Validate six child processes and complete/disjoint full-discovery identities.
  */
 function audit_evaluate_winapp_report(
     ?string $contents,

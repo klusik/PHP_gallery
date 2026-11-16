@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Callable
 import webbrowser
 
 from .gallery_hdr_macos import MacHDRSurface
-from .ui_theme import hide_inline_tooltip, icon_button
+from .ui_theme import Button, hide_inline_tooltip, icon_button
 from .tk_scroll_input import vertical_scroll_delta
 
 if TYPE_CHECKING:
@@ -490,7 +490,7 @@ class PhotoLightbox:
         self._map_status = ttk.Label(
             self._location_panel, text="", style="Muted.TLabel",
         )
-        self._map_action = ttk.Button(
+        self._map_action = Button(
             self._location_panel, text=self.text("open_map"),
             command=self._open_map, style="Photos.Icon.TButton",
         )

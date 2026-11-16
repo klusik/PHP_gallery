@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Callable
 from uploader.watch_recovery import WatchRecoveryCoordinator, WatchRecoverySnapshot
 from uploader.watch_queue import observe_watch_source
 from uploader.flight_report_translations import recovery_text
-from uploader.ui_theme import GlassCard
+from uploader.ui_theme import Button, GlassCard
 from uploader.overlay import OverlayPanel
 
 if TYPE_CHECKING:
@@ -233,21 +233,21 @@ class WatchRecoveryReviewDialog:
         self.buttons = buttons
         buttons.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         buttons.columnconfigure((0, 1, 2, 3, 4), weight=1)
-        self.confirm_button = ttk.Button(
+        self.confirm_button = Button(
             buttons, text=self.text("watch_recovery_confirm"), command=self.confirm)
         self.confirm_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.skip_button = ttk.Button(
+        self.skip_button = Button(
             buttons, text=self.text("watch_recovery_skip"), command=self.skip)
         self.skip_button.grid(row=0, column=1, sticky="ew", padx=4)
-        self.prior_button = ttk.Button(
+        self.prior_button = Button(
             buttons, text=self.text("watch_recovery_review_earlier"),
             command=self.review_earlier)
         self.prior_button.grid(row=0, column=2, sticky="ew", padx=4)
-        self.resume_button = ttk.Button(
+        self.resume_button = Button(
             buttons, text=self.text("watch_recovery_resume_pending"),
             command=self.resume_retained)
         self.resume_button.grid(row=0, column=3, sticky="ew", padx=4)
-        self.cancel_button = ttk.Button(
+        self.cancel_button = Button(
             buttons, text=self.text("watch_recovery_cancel"), command=self.close)
         self.cancel_button.grid(row=0, column=4, sticky="ew", padx=(4, 0))
         self.action_buttons = (self.confirm_button, self.skip_button,

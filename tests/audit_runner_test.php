@@ -1467,7 +1467,7 @@ audit_test_assert(
 
 $nativeWinappReport = $winappReport;
 $nativeWinappReport['runtime']['suite_settings']['pattern'] =
-    'test_native_gallery_viewer.py';
+    'test_native_gallery_*.py';
 audit_test_assert(
     !audit_validate_winapp_report($nativeWinappReport)['valid']
         && audit_validate_winapp_report($nativeWinappReport, true)['valid']
@@ -1498,13 +1498,14 @@ $partitionedWinappReport['tests'] = [
     array_replace($winappReport['tests'][0], ['id' => 'suite.Complement.test_three']),
     array_replace($winappReport['tests'][0], ['id' => 'suite.OtherComplement.test_four']),
     array_replace($winappReport['tests'][0], ['id' => 'suite.PreloadBenchmark.test_five']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.DenseReturn.test_six']),
 ];
 $partitionedWinappReport['counts'] = array_fill_keys(
     array_keys($winappReport['counts']),
     0,
 );
-$partitionedWinappReport['counts']['total'] = 5;
-$partitionedWinappReport['counts']['passed'] = 5;
+$partitionedWinappReport['counts']['total'] = 6;
+$partitionedWinappReport['counts']['passed'] = 6;
 $partitionedIds = array_column($partitionedWinappReport['tests'], 'id');
 $partitionedWinappReport['partition_processes'] = [
     [
@@ -1552,23 +1553,32 @@ $partitionedWinappReport['partition_processes'] = [
         'expected_test_ids' => [$partitionedIds[4]],
         'observed_test_ids' => [$partitionedIds[4]],
     ],
+    [
+        'partition' => 6, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[5]],
+        'observed_test_ids' => [$partitionedIds[5]],
+    ],
 ];
 $partitionedWinappReport['partition_proof'] = [
-    'partition_count' => 5, 'complete' => true, 'exact_union' => true,
+    'partition_count' => 6, 'complete' => true, 'exact_union' => true,
     'expected_test_ids' => $partitionedIds,
     'observed_test_ids' => $partitionedIds,
-    'total_duration_seconds' => 0.5,
+    'total_duration_seconds' => 0.6,
 ];
 $partitionedWinappSuccess = audit_evaluate_winapp_report(
     json_encode($partitionedWinappReport),
-    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.5],
+    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.6],
     false,
     true,
 );
 audit_test_assert(
     $partitionedWinappSuccess['status'] === 'PASS'
-        && count($partitionedWinappSuccess['partition_processes']) === 5,
-    'Only exact, disjoint and successful five-way partitions may qualify full discovery.',
+        && count($partitionedWinappSuccess['partition_processes']) === 6,
+    'Only exact, disjoint and successful six-way partitions may qualify full discovery.',
 );
 $partitionCorruptions = [
     'null child success' => static function (array &$report): void {

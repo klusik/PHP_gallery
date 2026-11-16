@@ -13,6 +13,18 @@ all parameters, concrete structures and return variants. Preserve comments and
 complete native headers. Extend the existing owner instead of duplicating
 policy.
 
+All action buttons, native dialogs, in-window dialog surfaces and range controls
+must use the inherited components in `uploader/ui_theme.py`: `Button`,
+`SmoothIconButton`, `Dialog`, `DialogSurface`/`OverlayPanel` and `Slider`.
+Only that library defines ttk styles, material artwork and native corner
+clipping. Consumers select a registered semantic variant and own behavior/layout;
+they do not construct raw Tk/ttk buttons, scales or child toplevels or mutate
+styles. Add variants at the central owner through inheritance. All rounded
+surfaces expose the actual parent outside their outline; there is no per-caller
+corner opt-in. The portable `test_ui_library.py` guard and native pixel/state/
+fallback tests enforce this contract. Platform file/message dialogs retain
+their operating-system appearance.
+
 For callbacks without explicit parameters, omit `Args:` and document `None`
 only under `Returns:`. List only parameters present in the native signature.
 

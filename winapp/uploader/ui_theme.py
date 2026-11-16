@@ -3,7 +3,9 @@
 # File: winapp/uploader/ui_theme.py
 # Module Type: Windows uploader presentation support
 # Purpose: Provide a cohesive, accessible Tkinter theme for the uploader.
-# Responsibilities: Configure shared ttk styles, icon buttons, cards and help.
+# Responsibilities:
+#   - Own inherited button, dialog, range and card components and all ttk styles.
+#   - Share native rounded clipping, material artwork, icons and safe fallbacks.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 
@@ -11,6 +13,7 @@
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import cache
 from math import cos, radians, sin
 import ctypes
 import _tkinter
@@ -506,8 +509,12 @@ def create_smooth_icon(
             try:
                 import io
                 with Image.open(io.BytesIO(cover)) as source:
-                    preview = ImageOps.fit(source.convert("RGB"),
-                                           (102 * scale, 48 * scale))
+                    # Preserve the folder rim for every local aspect ratio.
+                    # Insets 5/12/8 are silhouette geometry, not cache policy.
+                    preview = ImageOps.fit(source.convert("RGB"), (
+                        max(1, (width - 10) * scale),
+                        max(1, (height - 20) * scale),
+                    ))
                     canvas.paste(preview, (5 * scale, 12 * scale))
             except (OSError, ValueError):
                 pass
@@ -725,7 +732,458 @@ def create_smooth_icon(
     return None
 
 
-class SmoothIconButton(ttk.Button):
+# Purpose: Admit only centrally declared semantic action styles.
+# Type: tuple[str, ...]. Units: ttk style names. Scope: all WinApp buttons.
+# Consumers: Button creation/configuration and source-contract fixtures.
+# Rationale: one registry prevents per-screen skin creation and unknown variants.
+ROUND_BUTTON_STYLES = (
+    'TButton', 'Compact.TButton', 'Accent.Compact.TButton', 'Primary.TButton',
+    'Primary.Icon.TButton', 'LinkedPhoto.TButton',
+    'Selected.LinkedPhoto.TButton', 'Placeholder.LinkedPhoto.TButton',
+)
+# Purpose: Resolve child-control backing from the actual central parent surface.
+# Type: dict[str, str]. Units: surface prefix to palette token.
+# Scope: the UI library. Consumers: button contexts and range material generation.
+# Rationale: every supported backing is a shared token, never a per-widget skin.
+COMPONENT_SURFACES = {
+    'OnApp': 'background', 'OnCard': 'card_surface',
+    'OnInset': 'card_surface_alt', 'OnSurface': 'surface', 'OnAlt': 'surface_alt',
+}
+FLAT_BUTTON_STYLES = (
+    'Icon.TButton', 'App.Icon.TButton', 'Photos.Icon.TButton',
+    'Action.Photos.Icon.TButton', 'Danger.Action.Photos.Icon.TButton',
+    'Format.Photos.Icon.TButton', 'Selected.Format.Photos.Icon.TButton',
+    'Storage.Metric.TButton', 'Watcher.RecordingBright.Icon.TButton',
+    'Watcher.RecordingDim.Icon.TButton', 'Header.Metric.Icon.TButton',
+)
+BUTTON_STYLE_BASES = (
+    ROUND_BUTTON_STYLES + tuple('Flat.' + name for name in ROUND_BUTTON_STYLES)
+    + FLAT_BUTTON_STYLES
+)
+BUTTON_STYLES = BUTTON_STYLE_BASES + tuple(
+    surface + '.' + name
+    for surface in COMPONENT_SURFACES for name in FLAT_BUTTON_STYLES
+)
+
+# Purpose: Make unavailable image status readable without a caption.
+# Type: int. Units: points. Scope: gallery placeholder button variant.
+# Consumers: Placeholder.LinkedPhoto.TButton. Rationale: 30 pt stays recognizable
+# at ordinary desktop scaling; every other tile property inherits its base.
+GALLERY_PLACEHOLDER_FONT_POINTS = 30
+
+# Purpose: Keep shared sliders compact beside switches and icon actions.
+# Type: tuple[int, int]. Units: Tk pixels, thumb length and thickness.
+# Scope: native horizontal/vertical ranges. Consumers: central TScale style.
+# Rationale: 12 by 8 supplies a visible thumb without a boxed control surface.
+SLIDER_THUMB_SIZE = (12, 8)
+
+# Purpose: Keep native range tracks quiet below their shared round thumb.
+# Type: int. Units: Tk pixels. Scope: all library range surfaces/orientations.
+# Consumers: _install_range_elements.
+# Rationale: 2 is visible on the dark theme without a boxed platform bevel.
+SLIDER_TRACK_WIDTH = 2
+
+# Purpose: Match compact header information cards without increasing either one.
+# Type: tuple[int, int]. Units: Tk pixels, horizontal/vertical interior padding.
+# Scope: Watcher and cache metrics. Consumers: MetricCard.
+# Rationale: 8 by 4 retains the existing smaller cache badge as the common size.
+METRIC_CARD_PADDING = (8, 4)
+
+# Purpose: Keep the Watcher stop glyph within the shared metric text height.
+# Type: tuple[int, int]. Units: Tk pixels, horizontal/vertical action padding.
+# Scope: header metrics. Consumers: Header.Metric.Icon.TButton.
+# Rationale: 3 horizontally retains the icon spacing; zero vertically lets the
+# same 16-pixel artwork fit inside the cache badge's existing smaller height.
+METRIC_ACTION_PADDING = (3, 0)
+
+# Purpose: Share compact artwork dimensions across both information badges.
+# Type: tuple[int, int]. Units: Tk pixels. Scope: header metrics and their action.
+# Consumers: metric labels, cache icon and Header.Metric.Icon.TButton.
+# Rationale: 16 by 16 matches Photos glyphs inside the existing short cache badge.
+METRIC_ICON_SIZE = (_PHOTOS_ICON_IMAGE_SIZE, _PHOTOS_ICON_IMAGE_SIZE)
+
+
+class _RoundedSurface:
+    """Share native corner clipping and GDI ownership across themed widgets.
+
+    Only library Frame/Button subclasses use this mixin. Geometry and failure
+    behavior have one implementation, so derived controls inherit corner fixes.
+    """
+
+    def _initialize_rounded_region(self, radius: int, fallback_style: str) -> None:
+        """Bind shared corner shaping after the concrete Tk widget exists.
+
+        Args:
+            radius (int): Central material radius in logical Tk pixels.
+            fallback_style (str): Registered flat variant for this widget family.
+        Returns:
+            None: Native resize/destruction bindings own the region, or the
+                central flat variant is selected when shaping is unavailable.
+        """
+        self._rounded_corner_radius = radius
+        self._rounded_fallback_style = fallback_style
+        self._rounded_region_api = _load_context_region_api()
+        self._rounded_region_active = self._rounded_region_api is not None
+        self._rounded_region_size: tuple[int, int] | None = None
+        self._rounded_applied_radius: int | None = None
+        self._rounded_region_after: str | None = None
+        if self._rounded_region_active:
+            self.bind('<Configure>', self._schedule_rounded_region, add='+')
+            self.bind('<Destroy>', self._dispose_rounded_region, add='+')
+            self._rounded_region_after = self.after_idle(self._apply_rounded_region)
+        else:
+            self._use_context_fallback()
+
+    def _schedule_rounded_region(self, event: tk.Event) -> None:
+        """Defer native shape updates until Tk finishes layout negotiation.
+
+        Args:
+            event (tk.Event): Configure event for the card's actual HWND.
+
+        Returns:
+            None: At most one idle callback is queued for the current geometry.
+        """
+        if (event.widget is not self or not self._rounded_region_active
+                or self._rounded_region_after is not None):
+            return
+        self._rounded_region_after = self.after_idle(
+            self._apply_rounded_region,
+        )
+
+    def _apply_rounded_region(self) -> None:
+        """Apply a DPI-consistent native rounded region to this card HWND.
+
+        Returns:
+            None: Windows owns a successful HRGN; unsupported geometry falls
+                back to the flat opaque style without leaking GDI objects.
+        """
+        self._rounded_region_after = None
+        if not self._rounded_region_active or not self.winfo_exists():
+            return
+        width, height = self.winfo_width(), self.winfo_height()
+        if width <= 0 or height <= 0:
+            return
+        radius = min(self._rounded_corner_radius, width // 2, height // 2)
+        if (self._rounded_region_size == (width, height)
+                and self._rounded_applied_radius == radius):
+            return
+
+        api = self._rounded_region_api
+        if api is None:
+            self._use_context_fallback()
+            return
+        if radius <= 0:
+            if self._rounded_applied_radius:
+                # Zero radius is the central flat-role shape. Remove a previous
+                # round region when changing semantic variants on one button.
+                try:
+                    cleared = api.user32.SetWindowRgn(
+                        ctypes.c_void_p(self.winfo_id()), None, 1,
+                    )
+                except (AttributeError, OSError, TypeError, ValueError,
+                        ctypes.ArgumentError):
+                    cleared = 0
+                if not cleared:
+                    self._use_context_fallback()
+                    return
+            self._rounded_region_size = (width, height)
+            self._rounded_applied_radius = 0
+            return
+        # GDI clips the final raster row/column at the nominal half-open bounds.
+        # The extra pixel keeps the HWND's last in-window pixel inside the region.
+        try:
+            region = api.gdi32.CreateRoundRectRgn(
+                # The corner ellipse dimensions are the panel radius diameter.
+                0, 0, width + 1, height + 1, radius * 2, radius * 2,
+            )
+        except (AttributeError, OSError, TypeError, ValueError,
+                ctypes.ArgumentError):
+            self._use_context_fallback()
+            return
+        if not region:
+            self._use_context_fallback()
+            return
+        try:
+            # The final Win32 flag is TRUE so Windows redraws the shaped child.
+            result = api.user32.SetWindowRgn(
+                ctypes.c_void_p(self.winfo_id()), ctypes.c_void_p(region), 1,
+            )
+        except (AttributeError, OSError, TypeError, ValueError,
+                ctypes.ArgumentError):
+            try:
+                api.gdi32.DeleteObject(ctypes.c_void_p(region))
+            except (AttributeError, OSError, TypeError, ValueError,
+                    ctypes.ArgumentError):
+                pass
+            self._use_context_fallback()
+            return
+        if not result:
+            try:
+                api.gdi32.DeleteObject(ctypes.c_void_p(region))
+            except (AttributeError, OSError, TypeError, ValueError,
+                    ctypes.ArgumentError):
+                pass
+            self._use_context_fallback()
+            return
+        # SetWindowRgn transfers HRGN ownership to Windows on success.
+        self._rounded_region_size = (width, height)
+        self._rounded_applied_radius = radius
+
+    def _use_context_fallback(self) -> bool:
+        """Switch to an opaque flat card after native clipping is unavailable.
+
+        Returns:
+            bool: True when the old region was removed and the flat style was
+                applied; False when Windows refused to clear the prior region.
+        """
+        api = self._rounded_region_api
+        if api is not None and self._rounded_region_size is not None:
+            try:
+                # Passing a null HRGN removes the old shape from this HWND.
+                cleared = api.user32.SetWindowRgn(
+                    ctypes.c_void_p(self.winfo_id()), None, 1,
+                )
+            except (AttributeError, OSError, TypeError, ValueError,
+                    ctypes.ArgumentError):
+                cleared = 0
+            if not cleared:
+                # Retain the API and resize binding so a later Configure can
+                # retry; dropping it here would leave a stale clipped region.
+                return False
+        self._rounded_region_size = None
+        self._rounded_applied_radius = None
+        self._rounded_region_active = False
+        self._rounded_region_api = None
+        self.configure(style=self._rounded_fallback_style)
+        return True
+
+    def _dispose_rounded_region(self, event: tk.Event) -> None:
+        """Cancel pending region work when this card is destroyed.
+
+        Args:
+            event (tk.Event): Destroy event identifying the widget being removed.
+
+        Returns:
+            None: No callback or caller-owned HRGN remains after destruction.
+        """
+        if event.widget is not self or self._rounded_region_after is None:
+            return
+        try:
+            self.after_cancel(self._rounded_region_after)
+        except tk.TclError:
+            pass
+        self._rounded_region_after = None
+
+
+class Button(_RoundedSurface, ttk.Button):
+    """The only WinApp action-button base; semantic variants share this owner."""
+
+    def __init__(self, parent: tk.Misc, **kwargs: ButtonOptionValue) -> None:
+        """Create an action using a registered inherited style and shared corners.
+
+        Args:
+            parent (tk.Misc): Visible owner of the action.
+            **kwargs (ButtonOptionValue): Standard ttk action, text, image, state,
+                sizing and registered semantic-style options.
+        Returns:
+            None: A native ttk button with central material and corner behavior.
+        """
+        ensure_component_theme(parent)
+        name = str(kwargs.get('style', 'TButton'))
+        if name not in BUTTON_STYLES:
+            raise ValueError('Button style must belong to the central UI library.')
+        kwargs['style'] = _button_surface_style(parent, name)
+        name = str(kwargs['style'])
+        super().__init__(parent, **kwargs)
+        # Flat icon/metric controls have no rounded image material to clip.
+        # Gallery tiles inherit their smaller selection-rim radius.
+        radius = self._style_radius(name)
+        fallback = 'Flat.' + name if name in ROUND_BUTTON_STYLES else name
+        self._initialize_rounded_region(radius, fallback)
+
+    def _style_radius(self, name: str) -> int:
+        """Select the shared corner geometry for a registered semantic role.
+
+        Args:
+            name (str): Central ttk button style or its flat fallback.
+        Returns:
+            int: Gallery-rim or ordinary-material radius; zero for flat actions
+                or gallery tiles already composited onto their exact parent.
+        """
+        if name not in ROUND_BUTTON_STYLES:
+            return 0
+        if 'LinkedPhoto' in name:
+            # Gallery.tile artwork is already opaque on the exact Card surface.
+            # Avoid a native HWND reshape/redraw for every thumbnail there;
+            # other parents still receive clipping from this same shared owner.
+            if _component_surface(self.master) == 'OnCard':
+                return 0
+            return _GALLERY_SELECTION_CORNER_RADIUS
+        return _BUTTON_CORNER_RADIUS
+
+    def configure(
+        self, cnf: ButtonOptionMapping | str | None = None,
+        **kwargs: ButtonOptionValue,
+    ) -> TtkConfigureResult:
+        """Apply behavior/state options while admitting only central styles.
+
+        Args:
+            cnf (ButtonOptionMapping | str | None): Native option mapping or query.
+            **kwargs (ButtonOptionValue): Native options with a registered style.
+        Returns:
+            TtkConfigureResult: Native metadata/query value, or None after update.
+        """
+        name = kwargs.get('style', cnf.get('style') if isinstance(cnf, Mapping) else None)
+        if name is not None and name not in BUTTON_STYLES:
+            raise ValueError('Button style must belong to the central UI library.')
+        if isinstance(name, str):
+            name = _button_surface_style(self.master, name)
+            if isinstance(cnf, Mapping) and 'style' in cnf:
+                cnf = {**cnf, 'style': name}
+            if 'style' in kwargs:
+                kwargs['style'] = name
+        result = super().configure(cnf, **kwargs)
+        if isinstance(name, str) and hasattr(self, '_rounded_corner_radius'):
+            self._rounded_corner_radius = self._style_radius(name)
+            self._rounded_fallback_style = (
+                'Flat.' + name if name in ROUND_BUTTON_STYLES else name
+            )
+            if self._rounded_region_api is None:
+                super().configure(style=self._rounded_fallback_style)
+            elif self._rounded_region_after is None:
+                self._rounded_region_after = self.after_idle(self._apply_rounded_region)
+        return result
+
+    config = configure
+
+
+class Dialog(tk.Toplevel):
+    """Native child-dialog base sharing the library's theme and backdrop."""
+
+    def __init__(self, parent: tk.Misc) -> None:
+        """Create a themed native child without changing its owner's modality.
+
+        Args:
+            parent (tk.Misc): Existing application window or invoking widget.
+        Returns:
+            None: A normal child toplevel with the central themed background.
+        """
+        ensure_component_theme(parent)
+        super().__init__(parent, background=_PALETTE['background'])
+
+
+class Slider(ttk.Scale):
+    """Range control inheriting the central horizontal/vertical scale styles."""
+
+    def __init__(
+        self, parent: tk.Misc,
+        **kwargs: str | int | float | tk.Variable | Callable[[float], None],
+    ) -> None:
+        """Create a range with central thin-track styling and native interaction.
+
+        Args:
+            parent (tk.Misc): Visible owner of the range control.
+            **kwargs (str | int | float | tk.Variable | Callable[[float], None]):
+                Native range, orientation, value-variable, callback and size options.
+        Returns:
+            None: A native scale inheriting its material from the shared theme.
+        """
+        ensure_component_theme(parent)
+        if 'style' in kwargs:
+            raise ValueError('Slider appearance is owned by the central UI library.')
+        super().__init__(parent, **kwargs)
+        self._sync_surface_style()
+
+    def _sync_surface_style(self) -> None:
+        """Select the centrally drawn range for its parent and orientation.
+
+        Returns:
+            None: The track and thumb expose the real central backing surface.
+        """
+        surface = _component_surface(self.master)
+        orientation = str(self.cget('orient')).title()
+        super().configure(style=surface + '.' + orientation + '.TScale')
+
+    def configure(
+        self,
+        cnf: Mapping[str, str | int | float | tk.Variable | Callable[[float], None]] | str | None = None,
+        **kwargs: str | int | float | tk.Variable | Callable[[float], None],
+    ) -> TtkConfigureResult:
+        """Update native range behavior without introducing a per-screen skin.
+
+        Args:
+            cnf (Mapping[str, str | int | float | tk.Variable | Callable[[float], None]] | str | None):
+                Native range option mapping or option-name query.
+            **kwargs (str | int | float | tk.Variable | Callable[[float], None]):
+                Native range, value, orientation, callback or size options.
+        Returns:
+            TtkConfigureResult: Native metadata/query value, or None after update.
+        """
+        if 'style' in kwargs or isinstance(cnf, Mapping) and 'style' in cnf:
+            raise ValueError('Slider appearance is owned by the central UI library.')
+        result = super().configure(cnf, **kwargs)
+        if kwargs or isinstance(cnf, Mapping):
+            self._sync_surface_style()
+        return result
+
+    config = configure
+
+
+def _component_surface(parent: tk.Misc) -> str:
+    """Resolve a shared surface token from the actual widget backing.
+
+    Args:
+        parent (tk.Misc): Container owning a library component.
+    Returns:
+        str: Registered OnApp/OnCard/OnInset/OnSurface/OnAlt token. Unknown
+            non-library backings retain the readable Card default permanently.
+    """
+    try:
+        name = str(parent.cget('style')) or parent.winfo_class()
+        color = str(ttk.Style(parent).lookup(name, 'background')).casefold()
+    except tk.TclError:
+        try:
+            color = str(parent.cget('background')).casefold()
+        except tk.TclError:
+            color = ''
+    for surface, token in COMPONENT_SURFACES.items():
+        if color == _PALETTE[token].casefold():
+            return surface
+    # Library owner: source-mode hosts may supply an unrecognized native
+    # container. Card remains the permanent legible default for those callers.
+    return 'OnCard'
+
+
+def _button_surface_style(parent: tk.Misc, name: str) -> str:
+    """Derive an unboxed action's backing automatically from its container.
+
+    Args:
+        parent (tk.Misc): Actual parent of the action.
+        name (str): Registered semantic base or its previously resolved variant.
+    Returns:
+        str: Parent-aware inherited flat style, or the unchanged filled material.
+    """
+    prefix, separator, base = name.partition('.')
+    if prefix in COMPONENT_SURFACES and separator:
+        name = base
+    if name in FLAT_BUTTON_STYLES:
+        return _component_surface(parent) + '.' + name
+    return name
+
+
+def ensure_component_theme(parent: tk.Misc) -> None:
+    """Install the central theme once for the owning Tcl interpreter.
+
+    Args:
+        parent (tk.Misc): Widget in the interpreter receiving library components.
+    Returns:
+        None: Standalone helpers and native dialogs share the application theme.
+    """
+    if ttk.Style(parent).lookup('Library.TFrame', 'background') != _PALETTE['background']:
+        configure_theme(parent.winfo_toplevel())
+
+
+class SmoothIconButton(Button):
     """A ttk button whose known glyph text is backed by smooth icon artwork.
 
     Args:
@@ -853,11 +1311,11 @@ class SmoothIconButton(ttk.Button):
             color = style.lookup(str(self.cget("style")), "foreground", state)
             if not color:
                 color = _PALETTE["muted" if "disabled" in current_state else "ink"]
-            logical_size = (
-                _PHOTOS_ICON_IMAGE_SIZE
-                if "Photos.Icon" in str(self.cget("style"))
-                else _ICON_IMAGE_SIZE[0]
-            )
+            # Semantic descendants inherit their artwork size as a theme token;
+            # new compact roles must not depend on spelling "Photos" in a name.
+            logical_size = int(style.lookup(
+                str(self.cget('style')), 'icon_size',
+            ) or _ICON_IMAGE_SIZE[0])
             size = (logical_size, logical_size)
             image = create_smooth_icon(
                 self, key, size, pinned=pinned, tone=color,
@@ -867,11 +1325,11 @@ class SmoothIconButton(ttk.Button):
         except tk.TclError:
             return
 
-def configure_theme(root: tk.Tk) -> None:
+def configure_theme(root: tk.Misc) -> None:
     """Apply the uploader palette and shared ttk widget styles.
 
     Args:
-        root (tk.Tk): Application root whose ttk style and base background
+        root (tk.Misc): Application root or child whose ttk style and base background
             should receive the theme.
 
     Returns:
@@ -899,6 +1357,19 @@ def configure_theme(root: tk.Tk) -> None:
     # Unqualified inner frames live inside cards. App/page containers select
     # App.TFrame or Backdrop.TFrame explicitly so toolbars never cut dark strips
     # through an otherwise continuous panel surface.
+    style.configure('Library.TFrame', background=colors['background'])
+    style.configure('ContextFallback.TFrame', background=colors['card_surface'],
+                    relief='flat', borderwidth=0)
+    style.configure('Footer.Warning.TLabel', foreground=colors['warning'])
+    style.configure('Footer.Error.TLabel', foreground=colors['danger'])
+    style.configure('Danger.Action.Photos.Icon.TButton', foreground=colors['danger'])
+    style.configure('TSeparator', background=colors['line'])
+    style.configure('TScale', background=colors['muted'],
+                    troughcolor=colors['line'], borderwidth=0,
+                    sliderlength=SLIDER_THUMB_SIZE[0],
+                    sliderthickness=SLIDER_THUMB_SIZE[1], relief='flat')
+    style.map('TScale', background=[('active', colors['focus']),
+                                  ('disabled', colors['line'])])
     style.configure("TFrame", background=colors["card_surface"])
     style.configure("TLabel", background=colors["card_surface"],
                     foreground=colors["ink"])
@@ -987,6 +1458,10 @@ def configure_theme(root: tk.Tk) -> None:
     style.configure("Compact.TButton", padding=(7, 3), width=-1)
     style.configure("Storage.Metric.TButton", padding=0, width=-1,
                     background=colors["card_surface"], foreground=colors["ink"])
+    style.configure(
+        'Metric.Card.TLabel', padding=0, borderwidth=0, relief='flat',
+        font=style.lookup('Storage.Metric.TButton', 'font'),
+    )
     style.layout("Storage.Metric.TButton", [(
         "Button.padding", {"sticky": "nsew", "children": [
             ("Button.label", {"sticky": "nsew"}),
@@ -1006,10 +1481,17 @@ def configure_theme(root: tk.Tk) -> None:
                           ("active", colors["primary_hover"])],
               foreground=[("disabled", "#D8D7FA")])
     style.configure("Icon.TButton", padding=(2, 2),
+                    icon_size=_ICON_IMAGE_SIZE[0],
                     font=(_ui_font, 12),
                     background=colors["card_surface"],
                     foreground=colors["ink"])
+    style.configure(
+        'Header.Metric.Icon.TButton', padding=METRIC_ACTION_PADDING,
+        icon_size=METRIC_ICON_SIZE[0],
+        font=style.lookup('Storage.Metric.TButton', 'font'),
+    )
     style.configure("Photos.Icon.TButton", padding=_PHOTOS_ICON_PADDING,
+                    icon_size=_PHOTOS_ICON_IMAGE_SIZE,
                     borderwidth=0,
                     background=colors["card_surface"],
                     foreground=colors["ink"],
@@ -1036,10 +1518,10 @@ def configure_theme(root: tk.Tk) -> None:
         style.map(format_style, foreground=[("focus", colors["focus"])])
     style.configure("Action.Photos.Icon.TButton",
                     padding=(6, 3), font="TkDefaultFont", anchor="w")
-    style.configure("IconPrimary.TButton", padding=(3, 3),
+    style.configure("Primary.Icon.TButton", padding=(3, 3),
                     font=(_ui_font, 12),
                     background=colors["primary"], foreground="#F2F6FA")
-    style.map("IconPrimary.TButton",
+    style.map("Primary.Icon.TButton",
               foreground=[("disabled", "#F0EFFC")],
               background=[("pressed", colors["primary_pressed"]),
                           ("active", colors["primary_hover"])])
@@ -1193,10 +1675,19 @@ def configure_theme(root: tk.Tk) -> None:
                 }),
             ],
         })])
+    _install_gallery_button_styles(style)
+    # Every fallback keeps its semantic parent's text, state and action hierarchy,
+    # replacing only the rounded image material with a flat opaque layout.
+    for name in ROUND_BUTTON_STYLES:
+        style.layout('Flat.' + name, [('Button.border', {
+            'sticky': 'nswe', 'children': [('Button.padding', {
+                'sticky': 'nswe', 'children': [('Button.label', {'sticky': 'nswe'})],
+            })],
+        })])
     _install_focus_styles(style)
     # Context actions are glyphs, not miniature boxed buttons. Preserve ttk
     # keyboard activation and focus while painting only a quiet hover surface.
-    for name in ("Icon.TButton", "App.Icon.TButton", "IconPrimary.TButton"):
+    for name in ("Icon.TButton", "App.Icon.TButton", "Primary.Icon.TButton"):
         style.layout(name, [("Button.padding", {
             "sticky": "nswe", "children": [
                 ("Button.label", {"sticky": "nswe"}),
@@ -1212,6 +1703,131 @@ def configure_theme(root: tk.Tk) -> None:
     style.map("App.Icon.TButton", background=[
         ("active", colors["surface_alt"]),
         ("pressed", colors["surface"]),
+    ])
+
+    _install_button_surface_styles(style)
+    _install_range_elements(root, style)
+
+
+def _install_button_surface_styles(style: ttk.Style) -> None:
+    """Derive unboxed action contexts without copying their layout or typography.
+
+    Args:
+        style (ttk.Style): Central registry receiving inherited surface variants.
+    Returns:
+        None: Resting backing matches the parent; semantic glyph, focus and
+            disabled foreground remain inherited from the single action base.
+    """
+    for surface, token in COMPONENT_SURFACES.items():
+        background = _PALETTE[token]
+        for base in FLAT_BUTTON_STYLES:
+            name = surface + '.' + base
+            resting = (_PALETTE['surface_alt']
+                       if base.startswith('Selected.Format.') else background)
+            style.configure(name, background=resting)
+            style.map(name, background=[
+                ('disabled', background), ('pressed', _PALETTE['line']),
+                ('active', _PALETTE['surface_alt']), ('!active', resting),
+            ])
+
+
+def _install_range_elements(root: tk.Misc, style: ttk.Style) -> None:
+    """Draw the shared thin range track/thumb on each central backing surface.
+
+    Args:
+        root (tk.Misc): Interpreter owning the opaque range artwork.
+        style (ttk.Style): Central horizontal/vertical scale style registry.
+    Returns:
+        None: Native scale interaction uses a quiet line and small round thumb.
+            Optional-Pillow source repair keeps the readable native fallback.
+    """
+    if 'Library.OnCard.Horizontal.Scale.trough' in style.element_names():
+        return
+    try:
+        from PIL import Image, ImageDraw, ImageTk
+    except ImportError:
+        # Library owner permanently supports dependency repair without Pillow;
+        # native scales retain shared colors and native input in that mode.
+        return
+    extent, diameter = SLIDER_THUMB_SIZE
+    scale = _ARTWORK_SCALE
+    for surface, token in COMPONENT_SURFACES.items():
+        images: dict[str, ThemeImage] = {}
+        for kind in ('Horizontal', 'Vertical', 'normal', 'active', 'disabled'):
+            with Image.new('RGB', (extent * scale, extent * scale), _PALETTE[token]) as artwork:
+                draw = ImageDraw.Draw(artwork)
+                if kind in ('Horizontal', 'Vertical'):
+                    # A two-pixel center line is the shared thin-track geometry.
+                    leading = (extent - SLIDER_TRACK_WIDTH) // 2
+                    trailing = leading + SLIDER_TRACK_WIDTH
+                    box = ((0, leading * scale, extent * scale - 1, trailing * scale - 1)
+                           if kind == 'Horizontal' else
+                           (leading * scale, 0, trailing * scale - 1, extent * scale - 1))
+                    draw.rectangle(box, fill=_PALETTE['line'])
+                else:
+                    inset = (extent - diameter) // 2
+                    tone = {'normal': 'muted', 'active': 'focus', 'disabled': 'line'}[kind]
+                    draw.ellipse((inset * scale, inset * scale,
+                                  (extent - inset) * scale - 1,
+                                  (extent - inset) * scale - 1), fill=_PALETTE[tone])
+                with artwork.resize((extent, extent), Image.Resampling.LANCZOS) as raster:
+                    image = ImageTk.PhotoImage(raster, master=root)
+                images[kind] = image
+                _THEME_IMAGES['range-' + surface + '-' + kind] = image
+        slider = 'Library.' + surface + '.Scale.slider'
+        style.element_create(slider, 'image', images['normal'],
+                             ('disabled', images['disabled']),
+                             ('active', images['active']), ('focus', images['active']))
+        for orientation in ('Horizontal', 'Vertical'):
+            trough = 'Library.' + surface + '.' + orientation + '.Scale.trough'
+            edge = (extent - SLIDER_TRACK_WIDTH) // 2
+            border = (0, edge, 0, edge) if orientation == 'Horizontal' else (edge, 0, edge, 0)
+            sticky = 'we' if orientation == 'Horizontal' else 'ns'
+            side = 'left' if orientation == 'Horizontal' else 'top'
+            style.element_create(
+                trough, 'image', images[orientation], border=border,
+                padding=0, sticky=sticky,
+            )
+            style.layout(surface + '.' + orientation + '.TScale', [(trough, {
+                'sticky': sticky, 'children': [(slider, {'side': side, 'sticky': ''})],
+            })])
+
+
+
+
+def _install_gallery_button_styles(style: ttk.Style) -> None:
+    """Derive selected and placeholder tiles from the single gallery action base.
+
+    Args:
+        style (ttk.Style): Central registry for the owning Tcl interpreter.
+    Returns:
+        None: One tile material/layout is inherited by its state-only variants.
+    """
+    surface, ink, focus = (_PALETTE[key] for key in ('card_surface', 'ink', 'primary'))
+    style.configure(
+        'LinkedPhoto.TButton', background=surface, foreground=ink,
+        borderwidth=GALLERY_TILE_BORDER_INSET, padding=0, relief='flat', focuscolor=focus,
+    )
+    style.configure(
+        'Selected.LinkedPhoto.TButton', bordercolor=focus, lightcolor=focus,
+        darkcolor=focus, relief='solid',
+    )
+    style.configure(
+        'Placeholder.LinkedPhoto.TButton',
+        font=('Segoe UI Symbol', GALLERY_PLACEHOLDER_FONT_POINTS),
+    )
+    tile_element = ('Gallery.tile' if 'Gallery.tile' in style.element_names()
+                    else 'Button.border')
+    style.layout('LinkedPhoto.TButton', [(tile_element, {
+        'sticky': 'nswe', 'children': [('Button.padding', {
+            'sticky': 'nswe', 'children': [('Button.label', {'sticky': 'nswe'})],
+        })],
+    })])
+    style.map('LinkedPhoto.TButton',
+              background=[('pressed', surface), ('active', surface)],
+              foreground=[('disabled', ink)])
+    style.map('Selected.LinkedPhoto.TButton', bordercolor=[
+        ('selected', focus), ('focus', focus), ('pressed', focus), ('active', focus),
     ])
 
 
@@ -1518,7 +2134,7 @@ def _install_glossy_elements(root: tk.Tk, style: ttk.Style) -> None:
         ("TButton", "Gloss.button"),
         ("Primary.TButton", "Gloss.primary"),
         ("Icon.TButton", "Gloss.icon"),
-        ("IconPrimary.TButton", "Gloss.iconPrimary"),
+        ("Primary.Icon.TButton", "Gloss.iconPrimary"),
     ):
         style.layout(name, [(
             element,
@@ -1650,7 +2266,7 @@ def _install_focus_styles(style: ttk.Style) -> None:
     """
     focus = _PALETTE["focus"]
     for name in ("TButton", "Primary.TButton", "Icon.TButton",
-                 "IconPrimary.TButton", "Photos.Icon.TButton",
+                 "Primary.Icon.TButton", "Photos.Icon.TButton",
                  "TEntry", "TCombobox"):
         style.map(name, bordercolor=[("focus", focus)])
     style.map("Gallery.Section.TLabel", foreground=[("focus", focus)])
@@ -1685,7 +2301,7 @@ def icon_button(parent: tk.Misc, icon: str,
         style = style_override
     else:
         style = (
-            "IconPrimary.TButton" if primary else "Icon.TButton"
+            "Primary.Icon.TButton" if primary else "Icon.TButton"
         ) if icon_only else ("Primary.TButton" if primary else "TButton")
         if icon_only and not primary:
             container_style = str(parent.cget("style"))
@@ -1734,182 +2350,48 @@ def help_button(parent: tk.Misc, title: str, body: str) -> ttk.Button:
     return button
 
 
-class GlassCard(ttk.Frame):
-    """Frosted tinted ttk frame for grouping uploader controls.
+class GlassCard(_RoundedSurface, ttk.Frame):
+    """Shared frosted card whose rounded exterior reveals its actual parent.
 
-    The rounded RGB material simulates a translucent card while keeping all
-    actual Tk pixels opaque. Callers can pass standard ttk.Frame options.
+    Native clipping is mandatory on Windows for all cards, including nested
+    cards and metrics. Unsupported platforms use the central flat fallback.
     """
 
     def __init__(
-        self,
-        parent: tk.Misc,
-        *,
-        rounded_clip: bool = False,
+        self, parent: tk.Misc,
         **kwargs: str | int | bool | tuple[int, ...] | tk.Misc | ThemeImage,
     ) -> None:
-        """Create a themed card, optionally clipping its rounded corners.
+        """Create the standard card without a per-caller corner opt-in.
 
         Args:
-            parent (tk.Misc): Parent widget that owns the card.
-            rounded_clip (bool): Whether to clip the opaque exterior matte from
-                this card's HWND on Windows; unsupported platforms use a flat
-                opaque contextual style.
+            parent (tk.Misc): Container owning the visible card.
             **kwargs (str | int | bool | tuple[int, ...] | tk.Misc | ThemeImage):
-                Standard ttk.Frame options such as style, padding, dimensions
-                and an optional Tk image.
-
+                Standard frame options including padding, dimensions and style.
         Returns:
-            None: The initialized frame is ready to receive child widgets.
+            None: Shared native clipping or the central flat fallback is active.
         """
-        self._rounded_region_api = (
-            _load_context_region_api() if rounded_clip else None
-        )
-        self._rounded_region_active = rounded_clip and (
-            self._rounded_region_api is not None
-        )
-        self._rounded_region_size: tuple[int, int] | None = None
-        self._rounded_region_after: str | None = None
-        if rounded_clip and not self._rounded_region_active:
-            ttk.Style(parent).configure(
-                "ContextFallback.TFrame",
-                background=_PALETTE["card_surface"],
-                relief="flat", borderwidth=0,
-            )
-            kwargs.setdefault("style", "ContextFallback.TFrame")
-        else:
-            kwargs.setdefault("style", "Glass.TFrame")
+        ensure_component_theme(parent)
+        kwargs.setdefault('style', 'Glass.TFrame')
         super().__init__(parent, **kwargs)
-        if self._rounded_region_active:
-            self.bind("<Configure>", self._schedule_rounded_region, add="+")
-            self.bind("<Destroy>", self._dispose_rounded_region, add="+")
+        self._initialize_rounded_region(_PANEL_CORNER_RADIUS, 'ContextFallback.TFrame')
 
-    def _schedule_rounded_region(self, event: tk.Event) -> None:
-        """Defer native shape updates until Tk finishes layout negotiation.
 
-        Args:
-            event (tk.Event): Configure event for the card's actual HWND.
+class DialogSurface(GlassCard):
+    """In-window dialog surface inheriting the common card's theme and corners."""
 
-        Returns:
-            None: At most one idle callback is queued for the current geometry.
-        """
-        if (event.widget is not self or not self._rounded_region_active
-                or self._rounded_region_after is not None):
-            return
-        self._rounded_region_after = self.after_idle(
-            self._apply_rounded_region,
-        )
 
-    def _apply_rounded_region(self) -> None:
-        """Apply a DPI-consistent native rounded region to this card HWND.
+class MetricCard(GlassCard):
+    """Compact header-information surface shared by Watcher and cache metrics."""
 
-        Returns:
-            None: Windows owns a successful HRGN; unsupported geometry falls
-                back to the flat opaque style without leaking GDI objects.
-        """
-        self._rounded_region_after = None
-        if not self._rounded_region_active or not self.winfo_exists():
-            return
-        width, height = self.winfo_width(), self.winfo_height()
-        if width <= 0 or height <= 0:
-            return
-        if self._rounded_region_size == (width, height):
-            return
-
-        api = self._rounded_region_api
-        if api is None:
-            self._use_context_fallback()
-            return
-        radius = min(_PANEL_CORNER_RADIUS, width // 2, height // 2)
-        if radius <= 0:
-            return
-        # GDI clips the final raster row/column at the nominal half-open bounds.
-        # The extra pixel keeps the HWND's last in-window pixel inside the region.
-        try:
-            region = api.gdi32.CreateRoundRectRgn(
-                # The corner ellipse dimensions are the panel radius diameter.
-                0, 0, width + 1, height + 1, radius * 2, radius * 2,
-            )
-        except (AttributeError, OSError, TypeError, ValueError,
-                ctypes.ArgumentError):
-            self._use_context_fallback()
-            return
-        if not region:
-            self._use_context_fallback()
-            return
-        try:
-            # The final Win32 flag is TRUE so Windows redraws the shaped child.
-            result = api.user32.SetWindowRgn(
-                ctypes.c_void_p(self.winfo_id()), ctypes.c_void_p(region), 1,
-            )
-        except (AttributeError, OSError, TypeError, ValueError,
-                ctypes.ArgumentError):
-            try:
-                api.gdi32.DeleteObject(ctypes.c_void_p(region))
-            except (AttributeError, OSError, TypeError, ValueError,
-                    ctypes.ArgumentError):
-                pass
-            self._use_context_fallback()
-            return
-        if not result:
-            try:
-                api.gdi32.DeleteObject(ctypes.c_void_p(region))
-            except (AttributeError, OSError, TypeError, ValueError,
-                    ctypes.ArgumentError):
-                pass
-            self._use_context_fallback()
-            return
-        # SetWindowRgn transfers HRGN ownership to Windows on success.
-        self._rounded_region_size = (width, height)
-
-    def _use_context_fallback(self) -> bool:
-        """Switch to an opaque flat card after native clipping is unavailable.
-
-        Returns:
-            bool: True when the old region was removed and the flat style was
-                applied; False when Windows refused to clear the prior region.
-        """
-        api = self._rounded_region_api
-        if api is not None and self._rounded_region_size is not None:
-            try:
-                # Passing a null HRGN removes the old shape from this HWND.
-                cleared = api.user32.SetWindowRgn(
-                    ctypes.c_void_p(self.winfo_id()), None, 1,
-                )
-            except (AttributeError, OSError, TypeError, ValueError,
-                    ctypes.ArgumentError):
-                cleared = 0
-            if not cleared:
-                # Retain the API and resize binding so a later Configure can
-                # retry; dropping it here would leave a stale clipped region.
-                return False
-        self._rounded_region_size = None
-        self._rounded_region_active = False
-        self._rounded_region_api = None
-        ttk.Style(self).configure(
-            "ContextFallback.TFrame",
-            background=_PALETTE["card_surface"],
-            relief="flat", borderwidth=0,
-        )
-        self.configure(style="ContextFallback.TFrame")
-        return True
-
-    def _dispose_rounded_region(self, event: tk.Event) -> None:
-        """Cancel pending region work when this card is destroyed.
+    def __init__(self, parent: tk.Misc) -> None:
+        """Create the standard compact metric surface with shared padding.
 
         Args:
-            event (tk.Event): Destroy event identifying the widget being removed.
-
+            parent (tk.Misc): Header group owning this information card.
         Returns:
-            None: No callback or caller-owned HRGN remains after destruction.
+            None: The same material, native corners and inset surround both metrics.
         """
-        if event.widget is not self or self._rounded_region_after is None:
-            return
-        try:
-            self.after_cancel(self._rounded_region_after)
-        except tk.TclError:
-            pass
-        self._rounded_region_after = None
+        super().__init__(parent, padding=METRIC_CARD_PADDING)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1927,12 +2409,13 @@ class _ContextRegionApi:
     gdi32: ctypes.CDLL
 
 
+@cache
 def _load_context_region_api() -> _ContextRegionApi | None:
     """Load typed window-region functions only from Windows system libraries.
 
     Returns:
-        _ContextRegionApi | None: Configured system APIs on Windows, or None
-            so the caller can select a flat opaque fallback.
+        _ContextRegionApi | None: Process-shared configured system APIs on Windows,
+            or None for the permanent flat fallback. No per-widget DLL reloads.
     """
     if sys.platform != "win32":
         return None
@@ -2308,7 +2791,7 @@ def _show_help(owner: tk.Misc, title: str, body: str) -> None:
         parent = owner.winfo_toplevel()
         previous_grab = parent.grab_current()
         previous_focus = parent.focus_get()
-        dialog = tk.Toplevel(parent)
+        dialog = Dialog(parent)
     except tk.TclError:
         return
 
@@ -2364,7 +2847,7 @@ def _show_help(owner: tk.Misc, title: str, body: str) -> None:
     text_box.bind("<Button-2>", lambda _event: "break")
     footer = ttk.Frame(shell, style="Card.TFrame")
     footer.pack(fill="x", pady=(14, 0))
-    close_button = ttk.Button(footer, text="Close", command=close_help)
+    close_button = Button(footer, text="Close", command=close_help)
     close_button.pack(side="right")
     dialog.bind("<Escape>", lambda _event: close_help())
     dialog.protocol("WM_DELETE_WINDOW", close_help)
