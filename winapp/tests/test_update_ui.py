@@ -582,7 +582,11 @@ class UpdateControllerTests(unittest.TestCase):
                 StringVar=Mock(return_value=status),
                 ttk=ttk_stub,
             )
-            with patch.dict(sys.modules, {'tkinter': tkinter_stub}):
+            with (
+                patch.dict(sys.modules, {'tkinter': tkinter_stub}),
+                patch('uploader.ui_theme.Button', ttk_stub.Button),
+                patch('uploader.ui_theme.Dialog', tkinter_stub.Toplevel),
+            ):
                 controller.open_updates()
             self.assertEqual(len(operations), 1)
             self.assertIs(controller.window, window)

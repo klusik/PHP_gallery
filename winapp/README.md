@@ -1425,7 +1425,12 @@ The default-on **Subgalleries**
 switch shows direct child folder cards above the selected gallery's photos.
 Folder cards wrap to the pane width; overflow scrolls vertically, with no
 horizontal scrollbar. Mixed galleries reserve space for photos and separate
-the sections with a thin line. The folder row has its own identical seven-ratio
+the sections with a thin draggable line. Drag it vertically to allocate space
+between folders and photos. Its relative position is saved only on this computer
+for the selected gallery and restored across navigation/restarts; smaller windows
+retain usable space for photos. Focus the line and press Up/Down to adjust or
+Home to restore automatic compact height. Folder-only and hidden-folder views
+have no divider. The folder row has its own identical seven-ratio
 selector and oldest/newest record-order arrow. Photo controls sit directly above
 the photos when both sections are visible. Empty sections have no format/order
 controls; hiding folders also hides their controls, while the switch remains
@@ -1714,12 +1719,38 @@ and local cache headers. A partial catalogue never claims that an entire
 gallery is cached. The heading's cache icon opens the same gallery menu and
 explains the symbols on hover.
 
-Windows clips the shared contextual card to its rounded boundary, so the
+Windows clips every shared `GlassCard` to its rounded boundary by default,
+including Watcher/storage metrics and cards nested on a lighter panel, so the
 opaque material's dark outer matte does not cover the content behind its
 corners. Resize and dismissal retain the same inline panel. When native
 shaping is unavailable, a flat opaque themed surface keeps the controls
-readable. Ordinary cards keep their existing material; no transparent image
-pixels or operating-system appearance changes are required.
+readable. The design contract forbids rectangular dark corner blocks on every
+rounded surface. Native tests compare all four actual screenshot corners with
+the parent on App/Card backgrounds and after resize, alongside region/fallback
+checks. No transparent image pixels or operating-system appearance changes
+are required.
+
+All action buttons use `ui_theme.Button`; `SmoothIconButton` derives from it.
+Both buttons and cards inherit `_RoundedSurface`, which owns clipping, resize
+tracking and GDI cleanup once. Native child dialogs use `Dialog`; in-window
+dialogs use `OverlayPanel -> DialogSurface -> GlassCard`. Ranges use `Slider`
+and the central `TScale` styles. Selected and placeholder gallery tiles inherit
+`LinkedPhoto.TButton`, overriding only state or placeholder typography.
+Every ttk style definition lives in `ui_theme.py`. Consumers choose registered
+semantic variants and supply behavior/layout. Unknown button skins and custom
+slider skins are rejected. The portable library guard refuses raw constructors,
+raw derived components and external style mutations; native tests verify actual
+inheritance, enabled/disabled behavior, fallback and corner pixels on both
+surfaces. Operating-system file/message dialogs keep native appearance.
+Unboxed actions and sliders derive their backing from the actual parent surface,
+even when a caller supplies an App icon role on a Card. Ranges use a thin line
+and round thumb while retaining native input. `MetricCard` shares padding and a
+compact Stop action between the equally short Watcher and cache badges.
+Icon size inherits a central style token rather than a component-name test;
+Watcher and cache share the same metric artwork dimensions.
+Gallery tiles on the exact Card matte use their existing opaque material without
+reshaping every thumbnail HWND; other parent surfaces still receive clipping.
+Both compositions are covered by corner pixels in the native component catalog.
 
 **Preload gallery** reads the selected gallery's direct photos in the
 background, including thumbnails and lightbox renditions. Subgalleries are

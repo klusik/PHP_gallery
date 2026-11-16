@@ -2100,7 +2100,7 @@ direkte Vorschaubild. Fehlt es, erscheint ein neutrales Ordnersymbol.
 Fotos hält Galerielisten im Arbeitsspeicher und verwendet die aktuelle
 Berechtigung der Verknüpfung.
 Ordnerkarten umbrechen an der Panelbreite und scrollen nur vertikal. Eine
-feine Linie trennt Ordner und Fotos. Ordner haben eine eigene Auswahl der
+feine ziehbare Linie trennt Ordner und Fotos. Ordner haben eine eigene Auswahl der
 sieben Seitenverhältnisse und einen Pfeil für älteste/neueste Einträge.
 Bei gemischten Galerien stehen die Foto-Steuerelemente direkt über den Fotos.
 Leere oder ausgeblendete Bereiche haben keine Ansichtssteuerung; ohne Kinder
@@ -2123,9 +2123,19 @@ Galerien bleiben während der angezeigten Fortsetzung benutzbar. Bei Fehlern
 stoppt der Ablauf und bietet einen manuellen neuen Versuch; normales Blättern
 benötigt keinen Klick auf \ui{Mehr laden}. Kontextpanels behalten das Schließen
 per Tastatur und Außenklick bei.
-Windows beschneidet ihre abgerundete Kontur ohne dunkle äußere Eckblöcke.
+Die Trennlinie zwischen Ordnern und Fotos lässt sich vertikal ziehen. Ihre
+relative Position wird nur auf diesem Computer je Galerie gespeichert und nach
+Navigation oder Neustart wiederhergestellt. Auf/Ab ändert die fokussierte Linie;
+Pos1 stellt die automatische kompakte Höhe wieder her. Bei ausgeblendeten
+Ordnern oder reinen Ordnergalerien entfällt die Linie.
+Windows beschneidet alle gemeinsamen Glaskarten, auch normale Karten und
+Kopfzeilenanzeigen, ohne dunkle äußere Eckblöcke.
 Ist native Formgebung nicht verfügbar, bleibt ein flaches undurchsichtiges
-Panel im aktuellen Design benutzbar.
+Panel im aktuellen Design benutzbar. Alle Schaltflächen, Dialoge und Schieberegler
+erben ihr Aussehen aus der zentralen WinApp-Komponentenbibliothek.
+Watcher- und Cache-Anzeigen haben dieselbe kompakte Höhe. Rahmenlose Symbole
+und Schieberegler passen ihren Hintergrund automatisch an das übergeordnete
+Panel an; Regler verwenden eine dünne Linie und einen kleinen runden Griff.
 Ladestatus und ein kleiner geglätteter Drehring stehen über dem Baum. Sie zeigen
 anfängliche und fortgesetzte Abfragen an und enden bei Abschluss, Fehler oder
 Trennung, ohne einen Prozentwert zu schätzen.
@@ -11015,6 +11025,13 @@ als~informative Prüfung. Alle erforderlichen Jobs und~das~Gate für~das~exakte
 SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier
 PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder
 Entwicklungsänderung.
+
+Der WinApp-Partitionskoordinator ermittelt das vollständige Testinventar einmal.
+Jeder Kindprozess lädt nur seine zugewiesenen lokalen Module und muss jede
+ausgewählte Identität melden. Modul-/Klassen-Fixtures, der vollständige disjunkte
+Identitätsnachweis und die bisherigen Prozess-/Koordinatorfristen bleiben Pflicht.
+Sechs serielle Gruppen isolieren den unveränderten dichten Cache-Rückkehrfall
+vom Viewer; jeder Prozess erhält explizite Quell-/Test-Importpfade.
 
 Der gehostete portable WinApp-Job installiert die vorhandene Pillow-Anforderung
 in den für das Audit ausgewählten Python-Interpreter, damit der Pixeltest für

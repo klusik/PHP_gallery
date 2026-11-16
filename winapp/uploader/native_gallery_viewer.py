@@ -70,7 +70,10 @@ from .gallery_lightbox import (
     PhotoLightbox,
     detect_black_matte_crop,
 )
-from .ui_theme import GALLERY_TILE_BORDER_INSET, _attach_tooltip, icon_button
+from .ui_theme import (
+    Button, GALLERY_TILE_BORDER_INSET, _attach_tooltip, ensure_component_theme,
+    icon_button,
+)
 from .tk_scroll_input import vertical_scroll_delta
 from .gallery_view_preferences import normalize_card_format
 from .gallery_view_order import GalleryViewOrder
@@ -229,12 +232,6 @@ class GalleryThumbnailMemory:
 # Consumers: _NativeGalleryViewer._show_thumbnail.
 # Rationale: A neutral image mark avoids substituting server filenames for media.
 MEDIA_THUMBNAIL_PLACEHOLDER = '▧'
-
-# Purpose: Make an unavailable-preview mark legible without a caption.
-# Type: int. Units: points. Scope: fallback photo-tile glyph.
-# Consumers: LinkedPhotoPlaceholder.TButton.
-# Rationale: 30 pt reads as an image status mark at ordinary desktop scaling.
-MEDIA_THUMBNAIL_PLACEHOLDER_FONT_SIZE = 30
 
 # Purpose: Keep adjacent photo cards close while preserving a visible gap.
 # Type: int. Units: pixels. Scope: horizontal and vertical photo-grid gutters.
@@ -1073,6 +1070,7 @@ class _NativeGalleryViewer:
         Returns:
             None: Widgets are installed in the returned child frame.
         """
+        ensure_component_theme(self.window)
         shell = ttk.Frame(self.frame, padding=12, style='Card.TFrame')
         shell.pack(fill='both', expand=True)
         gallery_title = ''.join(
@@ -1094,51 +1092,6 @@ class _NativeGalleryViewer:
         surface = style.lookup('Card.TFrame', 'background') or '#253443'
         ink = style.lookup('TLabel', 'foreground') or '#F2F6FA'
         focus = style.lookup('Primary.TButton', 'background') or '#08AED0'
-        style.configure(
-            'LinkedPhoto.TButton', background=surface, foreground=ink,
-            borderwidth=2, padding=0, relief='flat', focuscolor=focus,
-        )
-        style.configure(
-            'LinkedPhotoSelected.TButton', background=surface, foreground=ink,
-            bordercolor=focus, lightcolor=focus, darkcolor=focus,
-            borderwidth=2, padding=0, relief='solid', focuscolor=focus,
-        )
-        style.configure(
-            'LinkedPhotoPlaceholder.TButton',
-            background=surface, foreground=ink, borderwidth=2, padding=0,
-            relief='flat', focuscolor=focus,
-            font=('Segoe UI Symbol', MEDIA_THUMBNAIL_PLACEHOLDER_FONT_SIZE),
-        )
-        tile_element = (
-            'Gallery.tile' if 'Gallery.tile' in style.element_names()
-            else 'Button.border'
-        )
-        tile_layout = [(tile_element, {
-            'sticky': 'nswe',
-            'children': [('Button.padding', {
-                'sticky': 'nswe',
-                'children': [('Button.label', {'sticky': 'nswe'})],
-            })],
-        })]
-        for tile_style in (
-            'LinkedPhoto.TButton', 'LinkedPhotoSelected.TButton',
-            'LinkedPhotoPlaceholder.TButton',
-        ):
-            style.layout(tile_style, tile_layout)
-        style.map(
-            'LinkedPhoto.TButton',
-            background=[('pressed', surface), ('active', surface)],
-            foreground=[('disabled', ink)],
-        )
-        style.map(
-            'LinkedPhotoSelected.TButton',
-            background=[('pressed', surface), ('active', surface)],
-            bordercolor=[
-                ('selected', focus), ('focus', focus),
-                ('pressed', focus), ('active', focus),
-            ],
-            foreground=[('disabled', ink)],
-        )
         right = ttk.Frame(body, style='Card.TFrame')
         right.pack(fill='both', expand=True)
         self.grid_canvas = tk.Canvas(
@@ -1734,7 +1687,7 @@ class _NativeGalleryViewer:
         if index < len(self._tile_buttons):
             self._tile_buttons[index].configure(
                 image='', text=MEDIA_THUMBNAIL_PLACEHOLDER, compound='none',
-                style='LinkedPhotoPlaceholder.TButton',
+                style='Placeholder.LinkedPhoto.TButton',
             )
 
     def _observe_thumbnail_read(
@@ -2346,9 +2299,9 @@ class _NativeGalleryViewer:
             selected = photo.image_id in self._selected_photo_ids
             tile.state(['selected'] if selected else ['!selected'])
             tile.configure(style=(
-                'LinkedPhotoSelected.TButton' if selected else
+                'Selected.LinkedPhoto.TButton' if selected else
                 'LinkedPhoto.TButton' if self._photo_images[index] is not None else
-                'LinkedPhotoPlaceholder.TButton'
+                'Placeholder.LinkedPhoto.TButton'
             ))
 
     def _on_empty_context(self, event: tk.Event) -> str | None:
@@ -3210,13 +3163,13 @@ class _NativeGalleryViewer:
             title = ''.join(char if char.isprintable() else ' '
                             for char in photo.title).strip()
             full_label = title[:160] or self._text('linking_media_open')
-            tile = ttk.Button(
+            tile = Button(
                 self.grid_frame,
                 text=MEDIA_THUMBNAIL_PLACEHOLDER,
                 image='',
                 compound='none',
                 width=-1,
-                style='LinkedPhotoPlaceholder.TButton',
+                style='Placeholder.LinkedPhoto.TButton',
                 command=lambda selected=index: self.select_photo(selected),
                 takefocus=True,
             )
@@ -4849,7 +4802,7 @@ class _NativeGalleryViewer:
                 data.close()
             self._tile_buttons[index].configure(
                 image='', text=MEDIA_THUMBNAIL_PLACEHOLDER, compound='none',
-                style='LinkedPhotoPlaceholder.TButton',
+                style='Placeholder.LinkedPhoto.TButton',
             )
             if index < len(self._tile_tooltips):
                 self._tile_tooltips[index].set(

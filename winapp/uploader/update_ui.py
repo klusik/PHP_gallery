@@ -321,12 +321,12 @@ class UpdateController:
         """
         import tkinter as tk
         from tkinter import ttk
-        from uploader.ui_theme import place_dialog
+        from uploader.ui_theme import Button, Dialog, place_dialog
         if self.window is not None and self.window.winfo_exists():
             self.window.deiconify()
             self.window.lift()
             return
-        self.window = tk.Toplevel(self.root)
+        self.window = Dialog(self.root)
         self.window.withdraw()
         self.window.title("PHP Gallery Uploader updates")
         self.window.protocol("WM_DELETE_WINDOW", self.later)
@@ -342,7 +342,7 @@ class UpdateController:
         self.progress.pack(padx=18, pady=8)
         buttons = ttk.Frame(self.window, style="App.TFrame")
         buttons.pack(pady=12)
-        self.action = ttk.Button(
+        self.action = Button(
             buttons,
             text="Update",
             command=self.download,
@@ -350,9 +350,9 @@ class UpdateController:
             style="Primary.TButton",
         )
         self.action.pack(side="left", padx=5)
-        self.cancel_button = ttk.Button(buttons, text="Cancel download", command=self.cancel.set, state="disabled")
+        self.cancel_button = Button(buttons, text="Cancel download", command=self.cancel.set, state="disabled")
         self.cancel_button.pack(side="left", padx=5)
-        ttk.Button(buttons, text="Later", command=self.later).pack(side="left", padx=5)
+        Button(buttons, text="Later", command=self.later).pack(side="left", padx=5)
         self._restore_notice_state()
         place_dialog(self.window, self.root)
         # Center once, then let Tk fit the wrapped status and complete button

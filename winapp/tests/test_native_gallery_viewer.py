@@ -133,6 +133,12 @@ TEST_TREE_REFRESH_SCREEN_MARGIN = 80
 # the existing larger vertical margin still protects title bars and the taskbar.
 TEST_HEADER_SCREEN_WIDTH_MARGIN = 16
 
+# Purpose: Capture the actual parent immediately around a shaped HWND.
+# Type: int. Units: native pixels. Scope: card/button corner screenshots.
+# Consumers: NativeGalleryViewerTests._assert_rendered_card_corners.
+# Rationale: 4 leaves room for outside samples without including adjacent controls.
+TEST_CORNER_CAPTURE_MARGIN = 4
+
 # Purpose: Give generated button clicks deterministic Windows event times.
 # Type: tuple[int, int]. Units: milliseconds. Scope: double-click Tk fixture.
 # Consumers: NativeGalleryViewerTests.test_grid_single_click_selects_and_double_click_opens_lightbox.
@@ -366,7 +372,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         prepare_windows_display()
         self.root = tk.Tk()
         self.root.tk.call('tk', 'scaling', TEST_TK_SCALING)
-        self.root.geometry('840x620')
+        # Fixed work-area origin keeps native captures clear of the taskbar.
+        self.root.geometry('840x620+0+0')
         self.root.update()
         self.addCleanup(self._destroy_root)
 
@@ -3049,7 +3056,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         viewer.close()
 
-    def test_dense_return_renews_catalogue_and_reuses_disk(self) -> None:
+    def _case_dense_return_renews_catalogue_and_reuses_disk(self) -> None:
         """Reuse real disk files after dense scrolling and proof expiration.
 
         Returns:
@@ -4309,17 +4316,94 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'A recreated Photos workspace did not restore the saved sash width.',
         )
 
+    def _build_screenshot_shell(self) -> tuple[ttk.Frame, ttk.Frame, ui_theme.GlassCard]:
+        """Mount production header wiring above native screenshot workspaces.
+
+        Returns:
+            tuple[ttk.Frame, ttk.Frame, ui_theme.GlassCard]: Outer App surface,
+                global storage host and real Watcher metric card. Live services
+                are replaced at their external boundaries, not by fake widgets.
+        """
+        from test_redesign import MAIN
+
+        outer = ttk.Frame(self.root, style='App.TFrame', padding=(16, 12, 16, 10))
+        outer.pack(fill='both', expand=True)
+        outer.columnconfigure(1, weight=1)
+        outer.rowconfigure(2, weight=1)
+        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app.root = self.root
+        app.flights = types.SimpleNamespace(ui_language=tk.StringVar(self.root, 'en'))
+        app.updates = types.SimpleNamespace(check=mock.Mock())
+        app.linking_manager = types.SimpleNamespace(
+            linked_address=tk.StringVar(self.root, 'https://gallery.example.test'),
+            status=tk.StringVar(self.root, ''),
+        )
+        app.watcher_header_count_var = tk.StringVar(self.root, '0')
+        app.watcher_header_time_var = tk.StringVar(self.root, '00:23')
+        app.refresh_watcher_header = mock.Mock()
+        app.notebook = mock.Mock()
+        app.notebook.index.return_value = 0
+        app.tab_indices = {'photos': 0}
+        app.build_app_header(outer)
+        app._watcher_header_stop_button.pack(side='left', padx=(6, 0))
+        app.monitor_light.create_oval(4, 4, 12, 12, fill='#41ce8b', outline='')
+        card = app._watcher_header_status_icon.master
+        assert isinstance(card, ui_theme.GlassCard)
+        return outer, app._storage_header, card
+
+    def _assert_rendered_card_corners(
+        self, card: ui_theme.GlassCard | ui_theme.Button, name: str, evidence: Path,
+    ) -> None:
+        """Compare all four real Windows corner pixels with their surroundings.
+
+        Args:
+            card (ui_theme.GlassCard | ui_theme.Button): Mapped library surface
+                with its central corner behavior.
+            name (str): Safe fixture-authored screenshot basename.
+            evidence (Path): Directory retaining original native screen captures.
+        Returns:
+            None: Each corner exposes the actual parent without a dark matte;
+                native clipping is active and the detail capture is retained.
+        """
+        from PIL import ImageGrab
+
+        self._wait_until(
+            lambda: card._rounded_region_size == (card.winfo_width(), card.winfo_height()),
+            'The default GlassCard did not acquire its real Windows region.',
+        )
+        self.assertTrue(card._rounded_region_active)
+        # Four pixels around the real HWND expose the surrounding parent surface.
+        margin = TEST_CORNER_CAPTURE_MARGIN
+        x, y = card.winfo_rootx(), card.winfo_rooty()
+        width, height = card.winfo_width(), card.winfo_height()
+        evidence.mkdir(parents=True, exist_ok=True)
+        with ImageGrab.grab(bbox=(x - margin, y - margin,
+                                  x + width + margin, y + height + margin)) as capture:
+            capture.save(evidence / f'{name}.png')
+            for local_x, local_y, outside_x in (
+                (0, 0, -2), (width - 1, 0, width + 1),
+                (0, height - 1, -2), (width - 1, height - 1, width + 1),
+            ):
+                self.assertEqual(
+                    capture.getpixel((margin + outside_x, margin + local_y)),
+                    capture.getpixel((margin + local_x, margin + local_y)),
+                    f'{name}: dark/opaque corner at {(local_x, local_y)}',
+                )
+
     def test_gallery_sections_wrap_and_keep_local_controls_independent(self) -> None:
         """Render all four folder/photo combinations with independent controls.
 
         Returns:
             None: Desktop/narrow screenshots and actual Tk geometry prove wrapped
-                folders, hidden absent controls, separate crops and local order.
+                folders, hidden absent controls, separate crops, local order,
+                mouse resizing, per-gallery disk restoration and header corners.
         """
         from PIL import ImageGrab
         from uploader.gallery_view_preferences import (
             load_gallery_card_format, save_gallery_card_format,
             load_gallery_photo_order, save_gallery_photo_order,
+            load_gallery_folder_split, save_gallery_folder_split,
+            GALLERY_FOLDER_SHARE_SCALE,
         )
 
         # Tk's update-based fixture has no continuously entered mainloop.
@@ -4390,6 +4474,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             session.media_page.side_effect = read_page
             provider: list[LinkingSession | None] = [None]
             ui_theme.configure_theme(self.root)
+            outer, storage_host, watcher_card = self._build_screenshot_shell()
             # Accelerate only the synthetic cover poll to the fixture's established
             # GUI pump cadence. Pixel/layout and cache assertions remain unchanged;
             # these screenshots make no production loading-time claim.
@@ -4398,7 +4483,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
             ):
                 path = Path(directory) / 'view.json'
                 workspace = photos_workspace.PhotosWorkspace(
-                    self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+                    outer, lambda: provider[0], mock.Mock(), lambda: 'en',
+                    storage_parent=storage_host, storage_surface=outer,
+                    load_folder_split=lambda _session, gallery_id: load_gallery_folder_split(path, gallery_id),
+                    save_folder_split=lambda _session, gallery_id, share: save_gallery_folder_split(path, gallery_id, share),
                     load_folder_format=lambda _session, gallery_id: load_gallery_card_format(
                         path, gallery_id, folders=True,
                     ),
@@ -4412,7 +4500,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                         path, gallery_id, value, folders=True,
                     ),
                 )
-                workspace.pack(fill='both', expand=True)
+                workspace.grid(row=2, column=0, columnspan=2, sticky='nsew')
                 workspace._ensure_initial_gallery = mock.Mock()
                 provider[0] = session
                 workspace.refresh_session()
@@ -4420,12 +4508,36 @@ class NativeGalleryViewerTests(unittest.TestCase):
                                  'Synthetic section catalogue did not settle.')
                 evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'gallery-sections'
                 evidence.mkdir(parents=True, exist_ok=True)
+                workspace._storage_text.set('4,794 · 30.9 MiB')
                 # Existing desktop/narrow dimensions retain the runner screen margin.
                 for width, height in TEST_TREE_REFRESH_VIEWPORTS:
                     self.root.geometry(
-                        f'{min(width, self.root.winfo_screenwidth() - TEST_TREE_REFRESH_SCREEN_MARGIN)}x'
+                        f'{min(width, self.root.winfo_screenwidth() - TEST_HEADER_SCREEN_WIDTH_MARGIN)}x'
                         f'{min(height, self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN)}+0+0'
                     )
+                    self.root.update()
+                    # Reproduce the reported tiny loading badge, then let its
+                    # real native geometry grow for the ready count/size state.
+                    workspace._storage_text.set('—')
+                    self.root.update()
+                    self._assert_rendered_card_corners(
+                        workspace._storage_heading, f'storage-loading-{width}',
+                        evidence / 'rounded-corners',
+                    )
+                    workspace._storage_text.set('4,794 · 30.9 MiB')
+                    self.root.update()
+                    for card_name, card in (
+                        ('storage', workspace._storage_heading), ('watcher', watcher_card),
+                    ):
+                        self._assert_rendered_card_corners(
+                            card, f'{card_name}-{width}', evidence / 'rounded-corners',
+                        )
+                    self.assertEqual(workspace._storage_heading.winfo_height(),
+                                     watcher_card.winfo_height(), [
+                                         (child.winfo_class(), str(child.cget('style')),
+                                          child.winfo_reqheight())
+                                         for child in watcher_card.winfo_children()
+                                     ])
                     for name, gallery, show_folders in (
                         ('photos-only', leaf, True), ('mixed', mixed, True),
                         ('folders-only', folders_only, True), ('folders-hidden', mixed, False),
@@ -4490,6 +4602,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
                         self.assertEqual(visible_folders, bool(workspace._folder_format_controls.winfo_ismapped()))
                         self.assertEqual(gallery is not folders_only,
                                          bool(workspace._card_format_controls.winfo_ismapped()))
+                        self.assertEqual(visible_folders and gallery is not folders_only,
+                                         bool(workspace._photo_separator.winfo_ismapped()))
                         if visible_folders:
                             rows = {int(tile.grid_info()['row']) for tile in shelf._tiles.values()}
                             self.assertGreater(len(rows), 1)
@@ -4538,9 +4652,84 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     self.assertEqual('oldest', load_gallery_photo_order(path, mixed.gallery_id))
                     workspace._folder_order_button.invoke()
                     workspace._folder_format_buttons['default'].invoke()
+                    self.root.update()
+                    separator = workspace._photo_separator
+                    # Exact low/high mouse destinations verify both directions;
+                    # coordinates are relative to the shelf and pane, not mocks.
+                    for label, target_share in (('low', 220), ('high', 550)):
+                        start_y = separator.winfo_rooty() + separator.winfo_height() // 2
+                        target_y = (workspace._folder_shelf.winfo_rooty()
+                                    + round(workspace.viewer_pane.winfo_height()
+                                            * target_share / GALLERY_FOLDER_SHARE_SCALE)
+                                    + separator.winfo_height() // 2)
+                        separator.event_generate('<ButtonPress-1>', x=8, y=3, rooty=start_y)
+                        separator.event_generate('<B1-Motion>', x=8, y=3, rooty=target_y)
+                        self.root.update()
+                        separator.event_generate('<ButtonRelease-1>', x=8, y=3, rooty=target_y)
+                        self.root.update()
+                        saved_share = load_gallery_folder_split(path, mixed.gallery_id)
+                        self.assertIsNotNone(saved_share)
+                        self.assertEqual(saved_share, workspace._folder_shelf._height_share)
+                        self.assertIsNone(workspace.grab_current())
+                        self.assertGreater(workspace._viewer.winfo_height(), 1)
+                        self._wait_until(covers_ready, 'Resized folder covers did not settle.')
+                        self._wait_until(
+                            lambda: bool(controller._visible_thumbnail_indices)
+                            and all(controller._photo_images[index]
+                                    for index in controller._visible_thumbnail_indices),
+                            'Resized photo thumbnails did not settle.',
+                        )
+                        with ImageGrab.grab(bbox=bounds) as capture:
+                            capture.save(evidence / f'divider-{label}-{width}.png')
+                    saved_height = workspace._folder_shelf.winfo_height()
+                    self.assertIsNone(load_gallery_folder_split(path, folders_only.gallery_id))
+                    workspace._select_gallery(folders_only)
+                    self._wait_until(lambda: workspace._photos_present is False,
+                                     'Divider fixture did not reach folder-only gallery.')
+                    self.assertFalse(separator.winfo_ismapped())
+                    # Discard the in-memory value so returning must read the real file.
+                    workspace._folder_splits.clear()
+                    workspace._select_gallery(mixed)
+                    self._wait_until(lambda: workspace._photos_present is True,
+                                     'Divider fixture did not return to its mixed gallery.')
+                    self.root.update()
+                    self.assertEqual(saved_share, workspace._folder_shelf._height_share)
+                    self.assertEqual(saved_height, workspace._folder_shelf.winfo_height())
+                    self._wait_until(covers_ready, 'Restored folder covers did not settle.')
+                    restored = workspace._viewer._gallery_viewer_controller
+                    self._wait_until(
+                        lambda: bool(restored._visible_thumbnail_indices)
+                        and all(restored._photo_images[index]
+                                for index in restored._visible_thumbnail_indices),
+                        'Restored photo thumbnails did not settle.',
+                    )
+                    with ImageGrab.grab(bbox=bounds) as capture:
+                        capture.save(evidence / f'divider-restored-{width}.png')
+                    # A gallery switch cancels a local grab; an old release cannot
+                    # save the captured gallery's share under the next selection.
+                    separator.event_generate('<ButtonPress-1>', x=8, y=3)
+                    workspace._show_subgalleries.set(False)
+                    workspace._sync_subgalleries()
+                    self.assertIsNone(workspace._folder_drag)
+                    separator.event_generate('<ButtonRelease-1>', x=8, y=3)
+                    self.assertEqual(saved_share, load_gallery_folder_split(path, mixed.gallery_id))
+                    workspace._show_subgalleries.set(True)
+                    workspace._sync_subgalleries()
+                    # Home clears only this divider override, retaining local formats.
+                    separator.focus_force()
+                    self._wait_until(lambda: self.root.focus_get() is separator,
+                                     'The divider did not acquire native keyboard focus.')
+                    separator.event_generate('<Down>')
+                    self.root.update()
+                    self.assertGreater(load_gallery_folder_split(path, mixed.gallery_id), saved_share)
+                    separator.event_generate('<Home>')
+                    self.root.update()
+                    self.assertIsNone(load_gallery_folder_split(path, mixed.gallery_id))
+                    self.assertEqual('default', load_gallery_card_format(path, mixed.gallery_id, folders=True))
                 session.change_gallery_visibility.assert_not_called()
                 session.save_gallery_edit.assert_not_called()
                 workspace.destroy()
+                outer.destroy()
         finally:
             gc.collect()
             if automatic_gc:
@@ -4738,6 +4927,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             )
             self.root.update()
             self.assertIn(MAIN.APP_VERSION, str(header.version.cget('text')))
+            self.assertEqual(workspace._storage_heading.winfo_height(),
+                             app._watcher_header_status_icon.master.winfo_height())
             for control in (header.brand, header.version, header.actions, header.links):
                 self.assertTrue(control.winfo_ismapped())
                 self.assertGreaterEqual(control.winfo_rootx(), header.winfo_rootx())
@@ -4826,10 +5017,13 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session.media_photo_info.side_effect = read_info
         provider: list[LinkingSession | None] = [None]
         ui_theme.configure_theme(self.root)
+        outer, storage_host, _watcher_card = self._build_screenshot_shell()
         workspace = photos_workspace.PhotosWorkspace(
-            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+            outer, lambda: provider[0], mock.Mock(), lambda: 'en',
+            storage_parent=storage_host, storage_surface=outer,
         )
-        workspace.pack(fill='both', expand=True)
+        workspace.grid(row=2, column=0, columnspan=2, sticky='nsew')
+        workspace._storage_text.set('4,794 · 30.9 MiB')
         workspace._ensure_initial_gallery = mock.Mock()
         provider[0] = session
         workspace.refresh_session()
@@ -4890,16 +5084,21 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertEqual(reads_before_close, len(observations))
         self.assertIs(viewer_frame, workspace._viewer)
         workspace.destroy()
+        outer.destroy()
 
     def test_context_glass_card_native_region_matches_mapped_geometry(self) -> None:
-        """Verify the actual Windows child HWND region excludes its corners.
+        """Verify default cards reveal their actual lighter parent at every corner.
 
         Returns:
-            None: The copied region excludes the top-left corner and includes
-                its center after initial mapping and a subsequent resize.
+            None: All four screenshot corners match the parent before/after
+                resize. The actual HWND region excludes its corner, includes
+                its center and retains the final in-window edge pixels.
         """
+        ui_theme.configure_theme(self.root)
+        parent = ttk.Frame(self.root, style='Card.TFrame')
+        parent.pack(fill='both', expand=True)
         card = photos_workspace.GlassCard(
-            self.root, padding=8, rounded_clip=True,
+            parent, padding=8,
         )
         initial_width, initial_height = TEST_CONTEXT_CARD_INITIAL_SIZE
         card.place(
@@ -4915,6 +5114,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         self.assertTrue(card._rounded_region_active)
         self.assertEqual(card.cget('style'), 'Glass.TFrame')
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'rounded-corners'
+        self._assert_rendered_card_corners(card, 'card-surface-initial', evidence)
         api = card._rounded_region_api
         self.assertIsNotNone(api)
         assert api is not None
@@ -4948,6 +5149,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 ),
                 'The rounded region did not follow the resized card.',
             )
+            self._assert_rendered_card_corners(card, 'card-surface-resized', evidence)
             result = api.user32.GetWindowRgn(
                 ctypes.c_void_p(card.winfo_id()),
                 ctypes.c_void_p(copied_region),
@@ -4979,6 +5181,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             # GetWindowRgn copies the owned HWND region into this caller handle.
             api.gdi32.DeleteObject(ctypes.c_void_p(copied_region))
             card.destroy()
+            parent.destroy()
 
     def test_context_glass_card_uses_flat_fallback_when_region_api_missing(self) -> None:
         """Keep contextual cards readable when native clipping is unavailable.
@@ -4987,9 +5190,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Missing native APIs select the opaque card surface without
                 claiming that Windows applied a rounded region.
         """
+        ui_theme.configure_theme(self.root)
         with mock.patch.object(ui_theme, '_load_context_region_api', return_value=None):
             card = photos_workspace.GlassCard(
-                self.root, padding=8, rounded_clip=True,
+                self.root, padding=8,
             )
         card.pack(anchor='nw')
         self.root.update_idletasks()
@@ -5008,7 +5212,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Equal geometry is deduplicated; a refused resize deletes its
                 new HRGN, clears the old one and switches to the flat style.
         """
-        card = photos_workspace.GlassCard(self.root, padding=8)
+        # Begin without a real HWND region; the controlled API below owns all
+        # successful/failing region transitions asserted by this fixture.
+        with mock.patch.object(ui_theme, '_load_context_region_api', return_value=None):
+            card = photos_workspace.GlassCard(self.root, padding=8)
         card.place(x=0, y=0, width=80, height=50)
         self.root.update_idletasks()
         self.root.update()
@@ -5053,6 +5260,110 @@ class NativeGalleryViewerTests(unittest.TestCase):
         card._dispose_rounded_region(event)
         self.assertIsNone(card._rounded_region_after)
         card.destroy()
+
+    def test_ui_library_inherits_button_dialog_and_slider_appearance(self) -> None:
+        """Render central components on both surfaces and verify real inheritance.
+
+        Returns:
+            None: Standard/derived actions share clipping and state behavior;
+                dialogs and ranges inherit the library, unknown skins refuse,
+                and original catalog/detail captures retain native rendering.
+        """
+        from PIL import ImageGrab
+
+        ui_theme.configure_theme(self.root)
+        app = ttk.Frame(self.root, style='App.TFrame', padding=12)
+        app.pack(fill='both', expand=True)
+        surfaces = []
+        for column, name in enumerate(('App', 'Card')):
+            frame = ttk.Frame(app, style=name + '.TFrame', padding=12)
+            frame.grid(row=0, column=column, sticky='nsew', padx=8)
+            app.columnconfigure(column, weight=1)
+            surfaces.append(frame)
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'ui-library'
+        evidence.mkdir(parents=True, exist_ok=True)
+        for surface, name in zip(surfaces, ('app', 'card')):
+            for row, style in enumerate((
+                'TButton', 'Primary.TButton', 'Compact.TButton', 'LinkedPhoto.TButton',
+            )):
+                button = ui_theme.Button(surface, text=style, style=style)
+                button.grid(row=row, column=0, sticky='ew', pady=8)
+                self.root.update()
+                self._assert_rendered_card_corners(button, name + '-' + style, evidence)
+                button.state(['disabled'])
+                self.assertTrue(button.instate(['disabled']))
+                button.state(['!disabled'])
+                self.assertFalse(button.instate(['disabled']))
+            icon = ui_theme.SmoothIconButton(surface, 'close', style='App.Icon.TButton')
+            icon.grid(row=4, column=0)
+            self.assertIsInstance(icon, ui_theme.Button)
+            self.assertEqual(ui_theme._PALETTE['background' if name == 'app' else 'card_surface'],
+                             ttk.Style(self.root).lookup(str(icon.cget('style')), 'background'))
+            slider = ui_theme.Slider(surface, from_=0, to=100, orient='horizontal')
+            slider.grid(row=5, column=0, sticky='ew', pady=8)
+            slider.set(37)
+            self.assertEqual(37, slider.get())
+            self.root.update()
+            self.assertLessEqual(slider.winfo_height(), ui_theme.SLIDER_THUMB_SIZE[0])
+            # Native trough click and thumb drag must survive the shared image
+            # elements; checking set/get alone would miss broken class bindings.
+            click_x, click_y = slider.winfo_width() - 2, slider.winfo_height() // 2
+            slider.event_generate('<ButtonPress-1>', x=click_x, y=click_y)
+            slider.event_generate('<ButtonRelease-1>', x=click_x, y=click_y)
+            self.root.update()
+            self.assertGreater(slider.get(), 37)
+        self.root.update()
+        bounds = (self.root.winfo_rootx(), self.root.winfo_rooty(),
+                  self.root.winfo_rootx() + self.root.winfo_width(),
+                  self.root.winfo_rooty() + self.root.winfo_height())
+        with ImageGrab.grab(bbox=bounds) as capture:
+            capture.save(evidence / 'component-library.png')
+        style = ttk.Style(self.root)
+        # A base delta must reach both descendants through ttk inheritance.
+        inherited_padding = (3, 2)
+        style.configure('LinkedPhoto.TButton', padding=inherited_padding)
+        for variant in ('Selected.LinkedPhoto.TButton', 'Placeholder.LinkedPhoto.TButton'):
+            self.assertEqual(style.lookup('LinkedPhoto.TButton', 'padding'),
+                             style.lookup(variant, 'padding'))
+            self.assertEqual(style.layout('LinkedPhoto.TButton'), style.layout(variant))
+        with self.assertRaisesRegex(ValueError, 'central UI library'):
+            ui_theme.Button(app, text='Invalid', style='ScreenSpecific.TButton')
+        with self.assertRaisesRegex(ValueError, 'central UI library'):
+            button.configure(style='ScreenSpecific.TButton')
+        button.configure(style='App.Icon.TButton')
+        self.root.update()
+        self.assertEqual(0, button._rounded_applied_radius)
+        button.configure(style='Primary.TButton')
+        self.root.update()
+        self._assert_rendered_card_corners(button, 'changed-role-primary', evidence)
+        with self.assertRaisesRegex(ValueError, 'central UI library'):
+            ui_theme.Slider(app, style='ScreenSpecific.Horizontal.TScale')
+        dialog = ui_theme.Dialog(self.root)
+        dialog.geometry('360x180+20+20')
+        self.assertEqual(ui_theme._PALETTE['background'], dialog.cget('background'))
+        panel = ui_theme.DialogSurface(dialog, padding=12)
+        panel.pack(fill='both', expand=True, padx=8, pady=8)
+        ui_theme.Button(panel, text='Close', command=dialog.destroy).pack()
+        self.assertIsInstance(panel, ui_theme.GlassCard)
+        self.root.update()
+        self._assert_rendered_card_corners(panel, 'dialog-surface', evidence)
+        dialog.destroy()
+        # Unsupported shaping inherits the semantic parent while replacing only
+        # its rounded material, preserving enabled/disabled command behavior.
+        with mock.patch.object(ui_theme, '_load_context_region_api', return_value=None):
+            flat = ui_theme.Button(app, text='Primary fallback', style='Primary.TButton')
+            selected_flat = ui_theme.Button(
+                app, text='Selected fallback', style='Selected.LinkedPhoto.TButton',
+            )
+        self.assertEqual('Flat.Primary.TButton', flat.cget('style'))
+        self.assertFalse(flat._rounded_region_active)
+        self.assertEqual('Flat.Selected.LinkedPhoto.TButton', selected_flat.cget('style'))
+        self.assertEqual('Button.border', style.layout(str(selected_flat.cget('style')))[0][0])
+        self.assertEqual(ui_theme._PALETTE['primary'],
+                         style.lookup(str(selected_flat.cget('style')), 'bordercolor', ('selected',)))
+        flat.destroy()
+        selected_flat.destroy()
+        app.destroy()
 
     def test_catalogue_cap_schedules_one_paced_page(self) -> None:
         """Continue cataloguing at a fixed pace after the bounded burst.
@@ -9433,7 +9744,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             viewer.selected_photo_ids(),
         )
         self.assertEqual(
-            'LinkedPhotoSelected.TButton',
+            'Selected.LinkedPhoto.TButton',
             viewer._tile_buttons[0].cget('style'),
         )
         third = LinkedPhoto(TEST_NEXT_PAGE_IMAGE_ID, 'Third photo')
@@ -9511,7 +9822,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     rim = 2 * native_gallery_viewer.GALLERY_TILE_BORDER_INSET
                     self.assertEqual(image.width() + rim, tile.winfo_width())
                     self.assertEqual(image.height() + rim, tile.winfo_height())
-                    self.assertEqual('LinkedPhotoSelected.TButton', tile.cget('style'))
+                    self.assertEqual('Selected.LinkedPhoto.TButton', tile.cget('style'))
                     self.assertEqual((TEST_FIRST_IMAGE_ID,), viewer.selected_photo_ids())
         viewer.close()
 

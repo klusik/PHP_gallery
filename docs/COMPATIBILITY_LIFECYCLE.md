@@ -1248,15 +1248,49 @@ between differently scaled monitors is not claimed. Native display/ClearType
 appearance, fractional scaling and monitor moves need manual qualification.
 No OS display or smoothing preferences are changed.
 
-Contextual `GlassCard` surfaces opt into native child-window clipping on
-Windows. This removes the fixed dark matte from their rounded exterior while
-preserving ordinary cards and the existing inline focus/dismissal owners.
-The theme permanently supports a flat opaque contextual fallback when native
+All `GlassCard` surfaces enable native child-window clipping by default on
+Windows, including ordinary cards, nested cards and Watcher/storage metrics.
+The former contextual-only opt-in left dark rectangular corners visible on
+lighter parents; native screenshot pixels now cover both parent surfaces,
+default construction, header composition and resizing. The existing inline
+focus/dismissal owners remain authoritative.
+The theme permanently supports a flat opaque themed fallback when native
 region APIs are unavailable or refuse a shape. A resize fallback clears a
 previous native region before returning to rectangular rendering. This path
 keeps controls usable without introducing transparent-image rendering or a
 new dependency. Supported-platform prevalence is unknown; retirement requires
 equivalent corner, resize, ownership and fallback coverage on those platforms.
+
+The same native lifecycle is inherited by central `Button` and its
+`SmoothIconButton` descendant. `DialogSurface -> GlassCard` and
+`OverlayPanel -> DialogSurface` retain inline modal/focus ownership;
+`Dialog` centralizes native child-window appearance and `Slider` centralizes
+ranges. All runtime action/dialog constructors and ttk style writes moved to
+the shared library; native file/message dialogs remain platform-owned.
+Gallery selected/placeholder styles now inherit the `LinkedPhoto.TButton`
+suffix instead of copying its layout. Portable negative controls guard direct
+constructors, aliases, raw subclasses and external style mutation; native tests
+cover inherited deltas, states, fallback and both parent surfaces. Standalone
+helpers install the same theme on first component use. There is no new runtime
+dependency or online capability; installed-host prevalence remains unknown.
+Unboxed actions and ranges select inherited variants from the actual central
+parent token. Range artwork uses an opaque matching backing, a thin track and
+round thumb; optional-Pillow repair permanently retains native scale rendering
+and input. Flat button fallbacks keep the native border element so selection,
+focus and semantic action states remain visible. Gallery tile RGB artwork on
+the exact Card parent does not need per-thumbnail `SetWindowRgn` redraws;
+other parents retain clipping. This avoids the measured dense-return cost while
+retaining pixel assertions on App and Card. Shared `MetricCard` padding and a
+compact Stop role keep Watcher/cache height equal at desktop and narrow widths.
+
+Local gallery-view schema version 1 permanently supports the additive
+`folder_splits` map. Canonical decimal strings store 100..800 thousandths of
+viewer-pane height by gallery ID in the existing verified identity's local
+`.view.json` file. Older files omit it and retain automatic compact layout.
+Existing format/order writes preserve split entries; malformed/unreadable files
+are not replaced. No online settings or server capabilities change. Native
+drag/navigation fixtures and portable round-trip/invalid/capacity/IO-failure
+fixtures cover restoration and isolation; installed prevalence is unknown.
 
 ## WinApp update process exit
 

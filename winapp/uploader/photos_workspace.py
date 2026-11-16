@@ -48,7 +48,10 @@ from .gallery_media_cache import (
     GalleryMediaCache,
     MEDIA_THUMBNAIL_CACHE_MAX_BYTES as THUMBNAIL_DISK_DEFAULT_BYTES,
 )
-from .gallery_view_preferences import PHOTO_CARD_FORMATS, normalize_card_format
+from .gallery_view_preferences import (
+    GALLERY_FOLDER_SHARE_BOUNDS, GALLERY_FOLDER_SHARE_SCALE,
+    PHOTO_CARD_FORMATS, normalize_card_format,
+)
 from .config import (
     THUMBNAIL_CACHE_LIMIT_CHOICES_GIB, set_thumbnail_cache_limit_gib,
 )
@@ -63,9 +66,22 @@ from .native_gallery_viewer import (
 )
 from .tk_scroll_input import vertical_scroll_delta
 from .ui_theme import (
-    GlassCard, ThemeImage, _PALETTE, attach_inline_tooltip,
+    Button,
+    GlassCard, MetricCard, METRIC_ICON_SIZE, ThemeImage, _PALETTE, attach_inline_tooltip,
     create_smooth_icon, icon_button,
 )
+
+# Purpose: Make the thin section line easy to grab without adding a toolbar.
+# Type: int. Units: logical Tk pixels. Scope: mixed gallery divider hit area.
+# Consumers: PhotosWorkspace._build_widgets.
+# Rationale: 7 keeps the visible line thin with three pixels of padding per side.
+FOLDER_DIVIDER_HIT_HEIGHT = 7
+
+# Purpose: Allow keyboard resizing with the same local persistence as dragging.
+# Type: int. Units: thousandths of pane height. Scope: focused gallery divider.
+# Consumers: PhotosWorkspace._key_folder_resize.
+# Rationale: 20 changes two percent per arrow press without a large jump.
+FOLDER_DIVIDER_KEY_STEP = 20
 
 
 # Purpose: Keep Tk result delivery responsive during sequential page loading.
@@ -438,6 +454,10 @@ class PhotosWorkspace(ttk.Frame):
             Load the independent local child-gallery record order.
         save_folder_order (Callable[[LinkingSession, int, str], bool] | None):
             Persist child-gallery order without any online write.
+        load_folder_split (Callable[[LinkingSession, int], int | None] | None):
+            Read the local relative divider position for this gallery.
+        save_folder_split (Callable[[LinkingSession, int, int | None], bool] | None):
+            Save the divider locally; None restores automatic sizing.
         catalogue_cache (_CatalogueCacheFactory | None): Create the account-and-
             scope-bound structure cache, or omit optional local persistence.
         load_tree_width (Callable[[], int | None] | None):
@@ -479,6 +499,8 @@ class PhotosWorkspace(ttk.Frame):
         save_folder_format: Callable[[LinkingSession, int, str], bool] | None = None,
         load_folder_order: Callable[[LinkingSession, int], str] | None = None,
         save_folder_order: Callable[[LinkingSession, int, str], bool] | None = None,
+        load_folder_split: Callable[[LinkingSession, int], int | None] | None = None,
+        save_folder_split: Callable[[LinkingSession, int, int | None], bool] | None = None,
         catalogue_cache: _CatalogueCacheFactory | None = None,
         load_tree_width: Callable[[], int | None] | None = None,
         save_tree_width: Callable[[int], None] | None = None,
@@ -529,6 +551,10 @@ class PhotosWorkspace(ttk.Frame):
                 Load the independent local child-gallery record order.
             save_folder_order (Callable[[LinkingSession, int, str], bool] | None):
                 Persist child-gallery order without any online write.
+            load_folder_split (Callable[[LinkingSession, int], int | None] | None):
+                Read local divider thousandths, or None for automatic sizing.
+            save_folder_split (Callable[[LinkingSession, int, int | None], bool] | None):
+                Persist only the local divider; None removes its override.
             catalogue_cache (_CatalogueCacheFactory | None): Optional verified
                 identity cache factory; file access
                 occurs only on background workers.
@@ -578,6 +604,11 @@ class PhotosWorkspace(ttk.Frame):
         self._save_folder_order = save_folder_order
         self._folder_views: dict[int, tuple[str, str]] = {}
         self._folder_unsaved: set[tuple[int, str]] = set()
+        self._load_folder_split = load_folder_split
+        self._save_folder_split = save_folder_split
+        self._folder_splits: dict[int, int | None] = {}
+        self._folder_split_unsaved: set[int] = set()
+        self._folder_drag: tuple[LinkingSession, int, int] | None = None
         self._photos_present: bool | None = None
         self._folders_visible = False
         self._catalogue_cache_factory = catalogue_cache
@@ -809,13 +840,8 @@ class PhotosWorkspace(ttk.Frame):
             None: Installs the workspace widgets in the main window.
         """
         self.connect_view = ttk.Frame(self, style="Card.TFrame", padding=18)
-        style = ttk.Style(self)
-        danger = style.lookup('Watcher.Active.TLabel', 'foreground') or '#FF91A2'
-        style.configure(
-            'Danger.Action.Photos.Icon.TButton', foreground=danger,
-        )
         self.connect_view.grid(row=0, column=0, sticky="nw", padx=18, pady=18)
-        ttk.Button(
+        Button(
             self.connect_view,
             text=tr(self._language(), "linking_start"),
             command=self._connect,
@@ -927,7 +953,7 @@ class PhotosWorkspace(ttk.Frame):
             self._text("refresh_galleries"),
         )
         self.tree_refresh_button.pack(side="left", padx=(4, 0))
-        self.load_more_button = ttk.Button(
+        self.load_more_button = Button(
             controls,
             text=self._text("load_more"),
             command=self._load_more_catalogue,
@@ -935,7 +961,7 @@ class PhotosWorkspace(ttk.Frame):
         )
         self.load_more_button.pack(side="right")
         self.load_more_button.pack_forget()
-        self.retry_button = ttk.Button(
+        self.retry_button = Button(
             controls,
             text=self._text("retry"),
             command=self._retry_catalogue,
@@ -1000,17 +1026,17 @@ class PhotosWorkspace(ttk.Frame):
         for sequence in ("<Button-3>", "<Button-2>", "<Control-Button-1>"):
             self.tree.bind(sequence, self._tree_context)
         storage_parent = self._storage_parent or self.viewer_pane
-        self._storage_heading = GlassCard(storage_parent, padding=(8, 4))
+        self._storage_heading = MetricCard(storage_parent)
         self._storage_heading.pack(anchor='e')
         self._storage_text = tk.StringVar(self, self._text('storage_loading'))
-        self._storage_button = ttk.Button(
+        self._storage_button = Button(
             self._storage_heading, textvariable=self._storage_text,
             command=self._open_storage_context, style='Storage.Metric.TButton',
             takefocus=True,
         )
         self._storage_button.pack(side='right')
         self._storage_icon = create_smooth_icon(
-            self._storage_button, 'local', (16, 16), tone='primary',
+            self._storage_button, 'local', METRIC_ICON_SIZE, tone='primary',
         )
         if self._storage_icon is not None:
             self._storage_button.configure(image=self._storage_icon, compound='left')
@@ -1069,7 +1095,7 @@ class PhotosWorkspace(ttk.Frame):
             in_=self._gallery_heading, row=0, column=1, sticky="w",
         )
         self._photo_order_hint = tk.StringVar(self, self._text('order_oldest'))
-        self._photo_order_button = ttk.Button(
+        self._photo_order_button = Button(
             self._card_format_controls, text='↑', width=-1,
             style='Photos.Icon.TButton', state='disabled',
             command=self._toggle_photo_order, takefocus=True,
@@ -1089,7 +1115,7 @@ class PhotosWorkspace(ttk.Frame):
                     tone="primary" if selected else "muted",
                 )
             artwork = self._card_format_images[(key, False)]
-            button = ttk.Button(
+            button = Button(
                 self._card_format_controls, text=caption,
                 image=artwork if artwork is not None else "", compound="top",
                 style="Format.Photos.Icon.TButton", state="disabled",
@@ -1116,7 +1142,7 @@ class PhotosWorkspace(ttk.Frame):
         )
         self._folder_order_hint = tk.StringVar(self)
         self._folder_format_hint = tk.StringVar(self)
-        self._folder_order_button = ttk.Button(
+        self._folder_order_button = Button(
             self._folder_format_controls, text='↑', width=-1,
             style='Photos.Icon.TButton', takefocus=True,
             command=lambda: self._choose_folder_view(order=True),
@@ -1127,7 +1153,7 @@ class PhotosWorkspace(ttk.Frame):
         )
         self._folder_format_buttons: dict[str, ttk.Button] = {}
         for index, key in enumerate(PHOTO_CARD_FORMATS):
-            button = ttk.Button(
+            button = Button(
                 self._folder_format_controls,
                 text=self._text('card_format_default') if key == 'default' else key,
                 image=self._card_format_images[(key, False)] or '', compound='top',
@@ -1146,7 +1172,24 @@ class PhotosWorkspace(ttk.Frame):
         attach_inline_tooltip(
             self._folder_notice_label, self._folder_format_hint, self.viewer_pane,
         )
-        self._photo_separator = ttk.Separator(self.viewer_pane, orient='horizontal')
+        self._photo_separator = ttk.Frame(
+            self.viewer_pane, style='Card.TFrame',
+            height=FOLDER_DIVIDER_HIT_HEIGHT, cursor='sb_v_double_arrow',
+            takefocus=True,
+        )
+        divider_line = ttk.Separator(
+            self._photo_separator, orient='horizontal', cursor='sb_v_double_arrow',
+        )
+        divider_line.place(relx=0, rely=0.5, relwidth=1)
+        self._folder_split_hint = tk.StringVar(self, self._text('folder_split_hint'))
+        for target in (self._photo_separator, divider_line):
+            target.bind('<ButtonPress-1>', self._start_folder_resize)
+            target.bind('<B1-Motion>', self._move_folder_resize)
+            target.bind('<ButtonRelease-1>', self._finish_folder_resize)
+            target.bind('<Up>', self._key_folder_resize)
+            target.bind('<Down>', self._key_folder_resize)
+            target.bind('<Home>', self._key_folder_resize)
+            attach_inline_tooltip(target, self._folder_split_hint, self.viewer_pane)
         self._recording_heading = ttk.Label(
             self._heading_title, text="", style="Card.TLabel",
         )
@@ -1747,6 +1790,9 @@ class PhotosWorkspace(ttk.Frame):
         self._card_format_unsaved.clear()
         self._folder_views.clear()
         self._folder_unsaved.clear()
+        self._cancel_folder_resize()
+        self._folder_splits.clear()
+        self._folder_split_unsaved.clear()
         self._photos_present = None
         self._tree_state = (
             self._load_tree_state(session)
@@ -3779,6 +3825,134 @@ class PhotosWorkspace(ttk.Frame):
             self._folder_unsaved.add(identity)
         self._sync_subgalleries()
 
+    def _cancel_folder_resize(self) -> None:
+        """Release a drag before hiding its section or changing identity.
+
+        Returns:
+            None: Stale release events cannot persist into another gallery.
+        """
+        self._folder_drag = None
+        if self.grab_current() is self._photo_separator:
+            self._photo_separator.grab_release()
+
+    def _start_folder_resize(self, event: tk.Event) -> str:
+        """Capture one mixed gallery and the pointer's offset within its line.
+
+        Args:
+            event (tk.Event): Mouse press on the visible divider or its line.
+        Returns:
+            str: break prevents unrelated selection or binding actions.
+        """
+        session, gallery_id = self._session, self._selected_gallery_id
+        if (session is not None and gallery_id is not None
+                and session is self._session_provider()
+                and self._folders_visible and self._photos_present is not False):
+            self._folder_drag = (
+                session, gallery_id,
+                event.y_root - self._photo_separator.winfo_rooty(),
+            )
+            self._photo_separator.focus_set()
+            self._photo_separator.grab_set()
+        return 'break'
+
+    def _move_folder_resize(self, event: tk.Event) -> str:
+        """Resize the shelf under the pointer without writing during motion.
+
+        Args:
+            event (tk.Event): Captured mouse motion, including outside the line.
+        Returns:
+            str: break keeps the drag scoped to this gallery divider.
+        """
+        drag = self._folder_drag
+        if drag is None:
+            return 'break'
+        session, gallery_id, offset = drag
+        if (session is not self._session_provider() or session is not self._session
+                or gallery_id != self._selected_gallery_id
+                or not self._folders_visible or self._photos_present is False):
+            self._cancel_folder_resize()
+            return 'break'
+        height = event.y_root - offset - self._folder_shelf.winfo_rooty()
+        share = round(height * GALLERY_FOLDER_SHARE_SCALE
+                      / max(1, self.viewer_pane.winfo_height()))
+        share = max(GALLERY_FOLDER_SHARE_BOUNDS[0],
+                    min(share, GALLERY_FOLDER_SHARE_BOUNDS[1]))
+        self._folder_splits[gallery_id] = share
+        self._folder_shelf.set_height_share(share)
+        return 'break'
+
+    def _finish_folder_resize(self, event: tk.Event) -> str:
+        """Commit a captured drag to the local gallery preference on release.
+
+        Args:
+            event (tk.Event): Mouse release from the divider's local grab.
+        Returns:
+            str: break ends only this drag; online gallery state is untouched.
+        """
+        drag = self._folder_drag
+        if drag is not None:
+            self._move_folder_resize(event)
+            if self._folder_drag is not None:
+                self._persist_folder_split(drag[0], drag[1])
+        self._cancel_folder_resize()
+        return 'break'
+
+    def _persist_folder_split(self, session: LinkingSession, gallery_id: int) -> None:
+        """Persist the current divider only for its still-selected identity.
+
+        Args:
+            session (LinkingSession): Exact live session that began this action.
+            gallery_id (int): Physical gallery selected when the action began.
+        Returns:
+            None: A failed local write leaves the view usable and marks its hint.
+        """
+        if (session is not self._session or session is not self._session_provider()
+                or gallery_id != self._selected_gallery_id):
+            return
+        saved = False
+        if self._save_folder_split is not None:
+            try:
+                saved = self._save_folder_split(
+                    session, gallery_id, self._folder_splits.get(gallery_id),
+                ) is True
+            except (OSError, TypeError, ValueError):
+                pass
+        if saved:
+            self._folder_split_unsaved.discard(gallery_id)
+        else:
+            self._folder_split_unsaved.add(gallery_id)
+        self._sync_subgalleries()
+
+    def _key_folder_resize(self, event: tk.Event) -> str:
+        """Move the focused divider by arrows or restore automatic with Home.
+
+        Args:
+            event (tk.Event): Up, Down or Home key on the section divider.
+        Returns:
+            str: break prevents the same key from navigating the photo grid.
+        """
+        session, gallery_id = self._session, self._selected_gallery_id
+        if (session is None or gallery_id is None
+                or session is not self._session_provider()
+                or not self._folders_visible or self._photos_present is False):
+            return 'break'
+        share = None
+        if event.keysym != 'Home':
+            current = self._folder_splits.get(gallery_id)
+            if current is None:
+                current = round(self._folder_shelf.winfo_height()
+                                * GALLERY_FOLDER_SHARE_SCALE
+                                / max(1, self.viewer_pane.winfo_height()))
+            # Adjust the saved intent, not a height temporarily clamped by a
+            # smaller window. Down must never decrease the preferred share.
+            step = -FOLDER_DIVIDER_KEY_STEP if event.keysym == 'Up' else FOLDER_DIVIDER_KEY_STEP
+            share = max(GALLERY_FOLDER_SHARE_BOUNDS[0],
+                        min(current + step, GALLERY_FOLDER_SHARE_BOUNDS[1]))
+        self._folder_splits[gallery_id] = share
+        self._folder_shelf.set_height_share(share)
+        self._persist_folder_split(session, gallery_id)
+        return 'break'
+
     def _sync_subgalleries(self) -> None:
         """Project wrapped folders and place each section's controls beside it.
 
@@ -3820,7 +3994,29 @@ class PhotosWorkspace(ttk.Frame):
             self._subgallery_switch.pack_forget()
         visible = bool(children) and self._show_subgalleries.get()
         has_photos = self._photos_present is not False
+        if self._folder_drag is not None and (
+            self._folder_drag[:2] != (self._session, parent_id)
+            or not visible or not has_photos
+        ):
+            self._cancel_folder_resize()
+        if parent_id is not None and parent_id not in self._folder_splits:
+            share = None
+            if self._load_folder_split is not None and self._session is not None:
+                try:
+                    share = self._load_folder_split(self._session, parent_id)
+                except (OSError, TypeError, ValueError):
+                    pass
+            self._folder_splits[parent_id] = (
+                share if type(share) is int
+                and GALLERY_FOLDER_SHARE_BOUNDS[0] <= share
+                <= GALLERY_FOLDER_SHARE_BOUNDS[1] else None
+            )
         self._folders_visible = visible
+        self._folder_shelf.set_height_share(self._folder_splits.get(parent_id))
+        self._folder_split_hint.set(self._text(
+            'folder_split_unsaved' if parent_id in self._folder_split_unsaved
+            else 'folder_split_hint',
+        ))
         self._folder_shelf.set_view(card_format, has_photos)
         self._folder_shelf.show_children(self._session, parent_id, children)
         if self._viewer is not None:
@@ -4067,7 +4263,7 @@ class PhotosWorkspace(ttk.Frame):
         """
         self._dismiss_context(restore=False)
         parent = surface if surface is not None else self
-        card = GlassCard(parent, padding=8, takefocus=True, rounded_clip=True)
+        card = GlassCard(parent, padding=8, takefocus=True)
         self._context_card, self._context_origin = card, event.widget
         self._context_surface = parent
         self._context_xy = (
@@ -4189,7 +4385,7 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             ttk.Button: Focusable action control.
         """
-        button = ttk.Button(
+        button = Button(
             card, text=text, command=command,
             style=(
                 'Danger.Action.Photos.Icon.TButton' if destructive
@@ -6980,7 +7176,7 @@ class PhotosWorkspace(ttk.Frame):
                         wraplength=max(1, width - 32), justify='left',
                     )
                     text.pack(side='left', fill='x', expand=True)
-                    edit = ttk.Button(
+                    edit = Button(
                         row, text='▾' if key.endswith('_visibility') else '✎',
                         style='Action.Photos.Icon.TButton', width=-1,
                         command=actions[key], takefocus=True,

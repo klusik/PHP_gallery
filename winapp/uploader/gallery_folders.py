@@ -18,8 +18,11 @@ from tkinter import ttk
 from typing import Callable
 
 from .app_linking import LinkedGallery, LinkedMediaPage, LinkingError, LinkingSession
-from .gallery_view_preferences import normalize_card_format
-from .ui_theme import _PALETTE, _attach_tooltip, create_smooth_icon
+from .gallery_view_preferences import (
+    GALLERY_FOLDER_SHARE_BOUNDS, GALLERY_FOLDER_SHARE_SCALE,
+    normalize_card_format,
+)
+from .ui_theme import Button, _PALETTE, _attach_tooltip, create_smooth_icon
 
 try:
     from PIL import Image, ImageOps, ImageTk
@@ -38,6 +41,18 @@ FOLDER_IMAGE_SIZE = (112, 68)
 # Consumers: GalleryFolderShelf._viewport_changed.
 # Rationale: 0.4 admits several folder rows without starving the photo grid.
 FOLDER_PANE_FRACTION = 0.4
+
+# Purpose: Leave a usable photo row and its separate compact toolbar visible.
+# Type: int. Units: logical Tk pixels. Scope: a mixed gallery's lower section.
+# Consumers: GalleryFolderShelf._viewport_changed.
+# Rationale: 128 reserves a 96-pixel photo viewport plus a compact control row.
+FOLDER_PHOTO_RESERVE = 128
+
+# Purpose: Keep the folder viewport usable near the upper end of a drag.
+# Type: int. Units: logical Tk pixels. Scope: manually sized mixed galleries.
+# Consumers: GalleryFolderShelf._viewport_changed.
+# Rationale: 48 leaves a visible folder fragment and its vertical scroll target.
+FOLDER_MIN_HEIGHT = 48
 
 # Purpose: Keep folder cards compact and their cover retention bounded.
 # Type: int. Units: pixels. Scope: explicit folder proportions and cover decode.
@@ -99,6 +114,7 @@ class GalleryFolderShelf(ttk.Frame):
         self._cover_payloads: dict[int, bytes] = {}
         self._card_format = 'default'
         self._has_photos = True
+        self._height_share: int | None = None
         self._resolved: set[int] = set()
         self._results: queue.Queue[tuple[object, int, bytes | None, bool]] = queue.Queue()
         self._generation = object()
@@ -110,6 +126,7 @@ class GalleryFolderShelf(ttk.Frame):
         self._placeholder = self._folder_icon(None)
         self.bind('<Destroy>', self._on_destroy, add='+')
         self.bind('<Map>', self._viewport_changed, add='+')
+        self.bind('<Configure>', self._viewport_changed, add='+')
         self.bind('<Unmap>', self._on_unmap, add='+')
 
     def _build_widgets(self) -> None:
@@ -190,7 +207,7 @@ class GalleryFolderShelf(ttk.Frame):
                 self._tiles[gallery.gallery_id].configure(text=short)
                 self._titles[gallery.gallery_id].set(title)
                 continue
-            tile = ttk.Button(
+            tile = Button(
                 self._cards, text=short, image=self._placeholder or '',
                 compound='top', style='LinkedPhoto.TButton',
                 command=lambda gallery_id=gallery.gallery_id: self._open_gallery(gallery_id),
@@ -247,6 +264,22 @@ class GalleryFolderShelf(ttk.Frame):
         self._resolved.clear()
         self._schedule()
 
+    def set_height_share(self, share: int | None) -> None:
+        """Apply the gallery's relative divider position without media reads.
+
+        Args:
+            share (int | None): Bounded thousandths of viewer height, or None
+                for automatic compact sizing. Folder-only views ignore it.
+        Returns:
+            None: The visible shelf resizes while the same covers remain owned.
+        """
+        self._height_share = (
+            share if type(share) is int
+            and GALLERY_FOLDER_SHARE_BOUNDS[0] <= share
+            <= GALLERY_FOLDER_SHARE_BOUNDS[1] else None
+        )
+        self._viewport_changed(None)
+
     def _image_size(self) -> tuple[int, int]:
         """Return the bounded silhouette size for the selected folder ratio.
 
@@ -289,12 +322,24 @@ class GalleryFolderShelf(ttk.Frame):
         for index, tile in enumerate(self._tiles.values()):
             tile.grid_configure(row=index // columns, column=index % columns)
         height = self._cards.winfo_reqheight()
-        fraction = FOLDER_PANE_FRACTION if self._has_photos else 1.0
-        # The folder-only shelf may use the remaining pane, while mixed albums
-        # retain their photo viewport. Pack handles the remaining heading space.
-        limit = max(1, round(self.master.winfo_height() * fraction))
+        pane_height = self.master.winfo_height()
+        available = max(1, pane_height - self.winfo_y())
+        if self._has_photos:
+            available = max(1, available - FOLDER_PHOTO_RESERVE)
+        if self._has_photos and self._height_share is not None:
+            requested = max(
+                FOLDER_MIN_HEIGHT,
+                round(pane_height * self._height_share / GALLERY_FOLDER_SHARE_SCALE),
+            )
+        else:
+            fraction = FOLDER_PANE_FRACTION if self._has_photos else 1.0
+            requested = min(height, round(pane_height * fraction))
+        # Explicit drags allocate a section even when its content is shorter.
+        # Automatic/solo shelves stay compact, and physical limits protect the
+        # photo viewport when restoring a ratio on a smaller monitor.
+        limit = max(1, min(requested, available))
         self._canvas.itemconfigure(self._window, width=width)
-        self._canvas.configure(height=min(height, limit), scrollregion=(0, 0, width, height))
+        self._canvas.configure(height=limit, scrollregion=(0, 0, width, height))
         if height > limit:
             self._scrollbar.grid(row=0, column=1, sticky='ns')
         else:

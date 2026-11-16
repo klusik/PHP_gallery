@@ -50,6 +50,18 @@ Chromium
 and the aggregate. All 27 actual native owners must pass. Failed, missing,
 duplicated, cancelled or skipped mandatory owners are not successful evidence.
 
+The WinApp partition coordinator still discovers the complete canonical
+inventory and requires the exact disjoint child-ID union. An explicitly selected
+child loads only its owned local test modules, validates every requested identity
+against standard discovery in those modules, and retains normal module/class
+fixtures and the selected-subset report marker. This removes repeated unrelated
+imports without narrowing parent coverage, adding a parallel registry or changing
+the existing 90-second child and 480-second whole-run limits. Six serial classes/
+module groups isolate the durable dense-return fixture from the viewer batch;
+source/test imports are bootstrapped explicitly in every independent process.
+Unknown, unsafe, duplicate or missing IDs
+and incomplete process/report evidence remain failures.
+
 Contract 4 dispatches macOS packaging independently from the selected feature
 workflow after preparation, with the same exact candidate A and immutable base
 P. Its central `production-package` suite retains actual outcomes and diagnostics

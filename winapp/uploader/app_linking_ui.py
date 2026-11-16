@@ -70,7 +70,7 @@ from .state_store import (
     RECENT_GALLERY_ADDRESS_LIMIT,
     load_recent_gallery_addresses, save_recent_gallery_addresses,
 )
-from .ui_theme import GlassCard, icon_button, place_dialog
+from .ui_theme import Button, Dialog, GlassCard, icon_button, place_dialog
 
 # Purpose: Refresh the linking dialog without touching Tk from worker threads.
 # Type: int. Units: milliseconds. Scope: one pending identity operation.
@@ -976,7 +976,7 @@ class LinkingManager:
                 self._status.set('A gallery request is already in progress.')
             return
 
-        dialog = tk.Toplevel(self._root)
+        dialog = Dialog(self._root)
         title = 'Manage link' if manage else 'Link gallery'
         dialog.title(title)
         dialog.resizable(True, False)
@@ -1136,11 +1136,11 @@ class LinkingManager:
         forget_button = icon_button(
             actions, 'close', forget_choice, self._text('linking_forget_address'),
         )
-        confirm = ttk.Button(
+        confirm = Button(
             actions, text=title, command=submit, style='Accent.Compact.TButton',
         )
         confirm.pack(side='right')
-        ttk.Button(actions, text='Cancel', command=cancel, style='Compact.TButton').pack(
+        Button(actions, text='Cancel', command=cancel, style='Compact.TButton').pack(
             side='right', padx=(0, 8),
         )
         dialog.bind('<Return>', lambda _event: submit())
@@ -1765,7 +1765,7 @@ class LinkingManager:
                 self._offline_binding = self._saved_offline_binding(issuer)
             except RuntimeError:
                 self._offline_store = None
-        window = tk.Toplevel(parent)
+        window = Dialog(parent)
         self._window = window
         title = 'Manage link' if manage else 'Choose gallery'
         window.title(title)
@@ -1855,15 +1855,15 @@ class LinkingManager:
             browse_explanation.grid(row=4, column=0, sticky='ew')
             status_label.grid(row=5, column=0, sticky='ew', pady=(0, 6))
             self._link_actions.grid(row=6, column=0, sticky='ew', pady=(8, 0))
-        self._start_button = ttk.Button(
+        self._start_button = Button(
             self._link_actions, text=self._text('linking_start'),
             command=lambda: self._start(issuer), style='Compact.TButton',
         )
-        self._browser_button = ttk.Button(
+        self._browser_button = Button(
             self._link_actions, text=self._text('linking_open_browser'),
             command=self._open_browser, style='Compact.TButton',
         )
-        self._revoke_button = ttk.Button(
+        self._revoke_button = Button(
             self._link_actions, text='Unlink gallery', command=self.unlink,
             style='Compact.TButton',
         )
@@ -1885,19 +1885,19 @@ class LinkingManager:
         self._gallery_next_button = icon_button(
             toolbar, '›', self._next_galleries, self._text('linking_next_page'),
         )
-        self._gallery_select_button = ttk.Button(
+        self._gallery_select_button = Button(
             toolbar, text=self._text('linking_select_gallery'),
             command=self._select_gallery, style='Accent.Compact.TButton',
         )
-        self._recovery_button = ttk.Button(
+        self._recovery_button = Button(
             self._gallery_actions, text='Check uncertain upload',
             command=self._check_uncertain_upload, style='Compact.TButton',
         )
-        self._review_button = ttk.Button(
+        self._review_button = Button(
             self._gallery_actions, text=self._text('linking_review_title'),
             command=self._review_uncertain_upload, style='Compact.TButton',
         )
-        self._detail_button = ttk.Button(
+        self._detail_button = Button(
             self._gallery_actions, text='Read selected details',
             command=self._read_detail, style='Compact.TButton',
         )
@@ -1905,31 +1905,31 @@ class LinkingManager:
             self._gallery_actions, state='readonly', width=15,
             values=('public', 'private', 'unpublished'),
         )
-        self._visibility_button = ttk.Button(
+        self._visibility_button = Button(
             self._gallery_actions, text=self._text('linking_visibility_action'),
             command=self._change_visibility, style='Compact.TButton',
         )
-        self._create_button = ttk.Button(
+        self._create_button = Button(
             self._gallery_actions, text='Create gallery', command=self._create_gallery,
             style='Compact.TButton',
         )
-        self._create_status_button = ttk.Button(
+        self._create_status_button = Button(
             self._gallery_actions, text='Check create status',
             command=self._reconcile_gallery_create, style='Compact.TButton',
         )
-        self._create_resume_button = ttk.Button(
+        self._create_resume_button = Button(
             self._gallery_actions, text='Resume original creation',
             command=self._resume_gallery_create, style='Compact.TButton',
         )
-        self._create_abandon_button = ttk.Button(
+        self._create_abandon_button = Button(
             self._gallery_actions, text='Close unresolved creation',
             command=self._abandon_gallery_create, style='Compact.TButton',
         )
-        self._use_created_button = ttk.Button(
+        self._use_created_button = Button(
             self._gallery_actions, text=self._text('linking_use_created'),
             command=self._use_created_gallery, style='Compact.TButton',
         )
-        self._ack_created_button = ttk.Button(
+        self._ack_created_button = Button(
             self._gallery_actions, text='Dismiss result',
             command=self._acknowledge_created_gallery, style='Compact.TButton',
         )
@@ -1966,19 +1966,19 @@ class LinkingManager:
         self._footer_actions = ttk.Frame(card, style='Card.TFrame')
         if manage:
             self._footer_actions.grid(row=12, column=0, sticky='ew', pady=(10, 0))
-        self._manage_button = ttk.Button(
+        self._manage_button = Button(
             self._footer_actions, text='Manage gallery links',
             command=self._open_devices, style='Compact.TButton',
         )
-        self._restore_button = ttk.Button(
+        self._restore_button = Button(
             self._footer_actions, text='Reconnect saved link',
             command=self._restore_offline, style='Compact.TButton',
         )
-        self._discard_button = ttk.Button(
+        self._discard_button = Button(
             self._footer_actions, text='Forget saved link',
             command=self._discard_offline, style='Compact.TButton',
         )
-        self._close_button = ttk.Button(
+        self._close_button = Button(
             self._footer_actions, text='Close', command=self._close_window,
             style='Compact.TButton',
         )

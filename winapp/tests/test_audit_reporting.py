@@ -13,8 +13,10 @@
 
 import copy
 import io
+import json
 import sys
 import unittest
+from tempfile import TemporaryDirectory
 from unittest import mock
 from pathlib import Path
 
@@ -24,12 +26,71 @@ if str(project_root) not in sys.path:
 
 from scripts.audit_winapp_report import AuditReport, report_suite
 from scripts.audit_winapp_report import discover_canonical_suite, flatten_suite, main
+from scripts.audit_winapp_report import discover_selected_suite
+from scripts import audit_winapp_report as reporting
 from scripts.audit_winapp_partitioned import merge_reports, partition_test_ids
 from scripts.audit_winapp_partitioned import validate_child_report
 
 
 class AuditReportingTests(unittest.TestCase):
     """Protect structured WinApp unittest outcomes and report accounting."""
+
+    def test_selected_discovery_loads_only_owned_modules_and_rejects_unknown_ids(self) -> None:
+        """Scope child imports while preserving exact requested case identities.
+
+        Returns:
+            None: Only selected local modules are discovered in stable order;
+                unrelated cases, unsafe names, duplicates and unknown IDs refuse.
+        """
+        first = mock.Mock(spec=unittest.TestCase)
+        first.id.return_value = 'test_alpha.Example.test_first'
+        second = mock.Mock(spec=unittest.TestCase)
+        second.id.return_value = 'test_beta.Example.test_second'
+        unrelated = mock.Mock(spec=unittest.TestCase)
+        unrelated.id.return_value = 'test_alpha.Other.test_unselected'
+        with mock.patch.object(unittest.defaultTestLoader, 'discover', side_effect=[
+            unittest.TestSuite([first, unrelated]), unittest.TestSuite([second]),
+        ]) as discover:
+            suite = discover_selected_suite([second.id(), first.id()])
+        self.assertEqual([first.id(), second.id()], [case.id() for case in flatten_suite(suite)])
+        self.assertEqual(['test_alpha.py', 'test_beta.py'],
+                         [call.kwargs['pattern'] for call in discover.call_args_list])
+        self.assertIn(str(project_root / 'winapp'), sys.path)
+        for ids in ([], [first.id(), first.id()], ['../outside.Example.test_one'],
+                    ['test_alpha.Missing.test_unknown']):
+            with self.subTest(ids=ids), mock.patch.object(
+                unittest.defaultTestLoader, 'discover', return_value=unittest.TestSuite([first]),
+            ):
+                with self.assertRaises(ValueError):
+                    discover_selected_suite(ids)
+
+    def test_selected_cli_keeps_subset_reporting_and_skips_full_child_discovery(self) -> None:
+        """Exercise selected-child report publication without unrelated discovery.
+
+        Returns:
+            None: The child executes its supplied suite, marks subset evidence,
+                writes the exact successful ID and never reloads the full suite.
+        """
+        case = unittest.FunctionTestCase(lambda: None)
+        case.id = lambda: 'test_alpha.Example.test_one'
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / 'report.json'
+            selection = Path(directory) / 'ids.json'
+            selection.write_text(json.dumps([case.id()]), encoding='utf-8')
+            with (
+                mock.patch.object(reporting, 'discover_selected_suite',
+                                  return_value=unittest.TestSuite([case])) as selected,
+                mock.patch.object(reporting, 'discover_canonical_suite') as complete,
+                mock.patch.object(reporting.sys, 'stderr', io.StringIO()),
+            ):
+                self.assertEqual(0, main([str(output), '--test-ids-file=' + str(selection)]))
+            selected.assert_called_once_with([case.id()])
+            complete.assert_not_called()
+            report = json.loads(output.read_text(encoding='utf-8'))
+            self.assertTrue(report['successful'])
+            self.assertEqual([case.id()], [row['id'] for row in report['tests']])
+            self.assertEqual('selected-id-subset',
+                             report['runtime']['suite_settings']['partition_selection'])
 
     def test_selected_child_progress_is_flushed_without_changing_reports(self) -> None:
         """Emit per-test progress only for selected child execution.
@@ -130,7 +191,7 @@ class AuditReportingTests(unittest.TestCase):
             self.assertEqual('test_*.py', discover.call_args.kwargs['pattern'])
             discover_canonical_suite(native_only=True)
             self.assertEqual(
-                'test_native_gallery_viewer.py',
+                'test_native_gallery_*.py',
                 discover.call_args.kwargs['pattern'],
             )
         # An intentionally empty supplied suite records selection metadata;
@@ -140,7 +201,7 @@ class AuditReportingTests(unittest.TestCase):
         )
         self.assertFalse(report['successful'])
         self.assertEqual(
-            'test_native_gallery_viewer.py',
+            'test_native_gallery_*.py',
             report['runtime']['suite_settings']['pattern'],
         )
         self.assertEqual(2, main(['unused-output.json', '--other-selection']))
@@ -214,23 +275,27 @@ class AuditReportingTests(unittest.TestCase):
             'test_gallery_preload.GalleryPreloadWorkerTests.test_six',
             'test_gallery_preload.GalleryPreloadWorkerTests.test_seven',
         ]
+        dense_return_ids = [
+            'test_native_gallery_dense_return.NativeGalleryDenseReturnTests.test_dense_return',
+        ]
         complement_ids = ['test_upload.UploadTests.test_eight']
         canonical_ids = (
             viewer_ids + small_benchmark_ids + large_benchmark_ids
-            + preload_benchmark_ids + complement_ids
+            + preload_benchmark_ids + dense_return_ids + complement_ids
         )
 
-        shards = partition_test_ids(canonical_ids, 5)
+        shards = partition_test_ids(canonical_ids, 6)
 
         self.assertEqual(set(viewer_ids), set(shards[0]))
         self.assertEqual(set(small_benchmark_ids), set(shards[1]))
         self.assertEqual(set(large_benchmark_ids), set(shards[2]))
         self.assertEqual(set(preload_benchmark_ids), set(shards[3]))
-        self.assertEqual(set(complement_ids), set(shards[4]))
+        self.assertEqual(set(dense_return_ids), set(shards[4]))
+        self.assertEqual(set(complement_ids), set(shards[5]))
         self.assertEqual(
             set(canonical_ids),
             set(shards[0]) | set(shards[1]) | set(shards[2])
-            | set(shards[3]) | set(shards[4]),
+            | set(shards[3]) | set(shards[4]) | set(shards[5]),
         )
         self.assertFalse(set(shards[0]) & set(shards[1]))
         self.assertFalse(set(shards[0]) & set(shards[2]))
@@ -242,6 +307,8 @@ class AuditReportingTests(unittest.TestCase):
         self.assertFalse(set(shards[2]) & set(shards[3]))
         self.assertFalse(set(shards[2]) & set(shards[4]))
         self.assertFalse(set(shards[3]) & set(shards[4]))
+        for shard in shards[:-1]:
+            self.assertFalse(set(shard) & set(shards[-1]))
 
     def test_partition_merge_rejects_missing_duplicate_and_unsuccessful_children(self) -> None:
         """Prevent incomplete, duplicated or failed child evidence from passing.

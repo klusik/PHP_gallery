@@ -926,7 +926,13 @@ with no detected game and with a Photos browsing link. They retain linked-mode
 reconnection and active, pending, draining and manual-import state precedence;
 Begin opens the existing API connection editor without accepting capture work.
 Contextual-card fixtures verify GDI handle ownership, resize deduplication and
-safe fallback. On Windows, a mapped Tk card's actual region excludes its corner
+safe fallback. Default ordinary cards additionally compare all four actual
+screen corner pixels with their surrounding App/Card parent, before and after
+resize; the production header checks Watcher and storage metrics at desktop
+and narrow widths. Original detail captures are retained under
+`rounded-corners/` (also inside `gallery-sections/`). The old contextual-only
+opt-in cannot satisfy these default-construction assertions.
+On Windows, a mapped Tk card's actual region excludes its corner
 and includes its center and resized edge. Pagination retains its initial burst
 cap and cursor, then queues a single paced continuation without a mandatory
 Load more click. Controlled timer fixtures verify pacing, session/destruction
@@ -1974,7 +1980,7 @@ cache accounting still runs after dismissal. Screenshots are retained as
 The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
 SHA through `scripts/audit.php`. It runs `--profile=source-contracts` separately
 from `--suite=winapp-partitioned` on Linux and Windows. The latter keeps the
-central complete discovery and its existing five serial partitions; it is not
+central complete discovery and its six serial partitions; it is not
 the narrower `winapp-native` viewer diagnostic. It performs no integration,
 release, installer build or production operation. Ordinary feature BASIC remains
 a separate required source result.
@@ -9531,12 +9537,33 @@ pool and displays an authorized disk cover while background metadata is held;
 an empty refreshed child removes the old pixels. A canvas-only unmap stops
 its poll; remapping the same geometry must restart cover work without binary
 HTTP, independently of the shelf frame's mapping events. Portable preferences cover
-additive legacy files and independent folder/photo writes. The screenshot fixture
+additive legacy files, independent folder/photo writes, divider bounds, identity
+isolation, capacity and failed atomic writes. Four-state captures use the real
+application header/global storage host. Native mouse drags move the thin divider
+both ways; navigation with in-memory state discarded restores its local file,
+hiding folders cancels an active grab, and Home resets automatic sizing. Extra
+low/high/restored divider screenshots retain the resulting geometry. All fixture
+windows use a visible work-area origin to avoid taskbar/offscreen captures.
+The screenshot fixture
 uses the established GUI pump cadence for synthetic cover polling and waits for
 every visible cover/photo, respecting virtualized offscreen image release.
 Synthetic authorized media makes these screenshots reproducible without a real
 account; this does not establish installed-client/server acceptance or production
 performance.
+
+The shared UI library has portable architectural coverage in
+`winapp/tests/test_ui_library.py`: complete runtime consumers must use central
+button/dialog/range bases and cannot mutate ttk styles. Negative controls cover
+aliases, raw subclasses and direct/assigned style writes. The native component
+catalog verifies App/Card corner pixels, derived gallery-style inheritance,
+enabled/disabled states, unknown-skin rejection, button role changes, slider
+values, dialog surfaces and the flat fallback. Original catalog/detail PNGs are
+retained under `cache/test-audit/ui-library/`.
+The catalog includes gallery tiles on both backgrounds, automatic icon backing
+when an App role is placed on a Card, thin-range geometry and a real native
+trough click. Header captures assert equal Watcher/cache badge heights with
+Stop present, at both widths. Dense-gallery regression retains its exact cache
+and transport assertions while matching-matte tiles avoid per-HWND redraws.
 
 `winapp/tests/test_native_gallery_viewer.py` and
 `winapp/tests/test_app_linking.py`. It checks responsive grid columns, selected
@@ -9656,7 +9683,7 @@ Chromium and installed GUI coverage.
 For focused Windows UI diagnosis, its optional `native_only` dispatch selects
 the central `winapp-native` suite and Windows runner only; unrelated jobs and
 installer assembly are omitted. The adapter records
-`test_native_gallery_viewer.py` as the actual discovery pattern. Its validator
+`test_native_gallery_*.py` as the actual discovery pattern. Its validator
 requires that explicit scope and refuses the same report as complete WinApp
 evidence. Default complete discovery and the 90-second child cap remain intact.
 This scope permits hosted native UI verification after a whole-suite timeout;
@@ -9668,8 +9695,9 @@ evidence, the coordinator places all classes discovered from
 `test_native_gallery_viewer.py` into one child, the small and large cohort
 benchmark classes `ThumbnailCacheSmallBenchmarkTests` and
 `ThumbnailCacheLargeBenchmarkTests` into separate children,
-`GalleryPreloadWorkerTests` into a fourth, and the exact remaining inventory
-into a fifth. The five children run serially in separate Python processes,
+`GalleryPreloadWorkerTests` into a fourth, and the unchanged durable dense-return
+case in `NativeGalleryDenseReturnTests` into a fifth. The exact remaining
+inventory occupies a sixth. The six children run serially in separate Python processes,
 each under the existing 90-second cap; the coordinator has a 480-second outer
 bound for those unchanged child caps plus inventory and report handling. It
 retains each original schema-1 child report and log. Selected-ID children flush
@@ -9681,12 +9709,28 @@ JSON report serialization.
 verify this progress evidence itself.
 Report verbosity, schema, child limits and selection remain unchanged. The
 coordinator checks runtime identity and report
-counts, and requires the exact disjoint test-ID union across all five children
+counts, and requires the exact disjoint test-ID union across all six children
 before merging the real outcomes. Missing, timed-out, malformed, duplicate,
 incomplete or unsuccessful child evidence fails. The ordinary `winapp` suite
 and its 90-second full-process behavior remain unchanged; earlier full-process
 and two-, three- and four-partition timeouts remain failed historical runs and
 are not converted into passes by partitioned execution.
+
+The audit owner installs both WinApp source and test import roots explicitly;
+selected children cannot depend on another module alphabetically bootstrapping
+`uploader` imports. The dense-return body and its setup are reused unchanged,
+retaining its cache, transport and measurement assertions in the separate class.
+The 480-second whole-run cap is retained even with six bounded children.
+
+Only the coordinator performs complete canonical discovery. An explicitly
+selected child discovers the exact local `test_` modules represented in its ID
+file, then verifies that every requested ID exists and executes only that set.
+It retains normal module/class fixture handling and the selected-subset report
+marker. Empty, duplicate, unsafe and absent identities refuse execution.
+This avoids importing/instantiating the unrelated inventory in every bounded
+child; the parent's complete disjoint ID proof and the existing 90/480-second
+limits remain authoritative. Portable fixtures cover scoped loading, refusal
+cases and real selected-child report publication without a second full scan.
 
 The gallery writer fixture executes the real copy, Trash and restore wrappers
 against an injected linked-creation reservation refusal. It requires each guard

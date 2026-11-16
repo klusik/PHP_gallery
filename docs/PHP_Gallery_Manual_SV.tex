@@ -1950,7 +1950,7 @@ första auktoriserade miniatyrbilden i undergalleriet. Om ingen finns visas en
 neutral mappikon. Foton håller gallerilistor i minnet och använder länkens
 aktuella behörighet.
 Mappkorten radbryts efter panelens bredd och rullar endast vertikalt. En tunn
-linje skiljer mappar från foton. Mappar har ett eget val av sju bildförhållanden
+dragbar linje skiljer mappar från foton. Mappar har ett eget val av sju bildförhållanden
 och en pil för äldsta/nyaste poster först. Blandade gallerier visar fotonas
 kontroller direkt ovanför fotona. Tomma eller dolda delar saknar vykontroller;
 utan undergallerier döljs även mappreglaget. Båda formaten och ordningarna
@@ -1970,8 +1970,18 @@ från den sparade positionen, en sida var femte sekund. Inlästa gallerier kan
 användas medan laddningsstatusen visar fortsatt arbete. Fel stoppar förloppet
 och erbjuder ett manuellt nytt försök; vanlig bläddring kräver inte \ui{Visa fler}.
 Kontextpaneler behåller stängning med tangentbord och klick
-utanför panelen. Windows klipper deras rundade kontur utan mörka yttre hörn.
+utanför panelen. Dra avdelaren mellan mappar och foton lodrätt för att fördela
+höjden. Dess relativa läge sparas bara på denna dator per galleri och återställs
+efter navigering eller omstart. Upp/ned ändrar den fokuserade avdelaren;
+Home återställer automatisk kompakt höjd. Dolda mappar och rena mappgallerier
+har ingen avdelare. Windows klipper alla gemensamma glaskort, även vanliga kort
+och indikatorer i huvudet, utan mörka yttre hörn.
 Om inbyggd formgivning saknas förblir en platt ogenomskinlig temapanel användbar.
+Alla knappar, dialoger och skjutreglage ärver sitt utseende från WinApps centrala
+komponentbibliotek.
+Watcher- och cacheindikatorerna har samma kompakta höjd. Symboler utan ram och
+skjutreglage anpassar automatiskt bakgrunden till sin panel; reglagen använder
+en tunn linje och ett litet runt handtag.
 Laddningsstatus och en liten utjämnad snurrande ring visas ovanför trädet under
 inledande och fortsatta läsningar. De stoppas vid slutförande, fel eller
 frånkoppling utan att uppskatta en procentandel.
@@ -10326,6 +10336,13 @@ och~obligatoriska paketkontroller på~Linux och~Windows; macOS körs separat
 som~en rådgivande kontroll. Alla obligatoriska jobb och~kontrollen av~exakt SHA
 måste lyckas. Utgåveflödet bygger alla fyra PDF-handböcker en~gång efter
 de~slutliga källändringarna, inte vid~rutinmässig utveckling.
+
+WinApps partitionskoordinator identifierar hela testinventariet en gång.
+Varje barnprocess läser bara sina tilldelade lokala moduler och måste rapportera
+varje vald identitet. Modul-/klass-fixtures, fullständigt bevis för disjunkt
+identitetstäckning och befintliga process-/koordinatortidsgränser är fortsatt krav.
+Sex seriella grupper isolerar det oförändrade täta cacheåtergångsfallet från
+visaren; varje process får uttryckliga importvägar för källkod och tester.
 
 Det värdbaserade portabla WinApp-jobbet installerar det befintliga
 Pillow-kravet i den Python-tolk som valts för revisionen, så att pixeltestet

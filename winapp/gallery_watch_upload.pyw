@@ -231,6 +231,7 @@ from uploader.app_header import (
 from uploader.gallery_view_preferences import (
     load_gallery_card_format, save_gallery_card_format,
     load_gallery_photo_order, save_gallery_photo_order,
+    load_gallery_folder_split, save_gallery_folder_split,
 )
 from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS, FinalizationWorker
 from uploader.flight_recorder import FlightRecorder
@@ -266,8 +267,10 @@ except ImportError:  # pragma: no cover
 
 if tk is not None:
     from uploader.ui_theme import (
+        Button, Dialog,
         GalleryIdentityLabel,
         GlassCard,
+        MetricCard, METRIC_ICON_SIZE,
         ThemeImage,
         _PALETTE,
         attach_inline_tooltip,
@@ -296,11 +299,6 @@ except ImportError:  # pragma: no cover
 
 APP_NAME = "PHPGalleryUploader"
 APP_DISPLAY_NAME = "PHP Gallery uploader"
-# Purpose: Keep the three watcher status glyphs aligned with compact controls.
-# Type: tuple[int, int]. Units: pixels. Scope: Watcher header artwork.
-# Consumers: WatcherApp.build_ui and WatcherApp.refresh_watcher_header.
-# Rationale: 16 by 16 pixels matches the existing header status indicator.
-WATCHER_HEADER_ICON_SIZE = (16, 16)
 CONFIG_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
 STATE_PATH = CONFIG_DIR / "upload_state.json"
@@ -8573,14 +8571,6 @@ class WatcherApp:
             "write",
             lambda *_trace_info: self.refresh_watcher_header(),
         )
-        ttk.Style(self.root).configure(
-            "Footer.Warning.TLabel",
-            foreground="#F2C581",
-        )
-        ttk.Style(self.root).configure(
-            "Footer.Error.TLabel",
-            foreground="#FF91A2",
-        )
         layout = self._ui_layout_state
         geometry = (
             f"{layout.width}x{layout.height}{layout.x:+d}{layout.y:+d}"
@@ -8618,7 +8608,7 @@ class WatcherApp:
             style="Section.TLabel",
         )
         self.update_banner_label.grid(row=0, column=0, sticky="w")
-        self.update_banner_action = ttk.Button(
+        self.update_banner_action = Button(
             self.update_banner,
             text="Open update",
             command=self.open_update_notice,
@@ -8746,43 +8736,43 @@ class WatcherApp:
             background="#131B26",
         )
         self.monitor_light.pack(side="left", padx=(0, 6))
-        watcher_display = GlassCard(header.actions, padding=(8, 4))
+        watcher_display = MetricCard(header.actions)
         watcher_display.pack(side='left', padx=(0, HEADER_GROUP_GAP))
         self._watcher_header_icon_cache: Dict[str, ThemeImage] = {}
         self._watcher_header_status_icon = ttk.Label(
-            watcher_display, style="Card.TLabel",
+            watcher_display, style="Metric.Card.TLabel",
         )
         self._watcher_header_status_icon.pack(side="left", padx=(0, 8))
         self._watcher_header_queue_image = create_smooth_icon(
-            watcher_display, "queue", WATCHER_HEADER_ICON_SIZE,
+            watcher_display, "queue", METRIC_ICON_SIZE,
         )
         self._watcher_header_queue_icon = ttk.Label(
             watcher_display,
             image=self._watcher_header_queue_image or "",
             text="▧" if self._watcher_header_queue_image is None else "",
-            style="Card.TLabel",
+            style="Metric.Card.TLabel",
         )
         self._watcher_header_queue_icon.pack(side="left", padx=(0, 3))
         self.watcher_header_count_label = ttk.Label(
             watcher_display,
             textvariable=self.watcher_header_count_var,
-            style="Card.TLabel",
+            style="Metric.Card.TLabel",
         )
         self.watcher_header_count_label.pack(side="left", padx=(0, 8))
         self._watcher_header_clock_image = create_smooth_icon(
-            watcher_display, "clock", WATCHER_HEADER_ICON_SIZE,
+            watcher_display, "clock", METRIC_ICON_SIZE,
         )
         self._watcher_header_clock_icon = ttk.Label(
             watcher_display,
             image=self._watcher_header_clock_image or "",
             text="◷" if self._watcher_header_clock_image is None else "",
-            style="Card.TLabel",
+            style="Metric.Card.TLabel",
         )
         self._watcher_header_clock_icon.pack(side="left", padx=(0, 3))
         self.watcher_header_time_label = ttk.Label(
             watcher_display,
             textvariable=self.watcher_header_time_var,
-            style="Card.TLabel",
+            style="Metric.Card.TLabel",
         )
         self.watcher_header_time_label.pack(side="left")
         self._watcher_header_stop_hint = tk.StringVar(
@@ -8792,7 +8782,7 @@ class WatcherApp:
         self._watcher_header_stop_button = icon_button(
             watcher_display, "stop", self.stop,
             self._watcher_header_stop_hint, tooltip_surface=outer,
-            style_override="Photos.Icon.TButton",
+            style_override="Header.Metric.Icon.TButton",
         )
         self._watcher_header_hint = tk.StringVar(self.root)
         for trigger in (
@@ -8837,11 +8827,11 @@ class WatcherApp:
         address = ttk.Label(
             bar, style="App.Status.TLabel", wraplength=WINDOW_SUMMARY_WRAP,
         )
-        choose = ttk.Button(
+        choose = Button(
             bar, text="Choose gallery…", command=self.choose_linked_gallery,
             style="Accent.Compact.TButton",
         )
-        link = ttk.Button(
+        link = Button(
             bar, command=self.link_gallery, style="Compact.TButton",
         )
         link.grid(row=0, column=2, sticky="w")
@@ -9000,7 +8990,7 @@ class WatcherApp:
         selected = self.notebook.index("current")
         for key, button in self.navigation_buttons.items():
             button.configure(style=(
-                "IconPrimary.TButton"
+                "Primary.Icon.TButton"
                 if self.tab_indices[key] == selected else "App.Icon.TButton"
             ))
         if getattr(self, "_watcher_recording_active", False):
@@ -9185,7 +9175,7 @@ class WatcherApp:
                 except (AttributeError, tk.TclError):
                     selected = False
                 button.configure(style=(
-                    "IconPrimary.TButton" if selected else "App.Icon.TButton"
+                    "Primary.Icon.TButton" if selected else "App.Icon.TButton"
                 ))
         workspace = getattr(self, "photos_workspace", None)
         callback = getattr(workspace, "set_watcher_recording", None)
@@ -9672,6 +9662,8 @@ class WatcherApp:
             save_folder_order=lambda session, gallery_id, value: self.save_photos_photo_order(
                 session, gallery_id, value, folders=True,
             ),
+            load_folder_split=self.load_photos_folder_split,
+            save_folder_split=self.save_photos_folder_split,
             catalogue_cache=self.photos_catalogue_cache,
             load_tree_width=lambda: preferred_tree_width,
             save_tree_width=self.save_photos_tree_width,
@@ -9821,6 +9813,44 @@ class WatcherApp:
             return False
         view_path = account_path.with_name(account_path.stem + ".view.json")
         return save_gallery_card_format(view_path, gallery_id, card_format, folders=folders)
+
+    def load_photos_folder_split(
+        self, session: LinkingSession, gallery_id: int,
+    ) -> int | None:
+        """Read a gallery divider from this computer's verified identity file.
+
+        Args:
+            session (LinkingSession): Current approved site/account session.
+            gallery_id (int): Selected physical gallery identity.
+        Returns:
+            int | None: Relative pane thousandths, or None for compact auto sizing.
+        """
+        account_path = self._photos_tree_state_path(session)
+        if account_path is None:
+            return None
+        return load_gallery_folder_split(
+            account_path.with_name(account_path.stem + '.view.json'), gallery_id,
+        )
+
+    def save_photos_folder_split(
+        self, session: LinkingSession, gallery_id: int, share: int | None,
+    ) -> bool:
+        """Save only a local divider preference without an online gallery write.
+
+        Args:
+            session (LinkingSession): Current approved site/account session.
+            gallery_id (int): Selected physical gallery identity.
+            share (int | None): Pane thousandths, or None to clear the override.
+        Returns:
+            bool: True after the verified account's atomic local write.
+        """
+        account_path = self._photos_tree_state_path(session)
+        if account_path is None:
+            return False
+        return save_gallery_folder_split(
+            account_path.with_name(account_path.stem + '.view.json'),
+            gallery_id, share,
+        )
 
     def _schedule_ui_layout_save(self, event: "tk.Event") -> None:
         """Debounce visible main-window geometry updates on the Tk owner.
@@ -10160,12 +10190,12 @@ class WatcherApp:
         self.watcher_capture_label.grid_remove()
         flight_actions = ttk.Frame(hero, style="Card.TFrame")
         flight_actions.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        self.finish_flight_button = ttk.Button(
+        self.finish_flight_button = Button(
             flight_actions, text=self.flights.text("finish_flight"),
             command=self.flight_action,
         )
         self.finish_flight_button.grid(row=0, column=0, sticky="w")
-        self.simbrief_button = ttk.Button(
+        self.simbrief_button = Button(
             flight_actions, textvariable=self.flights.simbrief_button_var,
             command=self.flights.toggle_simbrief,
         )
@@ -10176,7 +10206,7 @@ class WatcherApp:
             self.flights.text("simbrief_identity"),
         )
         self.simbrief_settings_button.grid(row=0, column=2, padx=(4, 0))
-        self.abandon_flight_button = ttk.Button(
+        self.abandon_flight_button = Button(
             flight_actions, text=self.flights.text("abandon"),
             command=self.abandon_flight,
         )
@@ -10197,7 +10227,7 @@ class WatcherApp:
         ttk.Label(heading, text="WATCH FOLDER", style="Eyebrow.TLabel").grid(
             row=0, column=0, sticky="w"
         )
-        ttk.Button(
+        Button(
             heading, text="Choose folder…", command=self.browse_folder,
             style="Compact.TButton",
         ).grid(row=0, column=1, padx=(8, 0))
@@ -10236,7 +10266,7 @@ class WatcherApp:
         ttk.Label(state, textvariable=self.watch_last_scan_var, style="Muted.TLabel").pack(side="left", padx=(18, 0))
         actions = ttk.Frame(card, style="Card.TFrame")
         actions.grid(row=4, column=0, sticky="ew")
-        self.watcher_action_button = ttk.Button(
+        self.watcher_action_button = Button(
             actions,
             text="▶  Start Watcher",
             command=self.toggle_watcher,
@@ -10248,7 +10278,7 @@ class WatcherApp:
             actions, '↻', self.refresh_upload_queue,
             tr(self.flights.ui_language.get(), 'watch_queue_refresh_hint'),
         ).pack(side='left', padx=(8, 0))
-        ttk.Button(
+        Button(
             actions,
             text=recovery_text(
                 self.flights.ui_language.get(), 'watch_inspection_title',
@@ -10259,7 +10289,7 @@ class WatcherApp:
             card, textvariable=self.watch_queue_status_var, style='Muted.TLabel',
             wraplength=WATCH_QUEUE_STATUS_WRAP_PIXELS, justify='left',
         ).grid(row=6, column=0, sticky='w', pady=(4, 0))
-        self.watch_recovery_action_button = ttk.Button(
+        self.watch_recovery_action_button = Button(
             actions, text=tr(self.flights.ui_language.get(), 'review_pending_uploads'),
             command=self.open_watch_recovery_review,
         )
@@ -10307,9 +10337,8 @@ class WatcherApp:
                 parent=self.root,
             )
             return
-        dialog = tk.Toplevel(self.root)
+        dialog = Dialog(self.root)
         dialog.title("Watcher settings")
-        dialog.configure(background=self.root.cget("background"))
         dialog.transient(self.root)
         dialog.resizable(True, True)
         dialog.columnconfigure(0, weight=1)
@@ -10420,8 +10449,8 @@ class WatcherApp:
             else:
                 dialog.destroy()
 
-        ttk.Button(footer, text="Cancel", command=cancel_changes).pack(side="right")
-        ttk.Button(
+        Button(footer, text="Cancel", command=cancel_changes).pack(side="right")
+        Button(
             footer,
             text="Save watcher settings",
             command=save_changes,
@@ -10504,13 +10533,13 @@ class WatcherApp:
         ttk.Label(target, textvariable=self.connection_status_var, style="Muted.TLabel").grid(
             row=2, column=0, sticky="w", pady=(2, 0)
         )
-        self.import_revoke_button = ttk.Button(
+        self.import_revoke_button = Button(
             target,
             text=self.flights.text("finish_flight"),
             command=self.flight_action,
         )
         self.import_revoke_button.grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self.import_abandon_button = ttk.Button(
+        self.import_abandon_button = Button(
             target, text=self.flights.text("abandon"),
             command=self.abandon_flight,
         )
@@ -10557,7 +10586,7 @@ class WatcherApp:
         )
         actions = ttk.Frame(card, style="Card.TFrame")
         actions.grid(row=10, column=0, sticky="ew", pady=(11, 0))
-        self.start_import_button = ttk.Button(
+        self.start_import_button = Button(
             actions,
             text="▶  Start import",
             command=self.start_manual_upload,
@@ -10590,7 +10619,7 @@ class WatcherApp:
         )
         self.cancel_import_button.state(["disabled"])
         self.cancel_import_button.pack(side="left", padx=(5, 0))
-        self.retry_failed_button = ttk.Button(actions, text="Retry failed", command=self.retry_failed_import, state="disabled")
+        self.retry_failed_button = Button(actions, text="Retry failed", command=self.retry_failed_import, state="disabled")
         self.retry_failed_button.pack(side="left", padx=(7, 0))
         ttk.Label(actions, textvariable=self.manual_status_var, style="Muted.TLabel").pack(side="right")
 
@@ -10678,8 +10707,8 @@ class WatcherApp:
         ttk.Label(current, textvariable=self.activity_job_summary_var, wraplength=800).grid(row=1, column=0, sticky="w", pady=(0, 8))
         activity_actions = ttk.Frame(current, style="Card.TFrame")
         activity_actions.grid(row=2, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(activity_actions, text="Open Import", command=lambda: self.select_tab("import")).pack(side="left")
-        ttk.Button(activity_actions, text="Retry failed", command=self.retry_failed_import).pack(side="left", padx=8)
+        Button(activity_actions, text="Open Import", command=lambda: self.select_tab("import")).pack(side="left")
+        Button(activity_actions, text="Retry failed", command=self.retry_failed_import).pack(side="left", padx=8)
         self.activity_item_tree = ttk.Treeview(current, columns=("file", "state", "attempts", "detail"), show="headings", height=7)
         for column, title, width in [
             ("file", "File", 175),
@@ -10731,8 +10760,8 @@ class WatcherApp:
             "<<ComboboxSelected>>",
             lambda _event: self.refresh_activity_drawer(),
         )
-        ttk.Button(controls, text="Retry failed", command=self.retry_failed_import).pack(side="left")
-        ttk.Button(controls, text="Copy diagnostics", command=self.copy_diagnostics).pack(side="right")
+        Button(controls, text="Retry failed", command=self.retry_failed_import).pack(side="left")
+        Button(controls, text="Copy diagnostics", command=self.copy_diagnostics).pack(side="right")
         event_table = ttk.Frame(events, style="Card.TFrame")
         event_table.grid(row=2, column=0, sticky="ew")
         event_table.columnconfigure(0, weight=1)
@@ -10773,9 +10802,9 @@ class WatcherApp:
         ).grid(row=0, column=0, sticky="w", pady=(0, 8))
         diagnostic_actions = ttk.Frame(diagnostics, style="Card.TFrame")
         diagnostic_actions.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(diagnostic_actions, text="Open app folder", command=self.open_config_folder).pack(side="left")
-        ttk.Button(diagnostic_actions, text="Open log file", command=self.open_log_file).pack(side="left", padx=8)
-        ttk.Button(diagnostic_actions, text="Copy redacted diagnostics", command=self.copy_diagnostics).pack(side="left")
+        Button(diagnostic_actions, text="Open app folder", command=self.open_config_folder).pack(side="left")
+        Button(diagnostic_actions, text="Open log file", command=self.open_log_file).pack(side="left", padx=8)
+        Button(diagnostic_actions, text="Copy redacted diagnostics", command=self.copy_diagnostics).pack(side="left")
         self.log_text = tk.Text(
             diagnostics, height=9, wrap="word", relief="flat", padx=8, pady=6,
             font="TkFixedFont",
@@ -10818,11 +10847,11 @@ class WatcherApp:
         )
         actions = ttk.Frame(connection, style="Card.TFrame")
         actions.grid(row=5, column=1, columnspan=3, sticky="ew", pady=(10, 0))
-        ttk.Button(actions, text="✓  Save & Test", command=self.save_and_test_connection, style="Primary.TButton").pack(side="left")
+        Button(actions, text="✓  Save & Test", command=self.save_and_test_connection, style="Primary.TButton").pack(side="left")
         icon_button(actions, "add", self.open_connection_dialog, "Open protected credential editor").pack(side="left", padx=(7, 0))
-        self.revoke_button = ttk.Button(actions, text="Revoke key…", command=self.revoke_api_key)
+        self.revoke_button = Button(actions, text="Revoke key…", command=self.revoke_api_key)
         self.revoke_button.pack(side="left", padx=(7, 0))
-        ttk.Button(
+        Button(
             actions, text="Manage link…", command=self.manage_gallery_link,
         ).pack(side="left", padx=(7, 0))
         ttk.Label(connection, textvariable=self.revoke_blocker_var, style="Muted.TLabel", wraplength=760).grid(
@@ -10838,10 +10867,10 @@ class WatcherApp:
         ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, style="Muted.TLabel", wraplength=650).grid(
             row=1, column=0, columnspan=2, sticky="w", pady=5
         )
-        ttk.Button(runtime, text="Repair dependencies", command=self.repair_dependencies).grid(row=1, column=2, padx=(8, 0), pady=5)
+        Button(runtime, text="Repair dependencies", command=self.repair_dependencies).grid(row=1, column=2, padx=(8, 0), pady=5)
         ttk.Label(runtime, text="SimConnect.dll override").grid(row=2, column=0, sticky="w", pady=5)
         ttk.Entry(runtime, textvariable=self.simconnect_dll_path_var).grid(row=2, column=1, sticky="ew", padx=8, pady=5)
-        ttk.Button(runtime, text="Choose", command=self.browse_simconnect_dll).grid(row=2, column=2, pady=5)
+        Button(runtime, text="Choose", command=self.browse_simconnect_dll).grid(row=2, column=2, pady=5)
         ttk.Checkbutton(runtime, text="Keep working in the system tray when the window closes", variable=self.close_to_tray_var).grid(
             row=3, column=1, columnspan=2, sticky="w", pady=(5, 0)
         )
@@ -10861,7 +10890,7 @@ class WatcherApp:
             text="Installed Windows app only. This switch saves immediately.",
             style="Muted.TLabel",
         ).grid(row=5, column=1, columnspan=2, sticky="w", pady=(3, 0))
-        ttk.Button(
+        Button(
             runtime,
             text="✓  Save settings",
             command=self.save_config,
@@ -10896,7 +10925,7 @@ class WatcherApp:
         ttk.Combobox(advanced, textvariable=self.manual_thumbnail_workers_var, values=worker_choice_values(MAX_THUMBNAIL_WORKERS), width=10, state="readonly").grid(row=workers_row, column=1, sticky="w", pady=4)
         ttk.Label(advanced, text="Upload threads").grid(row=workers_row + 1, column=0, sticky="w", padx=(0, 14), pady=4)
         ttk.Combobox(advanced, textvariable=self.manual_upload_workers_var, values=worker_choice_values(MAX_UPLOAD_WORKERS), width=10, state="readonly").grid(row=workers_row + 1, column=1, sticky="w", pady=4)
-        ttk.Button(
+        Button(
             advanced,
             text="✓  Save settings",
             command=self.save_config,
@@ -10966,20 +10995,20 @@ class WatcherApp:
             style="Muted.TLabel",
             wraplength=550,
         ).grid(row=0, column=0, sticky="w")
-        self.semantic_ai_install_button = ttk.Button(
+        self.semantic_ai_install_button = Button(
             runtime_row,
             text="Install local AI module",
             command=self.repair_semantic_ai_dependencies,
         )
         self.semantic_ai_install_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
-        ttk.Button(
+        Button(
             runtime_row,
             text="Repair dependencies",
             command=self.repair_dependencies,
         ).grid(row=0, column=2, sticky="e", padx=(6, 0))
         actions = ttk.Frame(quick, style="Card.TFrame")
         actions.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(12, 0))
-        ttk.Button(
+        Button(
             actions,
             text="▶  Start AI worker",
             command=self.start_ai_worker,
@@ -13921,7 +13950,7 @@ class WatcherApp:
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         self.restore_from_tray()
-        dialog = tk.Toplevel(self.root)
+        dialog = Dialog(self.root)
         dialog.title("Gallery connection and API key")
         dialog.transient(self.root)
         dialog.geometry(CONNECTION_DIALOG_GEOMETRY)
@@ -13974,7 +14003,7 @@ class WatcherApp:
             key_var.set(value)
 
         ttk.Checkbutton(frame, text="Reveal", variable=reveal_var, command=toggle_reveal).grid(row=3, column=2, padx=6, pady=6)
-        ttk.Button(frame, text="Paste", command=paste_key).grid(row=3, column=3, pady=6)
+        Button(frame, text="Paste", command=paste_key).grid(row=3, column=3, pady=6)
         status = "A key is currently stored locally." if self.api_key_var.get().strip() else "No API key is currently stored."
         ttk.Label(frame, text=status, style="Muted.TLabel").grid(row=4, column=1, columnspan=3, sticky="w", pady=(0, 8))
 
@@ -14012,7 +14041,7 @@ class WatcherApp:
             if test_after:
                 self.test_connection()
 
-        revoke = ttk.Button(
+        revoke = Button(
             frame, text="Revoke saved API key...",
             command=lambda: (dialog.destroy(), self.revoke_api_key()),
         )
@@ -14033,20 +14062,20 @@ class WatcherApp:
                 else:
                     dialog.destroy()
 
-            ttk.Button(
+            Button(
                 frame, text="Use saved API key", command=use_saved_key,
                 style="Compact.TButton",
             ).grid(row=5, column=2, columnspan=2, sticky="e", pady=(0, 3))
         buttons = ttk.Frame(frame, style="Card.TFrame")
         buttons.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(3, 0))
         buttons.columnconfigure(0, weight=1)
-        ttk.Button(
+        Button(
             buttons, text="Cancel", command=dialog.destroy,
         ).grid(row=0, column=1, padx=(0, 8))
-        ttk.Button(
+        Button(
             buttons, text="Save", command=lambda: apply_values(False),
         ).grid(row=0, column=2, padx=(0, 8))
-        ttk.Button(
+        Button(
             buttons,
             text="✓  Save & Test",
             command=lambda: apply_values(True),
@@ -16301,7 +16330,7 @@ class WatcherApp:
                 icon = create_smooth_icon(
                     status_icon,
                     "recording",
-                    WATCHER_HEADER_ICON_SIZE,
+                    METRIC_ICON_SIZE,
                     tone=tone,
                     hollow=hollow,
                     pulse=pulse,

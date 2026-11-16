@@ -810,6 +810,7 @@ def main(ticket_path: str) -> int:
     """
     import tkinter as tk
     from tkinter import ttk
+    from uploader.ui_theme import Button
     path = Path(ticket_path)
     root = tk.Tk()
     root.title("PHP Gallery Uploader update")
@@ -818,7 +819,7 @@ def main(ticket_path: str) -> int:
     ttk.Label(root, textvariable=text, wraplength=490).pack(padx=15, pady=15)
     bar = ttk.Progressbar(root, maximum=100)
     bar.pack(fill="x", padx=15)
-    button = ttk.Button(root, text="Close", command=root.destroy, state="disabled")
+    button = Button(root, text="Close", command=root.destroy, state="disabled")
     button.pack(pady=10)
     def prevent_close() -> None:
         """Keep the helper alive while setup or verification is in progress.

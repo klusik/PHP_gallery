@@ -1889,7 +1889,7 @@ karty přímých podgalerií. Titulní obrázek tvoří první povolený náhled
 z~podgalerie. Pokud chybí, karta zobrazí ikonu složky. Karta Fotky drží výpis
 galerií v~paměti a~využívá aktuální oprávnění propojení.
 Složky se zalamují podle šířky panelu a~posouvají pouze svisle. Od fotek je
-odděluje tenká čára. Mají vlastní přepínač sedmi poměrů stran a~šipku pořadí
+odděluje tenká uchopitelná čára. Mají vlastní přepínač sedmi poměrů stran a~šipku pořadí
 od nejstarších či nejnovějších záznamů. Ve smíšené galerii leží ovládání fotek
 níže přímo nad fotkami. Prázdné či skryté části nemají ovládání zobrazení;
 pokud neexistují podgalerie, nezobrazuje se ani jejich přepínač. Oba poměry
@@ -1938,9 +1938,18 @@ Windows chrání uložené názvy uživatelským DPAPI; nebezpečné úložišt�
 poškozený soubor znamená chybějící cache. Média stále vyžadují aktuální
 ověření serverem a~nové nahrávání či tvorba galerie čerstvé potvrzení cíle.
 Tato metadata neudělují přístup k~fotografiím offline.
+Tažením předělu mezi složkami a~fotkami rozdělíte jejich výšku. Relativní poloha
+se ukládá pouze na tomto počítači pro danou galerii a~obnoví se po návratu
+i~restartu. Šipky nahoru/dolů upraví zaměřený předěl; Home obnoví automatickou
+kompaktní výšku. U~skrytých složek či galerie jen se složkami předěl chybí.
 Kontextové panely zachovávají zavření klávesnicí a~kliknutím mimo panel.
-Windows ořízne jejich zaoblený obrys bez tmavých vnějších rohů; pokud nativní
-tvarování není dostupné, zůstává použitelný plochý neprůhledný panel motivu.
+Windows ořízne všechny sdílené skleněné karty, včetně běžných karet
+a~ukazatelů v~hlavičce, bez tmavých vnějších rohů. Pokud nativní tvarování není
+dostupné, zůstává použitelný plochý neprůhledný panel motivu. Všechna tlačítka,
+dialogy a~slidery dědí vzhled z~centrální knihovny prvků WinApp.
+Informační panely Watcheru a~cache mají stejnou kompaktní výšku. Neorámované
+ikony a~slidery automaticky odpovídají pozadí svého panelu; slidery používají
+tenkou čáru a~malý kulatý jezdec.
 
 Obrazovka Watcher zobrazuje cílovou galerii. Ověřený název v~API režimu
 zachová obnovení stejného uloženého připojení; změna klíče nebo režimu jej
@@ -10028,6 +10037,13 @@ balení na~Linuxu a~Windows; macOS běží samostatně jako informativní kontro
 Všechny povinné joby a~kontrola přesného SHA musejí uspět. Release workflow
 sestaví všechny čtyři PDF příručky jednou po~posledních úpravách zdrojů, nikoli
 při běžném vývoji.
+
+Koordinátor částí WinApp jednou zjistí úplný seznam testů. Každý dílčí proces
+načte pouze přidělené místní moduly a~musí vykázat každou vybranou identitu.
+Zůstávají zachovány fixtures modulů a~tříd, úplný důkaz nepřekrývajícího se
+pokrytí i~dosavadní časové limity procesů a~koordinátoru.
+Šest sériových skupin odděluje nezměněný scénář návratu do~husté trvalé cache
+od~prohlížeče; každý proces má výslovně připravené importy zdrojů a~testů.
 
 Hostovaný přenosný job WinApp instaluje existující požadavek Pillow
 do~interpretu Pythonu vybraného pro~audit, takže test pixelů odznaku na~liště

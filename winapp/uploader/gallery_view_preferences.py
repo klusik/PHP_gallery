@@ -2,13 +2,13 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/uploader/gallery_view_preferences.py
 # Module Type: Local Gallery View Preferences
-# Purpose: Persist WinApp photo-card formats and order independently of uploads.
+# Purpose: Persist local gallery formats, order and section-divider positions.
 # Responsibilities:
 #   - Validate supported card formats and bounded per-account local preferences.
 #   - Atomically save one gallery choice while preserving other gallery choices.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
-"""Local-only photo presentation preferences for verified gallery identities."""
+"""Local-only gallery presentation preferences for verified identities."""
 
 import json
 from pathlib import Path
@@ -37,6 +37,19 @@ GALLERY_VIEW_PREFERENCES_MAX_GALLERIES = 10000
 # gallery-ID/format pairs, including indentation, without unbounded allocation.
 GALLERY_VIEW_PREFERENCES_MAX_BYTES = 1024 * 1024
 
+# Purpose: Retain useful folder and photo viewports at both ends of a drag.
+# Type: tuple[int, int]. Units: thousandths of the viewer-pane height.
+# Scope: one mixed gallery. Consumers: divider UI and local preference IO.
+# Rationale: 100..800 permits a broad adjustment while reserving photo space;
+# the native layout also enforces physical minimums in small windows.
+GALLERY_FOLDER_SHARE_BOUNDS = (100, 800)
+
+# Purpose: Store relative divider positions independent of monitor dimensions.
+# Type: int. Units: parts per whole viewer height. Scope: local gallery views.
+# Consumers: folder shelf, divider drag and preference serialization.
+# Rationale: 1000 gives subpixel precision at ordinary desktop window heights.
+GALLERY_FOLDER_SHARE_SCALE = 1000
+
 
 def normalize_card_format(value: str) -> str:
     """Return a supported format or the existing natural-preview default.
@@ -56,7 +69,8 @@ def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
         path (Path): Credential-free file for one verified site/account.
     Returns:
         dict[str, dict[str, str]]: Independent card_formats, photo_orders,
-            folder_formats and folder_orders keyed by positive gallery IDs.
+            folder_formats, folder_orders and folder_splits keyed by positive
+            gallery IDs. Split values are canonical decimal thousandths.
     Raises:
         OSError: The file cannot be read.
         ValueError: The file is unsafe, oversized, malformed or unsupported.
@@ -70,6 +84,7 @@ def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
     except FileNotFoundError:
         return {key: {} for key in (
             'card_formats', 'photo_orders', 'folder_formats', 'folder_orders',
+            'folder_splits',
         )}
     if len(encoded) > GALLERY_VIEW_PREFERENCES_MAX_BYTES:
         raise ValueError("Gallery view preferences exceed their size limit.")
@@ -90,6 +105,7 @@ def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
         ("photo_orders", ("oldest", "newest"), "oldest"),
         ("folder_formats", PHOTO_CARD_FORMATS, "default"),
         ("folder_orders", ("oldest", "newest"), "oldest"),
+        ("folder_splits", None, ""),
     ):
         rows = payload.get(field, {})
         if (not isinstance(rows, dict)
@@ -98,12 +114,102 @@ def _read_preferences(path: Path) -> dict[str, dict[str, str]]:
         result[field] = {}
         for raw_id, value in rows.items():
             if (not isinstance(raw_id, str) or not raw_id.isdecimal()
-                    or not isinstance(value, str) or value not in choices):
+                    or not isinstance(value, str)):
+                continue
+            if choices is not None and value not in choices:
+                continue
+            if choices is None and (
+                not value.isascii() or not value.isdecimal()
+                or str(int(value)) != value
+                or not GALLERY_FOLDER_SHARE_BOUNDS[0] <= int(value)
+                <= GALLERY_FOLDER_SHARE_BOUNDS[1]
+            ):
                 continue
             gallery_id = int(raw_id)
             if 0 < gallery_id <= LINKING_GALLERY_ID_MAX and value != default:
                 result[field][str(gallery_id)] = value
     return result
+
+
+def _write_preferences(path: Path, preferences: dict[str, dict[str, str]]) -> None:
+    """Publish a complete view file only when it remains readable within its cap.
+
+    Args:
+        path (Path): Credential-free local identity file.
+        preferences (dict[str, dict[str, str]]): Validated independent maps for
+            card_formats, photo_orders, folder_formats, folder_orders and
+            folder_splits, each keyed by canonical positive gallery IDs.
+    Returns:
+        None: The complete bounded version 1 snapshot is atomically published.
+    Raises:
+        OSError: Atomic local publication fails.
+        ValueError: The encoded complete file would exceed the read-size limit.
+    """
+    payload = {"version": 1, **preferences}
+    # Match the state-store owner's UTF-8/indentation; the schema number and
+    # indentation width describe the existing JSON wire format.
+    encoded = json.dumps(payload, indent=2, ensure_ascii=False).encode('utf-8')
+    if len(encoded) > GALLERY_VIEW_PREFERENCES_MAX_BYTES:
+        raise ValueError('Gallery view preferences exceed their size limit.')
+    atomic_write_json(path, payload)
+
+
+def load_gallery_folder_split(path: Path, gallery_id: int) -> int | None:
+    """Restore a local relative divider position for one physical gallery.
+
+    Args:
+        path (Path): Credential-free local file for the verified identity.
+        gallery_id (int): Selected positive gallery identity.
+    Returns:
+        int | None: Saved thousandths of pane height, or None for automatic
+            compact layout when missing, invalid or unreadable.
+    """
+    if type(gallery_id) is not int or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX:
+        return None
+    try:
+        value = _read_preferences(path)['folder_splits'].get(str(gallery_id))
+        return int(value) if value is not None else None
+    except (OSError, ValueError):
+        # Local preference owner permanently keeps browsing usable with damaged
+        # storage. The writer refuses unreadable state rather than replacing it.
+        return None
+
+
+def save_gallery_folder_split(
+    path: Path, gallery_id: int, share: int | None,
+) -> bool:
+    """Atomically save only the gallery's local section-divider position.
+
+    Args:
+        path (Path): Credential-free local file for the verified identity.
+        gallery_id (int): Selected positive physical gallery identity.
+        share (int | None): Bounded thousandths of pane height; None restores
+            automatic compact layout and removes the explicit override.
+    Returns:
+        bool: True after local persistence; False for invalid input, full state
+            or failed IO. Unreadable existing files remain untouched.
+    """
+    if (type(gallery_id) is not int
+            or not 0 < gallery_id <= LINKING_GALLERY_ID_MAX
+            or share is not None and (
+                type(share) is not int
+                or not GALLERY_FOLDER_SHARE_BOUNDS[0] <= share
+                <= GALLERY_FOLDER_SHARE_BOUNDS[1]
+            )):
+        return False
+    try:
+        preferences = _read_preferences(path)
+        rows = preferences['folder_splits']
+        if share is None:
+            rows.pop(str(gallery_id), None)
+        else:
+            rows[str(gallery_id)] = str(share)
+        if len(rows) > GALLERY_VIEW_PREFERENCES_MAX_GALLERIES:
+            return False
+        _write_preferences(path, preferences)
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 def load_gallery_card_format(
@@ -156,7 +262,7 @@ def save_gallery_card_format(
         if len(rows) > GALLERY_VIEW_PREFERENCES_MAX_GALLERIES:
             return False
         # Version 1 is the structural local-view document schema, not a policy.
-        atomic_write_json(path, {"version": 1, **preferences})
+        _write_preferences(path, preferences)
         return True
     except (OSError, ValueError):
         return False
@@ -212,7 +318,7 @@ def save_gallery_photo_order(
             rows[key] = value
         if len(rows) > GALLERY_VIEW_PREFERENCES_MAX_GALLERIES:
             return False
-        atomic_write_json(path, {"version": 1, **preferences})
+        _write_preferences(path, preferences)
         return True
     except (OSError, ValueError):
         return False

@@ -28,6 +28,68 @@ from uploader import gallery_view_preferences as preferences
 class GalleryViewPreferenceTests(unittest.TestCase):
     """Verify local view choices without a server, Tk window or live profile."""
 
+    def test_divider_round_trip_preserves_formats_orders_and_other_galleries(self) -> None:
+        """Persist bounded divider positions separately in each local identity.
+
+        Returns:
+            None: Fresh reads restore exact shares; resets, unrelated view writes
+                and another account cannot overwrite a neighboring choice.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'account.json'
+            other = Path(directory) / 'other-account.json'
+            self.assertIsNone(preferences.load_gallery_folder_split(path, 1))
+            self.assertTrue(preferences.save_gallery_card_format(path, 1, '21:9'))
+            # Both documented bounds and a midrange share round-trip unchanged.
+            for share in (*preferences.GALLERY_FOLDER_SHARE_BOUNDS, 437):
+                self.assertTrue(preferences.save_gallery_folder_split(path, 1, share))
+                self.assertEqual(share, preferences.load_gallery_folder_split(path, 1))
+            self.assertTrue(preferences.save_gallery_folder_split(path, 2, 650))
+            self.assertTrue(preferences.save_gallery_photo_order(path, 1, 'newest', folders=True))
+            self.assertEqual(437, preferences.load_gallery_folder_split(path, 1))
+            self.assertEqual('21:9', preferences.load_gallery_card_format(path, 1))
+            self.assertIsNone(preferences.load_gallery_folder_split(other, 1))
+            self.assertTrue(preferences.save_gallery_folder_split(path, 1, None))
+            self.assertIsNone(preferences.load_gallery_folder_split(path, 1))
+            self.assertEqual(650, preferences.load_gallery_folder_split(path, 2))
+
+    def test_invalid_dividers_and_failed_writes_preserve_local_state(self) -> None:
+        """Refuse malformed divider values and preserve unreadable files.
+
+        Returns:
+            None: Out-of-range, boolean, float and malformed values never become
+                a saved divider; failure, capacity and old-file handling stay safe.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'account.json'
+            path.write_text('{"version":1,"card_formats":{"1":"16:9"}}', encoding='utf-8')
+            self.assertIsNone(preferences.load_gallery_folder_split(path, 1))
+            original = path.read_bytes()
+            # Boundary neighbors and non-integer JSON-compatible inputs are invalid.
+            for value in (99, 801, True, 0.4, '400'):
+                self.assertFalse(preferences.save_gallery_folder_split(path, 1, value))
+                self.assertEqual(original, path.read_bytes())
+            with mock.patch.object(preferences, 'atomic_write_json', side_effect=OSError('read only')):
+                self.assertFalse(preferences.save_gallery_folder_split(path, 1, 400))
+            self.assertEqual(original, path.read_bytes())
+            with mock.patch.object(preferences, 'GALLERY_VIEW_PREFERENCES_MAX_GALLERIES', 1):
+                self.assertTrue(preferences.save_gallery_folder_split(path, 1, 400))
+                self.assertFalse(preferences.save_gallery_folder_split(path, 2, 500))
+            original = path.read_bytes()
+            # The full UTF-8 snapshot cap applies across all independent maps.
+            with mock.patch.object(preferences, 'GALLERY_VIEW_PREFERENCES_MAX_BYTES', len(original)):
+                self.assertFalse(preferences.save_gallery_folder_split(path, 2, 500))
+            self.assertEqual(original, path.read_bytes())
+            for value in ('0400', 'NaN', '801', '-100', 400, True):
+                path.write_text(json.dumps({
+                    'version': 1, 'card_formats': {}, 'folder_splits': {'1': value},
+                }), encoding='utf-8')
+                self.assertIsNone(preferences.load_gallery_folder_split(path, 1))
+            for original_text in ('{broken', '{"version":1,"card_formats":{},"folder_splits":[]}'):
+                path.write_text(original_text, encoding='utf-8')
+                self.assertFalse(preferences.save_gallery_folder_split(path, 1, 400))
+                self.assertEqual(original_text, path.read_text(encoding='utf-8'))
+
     def test_folder_and_photo_preferences_survive_independent_writes(self) -> None:
         """Round-trip separate folder and photo choices in one local file.
 
