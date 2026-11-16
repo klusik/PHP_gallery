@@ -137,7 +137,8 @@ function app_linking_gallery_edit_read(
 /**
  * Save exactly one reviewed field, preserving all unrelated server settings.
  *
- * Display-title changes deliberately retain physical folders and stable URLs.
+ * Title changes rename the physical subtree through the common move owner.
+ * Grant and revision locks remain held through the physical/DB transition.
  * A failed sidecar after commit is an unknown outcome and is never replayed.
  *
  * @param array{grant_id:int,user_id:int,username:string,scope:string} $identity Current bearer identity.
@@ -181,6 +182,7 @@ function app_linking_gallery_edit_save(
     }
     $writer = gallery_edit_writer_begin();
     $transaction = false;
+    $folderMove = null;
     try {
         if (!app_link_model_create_transaction_begin(
             $identity['user_id'], $identity['grant_id'], $hash, $issuer,
@@ -208,7 +210,15 @@ function app_linking_gallery_edit_save(
         if (!admin_operation_model_lock_owned($writer)) {
             throw new RuntimeException('Gallery writer is unavailable.');
         }
-        gallery_model_update_fields($galleryId, [$column => $stored], now_sql());
+        if ($field === 'title') {
+            $folderMove = move_gallery_folder_to_parent_owned(
+                $galleryId, empty($current['parent_id']) ? null : (int) $current['parent_id'],
+                null, false, (string) $stored, true,
+            );
+        }
+        if ($folderMove === null || !$folderMove['moved']) {
+            gallery_model_update_fields($galleryId, [$column => $stored], now_sql());
+        }
         $updated = gallery_model_linked_visibility_lock($galleryId);
         if ($updated === null
             || gallery_edit_revision($updated) !== app_linking_visibility_next_revision($revision)
@@ -219,11 +229,33 @@ function app_linking_gallery_edit_save(
         $after = $updated;
         unset($before[$column], $before['updated_at'], $before['edit_revision']);
         unset($after[$column], $after['updated_at'], $after['edit_revision']);
+        if ($folderMove !== null && $folderMove['moved']) {
+            if (($updated['folder_path'] ?? null) !== $folderMove['to']
+                || ($updated['folder_path_hash'] ?? null) !== hash('sha256', $folderMove['to'])) {
+                throw new RuntimeException('Gallery folder readback is unavailable.');
+            }
+            unset($before['folder_path'], $before['folder_path_hash']);
+            unset($after['folder_path'], $after['folder_path_hash']);
+        }
         if ($before !== $after || !admin_operation_model_lock_owned($writer)) {
             throw new RuntimeException('Unrelated gallery settings changed.');
         }
         app_link_model_create_transaction_end(true);
         $transaction = false;
+        if ($folderMove !== null && $folderMove['moved']) {
+            gallery_folder_move_complete(
+                gallery_subtree_ids($galleryId),
+                (int) ($current['parent_id'] ?? 0), (int) ($current['parent_id'] ?? 0),
+                true, true,
+            );
+            $confirmed = gallery_model_find_by_id($galleryId);
+            if ($confirmed === null || $confirmed['title'] !== $stored
+                || $confirmed['folder_path'] !== $folderMove['to']
+                || !admin_operation_model_lock_owned($writer)) {
+                throw new RuntimeException('Gallery rename completion is unconfirmed.');
+            }
+            return app_linking_gallery_edit_projection($confirmed);
+        }
         gallery_visit_content_update([$galleryId]);
         if (!admin_operation_model_lock_owned($writer)
             || !write_gallery_sidecar($updated)
@@ -231,10 +263,21 @@ function app_linking_gallery_edit_save(
             throw new RuntimeException('Gallery edit completion is unconfirmed.');
         }
         return app_linking_gallery_edit_projection($updated);
-    } finally {
-        if ($transaction) {
-            app_link_model_create_transaction_end(false);
+    } catch (Throwable $error) {
+        if ($error instanceof DeferredGalleryFolderMoveFailure) {
+            $folderMove = $error->move;
         }
+        if ($transaction) {
+            // Only a confirmed database rollback permits moving bytes back.
+            // An ambiguous/lost commit keeps the physical receipt for recovery.
+            app_link_model_create_transaction_end(false);
+            $transaction = false;
+            if ($folderMove !== null) {
+                gallery_folder_move_rollback($folderMove);
+            }
+        }
+        throw $error;
+    } finally {
         gallery_edit_writer_end($writer);
     }
 }

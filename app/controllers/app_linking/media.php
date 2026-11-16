@@ -211,9 +211,11 @@ function cms_app_linking_media(): void
             $payload = match ($kind) {
                 'photos' => app_linking_media_page(
                     $gallery, $query['cursor'],
-                    ($_SERVER['HTTP_X_PHP_GALLERY_PHOTO_PAGE'] ?? '')
-                        === (string) APP_LINKING_MEDIA_CATALOGUE_SIZE,
+                    in_array($_SERVER['HTTP_X_PHP_GALLERY_PHOTO_PAGE'] ?? '',
+                        [(string) APP_LINKING_MEDIA_CATALOGUE_SIZE, 'cover-v1'], true),
                     $adminMedia, $publicGallery,
+                    ($_SERVER['HTTP_X_PHP_GALLERY_PHOTO_PAGE'] ?? '') === 'cover-v1'
+                        && $query['cursor'] === 0,
                 ),
                 'revision' => app_linking_admin_media_revision($query['gallery_id']),
                 'info' => app_linking_admin_media_info($query['gallery_id']),

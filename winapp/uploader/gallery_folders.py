@@ -22,7 +22,9 @@ from .gallery_view_preferences import (
     GALLERY_FOLDER_SHARE_BOUNDS, GALLERY_FOLDER_SHARE_SCALE,
     normalize_card_format,
 )
-from .ui_theme import Button, _PALETTE, _attach_tooltip, create_smooth_icon
+from .ui_theme import (
+    Button, _PALETTE, _attach_tooltip, create_smooth_icon, folder_card_size,
+)
 
 try:
     from PIL import Image, ImageOps, ImageTk
@@ -30,9 +32,9 @@ except ImportError:
     Image = ImageOps = ImageTk = None
 
 
-# Purpose: Fit a complete folder preview and title above the photo grid.
-# Type: tuple[int, int]. Units: pixels. Scope: one folder card image.
-# Consumers: GalleryFolderShelf._folder_icon.
+# Purpose: Bound the default cover before the shared folder rim is added.
+# Type: tuple[int, int]. Units: pixels. Scope: one folder card's cover content.
+# Consumers: GalleryFolderShelf._image_size.
 # Rationale: 112 by 68 leaves room for several folders at minimum window width.
 FOLDER_IMAGE_SIZE = (112, 68)
 
@@ -116,6 +118,7 @@ class GalleryFolderShelf(ttk.Frame):
         self._has_photos = True
         self._height_share: int | None = None
         self._resolved: set[int] = set()
+        self._cache_checked: set[int] = set()
         self._results: queue.Queue[tuple[object, int, bytes | None, bool]] = queue.Queue()
         self._generation = object()
         self._cancelled = threading.Event()
@@ -190,6 +193,7 @@ class GalleryFolderShelf(ttk.Frame):
             self._covers.clear()
             self._cover_payloads.clear()
             self._resolved.clear()
+            self._cache_checked.clear()
             self._canvas.yview_moveto(0)
         child_ids = {gallery.gallery_id for gallery in children}
         for gallery_id in tuple(self._tiles):
@@ -199,6 +203,7 @@ class GalleryFolderShelf(ttk.Frame):
                 self._covers.pop(gallery_id, None)
                 self._cover_payloads.pop(gallery_id, None)
                 self._resolved.discard(gallery_id)
+                self._cache_checked.discard(gallery_id)
         for gallery in children:
             title = ''.join(char if char.isprintable() else ' ' for char in gallery.title)
             short = (title if len(title) <= FOLDER_TITLE_LIMIT
@@ -262,6 +267,7 @@ class GalleryFolderShelf(ttk.Frame):
             None: Existing session/disk proofs lead the next background refresh.
         """
         self._resolved.clear()
+        self._cache_checked.clear()
         self._schedule()
 
     def set_height_share(self, share: int | None) -> None:
@@ -281,10 +287,10 @@ class GalleryFolderShelf(ttk.Frame):
         self._viewport_changed(None)
 
     def _image_size(self) -> tuple[int, int]:
-        """Return the bounded silhouette size for the selected folder ratio.
+        """Return the cover size before adding the surrounding folder frame.
 
         Returns:
-            tuple[int, int]: Width and height in logical Tk pixels.
+            tuple[int, int]: Actual image width and height in logical Tk pixels.
         """
         if self._card_format == 'default':
             return FOLDER_IMAGE_SIZE
@@ -304,7 +310,7 @@ class GalleryFolderShelf(ttk.Frame):
         if Image is None or ImageTk is None:
             return None
         return create_smooth_icon(
-            self, "folder", self._image_size(), cover=cover,
+            self, "folder", folder_card_size(self._image_size()), cover=cover,
         )
 
     def _viewport_changed(self, _event: tk.Event | None) -> None:
@@ -368,6 +374,7 @@ class GalleryFolderShelf(ttk.Frame):
             self._covers.pop(gallery_id, None)
             self._cover_payloads.pop(gallery_id, None)
             self._resolved.discard(gallery_id)
+            self._cache_checked.discard(gallery_id)
 
     def _scroll(self, *arguments: str) -> None:
         """Scroll the folder strip and schedule newly exposed cards.
@@ -461,12 +468,78 @@ class GalleryFolderShelf(ttk.Frame):
             return
         top = self._canvas.canvasy(0)
         bottom = top + self._canvas.winfo_height()
-        for gallery_id, tile in self._tiles.items():
-            if (gallery_id not in self._resolved
-                    and tile.winfo_y() < bottom
-                    and tile.winfo_y() + tile.winfo_height() > top):
+        visible = tuple(
+            gallery_id for gallery_id, tile in self._tiles.items()
+            if tile.winfo_y() < bottom
+            and tile.winfo_y() + tile.winfo_height() > top
+        )
+        cached = tuple(key for key in visible if key not in self._cache_checked)
+        if cached:
+            self._cache_checked.update(cached)
+            self._request_cached_covers(session, cached)
+            return
+        for gallery_id in visible:
+            if gallery_id not in self._resolved:
                 self._request_cover(session, gallery_id)
                 return
+
+    def _request_cached_covers(
+        self, session: LinkingSession, gallery_ids: tuple[int, ...],
+    ) -> None:
+        """Display every visible authorized disk hit before any refresh blocks.
+
+        Args:
+            session (LinkingSession): Exact live session owning cover proofs.
+            gallery_ids (tuple[int, ...]): Visible children awaiting a disk pass.
+        Returns:
+            None: One network-free worker queues independent cached covers.
+        """
+        generation, cancelled = self._generation, self._cancelled
+
+        def read_cached() -> None:
+            """Queue all verified cover hits without renewing their authority.
+
+            Returns:
+                None: Missing or expired metadata is left to background refresh.
+            """
+            for gallery_id in gallery_ids:
+                if cancelled.is_set():
+                    return
+                cover = self._cached_cover(session, gallery_id, cancelled)
+                if cover is not None and not cancelled.is_set():
+                    self._results.put((generation, gallery_id, cover, False))
+
+        self._worker = threading.Thread(
+            target=read_cached, name='PHPGalleryFolderCache', daemon=True,
+        )
+        self._worker.start()
+        self._schedule()
+
+    def _cached_cover(
+        self, session: LinkingSession, gallery_id: int,
+        cancelled: threading.Event,
+    ) -> bytes | None:
+        """Resolve disk bytes only through a still-current session descriptor.
+
+        Args:
+            session (LinkingSession): Active scope and validator authority.
+            gallery_id (int): Exact child gallery whose first photo is needed.
+            cancelled (threading.Event): Current shelf cancellation boundary.
+        Returns:
+            bytes | None: Normalized verified cover, or no admissible disk hit.
+        """
+        try:
+            recent = session.recent_media_page(gallery_id)
+            if isinstance(recent, LinkedMediaPage) and recent.photos:
+                cached = session.cached_media_photo(
+                    gallery_id, recent.photos[0], cancelled=cancelled,
+                )
+                if cached is not None and not cancelled.is_set():
+                    return self._normalize_cover(cached[0])
+        except (OSError, ValueError, RuntimeError, Image.DecompressionBombError):
+            # A refused/expired descriptor never authorizes an unscoped copy.
+            pass
+        return None
 
     def _request_cover(self, session: LinkingSession, gallery_id: int) -> None:
         """Resolve one visible child’s first authorized photo in a worker.
@@ -490,20 +563,9 @@ class GalleryFolderShelf(ttk.Frame):
             try:
                 # The session owns descriptor freshness and disk authorization.
                 # Never persist a second unscoped cover cache or trust saved IDs.
-                recent = session.recent_media_page(gallery_id)
-                if isinstance(recent, LinkedMediaPage) and recent.photos:
-                    try:
-                        cached = session.cached_media_photo(
-                            gallery_id, recent.photos[0], cancelled=cancelled,
-                        )
-                    except LinkingError:
-                        # The session owner may reject an aged proof. A fresh
-                        # metadata read below must still get its normal chance.
-                        cached = None
-                    if cached is not None and not cancelled.is_set():
-                        cover = self._normalize_cover(cached[0])
-                        self._results.put((generation, gallery_id, cover, False))
-                page = session.media_page(gallery_id, cancelled=cancelled)
+                page = session.media_page(
+                    gallery_id, cancelled=cancelled, cover_only=True,
+                )
                 if page.photos and not cancelled.is_set():
                     photo = page.photos[0]
                     try:
@@ -526,7 +588,10 @@ class GalleryFolderShelf(ttk.Frame):
                 elif not cancelled.is_set():
                     cover = None
             except (OSError, ValueError, RuntimeError, Image.DecompressionBombError):
-                pass
+                # A transient metadata failure may retain a verified current
+                # cover. Known permission refusals revoke the session's page,
+                # so the same owner also refuses this fallback after revocation.
+                cover = self._cached_cover(session, gallery_id, cancelled)
             if not cancelled.is_set():
                 self._results.put((generation, gallery_id, cover, True))
 

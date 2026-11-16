@@ -3399,9 +3399,12 @@ class PhotosWorkspace(ttk.Frame):
             image=self._recording_image(False) if selected_target else '',
         )
 
-    def _refresh_catalogue(self) -> None:
+    def _refresh_catalogue(self, *, keep_context: bool = False) -> None:
         """Restart server reconciliation while retaining the known visible tree.
 
+        Args:
+            keep_context (bool): Retain a confirmed edit's completion surface
+                while canonical server folder paths are refreshed.
         Returns:
             None: Selection, expansion and the photo viewer survive. Obsolete
                 catalogue responses are cancelled and fenced independently of
@@ -3410,7 +3413,8 @@ class PhotosWorkspace(ttk.Frame):
         if (self._destroyed or self._session is None
                 or self._session_provider() is not self._session):
             return
-        self._dismiss_context(restore=False)
+        if not keep_context:
+            self._dismiss_context(restore=False)
         self._cancel_catalogue_continuation()
         self._cancel_cached_catalogue_mount()
         self._catalogue_cancel.set()
@@ -6719,7 +6723,11 @@ class PhotosWorkspace(ttk.Frame):
         if (card is not self._context_card or session is not self._session
                 or session is not self._session_provider()):
             return
+        previous = self._galleries.get(snapshot.gallery_id)
+        title_changed = previous is not None and previous.title != snapshot.title
         self._apply_gallery_edit_snapshot(snapshot)
+        if title_changed:
+            self._refresh_catalogue(keep_context=True)
         self._context_content(card, self._text('saved'))
         self._context_action(
             card, self._text('gallery_info'),

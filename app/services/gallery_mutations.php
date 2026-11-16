@@ -67,6 +67,24 @@ use function Gallery\Models\gallery_mutation_model_update_gallery_paths;
 
 require_once __DIR__ . '/gallery_image_move_journal.php';
 
+/** Carry a physical receipt until the caller confirms its database rollback. */
+final class DeferredGalleryFolderMoveFailure extends RuntimeException
+{
+    /** @var array{moved:bool,from:string,to:string,galleries:int} Same-writer relative move receipt. */
+    public readonly array $move;
+
+    /** Retain the receipt without guessing whether the caller can roll back.
+     * @param array{moved:bool,from:string,to:string,galleries:int} $move Physical subtree transition.
+     * @param Throwable $cause Original database/completion failure.
+     * @return void Initializes the safe failure and its recovery evidence.
+     */
+    public function __construct(array $move, Throwable $cause)
+    {
+        $this->move = $move;
+        parent::__construct('Gallery move completion is unconfirmed.', 0, $cause);
+    }
+}
+
 /**
  * Build a literal folder-path descendant pattern for SQL LIKE predicates.
  *
@@ -1941,6 +1959,8 @@ function move_gallery_folder_to_parent(
  *     validated the attachment graph.
  * @param ?string $title New root title, committed atomically with the path map;
  *     null retains it.
+ * @param bool $deferCompletion Whether the caller owns an outer transaction
+ *     and will run gallery_folder_move_complete() only after its commit.
  * @return array{moved:bool, from:string, to:string, galleries:int} Physical
  *     move result and affected hierarchy count.
  */
@@ -1950,6 +1970,7 @@ function move_gallery_folder_to_parent_owned(
     ?string $folderName = null,
     bool $smartGalleryGraphPrevalidated = false,
     ?string $title = null,
+    bool $deferCompletion = false,
 ): array {
     mutation_schema_assert_available(
         gallery_move_schema_status(),
@@ -2122,6 +2143,12 @@ function move_gallery_folder_to_parent_owned(
             smart_gallery_graph_cache_clear();
         }
     } catch (Throwable $exception) {
+        if ($deferCompletion && $moved) {
+            throw new DeferredGalleryFolderMoveFailure([
+                'moved' => true, 'from' => $oldPath, 'to' => $newPath,
+                'galleries' => count($pathMap),
+            ], $exception);
+        }
         if ($moved && is_dir($newAbs) && !is_dir($oldAbs)) {
             @rename($newAbs, $oldAbs);
         }
@@ -2132,31 +2159,74 @@ function move_gallery_folder_to_parent_owned(
         );
     }
 
-    if (!$smartGalleryGraphPrevalidated) {
-        sync_gallery_parent_ids();
-        if (public_path_schema_ready()) {
-            refresh_gallery_public_paths();
-        }
+    if (!$deferCompletion) {
+        gallery_folder_move_complete(
+            array_map('intval', array_keys($pathMap)),
+            (int) ($gallery['parent_id'] ?? 0), (int) ($parentId ?? 0),
+            !$smartGalleryGraphPrevalidated,
+        );
     }
-    foreach (array_keys($pathMap) as $id) {
-        // $updated stores an intermediate value used by the surrounding gallery workflow.
-        $updated = find_gallery((int) $id, true);
-        if ($updated) {
-            write_gallery_sidecar($updated);
-        }
-    }
-
-    // The owned operation already resolved the full physical branch. Publish
-    // only those stable sources and the old/new placement parents after success.
-    gallery_visit_content_update(array_merge(array_keys($pathMap), [
-        (int) ($gallery['parent_id'] ?? 0), (int) ($parentId ?? 0),
-    ]));
     return [
         'moved' => true,
         'from' => $oldPath,
         'to' => $newPath,
         'galleries' => count($pathMap),
     ];
+}
+
+/**
+ * Complete hierarchy, sidecars and visitor invalidation after a committed move.
+ *
+ * @param list<int> $galleryIds Stable identities of the moved physical subtree.
+ * @param int $oldParentId Previous parent identity, or zero for storage root.
+ * @param int $newParentId Current parent identity, or zero for storage root.
+ * @param bool $refreshHierarchy Whether the caller needs parent/public-path repair.
+ * @param bool $confirmSidecars Whether every committed sidecar must be confirmed.
+ *     False preserves historical best-effort completion for existing move callers;
+ *     linked title edits require confirmation before acknowledging success.
+ * @return void Publishes sidecars and invalidates affected visitor content.
+ * @throws RuntimeException When a committed folder's sidecar cannot be confirmed.
+ */
+function gallery_folder_move_complete(
+    array $galleryIds, int $oldParentId, int $newParentId,
+    bool $refreshHierarchy = true,
+    bool $confirmSidecars = false,
+): void {
+    if ($refreshHierarchy) {
+        sync_gallery_parent_ids();
+        if (public_path_schema_ready()) {
+            refresh_gallery_public_paths();
+        }
+    }
+    foreach ($galleryIds as $id) {
+        $updated = find_gallery($id, true);
+        $written = $updated ? write_gallery_sidecar($updated) : false;
+        if ($confirmSidecars && !$written) {
+            throw new RuntimeException('Gallery move sidecar completion is unconfirmed.');
+        }
+    }
+    gallery_visit_content_update(array_merge($galleryIds, [$oldParentId, $newParentId]));
+}
+
+/**
+ * Restore an owned folder move only after its database rollback was confirmed.
+ *
+ * @param array{moved:bool,from:string,to:string,galleries:int} $move Receipt from
+ *     the same writer's deferred folder move, containing relative paths only.
+ * @return void A no-op needs no work; otherwise restores the original directory.
+ * @throws RuntimeException When restoration cannot be conclusively completed.
+ */
+function gallery_folder_move_rollback(array $move): void
+{
+    if (!$move['moved']) {
+        return;
+    }
+    $source = gallery_abs_path($move['to']);
+    $target = gallery_target_abs_path($move['from']);
+    if (!is_dir($source) || is_link($source)
+        || file_exists($target) || is_link($target) || !@rename($source, $target)) {
+        throw new RuntimeException('Gallery folder rollback is unconfirmed.');
+    }
 }
 
 /**

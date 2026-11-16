@@ -41,6 +41,14 @@ use function Gallery\Services\gallery_allows_gps_maps;
  * Consumers: app_linking_media_page. Rationale: Eight leaves one lookahead row.
  */
 const APP_LINKING_MEDIA_PAGE_SIZE = 8;
+
+/**
+ * Resolve only the single direct photo used by a subgallery cover.
+ * Type: int. Units: descriptors per cover request. Scope: native cover metadata.
+ * Consumers: app_linking_media_page(). Rationale: one folder has one cover;
+ * hashing an ordinary catalogue page delays reuse of already cached artwork.
+ */
+const APP_LINKING_MEDIA_COVER_SIZE = 1;
 /**
  * Bound the opt-in native catalogue page.
  * Type: int. Units: photos per page. Scope: one authorized physical gallery.
@@ -388,7 +396,8 @@ function app_linking_media_gallery(
  * @param bool $nativeCatalogue Whether the native caller requested a wider page.
  * @param bool $adminMedia Whether this request passed the restricted media grant check.
  * @param bool $publicGallery Whether the Admin gallery separately passed public export.
- * @return array{gallery_id:int,parent_id:?int,photos:list<array{id:int,title:string,latitude?:float,longitude?:float,thumbnail_etag?:string,preload_thumbnail_etag?:string,visibility?:string,nsfw?:bool,size?:?int,cache_eligible?:bool,preload_eligible?:bool}>,next_after:?int}
+ * @param bool $coverOnly Whether to return just the first direct cover descriptor.
+ * @return array{gallery_id:int,parent_id:?int,photos:list<array{id:int,title:string,latitude?:float,longitude?:float,thumbnail_etag?:string,preload_thumbnail_etag?:string,visibility?:string,nsfw?:bool,size?:?int,cache_eligible?:bool,preload_eligible?:bool}>,next_after:?int,cover_page?:bool}
  *     Ordered authorized photo descriptors without paths or credentials.
  */
 function app_linking_media_page(
@@ -397,9 +406,11 @@ function app_linking_media_page(
     bool $nativeCatalogue = false,
     bool $adminMedia = false,
     bool $publicGallery = false,
+    bool $coverOnly = false,
 ): array {
-    $pageSize = $nativeCatalogue ? APP_LINKING_MEDIA_CATALOGUE_SIZE
-        : APP_LINKING_MEDIA_PAGE_SIZE;
+    $pageSize = $coverOnly ? APP_LINKING_MEDIA_COVER_SIZE
+        : ($nativeCatalogue ? APP_LINKING_MEDIA_CATALOGUE_SIZE
+            : APP_LINKING_MEDIA_PAGE_SIZE);
     $galleryId = (int) $gallery['id'];
     $preloadGalleryAllowed = $adminMedia
         && gallery_admin_media_preload_gallery_allowed($galleryId);
@@ -464,8 +475,9 @@ function app_linking_media_page(
         'gallery_id' => $galleryId,
         'parent_id' => empty($gallery['parent_id']) ? null : (int) $gallery['parent_id'],
         'photos' => $photos,
-        'next_after' => count($rows) > $pageSize
+        'next_after' => !$coverOnly && count($rows) > $pageSize
             ? $photos[array_key_last($photos)]['id'] : null,
+        ...($coverOnly ? ['cover_page' => true] : []),
     ];
 }
 

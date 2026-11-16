@@ -84,7 +84,7 @@ function view_render_admin_media_renamer_page(array $viewModel): void
 /**
  * Render the site-wide Media Renamer workspace.
  *
- * @param array{log_url?:string,notice?:string,scope_form_html?:string,has_plans?:bool,plan_table_html?:string,execution_details_html?:string,apply_form_html?:string} $viewModel Controller-prepared workspace state.
+ * @param array{log_url?:string,detail_url?:string,csrf_html?:string,notice?:string,scope_form_html?:string,has_plans?:bool,plan_table_html?:string,execution_details_html?:string,apply_form_html?:string} $viewModel Controller-prepared workspace state.
  * @return void Writes escaped presentation markup.
  */
 function view_render_admin_media_renamer_site_workspace(array $viewModel): void
@@ -93,6 +93,9 @@ function view_render_admin_media_renamer_site_workspace(array $viewModel): void
         '<div class="admin-media-renamer-workspace" data-admin-media-renamer-workspace="site" data-media-renamer-log-url="'
             . e((string) ($viewModel['log_url'] ?? ''))
             . '">';
+    echo '<form hidden method="post" data-media-renamer-reader action="'
+        . e((string) ($viewModel['detail_url'] ?? '')) . '">'
+        . (string) ($viewModel['csrf_html'] ?? '') . '</form>';
     echo
         '<div class="thumbnail-progress admin-media-renamer-progress" data-admin-media-renamer-progress role="status" aria-live="polite" hidden><progress class="thumbnail-progress-bar" value="0" max="100" data-admin-media-renamer-progress-bar></progress><p class="muted" data-admin-media-renamer-progress-text></p></div>';
     $notice = (string) ($viewModel['notice'] ?? '');
@@ -100,6 +103,7 @@ function view_render_admin_media_renamer_site_workspace(array $viewModel): void
         echo '<div class="notice" role="status">' . e($notice) . '</div>';
     }
     echo (string) ($viewModel['scope_form_html'] ?? '');
+    echo (string) ($viewModel['execution_details_html'] ?? '');
 
     if (!empty($viewModel['has_plans'])) {
         echo '<section class="panel admin-media-renamer-preview">';
@@ -116,11 +120,11 @@ function view_render_admin_media_renamer_site_workspace(array $viewModel): void
                 . '"><span aria-hidden="true">?</span></summary><div class="admin-inline-help-content">'
                 . e(t(
                     'admin.media_renamer.preview_help',
-                    'Review every old-to-new filename mapping before applying. Missing files and unsafe collisions are skipped.',
+                    'Analysis uses database records only. Expand a gallery to inspect filenames; physical file safety is checked during renaming.',
                 ))
                 . '</div></details></div>';
-        echo (string) ($viewModel['plan_table_html'] ?? '');
-        echo (string) ($viewModel['execution_details_html'] ?? '');
+        echo '<div data-media-renamer-proposals>'
+            . (string) ($viewModel['plan_table_html'] ?? '') . '</div>';
         echo (string) ($viewModel['apply_form_html'] ?? '');
         echo '</section>';
     }
@@ -133,9 +137,8 @@ function view_render_admin_media_renamer_site_workspace(array $viewModel): void
  * @param array{log_url?:string, notice?:string, pattern_form_html?:string,
  *     error?:string, plan_table_html?:string, execution_details_html?:string,
  *     rename_count?:int, rename_image_ids?:list<int>, apply_url?:string,
- *     csrf_html?:string, gallery_id?:int, pattern?:string} $viewModel Prepared
- *     panel fragments, semantic gallery identity and executable preview image
- *     IDs.
+ *     csrf_html?:string, detail_url?:string, gallery_id?:int, pattern?:string} $viewModel Prepared
+ *     panel fragments and gallery identity; candidate IDs are fetched only on apply.
  * @return void Render the gallery-level Media Renamer panel.
  */
 function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
@@ -144,6 +147,9 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
         '<div class="admin-media-renamer-workspace" data-admin-media-renamer-workspace="gallery" data-media-renamer-log-url="'
             . e((string) ($viewModel['log_url'] ?? ''))
             . '">';
+    echo '<form hidden method="post" data-media-renamer-reader action="'
+        . e((string) ($viewModel['detail_url'] ?? '')) . '">'
+        . (string) ($viewModel['csrf_html'] ?? '') . '</form>';
     $notice = (string) ($viewModel['notice'] ?? '');
     if ($notice !== '') {
         echo '<div class="notice" role="status">' . e($notice) . '</div>';
@@ -180,7 +186,8 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
         return;
     }
 
-    echo (string) ($viewModel['plan_table_html'] ?? '');
+    echo '<div data-media-renamer-proposals>'
+        . (string) ($viewModel['plan_table_html'] ?? '') . '</div>';
     echo (string) ($viewModel['execution_details_html'] ?? '');
 
     $renameCount = max(0, (int) ($viewModel['rename_count'] ?? 0));
@@ -189,6 +196,8 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
             . e((string) ($viewModel['apply_url'] ?? ''))
             . '" class="admin-inline-form" data-admin-media-renamer-form'
             . ' data-media-renamer-apply="gallery"'
+            . ' data-media-renamer-lazy-candidates="1"'
+            . ' data-media-renamer-apply-total="' . $renameCount . '"'
             . ' data-media-renamer-target="#admin-edit-renamer">';
     echo (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="action" value="rename_files">';
@@ -215,7 +224,7 @@ function view_render_admin_media_renamer_gallery_panel(array $viewModel): void
             . '> '
             . e(t(
                 'admin.media_renamer.reviewed_checkbox',
-                'I reviewed the preview and want to rename files on disk.',
+                'I want to rename files on disk using the selected naming pattern.',
             ))
             . '</label>';
     echo
@@ -564,7 +573,7 @@ function view_render_admin_media_renamer_scope_form(array $viewModel): void
 /**
  * Render the site-wide apply confirmation form.
  *
- * @param array<string,mixed> $viewModel Controller-prepared apply state.
+ * @param array{rename_count?:int,candidate_image_ids?:list<int>,selected_gallery_ids?:list<int>,action_url?:string,csrf_html?:string,selected_scope?:string,selected_single_gallery_id?:int,pattern?:string,hide_empty_galleries?:bool,hide_done_galleries?:bool,rename_availability_checked?:bool,availability_payload?:string} $viewModel Controller-prepared apply state with no eager candidate list for current clients.
  * @return void Emits the site-wide apply confirmation form.
  */
 function view_render_admin_media_renamer_apply_form(array $viewModel): void
@@ -581,7 +590,8 @@ function view_render_admin_media_renamer_apply_form(array $viewModel): void
             . ' data-media-renamer-target="'
             . '[data-admin-media-renamer-workspace=site]"'
             . ' data-media-renamer-apply-total="'
-            . count($candidateImageIds)
+            . $renameCount
+            . '" data-media-renamer-lazy-candidates="1'
             . '">';
     echo (string) ($viewModel['csrf_html'] ?? '');
     echo '<input type="hidden" name="renamer_action" value="apply">';
@@ -633,7 +643,7 @@ function view_render_admin_media_renamer_apply_form(array $viewModel): void
             . '> '
             . e(t(
                 'admin.media_renamer.reviewed_checkbox',
-                'I reviewed the preview and want to rename files on disk.',
+                'I want to rename files on disk using the selected naming pattern.',
             ))
             . '</label>';
     $buttonLabel = t(
@@ -663,12 +673,38 @@ function view_render_admin_media_renamer_apply_form(array $viewModel): void
 /**
  * Render dry-run plan tables grouped by gallery.
  *
- * @param array{aggregate?:array{total?:int,rename?:int,already_matches?:int,warnings?:int,missing?:int,collision?:int,skipped?:int},plans?:list<array{gallery:array{title?:string,folder_path?:string},items:list<array{status?:string,old_relative_path?:string,new_relative_path?:string,status_label?:string,notes_text?:string}>}>} $viewModel Controller-prepared plan-table state.
+ * @param array{aggregate?:array{total?:int,rename?:int,already_matches?:int,warnings?:int,missing?:int,collision?:int,skipped?:int},plans?:list<array{gallery:array{id?:int,title?:string,folder_path?:string},preview_only?:bool,pattern?:string,detail_url?:string,summary?:array{total:int,rename:int,warnings:int,...},items:list<array{status?:string,old_relative_path?:string,new_relative_path?:string,status_label?:string,notes_text?:string}>}>} $viewModel Controller-prepared summary or compatibility plan-table state.
  * @return void Writes escaped presentation markup.
  */
 function view_render_admin_media_renamer_plan_table(array $viewModel): void
 {
     $aggregate = (array) ($viewModel['aggregate'] ?? []);
+    $plans = (array) ($viewModel['plans'] ?? []);
+    if (!empty($plans[0]['preview_only'])) {
+        echo '<div class="admin-media-renamer-totals">';
+        foreach ([
+            ['total', 'admin.media_renamer.metric_total', 'Files'],
+            ['rename', 'admin.media_renamer.metric_rename', 'Will rename'],
+            ['already_matches', 'admin.media_renamer.metric_ok', 'Already ok'],
+            ['warnings', 'admin.media_renamer.metric_warnings', 'Warnings'],
+        ] as [$key, $label, $fallback]) {
+            echo '<span>' . e(t($label, $fallback)) . ' <strong>'
+                . (int) ($aggregate[$key] ?? 0) . '</strong></span>';
+        }
+        echo '</div><div class="admin-media-renamer-plan-groups">';
+        foreach ($plans as $plan) {
+            $gallery = $plan['gallery'];
+            view_render_admin_media_renamer_lazy_gallery([
+                'gallery_id' => (int) $gallery['id'], 'title' => (string) ($gallery['title'] ?? ''),
+                'path' => (string) ($gallery['folder_path'] ?? ''),
+                'total' => (int) $plan['summary']['total'], 'rename' => (int) $plan['summary']['rename'],
+                'failed' => (int) $plan['summary']['warnings'], 'mode' => 'preview_details',
+                'pattern' => (string) $plan['pattern'], 'detail_url' => (string) $plan['detail_url'],
+            ]);
+        }
+        echo '</div>';
+        return;
+    }
     echo '<div class="admin-metric-grid admin-media-renamer-summary">';
     echo
         '<div class="admin-metric-card"><span>'
@@ -740,6 +776,17 @@ function view_render_admin_media_renamer_plan_table(array $viewModel): void
             )
         );
         $path = (string) ($gallery['folder_path'] ?? '');
+        if (!empty($plan['preview_only'])) {
+            view_render_admin_media_renamer_lazy_gallery([
+                'gallery_id' => (int) $gallery['id'], 'title' => $title, 'path' => $path,
+                'total' => (int) ($plan['summary']['total'] ?? 0),
+                'rename' => (int) ($plan['summary']['rename'] ?? 0),
+                'failed' => (int) ($plan['summary']['warnings'] ?? 0),
+                'mode' => 'preview_details', 'pattern' => (string) ($plan['pattern'] ?? ''),
+                'detail_url' => (string) ($plan['detail_url'] ?? ''),
+            ]);
+            continue;
+        }
         if (!$items) {
             echo
                 '<div class="admin-media-renamer-empty-plan" title="'
@@ -818,11 +865,31 @@ function view_render_admin_media_renamer_plan_table(array $viewModel): void
 /**
  * Render execution details after an apply run.
  *
- * @param array<string,mixed> $viewModel Controller-prepared execution state.
+ * @param array{report_token?:string,report_error?:string,galleries?:list<array{gallery_id:int,gallery:string,total:int,renamed:int,failed:int,detail_url:string,...}>,details?:list<array{gallery:string,old:string,new:string,status?:string,status_label?:string,notes_text?:string,...}>} $viewModel Compact report overview or explicitly supplied compatibility rows.
  * @return void Emits the execution details when present.
  */
 function view_render_admin_media_renamer_execution_details(array $viewModel): void
 {
+    if (!empty($viewModel['report_error'])) {
+        echo '<p class="notice" role="status">' . e($viewModel['report_error']) . '</p>';
+    }
+    $galleries = (array) ($viewModel['galleries'] ?? []);
+    if ($galleries !== []) {
+        echo '<section data-media-renamer-report class="admin-media-renamer-report"><h3>'
+            . e(t('admin.media_renamer.process_title', 'Last run details')) . '</h3>';
+        foreach ($galleries as $gallery) {
+            view_render_admin_media_renamer_lazy_gallery([
+                'gallery_id' => (int) $gallery['gallery_id'],
+                'title' => (string) $gallery['gallery'], 'total' => (int) $gallery['total'],
+                'rename' => (int) $gallery['renamed'], 'failed' => (int) $gallery['failed'],
+                'mode' => 'report_details',
+                'report_token' => (string) ($viewModel['report_token'] ?? ''),
+                'detail_url' => (string) ($gallery['detail_url'] ?? ''),
+            ]);
+        }
+        echo '</section>';
+        return;
+    }
     $details = (array) ($viewModel['details'] ?? []);
     if (!$details) {
         return;
@@ -875,4 +942,81 @@ function view_render_admin_media_renamer_execution_details(array $viewModel): vo
 function view_render_admin_media_renamer_fragment(string $html): void
 {
     echo $html;
+}
+
+/**
+ * Render one compact gallery overview without materializing filename rows.
+ * @param array{gallery_id:int,title:string,path?:string,total:int,rename:int,failed?:int,mode:string,pattern?:string,report_token?:string,detail_url:string} $viewModel Prepared counters, read-only request identity and no-script destination.
+ * @return void Emits an accessible disclosure whose details load on demand.
+ */
+function view_render_admin_media_renamer_lazy_gallery(array $viewModel): void
+{
+    $report = $viewModel['mode'] === 'report_details';
+    echo '<details class="admin-media-renamer-lazy" data-media-renamer-detail'
+        . ' data-detail-mode="' . e($viewModel['mode']) . '"'
+        . ' data-detail-gallery="' . $viewModel['gallery_id'] . '"'
+        . ' data-detail-pattern="' . e((string) ($viewModel['pattern'] ?? '')) . '"'
+        . ' data-report-token="' . e((string) ($viewModel['report_token'] ?? '')) . '">';
+    echo '<summary><strong>' . e($viewModel['title']) . '</strong>';
+    if (!empty($viewModel['path'])) {
+        echo '<code title="' . e($viewModel['path']) . '">' . e($viewModel['path']) . '</code>';
+    }
+    echo '<span><b>' . $viewModel['rename'] . '</b> '
+        . e($report ? t('admin.media_renamer.renamed_files', 'Renamed')
+            : t('admin.media_renamer.metric_rename', 'Will rename'))
+        . ' · ' . $viewModel['total'] . ' '
+        . e(t('admin.media_renamer.metric_total', 'Files')) . '</span>';
+    if (!empty($viewModel['failed'])) {
+        echo '<small>' . $viewModel['failed'] . ' '
+            . e(t('admin.media_renamer.metric_warnings', 'Warnings')) . '</small>';
+    }
+    echo '</summary><div data-media-renamer-detail-body></div>'
+        . '<p class="muted" role="status" aria-live="polite" data-media-renamer-detail-status hidden></p>'
+        . '<button type="button" class="secondary" data-media-renamer-detail-more hidden>'
+        . e(t('admin.media_renamer.load_more_files', 'Load more files')) . '</button>'
+        . '<noscript><a class="secondary" href="' . e($viewModel['detail_url']) . '">'
+        . e(t('admin.media_renamer.show_files', 'Show files')) . '</a></noscript></details>';
+}
+
+/**
+ * Keep explicit detail paging usable without JavaScript.
+ * @param array{return_url:string,next_url:string} $viewModel Prepared same-origin destinations.
+ * @return void Emits the next page and return actions when available.
+ */
+function view_render_admin_media_renamer_detail_navigation(array $viewModel): void
+{
+    echo '<nav class="admin-media-renamer-detail-navigation">';
+    if ($viewModel['next_url'] !== '') {
+        echo '<a class="secondary" href="' . e($viewModel['next_url']) . '">'
+            . e(t('admin.media_renamer.load_more_files', 'Load more files')) . '</a> ';
+    }
+    echo '<a href="' . e($viewModel['return_url']) . '">'
+        . e(t('admin.media_renamer.back_to_overview', 'Back to overview')) . '</a></nav>';
+}
+
+/**
+ * Render only one explicitly requested page of old/new filename evidence.
+ * @param array{rows:list<array{old:string,new:string,status_label:string,notes_text:string}>} $viewModel Prepared escaped-at-output presentation rows.
+ * @return void Emits a compact responsive table or an explicit empty-page message.
+ */
+function view_render_admin_media_renamer_file_page(array $viewModel): void
+{
+    if ($viewModel['rows'] === []) {
+        echo '<p class="muted">' . e(t('admin.media_renamer.nothing_to_rename',
+            'No files currently need renaming.')) . '</p>';
+        return;
+    }
+    $old = t('admin.media_renamer.old_name', 'Old filename');
+    $new = t('admin.media_renamer.new_name', 'Suggested filename');
+    $status = t('admin.media_renamer.status', 'Status');
+    echo '<table class="admin-media-renamer-file-page"><thead><tr><th>' . e($old)
+        . '</th><th>' . e($new) . '</th><th>' . e($status) . '</th></tr></thead><tbody>';
+    foreach ($viewModel['rows'] as $row) {
+        echo '<tr><td data-label="' . e($old) . '"><code>' . e($row['old'])
+            . '</code></td><td data-label="' . e($new) . '"><code>' . e($row['new'])
+            . '</code></td><td data-label="' . e($status) . '">' . e($row['status_label']);
+        if ($row['notes_text'] !== '') echo '<small>' . e($row['notes_text']) . '</small>';
+        echo '</td></tr>';
+    }
+    echo '</tbody></table>';
 }

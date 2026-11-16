@@ -139,6 +139,13 @@ TEST_HEADER_SCREEN_WIDTH_MARGIN = 16
 # Rationale: 4 leaves room for outside samples without including adjacent controls.
 TEST_CORNER_CAPTURE_MARGIN = 4
 
+# Purpose: Identify antialiased cover pixels independently of the folder rim.
+# Type: int. Units: RGB channel levels out of 255. Scope: folder ratio mask.
+# Consumers: test_folder_cover_ratio_describes_the_image_inside_the_frame.
+# Rationale: 32 includes Lanczos edge variation while the fixture's bright red
+# cover remains over 100 levels away from every dark shared-frame color.
+TEST_FOLDER_COVER_COLOR_DISTANCE = 32
+
 # Purpose: Give generated button clicks deterministic Windows event times.
 # Type: tuple[int, int]. Units: milliseconds. Scope: double-click Tk fixture.
 # Consumers: NativeGalleryViewerTests.test_grid_single_click_selects_and_double_click_opens_lightbox.
@@ -3685,6 +3692,11 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 baseline, **{field: value, 'revision': str(int(baseline.revision) + 1)},
             )
             session.read_gallery_edit.return_value = updated
+            # The subsequent canonical catalogue reflects the confirmed server
+            # rename; returning the old fixture row would invent server drift.
+            session.gallery_page.return_value = LinkedGalleryPage(
+                (replace(gallery, title=updated.title),), None,
+            )
             session.media_gallery_details.return_value.update({
                 'title': updated.title, 'description': updated.description,
                 'nsfw': updated.nsfw, 'listed': updated.listed,
@@ -3730,6 +3742,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertEqual(snapshot.title, workspace._gallery_title.get())
         entry.delete(0, 'end')
         entry.insert(0, 'Edited in WinApp')
+        previous_viewer = workspace._viewer
         workspace._submit_gallery_edit(
             workspace._context_card, session, snapshot, 'title', entry.get(),
         )
@@ -3737,6 +3750,12 @@ class NativeGalleryViewerTests(unittest.TestCase):
             lambda: workspace._gallery_title.get() == 'Edited in WinApp',
             'The canonical saved title did not update the heading.',
         )
+        self._wait_until(
+            lambda: session.gallery_page.call_count >= 2
+            and TEST_GALLERY_ID in workspace._fresh_catalogue_ids,
+            'A confirmed title save did not reconcile the canonical catalogue.',
+        )
+        self.assertIs(previous_viewer, workspace._viewer)
         self.assertEqual(snapshot, session.save_gallery_edit.call_args.args[0])
         self.assertEqual('title', session.save_gallery_edit.call_args.args[1])
         self.assertEqual('Edited in WinApp', session.save_gallery_edit.call_args.args[2])
@@ -4278,7 +4297,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             large_folder = shelf._folder_icon(
                 image_bytes[page.photos[0].image_id],
             )
-        self.assertEqual((168, 102), ImageTk.getimage(large_folder).size)
+        # At 150% DPI the 112x68 cover keeps its own geometry; the surrounding
+        # 10x20 logical-pixel folder frame adds 15x30 physical pixels.
+        self.assertEqual((183, 132), ImageTk.getimage(large_folder).size)
         shelf._covers[TEST_GALLERY_ID] = large_folder
         shelf._tiles[TEST_GALLERY_ID].configure(image=large_folder)
         self.root.update_idletasks()
@@ -4457,6 +4478,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             def read_page(
                 gallery_id: int, after_id: int | None = None,
                 cancelled: threading.Event | None = None,
+                *, cover_only: bool = False,
             ) -> LinkedMediaPage:
                 """Serve gallery-specific read-only synthetic metadata.
 
@@ -4464,6 +4486,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     gallery_id (int): Exact parent or child being displayed.
                     after_id (int | None): Unused first-page cursor in this fixture.
                     cancelled (threading.Event | None): Actual consumer cancellation.
+                    cover_only (bool): Return the one direct folder cover.
                 Returns:
                     LinkedMediaPage: Empty folder-only parent or authorized photos.
                 """
@@ -4635,7 +4658,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                                 for index in controller._visible_thumbnail_indices),
                         'Mixed gallery thumbnails did not settle for ratio screenshots.',
                     )
-                    for key in ('4:3', '1:1', '9:16', '21:9'):
+                    for key in ('16:9', '4:3', '1:1', '4:5', '9:16', '21:9'):
                         workspace._folder_format_buttons[key].invoke()
                         self.root.update()
                         self.assertEqual(key, workspace._folder_shelf._card_format)
@@ -4735,6 +4758,158 @@ class NativeGalleryViewerTests(unittest.TestCase):
             if automatic_gc:
                 gc.enable()
 
+    def test_cover_descriptor_never_becomes_a_complete_viewer_catalogue(self) -> None:
+        """Keep a shelf's one-cover metadata out of the album-page shortcut.
+
+        Returns:
+            None: A cover forces a normal gallery read; an ordinary recent
+                page retains the established immediate rendering shortcut.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        session.recent_media_page.return_value = replace(page, photos=page.photos[:1],
+                                                         cover_only=True)
+        viewer = native_gallery_viewer._NativeGalleryViewer.__new__(
+            native_gallery_viewer._NativeGalleryViewer,
+        )
+        viewer.session = session
+        viewer.gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Album')
+        viewer._view_order = None
+        viewer._closed = False
+        viewer._worker = None
+        viewer._events = queue.Queue()
+        viewer._cancelled = threading.Event()
+        viewer._generation = 0
+        viewer._launch = mock.Mock()
+        viewer._schedule_queue_poll = mock.Mock()
+        viewer._load_first_page()
+        self.assertTrue(viewer._events.empty())
+        self.assertEqual('page', viewer._launch.call_args.args[0])
+        self.assertEqual((page, None), viewer._launch.call_args.args[1]())
+        viewer._launch.reset_mock()
+        session.recent_media_page.return_value = page
+        viewer._load_first_page()
+        viewer._launch.assert_not_called()
+        self.assertEqual('page_recent', viewer._events.get_nowait()[1])
+
+    def test_folder_cover_ratio_describes_the_image_inside_the_frame(self) -> None:
+        """Measure the actual colored image rectangle inside every folder rim.
+
+        Returns:
+            None: The cover pixels retain the chosen ratio while the outer
+                folder adds its tab and border beyond the photograph.
+        """
+        from uploader.gallery_folders import GalleryFolderShelf
+
+        ui_theme.configure_theme(self.root)
+        shelf = GalleryFolderShelf(self.root, mock.Mock())
+        self.addCleanup(shelf.destroy)
+        # This distinctive flat color identifies photo pixels independently
+        # of the shared folder border and the surrounding Theme background.
+        color = (237, 41, 83)
+        cover = self._png(color)
+        with mock.patch.object(ui_theme, '_tk_dpi_scale', return_value=1.0):
+            for ratio in ('16:9', '21:9', '4:3', '1:1', '4:5', '9:16'):
+                shelf.set_view(ratio, True)
+                raster = ImageTk.getimage(shelf._folder_icon(cover)).convert('RGB')
+                # Lanczos subtly changes even near-interior pixels: exact RGB
+                # equality measured a 106x57 core of a 112x63 cover on Windows.
+                # Count its antialiased photo edge, still far from the dark rim.
+                points = [(index % raster.width, index // raster.width)
+                          for index, pixel in enumerate(raster.getdata())
+                          if max(abs(actual - expected)
+                                 for actual, expected in zip(pixel, color))
+                          <= TEST_FOLDER_COVER_COLOR_DISTANCE]
+                self.assertTrue(points, ratio)
+                width = max(x for x, _y in points) - min(x for x, _y in points) + 1
+                height = max(y for _x, y in points) - min(y for _x, y in points) + 1
+                target_width, target_height = (int(value) for value in ratio.split(':'))
+                # Allow only the unavoidable single-pixel integer rounding.
+                self.assertLessEqual(abs(width * target_height - height * target_width),
+                                     max(target_width, target_height), ratio)
+                self.assertGreater(raster.width, width)
+                self.assertGreater(raster.height, height)
+
+    def test_folder_cover_worker_writes_and_reuses_real_thumbnail_storage(self) -> None:
+        """Exercise real session/cache writes and a fresh-session folder reopen.
+
+        Returns:
+            None: The first request persists the authorized original thumbnail;
+                a new shelf/session uses its verified bytes after fresh metadata
+                without a second binary read or a mocked cache lookup.
+        """
+        from uploader import app_linking as linking
+        from uploader.gallery_folders import GalleryFolderShelf
+
+        issuer = 'https://gallery.example.test'
+        body = self._png((90, 130, 170))
+        validator = '"' + hashlib.sha256(body).hexdigest() + '"'
+        reads = {'metadata': 0, 'binary': 0}
+
+        def transport(
+            gallery_id: int, kind: str, selector: int | str | None,
+            cancelled: threading.Event | None,
+            if_none_match: str | None = None,
+            **options: bool | list[int] | MediaReadTimings,
+        ) -> tuple[bytes, str, str | None, bool]:
+            """Replace only the network boundary with current authorized data.
+
+            Args:
+                gallery_id (int): Exact requested gallery identity.
+                kind (str): Metadata page or thumbnail rendition.
+                selector (int | str | None): Initial cursor or direct photo ID.
+                cancelled (threading.Event | None): Current shelf cancellation.
+                if_none_match (str | None): Optional existing body validator.
+                **options (bool | list[int] | MediaReadTimings): Cover-only
+                    selection, proof witness sink or transport timing record.
+            Returns:
+                tuple[bytes, str, str | None, bool]: Canonical metadata or the
+                    first cache-admitted PNG, its MIME, validator and admission.
+            """
+            self.assertEqual(TEST_GALLERY_ID, gallery_id)
+            if kind == 'photos':
+                self.assertIs(options.get('cover_only'), True)
+                reads['metadata'] += 1
+                return json.dumps({
+                    'gallery_id': gallery_id, 'parent_id': None,
+                    'photos': [{'id': TEST_FIRST_IMAGE_ID, 'title': 'Cover',
+                                'thumbnail_etag': validator}], 'next_after': None,
+                    'cover_page': True,
+                }).encode('utf-8'), 'application/json', None, False
+            self.assertEqual('thumbnail', kind)
+            reads['binary'] += 1
+            self.assertEqual(1, reads['binary'], 'The disk thumbnail was downloaded again.')
+            return body, 'image/png', validator, True
+
+        with TemporaryDirectory() as directory:
+            for cycle in range(2):
+                cache = GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES,
+                                          thumbnails=True)
+                session = LinkingSession(
+                    issuer, 'pgla_' + 'A' * 43,
+                    time.monotonic() + linking.LINKING_MAX_TOKEN_LIFETIME_SECONDS,
+                    linking.GALLERIES_SCOPE,
+                )
+                with mock.patch.object(session, '_media_read', side_effect=transport), \
+                        mock.patch.object(linking.GalleryMediaCache, 'for_current_user',
+                                          return_value=cache):
+                    shelf = GalleryFolderShelf(self.root, mock.Mock())
+                    shelf.pack(fill='both', expand=True)
+                    shelf.show_children(session, TEST_PARENT_GALLERY_ID, (
+                        LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Cached folder'),
+                    ))
+                    self._wait_until(lambda: TEST_GALLERY_ID in shelf._covers
+                                     and TEST_GALLERY_ID in shelf._resolved,
+                                     f'The real cover pipeline did not settle in cycle {cycle}.')
+                    stored = cache.read(cache.key(issuer, TEST_GALLERY_ID,
+                                                   TEST_FIRST_IMAGE_ID, True))
+                    self.assertIsNotNone(stored)
+                    self.assertEqual(body, stored.body)
+                    self.assertEqual(validator, stored.etag)
+                    shelf.destroy()
+                    session.close()
+            self.assertEqual({'metadata': 2, 'binary': 1}, reads)
+
     def test_folder_cover_uses_persistent_thumbnail_before_background_refresh(self) -> None:
         """Display an authorized disk cover while fresh metadata is still held.
 
@@ -4755,6 +4930,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.addCleanup(session.close)
         photo = LinkedPhoto(TEST_FIRST_IMAGE_ID, 'Saved cover', cache_eligible=True)
         page = LinkedMediaPage(TEST_GALLERY_ID, None, (photo,), None)
+        second_photo = replace(photo, image_id=photo.image_id + 1)
+        second_id = TEST_GALLERY_ID + 1
+        pages = {TEST_GALLERY_ID: page,
+                 second_id: LinkedMediaPage(second_id, None, (second_photo,), None)}
         body = self._png((90, 130, 170))
         validator = '"' + hashlib.sha256(body).hexdigest() + '"'
         started, release = threading.Event(), threading.Event()
@@ -4763,6 +4942,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         def refresh(
             gallery_id: int, after_id: int | None = None,
             cancelled: threading.Event | None = None,
+            *, cover_only: bool = False,
         ) -> LinkedMediaPage:
             """Hold a fresh metadata read after the cached result is queued.
 
@@ -4770,24 +4950,26 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 gallery_id (int): Exact child folder being refreshed.
                 after_id (int | None): Initial catalogue cursor, unused here.
                 cancelled (threading.Event | None): Current shelf cancellation.
+                cover_only (bool): Request the first cover without a full page.
             Returns:
                 LinkedMediaPage: Unchanged current authorized photo descriptor.
             """
             started.set()
             if not release.wait(TEST_GUI_WAIT_SECONDS):
                 raise TimeoutError('Folder metadata refresh was not released.')
-            return page
+            return pages[gallery_id]
 
         with TemporaryDirectory() as directory:
             writer = GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True)
-            self.assertTrue(writer.write(
-                writer.key(issuer, TEST_GALLERY_ID, photo.image_id, True),
-                body, 'image/png', validator,
-            ))
+            for gallery_id, saved in pages.items():
+                self.assertTrue(writer.write(
+                    writer.key(issuer, gallery_id, saved.photos[0].image_id, True),
+                    body, 'image/png', validator,
+                ))
             # Reopening the owner proves persistence rather than an in-memory hit.
             reader = GalleryMediaCache(Path(directory), linking.NATIVE_MEDIA_MAX_BYTES, thumbnails=True)
             with mock.patch.object(linking.GalleryMediaCache, 'for_current_user', return_value=reader), \
-                    mock.patch.object(session, 'recent_media_page', return_value=page), \
+                    mock.patch.object(session, 'recent_media_page', side_effect=pages.get), \
                     mock.patch.object(session, 'media_page', side_effect=refresh) as metadata, \
                     mock.patch.object(session, 'media_photo') as binary:
                 ui_theme.configure_theme(self.root)
@@ -4795,9 +4977,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 shelf.pack(fill='both', expand=True)
                 shelf.show_children(session, TEST_PARENT_GALLERY_ID, (
                     LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Saved cover folder'),
+                    LinkedGallery(second_id, TEST_PARENT_GALLERY_ID, 'Second saved folder'),
                 ))
-                self._wait_until(lambda: started.is_set() and TEST_GALLERY_ID in shelf._covers,
-                                 'The disk cover did not appear before fresh metadata completed.')
+                self._wait_until(lambda: started.is_set() and pages.keys() <= shelf._covers.keys(),
+                                 'Every visible disk cover must precede the blocked metadata refresh.')
                 self.assertNotIn(TEST_GALLERY_ID, shelf._resolved)
                 binary.assert_not_called()
                 release.set()

@@ -53,6 +53,23 @@ older version 1 files; no adoption or safe retirement is assumed. Folder covers
 use the existing session-authorized thumbnail pool rather than an unscoped cache.
 Public proof expiry, private-media authorization, revocation and cancellation
 remain enforced; no offline permission is inferred from a saved thumbnail.
+WinApp 1.4 uses the additive `cover-v1` photo-page header for a single current
+cover descriptor with the ordinary validator/preload policy. A `cover_page:true`
+reply must contain at most one photo and no continuation. On an older server,
+the absent marker permanently selects the existing catalogue header for that
+session after one passive retry; the old small page cannot silently discard
+cache proofs and force repeated binary loads. The shelf probes all visible
+session-authorized disk entries before starting serial metadata refreshes.
+The shared theme draws the folder outside the selected image ratio.
+
+Native title saves now use the shared guarded physical subtree mover under the
+same grant transaction and writer lease. Its path model joins that transaction;
+description/switch edits retain their existing field-only semantics. Root title,
+path hashes and descendant paths change together. Confirmed rollback permits
+physical restoration; ambiguous commit/readback or post-commit sidecar failure
+does not authorize replay or an invented rollback. Existing `gallery:edit`
+consent remains required; no new scope or schema is added. The WinApp catalogue
+refreshes after a confirmed title save without discarding the visible editor.
 Installed-client/server acceptance and real-host performance remain unverified
 until a separate user review and deployment.
 Unreadable files use the existing display default but refuse overwrite; a failed
@@ -1291,6 +1308,10 @@ Existing format/order writes preserve split entries; malformed/unreadable files
 are not replaced. No online settings or server capabilities change. Native
 drag/navigation fixtures and portable round-trip/invalid/capacity/IO-failure
 fixtures cover restoration and isolation; installed prevalence is unknown.
+The real `WatcherApp` host bridge is covered through its local identity/path
+resolution: a reconstructed host restores the selected gallery's split, other
+gallery/account/site identities remain isolated, and the linked session receives
+no network call. This is local view storage only.
 
 ## WinApp update process exit
 
@@ -2839,6 +2860,30 @@ preference persistence, finalization exclusion and scrollbar overflow. Actual
 simulator/aircraft/build and installed-upgrade acceptance remain separate.
 
 ## Media-renamer long original filenames
+
+Analysis and lazy preview details use lightweight indexed image naming columns
+through the model and the same deterministic naming policy. They perform no
+gallery filesystem inspection, source hashing or derivative enumeration. The
+initial response retains counters per gallery and no filename list or image-ID
+list. An explicit expansion fetches at most 50 names; explicit apply freezes
+candidate IDs through 500-ID pages, then keeps the existing 15-image physical
+batch flow. Only execution rebuilds the physical safety plan, so missing files
+and unindexed disk collisions are reported there instead of during analysis.
+
+Completed report overviews replace proposals. Actual confirmed outcomes are
+journaled under `cache/media-renamer-reports`, which is denied by the root HTTP
+rewrite policy. Opaque report IDs are bound to the authenticated account and PHP
+session, with a 24-hour lifetime. Detail reads enforce that binding and content
+hashes, open only requested chunks, return at most 50 rows and use no-store
+responses. Atomic publication and nonblocking leases protect the small index;
+garbage collection admits only producer-proven expired files within a 50 ms
+work-admission budget, with an in-progress filesystem operation allowed to finish.
+Storage failure warns without undoing or replaying confirmed renames. Classic
+forms retain their report identity and read-only paginated links. No database
+migration or replacement of existing rename execution/rollback is introduced.
+The database preview/journal fixture and Chromium production-view journey own
+regression coverage; live hosting performance and installed acceptance are
+unknown until separate deployment and review.
 
 The renamer stages exclusively owned JPG/WebP cache files alongside originals,
 removes stale prospective targets, commits original names and rows, and

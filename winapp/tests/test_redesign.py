@@ -175,6 +175,39 @@ class UiLayoutPreferenceTests(unittest.TestCase):
                     "photos"]["info_width"],
             )
 
+    def test_gallery_divider_host_bridge_persists_only_local_identity_state(self) -> None:
+        """Round-trip the production host callbacks without any online write.
+
+        Returns:
+            None: A recreated host restores the saved per-gallery share from
+                its real local view file; other accounts/sites remain isolated.
+        """
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(MAIN, 'CONFIG_DIR', Path(directory)):
+            app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+            app.linking_manager = mock.Mock()
+            session = mock.Mock(spec=LinkingSession)
+            app.linking_manager.photos_site_identity.return_value = (
+                'https://gallery.example.test', 7,
+            )
+            # 437 is an interior persisted share, distinct from auto/default.
+            self.assertTrue(app.save_photos_folder_split(session, 11, 437))
+            path = app._photos_tree_state_path(session)
+            view_path = path.with_name(path.stem + '.view.json')
+            document = json.loads(view_path.read_text(encoding='utf-8'))
+            self.assertEqual({'11': '437'}, document['folder_splits'])
+            restored = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+            restored.linking_manager = app.linking_manager
+            self.assertEqual(437, restored.load_photos_folder_split(session, 11))
+            self.assertIsNone(restored.load_photos_folder_split(session, 12))
+            for identity in (('https://gallery.example.test', 8),
+                             ('https://other.example.test', 7), None):
+                app.linking_manager.photos_site_identity.return_value = identity
+                self.assertIsNone(restored.load_photos_folder_split(session, 11))
+            self.assertFalse(restored.save_photos_folder_split(session, 11, 600))
+            self.assertEqual(document, json.loads(view_path.read_text(encoding='utf-8')))
+            self.assertEqual([], session.mock_calls)
+
     def test_legacy_layout_defaults_and_clamps_inspector_width(self) -> None:
         """Default older profiles and bound malformed inspector widths.
 

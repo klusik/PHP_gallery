@@ -3010,9 +3010,10 @@ class _NativeGalleryViewer:
         page = (recent(self.gallery.gallery_id)
                 if callable(recent) and getattr(self, '_view_order', None) is None
                 else None)
-        if (isinstance(page, LinkedMediaPage) and not self._closed
+        if (isinstance(page, LinkedMediaPage) and not page.cover_only and not self._closed
                 and self._worker is None and self._events.empty()):
-            # Deliver after mounting, so implicit-preview callbacks and cache
+            # A cover descriptor cannot imply a complete one-photo album.
+            # Deliver full pages after mounting, so implicit-preview callbacks and cache
             # owners are installed before they observe the reused page.
             self._generation += 1
             self._events.put_nowait((

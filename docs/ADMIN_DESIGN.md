@@ -1,5 +1,16 @@
 # Shared public and Admin UI design contract
 
+Gallery folder cards apply the selected aspect ratio to their cover image;
+the shared folder tab and rim extend around that image. Never fit the entire
+folder silhouette to the photo ratio. The WinApp central artwork owner supplies
+this geometry; rendered pixel tests cover all six explicit ratios.
+
+Large maintenance previews and completed reports start with compact per-gallery
+summary disclosures. Fetch bounded file details only after expansion, preserve
+visible loading/retry feedback, and replace proposals with the completed report.
+Use Theme surfaces and foreground tokens, responsive wrapping and the existing
+action hierarchy; details must not introduce horizontal page scrolling.
+
 This document is the mandatory visual design authority for **every new or
 changed public and Admin interface**. Apply it automatically before writing UI,
 without asking the user to repeat the design requirements. Existing global

@@ -954,3 +954,12 @@ const VIEWER_ANTI_AUTOMATION_HONEYPOT_MAX_BYTES = 256;
  * Rationale: preserve the existing 64-candidate normalization bound; malformed input rows are still inspected and this is not a scan-count guarantee.
  */
 const VIEWER_ANTI_AUTOMATION_PRUNE_CANDIDATE_CAP = 64;
+
+/**
+ * Preserve short, server-confirmed physical rename requests across both UIs.
+ * Type: int. Units: image IDs per request. Scope: Admin AJAX rename execution.
+ * Consumers: site/gallery controllers and completed-report chunk writer.
+ * Rationale: 15 retains the existing browser admission and progress cadence;
+ * the passive policy owner can be loaded before controller declarations.
+ */
+const MEDIA_RENAMER_PHYSICAL_BATCH_SIZE = 15;

@@ -359,15 +359,20 @@ function admin_edit_gallery_tab_url(int $galleryId, string $tab = ''): string
  *
  * @param int $galleryId Gallery identifier.
  * @param string $pattern Pattern value.
+ * @param string $reportToken Optional server-side completed-report identity.
  * @return string Text result for the caller.
  */
 function admin_edit_gallery_tab_url_with_renamer_pattern(
     int $galleryId,
     string $pattern,
+    string $reportToken = '',
 ): string {
     $params = ['id' => $galleryId, 'tab' => 'admin-edit-renamer'];
     if ($pattern !== media_renamer_default_pattern()) {
         $params['renamer_pattern'] = $pattern;
+    }
+    if ($reportToken !== '') {
+        $params['renamer_report'] = $reportToken;
     }
     return url_for('admin_edit_gallery', $params) . '#admin-edit-renamer';
 }

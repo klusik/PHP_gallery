@@ -9551,6 +9551,38 @@ Synthetic authorized media makes these screenshots reproducible without a real
 account; this does not establish installed-client/server acceptance or production
 performance.
 
+The database-only rename preview and journal regression uses real lightweight
+SQLite model queries without an available gallery filesystem. It covers empty
+initial filename/ID lists, 50-row details, 500-ID candidate pages, naming/no-op
+semantics, session isolation, expiry, chunk integrity and reading a later page
+without inspecting earlier chunks. The path-map model must preserve a caller's
+open transaction and support its rollback. The linked edit fixture runs the real
+physical mover on an owned directory with a child/photo and distinguishes a
+confirmed rollback from post-commit sidecar uncertainty.
+Its timestamp/slug helpers come from the actual owner; shared policy declarations
+load once through their canonical dependency even in the copied report fixture.
+Report reclamation is observed across separate unchanged bounded opportunities,
+with unrelated files preserved. Writer guards pin both complete move signatures:
+the unchanged public declaration and its explicit owned-only deferral default.
+The linked edit fixture also uses the actual revision/writer services and models;
+SQLite adapters replace only MySQL advisory SQL primitives and verify balanced
+acquisition/release across terminal outcomes. Existing disposable MySQL owners
+retain actual cross-connection locking qualification.
+`admin_media_renamer_browser_test.mjs` renders production PHP views and executes
+the production client in disposable Chromium. It checks lazy reads, bounded
+pagination, retry, stale-response cancellation, explicit confirmation, unchanged
+15-image batches, report replacement and exact server mutation/context retention.
+Desktop/narrow screenshots are retained under `cache/test-audit/`.
+
+The folder-cover native fixture writes through the real linking/cache pipeline
+and creates a new shelf/session/cache object before proving disk reuse without
+a second binary read. Another fixture blocks the first metadata refresh while
+requiring all visible authorized cached covers to appear. The actual image
+pixel rectangle must retain every selected ratio inside the folder frame.
+Portable coverage tests legacy server negotiation and the real host bridge's
+local per-gallery divider save across host reconstruction and identity changes.
+These checks do not launch or qualify the user's installed app/server.
+
 The shared UI library has portable architectural coverage in
 `winapp/tests/test_ui_library.py`: complete runtime consumers must use central
 button/dialog/range bases and cannot mutate ttk styles. Negative controls cover

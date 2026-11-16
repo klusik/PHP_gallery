@@ -2628,6 +2628,58 @@ class VisibilitySessionTests(unittest.TestCase):
 class NativeMediaSessionTests(unittest.TestCase):
     """Verify authorized media scope, cache reads and resource identities."""
 
+    def test_cover_page_legacy_fallback_preserves_thumbnail_validators(self) -> None:
+        """Negotiate an older server once and retain normal cache admission.
+
+        Returns:
+            None: Unknown cover headers fall back to the established catalogue
+                lane once; later cover reads carry fresh strong validators.
+        """
+        session = linking.LinkingSession(
+            'https://gallery.example', 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+        )
+        self.addCleanup(session.close)
+        validator = '"' + hashlib.sha256(b'cover').hexdigest() + '"'
+        old = {'gallery_id': 4, 'parent_id': None,
+               'photos': [{'id': 7, 'title': 'Cover'}], 'next_after': None}
+        current = dict(old, photos=[{'id': 7, 'title': 'Cover',
+                                    'thumbnail_etag': validator}])
+        with mock.patch.object(session, '_media_read', side_effect=[
+            (json.dumps(page).encode(), 'application/json', None, False)
+            for page in (old, current, current)
+        ]) as network:
+            first = session.media_page(4, cover_only=True)
+            second = session.media_page(4, cover_only=True)
+        self.assertEqual(validator, first.photos[0].thumbnail_etag)
+        self.assertEqual(validator, second.photos[0].thumbnail_etag)
+        self.assertIs(network.call_args_list[0].kwargs.get('cover_only'), True)
+        self.assertNotIn('cover_only', network.call_args_list[1].kwargs)
+        self.assertNotIn('cover_only', network.call_args_list[2].kwargs)
+
+    def test_cover_page_enforces_the_single_descriptor_contract(self) -> None:
+        """Reject a server's false single-cover marker without caching its page.
+
+        Returns:
+            None: Oversized marked cover pages and cursor combinations fail.
+        """
+        session = linking.LinkingSession(
+            'https://gallery.example', 'pgla_' + 'A' * 43,
+            time.monotonic() + TEST_WORKER_WAIT_SECONDS, linking.GALLERIES_SCOPE,
+        )
+        self.addCleanup(session.close)
+        page = {'gallery_id': 4, 'parent_id': None, 'cover_page': True,
+                'photos': [{'id': 7, 'title': 'First'}, {'id': 8, 'title': 'Second'}],
+                'next_after': None}
+        with mock.patch.object(session, '_media_read', return_value=(
+            json.dumps(page).encode(), 'application/json', None, False,
+        )):
+            with self.assertRaises(linking.LinkingError):
+                session.media_page(4, cover_only=True)
+            with self.assertRaises(linking.LinkingError):
+                session.media_page(4, after_id=7, cover_only=True)
+        self.assertIsNone(session.recent_media_page(4))
+
     def test_cached_media_photo_returns_verified_hit_without_network(self) -> None:
         """Expose a current local hit without entering authenticated transport.
 

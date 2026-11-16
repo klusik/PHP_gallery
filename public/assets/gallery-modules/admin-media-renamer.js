@@ -39,6 +39,21 @@ import {captureAdminPanelOwner} from './admin-panel-lifecycle.js?v=20260920-pane
 // and gives visible server-confirmed progress without one long request.
 const renameBatchSize = 15;
 
+// Bound ID-only apply preparation independently of filename rendering.
+// Type: number. Units: image IDs per response. Scope: lazy apply preparation.
+// Consumers: loadRenameCandidateIds. Rationale: 500 matches the server's
+// MEDIA_RENAMER_CANDIDATE_PAGE_SIZE without eager hidden-input lists.
+const renameCandidatePageSize = 500;
+
+// Bound compact warning/failure messages without retaining file-detail arrays.
+// Type: number. Units: messages per run. Scope: browser rename progress.
+// Consumers: mergeApplyResult. Rationale: 50 preserves the existing feedback cap;
+// full requested filename evidence remains in the authenticated server report.
+const renameResultMessageLimit = 50;
+
+/** @type {WeakMap<HTMLElement, AbortController>} Active explicit detail reads. */
+const detailRequests = new WeakMap();
+
 /**
  *  @typedef {{gallery_id?:number, galleries_requested?:number,
  *     galleries_processed?:number, renamed:number, already_matches:number,
@@ -47,13 +62,14 @@ const renameBatchSize = 15;
  *     derivative_failures:number, zip_archives_deleted:number,
  *     titles_updated:number, details:Array<{gallery_id:number, gallery:string,
  *     image_id:number, old:string, new:string, status:string, notes:string[]}>,
- *     warnings:string[], failures:string[]}} MediaRenameResult
+ *     warnings:string[], failures:string[], report_token?:string}} MediaRenameResult
  */
 
 /**
  * @typedef {import('./admin-mutation-completion.js').MutationEnvelopeCandidate
  *     & {ok?:boolean, result?:MediaRenameResult, processed?:number,
  *     availability?:Record<string, {rename_count:number, warning_count:number}>,
+ *     candidate_ids?:number[], next_offset?:number|null, detail_html?:string,
  *     panel_html?:string, body_html?:string, error?:string, message?:string}}
  *     MediaRenamerPayload
  */
@@ -91,6 +107,8 @@ export function setupAdminMediaRenamer() {
     });
     document.addEventListener('submit', handleMediaRenamerSubmit);
     document.addEventListener('change', handleMediaRenamerSettingChange);
+    document.addEventListener('toggle', handleMediaRenamerDetailToggle, true);
+    document.addEventListener('click', handleMediaRenamerDetailMore);
 }
 
 /**
@@ -121,6 +139,159 @@ function handleMediaRenamerSettingChange(event) {
         // Preserve older browsers through the native button submission path with its action value.
         refreshButton.click();
     }
+}
+
+/**
+ * Start one explicit disclosure read, or cancel its obsolete passive request.
+ * @param {Event} event Native details toggle captured from a dynamic workspace.
+ * @return {void} Leaves closed/previously loaded disclosures network-free.
+ */
+function handleMediaRenamerDetailToggle(event) {
+    const details = event.target;
+    if (!(details instanceof HTMLElement) || !details.matches('[data-media-renamer-detail]')) return;
+    if (!details.open) {
+        detailRequests.get(details)?.abort();
+        detailRequests.delete(details);
+        details.removeAttribute('aria-busy');
+        const button = details.querySelector('[data-media-renamer-detail-more]');
+        if (button instanceof HTMLButtonElement) button.disabled = false;
+    } else if (details.dataset.loaded !== '1') {
+        void loadRenamerDetail(details, 0);
+    }
+}
+
+/**
+ * Request another bounded page only after the user activates its action.
+ * @param {MouseEvent} event Delegated click from a dynamically rendered detail row.
+ * @return {void} Starts a passive page read and prevents unrelated form submission.
+ */
+function handleMediaRenamerDetailMore(event) {
+    const button = event.target instanceof HTMLElement
+        ? event.target.closest('[data-media-renamer-detail-more]') : null;
+    const details = button?.closest('[data-media-renamer-detail]');
+    if (!(details instanceof HTMLElement) || !(button instanceof HTMLButtonElement)) return;
+    event.preventDefault();
+    void loadRenamerDetail(details, Number(button.dataset.detailOffset || 0));
+}
+
+/**
+ * Fetch names only for the currently expanded gallery and requested page.
+ * @param {HTMLElement} details Owned native disclosure in the current workspace.
+ * @param {number} offset Nonnegative page displacement supplied by the server.
+ * @return {Promise<void>} Commits current bounded HTML or an explicit retry action.
+ */
+async function loadRenamerDetail(details, offset) {
+    if (detailRequests.has(details) || !Number.isSafeInteger(offset) || offset < 0) return;
+    const workspace = details.closest('[data-admin-media-renamer-workspace]');
+    const form = workspace?.querySelector('[data-media-renamer-reader]');
+    const target = details.querySelector('[data-media-renamer-detail-body]');
+    const status = details.querySelector('[data-media-renamer-detail-status]');
+    const more = details.querySelector('[data-media-renamer-detail-more]');
+    if (!(form instanceof HTMLFormElement) || !target || !status || !more) return;
+    const controller = new AbortController();
+    detailRequests.set(details, controller);
+    details.setAttribute('aria-busy', 'true');
+    more.disabled = true;
+    status.hidden = false;
+    status.textContent = i18nForElement(details, 'admin.media_renamer.loading_files', 'Loading file details...');
+    try {
+        const response = await submitRenamerRead(form, details.dataset.detailMode || '', {
+            detail_gallery_id: details.dataset.detailGallery || '',
+            detail_offset: String(offset),
+            renamer_pattern: details.dataset.detailPattern || '',
+            report_token: details.dataset.reportToken || '',
+        }, controller.signal);
+        const payload = await parseRenamerJsonResponse(response, form);
+        if (controller.signal.aborted || !details.isConnected || !details.open
+            || detailRequests.get(details) !== controller) return;
+        const next = payload.next_offset;
+        if (!response.ok || payload.ok === false || typeof payload.detail_html !== 'string'
+            || (next !== null && (!Number.isSafeInteger(next) || next <= offset))) {
+            throw new Error(payload.error || i18nForElement(details,
+                'admin.media_renamer.detail_failed', 'File details could not be loaded. Try again.'));
+        }
+        target.insertAdjacentHTML('beforeend', payload.detail_html);
+        details.dataset.loaded = '1';
+        status.hidden = true;
+        more.hidden = next === null;
+        more.dataset.detailOffset = String(next ?? 0);
+        more.textContent = i18nForElement(details, 'admin.media_renamer.load_more_files', 'Load more files');
+    } catch (error) {
+        if (controller.signal.aborted || !details.isConnected
+            || detailRequests.get(details) !== controller) return;
+        status.textContent = error instanceof Error ? error.message : String(error);
+        more.hidden = false;
+        more.dataset.detailOffset = String(offset);
+        more.textContent = i18nForElement(details, 'admin.media_renamer.retry_files', 'Retry loading files');
+    } finally {
+        if (detailRequests.get(details) === controller) {
+            detailRequests.delete(details);
+            details.removeAttribute('aria-busy');
+            more.disabled = false;
+        }
+    }
+}
+
+/**
+ * Send a small authenticated passive read through the central renamer endpoint.
+ * @param {HTMLFormElement} form Reader/operation form supplying the CSRF token.
+ * @param {string} action Fixed read-only action name.
+ * @param {Record<string, string>} fields Explicit gallery, cursor, pattern and report selectors.
+ * @param {AbortSignal|undefined} signal Optional cancellation of obsolete detail reads.
+ * @return {Promise<Response>} Same-origin JSON response with its diagnostic URL.
+ */
+async function submitRenamerRead(form, action, fields, signal = undefined) {
+    const workspace = findRenamerWorkspace(form);
+    const reader = workspace?.querySelector('[data-media-renamer-reader]');
+    const source = reader instanceof HTMLFormElement ? reader : form;
+    const body = new FormData(source);
+    body.set('renamer_action', action);
+    body.set('ajax', '1');
+    Object.entries(fields).forEach(([key, value]) => body.set(key, value));
+    const requestUrl = formActionUrl(source);
+    const response = await fetch(requestUrl, {
+        method: 'POST', body, credentials: 'same-origin', signal,
+        headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+    });
+    response.mediaRenamerRequestUrl = requestUrl;
+    return response;
+}
+
+/**
+ * Freeze ID-only candidates at explicit apply time without rendering file rows.
+ * @param {HTMLFormElement} form Confirmed apply form with selected galleries.
+ * @return {Promise<string[]>} Ordered unique image IDs for the existing physical batches.
+ */
+async function loadRenameCandidateIds(form) {
+    const ids = [];
+    const seen = new Set();
+    const pattern = String(new FormData(form).get('renamer_pattern') || '');
+    for (const galleryId of galleryIdsFromForm(form)) {
+        let offset = 0;
+        do {
+            const response = await submitRenamerRead(form, 'candidate_page', {
+                detail_gallery_id: galleryId, detail_offset: String(offset), renamer_pattern: pattern,
+            });
+            const payload = await parseRenamerJsonResponse(response, form);
+            const next = payload.next_offset;
+            if (!response.ok || payload.ok === false || !Array.isArray(payload.candidate_ids)
+                || payload.candidate_ids.length > renameCandidatePageSize
+                || (next !== null && (!Number.isSafeInteger(next) || next <= offset))) {
+                throw new Error(payload.error || i18nForElement(form,
+                    'admin.media_renamer.progress_failed', 'Rename request failed.'));
+            }
+            for (const id of payload.candidate_ids) {
+                if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)) {
+                    throw new Error(i18nForElement(form,
+                        'admin.media_renamer.progress_failed', 'Rename request failed.'));
+                }
+                seen.add(id);
+                ids.push(String(id));
+            }
+            offset = next;
+        } while (offset !== null);
+    }
+    return ids;
 }
 
 /**
@@ -235,7 +406,8 @@ function isBatchedApplyForm(form) {
         && action.value === 'apply'
         && form.dataset.mediaRenamerTarget === '[data-admin-media-renamer-workspace=site]')
         || form.dataset.mediaRenamerApply === 'gallery')
-        && form.querySelectorAll('input[name="rename_candidate_image_ids[]"]').length > 0;
+        && (form.dataset.mediaRenamerLazyCandidates === '1'
+            || form.querySelectorAll('input[name="rename_candidate_image_ids[]"]').length > 0);
 }
 
 /**
@@ -252,7 +424,13 @@ function isBatchedApplyForm(form) {
  *     workspace.
  */
 async function submitApplyInBatches(form, submitter, progress) {
-    const imageIds = renameCandidateImageIdsFromForm(form);
+    const workspace = findRenamerWorkspace(form);
+    workspace?.querySelectorAll('[data-media-renamer-proposals], [data-media-renamer-report]')
+        .forEach(node => node.replaceChildren());
+    if (progress) progress.dataset.indeterminate = '1';
+    const preparedIds = renameCandidateImageIdsFromForm(form);
+    const imageIds = preparedIds.length > 0 ? preparedIds : await loadRenameCandidateIds(form);
+    if (progress) progress.dataset.indeterminate = '0';
     const total = imageIds.length;
     let processed = 0;
     const aggregate = emptyApplyResult();
@@ -265,12 +443,13 @@ async function submitApplyInBatches(form, submitter, progress) {
     try {
         for (let offset = 0; offset < total; offset += renameBatchSize) {
             const batchIds = imageIds.slice(offset, offset + renameBatchSize);
-            const response = await submitApplyBatch(form, batchIds);
+            const response = await submitApplyBatch(form, batchIds, aggregate.report_token || '');
             const payload = await parseRenamerJsonResponse(response, form);
             if (!response.ok || payload.ok === false) {
                 throw new Error(payload.error || payload.message || i18nForElement(form, 'admin.media_renamer.progress_failed', 'Rename request failed.'));
             }
-            if (payload.mutation && Array.isArray(payload.contexts)) {
+            if (payload.mutation && Array.isArray(payload.contexts)
+                && (!confirmedMutation || payload.mutation.entity_ids?.length > 0)) {
                 confirmedMutation = payload;
             }
             if (!Number.isSafeInteger(payload.processed) || payload.processed !== batchIds.length) {
@@ -293,7 +472,12 @@ async function submitApplyInBatches(form, submitter, progress) {
             throw new Error(finalPayload.error || finalPayload.message || i18nForElement(form, 'admin.media_renamer.progress_failed', 'Rename request failed.'));
         }
 
-        return finalPayload;
+        // Keep the actual confirmed batch's completion contract when the
+        // final read only returns compact report/markup data. No filename
+        // arrays or locally invented public revision are needed for refresh.
+        return confirmedMutation ? {...finalPayload,
+            mutation: confirmedMutation.mutation, contexts: confirmedMutation.contexts,
+        } : finalPayload;
     } catch (error) {
         if (error instanceof Error && confirmedMutation) error.confirmedMutation = confirmedMutation;
         throw error;
@@ -337,14 +521,16 @@ function galleryIdsFromForm(form) {
  *
  * @param {HTMLFormElement} form Submitted form.
  * @param {string[]} batchIds Image ids in this batch.
+ * @param {string} reportToken Server-side report identity from earlier confirmed batches.
  * @return {Promise<Response>} Fetch response.
  */
-async function submitApplyBatch(form, batchIds) {
+async function submitApplyBatch(form, batchIds, reportToken) {
     const body = new FormData(form);
     body.delete('rename_candidate_image_ids[]');
     body.delete('batch_image_ids[]');
     batchIds.forEach((imageId) => body.append('batch_image_ids[]', imageId));
     body.set('renamer_action', 'apply_batch');
+    body.set('report_token', reportToken);
     if (form.dataset.mediaRenamerApply === 'gallery') body.set('action', 'rename_files');
     body.set('ajax', '1');
 
@@ -395,7 +581,7 @@ async function submitApplyFinalRefresh(form, aggregate) {
 /**
  * Return an empty aggregate result object matching the PHP result shape.
  *
- * @return {object} Mutable aggregate result.
+ * @return {MediaRenameResult} Mutable counters and report identity without filenames.
  */
 function emptyApplyResult() {
     return {
@@ -414,27 +600,31 @@ function emptyApplyResult() {
         details: [],
         warnings: [],
         failures: [],
+        report_token: '',
     };
 }
 
 /**
  * Merge one batch result into the aggregate result.
  *
- * @param {object} target Aggregate result.
- * @param {object} source Batch result from PHP.
+ * @param {MediaRenameResult} target Aggregate result without eager file details.
+ * @param {Partial<MediaRenameResult>} source Confirmed batch counters and report identity.
+ * @return {void} Merges counters/messages while keeping filename details on the server.
  */
 function mergeApplyResult(target, source) {
     ['galleries_processed', 'renamed', 'already_matches', 'missing', 'skipped', 'collisions', 'derivatives_moved', 'derivatives_cleaned', 'derivative_failures', 'zip_archives_deleted', 'titles_updated'].forEach((key) => {
         target[key] = Number(target[key] || 0) + Number(source[key] || 0);
     });
-    ['details', 'warnings', 'failures'].forEach((key) => {
+    ['warnings', 'failures'].forEach((key) => {
         if (Array.isArray(source[key])) {
             target[key].push(...source[key]);
         }
     });
-    target.details = target.details.slice(0, 500);
-    target.warnings = target.warnings.slice(0, 50);
-    target.failures = target.failures.slice(0, 50);
+    target.warnings = target.warnings.slice(0, renameResultMessageLimit);
+    target.failures = target.failures.slice(0, renameResultMessageLimit);
+    if (typeof source.report_token === 'string' && /^[a-f0-9]{32}$/u.test(source.report_token)) {
+        target.report_token = source.report_token;
+    }
 }
 
 /**
