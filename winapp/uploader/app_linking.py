@@ -3739,6 +3739,24 @@ class LinkedGalleryDetail:
 # Consumers: snapshot validation and save. Rationale: 65,535 is the server TEXT capacity.
 GALLERY_EDIT_DESCRIPTION_MAX_BYTES = 65535
 
+# Purpose: Finish one explicit edit without another user confirmation.
+# Type: int. Units: conditional writes. Scope: one gallery edit intent.
+# Consumers: LinkingSession.apply_gallery_edit. Rationale: 2 allows one fresh
+# conflict retry or same-revision retry, never an unbounded mutation loop.
+GALLERY_EDIT_WRITE_ATTEMPTS = 2
+
+# Purpose: Reconcile a lost acknowledgement before presenting an inline failure.
+# Type: int. Units: authorized reads. Scope: one failed gallery write.
+# Consumers: LinkingSession.apply_gallery_edit. Rationale: 3 tolerates a brief
+# read outage while preserving finite work and the transport's own deadlines.
+GALLERY_EDIT_READ_ATTEMPTS = 3
+
+# Purpose: Yield between failed reconciliation reads without blocking Tk.
+# Type: float. Units: seconds. Scope: one gallery edit worker.
+# Consumers: LinkingSession.apply_gallery_edit. Rationale: 0.25 avoids a tight
+# retry loop and remains cancellable when the originating context disappears.
+GALLERY_EDIT_READ_DELAY_SECONDS = 0.25
+
 
 @dataclass(frozen=True)
 class LinkedGalleryEditSnapshot:
@@ -3751,6 +3769,26 @@ class LinkedGalleryEditSnapshot:
     visibility: str
     listed: bool
     nsfw: bool
+
+
+class LinkingGalleryEditFailure(LinkingError):
+    """Retain an observed edit baseline without exposing remote error text."""
+
+    def __init__(
+        self, snapshot: LinkedGalleryEditSnapshot | None, *, conflict: bool = False,
+    ) -> None:
+        """Keep the latest authorized observation for an editable retained draft.
+
+        Args:
+            snapshot (LinkedGalleryEditSnapshot | None): Fresh server observation,
+                or None when no follow-up read could be authenticated.
+            conflict (bool): Whether another revision prevented reconciliation.
+        Returns:
+            None: Stores only validated metadata and a fixed local message.
+        """
+        self.snapshot = snapshot
+        self.conflict = conflict
+        super().__init__('Gallery change could not be completed.')
 
 
 def gallery_edit_text_valid(field: str, value: str) -> bool:
@@ -8515,6 +8553,91 @@ class LinkingSession:
             if other != field and getattr(current, other) != getattr(snapshot, other):
                 raise LinkingError('Unrelated gallery metadata changed.')
         return current
+
+    def apply_gallery_edit(
+        self, gallery_id: int, field: str, value: str | bool,
+        cancelled: threading.Event | None = None,
+    ) -> LinkedGalleryEditSnapshot:
+        """Apply one user intent and reconcile its result without manual reload.
+
+        Every write retains the server's exact revision precondition. A definite
+        conflict permits one refreshed field-only attempt. An unknown outcome
+        permits another write only if a fresh complete observation is identical
+        to its baseline; the unchanged revision fences a still-running first
+        request. A changed revision never licenses replay of an unknown write.
+
+        Args:
+            gallery_id (int): Exact physical gallery selected by the user.
+            field (str): title, description, nsfw or listed; peers are preserved.
+            value (str | bool): Explicit desired field value, never a toggle delta.
+            cancelled (threading.Event | None): Owning context cancellation.
+        Returns:
+            LinkedGalleryEditSnapshot: Authorized canonical state with the
+                requested value, from the acknowledgement or a fresh read.
+        Raises:
+            LinkingGalleryEditFailure: Finite reconciliation failed; a fresh
+                observation is retained when available and the draft stays editable.
+            LinkingError: Local input, authority or cancellation is invalid.
+        """
+        valid = (
+            type(value) is bool if field in ('listed', 'nsfw')
+            else isinstance(value, str) and field in ('title', 'description')
+            and gallery_edit_text_valid(field, value)
+        )
+        if not valid:
+            raise LinkingError('Invalid gallery edit.')
+        if cancelled is not None and cancelled.is_set():
+            raise LinkingError('Gallery editor is no longer current.')
+        snapshot = self.read_gallery_edit(gallery_id, cancelled=cancelled)
+        for _attempt in range(GALLERY_EDIT_WRITE_ATTEMPTS):
+            if cancelled is not None and cancelled.is_set():
+                raise LinkingError('Gallery editor is no longer current.')
+            if getattr(snapshot, field) == value:
+                return snapshot
+            conflict = False
+            retryable = True
+            try:
+                return self.save_gallery_edit(snapshot, field, value, cancelled=cancelled)
+            except LinkingRevisionConflict:
+                # A 409 is a definite refusal before mutation, so the user's
+                # explicit field intent may use the latest reviewed revision.
+                conflict = True
+            except LinkingError as error:
+                # Authentication, rate limits and other definite client refusals
+                # are observed but never turned into another automatic write.
+                status = getattr(error, 'status', None)
+                retryable = not (
+                    isinstance(error, LinkingGrantRejected)
+                    or isinstance(status, int) and 400 <= status < 500
+                )
+            observed: LinkedGalleryEditSnapshot | None = None
+            for read_attempt in range(GALLERY_EDIT_READ_ATTEMPTS):
+                if cancelled is not None and cancelled.is_set():
+                    raise LinkingError('Gallery editor is no longer current.')
+                if read_attempt:
+                    if cancelled is not None:
+                        if cancelled.wait(GALLERY_EDIT_READ_DELAY_SECONDS):
+                            raise LinkingError('Gallery editor is no longer current.')
+                    else:
+                        time.sleep(GALLERY_EDIT_READ_DELAY_SECONDS)
+                try:
+                    observed = self.read_gallery_edit(gallery_id, cancelled=cancelled)
+                    break
+                except LinkingError as error:
+                    status = getattr(error, 'status', None)
+                    if (isinstance(error, LinkingGrantRejected)
+                            or isinstance(status, int) and 400 <= status < 500):
+                        break
+            if observed is None:
+                raise LinkingGalleryEditFailure(None) from None
+            if getattr(observed, field) == value:
+                return observed
+            if not retryable or (not conflict and observed != snapshot):
+                raise LinkingGalleryEditFailure(
+                    observed, conflict=observed.revision != snapshot.revision,
+                ) from None
+            snapshot = observed
+        raise LinkingGalleryEditFailure(snapshot, conflict=conflict)
 
     def can_change_gallery_visibility(self) -> bool:
         """Check explicit visibility consent without asserting server access.

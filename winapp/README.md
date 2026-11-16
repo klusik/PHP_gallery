@@ -1582,17 +1582,32 @@ Click the gallery title or its pencil to edit its name; use the description
 pencil in Gallery information for multiline text. WinApp reads complete current
 server text and its edit revision before opening either editor. Confirm with
 Save (Enter for a title, Control+Enter for a description), or cancel with Escape
-or Cancel. A save sends only that one field and the reviewed revision. A web
-edit made meanwhile refuses the stale save; a lost reply remains unconfirmed.
-The draft stays visible and locked until an explicit server reload; writes are
-never automatically replayed. Confirmed server titles update the tree and
+or Cancel. Saving obtains a fresh revision and changes only that field. WinApp
+automatically reads back an uncertain reply. A confirmed revision conflict can
+retry the same field once; a lost reply can retry only if the complete baseline
+and revision remain unchanged. A changed unknown outcome never licenses replay.
+An unresolved draft stays editable with inline feedback and no reload button.
+Confirmed server titles close the editor and update the tree and
 heading. A title save derives the physical directory leaf with the server's
 existing sanitizer and moves the complete subtree. Gallery/image IDs remain
 stable; descendant paths, hierarchy metadata and available public paths follow
 the move. Occupied destinations are refused. Grant/revision checks remain locked
 through the directory/database transition. A confirmed DB rollback restores the
 old directory; an ambiguous commit or failed post-commit sidecar stays unconfirmed
-and must not be replayed automatically. The tree refreshes after confirmation.
+and is reconciled through an authorized read before any further conditional
+write. The tree refreshes after confirmation. Repeated A/B/A/B title edits are
+serialized by the context worker without blocking the native event loop.
+
+Capture progress has no repair buttons. After interruption, WinApp checks its
+exact pending destination in the background and tries the already approved
+connection once. If that destination cannot be restored, it automatically ends
+the capture through the existing durable local-retention owner. Pending original
+files, reports, receipts and uncertain-upload evidence remain local. No upload
+is declared successful and no credential is revoked. This also works after a
+restart when no Finish worker exists. A live request keeps its transport lease
+until it actually ends. Temporary local persistence failures retry quietly;
+unconfirmed persistence keeps the original guard. Independent PDF operations
+retain their own explicit actions.
 
 Metadata edits require a server advertising **gallery:edit** and a new browser
 approval; an old read, visibility or deletion grant gains no new permission.

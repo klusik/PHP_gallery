@@ -679,7 +679,9 @@ function admin_edit_gallery_handle_media_rename(
     try {
         if ($batchAction === 'apply_batch') {
             $batchImageIds = admin_media_renamer_image_ids_from_post('batch_image_ids');
-            if ($batchImageIds === [] || count($batchImageIds) > MEDIA_RENAMER_GALLERY_BATCH_LIMIT) {
+            $batchSequences = admin_media_renamer_sequence_map_from_post($batchImageIds);
+            if ($batchImageIds === [] || count($batchImageIds) > MEDIA_RENAMER_GALLERY_BATCH_LIMIT
+                || $batchSequences === null) {
                 header('Content-Type: application/json');
                 http_response_code(400);
                 echo json_encode(admin_mutation_error_envelope(
@@ -694,6 +696,7 @@ function admin_edit_gallery_handle_media_rename(
                 (int) $gallery['id'],
                 $batchImageIds,
                 $renamerPattern,
+                $batchSequences,
             );
             $batchRenamedIds = array_values(array_map(
                 static fn(array $detail): int => (int) $detail['image_id'],
@@ -742,7 +745,9 @@ function admin_edit_gallery_handle_media_rename(
             admin_media_renamer_log_event(
                 $completionSeverity === 'warning' ? 'warning' : 'info',
                 'media_renamer.gallery_completed',
-                'Gallery media rename completed.',
+                $completionSeverity === 'warning'
+                    ? 'Gallery media rename completed with unresolved outcomes.'
+                    : 'Gallery media rename completed.',
                 [
                     'gallery_id' => (int) $gallery['id'],
                     'gallery_path' => (string) ($gallery['folder_path'] ?? ''),

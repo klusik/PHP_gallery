@@ -136,7 +136,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261116-lazy-renamer-v1';
+} from './gallery-modules/admin-operations.js?v=20261116-stable-renamer-v2';
 
 /**
  * Runs a setup callback after the DOM is ready.

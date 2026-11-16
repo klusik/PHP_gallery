@@ -67,6 +67,12 @@ from uploader.simconnect_flight import (
 # Consumers: FlightUI.tick.
 # Rationale: 250 ms keeps progress responsive at modest idle CPU use.
 PROGRESS_TICK_MS = 250
+# Purpose: Retry temporarily unavailable local capture persistence quietly.
+# Type: float; Units: seconds; Scope: one interrupted capture generation.
+# Consumers: FlightUI._recover_capture, FlightUI.force_finish, FlightUI.tick.
+# Rationale: five seconds avoids a hot disk-error loop while retaining the
+# original durable guard until publication and readback actually succeed.
+CAPTURE_RECOVERY_RETRY_SECONDS = 5.0
 # Let background workers sleep between cancellation/deadline checks.
 # Type: float; Units: seconds; Scope: finalization drain worker.
 # Consumers: FlightUI.wait_for_workers.
@@ -381,6 +387,13 @@ class FlightUI:
         self._preparing_progress = False
         self._progress_local_mode = False
         self._force_finish_pending = False
+        self._capture_recovery_results: queue.Queue[
+            tuple[int, FinalizationWorker | None, str, tuple[SessionPlan, ...] | None]
+        ] = queue.Queue()
+        self._capture_recovery_worker: threading.Thread | None = None
+        self._capture_recovery_restore_attempted = False
+        self._capture_recovery_restore_pending = False
+        self._capture_recovery_retry_at: float | None = None
         self.phase_var = tk.StringVar(value="")
         self.detail_var = tk.StringVar(value="")
         self.time_var = tk.StringVar(value="")
@@ -1791,7 +1804,7 @@ class FlightUI:
         """Open recovery for the saved Watcher session, including after restart.
 
         Returns:
-            None: Shows unfinished work or the error that prevents reading it.
+            None: Starts automatic same-target recovery or durable local retention.
         """
         if not self.busy() and (
             self.independent_operation()
@@ -1801,6 +1814,151 @@ class FlightUI:
             self.operation = None
         self._recovery_state = None
         self.show_progress()
+
+    def _recover_capture(self, *, requested: bool = False) -> None:
+        """Resolve interrupted capture without exposing repair decisions to users.
+
+        Args:
+            requested (bool): Explicit Finish failed before creating a worker;
+                permit retention of its still-running capture producer.
+        Returns:
+            None: Reads only the captured binding off Tk. The normal event owner
+                attempts same-target restoration, then durable local retention.
+                Independent PDF work and submitted revocation are untouched.
+        """
+        if (self.independent_operation() or self._force_finish_pending
+                or self._capture_recovery_worker is not None
+                or self._capture_recovery_restore_pending
+                or (self._capture_recovery_retry_at is not None
+                    and time.monotonic() < self._capture_recovery_retry_at)):
+            return
+        operation = self.operation
+        watcher = self.host.worker
+        if (not requested and operation is None and watcher is not None
+                and watcher.is_alive()
+                and not getattr(watcher, '_recovery_review_only', False)):
+            return
+        if (operation is not None and (
+                operation.server_request_sent or operation.wants_revoke
+                or operation.is_alive())):
+            return
+        try:
+            binding = self.binding()
+        except ValueError:
+            self.detail_var.set(self.text('capture_recovery_unavailable'))
+            return
+        generation = self._progress_generation
+        self._capture_recovery_retry_at = None
+        directory = self.directory
+        results = self._capture_recovery_results
+        self.detail_var.set(self.text('capture_recovering'))
+
+        def inspect() -> None:
+            """Read exact-target pending plans without touching native widgets.
+
+            Returns:
+                None: Enqueues owned plans or an unreadable-state marker.
+            """
+            try:
+                plans = tuple(pending_sessions(directory, binding))
+            except (OSError, ValueError, RuntimeError):
+                plans = None
+            results.put((generation, operation, binding, plans))
+
+        worker = threading.Thread(
+            target=inspect, name='PHPGalleryCaptureRecovery', daemon=True,
+        )
+        self._capture_recovery_worker = worker
+        try:
+            worker.start()
+        except RuntimeError:
+            self._capture_recovery_worker = None
+            self._capture_recovery_retry_at = time.monotonic() + CAPTURE_RECOVERY_RETRY_SECONDS
+            self.detail_var.set(self.text('capture_recovery_unavailable'))
+
+    def _accept_capture_recovery(self) -> None:
+        """Apply background recovery only to its original operation and binding.
+
+        Returns:
+            None: Restores the same approved target once, or invokes the existing
+                durable queue/flight publisher with a captured logical operation.
+        """
+        try:
+            generation, operation, binding, plans = self._capture_recovery_results.get_nowait()
+        except queue.Empty:
+            return
+        self._capture_recovery_worker = None
+        if generation != self._progress_generation or self.operation is not operation:
+            return
+        try:
+            current_binding = self.binding()
+        except ValueError:
+            return
+        if current_binding != binding:
+            return
+        if plans is None:
+            self._capture_recovery_retry_at = time.monotonic() + CAPTURE_RECOVERY_RETRY_SECONDS
+            self.detail_var.set(self.text('capture_recovery_unavailable'))
+            self.host.status_var.set(self.text('capture_recovery_unavailable'))
+            return
+        if not plans and operation is None:
+            self._recovery_state = (binding, 'idle')
+            if self.dialog is not None and self.dialog.winfo_exists():
+                self.dialog.withdraw()
+            return
+        restore = getattr(self.host, 'restore_capture_upload_target', None)
+        if callable(restore) and not self._capture_recovery_restore_attempted:
+            self._capture_recovery_restore_attempted = True
+            self._capture_recovery_restore_pending = True
+
+            def restored(available: bool) -> None:
+                """Continue only this user intent after exact-target verification.
+
+                Args:
+                    available (bool): Same approved gallery was restored.
+                Returns:
+                    None: Retries normal completion once or retains files locally.
+                """
+                if (generation != self._progress_generation
+                        or self.operation is not operation):
+                    return
+                self._capture_recovery_restore_pending = False
+                try:
+                    if self.binding() != binding:
+                        return
+                except ValueError:
+                    return
+                if available:
+                    self.begin(automatic=True, explicit_retry=True)
+                else:
+                    self._retain_capture(plans)
+
+            try:
+                restore(binding, restored)
+            except (OSError, ValueError, RuntimeError):
+                restored(False)
+            return
+        self._retain_capture(plans)
+
+    def _retain_capture(self, plans: tuple[SessionPlan, ...]) -> None:
+        """Publish local retention even when no Finish worker was constructed.
+
+        Args:
+            plans (tuple[SessionPlan, ...]): Fresh exact-target pending plans.
+        Returns:
+            None: Uses the existing queue/transport leases and durable readback;
+                no network mutation, credential removal or file deletion occurs.
+        """
+        if self.operation is None:
+            self._progress_generation += 1
+            self.operation = FinalizationWorker(
+                list(plans), '', '', self.wait_for_workers, self.submit_revoke, False,
+            )
+            self.operation.flight_generation = self._progress_generation
+            self.operation.trigger_reason = 'automatic_capture_recovery'
+            self.automatic_operation = self.operation
+        self.detail_var.set(self.text('capture_retaining'))
+        self.force_finish()
 
     def can_start(self) -> bool:
         """Refuse a new flight while existing accepted work needs completion.
@@ -1881,6 +2039,11 @@ class FlightUI:
         )
         self.plan.save()
         self._recovery_state = None
+        # A new capture fences delayed recovery even for the same gallery.
+        self._progress_generation += 1
+        self._capture_recovery_restore_attempted = False
+        self._capture_recovery_restore_pending = False
+        self._capture_recovery_retry_at = None
         self.recorder.start()
         self.dispatch = None
         self.refresh_dispatch_status()
@@ -1972,6 +2135,12 @@ class FlightUI:
             self.active_dispatch_directory = None
             raise ValueError("Flight recorder could not resume safely.") from None
         self._recovery_state = None
+        # Resumption replaces the active capture owner, including same-target
+        # restoration callbacks which started before this recorder was admitted.
+        self._progress_generation += 1
+        self._capture_recovery_restore_attempted = False
+        self._capture_recovery_restore_pending = False
+        self._capture_recovery_retry_at = None
         self.refresh_dispatch_status()
         return restored_plan.directory
 
@@ -2266,11 +2435,13 @@ class FlightUI:
         except (OSError, ValueError, RuntimeError) as exc:
             self.host.api_key_revoke_running = False
             self._dismiss_progress_preparation()
-            messagebox.showerror(
-                self.capture_text("flight_progress"),
-                str(exc),
-                parent=self.dialog_owner(),
-            )
+            if not revoke and not self.independent_operation():
+                self._recover_capture(requested=True)
+            else:
+                messagebox.showerror(
+                    self.capture_text("flight_progress"), str(exc),
+                    parent=self.dialog_owner(),
+                )
 
     def stop_other_workers(self) -> None:
         """Stop other authenticated producers only for an explicit Revoke.
@@ -2542,8 +2713,9 @@ class FlightUI:
         """Open or restore the one shared nonmodal progress view.
 
         Returns:
-            None: Does not start/restart tasks or imply new revoke consent.
-                Local abandonment exposes only retry, retained files and hide.
+            None: Interrupted captures recover automatically without repair
+                buttons. Independent PDF actions retain their separate controls;
+                opening this view never implies new revoke consent.
         """
         local_mode = self.independent_operation()
         saved_upload = bool(
@@ -2557,20 +2729,9 @@ class FlightUI:
         preparing = getattr(self, "_preparing_progress", False) is True
         if self.operation is None and not preparing:
             self.phase_var.set(self.text("review_pending_uploads"))
-            try:
-                detail = ""
-                for plan in self.pending():
-                    path = plan.directory / "watch-drain.json"
-                    detail = plan.error or (
-                        str(read_document(path).get("error") or "")
-                        if path.exists() else ""
-                    )
-                    if detail:
-                        break
-                self.detail_var.set(detail or self.text("watcher_recovery_hint"))
-            except (OSError, ValueError) as exc:
-                self.detail_var.set(str(exc))
+            self.detail_var.set(self.text('capture_recovering'))
             self.time_var.set("")
+            self._recover_capture()
         elif self.operation is not None and not preparing:
             progress = self.operation.snapshot()
             self.phase_var.set(self.text(
@@ -2641,44 +2802,24 @@ class FlightUI:
             self.autoclose_frame, textvariable=self.completion_var,
             style='Muted.TLabel',
         ).pack(side='left')
-        Button(
-            self.autoclose_frame, text=self.text('keep_open'),
-            command=self.keep_progress_open, style='Compact.TButton',
-        ).pack(side='right')
+        if local_mode:
+            Button(
+                self.autoclose_frame, text=self.text('keep_open'),
+                command=self.keep_progress_open, style='Compact.TButton',
+            ).pack(side='right')
         self.autoclose_frame.pack_forget()
         actions = ttk.Frame(self.dialog.footer)
         actions.pack(fill="x", pady=(4, 0))
         self.progress_actions = actions
         actions.bind('<Configure>', lambda _event: self.refresh_progress_actions())
-        ordinary_actions = (
-            ("retry", self.retry_finalization),
-            ("keep_local", self.keep_local),
-            ("abandon", self.abandon),
-            ("keep_watched_files", self.abandon),
-            ("reconnect_upload_gallery", self.host.reconnect_upload_gallery),
-            ("cancel_revoke", self.cancel_revocation),
-            ("open_reports", self.open_reports),
-            ("hide", self.dialog.withdraw),
-        )
-        if callable(getattr(self.host, "force_finish_flight", None)):
-            ordinary_actions += (("force_finish", self.force_finish),)
-        if callable(getattr(self.host, "open_watch_recovery_review", None)):
-            ordinary_actions += (("force_continue_watch", self.force_continue_watch),)
-        if callable(getattr(self.host, "stop_and_keep_watch_pending", None)):
-            ordinary_actions += (("force_stop_watch", self.force_stop_watch),)
+        ordinary_actions: tuple[tuple[str, Callable[[], None]], ...] = ()
         local_actions = (
             ("retry", self.retry_saved_upload if saved_upload else self.create_local_pdf),
             ("cancel_upload" if saved_upload else "cancel_pdf", self.cancel_local_pdf),
             ("open_reports", self.open_reports),
             ("hide", self.dialog.withdraw),
         )
-        abandon_actions = (
-            ("retry", self.retry_finalization),
-            ("open_reports", self.open_reports),
-            ("hide", self.dialog.withdraw),
-        )
-        if callable(getattr(self.host, "force_finish_flight", None)):
-            abandon_actions += (("force_finish", self.force_finish),)
+        abandon_actions: tuple[tuple[str, Callable[[], None]], ...] = ()
         choices = (
             abandon_actions if abandoning else
             local_actions if local_mode else ordinary_actions
@@ -2717,7 +2858,8 @@ class FlightUI:
 
         Returns:
             None: Errors, cancellation, hidden views and replacement operations
-                never inherit an earlier operation's countdown.
+                never inherit an earlier operation's countdown. Capture status
+                works without a mapped repair-action row.
         """
         operation = self.operation
         if getattr(self, '_autoclose_operation', None) is not operation:
@@ -2741,7 +2883,12 @@ class FlightUI:
             dialog.withdraw()
             return
         self.completion_var.set(self.text('progress_autoclose').format(seconds=remaining))
-        self.autoclose_frame.pack(fill='x', before=self.progress_actions)
+        # Capture has no action row. Only independent PDF controls supply a
+        # mapped sibling which Tk can use as a pack-order anchor.
+        if self.progress_actions.winfo_manager() == 'pack':
+            self.autoclose_frame.pack(fill='x', before=self.progress_actions)
+        else:
+            self.autoclose_frame.pack(fill='x')
 
     def refresh_progress_actions(self) -> None:
         """Show only actions usable for the current progress or recovery state.
@@ -2751,6 +2898,11 @@ class FlightUI:
         """
         actions = self.progress_actions
         if actions is None or not actions.winfo_exists():
+            return
+        if not self.independent_operation():
+            for button in self.progress_buttons.values():
+                button.grid_remove()
+            actions.pack_forget()
             return
         operation = self.operation
         phase = operation.snapshot().phase if operation is not None else None
@@ -2826,10 +2978,10 @@ class FlightUI:
             review()
 
     def force_finish(self) -> None:
-        """Persist an explicit Finish escape intent through the App owner.
+        """Persist retained capture completion through the App owner.
 
         Returns:
-            None: Keeps Hide available while publication is pending; successful
+            None: Retries unavailable persistence automatically; successful
                 durable publication resolves logical Finish without claiming
                 that a live HTTP request was canceled.
         """
@@ -2866,6 +3018,7 @@ class FlightUI:
                     self.automatic_operation = None
                 self._preparing_progress = False
                 self._recovery_state = None
+                self._capture_recovery_retry_at = None
                 self._progress_generation += 1
                 self._last_terminal = "force_finished"
                 key = ("force_finish_transport_active"
@@ -2877,6 +3030,7 @@ class FlightUI:
                 self.host.status_var.set(self.text(key))
                 return
             self.detail_var.set(self.text("force_finish_failed"))
+            self._capture_recovery_retry_at = time.monotonic() + CAPTURE_RECOVERY_RETRY_SECONDS
             self.refresh_progress_actions()
 
         try:
@@ -2885,6 +3039,7 @@ class FlightUI:
             queued = False
         if queued is not True:
             self._force_finish_pending = False
+            self._capture_recovery_retry_at = time.monotonic() + CAPTURE_RECOVERY_RETRY_SECONDS
             self.detail_var.set(self.text("force_finish_failed"))
             self.refresh_progress_actions()
 
@@ -3215,6 +3370,10 @@ class FlightUI:
         Returns:
             None: Schedules the next bounded Tk update while the app is open.
         """
+        self._accept_capture_recovery()
+        if (self._capture_recovery_retry_at is not None
+                and time.monotonic() >= self._capture_recovery_retry_at):
+            self._recover_capture()
         operation = (None if getattr(self, "_preparing_progress", False) is True
                      else self.operation)
         watcher = self.host.worker
@@ -3316,6 +3475,9 @@ class FlightUI:
                         release_watcher()
                 self.refresh_reports()
                 self.host.refresh_connection_controls()
+                if (progress.phase == 'error' and not self.independent_operation()
+                        and not operation.abandonment and not operation.wants_revoke):
+                    self._recover_capture()
         self.refresh_progress_actions()
         self.refresh_autoclose()
         self.host.root.after(PROGRESS_TICK_MS, self.tick)

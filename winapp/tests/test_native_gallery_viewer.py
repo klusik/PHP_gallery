@@ -90,7 +90,7 @@ else:
 
 # Purpose: Bound polling for one real Tk worker result in native CI.
 # Type: float. Units: seconds. Scope: one test's page/detail readiness wait.
-# Consumers: NativeGalleryViewerTests._wait_until.
+# Consumers: NativeGalleryViewerTests._wait_until and held rename regression.
 # Rationale: Six seconds admits loaded Windows runners while failing promptly.
 TEST_GUI_WAIT_SECONDS = 6.0
 
@@ -3836,9 +3836,85 @@ class NativeGalleryViewerTests(unittest.TestCase):
         workspace._dismiss_context(restore=False)
         workspace._open_title_editor()
         self._wait_until(lambda: bool(controls('TEntry')), 'The fresh editor did not reopen.')
+        # Repeat the user's A -> B -> A -> B sequence through actual editors,
+        # worker completion, catalogue refresh and native widget destruction.
+        for title in ('Original title', 'Repeated title', 'Original title', 'Repeated title'):
+            workspace._dismiss_context(restore=False)
+            workspace._open_title_editor()
+            self._wait_until(lambda: bool(controls('TEntry')), 'Repeated title editor did not open.')
+            entry = controls('TEntry')[0]
+            entry.delete(0, 'end')
+            entry.insert(0, title)
+            entry.focus_force()
+            self.root.update()
+            self.assertIs(entry, self.root.focus_get())
+            writes = session.save_gallery_edit.call_count
+            entry.event_generate('<Return>')
+            self._wait_until(
+                lambda: session.save_gallery_edit.call_count > writes,
+                'The focused title editor did not dispatch its Return action.',
+            )
+            self._wait_until(
+                lambda: workspace._context_card is None and workspace._gallery_title.get() == title,
+                'Repeated rename did not finish and close its editor.',
+            )
+            self.assertIs(previous_viewer, workspace._viewer)
+        workspace._open_title_editor()
+        self._wait_until(lambda: bool(controls('TEntry')), 'Editor did not survive repeated renames.')
+        entered, release = threading.Event(), threading.Event()
+
+        def lost_reply(
+            baseline: LinkedGalleryEditSnapshot, field: str, value: str | bool,
+            cancelled: threading.Event | None = None,
+        ) -> LinkedGalleryEditSnapshot:
+            """Hold one committed rename whose acknowledgement is lost.
+
+            Args:
+                baseline (LinkedGalleryEditSnapshot): Captured conditional revision.
+                field (str): Explicit metadata field under test.
+                value (str | bool): Desired field value.
+                cancelled (threading.Event | None): Owning context cancellation.
+            Returns:
+                LinkedGalleryEditSnapshot: Never returned; raises after committing.
+            Raises:
+                LinkingError: Synthetic lost acknowledgement after the update.
+            """
+            entered.set()
+            if not release.wait(TEST_GUI_WAIT_SECONDS):
+                raise LinkingError('Held rename was not released.')
+            save(baseline, field, value, cancelled)
+            raise LinkingError('Lost rename acknowledgement')
+
+        session.save_gallery_edit.side_effect = lost_reply
+        entry = controls('TEntry')[0]
+        entry.delete(0, 'end')
+        entry.insert(0, 'Recovered automatically')
+        entry.focus_force()
+        self.root.update()
+        writes = session.save_gallery_edit.call_count
+        entry.event_generate('<Return>')
+        self._wait_until(entered.is_set, 'The held rename did not reach its worker.')
+        heartbeat: list[bool] = []
+        try:
+            self.root.after_idle(lambda: heartbeat.append(True))
+            workspace._open_title_editor()
+            self.root.update()
+            self.assertTrue(heartbeat, 'The native event loop blocked behind the rename worker.')
+        finally:
+            release.set()
+        self._wait_until(
+            lambda: bool(controls('TEntry')) and controls('TEntry')[0].get() == 'Recovered automatically',
+            'A reopened editor did not reconcile the lost acknowledgement automatically.',
+        )
+        self.assertEqual(writes + 1, session.save_gallery_edit.call_count)
+        self.assertIs(previous_viewer, workspace._viewer)
+        session.save_gallery_edit.side_effect = save
         # Cancel and re-open a description editor using a newer web revision.
         card = workspace._context_card
-        snapshot = replace(snapshot, title='Latest website title', revision='13')
+        snapshot = replace(
+            session.read_gallery_edit.return_value, title='Latest website title',
+            revision=str(int(session.read_gallery_edit.return_value.revision) + 1),
+        )
         session.read_gallery_edit.return_value = snapshot
         workspace._begin_gallery_edit(card, session, TEST_GALLERY_ID, 'description')
         self._wait_until(lambda: bool(controls('Text')), 'The full description editor did not open.')
@@ -3852,13 +3928,21 @@ class NativeGalleryViewerTests(unittest.TestCase):
             card, session, snapshot, 'description', text.get('1.0', 'end-1c'),
         )
         self._wait_until(
-            lambda: bool(controls('Text')) and controls('Text')[0].cget('state') == 'disabled',
-            'The conflicting draft was not retained in a locked editor.',
+            lambda: bool(controls('Text')) and controls('Text')[0].cget('state') == 'normal',
+            'The conflicting draft did not remain editable after automatic reconciliation.',
         )
         self.assertEqual('Retain this conflicting draft', controls('Text')[0].get('1.0', 'end-1c'))
-        self.assertEqual(before_reads, session.read_gallery_edit.call_count)
-        self.assertFalse(any('Save' in str(button.cget('text')) for button in controls('TButton')))
-        self.assertTrue(any('Reload' in str(button.cget('text')) for button in controls('TButton')))
+        self.assertGreater(session.read_gallery_edit.call_count, before_reads)
+        self.assertTrue(any('Save' in str(button.cget('text')) for button in controls('TButton')))
+        self.assertFalse(any('Reload' in str(button.cget('text')) for button in controls('TButton')))
+        for width, height in TEST_TREE_REFRESH_VIEWPORTS:
+            self.root.geometry(f'{width}x{height}+0+0')
+            self.root.update()
+            bounds = (self.root.winfo_rootx(), self.root.winfo_rooty(),
+                      self.root.winfo_rootx() + self.root.winfo_width(),
+                      self.root.winfo_rooty() + self.root.winfo_height())
+            with ImageGrab.grab(bbox=bounds) as captured:
+                captured.save(evidence / f'gallery-edit-reconciled-{width}.png')
         workspace.destroy()
 
     def _session(
@@ -3888,6 +3972,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
         session.can_reuse_cached_media.return_value = True
         session.can_read_admin_media.return_value = False
         session.can_edit_gallery_metadata.return_value = False
+        session.apply_gallery_edit.side_effect = (
+            lambda gallery_id, field, value, cancelled=None:
+            LinkingSession.apply_gallery_edit(session, gallery_id, field, value, cancelled)
+        )
         session.private_preload_user_id.return_value = None
         session.private_preload_cache_identity.return_value = None
         session.can_read_presentation.return_value = True

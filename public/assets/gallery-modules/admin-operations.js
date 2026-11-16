@@ -40,6 +40,6 @@ export { setupPictureGame } from './admin-picture-game.js?v=20260512-modular-adm
 export { setupAdminLogStatusForms, setupAdminLogLiveFilters } from './admin-logs.js?v=20261015-cache-worker-log-filters-v1';
 export { setupAdminGalleryFilters, setupAdminGalleryTree, setupAdminGalleryReordering, setupPublicGalleryPageReordering } from './admin-gallery-list.js?v=20261102-gallery-motion-v1';
 export { setupAdminImageReordering } from './admin-image-reordering.js?v=20261102-newest-order-v1';
-export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20261116-lazy-renamer-v1';
+export { setupAdminMediaRenamer } from './admin-media-renamer.js?v=20261116-stable-renamer-v2';
 export { setupAdminMetadataOrganizer } from './admin-metadata-organizer.js?v=20261105-uncertain-progress-v1';
 export { setupAdminTrashActions } from './admin-trash.js?v=20261027-trash-settings-v3';

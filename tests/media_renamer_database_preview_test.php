@@ -4,10 +4,11 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/media_renamer_database_preview_test.php
  * Module Type: Regression Test
- * Purpose: Exercise database-only previews and owned lazy rename journals.
+ * Purpose: Exercise database-only previews, stable physical batches and journals.
  * Responsibilities:
  *   - Run the real SQL/naming owners without an accessible gallery filesystem.
  *   - Check paging, report ownership/integrity and caller transaction ownership.
+ *   - Preserve sequence identity through long names and actual staged batches.
  * Author: Rudolf Klusal
  * License: MIT License (see LICENSE file in repository)
  */
@@ -40,20 +41,74 @@ namespace Gallery\Services {
      */
     function t(string $key, string $fallback = ''): string { return $fallback; }
 
-    /** Fail any attempted physical-gallery inspection during analysis.
+    /** Refuse gallery IO during analysis; resolve only the owned execution phase.
      * @param string $path Requested gallery-relative path.
-     * @return never No gallery disk exists in this fixture.
+     * @return string Owned physical fixture directory after explicit phase setup.
+     * @throws \LogicException Any filesystem access during the analysis phase.
      */
-    function gallery_abs_path(string $path): never
+    function gallery_abs_path(string $path): string
     {
-        throw new \LogicException('Database preview touched the gallery filesystem.');
+        if (!isset($GLOBALS['rename_physical_root'])) {
+            throw new \LogicException('Database preview touched the gallery filesystem.');
+        }
+        return $GLOBALS['rename_physical_root'];
+    }
+
+    /** Read current rows at the external image catalogue boundary.
+     * @param int $id Owned fixture gallery identity.
+     * @param bool $includeNested Whether nested paths are retained.
+     * @return list<array{id:int,gallery_id:int,relative_path:string,filename:string,title:string,sort_order:int}> Fresh naming rows in production SQL order.
+     */
+    function gallery_images(int $id, bool $includeNested = true): array
+    {
+        return array_values(array_filter(\Gallery\Models\media_renamer_model_preview_rows($id),
+            static fn(array $row): bool => $includeNested || !str_contains($row['relative_path'], '/')));
+    }
+
+    /** Resolve an original within the isolated flat fixture directory.
+     * @param array{relative_path:string,...} $image Current fixture image.
+     * @param array{folder_path:string,...} $gallery Current fixture gallery.
+     * @return string Owned original absolute path.
+     */
+    function image_abs_path(array $image, array $gallery): string
+    {
+        return gallery_abs_path($gallery['folder_path']) . '/' . $image['relative_path'];
+    }
+
+    /** Constrain the external path boundary to an owned flat directory.
+     * @param string $root Exact fixture root.
+     * @param string $path Existing source or prospective sibling target.
+     * @return bool Whether the path is a nonredirected direct child of the root.
+     */
+    function thumbnail_path_inside_existing_gallery(string $root, string $path): bool
+    {
+        return realpath($root) === realpath(dirname($path)) && !is_link($path);
+    }
+
+    /** Model the deliberate absence of generated derivatives in this fixture.
+     * @return list<int> Empty because only owned original files are created.
+     */
+    function thumbnail_sizes(): array { return []; }
+
+    /** Read current indexed ownership for a potential collision.
+     * @param int $galleryId Exact fixture gallery.
+     * @param string $relativePath Prospective filename.
+     * @return array{id:int}|null Current owner, or null for a free target.
+     */
+    function find_image_by_path(int $galleryId, string $relativePath): ?array
+    {
+        $query = \Gallery\Core\db()->prepare('SELECT id FROM images WHERE gallery_id=? AND relative_path=?');
+        $query->execute([$galleryId, $relativePath]);
+        return $query->fetch(\PDO::FETCH_ASSOC) ?: null;
     }
 }
 
 namespace {
+    require_once __DIR__ . '/../app/policy_constants.php';
     require_once __DIR__ . '/../app/helpers_files.php';
     require_once __DIR__ . '/../app/models/media_renamer.php';
     require_once __DIR__ . '/../app/models/gallery_mutations.php';
+    require_once __DIR__ . '/../app/controllers/admin_media_renamer.php';
 
     /** Allow several bounded housekeeping opportunities under parallel DB load.
      * Type: float. Units: seconds. Scope: fixture completion observation only.
@@ -68,6 +123,13 @@ namespace {
      */
     const RENAME_REPORT_RECLAIM_TEST_POLL_MICROS = 10000;
 
+    /** Reproduce the reported gallery size above collision-suffix capacity.
+     * Type: int. Units: original images. Scope: long-context batch regression.
+     * Consumers: physical planner/staging loop. Rationale: 922 reproduces the
+     * report and spans both candidate-page and physical-batch boundaries.
+     */
+    const RENAME_LONG_CONTEXT_IMAGE_COUNT = 922;
+
     $check = static function (bool $ok, string $message): void {
         if (!$ok) throw new \RuntimeException($message);
     };
@@ -75,6 +137,13 @@ namespace {
         try { $operation(); } catch (\RuntimeException) { return; }
         $check(false, $message);
     };
+    foreach ([['collisions' => 69], ['missing' => 1], ['failures' => ['Failed']],
+        ['derivative_failures' => 1]] as $unresolved) {
+        $check(\Gallery\Controllers\admin_media_renamer_result_log_severity($unresolved) === 'warning',
+            'An unresolved rename outcome was logged as an ordinary success.');
+    }
+    $check(\Gallery\Controllers\admin_media_renamer_result_log_severity(['renamed' => 1]) === 'info',
+        'A confirmed rename without unresolved outcomes was marked as a warning.');
     if (!extension_loaded('pdo_sqlite')) {
         throw new \RuntimeException('Required disposable SQLite driver is unavailable.');
     }
@@ -129,11 +198,94 @@ namespace {
         $check(count($ids['candidate_image_ids']) === 500 && $ids['next_offset'] === 500
             && count($tail['candidate_image_ids']) === 101 && $tail['next_offset'] === null
             && $ids['items'] === [], 'Apply preparation must retain bounded IDs only.');
+        $check($ids['candidate_sequences'] === range(1, 500)
+            && $tail['candidate_sequences'] === range(501, 601),
+            'Apply positions must preserve original numbering across pages.');
         $pdo->exec("UPDATE images SET relative_path='collections_journeys_0001.jpg',
             filename='collections_journeys_0001.jpg' WHERE id=1");
         $noOp = \Gallery\Services\media_renamer_database_preview(7, '', 0, 50);
         $check($noOp['summary']['already_matches'] === 1 && $noOp['items'][0]['image_id'] === 2,
             'Already matching names should count without expanding the detail list.');
+
+        // Actual original files exist only during execution. Initial and detail
+        // analysis above must still fail if they inspect the gallery filesystem.
+        $physical = $owned . '/originals';
+        mkdir($physical);
+        $GLOBALS['rename_physical_root'] = $physical;
+        // Keep the title below the real 255-character limit; the parent path
+        // supplies the remaining context which made the reported name too long.
+        $longTitle = str_repeat('Distant worlds and long chapter names ', 6);
+        $galleryInsert = $pdo->prepare('INSERT INTO galleries VALUES (8,?,?,?,NULL,?,1)');
+        $galleryInsert->execute([$longTitle,
+            'games/' . str_repeat('deep-space-route/', 8) . 'chapter', 'long', 'before']);
+        $longGallery = \Gallery\Services\find_gallery(8);
+        $context = \Gallery\Services\media_renamer_gallery_context_base($longGallery);
+        // Token position is structural: numeric identities must survive at
+        // either edge and between repeated descriptive placeholders.
+        foreach (['{gallery_context}_{seq4}', '{seq4}_{gallery_context}',
+            '{gallery_title}_{seq4}_{gallery_context}', '{gallery_context}_{image_id}'] as $pattern) {
+            $targets = [];
+            foreach ([1, RENAME_LONG_CONTEXT_IMAGE_COUNT] as $position) {
+                $target = \Gallery\Services\media_renamer_build_filename($context, $position,
+                    'png', 0, $pattern, $longGallery, ['id' => $position]);
+                $identity = str_contains($pattern, '{seq4}')
+                    ? str_pad((string) $position, 4, '0', STR_PAD_LEFT) : (string) $position;
+                $check(in_array($identity, explode('_', pathinfo($target, PATHINFO_FILENAME)), true)
+                    && strlen($target) <= \Gallery\Services\MEDIA_RENAMER_FILENAME_MAX_BYTES,
+                    'Long descriptive expansion removed a numeric token or exceeded the byte budget.');
+                $targets[] = $target;
+            }
+            $check($targets[0] !== $targets[1], 'Distinct identities collapsed into one long filename.');
+        }
+        $longInsert = $pdo->prepare('INSERT INTO images VALUES (?,8,?,?,?,0)');
+        foreach (range(1, RENAME_LONG_CONTEXT_IMAGE_COUNT) as $position) {
+            $name = 'a_' . str_pad((string) $position, 4, '0', STR_PAD_LEFT) . '.png';
+            // This reserved synthetic ID range cannot overlap gallery 7's rows.
+            $id = 10000 + $position;
+            $longInsert->execute([$id, $name, $name, 'Original ' . $position]);
+            file_put_contents($physical . '/' . $name, 'owned original ' . $id);
+        }
+        $frozen = [];
+        $offset = 0;
+        do {
+            $candidates = \Gallery\Services\media_renamer_database_preview(8, '', $offset,
+                \Gallery\Services\MEDIA_RENAMER_CANDIDATE_PAGE_SIZE, true);
+            $frozen += array_combine($candidates['candidate_image_ids'], $candidates['candidate_sequences']);
+            $offset = $candidates['next_offset'];
+        } while ($offset !== null);
+        $check(count($frozen) === RENAME_LONG_CONTEXT_IMAGE_COUNT,
+            'Long context collapsed distinct sequence candidates to collision suffixes.');
+        $renameUpdate = $pdo->prepare('UPDATE images SET relative_path=?,filename=? WHERE id=?');
+        foreach (array_chunk($frozen, \Gallery\Core\MEDIA_RENAMER_PHYSICAL_BATCH_SIZE, true) as $positions) {
+            $plan = \Gallery\Services\media_renamer_plan_for_gallery_selection(8, array_keys($positions), '', $positions);
+            $fresh = \Gallery\Services\media_renamer_refresh_execution_plan($plan);
+            $check($fresh['items'] === $plan['items'], 'Safety refresh discarded frozen positions.');
+            $check(count($plan['items']) === count($positions) && $plan['summary']['collision'] === 0,
+                'A later physical batch drifted into filenames produced by an earlier batch.');
+            $staged = [];
+            foreach ($plan['items'] as $item) {
+                $suffix = '_' . str_pad((string) $positions[$item['image_id']], 4, '0', STR_PAD_LEFT) . '.png';
+                $check($item['status'] === 'rename' && str_ends_with($item['new_filename'], $suffix)
+                    && strlen($item['new_filename']) <= \Gallery\Services\MEDIA_RENAMER_FILENAME_MAX_BYTES,
+                    'Long-name fitting discarded sequence digits or exceeded its byte budget.');
+                $source = $physical . '/' . $item['old_filename'];
+                $temporary = \Gallery\Services\media_renamer_staging_path($source);
+                $check(rename($source, $temporary), 'Owned original could not be staged.');
+                $staged[] = [$item, $temporary];
+            }
+            foreach ($staged as [$item, $temporary]) {
+                $target = $physical . '/' . $item['new_filename'];
+                $check(rename($temporary, $target), 'Staged original could not be published.');
+                $check(file_get_contents($target) === 'owned original ' . $item['image_id'],
+                    'Batch rename changed original bytes or image ownership.');
+                $renameUpdate->execute([$item['new_filename'], $item['new_filename'], $item['image_id']]);
+            }
+        }
+        $settled = \Gallery\Services\media_renamer_database_preview(8);
+        $check($settled['summary']['already_matches'] === RENAME_LONG_CONTEXT_IMAGE_COUNT
+            && $settled['summary']['rename'] === 0 && $settled['summary']['collision'] === 0,
+            'A repeated long-context run did not settle to an idempotent no-op.');
+        unset($GLOBALS['rename_physical_root']);
 
         $owner = hash('sha256', 'admin/session-A');
         $token = '';

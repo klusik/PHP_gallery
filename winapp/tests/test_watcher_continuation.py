@@ -33,7 +33,7 @@ if str(WINAPP_DIR) not in sys.path:
 
 from uploader.flight_jobs import SessionPlan, WatcherContinuation, WorkspaceLease
 from uploader.app_linking import (
-    LinkingResponseError, UPLOAD_OFFLINE_SCOPE, UPLOAD_SCOPE,
+    LinkingResponseError, LinkingSession, UPLOAD_OFFLINE_SCOPE, UPLOAD_SCOPE,
 )
 from uploader.flight_ui import FlightUI
 import uploader.flight_ui as FLIGHT_UI_MODULE
@@ -2037,6 +2037,84 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertTrue(self.pending_photo.is_file())
         app.linking_manager.start_photos_watcher.assert_not_called()
 
+    def test_capture_target_admission_runs_off_tk_and_rejects_a_moved_mode(self) -> None:
+        """Restore only the captured mode with admission outside the UI thread.
+
+        Returns:
+            None: Standard admission runs on the verifier thread, callbacks wait
+                for the UI event owner, and a concurrent mode change refuses it.
+        """
+        issuer = 'https://gallery.example.test/Galerie'
+        account_id, gallery_id = 19, 73
+        binding = linked_target_binding(issuer, account_id, gallery_id)
+        session = mock.Mock()
+        session.approved_scope.return_value = UPLOAD_SCOPE
+        target = LinkedUploadTarget(session, issuer, account_id, gallery_id, 'Capture')
+        original = SimpleNamespace(mode='linked', issuer=issuer,
+                                   account_id=account_id, gallery_id=gallery_id, scope=UPLOAD_SCOPE)
+        for changed in (False, True):
+            with self.subTest(mode_changed=changed):
+                app = object.__new__(MAIN.WatcherApp)
+                app.events = queue.Queue()
+                captured = SimpleNamespace(
+                    state='linked_active', record=original,
+                )
+                app.mode_owner = SimpleNamespace(view=mock.Mock(return_value=captured),
+                                                 select_linked=mock.Mock(return_value=captured))
+                app.linking_manager = mock.Mock()
+                app.linking_manager.selected_upload_target.return_value = None
+                app.linking_manager.resume_upload_session.return_value = session
+                threads: list[int] = []
+                app.linked_workspace_ready = mock.Mock(return_value=True)
+                app.linked_target_change_refusal = mock.Mock(
+                    side_effect=lambda _binding: threads.append(threading.get_ident()) or None,
+                )
+                entered, release = threading.Event(), threading.Event()
+
+                def verified(
+                    session: LinkingSession, issuer: str, account_id: int,
+                    scope: str, gallery_id: int,
+                ) -> LinkedUploadTarget:
+                    """Hold a synthetic authorized reply across a mode change.
+
+                    Args:
+                        session (LinkingSession): Captured already approved session.
+                        issuer (str): Exact original installation address.
+                        account_id (int): Original approved account identity.
+                        scope (str): Captured approved upload scope.
+                        gallery_id (int): Exact pending destination identity.
+                    Returns:
+                        LinkedUploadTarget: The exact original verified target.
+                    """
+                    entered.set()
+                    if not release.wait(TEST_EVENT_WAIT_SECONDS):
+                        raise RuntimeError('Capture verifier was not released.')
+                    return target
+
+                callback = mock.Mock()
+                with mock.patch.object(MAIN, 'verify_linked_upload_target', side_effect=verified):
+                    app.restore_capture_upload_target(binding, callback)
+                    self.assertTrue(entered.wait(TEST_EVENT_WAIT_SECONDS))
+                    callback.assert_not_called()
+                    if changed:
+                        app.mode_owner.view.return_value = SimpleNamespace(
+                            state='legacy', record=SimpleNamespace(mode='legacy'),
+                        )
+                    release.set()
+                    event = wait_for_event_kind(app.events, 'capture_target_restored')
+                callback.assert_not_called()
+                self.assertIs(event['payload']['on_result'], callback)
+                if changed:
+                    app.linked_target_change_refusal.assert_not_called()
+                    app.mode_owner.select_linked.assert_not_called()
+                    self.assertIsNone(event['payload']['target'])
+                else:
+                    app.linked_target_change_refusal.assert_called_once_with(binding)
+                    app.mode_owner.select_linked.assert_called_once_with(target, expected=captured)
+                    self.assertIs(event['payload']['target'], target)
+                    self.assertEqual(1, len(threads))
+                    self.assertNotEqual(threading.get_ident(), threads[0])
+
     def test_linked_manager_uses_only_the_same_restored_account_and_target(self) -> None:
         """Keep resume inside current approved account and saved target guards.
 
@@ -2081,6 +2159,18 @@ class WatcherContinuationTests(unittest.TestCase):
             target, binding, UPLOAD_SCOPE,
         ))
         manager._commit_linked_target.assert_called_once_with(target)
+        manager._commit_linked_target.reset_mock()
+        manager._target_refusal.reset_mock()
+        committed = mock.Mock(return_value=True)
+        self.assertTrue(manager.activate_verified_resume_target(
+            target, binding, UPLOAD_SCOPE, verify_committed=committed,
+        ))
+        manager._commit_linked_target.assert_not_called()
+        manager._target_refusal.assert_not_called()
+        committed.return_value = False
+        self.assertFalse(manager.activate_verified_resume_target(
+            target, binding, UPLOAD_SCOPE, verify_committed=committed,
+        ))
         manager._saved_upload_identity.return_value = (issuer, "b" * 64)
         self.assertFalse(manager.activate_verified_resume_target(
             target, binding, UPLOAD_SCOPE,
@@ -2089,7 +2179,7 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertFalse(manager.activate_verified_resume_target(
             target, binding, UPLOAD_OFFLINE_SCOPE,
         ))
-        self.assertEqual(1, manager._commit_linked_target.call_count)
+        manager._commit_linked_target.assert_not_called()
 
     def test_diagnostics_keep_safe_browser_runtime_and_update_context(self) -> None:
         """Copy safe updater, rendering and host context without API secrets.

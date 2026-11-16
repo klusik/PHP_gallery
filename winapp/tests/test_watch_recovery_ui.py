@@ -15,6 +15,7 @@
 import hashlib
 import io
 import json
+import queue
 import os
 import string
 import sys
@@ -529,11 +530,11 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         root.destroy()
 
     def test_force_finish_progress_action_desktop_and_narrow(self) -> None:
-        """Render the actual Finish progress window at both supported widths.
+        """Render capture progress without recovery decisions at either width.
 
         Returns:
-            None: Confirms the escape action remains mapped and captures the
-                themed native progress surface for hosted Windows review.
+            None: Asserts zero repair actions across locales and phases while
+                retaining native desktop/narrow screenshots and backend fences.
         """
         try:
             root = tk.Tk()
@@ -579,6 +580,11 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ui.automatic_operation = None
         ui._progress_generation = 1
         ui._force_finish_pending = False
+        ui._capture_recovery_results = queue.Queue()
+        ui._capture_recovery_worker = None
+        ui._capture_recovery_restore_attempted = False
+        ui._capture_recovery_restore_pending = False
+        ui._capture_recovery_retry_at = None
         ui._preparing_progress = False
         ui._progress_local_mode = False
         ui._animation_running = False
@@ -614,41 +620,25 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         self.assertIsNotNone(window)
         window.winfo_toplevel().geometry("900x650+10+10")
         root.update()
-        self.assertTrue(ui.progress_buttons["force_finish"].winfo_ismapped())
+        self.assertEqual({}, ui.progress_buttons)
         self.assertFalse(ui.task_frame.winfo_manager())
         self.assertEqual(tr("en", "phase_draining"), ui.phase_var.get())
-        self.assertEqual(tr("en", "hide"), ui.progress_buttons["hide"].cget("text"))
-        self.assertEqual(
-            recovery_text("en", "force_finish"),
-            ui.progress_buttons["force_finish"].cget("text"),
-        )
         self.assert_progress_controls_inside(window, ui)
-        self.capture_force_finish_window(window, ui, "force-finish-desktop.png")
+        self.capture_force_finish_window(window, ui, "automatic-capture-desktop.png")
 
         window.winfo_toplevel().geometry("390x560+10+10")
         root.update()
-        self.assertTrue(ui.progress_buttons["force_finish"].winfo_ismapped())
-        self.assertLessEqual(
-            ui.progress_buttons["force_finish"].winfo_rooty()
-            + ui.progress_buttons["force_finish"].winfo_height(),
-            window.winfo_rooty() + window.winfo_height(),
-        )
+        self.assertEqual({}, ui.progress_buttons)
         for locale in ("en", "cs", "de", "sv"):
             language.set(locale)
             ui.refresh_progress_actions()
             root.update()
-            self.assertEqual(
-                recovery_text(locale, "force_finish"),
-                ui.progress_buttons["force_finish"].cget("text"),
-            )
-            self.assertEqual(
-                tr(locale, "hide"), ui.progress_buttons["hide"].cget("text"),
-            )
+            self.assertEqual({}, ui.progress_buttons)
             self.assert_progress_controls_inside(window, ui)
         language.set("en")
         ui.refresh_progress_actions()
         root.update()
-        self.capture_force_finish_window(window, ui, "force-finish-narrow.png")
+        self.capture_force_finish_window(window, ui, "automatic-capture-narrow.png")
         self.assertFalse(any(isinstance(child, tk.Toplevel) for child in root.winfo_children()))
         progress.phase = 'generating'
         ui.phase_var.set(tr('en', 'phase_generating'))
@@ -687,10 +677,11 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         self.assertFalse(ui.autoclose_frame.winfo_manager())
         progress.phase = 'draining'
         ui.refresh_progress_actions()
-        ui.progress_buttons["force_finish"].invoke()
+        # Retention remains fenced but has no user-facing repair button.
+        ui.force_finish()
         self.assertEqual(1, len(force_callbacks))
         self.assertTrue(ui._force_finish_pending)
-        self.assertTrue(ui.progress_buttons["hide"].winfo_ismapped())
+        self.assertEqual({}, ui.progress_buttons)
         callback = force_callbacks.pop(0)
         callback("pending_transport")
         del callback
@@ -764,9 +755,10 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         top = window.winfo_rooty()
         right = left + window.winfo_width()
         bottom = top + window.winfo_height()
-        labels = ('hide',) if ui.operation.snapshot().phase == 'completed' else ('force_finish', 'hide')
-        for label in labels:
-            self.assertTrue(ui.progress_buttons[label].winfo_ismapped(), label)
+        self.assertEqual({}, ui.progress_buttons)
+        for frame in (ui.progress_actions, ui.autoclose_frame):
+            self.assertFalse(any(child.winfo_class() == 'TButton'
+                                 for child in frame.winfo_children()))
         for label, button in ui.progress_buttons.items():
             if not button.winfo_ismapped():
                 continue
@@ -783,7 +775,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
 
         Args:
             window (tk.Misc): Actual FlightUI progress to capture.
-            ui (FlightUI): Progress owner whose Force finish control is checked.
+            ui (FlightUI): Progress owner whose repair actions must be absent.
             filename (str): PNG artifact name in the hosted QA directory.
         Returns:
             None: Saves the rendered window when screenshot evidence is enabled.
@@ -794,10 +786,9 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         window.focus_force()
         window.update()
         window.update_idletasks()
-        button = ui.progress_buttons["hide"]
-        self.assertTrue(button.winfo_ismapped())
-        self.assertGreater(button.winfo_width(), 0)
-        self.assertGreater(button.winfo_height(), 0)
+        self.assert_progress_controls_inside(window, ui)
+        self.assertGreater(window.winfo_width(), 0)
+        self.assertGreater(window.winfo_height(), 0)
         if not QA_DIR:
             if REQUIRE_TK:
                 self.fail("Native progress screenshots require PHP_GALLERY_WATCH_RECOVERY_QA_DIR.")
