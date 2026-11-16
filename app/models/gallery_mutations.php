@@ -719,23 +719,23 @@ function gallery_mutation_model_move_images(
 }
 
 /**
- * Persist an explicit moved-gallery path/parent map in one new transaction.
+ * Persist an explicit moved-gallery path/parent map in a shared transaction.
  *
  * Paths, SHA-256 hashes, parent graph and row existence must be validated by
  * the
  * service while holding writer ownership. This method neither renames folders
  * nor regenerates public paths; absent IDs are not detected by row-count
  * checks.
- * Normal return commits all statements. An exception attempts rollback only
- * while PDO still reports an active transaction and does not prove filesystem
- * state.
+ * A caller-owned transaction remains open for grant/revision verification.
+ * Otherwise this model owns commit/rollback. Neither outcome proves filesystem
+ * state; the service owns physical recovery.
  *
  * @param list<array{id:int, folder_path:string, folder_path_hash:string,
  *     parent_id:int|null, title?:string}> $updates Complete subtree path map,
  *     with an optional root title committed in the same transaction.
  * @param string $now Shared SQL timestamp for every row in the map.
- * @return void Empty input does nothing; otherwise starts/commits its own
- *     transaction.
+ * @return void Empty input does nothing. Joins an existing caller transaction
+ *     or owns a new one; only an owned transaction is committed/rolled back.
  * @author Rudolf Klusal
  */
 function gallery_mutation_model_update_gallery_paths(
@@ -746,7 +746,10 @@ function gallery_mutation_model_update_gallery_paths(
         return;
     }
     $pdo = db();
-    $pdo->beginTransaction();
+    $ownsTransaction = !$pdo->inTransaction();
+    if ($ownsTransaction) {
+        $pdo->beginTransaction();
+    }
     try {
         $stmt = $pdo->prepare(
             'UPDATE galleries SET folder_path = ?, folder_path_hash = ?, parent_id = ?, updated_at = ?, edit_revision = edit_revision + 1 WHERE id = ?',
@@ -773,9 +776,11 @@ function gallery_mutation_model_update_gallery_paths(
                 $stmt->execute($values);
             }
         }
-        $pdo->commit();
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
     } catch (Throwable $exception) {
-        if ($pdo->inTransaction()) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
             $pdo->rollBack();
         }
         throw $exception;

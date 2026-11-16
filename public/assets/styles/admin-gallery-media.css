@@ -22,6 +22,107 @@
     box-shadow: none;
 }
 
+/* Rename summaries stay compact; filename rows exist only after an explicit
+ * expansion. These scoped Theme surfaces cover the standalone workspace too. */
+.admin-media-renamer-workspace [data-media-renamer-reader],
+.admin-media-renamer-workspace [data-media-renamer-detail-more][hidden],
+.admin-media-renamer-workspace [data-media-renamer-detail-status][hidden] {
+    display: none !important;
+}
+
+.admin-media-renamer-totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1rem;
+    margin-block: 0.4rem;
+    color: var(--ink);
+    font-size: 0.8rem;
+}
+
+#admin-edit-renamer { color: var(--ink); background: var(--panel); }
+.admin-media-renamer-workspace .admin-media-renamer-preview { background: transparent; }
+.admin-media-renamer-report > h3 { margin: 0.35rem 0; font-size: 0.85rem; }
+
+.admin-media-renamer-workspace .admin-media-renamer-lazy {
+    min-width: 0;
+    margin-block: 0.35rem;
+    padding: 0.25rem 0.55rem;
+    color: var(--ink);
+    border: 0;
+    border-radius: min(var(--radius, 8px), 8px);
+    background: color-mix(in srgb, var(--panel) 42%, transparent);
+    backdrop-filter: blur(12px);
+    box-shadow: none;
+}
+
+.admin-media-renamer-lazy > summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.65rem;
+    min-height: 28px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.admin-media-renamer-lazy > summary::before { content: '▸'; color: var(--accent); }
+.admin-media-renamer-lazy[open] > summary::before { content: '▾'; }
+.admin-media-renamer-lazy > summary::marker { content: ''; }
+.admin-media-renamer-lazy > summary strong { flex: 1 1 12rem; }
+.admin-media-renamer-lazy > summary code { flex: 1 1 10rem; overflow-wrap: anywhere; }
+.admin-media-renamer-lazy > summary :is(span, small) { font-size: 0.75rem; }
+.admin-media-renamer-lazy > summary:focus-visible { outline: 2px solid var(--accent); }
+.admin-media-renamer-lazy [data-media-renamer-detail-body] { min-width: 0; }
+
+.admin-media-renamer-workspace .admin-media-renamer-file-page {
+    width: 100%;
+    margin-block: 0.4rem;
+    table-layout: fixed;
+    border-collapse: collapse;
+    color: var(--ink);
+    font-size: 0.78rem;
+}
+
+.admin-media-renamer-file-page :is(th, td) {
+    padding: 0.35rem;
+    border: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+}
+
+.admin-media-renamer-file-page code { white-space: normal; color: inherit; }
+.admin-media-renamer-file-page small { display: block; margin-top: 0.2rem; }
+.admin-media-renamer-lazy [data-media-renamer-detail-more] {
+    min-height: 28px;
+    margin-block: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    color: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+    border-radius: min(var(--radius, 6px), 6px);
+    background: transparent;
+    box-shadow: none;
+    font-size: 0.8rem;
+}
+
+@media (max-width: 700px), (pointer: coarse) {
+    .admin-media-renamer-lazy > summary,
+    .admin-media-renamer-lazy [data-media-renamer-detail-more] { min-height: 44px; }
+}
+
+@media (max-width: 700px) {
+    .admin-media-renamer-file-page thead { display: none; }
+    .admin-media-renamer-file-page :is(tbody, tr, td) { display: block; }
+    .admin-media-renamer-file-page tr { padding-block: 0.35rem; }
+    .admin-media-renamer-file-page td { border: 0; padding: 0.2rem 0; }
+    .admin-media-renamer-file-page td::before {
+        content: attr(data-label) ': ';
+        display: block;
+        font-weight: 600;
+    }
+}
+
 :is(#admin-edit-media, #admin-edit-organizer, #admin-edit-renamer) :is(h2, h3, p, label, fieldset, form) {
     margin: 0;
 }

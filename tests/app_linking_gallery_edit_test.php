@@ -4,7 +4,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/app_linking_gallery_edit_test.php
  * Module Type: Linked Gallery Edit Regression Test
- * Purpose: Exercise single-field metadata policy with isolated persistence adapters.
+ * Purpose: Exercise native metadata edits, real folder moves and shared writer ownership.
  * Responsibilities:
  *   - Verify explicit scope, fresh revisions and unrelated-field preservation.
  *   - Retain rollback and post-commit sidecar uncertainty as distinct outcomes.
@@ -14,11 +14,15 @@
 declare(strict_types=1);
 
 namespace Gallery\Core {
-    /**
-     * Return the fixture SQL timestamp.
-     * @return string Fixed fixture SQL timestamp.
+    /** Return the fixture's advisory-SQL adapter connection.
+     * @return \PDO Disposable SQLite connection, never installation storage.
      */
-    function now_sql(): string { return '2026-11-15 12:00:00'; }
+    function db(): \PDO { return $GLOBALS['edit_writer_database']; }
+
+    /** Configure only the disposable physical-gallery fixture.
+     * @return array{galleries_root:string} Owned temporary storage root.
+     */
+    function cms_config(): array { return ['galleries_root' => $GLOBALS['edit_root']]; }
 }
 
 namespace Gallery\Models {
@@ -37,6 +41,7 @@ namespace Gallery\Models {
         string $client, string $scope,
     ): bool {
         $GLOBALS['edit_backup'] = $GLOBALS['edit_row'];
+        $GLOBALS['edit_child_backup'] = $GLOBALS['edit_child'];
         return $GLOBALS['edit_grant'] && $userId === 3 && $grantId === 4
             && $hash === hash('sha256', $GLOBALS['edit_token'])
             && $issuer === 'https://gallery.example.test'
@@ -51,19 +56,26 @@ namespace Gallery\Models {
      */
     function app_link_model_create_transaction_end(bool $commit): void
     {
+        if ($GLOBALS['edit_commit_lost']) throw new \RuntimeException('Transaction outcome unknown.');
+        if ($commit && $GLOBALS['edit_lose_commit']) {
+            $GLOBALS['edit_commit_lost'] = true;
+            throw new \RuntimeException('Commit reply lost.');
+        }
         if (!$commit) {
             $GLOBALS['edit_row'] = $GLOBALS['edit_backup'];
+            $GLOBALS['edit_child'] = $GLOBALS['edit_child_backup'];
         }
     }
 
     /**
      * Model the current shared writer lease.
-     * @param string $writer Expected fixture writer identity.
+     * @param string $writer Actual connection-owned advisory lock name.
      * @return bool True for the admitted fixture writer.
      */
     function admin_operation_model_lock_owned(string $writer): bool
     {
-        return $writer === 'fixture-writer';
+        return $GLOBALS['edit_writer_depth'] > 0
+            && $writer === $GLOBALS['edit_writer_name'];
     }
 
     /**
@@ -79,7 +91,7 @@ namespace Gallery\Models {
     /**
      * Model the existing field writer and explicit revision increment.
      * @param int $galleryId Exact physical fixture identity.
-     * @param array{title?:string,description?:string,nsfw_enabled?:int,access_listing?:string} $fields Selected semantic field map.
+     * @param array{title?:string,description?:string,nsfw_enabled?:int,access_listing?:string,folder_path?:string,folder_path_hash?:string,parent_id?:?int} $fields Selected metadata or moved-root path fields.
      * @param string $now Caller-owned SQL timestamp.
      * @return void Applies the field and optionally injects unrelated trigger drift.
      */
@@ -108,9 +120,119 @@ namespace Gallery\Models {
     {
         return gallery_model_linked_visibility_lock($galleryId);
     }
+
+    /** Apply the real mover's complete path map at the persistence boundary.
+     * @param list<array{id:int,folder_path:string,folder_path_hash:string,parent_id:?int,title?:string}> $updates Computed subtree map.
+     * @param string $now Shared SQL timestamp.
+     * @return void Updates root and descendant fixture rows.
+     */
+    function gallery_mutation_model_update_gallery_paths(array $updates, string $now): void
+    {
+        foreach ($updates as $update) {
+            $id = $update['id'];
+            unset($update['id']);
+            if ($id === 7) gallery_model_update_fields($id, $update, $now);
+            else $GLOBALS['edit_child'] = array_replace($GLOBALS['edit_child'], $update);
+        }
+        if ($GLOBALS['edit_db_failure']) throw new \RuntimeException('Injected path persistence failure.');
+    }
+
+    /** Read the fixture's actual complete subtree.
+     * @param string $path Root relative path.
+     * @param string $pattern Escaped descendant selector.
+     * @return list<array{id:int,folder_path:string,parent_id:?int,...}> Root and child rows.
+     */
+    function gallery_mutation_model_subtree_rows(string $path, string $pattern): array
+    {
+        return [$GLOBALS['edit_row'], $GLOBALS['edit_child']];
+    }
+
+    /** Read stable fixture subtree identities after its physical rename.
+     * @param string $path Current root path.
+     * @param string $pattern Escaped descendant selector.
+     * @param bool $deepestFirst Whether children must precede their root.
+     * @return list<int> The two fixture gallery IDs.
+     */
+    function gallery_mutation_model_subtree_ids(string $path, string $pattern, bool $deepestFirst = false): array
+    {
+        return $deepestFirst ? [8, 7] : [7, 8];
+    }
+
+    /** Supply the consistent parent graph to real hierarchy completion.
+     * @return list<array{id:int,folder_path:string,parent_id:?int,...}> Current rows.
+     */
+    function gallery_mutation_model_hierarchy_rows(): array
+    {
+        return [$GLOBALS['edit_row'], $GLOBALS['edit_child']];
+    }
+
+    /** Verify that a rename preserves parent relationships.
+     * @param list<array{id:int,folder_path:string,parent_id:?int,...}> $rows Current hierarchy.
+     * @param array<int,int> $parents Desired parents, zero meaning storage root.
+     * @param string $now Shared timestamp.
+     * @return bool False because the correct fixture graph needs no repair.
+     */
+    function gallery_mutation_model_sync_parent_map(array $rows, array $parents, string $now): bool
+    {
+        if ($parents !== [7 => 0, 8 => 7]) throw new \RuntimeException('Wrong subtree graph.');
+        return false;
+    }
 }
 
 namespace Gallery\Services {
+    /** Preserve safe English messages at the external localization boundary.
+     * @param string $key Translation identity requested by the actual writer.
+     * @param string $fallback Bounded prepared English message.
+     * @return string Unmodified fixture fallback text.
+     */
+    function t(string $key, string $fallback = ''): string { return $fallback; }
+
+    /** Read current fixture rows at the catalogue boundary.
+     * @param int $id Selected gallery ID.
+     * @param bool $fresh Whether stale request caches must be bypassed.
+     * @return array{id:int,folder_path:string,parent_id:?int,...}|null Current row.
+     */
+    function find_gallery(int $id, bool $fresh = false): ?array
+    {
+        return $id === 7 ? $GLOBALS['edit_row'] : ($id === 8 ? $GLOBALS['edit_child'] : null);
+    }
+
+    /** Resolve fixture-owned catalogue paths for collision/ancestor checks.
+     * @param string $path Exact relative gallery directory.
+     * @return array{id:int,folder_path:string,parent_id:?int,...}|null Matching row.
+     */
+    function find_gallery_by_folder_path(string $path): ?array
+    {
+        foreach ([$GLOBALS['edit_row'], $GLOBALS['edit_child']] as $row) {
+            if ($row['folder_path'] === $path) return $row;
+        }
+        return null;
+    }
+
+    /** Supply the externally inspected move schema state.
+     * @return array{state:string} Fixture schema observation.
+     */
+    function gallery_move_schema_status(): array
+    {
+        return ['state' => $GLOBALS['edit_schema'] ? 'available' : 'unknown'];
+    }
+
+    /** Reject physical changes when schema inspection is uncertain.
+     * @param array{state:string} $status Inspected schema state.
+     * @param string $operation Semantic mutation identity.
+     * @param string $missing Safe missing-schema description.
+     * @param string $unknown Safe uncertainty description.
+     * @return void Admits only confirmed schema availability.
+     */
+    function mutation_schema_assert_available(array $status, string $operation, string $missing, string $unknown): void
+    {
+        if ($status['state'] !== 'available') throw new \RuntimeException($unknown);
+    }
+
+    /** Keep optional public-path storage absent in this isolated fixture.
+     * @return bool False; public-path regeneration has its existing DB coverage.
+     */
+    function public_path_schema_ready(): bool { return false; }
     /** Represent a confirmed pre-write stale revision in the isolated service. */
     final class LinkedGalleryVisibilityConflict extends \RuntimeException {}
 
@@ -155,17 +277,6 @@ namespace Gallery\Services {
     }
 
     /**
-     * Model the canonical revision reader for small fixture revisions.
-     * @param array{edit_revision?:int|string} $row Stored fixture revision.
-     * @return string Canonical positive decimal revision, or empty for invalid input.
-     */
-    function gallery_edit_revision(array $row): string
-    {
-        $revision = (string) ($row['edit_revision'] ?? '');
-        return preg_match('/\A[1-9][0-9]*\z/D', $revision) === 1 ? $revision : '';
-    }
-
-    /**
      * Model the canonical revision increment for small fixture revisions.
      * @param string $revision Reviewed fixture revision.
      * @return string Next fixture revision.
@@ -182,23 +293,10 @@ namespace Gallery\Services {
      */
     function gallery_visibility_marker_assert_importable(string $path): void
     {
-        if ($path !== 'stable-folder') {
+        if (!is_dir(gallery_abs_path($path))) {
             throw new \RuntimeException('Unexpected fixture folder.');
         }
     }
-
-    /**
-     * Acquire the isolated fixture writer.
-     * @return string Owned fixture writer identifier.
-     */
-    function gallery_edit_writer_begin(): string { return 'fixture-writer'; }
-
-    /**
-     * Release the isolated fixture writer.
-     * @param string $writer Captured fixture writer identity.
-     * @return void No external lock is held by this test.
-     */
-    function gallery_edit_writer_end(string $writer): void {}
 
     /**
      * Reset the fixture schema-inspection boundary.
@@ -258,17 +356,21 @@ namespace Gallery\Services {
 
     /**
      * Model canonical sidecar publication and its post-commit failure.
-     * @param array{id:int,title:string,description:string,edit_revision:string,visibility:string,access_listing:string,nsfw_enabled:int,folder_path:string,sort_order:int,updated_at:string} $row Complete confirmed row.
+     * @param array{id:int,folder_path:string,parent_id:?int,folder_path_hash?:string,title?:string,description?:string,edit_revision?:string,visibility?:string,access_listing?:string,nsfw_enabled?:int,sort_order?:int,updated_at?:string} $row Confirmed root or minimal descendant fixture row.
      * @return bool Whether the fixture permits sidecar completion.
      */
     function write_gallery_sidecar(array $row): bool
     {
-        $GLOBALS['edit_sidecar'] = $row;
+        if ($row['id'] === 7) $GLOBALS['edit_sidecar'] = $row;
         return $GLOBALS['edit_sidecar_ok'];
     }
 }
 
 namespace {
+    require_once __DIR__ . '/../app/helpers_files.php';
+    require_once __DIR__ . '/../app/helpers_runtime.php';
+    require_once __DIR__ . '/../app/services/gallery_paths.php';
+    require_once __DIR__ . '/../app/services/gallery_mutations.php';
     require_once __DIR__ . '/../app/services/security_tokens.php';
     require_once __DIR__ . '/../app/services/app_linking_policy.php';
     require_once __DIR__ . '/../app/services/app_linking_gallery_edit.php';
@@ -278,6 +380,33 @@ namespace {
             throw new \RuntimeException($message);
         }
     };
+    if (!extension_loaded('pdo_sqlite')) {
+        throw new \RuntimeException('Required disposable SQLite driver is unavailable.');
+    }
+    $GLOBALS['edit_writer_depth'] = 0;
+    $GLOBALS['edit_writer_name'] = null;
+    $lockDatabase = new \PDO('sqlite::memory:', null, null,
+        [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+    $GLOBALS['edit_writer_database'] = $lockDatabase;
+    // Execute the actual writer service/model, replacing only MySQL-specific
+    // SQL primitives at the driver boundary. Arity 0/2/1 mirrors that protocol;
+    // return codes 1/0 represent owned/busy rather than bypassing ownership.
+    $lockDatabase->sqliteCreateFunction('DATABASE', static fn(): string => 'linked-edit-fixture', 0);
+    $lockDatabase->sqliteCreateFunction('GET_LOCK', static function (string $name, int $seconds): int {
+        if ($seconds !== \Gallery\Core\GALLERY_EDIT_LOCK_WAIT_SECONDS
+            || ($GLOBALS['edit_writer_name'] !== null && $GLOBALS['edit_writer_name'] !== $name)) {
+            return 0;
+        }
+        $GLOBALS['edit_writer_name'] = $name;
+        $GLOBALS['edit_writer_depth']++;
+        return 1;
+    }, 2);
+    $lockDatabase->sqliteCreateFunction('RELEASE_LOCK', static function (string $name): int {
+        if ($GLOBALS['edit_writer_name'] !== $name || $GLOBALS['edit_writer_depth'] <= 0) return 0;
+        $GLOBALS['edit_writer_depth']--;
+        if ($GLOBALS['edit_writer_depth'] === 0) $GLOBALS['edit_writer_name'] = null;
+        return 1;
+    }, 1);
     $GLOBALS['edit_token'] = \Gallery\Services\app_linking_access_token_generate();
     $GLOBALS['edit_scope'] = \Gallery\Services\APP_LINKING_VISIBILITY_SCOPE
         . \Gallery\Services\APP_LINKING_ADMIN_MEDIA_SUFFIX
@@ -289,13 +418,22 @@ namespace {
     $GLOBALS['edit_tamper'] = false;
     $GLOBALS['edit_sidecar_ok'] = true;
     $GLOBALS['edit_writes'] = 0;
+    $GLOBALS['edit_db_failure'] = false;
+    $GLOBALS['edit_commit_lost'] = false;
+    $GLOBALS['edit_lose_commit'] = false;
+    $GLOBALS['edit_root'] = sys_get_temp_dir() . '/linked-gallery-edit-' . bin2hex(random_bytes(8));
+    mkdir($GLOBALS['edit_root'] . '/stable-folder/child', 0700, true);
+    file_put_contents($GLOBALS['edit_root'] . '/stable-folder/child/photo.jpg', 'owned image bytes');
+    try {
+    $GLOBALS['edit_child'] = ['id' => 8, 'folder_path' => 'stable-folder/child', 'parent_id' => 7];
     $GLOBALS['edit_row'] = [
         'id' => 7, 'title' => 'Server title',
         // A description longer than the existing 512-character info projection.
         'description' => str_repeat('Complete description. ', 40),
         'edit_revision' => '9', 'visibility' => 'public',
         'access_listing' => 'listed', 'nsfw_enabled' => 0,
-        'folder_path' => 'stable-folder', 'sort_order' => 6, 'updated_at' => 'before',
+        'folder_path' => 'stable-folder', 'folder_path_hash' => hash('sha256', 'stable-folder'),
+        'parent_id' => null, 'sort_order' => 6, 'updated_at' => 'before',
     ];
     $read = \Gallery\Services\app_linking_gallery_edit_read(
         $identity, $GLOBALS['edit_token'], 'https://gallery.example.test', 7,
@@ -315,10 +453,14 @@ namespace {
         );
         $check($saved[$field] === $value
             && $saved['revision'] === (string) ((int) $before['edit_revision'] + 1)
-            && $GLOBALS['edit_row']['folder_path'] === 'stable-folder'
-            && $GLOBALS['edit_invalidated'] === [7]
+            && $GLOBALS['edit_row']['folder_path'] === 'renamed'
+            && in_array(7, $GLOBALS['edit_invalidated'], true)
             && $GLOBALS['edit_sidecar'] === $GLOBALS['edit_row'],
-            'Single-field edits must confirm canonical state without moving folders.');
+            'Edits must confirm canonical state and retain the renamed physical directory.');
+        $check(is_file($GLOBALS['edit_root'] . '/renamed/child/photo.jpg')
+            && !is_dir($GLOBALS['edit_root'] . '/stable-folder')
+            && $GLOBALS['edit_child']['folder_path'] === 'renamed/child',
+            'Native title edit did not move the real descendant/media directory.');
     }
     $before = $GLOBALS['edit_row'];
     try {
@@ -345,6 +487,31 @@ namespace {
         }
     }
     $GLOBALS['edit_row'] = $before;
+    mkdir($GLOBALS['edit_root'] . '/collision');
+    try {
+        \Gallery\Services\app_linking_gallery_edit_save(
+            $identity, $GLOBALS['edit_token'], 'https://gallery.example.test', 7,
+            $before['edit_revision'], 'title', 'Collision',
+        );
+        throw new \LogicException('Occupied physical destination was accepted.');
+    } catch (\RuntimeException $error) {
+        $check(!$error instanceof \LogicException && $before === $GLOBALS['edit_row']
+            && is_file($GLOBALS['edit_root'] . '/renamed/child/photo.jpg'),
+            'Destination collision must preserve source bytes and metadata.');
+    }
+    rmdir($GLOBALS['edit_root'] . '/collision');
+    $GLOBALS['edit_schema'] = false;
+    try {
+        \Gallery\Services\app_linking_gallery_edit_save(
+            $identity, $GLOBALS['edit_token'], 'https://gallery.example.test', 7,
+            $before['edit_revision'], 'title', 'Unknown schema',
+        );
+        throw new \LogicException('Unknown schema admitted a title move.');
+    } catch (\RuntimeException $error) {
+        $check(!$error instanceof \LogicException && $before === $GLOBALS['edit_row']
+            && !is_dir($GLOBALS['edit_root'] . '/unknown-schema'), 'Unknown schema must fail before mutation.');
+    }
+    $GLOBALS['edit_schema'] = true;
     $GLOBALS['edit_tamper'] = true;
     try {
         \Gallery\Services\app_linking_gallery_edit_save(
@@ -355,8 +522,25 @@ namespace {
     } catch (\RuntimeException $error) {
         $check(!$error instanceof \LogicException && $before === $GLOBALS['edit_row'],
             'Unrelated field changes must roll back before commit.');
+        $check(is_file($GLOBALS['edit_root'] . '/renamed/child/photo.jpg')
+            && !is_dir($GLOBALS['edit_root'] . '/trigger-drift'),
+            'Confirmed DB rollback must restore physical subtree bytes.');
     }
     $GLOBALS['edit_tamper'] = false;
+    $GLOBALS['edit_db_failure'] = true;
+    try {
+        \Gallery\Services\app_linking_gallery_edit_save(
+            $identity, $GLOBALS['edit_token'], 'https://gallery.example.test', 7,
+            $before['edit_revision'], 'title', 'Database failure',
+        );
+        throw new \LogicException('Failed path persistence was accepted.');
+    } catch (\RuntimeException $error) {
+        $check(!$error instanceof \LogicException && $before === $GLOBALS['edit_row']
+            && is_file($GLOBALS['edit_root'] . '/renamed/child/photo.jpg')
+            && !is_dir($GLOBALS['edit_root'] . '/database-failure'),
+            'Database failure must restore the directory only after confirmed rollback.');
+    }
+    $GLOBALS['edit_db_failure'] = false;
     $GLOBALS['edit_sidecar_ok'] = false;
     try {
         \Gallery\Services\app_linking_gallery_edit_save(
@@ -366,8 +550,23 @@ namespace {
         throw new \LogicException('Failed sidecar was acknowledged.');
     } catch (\RuntimeException $error) {
         $check(!$error instanceof \LogicException
-            && $GLOBALS['edit_row']['title'] === 'Committed but unconfirmed',
+            && $GLOBALS['edit_row']['title'] === 'Committed but unconfirmed'
+            && is_file($GLOBALS['edit_root'] . '/committed-but-unconfirmed/child/photo.jpg'),
             'Sidecar uncertainty must not claim success or invent rollback.');
+    }
+    $GLOBALS['edit_sidecar_ok'] = true;
+    $GLOBALS['edit_lose_commit'] = true;
+    try {
+        \Gallery\Services\app_linking_gallery_edit_save(
+            $identity, $GLOBALS['edit_token'], 'https://gallery.example.test', 7,
+            $GLOBALS['edit_row']['edit_revision'], 'title', 'Lost commit',
+        );
+        throw new \LogicException('Ambiguous commit was acknowledged.');
+    } catch (\RuntimeException $error) {
+        $check(!$error instanceof \LogicException && $GLOBALS['edit_commit_lost']
+            && $GLOBALS['edit_row']['title'] === 'Lost commit'
+            && is_file($GLOBALS['edit_root'] . '/lost-commit/child/photo.jpg'),
+            'Ambiguous commit must preserve recovery evidence without inventing rollback.');
     }
     $GLOBALS['edit_grant'] = false;
     try {
@@ -377,6 +576,11 @@ namespace {
         throw new \LogicException('Revoked grant was accepted.');
     } catch (\RuntimeException $error) {
         $check(!$error instanceof \LogicException, 'Revocation must fail closed.');
+    }
+    } finally {
+        \Gallery\Services\delete_directory_tree($GLOBALS['edit_root'], dirname($GLOBALS['edit_root']));
+        $check($GLOBALS['edit_writer_depth'] === 0 && $GLOBALS['edit_writer_name'] === null,
+            'The actual writer model leaked an advisory acquisition after a terminal outcome.');
     }
     echo "linked gallery metadata edit tests passed\n";
 }

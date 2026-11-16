@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.2.6}
+\newcommand{\version}{1.2.7}
 \newcommand{\manualdate}{16.~November~2026}
 
 \hypersetup{
@@ -2109,6 +2109,9 @@ in WinApp auf diesem Computer gespeichert, niemals online. Titelbilder
 verwenden den verifizierten Thumbnail-Diskcache. Aktuelle autorisierte
 Sitzungsmetadaten erlauben die Anzeige vor der Hintergrundaktualisierung;
 nach einem Neustart ist vor der Cache-Nutzung eine neue Autorisierung nötig.
+Alle sichtbaren Cache-Titelbilder erscheinen vor seriellen Hintergrundprüfungen.
+Das Seitenverhältnis gilt für das Bild; Ordnerlasche und Rahmen liegen darum.
+Die Trennlinie wird lokal je Galerie gespeichert und nach Neustart wiederhergestellt.
 Ohne Verknüpfung öffnet \ui{Verbinden} den
 vorhandenen Adressdialog und die Zustimmung im Browser. Die aktive
 Verknüpfung erlaubt anschließend das direkte Anzeigen öffentlicher Fotos.
@@ -2345,7 +2348,10 @@ speichert Titel, Control+Enter Beschreibungen; Escape bricht ab. Gleichzeitige
 Webänderungen verweigern veraltete Schreibversuche. Unbestätigte Ergebnisse
 behalten den gesperrten Entwurf und bieten ein ausdrückliches Neuladen ohne
 Wiederholung des Schreibens. Bestätigte Titel aktualisieren Baum und Kopf;
-physische Ordner und stabile URLs bleiben erhalten.
+der tatsächliche Serverordner samt Unterbaum wird nach der bestehenden
+Bereinigung umbenannt. IDs bleiben erhalten; untergeordnete und verfügbare
+öffentliche Pfade folgen dem Umzug. Belegte Ziele werden abgelehnt. Unklare
+Commits oder Sidecar-Ergebnisse erfordern erneutes Lesen statt Schreibwiederholung.
 
 Metadatenänderungen benötigen einen aktuellen Server und eine eigene
 Browserfreigabe für \texttt{gallery:edit}. Bestehende Rechte werden nicht
@@ -4730,9 +4736,9 @@ Wählen Sie den Umfang und das Dateinamenmuster und erstellen Sie vor jeder
 Bestätigung eine Vorschau. Die kompakte Galerieliste bietet eine lokale Suche,
 ohne die markierte Auswahl zu ändern; sie erscheint beim Umfang markierter
 Galerien. Für eine einzelne Galerie verwenden Sie die Auswahlliste. Fragezeichen
-öffnen ausführliche Hilfe. Die Vorschau zeigt Gesamtzahlen und aufklappbare
-Galeriegruppen; prüfen Sie vor der Übernahme die alten und vorgeschlagenen Pfade
-sowie den Status in jeder Gruppe. Suchbegriffe werden unabhängig von ihrer
+öffnen ausführliche Hilfe. Die Analyse verwendet nur Datenbanknamen und Speicher.
+Die Vorschau zeigt Gesamtzahlen und aufklappbare Galeriegruppen; erst das Öffnen
+lädt bis zu 50 Dateinamen je Seite. Einzelprüfungen sind optional. Suchbegriffe werden unabhängig von ihrer
 Reihenfolge mit AND verknüpft; doppelte Anführungszeichen erhalten die genaue
 Wortfolge einer Phrase. Sichtbarkeitsfilter aktualisieren nur die Galerieliste,
 ohne einen Umbenennungsplan zu erstellen. Erstellen Sie den Plan ausdrücklich
@@ -4747,18 +4753,22 @@ Fortschritt.
 einzelnen Galerie können physische Bilddateinamen anhand des Galeriekontexts und
 der aktuellen Fotoreihenfolge normalisieren. Dies ist ein Dateisystemvorgang,
 keine kosmetische Titeländerung; daher beginnt das Werkzeug immer mit einem
-Probelaufplan. Die Vorschau führt jeden alten und vorgeschlagenen Dateinamen auf
-und kennzeichnet Dateien, die bereits passen, fehlen, kollidieren würden oder
-aufgrund einer Sicherheitsregel übersprungen werden müssen.
+Probelaufplan ohne vorab erzeugte Dateiliste. Physische Originale, nicht
+indexierte Dateikollisionen und Derivate werden erst beim Umbenennen geprüft.
 
 Nur direkte Bilddateien im ausgewählten Galerieordner kommen infrage. Fehlende
 Originale, Pfade außerhalb der Galerie und unsichere Ziele werden nicht
 umbenannt. Ist der bevorzugte Zielname bereits belegt, kann aber ein sicherer
 deterministischer Zusatz die Kollision lösen, zeigt die Vorschau diese
-Anpassung. Die Übernahme eines Plans erfordert die Bestätigung, dass die
-Vorschau geprüft wurde, über das Kontrollkästchen direkt bei der Vorschau.
+Anpassung. Die Übernahme erfordert die Bestätigung des physischen Umbenennens
+über das Kontrollkästchen direkt bei der Vorschau.
 Diese einzige Bestätigung gilt für Galerie- und websiteweite Vorgänge und wird
 von Browser und Server geprüft; ein weiterer blockierender Dialog entfällt.
+Die Übernahme lädt nur Kandidaten-IDs und behält Stapel mit höchstens 15 Fotos.
+Der fertige Bericht ersetzt die Vorschläge durch Galerie-Gesamtzahlen. Erst
+Aufklappen lädt geänderte Namen in Seiten mit 50 Einträgen. Berichte gehören
+zur aktuellen Administrator-Anmeldesitzung und verfallen nach 24 Stunden.
+Ein Detail-Speicherfehler macht bestätigte Umbenennungen nicht rückgängig.
 
 Das Standardmuster ist \codeword{\{gallery_path\}_\{seq4\}}. Ein
 benutzerdefiniertes Muster darf \codeword{\{gallery_path\}},

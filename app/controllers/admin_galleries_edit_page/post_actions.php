@@ -58,6 +58,7 @@ use function Gallery\Services\gallery_lightbox_state_summary;
 use function Gallery\Services\media_renamer_execute_gallery;
 use function Gallery\Services\media_renamer_execute_gallery_image_batch;
 use function Gallery\Services\media_renamer_normalize_pattern;
+use const Gallery\Core\MEDIA_RENAMER_PHYSICAL_BATCH_SIZE;
 use function Gallery\Services\smart_gallery_assign_children_to_gallery;
 use function Gallery\Services\smart_gallery_validate_children_assignment;
 use function Gallery\Services\t;
@@ -70,7 +71,7 @@ use function Gallery\Services\admin_log_event;
  * Rationale: 15 keeps filesystem work short enough for visible progress and
  * matches the existing site-wide browser batch size without unbounded input.
  */
-const MEDIA_RENAMER_GALLERY_BATCH_LIMIT = 15;
+const MEDIA_RENAMER_GALLERY_BATCH_LIMIT = MEDIA_RENAMER_PHYSICAL_BATCH_SIZE;
 
 /**
  * Handle one gallery editor POST request.
@@ -649,7 +650,7 @@ function admin_edit_gallery_handle_media_rename(
     if (empty($_POST['confirm_media_rename'])) {
         $notice = t(
             'admin.media_renamer.confirm_required',
-            'Confirm that you reviewed the preview before applying physical renames.',
+            'Confirm that you want to rename physical files using this naming pattern.',
         );
         if (
             admin_wants_json()
@@ -723,7 +724,7 @@ function admin_edit_gallery_handle_media_rename(
             header('Content-Type: application/json');
             echo json_encode(array_merge($batchPayload, [
                 'processed' => count($renameResult['details']),
-                'result' => admin_media_renamer_bounded_result($renameResult),
+                'result' => admin_media_renamer_attach_report($renameResult),
             ]));
             return;
         }
@@ -877,6 +878,9 @@ function admin_edit_gallery_handle_media_rename(
                     : null,
             );
         }
+        if ($renameResult !== null && $batchAction !== 'apply_refresh') {
+            $renameResult = admin_media_renamer_attach_report($renameResult);
+        }
         $payload = $renameResult !== null
             ? admin_mutation_success_envelope(
                 // The refreshed renamer owns the single live result notice.
@@ -912,6 +916,13 @@ function admin_edit_gallery_handle_media_rename(
             'result' => $renameResult,
         ]));
         return;
+    }
+    if ($renameResult !== null) {
+        $renameResult = admin_media_renamer_attach_report($renameResult);
+        $renamerReturnUrl = admin_edit_gallery_tab_url_with_renamer_pattern(
+            (int) $gallery['id'], $renamerPattern,
+            (string) ($renameResult['report_token'] ?? ''),
+        );
     }
     flash_message('admin_notice', $notice);
     redirect_to($renamerReturnUrl);

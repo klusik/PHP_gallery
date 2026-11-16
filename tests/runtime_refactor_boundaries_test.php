@@ -196,6 +196,8 @@ foreach ($orderedCalls as $call) {
 }
 
 require_once $root . '/app/helpers.php';
+// Controller constants depend on the passive shared policy declaration owner.
+require_once $root . '/app/policy_constants.php';
 require_once $root . '/app/services/updates.php';
 require_once $root . '/app/controllers/public_gallery.php';
 require_once $root . '/app/controllers/admin_galleries_edit.php';

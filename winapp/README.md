@@ -1440,7 +1440,12 @@ none are written to the website. Folder covers reuse the ordinary verified
 thumbnail disk pool. A current session descriptor can display a matching cached
 cover before background metadata refresh; after restart, fresh authorized
 metadata is required before disk reuse. Permission, validator, cancellation and
-private-media checks remain owned by the linking session.
+private-media checks remain owned by the linking session. All visible cached
+covers are checked before a slow background metadata request can block later
+cards. Supporting servers return a single authorized cover descriptor. Older
+servers fall back once to the established catalogue page so strong thumbnail
+validators and private-cache admission remain available. The selected ratio
+describes the cover image itself; the folder tab and rim surround that image.
 Each folder uses its first authorized direct thumbnail as a cover. When no
 eligible image is available, the card shows a neutral folder. Photos keeps
 listings in memory and uses the current link grant. If the smallest thumbnail
@@ -1581,7 +1586,13 @@ or Cancel. A save sends only that one field and the reviewed revision. A web
 edit made meanwhile refuses the stale save; a lost reply remains unconfirmed.
 The draft stays visible and locked until an explicit server reload; writes are
 never automatically replayed. Confirmed server titles update the tree and
-heading. Display-title edits preserve physical folders and stable URLs.
+heading. A title save derives the physical directory leaf with the server's
+existing sanitizer and moves the complete subtree. Gallery/image IDs remain
+stable; descendant paths, hierarchy metadata and available public paths follow
+the move. Occupied destinations are refused. Grant/revision checks remain locked
+through the directory/database transition. A confirmed DB rollback restores the
+old directory; an ambiguous commit or failed post-commit sidecar stays unconfirmed
+and must not be replayed automatically. The tree refreshes after confirmation.
 
 Metadata edits require a server advertising **gallery:edit** and a new browser
 approval; an old read, visibility or deletion grant gains no new permission.

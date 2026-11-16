@@ -292,6 +292,10 @@ namespace {
         ];
         check(app_linking_media_page($mediaGallery, 0, false, true)['photos'] === [$expected],
             'The Admin catalogue must include the restricted photo without cache admission.');
+        $coverPage = app_linking_media_page($mediaGallery, 0, false, true, false, true);
+        check(($coverPage['cover_page'] ?? null) === true
+            && $coverPage['photos'] === [$expected] && $coverPage['next_after'] === null,
+            'Single-cover negotiation must retain private/NSFW cache restrictions.');
         check(gallery_admin_media_preload_gallery_allowed($galleryId),
             'A private non-NSFW gallery remains eligible independently of its photo flag.');
         $pdo->prepare('UPDATE images SET nsfw_enabled = 0 WHERE id = ?')->execute([$imageId]);

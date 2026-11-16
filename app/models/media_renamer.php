@@ -102,6 +102,22 @@ function media_renamer_model_indexed_paths(int $galleryId): array
 }
 
 /**
+ * Read only naming/ownership facts, retaining the canonical gallery order.
+ *
+ * @param int $galleryId Physical gallery whose indexed names are analyzed.
+ * @return list<array{id:int|string,gallery_id:int|string,relative_path:string,filename:string,title:?string,sort_order:int|string}> Lightweight rows, including nested paths used as fixed collision boundaries.
+ */
+function media_renamer_model_preview_rows(int $galleryId): array
+{
+    $stmt = db()->prepare(
+        'SELECT id, gallery_id, relative_path, filename, title, sort_order '
+            . 'FROM images WHERE gallery_id = ? ORDER BY sort_order, filename',
+    );
+    $stmt->execute([$galleryId]);
+    return $stmt->fetchAll() ?: [];
+}
+
+/**
  * Return requested gallery identifiers that still exist.
  *
  * @param list<int> $galleryIds Requested gallery identifiers.

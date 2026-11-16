@@ -166,6 +166,16 @@ $registry = [
 
     // Most PHP tests are self-contained. Keep only true environment exceptions here.
     'php_test_requirements' => [
+        'app_linking_gallery_edit_test.php' => [
+            'extensions' => ['pdo_sqlite'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Native gallery edits execute the real writer service/model through disposable SQLite advisory-SQL adapters and owned physical directories.',
+        ],
+        'media_renamer_database_preview_test.php' => [
+            'extensions' => ['pdo_sqlite'],
+            'missing_status' => 'BLOCKED',
+            'reason' => 'Real lightweight preview SQL and caller-owned transaction rollback require an isolated SQLite database.',
+        ],
         'gallery_music_service_test.php' => [
             'extensions' => ['pdo_sqlite'],
             'missing_status' => 'BLOCKED',
@@ -477,6 +487,15 @@ $registry = [
         'admin_gallery_title_completion_test.mjs' => [],
         'admin_gallery_title_completion_browser_test.mjs' => [
             'browser' => true,
+            'timeout' => 60,
+        ],
+        // Bound real view rendering, lazy-read/apply journeys and screenshots.
+        // Type: int. Units: seconds. Scope: one disposable Chromium child.
+        // Consumers: central browser owner. Rationale: 60 includes PHP render,
+        // desktop/narrow review frames and isolated browser teardown.
+        'admin_media_renamer_browser_test.mjs' => [
+            'browser' => true,
+            'php_argument' => true,
             'timeout' => 60,
         ],
         'public_content_widget_admin_browser_test.mjs' => [

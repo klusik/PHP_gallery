@@ -1,5 +1,150 @@
 # Patch notes
 
+## Version 1.2.7
+
+Improved subgallery thumbnail reuse and folder proportions in WinApp 1.4.0,
+made companion gallery renames update the real server directory, and reduced
+Admin bulk-renamer analysis and rendering work. Addressed the gallery and
+renaming defects tracked in [#394](https://github.com/klusik/PHP_gallery/issues/394).
+
+### Highlights
+
+#### Reliable subgallery covers
+
+- Fixed subgallery covers to write and reuse the verified thumbnail disk cache
+  across navigation and fresh sessions. Checked all visible authorized cached
+  covers before starting serial background metadata refreshes.
+- Preserved current authorization, private-media and validator checks. Required
+  fresh authorized metadata after restart and cleared covers after confirmed
+  access revocation, removal or an empty gallery.
+- Applied the selected aspect ratio to the cover image itself and drew the
+  folder tab and rim around it.
+- Verified that the folder/photo divider restored its position from the real
+  local per-gallery preference file without online settings writes.
+
+#### Physical gallery renames from WinApp
+
+- Changed confirmed title saves to move the real server directory and update
+  affected descendant and media paths through the existing guarded subtree
+  mover. Preserved gallery and image identifiers.
+- Refreshed the WinApp catalogue after a confirmed rename while retaining the
+  current gallery context.
+- Preserved stale-revision, grant and destination checks. Restored the old
+  directory only after a confirmed database rollback and avoided automatic
+  replay or speculative rollback after an uncertain commit or sidecar failure.
+
+#### Compact bulk-renamer proposals and reports
+
+- Changed analysis to derive proposed names and counters from database naming
+  records and memory, without inspecting image files, hashing originals or
+  enumerating derivatives.
+- Replaced complete initial filename lists with compact per-gallery summaries.
+  Loaded up to 50 file details only when a gallery was expanded, with explicit
+  pagination and retry.
+- Preserved AJAX discovery, gallery selection and rename progress. Collected
+  candidate IDs in bounded pages before applying the existing physical batches.
+- Cleared old proposals before showing the completed report. Displayed summary
+  rows first and loaded confirmed file outcomes only on request.
+- Kept missing-file and unindexed disk-collision checks in the physical rename
+  stage, where the existing filesystem safety and rollback logic remained.
+
+### Technical Details
+
+#### Linked media and directory mutations
+
+- Added the optional `X-PHP-Gallery-Photo-Page: cover-v1` request in
+  `winapp/uploader/app_linking.py` and the linked-media controller/service.
+  Supporting servers returned a single authorized cover descriptor with no
+  continuation. Kept cover-only responses separate from complete photo lists.
+- Added one-time session negotiation for older servers that omitted the cover
+  marker. Reused the established catalogue lane so strong validators and
+  private-cache admission remained available.
+- Updated `app/services/app_linking_gallery_edit.php` to coordinate the owned
+  physical mover with the grant transaction and writer lease. Made
+  `app/models/gallery_mutations.php` join an existing transaction rather than
+  commit its caller's work.
+- Updated root title, path hashes and descendant paths together. Required the
+  existing `gallery:edit` consent and conclusive write prerequisites; refused
+  occupied targets and stale or unauthorized saves. Kept description and switch
+  edits on their existing field-only path.
+- Preserved committed filesystem state when commit or post-commit completion
+  could not be confirmed, leaving explicit reload/recovery to the caller.
+
+#### Database previews and completed reports
+
+- Added `app/services/media_renamer/preview.php` under the existing renamer
+  owner, backed by a lightweight model projection and the existing naming and
+  collision policy. Returned no filename or image-ID list in initial summaries.
+- Added 50-row detail pages and 500-ID candidate pages. Shared the unchanged
+  15-image physical batch policy through the passive Core constants owner.
+- Added `app/services/media_renamer/reports.php` to journal actual completed
+  outcomes during execution. Bound opaque report identities to the authenticated
+  account and PHP session, with a 24-hour lifetime.
+- Stored reports under the HTTP-denied cache area, with atomic publication,
+  bounded chunks, integrity checks and nonblocking leases. Read only requested
+  chunks and returned detail responses with no-store caching.
+- Bounded expired-report housekeeping and preserved unrelated or unproven files.
+  Report storage failures produced warnings without undoing or replaying
+  confirmed renames.
+- Preserved classic-form report identities and read-only paginated links.
+  Introduced no database migration.
+
+#### Admin presentation
+
+- Updated `app/controllers/admin_media_renamer.php` and the gallery-editor
+  action path to return compact results while preserving actual mutation IDs,
+  revisions and refresh contexts.
+- Updated `public/assets/gallery-modules/admin-media-renamer.js` to fetch
+  details on expansion, cancel stale reads, retry failed pages and replace
+  proposals with the final report.
+- Updated the production view, responsive Theme styling and English, Czech,
+  German and Swedish interface text for the overview and lazy detail flow.
+
+#### Tests and documentation
+
+- Added real cache-pipeline and fresh-session cover reuse tests, a blocked
+  metadata refresh case, cover-only/full-catalogue separation, older-server
+  negotiation and pixel checks for all six explicit image ratios.
+- Exercised divider persistence through the actual host preference bridge and
+  verified isolation between local gallery, account and site identities.
+- Expanded the linked-edit fixture to execute the real directory/subtree mover
+  and transaction models, including confirmed rollback, occupied destinations,
+  stale edits, revoked grants, uncertain commits and balanced writer leases.
+- Added `tests/media_renamer_database_preview_test.php` for database-only
+  planning, bounded pages, transaction ownership and report ownership, expiry,
+  integrity and reclamation behavior.
+- Added `tests/admin_media_renamer_browser_test.mjs` using production PHP views
+  and client code. Covered lazy reads, pagination, retries, stale responses,
+  confirmation, physical batch size, replacement reports and exact mutation
+  envelopes, with desktop and narrow screenshots.
+- Updated architecture, design, testing and compatibility documentation, the
+  WinApp README and all four maintained manual source editions.
+
+### User Impact
+
+#### For WinApp users
+
+- Reduced repeated cover-image downloads while retaining current access checks.
+- Made selected cover ratios describe the visible image and retained local
+  divider positions without writing presentation preferences to the website.
+- Made gallery title changes update server folders and subsequent catalogue
+  paths; kept uncertain saves explicit instead of retrying them automatically.
+
+#### For administrators
+
+- Removed physical image inspection and complete filename rendering from bulk
+  analysis, allowing selected galleries to proceed from compact summaries.
+- Kept detailed proposals and completed-file reports available on demand.
+- Preserved the existing AJAX execution workflow and physical safety checks.
+
+#### For visitors and maintainers
+
+- Left the public gallery interface unchanged and retained existing access and
+  private-media checks.
+- Added regression coverage for cache reuse, directory mutation, lazy reporting
+  and local display persistence without claiming installed-host or production
+  performance acceptance.
+
 ## Version 1.2.6
 
 Improved gallery browsing in the Windows companion with wrapped subgallery

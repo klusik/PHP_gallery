@@ -136,7 +136,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261115-pdf-title-v2';
+} from './gallery-modules/admin-operations.js?v=20261116-lazy-renamer-v1';
 
 /**
  * Runs a setup callback after the DOM is ready.

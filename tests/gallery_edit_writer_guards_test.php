@@ -364,6 +364,35 @@ PHP;
                     === php_source_contract_tokens('<?php ' . $ownedSignature),
                 'Upload writer or owned signature changed.',
             );
+        } elseif ($name === 'move_gallery_folder_to_parent') {
+            // Pin both complete declarations: the public API stays unchanged;
+            // only the owned primitive accepts explicit deferred completion.
+            $publicSignature = <<<'PHP'
+function move_gallery_folder_to_parent(
+    int $galleryId,
+    ?int $parentId,
+    ?string $folderName = null,
+    bool $smartGalleryGraphPrevalidated = false,
+    ?string $title = null,
+): array
+PHP;
+            $ownedSignature = <<<'PHP'
+function move_gallery_folder_to_parent_owned(
+    int $galleryId,
+    ?int $parentId,
+    ?string $folderName = null,
+    bool $smartGalleryGraphPrevalidated = false,
+    ?string $title = null,
+    bool $deferCompletion = false,
+): array
+PHP;
+            gallery_writer_check(
+                php_source_contract_tokens('<?php ' . $function['declaration'])
+                    === php_source_contract_tokens('<?php ' . $publicSignature)
+                    && php_source_contract_tokens('<?php ' . $owned['declaration'])
+                    === php_source_contract_tokens('<?php ' . $ownedSignature),
+                'Public move signature or owned deferred-completion default changed.',
+            );
         } else {
             gallery_writer_check(
                 php_source_contract_tokens('<?php ' . str_replace(

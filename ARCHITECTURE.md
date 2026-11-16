@@ -786,7 +786,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.2.6';
+const CMS_VERSION = '1.2.7';
 ```
 
 Update-related code uses:
@@ -2474,6 +2474,18 @@ feature readiness is resolved once in `capabilities.php` and passed to every
 phase, so a control cannot be hidden in one tab and writable in another.
 
 Rules for split modules:
+
+The Media Renamer retains one domain service owner. Its `media_renamer/preview.php`
+part derives summaries and bounded filename/ID pages from the lightweight model
+projection without filesystem reads. `media_renamer/reports.php` owns temporary,
+session-bound completed-outcome journals. Controllers enforce Admin/CSRF, paging
+and canonical mutation envelopes; views render only prepared summaries/rows.
+Physical planning, source/derivative safety, staging and rollback remain with the
+existing executor. No schema or new runtime root is introduced. The two parts
+grow the existing module closure; hosted preparation owns measured inventory and
+complete-file hashes before integration qualification.
+The shared 15-image batch limit belongs to the passive Core policy owner so
+isolated controller declarations can load it without a full service bootstrap.
 
 - **a part file sits one directory deeper than the module entry file, so every
   filesystem-relative expression must be re-based when a function moves into

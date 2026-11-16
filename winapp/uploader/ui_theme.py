@@ -85,6 +85,13 @@ _PHOTO_FORMAT_LABEL_POINTS = 8
 # Rationale: 16 px leaves the toolbar text-free while preserving the 32 px row.
 _PHOTOS_ICON_IMAGE_SIZE = 16
 
+# Purpose: Draw the folder rim outside the correctly proportioned cover image.
+# Type: tuple[int, int, int, int]. Units: logical pixels, left/top/right/bottom.
+# Scope: shared folder artwork. Consumers: folder_card_size and create_smooth_icon.
+# Rationale: 5/12/5/8 retains the compact rim and raised tab without cropping
+# the selected image ratio into the remaining space of a ratio-shaped folder.
+FOLDER_COVER_INSETS = (5, 12, 5, 8)
+
 # Purpose: Normalize Tk's reported display density to logical UI pixels.
 # Type: float; Units: dots per inch; Scope: Windows uploader image and row sizing.
 # Consumers: _tk_dpi_scale.
@@ -410,6 +417,18 @@ def _scale_ui_pixels(master: tk.Misc, logical_pixels: int) -> int:
     return max(1, round(logical_pixels * _tk_dpi_scale(master)))
 
 
+def folder_card_size(image_size: tuple[int, int]) -> tuple[int, int]:
+    """Add the shared folder frame around an independently sized cover.
+
+    Args:
+        image_size (tuple[int, int]): Positive logical cover width and height.
+    Returns:
+        tuple[int, int]: Outer artwork width and height including the tab/rim.
+    """
+    left, top, right, bottom = FOLDER_COVER_INSETS
+    return image_size[0] + left + right, image_size[1] + top + bottom
+
+
 def create_smooth_icon(
     master: tk.Misc,
     icon: str,
@@ -509,13 +528,14 @@ def create_smooth_icon(
             try:
                 import io
                 with Image.open(io.BytesIO(cover)) as source:
-                    # Preserve the folder rim for every local aspect ratio.
-                    # Insets 5/12/8 are silhouette geometry, not cache policy.
+                    # The caller sizes the cover first, then adds this frame.
+                    # The selected ratio therefore describes the actual pixels.
+                    left, top, right, bottom = FOLDER_COVER_INSETS
                     preview = ImageOps.fit(source.convert("RGB"), (
-                        max(1, (width - 10) * scale),
-                        max(1, (height - 20) * scale),
+                        max(1, (width - left - right) * scale),
+                        max(1, (height - top - bottom) * scale),
                     ))
-                    canvas.paste(preview, (5 * scale, 12 * scale))
+                    canvas.paste(preview, (left * scale, top * scale))
             except (OSError, ValueError):
                 pass
     elif key in ("cloud", "local", "partial", "unknown"):

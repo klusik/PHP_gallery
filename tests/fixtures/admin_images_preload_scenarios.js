@@ -11,7 +11,7 @@
 import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261021-upload-media-v1';
 import {beginAdminPanelOpen, deactivateAdminPanel} from '/public/assets/gallery-modules/admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 import {prepareAdminPanelDrafts} from '/public/assets/gallery-modules/admin-panel-drafts.js?v=20261012-pdf-files-v1';
-import {setupAdminMediaRenamer} from '/public/assets/gallery-modules/admin-media-renamer.js?v=20261101-owned-cache-batches-v6';
+import {setupAdminMediaRenamer} from '/public/assets/gallery-modules/admin-media-renamer.js?v=20261116-lazy-renamer-v1';
 
 // Pace lifecycle condition checks without starving browser resource tasks.
 // Type: number; Units: milliseconds; Scope: one synthetic wait iteration;

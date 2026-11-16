@@ -38,6 +38,8 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 require_once __DIR__ . '/gallery_edit_concurrency.php';
+require_once __DIR__ . '/media_renamer/preview.php';
+require_once __DIR__ . '/media_renamer/reports.php';
 
 use RuntimeException;
 use Throwable;
@@ -427,11 +429,11 @@ function media_renamer_existing_gallery_ids(array $galleryIds): array
 }
 
 /**
- * Build rename plans for several galleries.
+ * Build database-only summary previews without inspecting physical files.
  *
  * @param array<int|string> $galleryIds Gallery ids value.
  * @param string $pattern Pattern value.
- * @return array<int,array<string,mixed>> Structured result data for the caller.
+ * @return list<array{gallery:array{id:int|string,title?:string,folder_path:string,...},items:list<array{gallery_id:int,image_id:int,old_relative_path:string,new_relative_path:string,status:string,warnings:list<string>,can_rename:bool}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>,preview_only:bool,candidate_image_ids:list<int>,next_offset:?int}> Compact UI plans; physical execution owns its separate fresh safety plan.
  */
 function media_renamer_plans_for_galleries(
     array $galleryIds,
@@ -439,7 +441,7 @@ function media_renamer_plans_for_galleries(
 ): array {
     $plans = [];
     foreach (media_renamer_existing_gallery_ids($galleryIds) as $galleryId) {
-        $plans[] = media_renamer_plan_for_gallery($galleryId, $pattern);
+        $plans[] = media_renamer_database_preview($galleryId, $pattern);
     }
     return $plans;
 }

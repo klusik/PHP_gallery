@@ -104,6 +104,9 @@ namespace Gallery\Controllers {
 }
 
 namespace {
+    // Load the shared declaration owner without introducing service-function
+    // implementations that would collide with this fixture's external adapters.
+    require_once dirname(__DIR__) . '/app/policy_constants.php';
     require_once
         dirname(__DIR__)
             . '/app/controllers/admin_galleries_edit_page/post_actions.php';

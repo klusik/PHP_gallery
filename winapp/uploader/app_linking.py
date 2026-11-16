@@ -4282,12 +4282,15 @@ class LinkedMediaPage:
         photos (tuple[LinkedPhoto, ...]): Ordered positive photo IDs; transport
             pages ascend and WinApp-only reverse snapshots descend.
         next_after (int | None): Exclusive continuation or None at the end.
+        cover_only (bool): True for a single cover descriptor, which cannot
+            establish the size or completeness of the gallery catalogue.
     """
 
     gallery_id: int
     parent_id: int | None
     photos: tuple[LinkedPhoto, ...]
     next_after: int | None
+    cover_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -4529,6 +4532,7 @@ def _native_media_read_once(
     *, allow_restricted: bool = False, admin_preload: bool = False,
     pool: _MediaConnectionPool | None = None,
     timings: MediaReadTimings | None = None,
+    cover_only: bool = False,
 ) -> _NativeMediaResponse:
     """Read one current media projection from the exact scoped installation.
 
@@ -4545,6 +4549,9 @@ def _native_media_read_once(
         pool (_MediaConnectionPool | None): Session's sequential idle socket,
             or None for the original one-request behavior.
         timings (MediaReadTimings | None): Caller-owned aggregate phase metrics.
+        cover_only (bool): Request only the first authorized cover descriptor.
+            Older servers retain their bounded legacy page; cache admission is
+            still decided by their current metadata and response policy.
 
     Returns:
         _NativeMediaResponse: Body or authorized not-modified marker, media type,
@@ -4611,7 +4618,9 @@ def _native_media_read_once(
         if cache_header is not None:
             headers[cache_header] = '1'
         if catalogue_request:
-            headers['X-PHP-Gallery-Photo-Page'] = str(NATIVE_MEDIA_PAGE_SIZE)
+            headers['X-PHP-Gallery-Photo-Page'] = (
+                'cover-v1' if cover_only else str(NATIVE_MEDIA_PAGE_SIZE)
+            )
         if admin_preload:
             headers['X-PHP-Gallery-Preload'] = 'admin-v1'
         if if_none_match is not None:
@@ -5232,6 +5241,7 @@ class LinkingSession:
         self._issuer = issuer
         self._scope = scope
         self._admin_preload_supported = admin_preload_supported
+        self._cover_page_supported: bool | None = None
         self._gallery_tree_supported = gallery_tree_supported
         self._thumbnail_batch_supported = thumbnail_batch_supported
         self._sliding_access_supported = (
@@ -5778,6 +5788,7 @@ class LinkingSession:
         timings: MediaReadTimings | None = None,
         proof_generation_out: list[int] | None = None,
         operation_deadline: float | None = None,
+        cover_only: bool = False,
     ) -> _NativeMediaResponse:
         """Serialize one exact media read under the shared session and HTTPS gates.
 
@@ -5796,6 +5807,8 @@ class LinkingSession:
             operation_deadline (float | None): Optional absolute monotonic
                 deadline shared with a larger operation, or None for the
                 existing independent admission and transport limits.
+            cover_only (bool): Request one first-page cover descriptor without
+                changing the route, authorization or legacy-server fallback.
 
         Returns:
             _NativeMediaResponse: Body/304 status, media type, validator, and
@@ -5808,6 +5821,9 @@ class LinkingSession:
         """
         if not _native_media_id(gallery_id):
             raise LinkingError('Invalid gallery media target.')
+        if (type(cover_only) is not bool
+                or cover_only and (kind != 'photos' or selector is not None)):
+            raise LinkingError('Invalid gallery cover selector.')
         if (operation_deadline is not None and (
                 type(operation_deadline) not in (int, float)
                 or not math.isfinite(operation_deadline))):
@@ -5924,6 +5940,7 @@ class LinkingSession:
                                 admin_preload=admin_preload,
                                 pool=self._media_connection_pool,
                                 timings=timings,
+                                **({'cover_only': True} if cover_only else {}),
                             ), cancel, transport_timeout,
                             LINKING_SOCKET_TIMEOUT_SECONDS,
                             phase='media', route='app_linking_media',
@@ -6042,7 +6059,7 @@ class LinkingSession:
     def media_page(
         self, gallery_id: int, after_id: int | None = None,
         cancelled: threading.Event | None = None,
-        *, timings: MediaReadTimings | None = None,
+        *, timings: MediaReadTimings | None = None, cover_only: bool = False,
     ) -> LinkedMediaPage:
         """Read a bounded page of currently permitted direct gallery photos.
 
@@ -6051,6 +6068,9 @@ class LinkingSession:
             after_id (int | None): Previous exclusive cursor or None for first page.
             cancelled (threading.Event | None): Current viewer cancellation.
             timings (MediaReadTimings | None): Optional metadata-only counters.
+            cover_only (bool): Request just the first authorized photo for a
+                folder cover. Older servers can return their ordinary bounded
+                first page; its normal permission and validator checks remain.
 
         Returns:
             LinkedMediaPage: Bound parent, ordered images and optional continuation.
@@ -6058,10 +6078,17 @@ class LinkingSession:
         Raises:
             LinkingError: The response, target or permission is unavailable.
         """
+        if (type(cover_only) is not bool
+                or cover_only and after_id is not None):
+            raise LinkingError('Invalid gallery cover page.')
         proof_generation: list[int] = []
-        options: dict[str, MediaReadTimings | list[int]] = (
+        options: dict[str, MediaReadTimings | list[int] | bool] = (
             {'timings': timings} if timings is not None else {}
         )
+        with self._lock:
+            request_cover = cover_only and self._cover_page_supported is not False
+        if request_cover:
+            options['cover_only'] = True
         if (scope_allows_admin_media(self._scope)
                 and self._admin_preload_supported):
             options['proof_generation_out'] = proof_generation
@@ -6142,7 +6169,21 @@ class LinkingSession:
                 or next_after != previous
                 or len(photos) not in (NATIVE_MEDIA_LEGACY_PAGE_SIZE, NATIVE_MEDIA_PAGE_SIZE))):
             raise LinkingError('Gallery photo cursor was not accepted.')
-        result = LinkedMediaPage(gallery_id, parent, tuple(photos), next_after)
+        if request_cover:
+            supported = page.get('cover_page') is True
+            if supported and (len(photos) > 1 or next_after is not None):
+                raise LinkingError('Gallery cover page was not accepted.')
+            with self._lock:
+                self._cover_page_supported = supported
+            if not supported and photos:
+                # Permanent support for older approved servers: an unknown
+                # header selects their small legacy page without validator
+                # proofs. Retry this passive read once using the established
+                # catalogue header, then use that lane for this session. Never
+                # degrade automatic private-thumbnail reuse to binary reloads.
+                return self.media_page(gallery_id, cancelled=cancelled, timings=timings)
+        result = LinkedMediaPage(gallery_id, parent, tuple(photos), next_after,
+                                 cover_only=request_cover and page.get('cover_page') is True)
         private_user_id: int | None = None
         private_full_opt_in = False
         if (scope_allows_admin_media(self._scope)

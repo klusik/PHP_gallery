@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.2.6}
+\newcommand{\version}{1.2.7}
 \newcommand{\manualdate}{16~november~2026}
 
 \hypersetup{
@@ -1958,6 +1958,9 @@ sparas endast i WinApp på den här datorn, aldrig online. Omslagen använder de
 verifierade miniatyrbildscachen på disk. Aktuella behöriga sessionsmetadata
 kan visa ett sparat omslag före bakgrundsuppdateringen; efter omstart krävs
 ny behörighetskontroll innan cachen används.
+Alla synliga sparade omslag visas före seriella bakgrundskontroller. Formatet
+gäller själva bilden; mappflik och ram ligger runt den. Avdelarens läge sparas
+lokalt per galleri och återställs efter omstart.
 Utan länk öppnar \ui{Anslut} den
 befintliga adressdialogen och godkännandet i webbläsaren. Den aktiva länken
 ger sedan direkt åtkomst till offentliga foton. Det separata uppladdningsmålet
@@ -2192,7 +2195,10 @@ texten. Varje editor läser först aktuellt servervärde och revision. Enter spa
 titeln, Control+Enter beskrivningen; Escape avbryter. Samtidiga webbändringar
 avvisar en gammal revision. Ett obekräftat resultat behåller det låsta utkastet
 och erbjuder uttrycklig serverinläsning utan att upprepa skrivningen. Bekräftade
-titlar uppdaterar träd och rubrik; fysiska mappar och stabila URL:er behålls.
+titlar uppdaterar träd och rubrik samt byter namn på den verkliga servermappen
+och dess underträd enligt befintlig sanering. ID:n behålls; underordnade och
+tillgängliga offentliga sökvägar följer flytten. Upptagna mål avvisas. Oklara
+commit- eller sidecar-resultat kräver ny läsning utan automatisk skrivupprepning.
 
 Metadataändringar kräver en aktuell server och separat webbläsargodkännande
 för \texttt{gallery:edit}. Befintliga rättigheter utökas inte. Inventering,
@@ -4375,9 +4381,9 @@ Välj omfattning och filnamnsmönster och skapa förhandsvisningen innan du
 bekräftar ett fysiskt namnbyte. Den kompakta gallerilistan har lokal sökning
 utan att ändra markerade val och visas för omfattningen markerade gallerier.
 Använd rullistan för ett enskilt galleri. Frågetecken öppnar utförlig hjälp.
-Förhandsvisningen visar sammanlagda antal och utfällbara gallerigrupper;
-kontrollera gamla och föreslagna sökvägar samt status i varje grupp innan planen
-tillämpas. Sökord kombineras med AND oavsett ordning; dubbla citattecken bevarar
+Analysen använder bara databasnamn och minne. Förhandsvisningen visar antal och
+utfällbara gallerigrupper; först när en grupp öppnas hämtas upp till 50 filnamn
+per sida. Detaljgranskning är frivillig. Sökord kombineras med AND oavsett ordning; dubbla citattecken bevarar
 en fras exakta ordföljd. Synlighetsfilter uppdaterar bara gallerilistan utan att
 skapa en namnbytesplan. Skapa planen uttryckligen med förhandsvisningsåtgärden.
 Tomma gallerier visas som kompakta sammanfattningsrader; gallerier med
@@ -4390,17 +4396,21 @@ förlopp.
 enskilda gallerier, kan normalisera fysiska bildfilnamn utifrån
 gallerisammanhang och aktuell bildordning. Det är en filsystemsåtgärd, inte en
 kosmetisk titeländring, så verktyget börjar alltid med en provkörningsplan.
-Förhandsvisningen listar varje gammalt och föreslaget filnamn och markerar filer
-som redan stämmer, saknas, skulle krocka eller måste hoppas över enligt en
-säkerhetsregel.
+Översikten innehåller ingen förgenererad fillista. Fysiska original,
+oindexerade filkollisioner och derivat kontrolleras först vid själva namnbytet.
 
 Endast bildfiler direkt i den valda gallerimappen kan behandlas. Saknade
 original, sökvägar utanför galleriet och osäkra mål döps inte om. Om det
 föredragna målnamnet redan är upptaget men ett säkert deterministiskt suffix kan
 lösa kollisionen visar förhandsvisningen justeringen. Att tillämpa en plan
-kräver att granskningsrutan vid förhandsvisningen markeras. Denna enda
+kräver att namnbytesrutan vid förhandsvisningen markeras. Denna enda
 bekräftelse gäller både galleri- och webbplatsövergripande körningar och
 kontrolleras av webbläsaren och servern; ingen extra blockerande dialog följer.
+Tillämpningen hämtar bara kandidat-ID:n och behåller satser med högst 15 foton.
+Slutrapporten ersätter förslagen med antal per galleri. Öppna ett galleri för
+att hämta ändrade namn i sidor med 50 poster. Rapporter tillhör administratörens
+aktuella inloggningssession och upphör efter 24 timmar. Ett detaljlagringsfel
+återställer inte bekräftade namnbyten.
 
 Standardmönstret är \codeword{\{gallery_path\}_\{seq4\}}. Ett eget mönster kan
 använda \codeword{\{gallery_path\}}, \codeword{\{gallery_title\}},
