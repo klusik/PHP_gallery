@@ -1,5 +1,117 @@
 # Patch notes
 
+## Version 1.2.8
+
+Fixed automatic gallery-edit reconciliation and interrupted capture recovery
+in WinApp 1.4.1, and corrected lost sequence numbers and changing batch order
+in the Admin media renamer. Addressed follow-up reports in
+[#394](https://github.com/klusik/PHP_gallery/issues/394).
+
+### Highlights
+
+#### Automatic gallery-edit reconciliation
+
+- Removed the manual server-reload gate after unconfirmed title and
+  description saves. Read back the authorized server state automatically and
+  recognized an already committed change without sending it again.
+- Retried the selected field once after a definite revision conflict. Allowed
+  an uncertain write to retry only against an unchanged complete baseline and
+  revision, preserving other metadata and fencing a late original commit.
+- Kept unresolved text editable with inline feedback, closed confirmed
+  editors automatically, and serialized repeated editor openings without
+  blocking the native event loop.
+
+#### Automatic interrupted-capture recovery
+
+- Restored the same already approved upload destination in the background
+  when possible. Otherwise retained pending originals locally and closed the
+  interrupted capture through the existing durable completion owner.
+- Recovered sessions that had no Finish worker after restart, which had made
+  the previous Force finish action ineffective.
+- Removed repair actions from capture progress. Retried temporary local
+  persistence failures quietly while preserving the guard until durable
+  publication and readback succeeded.
+- Preserved originals, reports, receipts, uncertain-upload evidence and
+  credentials. Kept any live HTTP request's transport ownership until the
+  request actually ended.
+
+#### Stable renaming for long gallery contexts
+
+- Shortened descriptive filename expansions before numeric sequence or image
+  identity tokens, preventing long gallery contexts from erasing `{seq4}`
+  and exhausting the existing collision suffixes.
+- Froze each image's original sequence position before applying physical
+  batches, preventing earlier filename changes from reordering later numbers.
+- Marked completed runs with remaining collisions or missing originals as
+  warning-level Admin log events rather than ordinary successful completion.
+
+### Technical Details
+
+#### WinApp edit and capture ownership
+
+- Added bounded field-intent reconciliation in
+  `winapp/uploader/app_linking.py` while retaining the raw single-use revision
+  snapshot primitive and current grant, cancellation and peer-field checks.
+- Updated `winapp/uploader/photos_workspace.py` to reconcile on its worker,
+  preserve editable drafts and refresh confirmed titles without manual reload.
+- Updated `winapp/uploader/flight_ui.py` to inspect exact-target pending plans
+  off Tk and supply a logical owned operation when no Finish worker existed.
+  Coalesced recovery and fenced late callbacks by operation, binding and
+  capture generation, including another capture using the same gallery.
+- Moved normal target admission and mode publication off Tk. Required the
+  exact captured mode view and saved account, gallery and scope when
+  reactivating through `winapp/uploader/mode_coordinator.py`.
+- Kept independent PDF actions on their separate workflow and corrected
+  completion-countdown layout when capture had no mapped action row.
+- Updated native recovery and edit feedback in English, Czech, German and
+  Swedish, and set the independent companion version to 1.4.1.
+
+#### Renamer naming and batch coordination
+
+- Updated `app/services/media_renamer.php` to fit descriptive tokens within
+  the established filename budget while retaining numeric identity. Used a
+  digest of the complete expansion when overlong literal patterns could not
+  otherwise fit, without increasing the collision-attempt budget.
+- Added original positions alongside IDs in existing 500-candidate pages and
+  forwarded validated positions through the unchanged 15-image physical
+  batches in the site-wide and gallery-editor action paths.
+- Preserved frozen positions during physical safety replanning. Retained
+  current ownership, filesystem collision, derivative and writer checks.
+- Updated `public/assets/gallery-modules/admin-media-renamer.js` and its
+  import revisions. Kept analysis database-only and retained lazy 50-file
+  proposal/report detail pages.
+- Introduced no database migration.
+
+#### Regression coverage and documentation
+
+- Added lost-acknowledgement, late-commit, conflict, authority and cancellation
+  cases, plus native A/B/A/B title edits and a held-reply event-loop check.
+- Added workerless recovery, same-target restoration, stale-callback,
+  duplicate-recovery and failed-persistence cases, including unchanged-target
+  capture-generation fencing and mode/account/scope refusal.
+- Required zero capture repair actions across native desktop/narrow layouts
+  and supported languages, while retaining backend persistence and transport
+  assertions.
+- Added a 922-original physical staging regression that verified bytes and
+  image ownership across batches and required a second analysis to report
+  922 already matching names with zero renames or collisions.
+- Verified original positions and sequence gaps through the browser batch
+  flow, and updated permanent documentation and all four manual sources.
+
+### User Impact
+
+#### For administrators and WinApp users
+
+- Removed manual reload and repair-button steps from ordinary gallery edits
+  and interrupted capture recovery while retaining safe local originals.
+- Made large galleries with long contexts retain their requested numbering
+  throughout renaming, with warning-level diagnostics for unresolved outcomes.
+- Preserved local-only aspect-ratio, sorting and divider preferences.
+
+#### For visitors
+
+- Public gallery behavior was unchanged.
+
 ## Version 1.2.7
 
 Improved subgallery thumbnail reuse and folder proportions in WinApp 1.4.0,
