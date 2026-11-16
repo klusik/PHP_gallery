@@ -278,3 +278,97 @@ class GalleryControlTests(unittest.TestCase):
         self.assertFalse(linking.gallery_edit_text_valid(
             'description', 'x' * (linking.GALLERY_EDIT_DESCRIPTION_MAX_BYTES + 1),
         ))
+
+    def test_lost_acknowledgement_is_resolved_by_authorized_read_without_replay(self) -> None:
+        """Recognize a committed rename after its reply was lost.
+
+        Returns:
+            None: One POST and the automatic read complete the original intent.
+        """
+        session = self._session()
+        with mock.patch.object(session, '_request', side_effect=[
+            self._snapshot(), linking.LinkingError('Lost acknowledgement'),
+            self._snapshot(title='Renamed', revision='10'),
+        ]) as request:
+            result = session.apply_gallery_edit(7, 'title', 'Renamed')
+        self.assertEqual('Renamed', result.title)
+        actions = [json.loads(call.kwargs['body'])['action']
+                   for call in request.call_args_list]
+        self.assertEqual(['gallery_edit_read', 'gallery_edit', 'gallery_edit_read'], actions)
+
+    def test_definite_conflict_rebases_only_the_requested_field_automatically(self) -> None:
+        """Use a refreshed revision after a definite pre-mutation refusal.
+
+        Returns:
+            None: A changed peer description survives the bounded rename retry.
+        """
+        session = self._session()
+        with mock.patch.object(session, '_request', side_effect=[
+            self._snapshot(), {'__client_visibility_conflict': 'revision_conflict'},
+            self._snapshot(description='New web description', revision='10'),
+            self._snapshot(title='Renamed', description='New web description', revision='11'),
+        ]) as request:
+            result = session.apply_gallery_edit(7, 'title', 'Renamed')
+        writes = [json.loads(call.kwargs['body']) for call in request.call_args_list
+                  if json.loads(call.kwargs['body'])['action'] == 'gallery_edit']
+        self.assertEqual(['9', '10'], [row['expected_revision'] for row in writes])
+        self.assertEqual('New web description', result.description)
+        self.assertEqual('Renamed', result.title)
+        self.assertTrue(all(row['field'] == 'title' for row in writes))
+
+    def test_unknown_write_cannot_overwrite_a_later_revision(self) -> None:
+        """Keep another writer's state after an ambiguous response.
+
+        Returns:
+            None: Only one POST occurs and fresh state accompanies the retained draft.
+        """
+        session = self._session()
+        with mock.patch.object(session, '_request', side_effect=[
+            self._snapshot(), linking.LinkingError('Unknown response'),
+            self._snapshot(title='Later web title', revision='11'),
+        ]) as request:
+            with self.assertRaises(linking.LinkingGalleryEditFailure) as failure:
+                session.apply_gallery_edit(7, 'title', 'Renamed')
+        self.assertEqual(3, request.call_count)
+        self.assertEqual('Later web title', failure.exception.snapshot.title)
+        self.assertTrue(failure.exception.conflict)
+
+    def test_delayed_first_commit_is_fenced_by_the_unchanged_revision(self) -> None:
+        """Allow an identical-baseline attempt without applying the rename twice.
+
+        Returns:
+            None: The late original commit makes the second POST conflict, then
+                automatic readback confirms the desired state without another write.
+        """
+        session = self._session()
+        with mock.patch.object(session, '_request', side_effect=[
+            self._snapshot(), linking.LinkingError('Original still running'),
+            self._snapshot(), {'__client_visibility_conflict': 'revision_conflict'},
+            self._snapshot(title='Renamed', revision='10'),
+        ]) as request:
+            result = session.apply_gallery_edit(7, 'title', 'Renamed')
+        writes = [json.loads(call.kwargs['body']) for call in request.call_args_list
+                  if json.loads(call.kwargs['body'])['action'] == 'gallery_edit']
+        self.assertEqual(['9', '9'], [row['expected_revision'] for row in writes])
+        self.assertEqual('10', result.revision)
+
+    def test_refused_authority_and_cancelled_reconciliation_never_retry_writes(self) -> None:
+        """Stop bounded recovery on grant refusal or context cancellation.
+
+        Returns:
+            None: Refusal preserves the last observed state; cancellation makes
+                no request and malformed input cannot start a passive read.
+        """
+        session = self._session()
+        with mock.patch.object(session, '_request', side_effect=[
+            self._snapshot(), linking.LinkingGrantRejected(), linking.LinkingGrantRejected(),
+        ]) as request:
+            with self.assertRaises(linking.LinkingGalleryEditFailure):
+                session.apply_gallery_edit(7, 'title', 'Renamed')
+        self.assertEqual(3, request.call_count)
+        cancelled = threading.Event()
+        cancelled.set()
+        with mock.patch.object(session, '_request') as request:
+            with self.assertRaises(linking.LinkingError):
+                session.apply_gallery_edit(7, 'title', 'Renamed', cancelled)
+        request.assert_not_called()

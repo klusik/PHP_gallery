@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.2.7}
+\newcommand{\version}{1.2.8}
 \newcommand{\manualdate}{16.~November~2026}
 
 \hypersetup{
@@ -2011,10 +2011,11 @@ und ZIP verwenden denselben Dateinamen. Die PDF-Endung wird bei Bedarf ergänzt.
 Kollisionen und unsichere Namen werden abgewiesen; Inhalt und Dokumentidentität
 bleiben erhalten.
 
-\ui{Fertigstellen erzwingen} (Force finish) bleibt im Finish-Fortschritt auch
-bei Fehlern oder Zeitüberschreitung erreichbar. Die Aktion stoppt neue
-Aufnahme und Übertragung und schließt die Sitzung nach dauerhaft gespeichertem
-Endentscheid lokal. Ausstehende Originale, Berichte und Belege ungewisser
+Unterbrochene Aufnahmen erholen sich automatisch, ohne Reparaturschaltflächen
+im Fortschritt. Die Anwendung prüft zuerst dasselbe bereits genehmigte Ziel
+im Hintergrund. Ist es nicht wiederherstellbar, stoppt sie neue Aufnahme und
+Übertragung und speichert einen dauerhaften lokalen Abschluss mit Dateierhalt.
+Ausstehende Originale, Berichte und Belege ungewisser
 Uploads bleiben erhalten; kein Eintrag gilt dadurch als hochgeladen oder
 übersprungen. Aktualisierung, Zeitablauf und Neustart setzen diese Sitzung
 nicht fort. Eine bereits gesendete Anfrage behält ihren physischen Eigentümer
@@ -2026,9 +2027,9 @@ Watcher, und wiederholt keinen leeren automatischen Abschluss. Die Diagnose
 unterscheidet Aufnahmesitzung und Worker-Warteschlange.
 
 Ein ungewisser Kopf zeigt \ui{Aktion erforderlich}. \ui{Fortsetzen} im
-Watcher, \ui{Fortsetzung erzwingen} im Fortschritt und
-\ui{Ausstehende Uploads prüfen} nach Neustart öffnen dieselbe Prüfung der
-exakten gespeicherten Quellgeneration und des Ziels. Lokale Vorschau und
+Watcher kann eine optionale Belegprüfung für die exakte gespeicherte Quelle
+und das Ziel öffnen. Aufnahmefortschritt und Neustartwiederherstellung lösen
+Unterbrechungen dagegen automatisch. Lokale Vorschau und
 autorisierte entfernte Beobachtung sind getrennt; ein ähnliches Bild,
 Galerieposition oder Hash ist kein Upload-Beleg. \ui{Bereits hochgeladen
 bestätigen} verlangt die exakte dauerhafte Bestätigung. \ui{Foto überspringen}
@@ -2345,13 +2346,22 @@ die öffentliche Auflistungsausnahme speichern ihren Zustand direkt online. Der 
 öffnet die Titelbearbeitung, der Beschreibungsstift den vollständigen Text.
 Jeder Editor liest zuerst den aktuellen Serverwert und die Revision. Enter
 speichert Titel, Control+Enter Beschreibungen; Escape bricht ab. Gleichzeitige
-Webänderungen verweigern veraltete Schreibversuche. Unbestätigte Ergebnisse
-behalten den gesperrten Entwurf und bieten ein ausdrückliches Neuladen ohne
-Wiederholung des Schreibens. Bestätigte Titel aktualisieren Baum und Kopf;
+Webänderungen verweigern veraltete Schreibversuche. Die Anwendung liest den
+Serverzustand automatisch und kann das ausgewählte Feld nach einem eindeutigen
+Konflikt einmal erneut speichern. Ein ungewisser Schreibversuch darf nur bei
+vollständig unverändertem Ausgangszustand samt Revision wiederholt werden.
+Ein veränderter unklarer Zustand erlaubt keine Wiederholung. Der Entwurf bleibt
+bearbeitbar, ohne Neuladeschaltfläche. Bestätigte Titel schließen den Editor
+und aktualisieren Baum und Kopf;
 der tatsächliche Serverordner samt Unterbaum wird nach der bestehenden
 Bereinigung umbenannt. IDs bleiben erhalten; untergeordnete und verfügbare
 öffentliche Pfade folgen dem Umzug. Belegte Ziele werden abgelehnt. Unklare
-Commits oder Sidecar-Ergebnisse erfordern erneutes Lesen statt Schreibwiederholung.
+Commits oder Sidecar-Ergebnisse werden automatisch durch Lesen abgeglichen.
+
+Der Medienumbenenner erhält Sequenznummern beim Kürzen langer Galeriekontexte.
+Die ursprünglichen Positionen bleiben über alle Stapel stabil. Analyse und
+eingeklappte Berichte lesen keine physischen Bilder. Verbleibende Kollisionen
+oder fehlende Originale erzeugen einen Abschluss mit Warnstufe im Protokoll.
 
 Metadatenänderungen benötigen einen aktuellen Server und eine eigene
 Browserfreigabe für \texttt{gallery:edit}. Bestehende Rechte werden nicht

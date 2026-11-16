@@ -1633,6 +1633,7 @@ class LinkingManager:
 
     def activate_verified_resume_target(
         self, target: LinkedUploadTarget, binding: str, approved_scope: str,
+        *, verify_committed: Callable[[], bool] | None = None,
     ) -> bool:
         """Publish a fresh server result only for the saved continuation target.
 
@@ -1641,6 +1642,9 @@ class LinkingManager:
                 by the continuation worker using the restored live grant.
             binding (str): Original target fingerprint from the claimed update.
             approved_scope (str): Exact original scope captured before updating.
+            verify_committed (Callable[[], bool] | None): Readback of the exact
+                mode already published by the host's guarded background worker;
+                None retains the established admission/publication path.
 
         Returns:
             bool: True after the existing target guard and mode owner accept
@@ -1657,10 +1661,12 @@ class LinkingManager:
                     or target.issuer != self._session_issuer
                     or target.user_id != self._session_user_id
                     or not target.session.can_upload()
-                    or target.session.approved_scope() != approved_scope
-                    or self._target_refusal(binding) is not None):
+                    or target.session.approved_scope() != approved_scope):
                 return False
-            if not commit(target):
+            if verify_committed is None:
+                if self._target_refusal(binding) is not None or not commit(target):
+                    return False
+            elif not verify_committed():
                 return False
         except Exception:
             return False

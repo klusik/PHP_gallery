@@ -28,7 +28,7 @@ from .app_linking import (
     NATIVE_MEDIA_DELETE_BATCH_MAX,
     NATIVE_MEDIA_MAX_BYTES,
     LinkedGallery, LinkedGalleryDetail, LinkedGalleryEditSnapshot,
-    LinkedGalleryPage, LinkedGalleryTree, LinkingRevisionConflict,
+    LinkedGalleryPage, LinkedGalleryTree, LinkingGalleryEditFailure,
     LinkedMediaDetails,
     LinkedMediaGalleryInfo, LinkedPhoto, LinkingSession,
     LinkingMediaThrottled, LinkingResponseError, gallery_edit_text_valid,
@@ -86,7 +86,7 @@ FOLDER_DIVIDER_KEY_STEP = 20
 
 # Purpose: Keep Tk result delivery responsive during sequential page loading.
 # Type: int. Units: milliseconds. Scope: one PhotosWorkspace lifetime.
-# Consumers: PhotosWorkspace._poll_events.
+# Consumers: PhotosWorkspace._poll_events, PhotosWorkspace._begin_gallery_edit.
 # Rationale: 80 ms gives quick feedback without a busy UI polling loop.
 PHOTOS_CATALOG_POLL_MS = 80
 
@@ -698,6 +698,7 @@ class PhotosWorkspace(ttk.Frame):
             tuple[int | None, Callable[[], None]]
         ] = queue.Queue()
         self._context_busy = False
+        self._gallery_edit_wait_id: str | None = None
         self._photo_info_cache: OrderedDict[
             tuple[int, int, int], tuple[float, LinkedMediaDetails]
         ] = OrderedDict()
@@ -4095,6 +4096,9 @@ class PhotosWorkspace(ttk.Frame):
         Returns:
             None: Other workspace controls remain available.
         """
+        if self._gallery_edit_wait_id is not None:
+            self.after_cancel(self._gallery_edit_wait_id)
+            self._gallery_edit_wait_id = None
         dispatch = self._create_dispatch
         self._create_dispatch = None
         if dispatch is not None:
@@ -6469,6 +6473,15 @@ class PhotosWorkspace(ttk.Frame):
         if (card is not self._context_card or session is not self._session
                 or session is not self._session_provider()):
             return
+        self._gallery_edit_wait_id = None
+        if self._context_busy:
+            # Opening another editor during a preceding worker's completion
+            # must yield to Tk, not lose the request or wait on a GUI lock.
+            self._gallery_edit_wait_id = self.after(
+                PHOTOS_CATALOG_POLL_MS,
+                lambda: self._begin_gallery_edit(card, session, gallery_id, field),
+            )
+            return
         if not getattr(session, 'can_edit_gallery_metadata', lambda: False)():
             self._context_content(card, self._text('edit_requires_approval'))
             if self._manager is not None:
@@ -6513,7 +6526,7 @@ class PhotosWorkspace(ttk.Frame):
         snapshot: LinkedGalleryEditSnapshot, field: str, *,
         draft: str | None = None, failure: str | None = None,
     ) -> None:
-        """Render a compact explicit text editor or retained unconfirmed draft.
+        """Render an editable draft with inline feedback and no reload gate.
 
         Args:
             card (GlassCard): Current trigger-anchored editing surface.
@@ -6521,14 +6534,13 @@ class PhotosWorkspace(ttk.Frame):
             snapshot (LinkedGalleryEditSnapshot): Full authoritative baseline.
             field (str): title or description being edited.
             draft (str | None): Retained user text after failure; None uses server text.
-            failure (str | None): Localized conflict/uncertain key; None permits Save.
+            failure (str | None): Optional localized inline failure key.
         Returns:
-            None: Confirm/cancel stay visible; failed writes require passive reload.
+            None: Save and Cancel stay usable after automatic reconciliation.
         """
         if (card is not self._context_card or session is not self._session
                 or session is not self._session_provider()):
             return
-        locked = failure in ('edit_conflict', 'edit_uncertain')
         if failure is None:
             self._apply_gallery_edit_snapshot(snapshot)
         self._context_content(card, self._text('edit_' + field))
@@ -6558,40 +6570,32 @@ class PhotosWorkspace(ttk.Frame):
         )
         status.pack(fill='x')
         self._tag_context_widget(status)
-        if locked:
-            editor.configure(state='disabled')
-            self._context_action(
-                card, self._text('edit_reload'),
-                lambda: self._begin_gallery_edit(card, session, snapshot.gallery_id, field),
-            )
+        save = lambda: self._submit_gallery_edit(
+            card, session, snapshot, field, read_value(),
+        )
+        self._context_action(card, self._text('edit_confirm'), save)
+        if field == 'title':
+            editor.bind('<Return>', lambda _event: (save(), 'break')[1])
         else:
-            save = lambda: self._submit_gallery_edit(
-                card, session, snapshot, field, read_value(),
-            )
-            self._context_action(card, self._text('edit_confirm'), save)
-            if field == 'title':
-                editor.bind('<Return>', lambda _event: (save(), 'break')[1])
-            else:
-                editor.bind('<Control-Return>', lambda _event: (save(), 'break')[1])
+            editor.bind('<Control-Return>', lambda _event: (save(), 'break')[1])
         self._context_action(card, self._text('cancel'), self._dismiss_context)
         self._place_context(card)
-        if not locked:
-            editor.focus_set()
+        editor.focus_set()
 
     def _submit_gallery_edit(
         self, card: GlassCard, session: LinkingSession,
         snapshot: LinkedGalleryEditSnapshot, field: str, value: str,
     ) -> None:
-        """Send one explicit text change without replaying conflicts or uncertainty.
+        """Apply one explicit text intent and reconcile completion on a worker.
 
         Args:
             card (GlassCard): Exact editor containing the submitted draft.
             session (LinkingSession): Captured current site/account session.
-            snapshot (LinkedGalleryEditSnapshot): Reviewed one-use server revision.
+            snapshot (LinkedGalleryEditSnapshot): Baseline displayed by this editor.
             field (str): title or description selected by the user.
             value (str): Complete submitted text, including description line breaks.
         Returns:
-            None: Reports canonical completion or retains a locked recoverable draft.
+            None: Completes in place or retains an editable draft with inline feedback.
         """
         if (card is not self._context_card or session is not self._session
                 or session is not self._session_provider()):
@@ -6601,22 +6605,23 @@ class PhotosWorkspace(ttk.Frame):
                 card, session, snapshot, field, draft=value, failure='edit_invalid',
             )
             return
-        if value == getattr(snapshot, field):
-            self._gallery_edit_saved(card, session, snapshot)
-            return
         cancel = self._cancel
 
         def write() -> Callable[[], None]:
-            """Submit the captured field once and retain the exact draft on failure.
+            """Submit the desired field and automatically check its saved state.
 
             Returns:
-                Callable[[], None]: Tk callback for confirmed, conflicting or unknown state.
+                Callable[[], None]: Completion or an editable retained draft.
             """
             try:
-                updated = session.save_gallery_edit(snapshot, field, value, cancelled=cancel)
-            except LinkingRevisionConflict:
+                updated = session.apply_gallery_edit(
+                    snapshot.gallery_id, field, value, cancelled=cancel,
+                )
+            except LinkingGalleryEditFailure as error:
+                current = error.snapshot or snapshot
+                failure = 'edit_conflict' if error.conflict else 'edit_uncertain'
                 return lambda: self._show_gallery_editor(
-                    card, session, snapshot, field, draft=value, failure='edit_conflict',
+                    card, session, current, field, draft=value, failure=failure,
                 )
             except Exception:
                 return lambda: self._show_gallery_editor(
@@ -6634,7 +6639,7 @@ class PhotosWorkspace(ttk.Frame):
         self, card: GlassCard, session: LinkingSession, gallery_id: int,
         field: str, value: bool,
     ) -> None:
-        """Apply an explicit information-card switch against fresh server state.
+        """Apply and reconcile a direct information-card switch automatically.
 
         Args:
             card (GlassCard): Current information card.
@@ -6643,7 +6648,7 @@ class PhotosWorkspace(ttk.Frame):
             field (str): nsfw or listed server-owned boolean setting.
             value (bool): Explicit desired state shown by the switch.
         Returns:
-            None: Saves once, preserving all other current settings and revision checks.
+            None: Preserves peer settings and revision checks without a reload action.
         """
         if (card is not self._context_card or session is not self._session
                 or session is not self._session_provider()):
@@ -6651,16 +6656,14 @@ class PhotosWorkspace(ttk.Frame):
         cancel = self._cancel
 
         def write() -> Callable[[], None]:
-            """Read current peer state and submit only the chosen boolean.
+            """Apply the explicit boolean through the shared reconciliation owner.
 
             Returns:
                 Callable[[], None]: Tk callback for canonical completion.
             """
-            snapshot = session.read_gallery_edit(gallery_id, cancelled=cancel)
-            if field == 'listed' and snapshot.visibility != 'public':
-                return lambda: self._gallery_switch_saved(card, session, snapshot)
-            if getattr(snapshot, field) != value:
-                snapshot = session.save_gallery_edit(snapshot, field, value, cancelled=cancel)
+            snapshot = session.apply_gallery_edit(
+                gallery_id, field, value, cancelled=cancel,
+            )
             return lambda: self._gallery_switch_saved(card, session, snapshot)
 
         self._run_context(
@@ -6689,36 +6692,34 @@ class PhotosWorkspace(ttk.Frame):
     def _gallery_switch_unconfirmed(
         self, card: GlassCard, session: LinkingSession, gallery_id: int,
     ) -> None:
-        """Offer passive information reload after an unconfirmed switch write.
+        """Restore current information automatically with inline failure feedback.
 
         Args:
             card (GlassCard): Originating information surface.
             session (LinkingSession): Captured site/account session.
             gallery_id (int): Gallery whose result must be checked.
         Returns:
-            None: Offers no automatic write or implicit rollback.
+            None: Fetches observed settings without another user action or write.
         """
-        if card is not self._context_card:
+        if (card is not self._context_card or session is not self._session
+                or session is not self._session_provider()):
             return
-        self._context_content(card, self._text('edit_uncertain'))
-        self._context_action(
-            card, self._text('edit_reload'),
-            lambda: self._fetch_gallery_info(card, session, gallery_id),
+        self._fetch_gallery_info(
+            card, session, gallery_id, notice='edit_uncertain',
         )
-        self._place_context(card)
 
     def _gallery_edit_saved(
         self, card: GlassCard, session: LinkingSession,
         snapshot: LinkedGalleryEditSnapshot,
     ) -> None:
-        """Display confirmed server values and offer the refreshed information card.
+        """Apply confirmed values and close the completed inline editor.
 
         Args:
             card (GlassCard): Originating edit surface.
             session (LinkingSession): Captured site/account session.
             snapshot (LinkedGalleryEditSnapshot): Canonical confirmed stored values.
         Returns:
-            None: Updates labels and presents server-confirmed completion in place.
+            None: Updates labels/catalogue without another confirmation or reload.
         """
         if (card is not self._context_card or session is not self._session
                 or session is not self._session_provider()):
@@ -6728,12 +6729,7 @@ class PhotosWorkspace(ttk.Frame):
         self._apply_gallery_edit_snapshot(snapshot)
         if title_changed:
             self._refresh_catalogue(keep_context=True)
-        self._context_content(card, self._text('saved'))
-        self._context_action(
-            card, self._text('gallery_info'),
-            lambda: self._fetch_gallery_info(card, session, snapshot.gallery_id),
-        )
-        self._place_context(card)
+        self._dismiss_context()
 
     def _gallery_info(
         self, card: GlassCard, session: LinkingSession, gallery_id: int,
@@ -6755,6 +6751,7 @@ class PhotosWorkspace(ttk.Frame):
 
     def _fetch_gallery_info(
         self, card: GlassCard, session: LinkingSession, gallery_id: int,
+        *, notice: str | None = None,
     ) -> None:
         """Fetch gallery details and the existing local cache coverage on demand.
 
@@ -6762,6 +6759,7 @@ class PhotosWorkspace(ttk.Frame):
             card (GlassCard): Context card that initiated the request.
             session (LinkingSession): Exact current linked session.
             gallery_id (int): Physical gallery identity.
+            notice (str | None): Optional inline translation key after reconciliation.
 
         Returns:
             None: A detail card replaces the menu when the worker completes.
@@ -6790,13 +6788,13 @@ class PhotosWorkspace(ttk.Frame):
             except Exception:
                 info, state, visible = None, "unknown", None
             return lambda: self._show_gallery_details(
-                card, gallery_id, details, info, state, visible,
+                card, gallery_id, details, info, state, visible, notice=notice,
             )
 
         self._run_context(
             card, read,
             lambda: self._show_gallery_details(
-                card, gallery_id, None, None, "unknown", None,
+                card, gallery_id, None, None, "unknown", None, notice=notice,
             ),
         )
 
@@ -6856,6 +6854,7 @@ class PhotosWorkspace(ttk.Frame):
         details: LinkedMediaDetails | None,
         info: LinkedMediaGalleryInfo | None, state: str,
         visible_count: int | None,
+        *, notice: str | None = None,
     ) -> None:
         """Render grouped gallery metadata with cache and legacy fallback.
 
@@ -6866,6 +6865,7 @@ class PhotosWorkspace(ttk.Frame):
             info (LinkedMediaGalleryInfo | None): Legacy Admin inventory.
             state (str): Observed local-cache coverage state.
             visible_count (int | None): Visible count, or None on read error.
+            notice (str | None): Optional localized inline operation feedback.
 
         Returns:
             None: The active card shows available fields and cache status.
@@ -6915,6 +6915,8 @@ class PhotosWorkspace(ttk.Frame):
                   + self._text("cache_" + state))
         if details is None:
             suffix += "\n" + self._text("details_fallback")
+        if notice is not None:
+            suffix = self._text(notice) + "\n" + suffix
         if self._probe_cancel is not None:
             self._probe_cancel = None
         session = self._session

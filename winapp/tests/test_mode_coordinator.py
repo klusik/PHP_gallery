@@ -992,6 +992,39 @@ class ModeCoordinatorTests(unittest.TestCase):
         with self.assertRaises(ModeCoordinatorError):
             restarted.acquire('linked', self.config)
 
+    def test_capture_reactivation_requires_the_exact_view_and_saved_destination(self) -> None:
+        """Fence background recovery against changed local mode and authority.
+
+        Returns:
+            None: Same-target reactivation preserves generation; stale views,
+                legacy state and another gallery/account/scope cannot publish.
+        """
+        session = Mock(spec=LinkingSession)
+        session.matches_issuer.return_value = True
+        session.can_upload.return_value = True
+        session.approved_scope.return_value = UPLOAD_SCOPE
+        target = LinkedUploadTarget(session, 'https://gallery.example', 7, 9, 'Capture')
+        owner = GuiModeOwner(self.config, lambda: self.vault)
+        owner.initialize()
+        with self.assertRaises(ModeCoordinatorError):
+            owner.select_linked(target, expected=owner.view())
+        self.assertIsNone(self.vault.record)
+        chosen = owner.select_linked(target)
+        generation = chosen.record.generation
+        restored = owner.select_linked(target, expected=chosen)
+        self.assertEqual(generation, restored.record.generation)
+        with self.assertRaises(ModeCoordinatorError):
+            owner.select_linked(target, expected=chosen)
+        for other in (LinkedUploadTarget(session, target.issuer, 7, 10, 'Other gallery'),
+                      LinkedUploadTarget(session, target.issuer, 8, 9, 'Other account')):
+            with self.assertRaises(ModeCoordinatorError):
+                owner.select_linked(other, expected=restored)
+        session.approved_scope.return_value = UPLOAD_SCOPE + ' changed'
+        with self.assertRaises(ModeCoordinatorError):
+            owner.select_linked(target, expected=restored)
+        self.assertIs(restored, owner.view())
+        self.assertEqual(restored.record, self.vault.record)
+
     def test_linked_selection_refuses_busy_or_unavailable_evidence(self) -> None:
         """Keep prior mode untouched when a saved-worker lease is still active.
 

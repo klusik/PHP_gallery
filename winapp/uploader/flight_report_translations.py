@@ -31,7 +31,10 @@ _WATCH_QUEUE_REFRESH_LABELS = {
 # Type: dict[str, dict[str, str]]. Units: localized UI labels. Scope: Watcher recovery.
 # Consumers: watch_recovery_ui.py. Rationale: All supported locales share explicit decisions.
 _WATCH_RECOVERY_LABELS = {
-    "en": {"watch_recovery_title": "Review pending upload",
+    "en": {"capture_recovering": "Restoring the original capture connection…",
+           "capture_retaining": "Keeping pending files locally and closing capture…",
+           "capture_recovery_unavailable": "Local recovery could not be saved yet. Original files are retained.",
+           "watch_recovery_title": "Review pending upload",
            "watch_inspection_title": "Inspect folder (read-only)",
            "watch_inspection_missing": "Folder is unavailable: {folder}",
            "watch_inspection_failed": "Read-only folder inspection failed: {reason}",
@@ -40,11 +43,11 @@ _WATCH_RECOVERY_LABELS = {
            "watch_finish_retained": "Stopped. Finish cutoff and pending originals are retained; no upload result was changed.",
            "watch_stop_stopping": "Saving Stop and keeping all pending originals…",
            "force_finish": "Force finish",
-           "force_finish_saving": "Saving Force finish; Hide remains available…",
+           "force_finish_saving": "Keeping pending originals safely on this computer…",
            "force_finish_saved": "Finish was safely released. Pending originals and history are retained.",
            "force_finish_transport_active": "Finish was released. An HTTP request still owns its lease; its result may remain unknown.",
-           "force_finish_failed": "Force finish was not saved. Finish remains active and guarded.",
-           "force_finish_unavailable": "Force finish is not available from the current owner.",
+           "force_finish_failed": "Local retention is temporarily unavailable. Retrying automatically; originals remain protected.",
+           "force_finish_unavailable": "Waiting for the local capture owner; originals remain protected.",
            "automatic_finish_no_work": "No eligible captured work remains for automatic Finish.",
            "watch_stop_transport_active": "Stop is saved; the current request still owns its transport. Work remains guarded.",
            "watch_recovery_loading": "Reading pending queue and exact target evidence…",
@@ -94,7 +97,10 @@ _WATCH_RECOVERY_LABELS = {
            "watch_recovery_remote_decode": "Remote observation unavailable: image data could not be decoded.",
            "watch_recovery_decision_saved": "Decision saved and queue re-read.",
            "watch_recovery_decision_failed": "Decision was rejected as stale or unavailable; the item remains pending."},
-    "cs": {"watch_recovery_title": "Zkontrolovat čekající nahrání",
+    "cs": {"capture_recovering": "Obnovuji původní připojení záznamu…",
+           "capture_retaining": "Ponechávám čekající soubory lokálně a ukončuji záznam…",
+           "capture_recovery_unavailable": "Lokální zotavení se zatím nepodařilo uložit. Původní soubory zůstávají zachované.",
+           "watch_recovery_title": "Zkontrolovat čekající nahrání",
            "watch_inspection_title": "Prohlédnout složku (pouze ke čtení)",
            "watch_inspection_missing": "Složka není dostupná: {folder}",
            "watch_inspection_failed": "Kontrola složky pouze ke čtení selhala: {reason}",
@@ -103,11 +109,11 @@ _WATCH_RECOVERY_LABELS = {
            "watch_finish_retained": "Zastaveno. Hranice dokončení i čekající originály jsou zachovány; výsledek nahrání se nezměnil.",
            "watch_stop_stopping": "Ukládá se zastavení a ponechání všech čekajících originálů…",
            "force_finish": "Vynutit dokončení",
-           "force_finish_saving": "Ukládá se vynucené dokončení; Skrýt zůstává dostupné…",
+           "force_finish_saving": "Čekající originály se bezpečně ponechávají v tomto počítači…",
            "force_finish_saved": "Dokončení bylo bezpečně uvolněno. Čekající originály a historie zůstávají zachovány.",
            "force_finish_transport_active": "Dokončení bylo uvolněno. HTTP požadavek stále vlastní svůj lease; jeho výsledek může zůstat neznámý.",
-           "force_finish_failed": "Vynucené dokončení se nepodařilo uložit. Dokončování zůstává aktivní a chráněné.",
-           "force_finish_unavailable": "Vynucené dokončení není pro aktuálního vlastníka dostupné.",
+           "force_finish_failed": "Lokální uložení je dočasně nedostupné. Automaticky opakujeme; originály zůstávají chráněné.",
+           "force_finish_unavailable": "Čeká se na vlastníka lokálního snímání; originály zůstávají chráněné.",
            "automatic_finish_no_work": "Pro automatické dokončení nezbývá žádná způsobilá zachycená práce.",
            "watch_stop_transport_active": "Zastavení je uloženo; aktuální požadavek stále vlastní přenos. Práce zůstává chráněná.",
            "watch_recovery_loading": "Načítá se čekající fronta a přesný cíl…",
@@ -157,7 +163,10 @@ _WATCH_RECOVERY_LABELS = {
            "watch_recovery_remote_decode": "Vzdálené pozorování není dostupné: obrázek nelze dekódovat.",
            "watch_recovery_decision_saved": "Rozhodnutí uloženo a fronta znovu načtena.",
            "watch_recovery_decision_failed": "Rozhodnutí bylo odmítnuto jako zastaralé nebo nedostupné; položka zůstává ve frontě."},
-    "de": {"watch_recovery_title": "Ausstehenden Upload prüfen",
+    "de": {"capture_recovering": "Ursprüngliche Aufnahmeverbindung wird wiederhergestellt…",
+           "capture_retaining": "Ausstehende Dateien bleiben lokal; Aufnahme wird beendet…",
+           "capture_recovery_unavailable": "Lokale Wiederherstellung konnte noch nicht gespeichert werden. Originaldateien bleiben erhalten.",
+           "watch_recovery_title": "Ausstehenden Upload prüfen",
            "watch_inspection_title": "Ordner prüfen (schreibgeschützt)",
            "watch_inspection_missing": "Ordner nicht verfügbar: {folder}",
            "watch_inspection_failed": "Schreibgeschützte Ordnerprüfung fehlgeschlagen: {reason}",
@@ -166,11 +175,11 @@ _WATCH_RECOVERY_LABELS = {
            "watch_finish_retained": "Gestoppt. Finish-Grenze und ausstehende Originale bleiben erhalten; der Uploadstatus wurde nicht geändert.",
            "watch_stop_stopping": "Stopp und Beibehaltung aller ausstehenden Originale werden gespeichert…",
            "force_finish": "Fertigstellen erzwingen",
-           "force_finish_saving": "Erzwungenes Fertigstellen wird gespeichert; Ausblenden bleibt verfügbar…",
+           "force_finish_saving": "Ausstehende Originale werden sicher auf diesem Computer behalten…",
            "force_finish_saved": "Der Abschluss wurde sicher freigegeben. Ausstehende Originale und Verlauf bleiben erhalten.",
            "force_finish_transport_active": "Der Abschluss wurde freigegeben. Eine HTTP-Anfrage besitzt weiterhin ihr Lease; ihr Ergebnis kann unbekannt bleiben.",
-           "force_finish_failed": "Erzwungenes Fertigstellen wurde nicht gespeichert. Der Abschluss bleibt aktiv und geschützt.",
-           "force_finish_unavailable": "Erzwungenes Fertigstellen ist für den aktuellen Besitzer nicht verfügbar.",
+           "force_finish_failed": "Lokales Behalten ist vorübergehend nicht verfügbar. Automatischer Wiederholungsversuch; Originale bleiben geschützt.",
+           "force_finish_unavailable": "Warten auf den lokalen Aufnahmebesitzer; Originale bleiben geschützt.",
            "automatic_finish_no_work": "Für den automatischen Abschluss sind keine geeigneten erfassten Aufgaben mehr vorhanden.",
            "watch_stop_transport_active": "Stopp gespeichert; die aktuelle Anfrage besitzt weiterhin den Transport. Arbeit bleibt geschützt.",
            "watch_recovery_loading": "Ausstehende Warteschlange und genaues Ziel werden gelesen…",
@@ -220,7 +229,10 @@ _WATCH_RECOVERY_LABELS = {
            "watch_recovery_remote_decode": "Remote-Beobachtung nicht verfügbar: Bilddaten konnten nicht decodiert werden.",
            "watch_recovery_decision_saved": "Entscheidung gespeichert und Warteschlange erneut gelesen.",
            "watch_recovery_decision_failed": "Entscheidung abgelehnt oder nicht verfügbar; Eintrag bleibt ausstehend."},
-    "sv": {"watch_recovery_title": "Granska väntande uppladdning",
+    "sv": {"capture_recovering": "Återställer den ursprungliga inspelningsanslutningen…",
+           "capture_retaining": "Behåller väntande filer lokalt och avslutar inspelningen…",
+           "capture_recovery_unavailable": "Lokal återställning kunde ännu inte sparas. Originalfilerna finns kvar.",
+           "watch_recovery_title": "Granska väntande uppladdning",
            "watch_inspection_title": "Granska mapp (skrivskyddad)",
            "watch_inspection_missing": "Mappen är inte tillgänglig: {folder}",
            "watch_inspection_failed": "Skrivskyddad mappgranskning misslyckades: {reason}",
@@ -229,11 +241,11 @@ _WATCH_RECOVERY_LABELS = {
            "watch_finish_retained": "Stoppad. Finish-gränsen och väntande original behålls; uppladdningsresultatet ändrades inte.",
            "watch_stop_stopping": "Sparar stopp och behåller alla väntande original…",
            "force_finish": "Tvinga slutförande",
-           "force_finish_saving": "Sparar tvingat slutförande; Dölj är fortfarande tillgängligt…",
+           "force_finish_saving": "Väntande original behålls säkert på den här datorn…",
            "force_finish_saved": "Slutförandet har frigjorts säkert. Väntande original och historik behålls.",
            "force_finish_transport_active": "Slutförandet har frigjorts. En HTTP-begäran äger fortfarande sin lease; resultatet kan förbli okänt.",
-           "force_finish_failed": "Tvingat slutförande sparades inte. Slutförandet är fortfarande aktivt och skyddat.",
-           "force_finish_unavailable": "Tvingat slutförande är inte tillgängligt för den aktuella ägaren.",
+           "force_finish_failed": "Lokalt sparande är tillfälligt otillgängligt. Försöker igen automatiskt; originalen är skyddade.",
+           "force_finish_unavailable": "Väntar på den lokala inspelningsägaren; originalen är skyddade.",
            "automatic_finish_no_work": "Det finns inget kvalificerat fångat arbete kvar för automatiskt slutförande.",
            "watch_stop_transport_active": "Stoppet är sparat; den aktuella begäran äger fortfarande transporten. Arbetet är skyddat.",
            "watch_recovery_loading": "Läser väntande kö och exakt mål…",
@@ -3250,16 +3262,14 @@ _GALLERY_CONTROL_LABELS = {'en': {'order_oldest': 'Oldest first · click for new
         'edit_title': 'Edit gallery title',
         'edit_description': 'Edit description',
         'edit_confirm': '✓ Save',
-        'edit_reload': 'Reload from server',
         'edit_online': 'This change is saved to the online gallery.',
         'edit_requires_approval': 'Editing needs a current server and '
                                   'separate gallery-edit approval.',
         'approve_edit': 'Approve gallery editing…',
-        'edit_conflict': 'The gallery changed on the server. Your draft was '
-                         'not saved. Reload before editing again.',
-        'edit_uncertain': 'Save is unconfirmed. Your draft is retained '
-                          'below. Reload the server state before another '
-                          'edit.',
+        'edit_conflict': 'The gallery changed while saving. Your text is kept '
+                         'and can still be edited.',
+        'edit_uncertain': 'Saving could not be completed. Your text is kept '
+                          'and can still be edited.',
         'edit_invalid': 'Enter a nonempty title (up to 255 characters), or a '
                         'description up to 65,535 UTF-8 bytes.'},
  'cs': {'order_oldest': 'Nejstarší první · kliknutím nejnovější první (jen '
@@ -3275,15 +3285,14 @@ _GALLERY_CONTROL_LABELS = {'en': {'order_oldest': 'Oldest first · click for new
         'edit_title': 'Upravit název galerie',
         'edit_description': 'Upravit popis',
         'edit_confirm': '✓ Uložit',
-        'edit_reload': 'Načíst stav ze serveru',
         'edit_online': 'Tato změna se uloží i do online galerie.',
         'edit_requires_approval': 'Úpravy vyžadují aktuální server a '
                                   'samostatné schválení úprav galerie.',
         'approve_edit': 'Schválit úpravy galerie…',
-        'edit_conflict': 'Galerie se na serveru změnila. Rozepsaný text se '
-                         'neuložil. Před další úpravou znovu načtěte stav.',
-        'edit_uncertain': 'Uložení není potvrzené. Rozepsaný text zůstává '
-                          'níže. Před další úpravou načtěte stav ze serveru.',
+        'edit_conflict': 'Galerie se při ukládání změnila. Rozepsaný text '
+                         'zůstává zachovaný a lze jej dál upravovat.',
+        'edit_uncertain': 'Uložení se nepodařilo dokončit. Rozepsaný text '
+                          'zůstává zachovaný a lze jej dál upravovat.',
         'edit_invalid': 'Zadejte neprázdný název (nejvýše 255 znaků) nebo '
                         'popis do 65 535 bajtů UTF-8.'},
  'de': {'order_oldest': 'Älteste zuerst · klicken für neueste zuerst (nur '
@@ -3299,19 +3308,16 @@ _GALLERY_CONTROL_LABELS = {'en': {'order_oldest': 'Oldest first · click for new
         'edit_title': 'Galerietitel bearbeiten',
         'edit_description': 'Beschreibung bearbeiten',
         'edit_confirm': '✓ Speichern',
-        'edit_reload': 'Vom Server neu laden',
         'edit_online': 'Diese Änderung wird in der Online-Galerie '
                        'gespeichert.',
         'edit_requires_approval': 'Bearbeitung erfordert einen aktuellen '
                                   'Server und eine eigene Freigabe für '
                                   'Galerieänderungen.',
         'approve_edit': 'Galeriebearbeitung freigeben…',
-        'edit_conflict': 'Die Galerie wurde auf dem Server geändert. Ihr '
-                         'Entwurf wurde nicht gespeichert. Laden Sie den '
-                         'Stand erneut.',
-        'edit_uncertain': 'Speichern ist unbestätigt. Ihr Entwurf bleibt '
-                          'unten erhalten. Laden Sie vor einer weiteren '
-                          'Änderung den Serverstand.',
+        'edit_conflict': 'Die Galerie änderte sich beim Speichern. Ihr Text '
+                         'bleibt erhalten und bearbeitbar.',
+        'edit_uncertain': 'Speichern konnte nicht abgeschlossen werden. Ihr '
+                          'Text bleibt erhalten und bearbeitbar.',
         'edit_invalid': 'Geben Sie einen nicht leeren Titel (höchstens 255 '
                         'Zeichen) oder eine Beschreibung mit höchstens '
                         '65.535 UTF-8-Bytes ein.'},
@@ -3328,15 +3334,14 @@ _GALLERY_CONTROL_LABELS = {'en': {'order_oldest': 'Oldest first · click for new
         'edit_title': 'Redigera gallerititel',
         'edit_description': 'Redigera beskrivning',
         'edit_confirm': '✓ Spara',
-        'edit_reload': 'Läs om från servern',
         'edit_online': 'Ändringen sparas i onlinegalleriet.',
         'edit_requires_approval': 'Redigering kräver en aktuell server och '
                                   'separat godkännande för galleriändringar.',
         'approve_edit': 'Godkänn galleriredigering…',
-        'edit_conflict': 'Galleriet ändrades på servern. Ditt utkast '
-                         'sparades inte. Läs om innan du redigerar igen.',
-        'edit_uncertain': 'Sparandet är obekräftat. Ditt utkast finns kvar '
-                          'nedan. Läs serverläget innan du redigerar igen.',
+        'edit_conflict': 'Galleriet ändrades medan det sparades. Texten '
+                         'finns kvar och kan fortfarande redigeras.',
+        'edit_uncertain': 'Det gick inte att slutföra sparandet. Texten '
+                          'finns kvar och kan fortfarande redigeras.',
         'edit_invalid': 'Ange en titel som inte är tom (högst 255 tecken) '
                         'eller en beskrivning med högst 65 535 UTF-8-byte.'}}
 _CONNECTION_RECOVERY_LABELS = {

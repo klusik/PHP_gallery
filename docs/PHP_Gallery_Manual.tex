@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.2.7}
+\newcommand{\version}{1.2.8}
 \newcommand{\manualdate}{16 November 2026}
 
 \hypersetup{
@@ -1812,9 +1812,9 @@ legacy OFPs, and~the~same filename is~used for~display, download and~ZIP export.
 The~PDF extension is~added when omitted. Collisions and~unsafe names
 are~refused; original bytes and~document identity remain intact.
 
-An~unknown head shows \ui{Needs attention}. \ui{Resume} in~Watcher,
-\ui{Force Continue} in~progress and~\ui{Review pending uploads} after restart
-open the~same review for~the~exact retained source and~target. Local preview
+An~unknown head shows \ui{Needs attention}. \ui{Resume} in~Watcher can open
+an~optional evidence review for~the~exact retained source and~target. Capture
+progress and~restart recovery instead resolve interruption automatically. Local preview
 and~authorized remote observation are~shown separately; a~matching image,
 gallery number or~hash is~not~an~upload receipt. \ui{Confirm already uploaded}
 requires the~exact durable acknowledgement. \ui{Skip photo} records
@@ -1843,9 +1843,10 @@ the~UI reports that wait instead of~claiming successful completion.
 Ownership remains held until the~retained cutoff has~been saved and~read back;
 a~failed save keeps processing paused under the~same owner.
 
-\ui{Force finish} is~available in~Finish progress, including after an~error
-or~timeout. It~closes the~capture locally, stops new admission and~dispatch,
-and~saves a~terminal decision before leaving finalization. Pending originals,
+Interrupted capture recovers automatically, with no~repair buttons in~progress.
+The~app first checks the~same already approved destination in~the~background.
+If~it~cannot restore it, the~app stops new admission and~dispatch and~saves
+a~terminal local-retention decision before leaving finalization. Pending originals,
 reports and~unknown-upload evidence remain on~disk; no~item is~declared
 uploaded or~skipped. Refresh, timeout and~restart cannot resume that session.
 An~already sent request retains its~physical owner until it~actually ends.
@@ -2135,12 +2136,20 @@ to~the~online gallery. Click the~heading or~its~pencil to~edit the~title, or~the
 description pencil to~edit complete multiline text. Each editor first reads
 the~current server value and~revision. Save with Enter for~a~title or
 Control+Enter for~a~description; Escape cancels. A~concurrent web edit refuses
-the~stale save. An~unconfirmed result retains a~locked draft and~offers explicit
-server reload without replaying the~write. Confirmed titles update the~tree
+the~stale save. The~app reads authoritative state automatically and~can retry
+the~selected field once after a~definite conflict. An~uncertain write can retry
+only against an~unchanged complete baseline and~revision; changed unknown state
+never authorizes replay. An~unresolved draft stays editable without a~reload
+button. Confirmed titles close the~editor and~update the~tree
 and~heading. Title saves also rename the~actual server directory and~its subtree
 using the~existing sanitizer. Stable IDs remain; descendant and~available public
 paths follow the~move. Occupied destinations refuse the~save. An~uncertain
-commit or~sidecar result requires passive reload, never automatic write replay.
+commit or~sidecar result is~read back automatically before further action.
+
+The~media renamer preserves sequence tokens when fitting long gallery contexts
+to~the~filename budget. Original sequence positions remain stable across batches;
+analysis and~collapsed reports still avoid reading physical image files. A~run
+with remaining collisions or~missing originals is~logged as~a~warning.
 
 These metadata changes require a~current server and~separate browser approval
 of~\texttt{gallery:edit}. Existing grants retain their permissions. Inventory,

@@ -87,7 +87,7 @@ assert_upload_auto_rename_selection(
         && php_source_contains(
             $wrapperSource,
             gallery_writer_compact(
-                'return media_renamer_execute_gallery_image_batch_owned($galleryId, $imageIds, $pattern);',
+                'return media_renamer_execute_gallery_image_batch_owned($galleryId, $imageIds, $pattern, $sequenceByImageId);',
             ),
         )
         && php_source_contains($wrapperSource, 'finally')
@@ -105,7 +105,7 @@ assert_upload_auto_rename_selection(
     php_source_contains(
         $batchSource,
         gallery_writer_compact(
-            'media_renamer_plan_for_gallery_selection($galleryId, $requested, $pattern)',
+            'media_renamer_plan_for_gallery_selection($galleryId, $requested, $pattern, $sequenceByImageId)',
         ),
     )
         && !php_source_contains(

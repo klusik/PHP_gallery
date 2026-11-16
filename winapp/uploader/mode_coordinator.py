@@ -977,14 +977,20 @@ class GuiModeOwner:
                 except ModeCoordinatorError:
                     self._view = None
                 raise
-    def select_linked(self, target: LinkedUploadTarget) -> ModeView:
+    def select_linked(
+        self, target: LinkedUploadTarget, *, expected: ModeView | None = None,
+    ) -> ModeView:
         """Complete an explicit target choice against verified GUI mode evidence.
 
         The caller must already have verified identity, exact gallery and user
-        consent, and must not use this method for automatic startup selection.
+        consent. Automatic capture recovery must supply its exact expected view
+        and may only reactivate the same saved destination, never select a new one.
 
         Args:
             target (LinkedUploadTarget): Fresh server-verified linked destination.
+            expected (ModeView | None): Exact view captured before background
+                verification; non-None restricts recovery to its unchanged saved
+                account/gallery/scope. None retains explicit target selection.
 
         Returns:
             ModeView: Active linked view after durable mode publication.
@@ -995,6 +1001,14 @@ class GuiModeOwner:
         with self._lock:
             if self._coordinator is None or self._view is None:
                 raise ModeCoordinatorError('Upload mode is unavailable.')
+            if expected is not None:
+                record = expected.record
+                if (self._view is not expected or record is None
+                        or record.mode != 'linked' or record.issuer != target.issuer
+                        or record.account_id != target.user_id
+                        or record.gallery_id != target.gallery_id
+                        or record.scope != target.session.approved_scope()):
+                    raise ModeCoordinatorError('Saved upload target changed during recovery.')
             try:
                 self._view = self._coordinator.select_linked(self._view, target)
                 return self._view

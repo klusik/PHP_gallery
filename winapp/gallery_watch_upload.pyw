@@ -156,6 +156,7 @@ from uploader.credential_store import WindowsUploadModeStore
 from uploader.macos_mode import MacUploadModeStore, assert_local_macos_profile
 from uploader.mode_coordinator import (
     CoordinatedWork, GuiModeOwner, ModeConfigPort, ModeCoordinator, ModeCoordinatorError,
+    ModeView,
 )
 from uploader.diagnostics import redact_text
 from uploader.linked_upload import (
@@ -11589,7 +11590,9 @@ class WatcherApp:
             linked_target_binding(record.issuer, record.account_id, record.gallery_id),
         )
 
-    def commit_linked_upload_target(self, target: LinkedUploadTarget) -> bool:
+    def commit_linked_upload_target(
+        self, target: LinkedUploadTarget, *, expected: ModeView | None = None,
+    ) -> bool:
         """Publish and activate one explicitly chosen server-verified target.
 
         The linking worker must have freshly verified this exact gallery, Admin
@@ -11597,11 +11600,15 @@ class WatcherApp:
 
         Args:
             target (LinkedUploadTarget): Exact independently verified gallery.
+            expected (ModeView | None): Captured unchanged same-target recovery
+                view, or None for an explicit new target choice.
 
         Returns:
             bool: True only after local workspace admission and confirmed mode
                 publication and activation.
         """
+        if (expected is not None and self.mode_owner.view() is not expected):
+            return False
         if (not self.linked_workspace_ready()
                 or self.linked_target_change_refusal(target.binding()) is not None):
             return False
@@ -11611,7 +11618,8 @@ class WatcherApp:
                 # missing config. Write only the loaded defaults, never
                 # copy the linked URL or read unsaved API-key form fields.
                 self.config = self._save_owned_config(self.config, first_setup=True)
-            view = self.mode_owner.select_linked(target)
+            view = (self.mode_owner.select_linked(target) if expected is None
+                    else self.mode_owner.select_linked(target, expected=expected))
             record = view.record
             return (
                 view.state == 'linked_active' and record is not None
@@ -13926,6 +13934,75 @@ class WatcherApp:
                 self.choose_linked_gallery()
             else:
                 self.linking_manager.open_address_dialog(prefill=saved[0] if saved else "")
+
+    def restore_capture_upload_target(
+        self, binding: str, on_result: Callable[[bool], None],
+    ) -> None:
+        """Reverify the saved capture destination without browser prompts.
+
+        Args:
+            binding (str): Exact original site/account/gallery fingerprint.
+            on_result (Callable[[bool], None]): Tk callback receiving whether
+                that same approved upload target was restored.
+        Returns:
+            None: Uses an existing authorized session; absent authority leaves
+                capture recovery free to retain originals locally instead.
+        """
+        selected = self.linking_manager.selected_upload_target()
+        if selected is not None:
+            on_result(selected.binding() == binding)
+            return
+        try:
+            view = self.mode_owner.view()
+            record = view.record
+            if (view.state != 'linked_active' or record is None
+                    or record.mode != 'linked'
+                    or linked_target_binding(record.issuer, record.account_id,
+                                             record.gallery_id) != binding):
+                on_result(False)
+                return
+            session = self.linking_manager.resume_upload_session(
+                record.issuer, record.account_id,
+            )
+            if session is None:
+                self.linking_manager.resume_saved_link(record.issuer)
+                on_result(False)
+                return
+            scope = session.approved_scope()
+        except (OSError, ValueError, RuntimeError):
+            on_result(False)
+            return
+
+        def verify() -> None:
+            """Check exact gallery access off Tk, preserving the original mode.
+
+            Returns:
+                None: Delivers a target or a fixed failure to the Tk event owner.
+            """
+            try:
+                target = verify_linked_upload_target(
+                    session, record.issuer, record.account_id, scope, record.gallery_id,
+                )
+                # The normal admission owner takes its own OS-backed work lock.
+                # Do not nest that non-reentrant file lock. Mode publication
+                # separately compares the exact captured view under its mutex.
+                if not self.commit_linked_upload_target(target, expected=view):
+                    raise ValueError('Saved upload target changed during recovery.')
+                committed_record = self.mode_owner.view().record
+            except Exception:
+                target = None
+                committed_record = None
+            self.events.put({'kind': 'capture_target_restored', 'payload': {
+                'target': target, 'record': committed_record, 'binding': binding,
+                'scope': scope, 'on_result': on_result,
+            }})
+
+        try:
+            threading.Thread(
+                target=verify, name='PHPGalleryCaptureTargetRestore', daemon=True,
+            ).start()
+        except RuntimeError:
+            on_result(False)
 
     def manage_gallery_link(self) -> None:
         """Open the access controls for the active or entered installation.
@@ -17155,6 +17232,24 @@ class WatcherApp:
                         )
                 elif kind == "saved_linked_mode_ready":
                     self.linked_target_changed()
+                elif kind == 'capture_target_restored':
+                    target = payload.get('target')
+                    restored = False
+                    try:
+                        if (isinstance(target, LinkedUploadTarget)
+                                and self.mode_owner.view().record == payload.get('record')
+                                and target.binding() == payload.get('binding')):
+                            restored = self.linking_manager.activate_verified_resume_target(
+                                target, target.binding(), payload['scope'],
+                                verify_committed=lambda: (
+                                    self.mode_owner.view().record == payload.get('record')
+                                ),
+                            )
+                    except (OSError, ValueError, RuntimeError):
+                        restored = False
+                    callback = payload.get('on_result')
+                    if callable(callback):
+                        callback(restored)
                 elif kind == "linking_resume_startup":
                     payload = event.get("payload", {})
                     issuer = payload.get("issuer") if isinstance(payload, dict) else None

@@ -1696,7 +1696,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.2.7. Release verification uses the
+This guide applies to PHP Gallery Version 1.2.8. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1957,13 +1957,17 @@ The temporary Issue 385 development workflow was retired after qualification.
 `test_gallery_controls.py` covers complete reverse paging and newly inserted
 photos and resumable quota waits, persistent gallery/account isolation,
 fresh full editor baselines,
-single-use revisions and non-replay after conflicts/lost replies.
+single-use raw revisions and automatic field-intent reconciliation. Cases include
+lost acknowledgements, definite revision conflicts, late first commits, changed
+unknown state, rejected authority and cancellation. Unknown changed revisions
+must never cause another automatic write.
 `app_linking_gallery_edit_test.php` exercises the real metadata service with
 isolated persistence boundaries: one-field saves, unchanged peer columns,
 pre-commit rollback, revocation and post-commit sidecar uncertainty. Existing
 disposable linking tests retain real SQL/grant qualification.
 The native Windows fixture exercises actual anchored editors and grouped
-menus, retains a conflicting draft, and captures desktop/narrow menu and
+menus, repeats A/B/A/B title edits without remounting the viewer, retains an
+editable unresolved draft without reload actions, and captures desktop/narrow menu and
 information screenshots under `cache/test-audit/gallery-controls/`.
 These fixtures do not establish an installed-client upgrade, target-host
 sidecar failure recovery or production account consent.
@@ -2030,8 +2034,12 @@ requires its actual final scan and preserves any dispatched request owner.
 Force-finish fixtures cover durable terminal restore, pending/unknown originals,
 new-dispatch fencing, late responses and stale UI callbacks, failed publication,
 repeated clicks, refresh/startup suppression and bounded normal Exit. Native
-Windows desktop/narrow fixtures keep Force finish and Hide reachable in error
-and waiting states. No installed-client or production acceptance is inferred
+Windows desktop/narrow fixtures require zero capture repair buttons in error
+and waiting states. Automatic recovery covers no pre-existing Finish worker,
+same-target restoration, stale operation/binding callbacks, coalesced recovery
+and failed persistence retaining its guard. Target verification tests require
+standard admission off Tk and reject a concurrently changed mode, account or
+scope. No installed-client or production acceptance is inferred
 from these disposable hosted fixtures.
 `test_watch_force_finish.py` exercises the actual app hook and event pump with
 durable queues, session plans and native upload leases, including a held late

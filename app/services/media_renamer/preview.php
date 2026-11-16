@@ -28,7 +28,7 @@ use function Gallery\Models\media_renamer_model_preview_rows;
 const MEDIA_RENAMER_DETAIL_PAGE_SIZE = 50;
 
 /**
- * Bound ID-only pages fetched when physical apply starts.
+ * Bound ID/sequence-position pages fetched when physical apply starts.
  * Type: int. Units: image identifiers per response. Scope: apply preparation.
  * Consumers: candidate controller and database preview. Rationale: 500 avoids
  * a full hidden-input list while amortizing metadata requests for large albums.
@@ -46,8 +46,8 @@ const MEDIA_RENAMER_CANDIDATE_PAGE_SIZE = 500;
  * @param string $pattern Requested deterministic naming pattern.
  * @param int $offset Exclusive-page displacement among visible proposals/candidates.
  * @param int $limit Maximum retained rows; zero requests only the summary.
- * @param bool $candidatesOnly Return only executable image IDs for apply preparation.
- * @return array{gallery:array{id:int|string,title?:string,folder_path:string,...},items:list<array{gallery_id:int,image_id:int,old_relative_path:string,new_relative_path:string,status:string,warnings:list<string>,can_rename:bool}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>,preview_only:bool,candidate_image_ids:list<int>,next_offset:?int} Summary and bounded requested data; initial analysis retains no file list.
+ * @param bool $candidatesOnly Return executable IDs and original sequence positions for apply preparation.
+ * @return array{gallery:array{id:int|string,title?:string,folder_path:string,...},items:list<array{gallery_id:int,image_id:int,old_relative_path:string,new_relative_path:string,status:string,warnings:list<string>,can_rename:bool}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>,preview_only:bool,candidate_image_ids:list<int>,candidate_sequences:list<int>,next_offset:?int} Summary and bounded requested data; initial analysis retains no file list.
  * @throws RuntimeException When the gallery is unavailable or paging is invalid.
  */
 function media_renamer_database_preview(
@@ -80,6 +80,7 @@ function media_renamer_database_preview(
         'missing' => 0, 'collision' => 0, 'skipped' => 0, 'warnings' => 0];
     $items = [];
     $candidateIds = [];
+    $candidateSequences = [];
     $visible = 0;
     $sequence = 0;
     foreach ($rows as $image) {
@@ -115,6 +116,7 @@ function media_renamer_database_preview(
         if ($limit > 0 && $visible >= $offset && $visible < $offset + $limit) {
             if ($candidatesOnly) {
                 $candidateIds[] = (int) $image['id'];
+                $candidateSequences[] = $sequence;
             } else {
                 $items[] = ['gallery_id' => $galleryId, 'image_id' => (int) $image['id'],
                     'old_relative_path' => $old, 'new_relative_path' => $new,
@@ -126,5 +128,6 @@ function media_renamer_database_preview(
     return ['gallery' => $gallery, 'items' => $items, 'summary' => $summary,
         'context_base' => $context, 'pattern' => $pattern, 'selected_image_ids' => [],
         'preview_only' => true, 'candidate_image_ids' => $candidateIds,
+        'candidate_sequences' => $candidateSequences,
         'next_offset' => $limit > 0 && $visible > $offset + $limit ? $offset + $limit : null];
 }

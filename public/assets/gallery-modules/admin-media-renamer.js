@@ -39,7 +39,7 @@ import {captureAdminPanelOwner} from './admin-panel-lifecycle.js?v=20260920-pane
 // and gives visible server-confirmed progress without one long request.
 const renameBatchSize = 15;
 
-// Bound ID-only apply preparation independently of filename rendering.
+// Bound ID/sequence apply preparation independently of filename rendering.
 // Type: number. Units: image IDs per response. Scope: lazy apply preparation.
 // Consumers: loadRenameCandidateIds. Rationale: 500 matches the server's
 // MEDIA_RENAMER_CANDIDATE_PAGE_SIZE without eager hidden-input lists.
@@ -53,6 +53,9 @@ const renameResultMessageLimit = 50;
 
 /** @type {WeakMap<HTMLElement, AbortController>} Active explicit detail reads. */
 const detailRequests = new WeakMap();
+
+/** @type {WeakMap<HTMLFormElement, Map<string, number>>} Original positions frozen before any batch mutates filenames. */
+const candidateSequences = new WeakMap();
 
 /**
  *  @typedef {{gallery_id?:number, galleries_requested?:number,
@@ -258,12 +261,13 @@ async function submitRenamerRead(form, action, fields, signal = undefined) {
 }
 
 /**
- * Freeze ID-only candidates at explicit apply time without rendering file rows.
+ * Freeze candidate IDs and original positions at apply time without file rows.
  * @param {HTMLFormElement} form Confirmed apply form with selected galleries.
  * @return {Promise<string[]>} Ordered unique image IDs for the existing physical batches.
  */
 async function loadRenameCandidateIds(form) {
     const ids = [];
+    const sequences = new Map();
     const seen = new Set();
     const pattern = String(new FormData(form).get('renamer_pattern') || '');
     for (const galleryId of galleryIdsFromForm(form)) {
@@ -275,22 +279,28 @@ async function loadRenameCandidateIds(form) {
             const payload = await parseRenamerJsonResponse(response, form);
             const next = payload.next_offset;
             if (!response.ok || payload.ok === false || !Array.isArray(payload.candidate_ids)
+                || !Array.isArray(payload.candidate_sequences)
+                || payload.candidate_sequences.length !== payload.candidate_ids.length
                 || payload.candidate_ids.length > renameCandidatePageSize
                 || (next !== null && (!Number.isSafeInteger(next) || next <= offset))) {
                 throw new Error(payload.error || i18nForElement(form,
                     'admin.media_renamer.progress_failed', 'Rename request failed.'));
             }
-            for (const id of payload.candidate_ids) {
-                if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)) {
+            for (const [index, id] of payload.candidate_ids.entries()) {
+                const sequence = payload.candidate_sequences[index];
+                if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)
+                    || !Number.isSafeInteger(sequence) || sequence <= 0) {
                     throw new Error(i18nForElement(form,
                         'admin.media_renamer.progress_failed', 'Rename request failed.'));
                 }
                 seen.add(id);
                 ids.push(String(id));
+                sequences.set(String(id), sequence);
             }
             offset = next;
         } while (offset !== null);
     }
+    candidateSequences.set(form, sequences);
     return ids;
 }
 
@@ -528,7 +538,12 @@ async function submitApplyBatch(form, batchIds, reportToken) {
     const body = new FormData(form);
     body.delete('rename_candidate_image_ids[]');
     body.delete('batch_image_ids[]');
+    body.delete('batch_sequence_numbers[]');
     batchIds.forEach((imageId) => body.append('batch_image_ids[]', imageId));
+    const sequences = candidateSequences.get(form);
+    if (sequences) {
+        batchIds.forEach((imageId) => body.append('batch_sequence_numbers[]', String(sequences.get(imageId))));
+    }
     body.set('renamer_action', 'apply_batch');
     body.set('report_token', reportToken);
     if (form.dataset.mediaRenamerApply === 'gallery') body.set('action', 'rename_files');

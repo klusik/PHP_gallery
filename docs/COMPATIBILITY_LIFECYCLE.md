@@ -2870,6 +2870,20 @@ candidate IDs through 500-ID pages, then keeps the existing 15-image physical
 batch flow. Only execution rebuilds the physical safety plan, so missing files
 and unindexed disk collisions are reported there instead of during analysis.
 
+The gallery-641 incident exposed long context truncation after substitution:
+the trailing sequence vanished and 922 indexed originals competed for the same
+bounded collision suffixes. Filename fitting now shortens descriptive tokens
+before numeric identities. Unusually long literal-only patterns retain a short
+digest of the complete expansion instead of silently erasing distinct identity.
+Both are permanent naming policies owned by `media_renamer.php`; the collision
+attempt budget remains unchanged. Candidate pages additionally freeze each
+image's original sequence position so filename-based ordering cannot drift
+between physical batches. The DB/physical regression stages 922 owned originals,
+verifies bytes and IDs, and requires a second analysis to be an idempotent no-op.
+Collisions or missing originals now produce a warning-level completion log.
+The supplied deployed report proves the old defect; deployed acceptance of the
+correction remains unknown until the new code is installed and exercised.
+
 Completed report overviews replace proposals. Actual confirmed outcomes are
 journaled under `cache/media-renamer-reports`, which is denied by the root HTTP
 rewrite policy. Opaque report IDs are bound to the authenticated account and PHP
@@ -4498,6 +4512,36 @@ uses 6.1-terra. No new root menu item or storage migration is introduced.
 - **Retirement:** Terminal records are permanent recovery evidence. Retain
   backward defaults and conservative unknown-result handling until deployed
   journals are proven drained; unknown usage does not authorize removal.
+
+### WINAPP-CAPTURE — Automatic interruption recovery and gallery edits
+
+- **Reason / evidence:** The installed 1.4.0 report offered Force finish without
+  a Finish worker, so the host refused publication before writing anything.
+  Browser identity, tree and media reads still succeeded while the selected
+  upload target was unavailable. A Windows AppHangB1 event confirms a hang during
+  the reported repeated rename session; its precise originating stack is unknown.
+- **Owners:** `LinkingSession.apply_gallery_edit` reconciles one explicit field
+  intent using fresh authorized reads and bounded revision-conditional writes.
+  A definite conflict may retry once. An unknown response may retry only with an
+  unchanged complete baseline/revision, fencing a late original commit. Changed
+  unknown state never authorizes replay. Text remains editable without manual
+  reload and the native context worker serializes repeated editor openings.
+- **Capture policy:** `FlightUI` automatically inspects the exact pending binding
+  off Tk, tries the existing approved target once and otherwise reuses the host's
+  durable local-retention publisher. It supplies a logical owned operation after
+  restart when no Finish worker exists. Standard upload admission and mode
+  publication run off Tk; the event owner rechecks exact mode, account and scope.
+  Capture progress exposes zero repair buttons. Temporary local persistence
+  failure retries quietly and cannot release an unconfirmed guard. No original,
+  receipt, uncertain-result evidence, live transport lease or credential is
+  discarded. Independent PDF operations retain their own explicit workflow.
+- **Compatibility / retirement:** Existing durable terminal records and raw
+  once-only edit snapshots remain supported permanently. This automatic capture
+  coordinator replaces the old native Force-finish action described above; it
+  does not change dispatch safety or grant/revocation semantics. Hosted tests
+  cover repeated rename, conditional replay fences, workerless recovery and
+  native desktop/narrow rendering. Installed upgrade, power loss, real server
+  interruption and reproduction of the original AppHang remain separate coverage.
 
 ### WINAPP-IMPORT — Manual source retention
 

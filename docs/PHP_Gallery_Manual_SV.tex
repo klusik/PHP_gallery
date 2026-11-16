@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.2.7}
+\newcommand{\version}{1.2.8}
 \newcommand{\manualdate}{16~november~2026}
 
 \hypersetup{
@@ -1867,9 +1867,10 @@ nedladdning och ZIP använder samma filnamn. PDF-filändelsen läggs till om den
 saknas. Kollisioner och osäkra namn avvisas; innehåll och dokumentidentitet
 bevaras.
 
-\ui{Tvinga slutförande} (Force finish) är tillgängligt i Finish-förloppet även
-vid fel eller timeout. Åtgärden stoppar ny insamling och sändning och stänger
-sessionen lokalt efter att slutbeslutet sparats beständigt. Väntande original,
+Avbruten insamling återhämtas automatiskt utan reparationsknappar i förloppet.
+Appen kontrollerar först samma redan godkända mål i bakgrunden. Om det inte kan
+återställas stoppas ny insamling och sändning, och ett beständigt lokalt avslut
+med bevarade filer sparas. Väntande original,
 rapporter och underlag för osäkra uploads behålls; ingen post räknas som
 uppladdad eller överhoppad. Uppdatering, timeout och omstart återupptar inte
 sessionen. En redan skickad begäran behåller sin fysiska ägare tills den
@@ -1879,9 +1880,9 @@ insamlingsgräns. Normalt Finish väntar på egna köer och slutskanningen,
 inte på en orelaterad inaktiv Watcher, och upprepar inget tomt automatiskt
 avslut. Diagnostiken skiljer insamlingssessionen från worker-kön.
 
-Ett osäkert huvud visar \ui{Åtgärd krävs}. \ui{Återuppta} i Watcher,
-\ui{Tvinga fortsatt granskning} i förloppet och \ui{Granska väntande uploads}
-efter omstart öppnar samma granskning av exakt sparad källgeneration och mål.
+Ett osäkert huvud visar \ui{Åtgärd krävs}. \ui{Återuppta} i Watcher kan öppna
+en valfri bevisgranskning för exakt sparad källa och mål. Insamlingsförloppet
+och återhämtning efter omstart löser i stället avbrottet automatiskt.
 Lokal förhandsvisning och auktoriserad fjärrobservation skiljs åt; en liknande
 bild, galleriposition eller hash är inget upload-kvitto.
 \ui{Bekräfta redan uppladdad} kräver exakt beständig bekräftelse.
@@ -2193,12 +2194,20 @@ väljaren Offentlig/Privat/Opublicerad; NSFW Guard och undantaget för offentlig
 online. Titeln eller dess penna öppnar titelredigering, beskrivningspennan hela
 texten. Varje editor läser först aktuellt servervärde och revision. Enter sparar
 titeln, Control+Enter beskrivningen; Escape avbryter. Samtidiga webbändringar
-avvisar en gammal revision. Ett obekräftat resultat behåller det låsta utkastet
-och erbjuder uttrycklig serverinläsning utan att upprepa skrivningen. Bekräftade
-titlar uppdaterar träd och rubrik samt byter namn på den verkliga servermappen
+avvisar en gammal revision. Appen läser serverläget automatiskt och kan försöka
+spara det valda fältet en gång till efter en säker konflikt. En osäker skrivning
+får bara upprepas om hela utgångsläget och revisionen är oförändrade. Ändrat
+okänt läge tillåter ingen upprepning. Utkastet förblir redigerbart utan en
+inläsningsknapp. Bekräftade titlar stänger editorn, uppdaterar träd och rubrik
+samt byter namn på den verkliga servermappen
 och dess underträd enligt befintlig sanering. ID:n behålls; underordnade och
 tillgängliga offentliga sökvägar följer flytten. Upptagna mål avvisas. Oklara
-commit- eller sidecar-resultat kräver ny läsning utan automatisk skrivupprepning.
+commit- eller sidecar-resultat stäms av automatiskt genom läsning.
+
+Medieomdöparen bevarar sekvensnummer när långa gallerikontexter kortas.
+Ursprungliga positioner förblir stabila mellan batcher. Analys och hopfällda
+rapporter läser inte fysiska bilder. Kvarvarande kollisioner eller saknade
+original ger en sluthändelse med varningsnivå i loggen.
 
 Metadataändringar kräver en aktuell server och separat webbläsargodkännande
 för \texttt{gallery:edit}. Befintliga rättigheter utökas inte. Inventering,

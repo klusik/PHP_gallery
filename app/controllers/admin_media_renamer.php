@@ -160,13 +160,15 @@ function cms_admin_media_renamer(): void
             $batchImageIds = admin_media_renamer_image_ids_from_post(
                 'batch_image_ids',
             );
-            if ($batchImageIds === [] || count($batchImageIds) > MEDIA_RENAMER_PHYSICAL_BATCH_SIZE) {
+            $batchSequences = admin_media_renamer_sequence_map_from_post($batchImageIds);
+            if ($batchImageIds === [] || count($batchImageIds) > MEDIA_RENAMER_PHYSICAL_BATCH_SIZE
+                || $batchSequences === null) {
                 admin_media_renamer_json_response(['ok' => false, 'error' => t(
                     'admin.media_renamer.progress_failed', 'Rename request failed.',
                 )], 400);
             }
             try {
-                $result = media_renamer_execute_image_batch($batchImageIds, $pattern);
+                $result = media_renamer_execute_image_batch($batchImageIds, $pattern, $batchSequences);
                 $renamedIds = array_values(array_map(
                     static fn(array $row): int => (int) $row['image_id'],
                     array_filter($result['details'],
@@ -827,6 +829,35 @@ function admin_media_renamer_image_ids_from_post(string $field): array
 }
 
 /**
+ * Bind bounded apply IDs to their original database preview positions.
+ *
+ * @param list<int> $imageIds Already validated bounded batch identities.
+ * @return array<int,int>|null Positive original positions keyed by image ID;
+ *     empty means a classic/older caller, null refuses malformed input.
+ */
+function admin_media_renamer_sequence_map_from_post(array $imageIds): ?array
+{
+    if (!array_key_exists('batch_sequence_numbers', $_POST)) {
+        return [];
+    }
+    $positions = $_POST['batch_sequence_numbers'];
+    if (!is_array($positions) || !array_is_list($positions)
+        || count($positions) !== count($imageIds)) {
+        return null;
+    }
+    $result = [];
+    foreach ($positions as $index => $position) {
+        $sequence = is_string($position) || is_int($position)
+            ? filter_var($position, FILTER_VALIDATE_INT) : false;
+        if ($sequence === false || $sequence <= 0) {
+            return null;
+        }
+        $result[$imageIds[$index]] = $sequence;
+    }
+    return $result;
+}
+
+/**
  * Trim large batch results before returning them through AJAX.
  *
  * @param array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,details?:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings?:list<string>,failures?:list<string>} $result Aggregate execution fields to bound before returning them to the browser.
@@ -1480,8 +1511,8 @@ function admin_media_renamer_result_notice(array $result): string
 /**
  * Return the Admin Logs severity for a completed media rename run.
  *
- * @param array $result Result value.
- * @return string Text result for the caller.
+ * @param array{failures?:list<string>,warnings?:list<string>,derivative_failures?:int,collisions?:int,missing?:int,...} $result Completed rename counters and diagnostics.
+ * @return string Warning for unresolved outcomes, otherwise info.
  */
 function admin_media_renamer_result_log_severity(array $result): string
 {
@@ -1491,6 +1522,8 @@ function admin_media_renamer_result_log_severity(array $result): string
     if (
         !empty($result['warnings'])
         || (int) ($result['derivative_failures'] ?? 0) > 0
+        || (int) ($result['collisions'] ?? 0) > 0
+        || (int) ($result['missing'] ?? 0) > 0
     ) {
         return 'warning';
     }
@@ -1558,7 +1591,9 @@ function admin_media_renamer_handle_detail_read(string $action, string $pattern)
             $page = media_renamer_database_preview($galleryId, $pattern, $offset,
                 MEDIA_RENAMER_CANDIDATE_PAGE_SIZE, true);
             admin_media_renamer_json_response(['ok' => true,
-                'candidate_ids' => $page['candidate_image_ids'], 'next_offset' => $page['next_offset']]);
+                'candidate_ids' => $page['candidate_image_ids'],
+                'candidate_sequences' => $page['candidate_sequences'],
+                'next_offset' => $page['next_offset']]);
             return;
         }
         if ($action === 'report_details') {

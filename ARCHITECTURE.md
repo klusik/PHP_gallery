@@ -786,7 +786,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.2.7';
+const CMS_VERSION = '1.2.8';
 ```
 
 Update-related code uses:
@@ -5758,6 +5758,23 @@ and deployment prerequisite are documented in
 writer inventory and still-inactive filesystem-fence rollout. This does not version
 every
 independent tag, translation or Smart Gallery entity.
+
+WinApp keeps the once-only revision snapshot primitive separate from its bounded
+field-intent coordinator. Each save obtains a fresh complete baseline. Authorized
+readback can confirm a lost reply; a definite conflict can retry only the selected
+field. An uncertain response permits another conditional write only while the
+complete baseline and revision remain unchanged. Changed unknown state preserves
+an editable draft and cannot authorize replay. Editors yield to the native event
+loop while their network worker runs. Capture destination restoration performs
+the standard upload-history admission and mode publication off Tk, followed by
+an exact mode/account/scope readback before updating native controls.
+
+Media-renamer filename fitting shortens descriptive placeholder expansions before
+numeric identity tokens. Candidate pages carry bounded ID/sequence-position pairs;
+the browser forwards those original positions with each physical batch. Replanning
+still checks current ownership, disk collisions and derivatives immediately before
+execution, but earlier filename changes cannot reorder later sequence numbers.
+Analysis remains database-only and detail/report filenames stay lazy.
 
 The layout compatibility callback runs during standalone installation as well
 as configured upgrades. It acquires/releases the canonical writer lock on its

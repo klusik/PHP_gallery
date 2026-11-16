@@ -500,12 +500,24 @@ returned values and existing shared mutation-completion contract.
 
 An authoritative refusal shows its reason and returned persisted values. A
 timeout, lost response or malformed result leaves completion explicitly
-unverified: keep the displayed intent, lock the affected form and offer a
-passive state reload. Do not silently retry a write, report success or invent
+unverified. Read authoritative state automatically before asking the user to
+repair anything. The native gallery editor owns a revision-fenced coordinator:
+it reconciles the desired field through a fresh authorized read, retries a
+definite conflict once, and permits a second uncertain write only against an
+unchanged complete baseline/revision. Unresolved text remains editable with
+inline feedback; there is no manual reload or confirmation step. Other forms
+whose owner has not implemented this coordinator keep their existing guard.
+Do not blindly replay a write, report success or invent
 a rollback when the server may already have committed it. The Content reference
 bounds a write at `15000ms`; preserve the owning route's safety and reconciliation
 contract when adopting this interaction elsewhere. Coupled fields travel with
 their peer state rather than overwriting it with a guessed default.
+
+Native capture progress presents status and zero repair actions. The application
+restores the same approved destination or durably retains pending originals and
+ends the interrupted capture automatically. Persistence failure retries quietly
+without falsely releasing its guard; live HTTP transport keeps its owner. Shared
+buttons, panels and status surfaces still inherit the central native UI library.
 
 The switch/label tooltip states **Factory default: Enabled/Disabled** using
 localized text and canonical factory metadata from the setting's owner. Expose

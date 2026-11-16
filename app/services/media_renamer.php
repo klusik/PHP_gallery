@@ -67,6 +67,30 @@ use function Gallery\Models\media_renamer_model_indexed_paths;
 const MEDIA_RENAMER_STAGING_ATTEMPTS = 100;
 
 /**
+ * Reserve portable filename space for originals and derivative names.
+ * Type: int. Units: ASCII bytes. Scope: one generated original filename.
+ * Consumers: media_renamer_build_filename(). Rationale: 240 preserves the
+ * established filesystem budget without discarding sequence placeholders.
+ */
+const MEDIA_RENAMER_FILENAME_MAX_BYTES = 240;
+
+/**
+ * Retain a meaningful minimum stem under the existing safe extension policy.
+ * Type: int. Units: ASCII bytes. Scope: generated filename stems.
+ * Consumers: media_renamer_build_filename(). Rationale: 16 preserves the
+ * original minimum and leaves room for an identity-preserving digest fallback.
+ */
+const MEDIA_RENAMER_STEM_MIN_BYTES = 16;
+
+/**
+ * Preserve identity when literal/repeated-token patterns cannot otherwise fit.
+ * Type: int. Units: hexadecimal characters. Scope: overlong literal stems.
+ * Consumers: media_renamer_pattern_stem(). Rationale: 12 retains 48 digest
+ * bits within the minimum stem; ordinary sequence patterns keep actual digits.
+ */
+const MEDIA_RENAMER_STEM_DIGEST_CHARS = 12;
+
+/**
  * Return gallery rows with direct-image counts for the site-wide renamer UI.
  *
  * @param bool $hideEmptyGalleries Hide empty galleries value.
@@ -472,12 +496,14 @@ function media_renamer_plan_for_gallery(
  * @param int $galleryId Gallery identifier.
  * @param array<int,int|string> $imageIds Selected image ids. Empty means all images.
  * @param string $pattern Pattern value.
- * @return array<string,mixed> Structured result data for the caller.
+ * @param array<int,int> $sequenceByImageId Frozen positive positions from apply preparation; empty retains classic complete-gallery numbering.
+ * @return array{gallery:array{id:int|string,folder_path:string,title?:string,...},items:list<array{gallery_id:int,image_id:int,old_relative_path:string,new_relative_path:string,status:string,warnings:list<string>,can_rename:bool,...}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>,requested_sequences:array<int,int>} Fresh physical safety plan and its exact original position map.
  */
 function media_renamer_plan_for_gallery_selection(
     int $galleryId,
     array $imageIds = [],
     string $pattern = '',
+    array $sequenceByImageId = [],
 ): array {
     $gallery = find_gallery($galleryId, true);
     if (!$gallery) {
@@ -511,6 +537,16 @@ function media_renamer_plan_for_gallery_selection(
             ),
         ));
 
+    if ($sequenceByImageId !== [] && (count($sequenceByImageId) !== count($requestedIds)
+        || count(array_unique($sequenceByImageId)) !== count($sequenceByImageId))) {
+        throw new RuntimeException('Frozen rename positions must cover the exact selection.');
+    }
+    foreach ($sequenceByImageId as $imageId => $fixedSequence) {
+        if (!isset($selectedImageIds[$imageId]) || !is_int($fixedSequence) || $fixedSequence <= 0) {
+            throw new RuntimeException('Invalid frozen rename sequence.');
+        }
+    }
+
     $galleryRoot = gallery_abs_path((string) $gallery['folder_path']);
     $pattern = media_renamer_normalize_pattern($pattern);
     $contextBase = media_renamer_gallery_context_base($gallery);
@@ -533,7 +569,7 @@ function media_renamer_plan_for_gallery_selection(
                 $contextBase,
                 $pattern,
                 $image,
-                $sequence,
+                $sequenceByImageId[$imageId] ?? $sequence,
                 $selectedImageIds,
                 $currentFileKeys,
                 $usedTargetPaths,
@@ -557,6 +593,7 @@ function media_renamer_plan_for_gallery_selection(
             'intval',
             array_keys($selectedImageIds),
         ),
+        'requested_sequences' => $sequenceByImageId,
     ];
 }
 
@@ -1119,9 +1156,11 @@ function media_renamer_pattern_help_text(): string
  * @param string $pattern Pattern value.
  * @param string $contextBase Context base value.
  * @param int $sequence Sequence value.
- * @param array<string,mixed> $gallery Gallery row supplying title and path substitutions.
- * @param array<string,mixed> $image Image row supplying title, filename and ID substitutions.
- * @return string Text result for the caller.
+ * @param array{id?:int|string,title?:string,folder_path?:string,...} $gallery Gallery naming context.
+ * @param array{id?:int|string,title?:string,filename?:string,relative_path?:string,...} $image Image naming context.
+ * @param ?int $maxBytes Optional ASCII byte budget; null preserves full expansion.
+ * @return string Expanded ASCII stem; descriptive text is shortened before
+ *     numeric identity tokens when a budget is provided.
  */
 function media_renamer_pattern_stem(
     string $pattern,
@@ -1129,6 +1168,7 @@ function media_renamer_pattern_stem(
     int $sequence,
     array $gallery,
     array $image,
+    ?int $maxBytes = null,
 ): string {
     $pattern = media_renamer_normalize_pattern($pattern);
     $oldFilename = (string) (
@@ -1152,13 +1192,48 @@ function media_renamer_pattern_stem(
         '{seq5}' => str_pad((string) max(1, $sequence), 5, '0', STR_PAD_LEFT),
     ];
 
-    $stem = strtr($pattern, $replacements);
-    $stem = media_renamer_ascii_slug($stem);
-    return $stem !== ''
-        ? $stem
-        : $contextBase
-        . '_'
-        . str_pad((string) max(1, $sequence), 4, '0', STR_PAD_LEFT);
+    $stem = media_renamer_ascii_slug(strtr($pattern, $replacements));
+    if ($stem === '') {
+        // Apply the supported default before fitting, so an empty expansion
+        // cannot bypass the filename budget through its fallback context.
+        $pattern = media_renamer_default_pattern();
+        $stem = media_renamer_ascii_slug(strtr($pattern, $replacements));
+    }
+    if ($maxBytes !== null && strlen($stem) > $maxBytes) {
+        // Shorten descriptive expansions before substitution. Sequence/image
+        // identities and their position in the requested pattern survive; a
+        // plain tail cut would erase {seq4} from long gallery-context names.
+        $textKeys = ['{gallery_context}', '{gallery_path}', '{gallery_title}',
+            '{photo_title}', '{old_name}', '{old_stem}'];
+        while (strlen($stem) > $maxBytes) {
+            $longest = null;
+            $longestBytes = 0;
+            foreach ($textKeys as $key) {
+                $expandedBytes = strlen($replacements[$key]) * substr_count($pattern, $key);
+                if ($expandedBytes > $longestBytes) {
+                    $longest = $key;
+                    $longestBytes = $expandedBytes;
+                }
+            }
+            if ($longest === null) {
+                break;
+            }
+            $count = substr_count($pattern, $longest);
+            $remove = (int) ceil((strlen($stem) - $maxBytes) / $count);
+            $replacements[$longest] = rtrim(substr($replacements[$longest], 0,
+                max(0, strlen($replacements[$longest]) - $remove)), '_');
+            $stem = media_renamer_ascii_slug(strtr($pattern, $replacements));
+        }
+        if (strlen($stem) > $maxBytes) {
+            // Literal-only/repeated-identity patterns may themselves exceed the
+            // filesystem budget. Preserve their complete identity in a digest
+            // instead of collapsing distinct sequences to one truncated name.
+            $digest = substr(hash('sha256', $stem), 0, MEDIA_RENAMER_STEM_DIGEST_CHARS);
+            $stem = rtrim(substr($stem, 0, $maxBytes - strlen($digest) - 1), '_')
+                . '_' . $digest;
+        }
+    }
+    return $stem;
 }
 
 /**
@@ -1169,9 +1244,10 @@ function media_renamer_pattern_stem(
  * @param string $extension Extension value.
  * @param int $suffix Suffix value.
  * @param string $pattern Pattern value.
- * @param array<string,mixed> $gallery Gallery row supplying title and path substitutions.
- * @param array<string,mixed> $image Image row supplying title, filename and ID substitutions.
- * @return string Text result for the caller.
+ * @param array{id?:int|string,title?:string,folder_path?:string,...} $gallery Gallery naming context.
+ * @param array{id?:int|string,title?:string,filename?:string,relative_path?:string,...} $image Image naming context.
+ * @return string Bounded filename retaining sequence/image identity and the
+ *     collision suffix within the established ASCII byte budget.
  */
 function media_renamer_build_filename(
     string $contextBase,
@@ -1184,18 +1260,18 @@ function media_renamer_build_filename(
 ): string {
     $extensionPart = '.' . $extension;
     $suffixPart = $suffix > 0 ? '_' . ($suffix + 1) : '';
+    $maxStemLength = max(
+        MEDIA_RENAMER_STEM_MIN_BYTES,
+        MEDIA_RENAMER_FILENAME_MAX_BYTES - strlen($suffixPart) - strlen($extensionPart),
+    );
     $stem = media_renamer_pattern_stem(
         $pattern,
         $contextBase,
         $sequence,
         $gallery,
         $image,
+        $maxStemLength,
     );
-    $maxStemLength = max(
-        16,
-        240 - strlen($suffixPart) - strlen($extensionPart),
-    );
-    $stem = substr($stem, 0, $maxStemLength);
     $stem = trim($stem, '_');
     if ($stem === '') {
         $stem =
@@ -1287,12 +1363,14 @@ function media_renamer_execute_gallery_owned(
  * @param int $galleryId Gallery identifier.
  * @param array<int|string> $imageIds Image ids value.
  * @param string $pattern Pattern value.
- * @return array<string,mixed> Structured result data for the caller.
+ * @param array<int,int> $sequenceByImageId Frozen original positions for these IDs; empty uses classic numbering.
+ * @return array{gallery_id?:int,galleries_requested?:int,galleries_processed?:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>} Confirmed counters and bounded-batch outcomes.
  */
 function media_renamer_execute_gallery_image_batch(
     int $galleryId,
     array $imageIds,
     string $pattern = '',
+    array $sequenceByImageId = [],
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
@@ -1300,6 +1378,7 @@ function media_renamer_execute_gallery_image_batch(
             $galleryId,
             $imageIds,
             $pattern,
+            $sequenceByImageId,
         );
     } finally {
         gallery_edit_writer_end($writerLock);
@@ -1315,13 +1394,15 @@ function media_renamer_execute_gallery_image_batch(
  * @param int $galleryId Gallery identifier.
  * @param list<int|string> $imageIds Explicit image selection; no positive IDs means no work.
  * @param string $pattern Requested filename pattern.
- * @return array<string,int|list<string>|list<array<string,mixed>>> Selected-image rename counters, details, warnings and failures; empty selection yields the zero aggregate.
+ * @param array<int,int> $sequenceByImageId Frozen original positions for this exact selection; empty uses classic numbering.
+ * @return array{gallery_id?:int,galleries_requested?:int,galleries_processed?:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>} Selected-image outcomes; empty selection yields zero counters.
  * @author Rudolf Klusal
  */
 function media_renamer_execute_gallery_image_batch_owned(
     int $galleryId,
     array $imageIds,
     string $pattern = '',
+    array $sequenceByImageId = [],
 ): array {
     $requested = array_values(array_unique(array_filter(
         array_map('intval', $imageIds),
@@ -1341,6 +1422,7 @@ function media_renamer_execute_gallery_image_batch_owned(
         $galleryId,
         $requested,
         $pattern,
+        $sequenceByImageId,
     ));
 }
 
@@ -1352,15 +1434,17 @@ function media_renamer_execute_gallery_image_batch_owned(
  *
  * @param array<int|string> $imageIds Image ids value.
  * @param string $pattern Pattern value.
- * @return array<string,mixed> Structured result data for the caller.
+ * @param array<int,int> $sequenceByImageId Frozen positions keyed by image identity; empty uses classic numbering.
+ * @return array{galleries_requested:int,galleries_processed:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>} Aggregated physical batch outcomes.
  */
 function media_renamer_execute_image_batch(
     array $imageIds,
     string $pattern = '',
+    array $sequenceByImageId = [],
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
-        return media_renamer_execute_image_batch_owned($imageIds, $pattern);
+        return media_renamer_execute_image_batch_owned($imageIds, $pattern, $sequenceByImageId);
     } finally {
         gallery_edit_writer_end($writerLock);
     }
@@ -1374,12 +1458,14 @@ function media_renamer_execute_image_batch(
  *
  * @param list<int|string> $imageIds Explicit image selection grouped by current gallery ownership.
  * @param string $pattern Requested filename pattern.
- * @return array<string,int|list<string>|list<array<string,mixed>>> Gallery/request counters, merged per-image details, warnings and independent gallery failures.
+ * @param array<int,int> $sequenceByImageId Frozen positions grouped by current image ownership; empty uses classic numbering.
+ * @return array{galleries_requested:int,galleries_processed:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>} Gallery/request counters and independent gallery failures.
  * @author Rudolf Klusal
  */
 function media_renamer_execute_image_batch_owned(
     array $imageIds,
     string $pattern = '',
+    array $sequenceByImageId = [],
 ): array {
     $ids = array_values(array_unique(array_filter(
         array_map('intval', $imageIds),
@@ -1413,6 +1499,7 @@ function media_renamer_execute_image_batch_owned(
                 (int) $galleryId,
                 $galleryImageIds,
                 $pattern,
+                array_intersect_key($sequenceByImageId, array_fill_keys($galleryImageIds, true)),
             );
             $result['galleries_processed']++;
             media_renamer_merge_execution_result($result, $galleryResult);
@@ -1847,6 +1934,7 @@ function media_renamer_refresh_execution_plan(array $plan): array
         $galleryId,
         $imageIds,
         (string) ($plan['pattern'] ?? ''),
+        (array) ($plan['requested_sequences'] ?? []),
     );
     if ($fresh['items'] !== ($plan['items'] ?? null)) {
         throw new GalleryEditConflict(gallery_edit_comparison($gallery));

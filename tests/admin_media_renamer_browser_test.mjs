@@ -104,9 +104,16 @@ window.fetch = async (_url, options) => {
             next_offset: gallery === 8 || offset ? null : 50};
     } else if (action === 'candidate_page') {
         check(!document.querySelector('[data-media-renamer-proposals]')?.textContent.trim(), 'Old proposals survived apply');
-        payload = {ok:true,candidate_ids:gallery === 7 ? Array.from({length:61},(_,i)=>i+1) : [62,63],next_offset:null};
+        payload = {ok:true,
+            candidate_ids:gallery === 7 ? Array.from({length:61},(_,i)=>i+1) : [62,63],
+            candidate_sequences:gallery === 7 ? Array.from({length:61},(_,i)=>i+1) : [7,9],
+            next_offset:null};
     } else if (action === 'apply_batch') {
         check(ids.length > 0 && ids.length <= 15, 'Physical batch limit changed');
+        const positions = body.getAll('batch_sequence_numbers[]').map(Number);
+        check(positions.length === ids.length && positions.every((position,index) =>
+            position === (ids[index] === 62 ? 7 : ids[index] === 63 ? 9 : ids[index])),
+            'Physical batches lost the original positions or their gaps');
         check(body.get('report_token') === (applied.length ? token : ''), 'Report continuation lost');
         applied.push(...ids);
         payload = {ok:true,processed:ids.length,result:{renamed:ids.length,details:[],warnings:[],failures:[],report_token:token},
