@@ -9499,6 +9499,24 @@ most 32 visible MP3/WAV tracks. See `docs/APP_LINKING_PHASE_0.md` for the
 ancestor and visibility restrictions.
 
 Current viewer source coverage lives in
+The inspector dismissal regression closes the pane during a held metadata read,
+checks that its late reply cannot reopen it, preserves the current gallery/viewer
+and selection, and reopens the same photo through current cached metadata. It
+retains open/closed screenshots under `cache/test-audit/inspector-dismissal/`.
+The multi-navigation gallery screenshot fixture disables automatic cyclic GC
+only during its render batch and explicitly collects discarded widgets on the Tk
+owner thread. Its update-based host does not run a continuous Tk mainloop;
+automatic collection on a Pillow worker can otherwise block while deleting Tk
+images. Production timing/limits and every visibility assertion remain unchanged.
+
+The native header fixture calls the real application header factory above
+Photos without constructing an installed profile or starting capture. It retains
+`cache/test-audit/compact-header/header-*.png` and `geometry.json`, comparing the
+rendered header against the original three native label rows under the same
+fonts/DPI. It checks a single wide row, bounded narrow controls, the retained
+version, connection status transitions and update-button wiring. The measured
+height is UI geometry, not installed-host performance evidence.
+
 The **WinApp gallery sections** workflow runs on an isolated Windows runner,
 bound to its exact SHA and the immutable main merge-base. Push feedback uses
 the existing central `winapp-native` diagnostic after an observed native failure.
@@ -9510,7 +9528,9 @@ photo/folder combinations at desktop and narrow widths under
 scrolling, hidden empty/disabled sections, separate local ratios/order and no
 metadata/visibility mutation. A second native fixture reopens the real thumbnail
 pool and displays an authorized disk cover while background metadata is held;
-an empty refreshed child removes the old pixels. Portable preferences cover
+an empty refreshed child removes the old pixels. A canvas-only unmap stops
+its poll; remapping the same geometry must restart cover work without binary
+HTTP, independently of the shelf frame's mapping events. Portable preferences cover
 additive legacy files and independent folder/photo writes. The screenshot fixture
 uses the established GUI pump cadence for synthetic cover polling and waits for
 every visible cover/photo, respecting virtualized offscreen image release.

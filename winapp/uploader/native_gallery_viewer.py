@@ -2107,6 +2107,26 @@ class _NativeGalleryViewer:
             if photo.image_id in self._selected_photo_ids
         )
 
+    def focus_selection(self) -> None:
+        """Return keyboard focus to the selection after its inspector closes.
+
+        Returns:
+            None: The current anchor or another selected tile receives focus;
+                an empty selection leaves focus on the existing grid canvas.
+                The selection and current album remain mounted.
+        """
+        index = self._selection_anchor_index
+        if (index is None or not 0 <= index < len(self._photos)
+                or self._photos[index].image_id not in self._selected_photo_ids):
+            index = next((
+                position for position, photo in enumerate(self._photos)
+                if photo.image_id in self._selected_photo_ids
+            ), None)
+        if index is not None:
+            self._focus_tile(index)
+        else:
+            self.grid_canvas.focus_set()
+
     def toggle_photo_selection(self, image_id: int) -> bool:
         """Toggle one currently loaded image in the explicit selection set.
 

@@ -135,7 +135,11 @@ DPI awareness; an existing manifest/host context is preserved. This avoids
 startup bitmap scaling, but does not add per-monitor layout reflow. Restart on
 the destination display when moving between displays with different scaling.
 
-The app header groups PHP Gallery and the linked site. The Watcher screen
+The app header places PHP Gallery, the version, linked site and live controls
+beside each other on wide windows. As space narrows, the decorative tagline
+hides first while the version stays visible. The link group uses another row
+only when needed. The full linked address is available on hover. Empty connection
+feedback occupies no row, leaving more height for the gallery. The Watcher screen
 shows the upload gallery, chosen folder and primary Start/Stop control.
 **Choose folder…** is on the Watcher screen; its settings sheet also offers
 the picker and open-folder action. Settings gears sit immediately beside their
@@ -1437,7 +1441,11 @@ eligible image is available, the card shows a neutral folder. Photos keeps
 listings in memory and uses the current link grant. If the smallest thumbnail
 is missing, the server can use another existing rendition or the existing
 public display file within the same byte limit. Click a thumbnail to select it
-and show its information in an adjustable right-hand pane. Double-click or
+and show its information in an adjustable right-hand pane. Its top-right Close
+control hides the pane and returns the width to the gallery without changing
+the selected photo or reloading the album. Click the same photo again to reopen
+its information. A pending metadata reply cannot reopen a dismissed pane.
+Double-click or
 press Enter to open the inline lightbox. Arrow keys move through the grid;
 Space toggles the focused photo. Control-click on Windows/Linux or Command-click
 on macOS toggles individual selections. Shift-click or Shift-arrow selects a

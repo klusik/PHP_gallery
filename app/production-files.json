@@ -1191,6 +1191,7 @@
         "winapp/requirements.txt",
         "winapp/run_gallery_watcher.bat",
         "winapp/uploader/__init__.py",
+        "winapp/uploader/app_header.py",
         "winapp/uploader/app_linking.py",
         "winapp/uploader/app_linking_ui.py",
         "winapp/uploader/config.py",

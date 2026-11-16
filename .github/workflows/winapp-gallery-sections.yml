@@ -2,7 +2,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/winapp-gallery-sections.yml
 # Module Type: Native WinApp Verification Workflow
-# Purpose: Verify gallery sections and retain native desktop/narrow screenshots.
+# Purpose: Verify native gallery/header layouts with desktop/narrow screenshots.
 # Responsibilities:
 #   - Execute central native diagnostics or complete partitions on the exact SHA
 #   - Retain native geometry, cache regressions and rendered screenshot evidence
@@ -15,6 +15,7 @@ on:
   push:
     branches:
       - feature/winapp-1-3-gallery-sections
+      - feature/winapp-compact-header
   workflow_dispatch:
     inputs:
       native_only:

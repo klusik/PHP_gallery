@@ -126,6 +126,13 @@ TEST_TREE_REFRESH_VIEWPORTS = ((1180, 760), (720, 620))
 # target viewports are clamped instead of capturing off-screen black pixels.
 TEST_TREE_REFRESH_SCREEN_MARGIN = 80
 
+# Purpose: Use the available desktop width for the real global-header controls.
+# Type: int. Units: Tk pixels. Scope: compact-header screenshot widths only.
+# Consumers: NativeGalleryViewerTests.test_compact_application_header_reclaims_gallery_height.
+# Rationale: 16 reserves the native eight-pixel window border on each side;
+# the existing larger vertical margin still protects title bars and the taskbar.
+TEST_HEADER_SCREEN_WIDTH_MARGIN = 16
+
 # Purpose: Give generated button clicks deterministic Windows event times.
 # Type: tuple[int, int]. Units: milliseconds. Scope: double-click Tk fixture.
 # Consumers: NativeGalleryViewerTests.test_grid_single_click_selects_and_double_click_opens_lightbox.
@@ -4315,226 +4322,237 @@ class NativeGalleryViewerTests(unittest.TestCase):
             load_gallery_photo_order, save_gallery_photo_order,
         )
 
-        # Distinct IDs model mixed (44), folder-only (12), photo-only (100),
-        # and two independent groups of 18 direct child records.
-        mixed = LinkedGallery(TEST_GALLERY_ID, None, 'Journeys · photos and subgalleries')
-        folders_only = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Collections · subgalleries only')
-        leaf = LinkedGallery(100, None, 'Landscapes · photos only')
-        children = tuple(
-            LinkedGallery(base + index, parent.gallery_id, f'{index + 1:02d} · {title}')
-            for parent, base in ((mixed, 200), (folders_only, 300))
-            for index, title in enumerate((
-                'Mountain light', 'Coastal journeys', 'Evening departures',
-                'Blue horizon', 'Hidden valleys', 'Northern skies',
-            ) * 3)
-        )
-        photos = tuple(LinkedPhoto(1000 + index, f'Landscape {index + 1:02d}')
-                       for index in range(12))
-        _, presentation, _ = self._gallery_data()
-        artwork: dict[int, bytes] = {}
-        for index, photo in enumerate(photos):
-            # A 640x360 authored scene exercises actual photo crops without
-            # embedding a user photograph or calling an external media service.
-            with Image.new('RGB', (640, 360), '#304d69') as image:
-                draw = ImageDraw.Draw(image)
-                draw.rectangle((0, 180, 640, 360), fill='#243b43')
-                draw.ellipse((440, 38, 504, 102), fill='#c8ba8d')
-                offset = (index % 3) * 30
-                draw.polygon(((0, 235), (150, 62 + offset), (345, 265)), fill='#6e8591')
-                draw.polygon(((180, 250), (440, 110 + offset), (640, 255)), fill='#445965')
-                draw.polygon(((0, 292), (350, 252), (640, 306), (640, 360), (0, 360)), fill='#557b87')
-                with io.BytesIO() as output:
-                    image.save(output, format='PNG')
-                    artwork[photo.image_id] = output.getvalue()
-        session = self._session(
-            LinkedMediaPage(mixed.gallery_id, None, photos, None), presentation, artwork,
-        )
-        session.recent_media_page.return_value = None
-        session.gallery_page.return_value = LinkedGalleryPage(
-            (mixed, folders_only, leaf, *children), None,
-        )
-        session.media_photo.side_effect = lambda gallery_id, image_id, thumbnail, **kwargs: (
-            artwork[image_id], 'image/png',
-        )
-
-        def read_page(
-            gallery_id: int, after_id: int | None = None,
-            cancelled: threading.Event | None = None,
-        ) -> LinkedMediaPage:
-            """Serve gallery-specific read-only synthetic metadata.
-
-            Args:
-                gallery_id (int): Exact parent or child being displayed.
-                after_id (int | None): Unused first-page cursor in this fixture.
-                cancelled (threading.Event | None): Actual consumer cancellation.
-            Returns:
-                LinkedMediaPage: Empty folder-only parent or authorized photos.
-            """
-            rows = (() if gallery_id == folders_only.gallery_id else
-                    photos if gallery_id in (mixed.gallery_id, leaf.gallery_id) else photos[:1])
-            return LinkedMediaPage(gallery_id, None, rows, None)
-
-        session.media_page.side_effect = read_page
-        provider: list[LinkingSession | None] = [None]
-        ui_theme.configure_theme(self.root)
-        # Accelerate only the synthetic cover poll to the fixture's established
-        # GUI pump cadence. Pixel/layout and cache assertions remain unchanged;
-        # these screenshots make no production loading-time claim.
-        with TemporaryDirectory() as directory, mock.patch(
-            'uploader.gallery_folders.FOLDER_POLL_MS', round(TEST_GUI_POLL_SECONDS * 1000),
-        ):
-            path = Path(directory) / 'view.json'
-            workspace = photos_workspace.PhotosWorkspace(
-                self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
-                load_folder_format=lambda _session, gallery_id: load_gallery_card_format(
-                    path, gallery_id, folders=True,
-                ),
-                save_folder_format=lambda _session, gallery_id, value: save_gallery_card_format(
-                    path, gallery_id, value, folders=True,
-                ),
-                load_folder_order=lambda _session, gallery_id: load_gallery_photo_order(
-                    path, gallery_id, folders=True,
-                ),
-                save_folder_order=lambda _session, gallery_id, value: save_gallery_photo_order(
-                    path, gallery_id, value, folders=True,
-                ),
+        # Tk's update-based fixture has no continuously entered mainloop.
+        # Collect discarded viewer/widget cycles on its Tk owner, rather than
+        # allowing a Pillow worker's automatic GC to delete Tk images remotely.
+        automatic_gc = gc.isenabled()
+        gc.disable()
+        try:
+            # Distinct IDs model mixed (44), folder-only (12), photo-only (100),
+            # and two independent groups of 18 direct child records.
+            mixed = LinkedGallery(TEST_GALLERY_ID, None, 'Journeys · photos and subgalleries')
+            folders_only = LinkedGallery(TEST_PARENT_GALLERY_ID, None, 'Collections · subgalleries only')
+            leaf = LinkedGallery(100, None, 'Landscapes · photos only')
+            children = tuple(
+                LinkedGallery(base + index, parent.gallery_id, f'{index + 1:02d} · {title}')
+                for parent, base in ((mixed, 200), (folders_only, 300))
+                for index, title in enumerate((
+                    'Mountain light', 'Coastal journeys', 'Evening departures',
+                    'Blue horizon', 'Hidden valleys', 'Northern skies',
+                ) * 3)
             )
-            workspace.pack(fill='both', expand=True)
-            workspace._ensure_initial_gallery = mock.Mock()
-            provider[0] = session
-            workspace.refresh_session()
-            self._wait_until(lambda: workspace._worker is None and workspace.tree.exists('100'),
-                             'Synthetic section catalogue did not settle.')
-            evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'gallery-sections'
-            evidence.mkdir(parents=True, exist_ok=True)
-            # Existing desktop/narrow dimensions retain the runner screen margin.
-            for width, height in TEST_TREE_REFRESH_VIEWPORTS:
-                self.root.geometry(
-                    f'{min(width, self.root.winfo_screenwidth() - TEST_TREE_REFRESH_SCREEN_MARGIN)}x'
-                    f'{min(height, self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN)}+0+0'
+            photos = tuple(LinkedPhoto(1000 + index, f'Landscape {index + 1:02d}')
+                           for index in range(12))
+            _, presentation, _ = self._gallery_data()
+            artwork: dict[int, bytes] = {}
+            for index, photo in enumerate(photos):
+                # A 640x360 authored scene exercises actual photo crops without
+                # embedding a user photograph or calling an external media service.
+                with Image.new('RGB', (640, 360), '#304d69') as image:
+                    draw = ImageDraw.Draw(image)
+                    draw.rectangle((0, 180, 640, 360), fill='#243b43')
+                    draw.ellipse((440, 38, 504, 102), fill='#c8ba8d')
+                    offset = (index % 3) * 30
+                    draw.polygon(((0, 235), (150, 62 + offset), (345, 265)), fill='#6e8591')
+                    draw.polygon(((180, 250), (440, 110 + offset), (640, 255)), fill='#445965')
+                    draw.polygon(((0, 292), (350, 252), (640, 306), (640, 360), (0, 360)), fill='#557b87')
+                    with io.BytesIO() as output:
+                        image.save(output, format='PNG')
+                        artwork[photo.image_id] = output.getvalue()
+            session = self._session(
+                LinkedMediaPage(mixed.gallery_id, None, photos, None), presentation, artwork,
+            )
+            session.recent_media_page.return_value = None
+            session.gallery_page.return_value = LinkedGalleryPage(
+                (mixed, folders_only, leaf, *children), None,
+            )
+            session.media_photo.side_effect = lambda gallery_id, image_id, thumbnail, **kwargs: (
+                artwork[image_id], 'image/png',
+            )
+
+            def read_page(
+                gallery_id: int, after_id: int | None = None,
+                cancelled: threading.Event | None = None,
+            ) -> LinkedMediaPage:
+                """Serve gallery-specific read-only synthetic metadata.
+
+                Args:
+                    gallery_id (int): Exact parent or child being displayed.
+                    after_id (int | None): Unused first-page cursor in this fixture.
+                    cancelled (threading.Event | None): Actual consumer cancellation.
+                Returns:
+                    LinkedMediaPage: Empty folder-only parent or authorized photos.
+                """
+                rows = (() if gallery_id == folders_only.gallery_id else
+                        photos if gallery_id in (mixed.gallery_id, leaf.gallery_id) else photos[:1])
+                return LinkedMediaPage(gallery_id, None, rows, None)
+
+            session.media_page.side_effect = read_page
+            provider: list[LinkingSession | None] = [None]
+            ui_theme.configure_theme(self.root)
+            # Accelerate only the synthetic cover poll to the fixture's established
+            # GUI pump cadence. Pixel/layout and cache assertions remain unchanged;
+            # these screenshots make no production loading-time claim.
+            with TemporaryDirectory() as directory, mock.patch(
+                'uploader.gallery_folders.FOLDER_POLL_MS', round(TEST_GUI_POLL_SECONDS * 1000),
+            ):
+                path = Path(directory) / 'view.json'
+                workspace = photos_workspace.PhotosWorkspace(
+                    self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+                    load_folder_format=lambda _session, gallery_id: load_gallery_card_format(
+                        path, gallery_id, folders=True,
+                    ),
+                    save_folder_format=lambda _session, gallery_id, value: save_gallery_card_format(
+                        path, gallery_id, value, folders=True,
+                    ),
+                    load_folder_order=lambda _session, gallery_id: load_gallery_photo_order(
+                        path, gallery_id, folders=True,
+                    ),
+                    save_folder_order=lambda _session, gallery_id, value: save_gallery_photo_order(
+                        path, gallery_id, value, folders=True,
+                    ),
                 )
-                for name, gallery, show_folders in (
-                    ('photos-only', leaf, True), ('mixed', mixed, True),
-                    ('folders-only', folders_only, True), ('folders-hidden', mixed, False),
-                ):
-                    workspace._show_subgalleries.set(show_folders)
-                    workspace._select_gallery(gallery)
-                    self._wait_until(
-                        lambda: workspace._photos_present is (gallery is not folders_only),
-                        'Section visibility did not follow the completed metadata page.',
+                workspace.pack(fill='both', expand=True)
+                workspace._ensure_initial_gallery = mock.Mock()
+                provider[0] = session
+                workspace.refresh_session()
+                self._wait_until(lambda: workspace._worker is None and workspace.tree.exists('100'),
+                                 'Synthetic section catalogue did not settle.')
+                evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'gallery-sections'
+                evidence.mkdir(parents=True, exist_ok=True)
+                # Existing desktop/narrow dimensions retain the runner screen margin.
+                for width, height in TEST_TREE_REFRESH_VIEWPORTS:
+                    self.root.geometry(
+                        f'{min(width, self.root.winfo_screenwidth() - TEST_TREE_REFRESH_SCREEN_MARGIN)}x'
+                        f'{min(height, self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN)}+0+0'
                     )
-                    controller = workspace._viewer._gallery_viewer_controller
-                    shelf = workspace._folder_shelf
-                    if gallery is not folders_only:
-                        self._wait_until(lambda: bool(controller._visible_thumbnail_indices)
-                                         and all(controller._photo_images[index]
-                                                 for index in controller._visible_thumbnail_indices),
-                                         'Synthetic photo thumbnails did not settle.')
-                    if show_folders and gallery is not leaf:
-                        def covers_ready() -> bool:
-                            """Require every visible folder cover before capturing its layout.
-
-                            Returns:
-                                bool: True once each viewport-intersecting child has artwork.
-                            """
-                            top = shelf._canvas.canvasy(0)
-                            bottom = top + shelf._canvas.winfo_height()
-                            visible = {
-                                gallery_id for gallery_id, tile in shelf._tiles.items()
-                                if tile.winfo_y() < bottom
-                                and tile.winfo_y() + tile.winfo_height() > top
-                            }
-                            return bool(visible) and visible <= shelf._covers.keys()
-
-                        try:
-                            self._wait_until(covers_ready, 'Visible folder covers did not settle.')
-                        except AssertionError as exc:
-                            state = {
-                                'case': name, 'width': width,
-                                'mapped': bool(shelf._canvas.winfo_ismapped()),
-                                'height': shelf._canvas.winfo_height(),
-                                'top': shelf._canvas.canvasy(0),
-                                'covers': sorted(shelf._covers),
-                                'resolved': sorted(shelf._resolved),
-                                'worker': shelf._worker is not None and shelf._worker.is_alive(),
-                                'poll': shelf._poll_id,
-                                'cancelled': shelf._cancelled.is_set(),
-                                'tiles': {
-                                    gallery_id: (tile.winfo_y(), tile.winfo_height())
-                                    for gallery_id, tile in shelf._tiles.items()
-                                },
-                                'reads': [call.args[0] for call in session.media_page.call_args_list],
-                            }
-                            bounds = (self.root.winfo_rootx(), self.root.winfo_rooty(),
-                                      self.root.winfo_rootx() + self.root.winfo_width(),
-                                      self.root.winfo_rooty() + self.root.winfo_height())
-                            with ImageGrab.grab(bbox=bounds) as capture:
-                                capture.save(evidence / f'failed-{name}-{width}.png')
-                            raise AssertionError(json.dumps(state, sort_keys=True)) from exc
-                    self.root.update()
-                    visible_folders = show_folders and gallery is not leaf
-                    self.assertEqual(visible_folders, bool(shelf.winfo_ismapped()))
-                    self.assertEqual(visible_folders, bool(workspace._folder_format_controls.winfo_ismapped()))
-                    self.assertEqual(gallery is not folders_only,
-                                     bool(workspace._card_format_controls.winfo_ismapped()))
-                    if visible_folders:
-                        rows = {int(tile.grid_info()['row']) for tile in shelf._tiles.values()}
-                        self.assertGreater(len(rows), 1)
-                        self.assertEqual('vertical', str(shelf._scrollbar.cget('orient')))
-                        self.assertFalse(shelf._canvas.cget('xscrollcommand'))
-                        for tile in shelf._tiles.values():
-                            self.assertLessEqual(tile.winfo_x() + tile.winfo_width(),
-                                                 shelf._canvas.winfo_width())
-                    if name == 'mixed':
-                        self.assertGreaterEqual(
-                            workspace._card_format_controls.winfo_rooty(),
-                            shelf.winfo_rooty() + shelf.winfo_height(),
+                    for name, gallery, show_folders in (
+                        ('photos-only', leaf, True), ('mixed', mixed, True),
+                        ('folders-only', folders_only, True), ('folders-hidden', mixed, False),
+                    ):
+                        workspace._show_subgalleries.set(show_folders)
+                        workspace._select_gallery(gallery)
+                        self._wait_until(
+                            lambda: workspace._photos_present is (gallery is not folders_only),
+                            'Section visibility did not follow the completed metadata page.',
                         )
-                    if name == 'photos-only':
-                        self.assertFalse(workspace._subgallery_switch.winfo_ismapped())
-                    bounds = (self.root.winfo_rootx(), self.root.winfo_rooty(),
-                              self.root.winfo_rootx() + self.root.winfo_width(),
-                              self.root.winfo_rooty() + self.root.winfo_height())
-                    with ImageGrab.grab(bbox=bounds) as capture:
-                        capture.save(evidence / f'{name}-{width}.png')
-                workspace._show_subgalleries.set(True)
-                workspace._select_gallery(mixed)
-                self._wait_until(lambda: workspace._photos_present is True,
-                                 'Mixed gallery did not return for independent controls.')
-                controller = workspace._viewer._gallery_viewer_controller
-                self._wait_until(
-                    lambda: bool(controller._visible_thumbnail_indices)
-                    and all(controller._photo_images[index]
-                            for index in controller._visible_thumbnail_indices),
-                    'Mixed gallery thumbnails did not settle for ratio screenshots.',
-                )
-                for key in ('4:3', '1:1', '9:16', '21:9'):
-                    workspace._folder_format_buttons[key].invoke()
-                    self.root.update()
-                    self.assertEqual(key, workspace._folder_shelf._card_format)
-                    self.assertEqual('default', controller._card_format)
-                    self.assertEqual(key, load_gallery_card_format(path, mixed.gallery_id, folders=True))
-                    self.assertEqual('default', load_gallery_card_format(path, mixed.gallery_id))
-                    if width == TEST_TREE_REFRESH_VIEWPORTS[0][0]:
+                        controller = workspace._viewer._gallery_viewer_controller
+                        shelf = workspace._folder_shelf
+                        if gallery is not folders_only:
+                            self._wait_until(lambda: bool(controller._visible_thumbnail_indices)
+                                             and all(controller._photo_images[index]
+                                                     for index in controller._visible_thumbnail_indices),
+                                             'Synthetic photo thumbnails did not settle.')
+                        if show_folders and gallery is not leaf:
+                            def covers_ready() -> bool:
+                                """Require every visible folder cover before capturing its layout.
+
+                                Returns:
+                                    bool: True once each viewport-intersecting child has artwork.
+                                """
+                                top = shelf._canvas.canvasy(0)
+                                bottom = top + shelf._canvas.winfo_height()
+                                visible = {
+                                    gallery_id for gallery_id, tile in shelf._tiles.items()
+                                    if tile.winfo_y() < bottom
+                                    and tile.winfo_y() + tile.winfo_height() > top
+                                }
+                                return bool(visible) and visible <= shelf._covers.keys()
+
+                            try:
+                                self._wait_until(covers_ready, 'Visible folder covers did not settle.')
+                            except AssertionError as exc:
+                                state = {
+                                    'case': name, 'width': width,
+                                    'mapped': bool(shelf._canvas.winfo_ismapped()),
+                                    'height': shelf._canvas.winfo_height(),
+                                    'top': shelf._canvas.canvasy(0),
+                                    'covers': sorted(shelf._covers),
+                                    'resolved': sorted(shelf._resolved),
+                                    'worker': shelf._worker is not None and shelf._worker.is_alive(),
+                                    'poll': shelf._poll_id,
+                                    'cancelled': shelf._cancelled.is_set(),
+                                    'tiles': {
+                                        gallery_id: (tile.winfo_y(), tile.winfo_height())
+                                        for gallery_id, tile in shelf._tiles.items()
+                                    },
+                                    'reads': [call.args[0] for call in session.media_page.call_args_list],
+                                }
+                                bounds = (self.root.winfo_rootx(), self.root.winfo_rooty(),
+                                          self.root.winfo_rootx() + self.root.winfo_width(),
+                                          self.root.winfo_rooty() + self.root.winfo_height())
+                                with ImageGrab.grab(bbox=bounds) as capture:
+                                    capture.save(evidence / f'failed-{name}-{width}.png')
+                                raise AssertionError(json.dumps(state, sort_keys=True)) from exc
+                        self.root.update()
+                        visible_folders = show_folders and gallery is not leaf
+                        self.assertEqual(visible_folders, bool(shelf.winfo_ismapped()))
+                        self.assertEqual(visible_folders, bool(workspace._folder_format_controls.winfo_ismapped()))
+                        self.assertEqual(gallery is not folders_only,
+                                         bool(workspace._card_format_controls.winfo_ismapped()))
+                        if visible_folders:
+                            rows = {int(tile.grid_info()['row']) for tile in shelf._tiles.values()}
+                            self.assertGreater(len(rows), 1)
+                            self.assertEqual('vertical', str(shelf._scrollbar.cget('orient')))
+                            self.assertFalse(shelf._canvas.cget('xscrollcommand'))
+                            for tile in shelf._tiles.values():
+                                self.assertLessEqual(tile.winfo_x() + tile.winfo_width(),
+                                                     shelf._canvas.winfo_width())
+                        if name == 'mixed':
+                            self.assertGreaterEqual(
+                                workspace._card_format_controls.winfo_rooty(),
+                                shelf.winfo_rooty() + shelf.winfo_height(),
+                            )
+                        if name == 'photos-only':
+                            self.assertFalse(workspace._subgallery_switch.winfo_ismapped())
+                        bounds = (self.root.winfo_rootx(), self.root.winfo_rooty(),
+                                  self.root.winfo_rootx() + self.root.winfo_width(),
+                                  self.root.winfo_rooty() + self.root.winfo_height())
                         with ImageGrab.grab(bbox=bounds) as capture:
-                            capture.save(evidence / ('mixed-ratio-' + key.replace(':', 'x') + '.png'))
-                original_ids = tuple(workspace._folder_shelf._tiles)
-                workspace._folder_order_button.invoke()
-                self.root.update()
-                self.assertEqual(tuple(reversed(original_ids)), tuple(workspace._folder_shelf._tiles))
-                self.assertEqual('oldest', load_gallery_photo_order(path, mixed.gallery_id))
-                workspace._folder_order_button.invoke()
-                workspace._folder_format_buttons['default'].invoke()
-            session.change_gallery_visibility.assert_not_called()
-            session.save_gallery_edit.assert_not_called()
-            workspace.destroy()
+                            capture.save(evidence / f'{name}-{width}.png')
+                    workspace._show_subgalleries.set(True)
+                    workspace._select_gallery(mixed)
+                    self._wait_until(lambda: workspace._photos_present is True,
+                                     'Mixed gallery did not return for independent controls.')
+                    controller = workspace._viewer._gallery_viewer_controller
+                    self._wait_until(
+                        lambda: bool(controller._visible_thumbnail_indices)
+                        and all(controller._photo_images[index]
+                                for index in controller._visible_thumbnail_indices),
+                        'Mixed gallery thumbnails did not settle for ratio screenshots.',
+                    )
+                    for key in ('4:3', '1:1', '9:16', '21:9'):
+                        workspace._folder_format_buttons[key].invoke()
+                        self.root.update()
+                        self.assertEqual(key, workspace._folder_shelf._card_format)
+                        self.assertEqual('default', controller._card_format)
+                        self.assertEqual(key, load_gallery_card_format(path, mixed.gallery_id, folders=True))
+                        self.assertEqual('default', load_gallery_card_format(path, mixed.gallery_id))
+                        if width == TEST_TREE_REFRESH_VIEWPORTS[0][0]:
+                            with ImageGrab.grab(bbox=bounds) as capture:
+                                capture.save(evidence / ('mixed-ratio-' + key.replace(':', 'x') + '.png'))
+                    original_ids = tuple(workspace._folder_shelf._tiles)
+                    workspace._folder_order_button.invoke()
+                    self.root.update()
+                    self.assertEqual(tuple(reversed(original_ids)), tuple(workspace._folder_shelf._tiles))
+                    self.assertEqual('oldest', load_gallery_photo_order(path, mixed.gallery_id))
+                    workspace._folder_order_button.invoke()
+                    workspace._folder_format_buttons['default'].invoke()
+                session.change_gallery_visibility.assert_not_called()
+                session.save_gallery_edit.assert_not_called()
+                workspace.destroy()
+        finally:
+            gc.collect()
+            if automatic_gc:
+                gc.enable()
 
     def test_folder_cover_uses_persistent_thumbnail_before_background_refresh(self) -> None:
         """Display an authorized disk cover while fresh metadata is still held.
 
         Returns:
             None: Reopened thumbnail storage supplies the first visible cover
-                without binary HTTP; a later empty inventory removes its pixels.
+                without binary HTTP; remapping restarts cover work and an empty
+                refreshed inventory removes obsolete pixels.
         """
         from uploader import app_linking as linking
         from uploader.gallery_folders import GalleryFolderShelf
@@ -4601,6 +4619,21 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 shelf.set_view('9:16', True)
                 self.root.update()
                 self.assertEqual(photo_reads, metadata.call_count)
+                # Stop a poll while only the canvas is hidden: the shelf frame
+                # remains mapped and therefore receives no new Map event.
+                shelf._canvas.grid_remove()
+                self.root.update()
+                shelf.refresh_covers()
+                self._wait_until(lambda: shelf._poll_id is None,
+                                 'The hidden canvas did not release its idle poll.')
+                reads_before_remap = metadata.call_count
+                shelf._canvas.grid()
+                self._wait_until(
+                    lambda: metadata.call_count > reads_before_remap
+                    and TEST_GALLERY_ID in shelf._resolved,
+                    'Mapping the unchanged canvas did not restart cover work.',
+                )
+                binary.assert_not_called()
                 metadata.side_effect = None
                 metadata.return_value = LinkedMediaPage(TEST_GALLERY_ID, None, (), None)
                 shelf.refresh_covers()
@@ -4609,6 +4642,254 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     'The empty refreshed child retained obsolete cover pixels.',
                 )
                 shelf.destroy()
+
+    def test_compact_application_header_reclaims_gallery_height(self) -> None:
+        """Render the real header factory above Photos at desktop and narrow widths.
+
+        Returns:
+            None: Native screenshots prove one wide row, bounded narrow actions,
+                retained version/link status and more height for gallery content.
+        """
+        from PIL import ImageGrab
+        from test_redesign import MAIN
+        from uploader.app_header import HEADER_WORKSPACE_GAP
+
+        ui_theme.configure_theme(self.root)
+        outer = ttk.Frame(self.root, style='App.TFrame', padding=(16, 12, 16, 10))
+        outer.pack(fill='both', expand=True)
+        outer.columnconfigure(1, weight=1)
+        outer.rowconfigure(2, weight=1)
+        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app.root = self.root
+        app.flights = types.SimpleNamespace(ui_language=tk.StringVar(self.root, 'en'))
+        app.updates = types.SimpleNamespace(check=mock.Mock())
+        app.linking_manager = types.SimpleNamespace(
+            linked_address=tk.StringVar(self.root, 'https://gallery.example.test'),
+            status=tk.StringVar(self.root, ''),
+        )
+        app.watcher_header_count_var = tk.StringVar(self.root, '0')
+        app.watcher_header_time_var = tk.StringVar(self.root, '00:23')
+        app.refresh_watcher_header = mock.Mock()
+        app.notebook = mock.Mock()
+        app.notebook.index.return_value = 0
+        app.tab_indices = {'photos': 0}
+        header = app.build_app_header(outer)
+        app._watcher_header_stop_button.pack(side='left', padx=(6, 0))
+        app.monitor_light.create_oval(4, 4, 12, 12, fill='#41ce8b', outline='')
+        page, presentation, image_bytes = self._gallery_data()
+        for photo, sky in zip(page.photos, ('#426986', '#536e78')):
+            # Normal-size authored 640x360 scenes make the reclaimed photo area
+            # visible; tiny pixel-test rasters intentionally remain tiny in Default.
+            with Image.new('RGB', (640, 360), sky) as image:
+                draw = ImageDraw.Draw(image)
+                draw.polygon(((0, 300), (180, 70), (380, 290)), fill='#82959f')
+                draw.polygon(((180, 330), (470, 130), (640, 310)), fill='#344e60')
+                draw.rectangle((0, 310, 640, 360), fill='#526c62')
+                with io.BytesIO() as output:
+                    image.save(output, format='PNG')
+                    image_bytes[photo.image_id] = output.getvalue()
+        session = self._session(page, presentation, image_bytes)
+        session.recent_media_page.return_value = None
+        session.gallery_page.return_value = LinkedGalleryPage((
+            LinkedGallery(TEST_GALLERY_ID, None, 'Journeys'),
+            LinkedGallery(55, TEST_GALLERY_ID, 'Mountain light'),
+            LinkedGallery(56, TEST_GALLERY_ID, 'Coastal journeys'),
+        ), None)
+        session.media_page.side_effect = lambda gallery_id, after_id=None, cancelled=None, **kwargs: LinkedMediaPage(
+            gallery_id, None, page.photos, None,
+        )
+        session.media_photo.side_effect = lambda gallery_id, image_id, thumbnail, cancelled=None, **kwargs: (
+            image_bytes[image_id], 'image/png',
+        )
+        provider: list[LinkingSession | None] = [None]
+        workspace = photos_workspace.PhotosWorkspace(
+            outer, lambda: provider[0], mock.Mock(), lambda: 'en',
+            storage_parent=app._storage_header, storage_surface=outer,
+        )
+        workspace.grid(row=2, column=0, columnspan=2, sticky='nsew')
+        workspace._storage_text.set('4,794 · 30.9 MiB')
+        workspace._ensure_initial_gallery = mock.Mock()
+        provider[0] = session
+        workspace.refresh_session()
+        self._wait_until(lambda: workspace.tree.exists(str(TEST_GALLERY_ID)),
+                         'The compact-header Photos fixture did not load.')
+        workspace._select_gallery(workspace._galleries[TEST_GALLERY_ID])
+        self._wait_until(lambda: workspace._photos_present is True,
+                         'The compact-header Photos fixture did not show photos.')
+        # Recreate only the original three label rows to measure their native
+        # requested height under the same fonts/DPI. The 2/5 row margins and
+        # 10-pixel bottom gap are the original shell geometry being replaced.
+        legacy = ttk.Frame(self.root, style='App.TFrame')
+        for row, text, style, gap in (
+            (0, 'PHP Gallery', 'Brand.TLabel', 0),
+            (1, 'Your gallery on autopilot · ' + MAIN.APP_VERSION, 'App.Eyebrow.TLabel', 2),
+            (2, 'Linked: https://gallery.example.test', 'App.Status.TLabel', 5),
+        ):
+            ttk.Label(legacy, text=text, style=style).grid(row=row, column=0, pady=(gap, 0))
+        self.root.update_idletasks()
+        legacy_height = legacy.winfo_reqheight() + 10
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'compact-header'
+        evidence.mkdir(parents=True, exist_ok=True)
+        measurements = []
+        for width, height in TEST_TREE_REFRESH_VIEWPORTS:
+            self.root.geometry(
+                f'{min(width, self.root.winfo_screenwidth() - TEST_HEADER_SCREEN_WIDTH_MARGIN)}x'
+                f'{min(height, self.root.winfo_screenheight() - TEST_TREE_REFRESH_SCREEN_MARGIN)}+0+0'
+            )
+            self.root.update()
+            self.assertIn(MAIN.APP_VERSION, str(header.version.cget('text')))
+            for control in (header.brand, header.version, header.actions, header.links):
+                self.assertTrue(control.winfo_ismapped())
+                self.assertGreaterEqual(control.winfo_rootx(), header.winfo_rootx())
+                self.assertLessEqual(control.winfo_rootx() + control.winfo_width(),
+                                     header.winfo_rootx() + header.winfo_width())
+            if width == TEST_TREE_REFRESH_VIEWPORTS[0][0]:
+                self.assertEqual(0, int(header.links.grid_info()['row']))
+                self.assertLess(header.winfo_height() + HEADER_WORKSPACE_GAP, legacy_height)
+            self.assertLessEqual(int(header.links.grid_info()['row']), 1)
+            self.assertGreaterEqual(workspace.winfo_rooty(),
+                                    header.winfo_rooty() + header.winfo_height())
+            controller = workspace._viewer._gallery_viewer_controller
+            self._wait_until(
+                lambda: bool(controller._visible_thumbnail_indices)
+                and all(controller._photo_images[index]
+                        for index in controller._visible_thumbnail_indices),
+                'Visible photos did not settle below the compact header.',
+            )
+            measurements.append({
+                'viewport_width': self.root.winfo_width(),
+                'header_height': header.winfo_height(),
+                'legacy_header_with_gap': legacy_height,
+                'header_with_gap': header.winfo_height() + HEADER_WORKSPACE_GAP,
+                'gallery_height': workspace.winfo_height(),
+            })
+            bounds = (self.root.winfo_rootx(), self.root.winfo_rooty(),
+                      self.root.winfo_rootx() + self.root.winfo_width(),
+                      self.root.winfo_rooty() + self.root.winfo_height())
+            with ImageGrab.grab(bbox=bounds) as capture:
+                capture.save(evidence / f'header-{width}.png')
+        app.check_updates_button.invoke()
+        app.updates.check.assert_called_once_with()
+        app.linking_manager.status.set('Connection unavailable; retry from the link controls.')
+        self.root.update()
+        self.assertGreater(header.links.winfo_height(), 1)
+        app.linking_manager.status.set('')
+        app.linking_manager.linked_address.set('')
+        self.root.update()
+        self.assertTrue(header.brand.winfo_ismapped())
+        self.assertTrue(header.version.winfo_ismapped())
+        (evidence / 'geometry.json').write_text(json.dumps(measurements, indent=2), encoding='utf-8')
+        workspace.destroy()
+        outer.destroy()
+        legacy.destroy()
+
+    def test_inspector_close_keeps_selection_and_rejects_late_metadata(self) -> None:
+        """Close the inspector during a read and reopen the same selected photo.
+
+        Returns:
+            None: Late metadata cannot reopen the pane, the gallery/selection
+                survive and cached reopening reuses details without another read.
+        """
+        from PIL import ImageGrab
+
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, None, 'Photo information can be closed')
+        session.gallery_page.return_value = LinkedGalleryPage((gallery,), None)
+        started, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        observations = []
+
+        def read_info(
+            gallery_id: int, image_id: int, cancelled: threading.Event | None = None,
+        ) -> dict[str, str | int | bool]:
+            """Hold one synthetic metadata reply across inspector dismissal.
+
+            Args:
+                gallery_id (int): Physical gallery owning the selected photo.
+                image_id (int): Exact selected photo identity.
+                cancelled (threading.Event | None): Real read cancellation signal.
+            Returns:
+                dict[str, str | int | bool]: Title, filename, MIME, size, dimensions,
+                    public visibility and non-sensitive flag for the test image.
+            """
+            observations.append(image_id)
+            started.set()
+            if not release.wait(TEST_GUI_WAIT_SECONDS):
+                raise TimeoutError('Inspector close fixture did not release metadata.')
+            return {
+                'title': 'Mountain light', 'filename': 'mountain-light.png',
+                'mime': 'image/png', 'size': 123456, 'width': 640, 'height': 360,
+                'visibility': 'public', 'nsfw': False,
+            }
+
+        session.media_photo_info.side_effect = read_info
+        provider: list[LinkingSession | None] = [None]
+        ui_theme.configure_theme(self.root)
+        workspace = photos_workspace.PhotosWorkspace(
+            self.root, lambda: provider[0], mock.Mock(), lambda: 'en',
+        )
+        workspace.pack(fill='both', expand=True)
+        workspace._ensure_initial_gallery = mock.Mock()
+        provider[0] = session
+        workspace.refresh_session()
+        self._wait_until(lambda: workspace.tree.exists(str(TEST_GALLERY_ID)),
+                         'Inspector dismissal gallery did not load.')
+        workspace._select_gallery(gallery)
+        viewer_frame = workspace._viewer
+        controller = viewer_frame._gallery_viewer_controller
+        self._wait_until(lambda: len(controller._photos) == len(page.photos),
+                         'Inspector dismissal photos did not load.')
+        controller.select_photo(0)
+        self.assertTrue(started.wait(TEST_GUI_WAIT_SECONDS))
+        self._wait_until(lambda: workspace._photo_inspector_close.winfo_ismapped(),
+                         'The inspector close control was not visible.')
+        before_width = workspace.viewer_pane.winfo_width()
+        selected = controller.selected_photo_ids()
+        workspace._photo_inspector_close.invoke()
+        self._wait_until(lambda: not workspace._photo_inspector_visible
+                         and workspace.viewer_pane.winfo_width() > before_width,
+                         'Closing the inspector did not return its width to the gallery.')
+        self.assertEqual(selected, controller.selected_photo_ids())
+        self.assertEqual(TEST_GALLERY_ID, workspace._selected_gallery_id)
+        self.assertIs(viewer_frame, workspace._viewer)
+        release.set()
+        self._wait_until(lambda: workspace._inspector_worker is None
+                         and workspace._inspector_results.empty(),
+                         'The dismissed metadata read did not finish.')
+        self.assertFalse(workspace._photo_inspector_visible)
+        cache_key = (id(session), TEST_GALLERY_ID, page.photos[0].image_id)
+        self.assertNotIn(cache_key, workspace._photo_info_cache)
+        controller.select_photo(0)
+        self._wait_until(lambda: workspace._photo_inspector_visible
+                         and cache_key in workspace._photo_info_cache,
+                         'Clicking the same selected photo did not reopen its information.')
+        self.root.update()
+        close = workspace._photo_inspector_close
+        self.assertLessEqual(
+            workspace._photo_inspector_heading.winfo_rootx()
+            + workspace._photo_inspector_heading.winfo_width(), close.winfo_rootx(),
+        )
+        evidence = WINAPP_DIR.parent / 'cache' / 'test-audit' / 'inspector-dismissal'
+        evidence.mkdir(parents=True, exist_ok=True)
+        bounds = (self.root.winfo_rootx(), self.root.winfo_rooty(),
+                  self.root.winfo_rootx() + self.root.winfo_width(),
+                  self.root.winfo_rooty() + self.root.winfo_height())
+        with ImageGrab.grab(bbox=bounds) as capture:
+            capture.save(evidence / 'inspector-open.png')
+        reads_before_close = len(observations)
+        close.invoke()
+        self.root.update()
+        self.assertFalse(workspace._photo_inspector_visible)
+        self.assertEqual(selected, controller.selected_photo_ids())
+        with ImageGrab.grab(bbox=bounds) as capture:
+            capture.save(evidence / 'inspector-closed.png')
+        controller.select_photo(0)
+        self.root.update()
+        self.assertTrue(workspace._photo_inspector_visible)
+        self.assertEqual(reads_before_close, len(observations))
+        self.assertIs(viewer_frame, workspace._viewer)
+        workspace.destroy()
 
     def test_context_glass_card_native_region_matches_mapped_geometry(self) -> None:
         """Verify the actual Windows child HWND region excludes its corners.

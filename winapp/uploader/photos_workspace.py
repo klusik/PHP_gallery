@@ -843,6 +843,13 @@ class PhotosWorkspace(ttk.Frame):
         self._photo_inspector_heading.grid(
             row=0, column=0, sticky="ew", pady=(0, 4),
         )
+        self._photo_inspector_close = icon_button(
+            self.info_pane, 'close', self._dismiss_photo_inspector,
+            self._text('close_photo_info'),
+        )
+        self._photo_inspector_close.grid(
+            row=0, column=1, sticky='ne', padx=(4, 0),
+        )
         self._photo_inspector_summary = ttk.Label(
             self.info_pane, text=self._text("select_photo_hint"),
             style="Muted.TLabel",
@@ -852,10 +859,10 @@ class PhotosWorkspace(ttk.Frame):
             justify="left",
         )
         self._photo_inspector_summary.grid(
-            row=1, column=0, sticky="ew", pady=(0, 6),
+            row=1, column=0, columnspan=2, sticky="ew", pady=(0, 6),
         )
         inspector_body = ttk.Frame(self.info_pane, style="Card.TFrame")
-        inspector_body.grid(row=2, column=0, sticky="nsew")
+        inspector_body.grid(row=2, column=0, columnspan=2, sticky="nsew")
         inspector_body.rowconfigure(0, weight=1)
         inspector_body.columnconfigure(0, weight=1)
         self._photo_inspector_canvas = tk.Canvas(
@@ -5034,6 +5041,17 @@ class PhotosWorkspace(ttk.Frame):
         while len(self._photo_info_cache) > PHOTOS_INFO_CACHE_ENTRY_LIMIT:
             self._photo_info_cache.popitem(last=False)
 
+    def _dismiss_photo_inspector(self) -> None:
+        """Close the information pane while preserving the gallery and selection.
+
+        Returns:
+            None: Pending metadata is fenced, grid width is restored and keyboard
+                focus returns to the selected photo without reloading the album.
+        """
+        self._clear_photo_inspector()
+        if self._viewer is not None:
+            self._viewer._gallery_viewer_controller.focus_selection()
+
     def _clear_photo_inspector(self) -> None:
         """Cancel pending metadata work and clear the visible inspector.
 
@@ -5235,7 +5253,10 @@ class PhotosWorkspace(ttk.Frame):
             self._photo_inspector_window, width=event.width,
         )
         self._photo_inspector_heading.configure(
-            wraplength=max(1, event.width - PHOTOS_INFO_PANE_HEADER_INSET),
+            wraplength=max(
+                1, event.width - PHOTOS_INFO_PANE_HEADER_INSET
+                - self._photo_inspector_close.winfo_reqwidth(),
+            ),
         )
         self._photo_inspector_summary.configure(
             wraplength=max(1, event.width - PHOTOS_INFO_PANE_HEADER_INSET),

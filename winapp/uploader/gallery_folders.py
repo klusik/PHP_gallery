@@ -135,6 +135,10 @@ class GalleryFolderShelf(ttk.Frame):
         )
         self._cards.bind('<Configure>', self._viewport_changed, add='+')
         self._canvas.bind('<Configure>', self._viewport_changed, add='+')
+        # A hidden poll can finish after the shelf maps but before its canvas
+        # maps. The canvas's own Map event must restart work even if its size
+        # stayed unchanged and no later Configure event is delivered.
+        self._canvas.bind('<Map>', self._viewport_changed, add='+')
         self._parent_configure_binding = self.master.bind(
             '<Configure>', self._viewport_changed, add='+',
         )

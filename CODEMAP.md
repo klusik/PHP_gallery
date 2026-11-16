@@ -615,6 +615,7 @@ tag controller through the pagination and description-layout services.
 | Upload API | `app/controllers/upload_automation.php`, handler `cms_upload_automation_upload` |
 | Token model | `app/services/upload_automation.php`, table `gallery_upload_tokens` |
 | Windows watcher | `winapp/gallery_watch_upload.pyw` |
+| Compact responsive application header | `winapp/uploader/app_header.py`; live action/link wiring in `winapp/gallery_watch_upload.pyw` |
 | Durable FIFO capture and head-only consumer contract | `winapp/uploader/watch_queue.py`, `winapp/uploader/discovery.py`, `winapp/uploader/state_store.py`; `docs/UPLOADER_QUEUE.md` |
 | Explicit uncertain-head decisions, retained stop and shared Resume preview | `winapp/uploader/watch_recovery.py`, `winapp/uploader/watch_recovery_ui.py`, Watcher integration in `winapp/gallery_watch_upload.pyw`, Finish actions in `winapp/uploader/flight_ui.py` |
 | Terminal Force finish, scoped drain and bounded Exit | Queue terminal persistence in `winapp/uploader/watch_queue.py`, capture plan in `winapp/uploader/flight_jobs.py`, app-owned cancellation/diagnostics in `winapp/gallery_watch_upload.pyw`, progress controls in `winapp/uploader/flight_ui.py` |

@@ -225,6 +225,9 @@ from uploader.app_linking import (
     LinkingRefreshRejected, validated_retry_after,
 )
 from uploader.gallery_catalogue_cache import GalleryCatalogueCache
+from uploader.app_header import (
+    CompactAppHeader, HEADER_GROUP_GAP, HEADER_WORKSPACE_GAP,
+)
 from uploader.gallery_view_preferences import (
     load_gallery_card_format, save_gallery_card_format,
     load_gallery_photo_order, save_gallery_photo_order,
@@ -8599,106 +8602,7 @@ class WatcherApp:
         outer.columnconfigure(1, weight=1)
         outer.rowconfigure(2, weight=1)
 
-        header = ttk.Frame(outer, style="App.TFrame")
-        header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-        header.columnconfigure(1, weight=1)
-        ttk.Label(
-            header,
-            text="PHP Gallery",
-            style="Brand.TLabel",
-        ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            header,
-            text="Your gallery on autopilot  ·  " + APP_VERSION,
-            style="App.Eyebrow.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
-        status = ttk.Frame(header, style="App.TFrame")
-        status.grid(row=0, column=2, rowspan=2, sticky="e")
-        self._storage_header = ttk.Frame(status, style="App.TFrame")
-        self._storage_header.pack(side="left", padx=(0, 10))
-        self._storage_context_surface = outer
-        self.monitor_light = tk.Canvas(
-            status,
-            width=16,
-            height=16,
-            highlightthickness=0,
-            bd=0,
-            background="#131B26",
-        )
-        self.monitor_light.pack(side="left", padx=(0, 6))
-        watcher_display = GlassCard(header, padding=(8, 4))
-        watcher_display.grid(
-            row=0, column=1, rowspan=2, sticky="e", padx=(12, 10),
-        )
-        self._watcher_header_icon_cache: Dict[str, ThemeImage] = {}
-        self._watcher_header_status_icon = ttk.Label(
-            watcher_display, style="Card.TLabel",
-        )
-        self._watcher_header_status_icon.pack(side="left", padx=(0, 8))
-        self._watcher_header_queue_image = create_smooth_icon(
-            watcher_display, "queue", WATCHER_HEADER_ICON_SIZE,
-        )
-        self._watcher_header_queue_icon = ttk.Label(
-            watcher_display,
-            image=self._watcher_header_queue_image or "",
-            text="▧" if self._watcher_header_queue_image is None else "",
-            style="Card.TLabel",
-        )
-        self._watcher_header_queue_icon.pack(side="left", padx=(0, 3))
-        self.watcher_header_count_label = ttk.Label(
-            watcher_display,
-            textvariable=self.watcher_header_count_var,
-            style="Card.TLabel",
-        )
-        self.watcher_header_count_label.pack(side="left", padx=(0, 8))
-        self._watcher_header_clock_image = create_smooth_icon(
-            watcher_display, "clock", WATCHER_HEADER_ICON_SIZE,
-        )
-        self._watcher_header_clock_icon = ttk.Label(
-            watcher_display,
-            image=self._watcher_header_clock_image or "",
-            text="◷" if self._watcher_header_clock_image is None else "",
-            style="Card.TLabel",
-        )
-        self._watcher_header_clock_icon.pack(side="left", padx=(0, 3))
-        self.watcher_header_time_label = ttk.Label(
-            watcher_display,
-            textvariable=self.watcher_header_time_var,
-            style="Card.TLabel",
-        )
-        self.watcher_header_time_label.pack(side="left")
-        self._watcher_header_stop_hint = tk.StringVar(
-            self.root,
-            tr(self.flights.ui_language.get(), "watcher_header_stop"),
-        )
-        self._watcher_header_stop_button = icon_button(
-            watcher_display, "stop", self.stop,
-            self._watcher_header_stop_hint, tooltip_surface=outer,
-            style_override="Photos.Icon.TButton",
-        )
-        self._watcher_header_hint = tk.StringVar(self.root)
-        for trigger in (
-            self._watcher_header_status_icon,
-            self._watcher_header_queue_icon,
-            self.watcher_header_count_label,
-            self._watcher_header_clock_icon,
-            self.watcher_header_time_label,
-        ):
-            attach_inline_tooltip(trigger, self._watcher_header_hint, outer)
-        self.refresh_watcher_header()
-        self.build_gallery_link_bar(header)
-        self.check_updates_button = icon_button(
-            header,
-            "refresh",
-            self.updates.check,
-            "Check for updates or open the available update",
-        )
-        self.check_updates_button.grid(
-            row=0,
-            column=3,
-            rowspan=2,
-            padx=4,
-        )
+        self.build_app_header(outer)
         self.update_banner = GlassCard(outer, padding=(12, 6))
         self.update_banner.grid(
             row=1,
@@ -8722,11 +8626,6 @@ class WatcherApp:
         )
         self.update_banner_action.grid(row=0, column=1, sticky="e", padx=(12, 0))
         self.update_banner.grid_remove()
-        help_button(
-            header,
-            "Watcher help",
-            "Choose a folder and connect a gallery. Start watching ignores files already present, then uploads new supported images after they finish copying. Files stay on this PC unless confirmed deletion is explicitly enabled.",
-        ).grid(row=0, column=5, rowspan=2, padx=(4, 0))
 
         rail = ttk.Frame(outer, style="App.TFrame", padding=(0, 4, 6, 0))
         rail.grid(row=2, column=0, sticky="ns")
@@ -8819,17 +8718,122 @@ class WatcherApp:
         self.update_monitor_state("disabled", "No background worker is active.")
         self.set_update_available(self.update_available_version)
 
+    def build_app_header(self, outer: "ttk.Frame") -> CompactAppHeader:
+        """Build one responsive identity/link/action strip above the workspace.
+
+        Args:
+            outer (ttk.Frame): Main window surface owning the header and views.
+        Returns:
+            CompactAppHeader: Mounted compact header with existing live actions,
+                storage context surface and link-state trace ownership.
+        """
+        header = CompactAppHeader(outer, APP_VERSION)
+        self._app_header = header
+        header.grid(
+            row=0, column=0, columnspan=2, sticky='ew',
+            pady=(0, HEADER_WORKSPACE_GAP),
+        )
+        status = ttk.Frame(header.actions, style="App.TFrame")
+        self._storage_header = ttk.Frame(status, style="App.TFrame")
+        self._storage_header.pack(side="left", padx=(0, 10))
+        self._storage_context_surface = outer
+        self.monitor_light = tk.Canvas(
+            status,
+            width=16,
+            height=16,
+            highlightthickness=0,
+            bd=0,
+            background="#131B26",
+        )
+        self.monitor_light.pack(side="left", padx=(0, 6))
+        watcher_display = GlassCard(header.actions, padding=(8, 4))
+        watcher_display.pack(side='left', padx=(0, HEADER_GROUP_GAP))
+        self._watcher_header_icon_cache: Dict[str, ThemeImage] = {}
+        self._watcher_header_status_icon = ttk.Label(
+            watcher_display, style="Card.TLabel",
+        )
+        self._watcher_header_status_icon.pack(side="left", padx=(0, 8))
+        self._watcher_header_queue_image = create_smooth_icon(
+            watcher_display, "queue", WATCHER_HEADER_ICON_SIZE,
+        )
+        self._watcher_header_queue_icon = ttk.Label(
+            watcher_display,
+            image=self._watcher_header_queue_image or "",
+            text="▧" if self._watcher_header_queue_image is None else "",
+            style="Card.TLabel",
+        )
+        self._watcher_header_queue_icon.pack(side="left", padx=(0, 3))
+        self.watcher_header_count_label = ttk.Label(
+            watcher_display,
+            textvariable=self.watcher_header_count_var,
+            style="Card.TLabel",
+        )
+        self.watcher_header_count_label.pack(side="left", padx=(0, 8))
+        self._watcher_header_clock_image = create_smooth_icon(
+            watcher_display, "clock", WATCHER_HEADER_ICON_SIZE,
+        )
+        self._watcher_header_clock_icon = ttk.Label(
+            watcher_display,
+            image=self._watcher_header_clock_image or "",
+            text="◷" if self._watcher_header_clock_image is None else "",
+            style="Card.TLabel",
+        )
+        self._watcher_header_clock_icon.pack(side="left", padx=(0, 3))
+        self.watcher_header_time_label = ttk.Label(
+            watcher_display,
+            textvariable=self.watcher_header_time_var,
+            style="Card.TLabel",
+        )
+        self.watcher_header_time_label.pack(side="left")
+        self._watcher_header_stop_hint = tk.StringVar(
+            self.root,
+            tr(self.flights.ui_language.get(), "watcher_header_stop"),
+        )
+        self._watcher_header_stop_button = icon_button(
+            watcher_display, "stop", self.stop,
+            self._watcher_header_stop_hint, tooltip_surface=outer,
+            style_override="Photos.Icon.TButton",
+        )
+        self._watcher_header_hint = tk.StringVar(self.root)
+        for trigger in (
+            self._watcher_header_status_icon,
+            self._watcher_header_queue_icon,
+            self.watcher_header_count_label,
+            self._watcher_header_clock_icon,
+            self.watcher_header_time_label,
+        ):
+            attach_inline_tooltip(trigger, self._watcher_header_hint, outer)
+        self.refresh_watcher_header()
+        status.pack(side="left")
+        self.build_gallery_link_bar(header.links)
+        self.check_updates_button = icon_button(
+            header.actions,
+            "refresh",
+            self.updates.check,
+            "Check for updates or open the available update",
+        )
+        self.check_updates_button.pack(side='left', padx=4)
+        help_button(
+            header.actions,
+            "Watcher help",
+            "Choose a folder and connect a gallery. Start watching ignores files already present, then uploads new supported images after they finish copying. Files stay on this PC unless confirmed deletion is explicitly enabled.",
+        ).pack(side='left', padx=(4, 0))
+        header.request_layout()
+        return header
+
     def build_gallery_link_bar(self, header: "ttk.Frame") -> None:
         """Group the selected site, gallery picker and connection actions.
 
         Args:
-            header (ttk.Frame): Main window header receiving the linking row.
+            header (ttk.Frame): Responsive header host receiving current link controls.
 
         Returns:
-            None: Shows the live site and opens the separate links chooser.
+            None: Shows the live site, keeps its full address on hover and preserves
+                existing link actions and status traces in the compact header.
         """
         bar = ttk.Frame(header, style="App.TFrame")
-        bar.grid(row=2, column=0, columnspan=6, sticky="w", pady=(5, 0))
+        bar.grid(row=0, column=0, sticky='ew')
+        bar.columnconfigure(0, weight=1)
         address = ttk.Label(
             bar, style="App.Status.TLabel", wraplength=WINDOW_SUMMARY_WRAP,
         )
@@ -8847,6 +8851,7 @@ class WatcherApp:
         )
         linked_address = self.linking_manager.linked_address
         status = self.linking_manager.status
+        attach_inline_tooltip(address, linked_address, self._storage_context_surface)
         feedback = ttk.Label(
             bar, textvariable=status, style="App.Status.TLabel",
             wraplength=WINDOW_SUMMARY_WRAP,
@@ -8894,6 +8899,9 @@ class WatcherApp:
                 )
             else:
                 feedback.grid_remove()
+            app_header = getattr(self, '_app_header', None)
+            if app_header is not None:
+                app_header.request_layout()
 
         self._gallery_link_refresh = refresh
         address_trace = linked_address.trace_add("write", refresh)
