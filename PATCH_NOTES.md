@@ -1,5 +1,128 @@
 # Patch notes
 
+## Version 1.3.0
+
+Updated WinApp gallery rendering and its application shell in PHP Gallery 1.3.0.
+Added retained Canvas rendering, session-scoped thumbnail and catalogue reuse,
+and more stable refreshes for existing Watcher and Photos views. Shipped WinApp
+1.5.0 as the independently versioned companion.
+
+### Highlights
+
+#### Watcher and Photos rendering
+
+- Reconciled unchanged Watcher rows and ordered Photos tiles during refresh,
+  preserving selection, focus, and scroll state. Removed the duplicate settled
+  lightbox repaint when leaving fullscreen. ([#361](https://github.com/klusik/PHP_gallery/issues/361),
+  [#397](https://github.com/klusik/PHP_gallery/issues/397),
+  [PR #398](https://github.com/klusik/PHP_gallery/pull/398))
+
+#### Virtualized Canvas gallery
+
+- Added a retained Canvas grid that recycles image, placeholder, and selection
+  items for the admitted viewport. Preserved existing paging, authorization,
+  selection, focus, keyboard navigation, and photo-detail ownership.
+  ([#399](https://github.com/klusik/PHP_gallery/issues/399),
+  [PR #400](https://github.com/klusik/PHP_gallery/pull/400))
+- Added the persisted **Experimental Canvas gallery renderer** setting. New
+  profiles and configurations without a saved choice use Canvas; an explicitly
+  saved native-renderer choice remains effective. The renderer is chosen at
+  startup, so a restart is required after changing the setting.
+  ([#399](https://github.com/klusik/PHP_gallery/issues/399))
+
+#### Integrated application shell and support
+
+- Kept application dialogs and file selection inside the WinApp shell. Added
+  bounded, privacy-filtered local support reports with offline collection and
+  explicit copy/save actions. Filtered credentials, local paths and location
+  fields, and corrected ownership of embedded Saved Reports controls.
+  ([#380](https://github.com/klusik/PHP_gallery/issues/380))
+
+#### Session-scoped gallery reuse
+
+- Shared authorized decoded thumbnails across gallery mounts in one Photos
+  session, with a 256 MiB and 4,096-entry cache cap. Reused fresh complete
+  same-session gallery ordering while the normal authoritative refresh runs.
+  ([#399](https://github.com/klusik/PHP_gallery/issues/399))
+- Retried one safely classified response-header timeout per full metadata refresh
+  after the original transport completed, retaining the validated page cursor
+  and snapshot age. ([#399](https://github.com/klusik/PHP_gallery/issues/399))
+
+### Technical Details
+
+#### WinApp
+
+- Persisted `experimental_canvas_gallery_renderer` through the existing
+  `ConfigStore`. `PHP_GALLERY_CANVAS_GRID` uses the saved preference when absent;
+  exact `1` selects Canvas, and exact `0` or any other present value selects the
+  native renderer. The decision is frozen at application startup.
+- The decoded-thumbnail LRU is shared only within a Photos session and is capped
+  at 256 MiB and 4,096 entries. This is a decoded-cache accounting limit, not a
+  cap on total process memory. Existing authorization proofs, freshness checks,
+  invalidation, and cancellation fences remain in place; disk/detail quotas and
+  TTL policy were not changed.
+- Retained complete newest-first order snapshots for up to four galleries
+  and 10,000 photo descriptors, expiring 60 seconds after the complete read
+  started. These snapshots contain display metadata only and do not authorize
+  thumbnail reads. A cold newest-first load can still require the complete
+  metadata scan.
+- Updated `winapp/VERSION` to `1.5.0`. Introduced no database migration; public
+  Gallery website behavior remained unchanged.
+- Built support reports from allowlisted runtime/settings values, redacted
+  diagnostics and at most 64 KiB of the existing log. Kept sharing under user
+  control; URL hosts and paths remained visible in the report preview.
+
+#### Testing and measurement tooling
+
+- Added central-audit Windows/Linux functional coverage for the shell, support
+  reports, renderer setting, gallery lifecycle, Canvas interaction and resource
+  bounds, plus the existing isolated frozen-build validation path.
+- Added a reproducible Tk measurement protocol with cold/warm process workloads,
+  retained raw JSON/CSV evidence and process-paired summaries for the Watcher,
+  Photos and lightbox interactions. These tools report measured work; a passing
+  sample matrix does not by itself establish broad Canvas adoption.
+- Split central WinApp discovery into seven complete, disjoint class groups
+  without increasing child deadlines or weakening assertions.
+  ([#361](https://github.com/klusik/PHP_gallery/issues/361),
+  [#397](https://github.com/klusik/PHP_gallery/issues/397))
+- Added authenticated readout of stored Canvas Markdown results without
+  rerunning measurements or treating inspection as current qualification.
+  ([#399](https://github.com/klusik/PHP_gallery/issues/399))
+
+#### Performance and compatibility limits
+
+- The historical Canvas comparison recorded a NO-GO for general adoption because
+  small, cold galleries regressed in settled-wheel measurements. The current
+  default-on setting is the owner's product decision, not a new statistical
+  qualification. The native renderer remains available through the saved setting
+  or environment override.
+- No cache-capacity A/B result is claimed. Physical display smoothness, installed
+  client use, and Windows remote cold-load behavior remain unqualified.
+
+### User Impact
+
+#### For visitors
+
+- Public Gallery website behavior did not change.
+
+#### For WinApp users
+
+- New profiles use the Canvas gallery by default. Users who explicitly saved the
+  native renderer keep that choice; changing the setting requires restarting
+  WinApp.
+- Reopening a recently viewed gallery can show its fresh cached order while the
+  authoritative refresh proceeds. A first cold newest-first load may still wait
+  for the complete catalogue read.
+- The Canvas gallery keeps the number of Tk items tied to the admitted viewport
+  rather than creating one native button for every photo. The historical
+  smaller-gallery timing regressions and limits above still apply.
+
+#### For maintainers
+
+- The central audit now owns the WinApp shell and renderer regressions, while the
+  opt-in measurement workflow retains raw interaction evidence and statistical
+  summaries for review.
+
 ## Version 1.2.8
 
 Fixed automatic gallery-edit reconciliation and interrupted capture recovery
