@@ -6,6 +6,7 @@
 # Responsibilities:
 #   - Journal observed source generations before hashing or network work.
 #   - Preserve target binding, Finish/Force intent and retry/unknown outcomes.
+#   - Retain one-use photo approval and prior uncertainty through normal FIFO.
 #   - Extend state_store atomic publication without importing desktop UI owners.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
@@ -295,6 +296,7 @@ class WatchQueueStore:
                 'error': '', 'last_failure': '', 'completed': False,
                 'order_verified': True, 'retained_stop': False,
                 'force_finished': False, 'force_finished_at': 0.0,
+                'approved_upload': None, 'approval_history': [],
             }
 
     def initialize(self, initial: list[WatchSource] | None) -> None:
@@ -390,6 +392,8 @@ class WatchQueueStore:
             row.setdefault('retained_stop', False)
             row.setdefault('force_finished', False)
             row.setdefault('force_finished_at', 0.0)
+            row.setdefault('approved_upload', None)
+            row.setdefault('approval_history', [])
             items = row.get('items')
             if not isinstance(items, list) or len(items) > WATCH_QUEUE_MAX_ITEMS:
                 raise ValueError('Capture item collection is malformed.')
@@ -443,6 +447,8 @@ class WatchQueueStore:
                 raise ValueError('Original capture exclusions do not match their sources.')
             intent = row.get('recovery_intent')
             if intent is not None:
+                current_head = next((raw for raw in items
+                                     if raw['state'] not in ('acknowledged', 'skipped')), None)
                 common_intent_keys = {
                     'item_id', 'sequence', 'signature', 'disposition',
                 }
@@ -451,11 +457,18 @@ class WatchQueueStore:
                     'blocker_path', 'blocker_sha256', 'target_binding',
                     'scope', 'mode',
                 }
+                approval_intent_keys = common_intent_keys | {
+                    'session_id', 'head_sha256', 'source_path', 'source_size',
+                    'target_binding', 'scope', 'mode', 'approval_token', 'approved_at',
+                    'prior_phase', 'prior_reason', 'prior_attempts',
+                    'prior_http_status', 'prior_next_retry_at',
+                }
                 if (not isinstance(intent, dict)
-                        or set(intent) not in (common_intent_keys, blocker_intent_keys)
+                        or set(intent) not in (common_intent_keys, blocker_intent_keys,
+                                               approval_intent_keys)
                         or intent.get('disposition') not in (
                             'confirmed_by_receipt', 'skipped_by_user',
-                            'continue_after_prior_review')
+                            'continue_after_prior_review', 'approved_photo_upload')
                         or type(intent.get('sequence')) is not int
                         or not isinstance(intent.get('item_id'), str)
                         or not isinstance(intent.get('signature'), str)):
@@ -467,15 +480,81 @@ class WatchQueueStore:
                                                     'blocker_path', 'blocker_sha256',
                                                     'target_binding', 'mode'))
                              or not isinstance(intent.get('scope'), str)
+                             or intent.get('mode') not in ('legacy', 'linked')
                              or not isinstance(intent.get('head_sha256'), str))):
                     raise ValueError('Prior-review intent is malformed.')
-                current_head = next((raw for raw in items
-                                     if raw['state'] not in ('acknowledged', 'skipped')), None)
+                if (intent.get('disposition') == 'approved_photo_upload'
+                        and (set(intent) != approval_intent_keys
+                             or not all(isinstance(intent.get(key), str) and intent[key]
+                                        for key in ('session_id', 'head_sha256',
+                                                    'source_path', 'target_binding',
+                                                    'mode', 'approval_token'))
+                             or not isinstance(intent.get('scope'), str)
+                             or intent.get('mode') not in ('legacy', 'linked')
+                             or type(intent.get('source_size')) is not int
+                             or intent['source_size'] < 0
+                             or type(intent.get('approved_at')) not in (int, float)
+                             or not math.isfinite(intent['approved_at'])
+                             or intent['approved_at'] <= 0
+                             or current_head is None
+                             or not isinstance(intent.get('prior_phase'), str)
+                             or not isinstance(intent.get('prior_reason'), str)
+                             or type(intent.get('prior_attempts')) is not int
+                             or intent['prior_attempts'] < 0
+                             or (intent.get('prior_http_status') is not None
+                                 and (type(intent['prior_http_status']) is not int
+                                      or not 100 <= intent['prior_http_status'] <= 599))
+                             or type(intent.get('prior_next_retry_at')) not in (int, float)
+                             or not math.isfinite(intent['prior_next_retry_at'])
+                             or intent['prior_next_retry_at'] < 0
+                             or re.fullmatch(r'[a-f0-9]{32}', intent['approval_token']) is None
+                             or re.fullmatch(r'[a-f0-9]{64}', intent['signature']) is None
+                             or re.fullmatch(r'[a-f0-9]{64}', intent['head_sha256']) is None
+                             or intent['session_id'] != row.get('session_id')
+                             or intent['source_path'] != current_head['source']['path']
+                             or intent['source_size'] != current_head['source']['size']
+                             or intent['head_sha256'] != current_head['sha256']
+                             or intent['target_binding'] != row.get('binding')
+                             or intent['scope'] != row.get('scope', '')
+                             or intent['signature'] != current_head['source']['signature']
+                             or current_head['state'] != 'uncertain')):
+                    raise ValueError('Approved photo intent is malformed.')
                 if (current_head is None or (intent['item_id'], intent['sequence'],
                                              intent['signature']) != (
                         current_head['item_id'], current_head['sequence'],
                         current_head['source']['signature'])):
                     raise ValueError('Recovery intent does not identify the current head.')
+            approval = row.get('approved_upload')
+            current_raw = next((raw for raw in items
+                                if raw['state'] not in ('acknowledged', 'skipped')), None)
+            if (approval is not None and (
+                    not self._valid_approval_entry(approval)
+                    or approval.get('outcome') != 'approved'
+                    or approval.get('binding') != self.binding
+                    or approval.get('scope') != self.scope
+                    or approval.get('session_id') != row.get('session_id')
+                    or current_raw is None
+                    or current_raw['state'] in ('uncertain', 'dispatching')
+                    or (approval.get('item_id'), approval.get('sequence'),
+                        approval.get('source_path'), approval.get('signature'),
+                        approval.get('size'), approval.get('sha256')) != (
+                        current_raw['item_id'], current_raw['sequence'],
+                        current_raw['source']['path'], current_raw['source']['signature'],
+                        current_raw['source']['size'], current_raw['sha256']))):
+                raise ValueError('Approved upload capability is malformed.')
+            history = row.get('approval_history')
+            if (not isinstance(history, list)
+                    or any(not self._valid_approval_entry(entry) for entry in history)):
+                raise ValueError('Approved upload history is malformed.')
+            if (len({entry['token'] for entry in history}) != len(history)):
+                raise ValueError('Approved upload history repeats a capability token.')
+            if any(entry['binding'] != self.binding
+                   or entry['scope'] != self.scope
+                   or entry['session_id'] != row.get('session_id')
+                   for entry in history):
+                raise ValueError('Approved upload history belongs to another queue context.')
+            if approval is not None and not any(entry == approval for entry in history):
+                raise ValueError('Approved upload is missing its durable history.')
             if (any(key not in row['initial'] for key in row['initial_hashes'])
                     or row['frozen'] != bool(cutoff)
                     or any(type(row.get(key)) not in (int, float)
@@ -737,6 +816,189 @@ class WatchQueueStore:
                 phase='manual_recovery', next_retry_at=0.0,
             )
 
+    @staticmethod
+    def _valid_approval_entry(value: JsonValue) -> bool:
+        """Validate one retained one-time upload approval or its outcome.
+
+        Args:
+            value (JsonValue): Persisted approval history object.
+
+        Returns:
+            bool: True for the exact bounded primitive record shape.
+        """
+        keys = {'token', 'item_id', 'sequence', 'signature', 'size', 'sha256',
+                'source_path', 'session_id', 'binding', 'scope', 'mode',
+                'approved_at', 'outcome', 'prior_phase', 'prior_reason',
+                'prior_attempts', 'prior_http_status', 'prior_next_retry_at'}
+        return bool(
+            isinstance(value, dict) and set(value) == keys
+            and all(isinstance(value.get(key), str) and value[key]
+                    for key in ('token', 'item_id', 'signature', 'sha256',
+                                'source_path', 'session_id', 'binding', 'mode', 'outcome'))
+            and type(value.get('sequence')) is int and value['sequence'] > 0
+            and type(value.get('size')) is int and value['size'] >= 0
+            and type(value.get('approved_at')) in (float, int)
+            and math.isfinite(value['approved_at']) and value['approved_at'] > 0
+            and value.get('outcome') in ('approved', 'dispatched', 'resolved')
+            and isinstance(value.get('scope'), str)
+            and value.get('mode') in ('legacy', 'linked')
+            and isinstance(value.get('prior_phase'), str)
+            and isinstance(value.get('prior_reason'), str)
+            and type(value.get('prior_attempts')) is int
+            and value['prior_attempts'] >= 0
+            and (value.get('prior_http_status') is None
+                 or type(value['prior_http_status']) is int
+                 and 100 <= value['prior_http_status'] <= 599)
+            and type(value.get('prior_next_retry_at')) in (float, int)
+            and math.isfinite(value['prior_next_retry_at'])
+            and value['prior_next_retry_at'] >= 0
+            and re.fullmatch(r'[a-f0-9]{32}', value['token']) is not None
+            and re.fullmatch(r'[a-f0-9]{64}', value['signature']) is not None
+            and re.fullmatch(r'[a-f0-9]{64}', value['sha256']) is not None
+        )
+
+    def _valid_approval(self, value: JsonValue) -> bool:
+        """Validate the pending capability against this session's target.
+
+        Args:
+            value (JsonValue): Pending approval capability.
+
+        Returns:
+            bool: True only when every immutable session and source field matches.
+        """
+        if not self._valid_approval_entry(value) or not isinstance(value, dict):
+            return False
+        current = self.head()
+        return bool(
+            value.get('outcome') == 'approved'
+            and value.get('binding') == self.binding
+            and value.get('scope') == self.scope
+            and value.get('session_id') == self.data.get('session_id')
+            and current is not None
+            and current.state not in ('uncertain', 'dispatching',
+                                      'acknowledged', 'skipped')
+            and (value.get('item_id'), value.get('sequence'), value.get('source_path'),
+                 value.get('signature'), value.get('size'), value.get('sha256')) == (
+                current.item_id, current.sequence, current.source.path,
+                current.source.signature, current.source.size, current.sha256)
+        )
+
+    def approve_photo_upload(self, item: WatchQueueItem,
+                             approval: dict[str, JsonValue]) -> WatchQueueItem:
+        """Publish a one-time approval for this exact unresolved FIFO head.
+
+        Args:
+            item (WatchQueueItem): Exact uncertain head approved by the user.
+            approval (dict[str, JsonValue]): Fully bound durable approval record.
+
+        Returns:
+            WatchQueueItem: Same item and sequence released to normal preparation.
+
+        Raises:
+            ValueError: Head, capability, target or queue state changed.
+            OSError: Durable approval publication failed.
+        """
+        with self.lock:
+            current = self.head()
+            if (current is None or current.state != 'uncertain'
+                    or current.item_id != item.item_id
+                    or current.source.signature != item.source.signature
+                    or self.data.get('force_finished') is True
+                    or self.data.get('recovery_intent') is None
+                    or not self._valid_approval_entry(approval)
+                    or approval.get('outcome') != 'approved'
+                    or approval.get('binding') != self.binding
+                    or approval.get('scope') != self.scope
+                    or approval.get('session_id') != self.data.get('session_id')
+                    or (approval.get('item_id'), approval.get('sequence'),
+                        approval.get('source_path'), approval.get('signature'),
+                        approval.get('size'), approval.get('sha256')) != (
+                        current.item_id, current.sequence, current.source.path,
+                        current.source.signature, current.source.size, current.sha256)
+                    or (approval.get('prior_phase'), approval.get('prior_reason'),
+                        approval.get('prior_attempts'), approval.get('prior_http_status'),
+                        approval.get('prior_next_retry_at')) != (
+                        current.phase, current.reason, current.attempts,
+                        current.http_status, current.next_retry_at)):
+                raise ValueError('Photo approval no longer matches the exact FIFO head.')
+            row = copy.deepcopy(self.data)
+            if row.get('approved_upload') is not None:
+                raise ValueError('Another approved upload is already pending.')
+            row['approval_history'].append(dict(approval))
+            row['approved_upload'] = dict(approval)
+            row.pop('recovery_intent', None)
+            row['retained_stop'] = False
+            updated = replace(current, state='preparing', phase='manual_approval',
+                              inventory_ready=False, next_retry_at=0.0, reason='')
+            row['items'] = [asdict(updated) if raw['item_id'] == item.item_id else raw
+                            for raw in row['items']]
+            row['pending'] = [raw['source']['path'] for raw in row['items']
+                              if raw['state'] not in ('acknowledged', 'skipped')]
+            row['checkpoint'] = row['last_change_at'] = self.clock()
+            self._publish(row)
+            return updated
+
+    def approved_upload_matches(self, item: WatchQueueItem, mode: str | None = None) -> bool:
+        """Check a pending approval against the exact current source generation.
+
+        Args:
+            item (WatchQueueItem): Candidate queue item after source revalidation.
+            mode (str | None): Current worker mode, when available for revalidation.
+
+        Returns:
+            bool: True only while its one-time approval remains unconsumed.
+        """
+        with self.lock:
+            approval = self.data.get('approved_upload')
+            return bool(self._valid_approval(approval)
+                        and isinstance(approval, dict)
+                        and approval.get('item_id') == item.item_id
+                        and approval.get('sequence') == item.sequence
+                        and approval.get('sha256') == item.sha256
+                        and approval.get('source_path') == item.source.path
+                        and approval.get('signature') == item.source.signature
+                        and (mode is None or approval.get('mode') == mode))
+
+    def begin_approved_upload_dispatch(
+        self, item: WatchQueueItem, mode: str,
+    ) -> dict[str, JsonValue]:
+        """Consume the exact approval atomically with the write-ahead dispatch.
+
+        Args:
+            item (WatchQueueItem): Prepared current head whose approval is consumed.
+            mode (str): Current worker mode rechecked at the dispatch boundary.
+
+        Returns:
+            dict[str, JsonValue]: Consumed capability retained for the live call only.
+
+        Raises:
+            ValueError: Capability or FIFO head changed before dispatch.
+            OSError: Durable write-ahead publication failed.
+        """
+        with self.lock:
+            if (self.data.get('force_finished') is True
+                    or self.data.get('retained_stop') is True):
+                raise ValueError('Stopped capture cannot dispatch an approved photo.')
+            if not self.approved_upload_matches(item, mode):
+                raise ValueError('Explicit photo approval is unavailable or stale.')
+            approval = copy.deepcopy(self.data['approved_upload'])
+            current = self.head()
+            if current is None:
+                raise ValueError('Approved FIFO head disappeared.')
+            updated = replace(current, state='dispatching', phase='upload', reason='')
+            row = copy.deepcopy(self.data)
+            row['items'] = [asdict(updated) if raw['item_id'] == item.item_id else raw
+                            for raw in row['items']]
+            row['approved_upload'] = None
+            for entry in reversed(row['approval_history']):
+                if entry['token'] == approval['token']:
+                    entry['outcome'] = 'dispatched'
+                    break
+            row['checkpoint'] = row['last_change_at'] = self.clock()
+            row['last_change_scan_generation'] = self.scan_generation
+            self._publish(row)
+            return approval
+
     def reconcile(self, observations: list[WatchSource]) -> int:
         """Durably append a local discovery batch without renumbering older items.
 
@@ -797,8 +1059,25 @@ class WatchQueueStore:
                             or source.clock == 'steam_filename_local'
                             and float(row['capture_started_at']) <= source.captured_at <= cutoff):
                         continue
+                pending_approval = row.get('approved_upload')
+                approved_generation = (old is not None
+                                       and isinstance(pending_approval, dict)
+                                       and pending_approval.get('item_id') == old['item_id'])
                 if (old is not None and old['state'] != 'skipped' and old['state'] not in (
                         'acknowledged', 'dispatching', 'uncertain')):
+                    if approved_generation:
+                        # A changed path generation is appended behind the
+                        # explicitly approved bytes; it cannot inherit approval.
+                        if len(row['items']) >= WATCH_QUEUE_MAX_ITEMS:
+                            raise ValueError('Capture queue is full; source photographs retained.')
+                        raw = asdict(WatchQueueItem(
+                            uuid.uuid4().hex, row['next_sequence'], source,
+                        ))
+                        row['items'].append(raw)
+                        latest[source.path] = raw
+                        row['next_sequence'] += 1
+                        added += 1
+                        continue
                     old['source'] = asdict(replace(
                         source, first_seen=old['source']['first_seen'],
                     ))
@@ -875,6 +1154,15 @@ class WatchQueueStore:
             row = copy.deepcopy(self.data)
             row['items'] = [asdict(updated) if raw['item_id'] == item.item_id else raw
                             for raw in row['items']]
+            approval = row.get('approved_upload')
+            if (updated.state in ('acknowledged', 'skipped')
+                    and isinstance(approval, dict)
+                    and approval.get('item_id') == item.item_id):
+                row['approved_upload'] = None
+                for entry in reversed(row['approval_history']):
+                    if entry['token'] == approval['token']:
+                        entry['outcome'] = 'resolved'
+                        break
             if updated.disposition in ('confirmed_by_receipt', 'skipped_by_user'):
                 row.pop('recovery_intent', None)
             row['pending'] = [raw['source']['path'] for raw in row['items']

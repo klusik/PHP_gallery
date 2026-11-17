@@ -2006,6 +2006,47 @@ single-use raw revisions and automatic field-intent reconciliation. Cases includ
 lost acknowledgements, definite revision conflicts, late first commits, changed
 unknown state, rejected authority and cancellation. Unknown changed revisions
 must never cause another automatic write.
+Metadata progress observers also hold 500-, 2,000- and 5,000-photo scans
+between validated pages, checking cumulative counts, complete reverse ordering,
+cancellation and retained-cursor resumption. Invalid pages publish no progress;
+observer exceptions cannot change a successful metadata read or its existing
+single safe header-timeout retry.
+
+`test_gallery_load_progress.py` exercises real Tk progress controls and the
+mounted viewer through the existing complete WinApp discovery. Held newest-first
+scans use 500, 2,000 and 5,000 descriptors with both renderers, observing count
+updates and native bar animation before releasing the request. Only presented
+visible thumbnails contribute a determinate fraction. Small oldest-first reads,
+cached reopen during a held refresh, manual quota Retry, safe header-timeout
+retry, transient thumbnail waits and viewer cancellation retain their actual
+owner behavior. The coalesced count slot cannot occupy a photo-result queue
+entry; stale generations cannot repaint the current indicator. Component
+checks cover elapsed/last-progress text, unknown delays and terminal cleanup.
+
+The existing **Issue 380 integrated WinApp UI** workflow runs this feature on
+Windows and Linux/Xvfb, bound to the exact event SHA and its immutable
+`origin/main` merge base. Its artifact contains the actual Tk desktop/narrow
+phase screenshots under `cache/test-audit/gallery-load-progress/` alongside
+the complete central audit report. These synthetic fixtures and bounded
+widget/queue checks do not establish physical display latency, installed-client
+acceptance, live server recovery or a statistical CPU/RAM comparison.
+`test_gallery_retry_progress.py` joins the real thumbnail session, owned fake
+HTTP boundary and mounted Tk viewer for HTTP 502, HTTP 503 and response-header
+timeout recovery. The existing session regressions separately retain exact
+attempt counts, gate release, refusal/manual-wait cases and observer failures.
+
+The Watcher recovery owners also cover **Photo is OK — upload**. The actual
+coordinator and FIFO consumer retain exact-head/source/target validation,
+one-use approval and the previous unknown attempt. Normal duplicate checks
+still apply. A failed linked-history save cannot release approval from an
+unpersisted in-memory archive; fresh-state intent repair commits it once.
+Native review tests exercise the enabled action without a receipt,
+desktop/narrow English and Czech layouts, coalesced clicks and stale decisions.
+Local review is available while a comparison preview request remains pending.
+The Windows job requires the existing recovery screenshot capture and retains
+its English/Czech desktop/narrow PNGs under `cache/test-audit/watch-recovery/`.
+These fixtures do not upload files to a live gallery.
+
 `app_linking_gallery_edit_test.php` exercises the real metadata service with
 isolated persistence boundaries: one-field saves, unchanged peer columns,
 pre-commit rollback, revocation and post-commit sidecar uncertainty. Existing

@@ -2,21 +2,26 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/uploader/watch_recovery.py
 # Module Type: Recovery Service
-# Purpose: Coordinate explicit durable review of uncertain watched uploads.
+# Purpose: Coordinate receipt, skip and one-photo approval for uncertain uploads.
 # Responsibilities:
 #   - Expose immutable queue review snapshots and validated counts.
-#   - Require local leases, exact current head and existing receipt evidence.
-#   - Persist explicit skip/receipt decisions without deleting source files.
+#   - Require local leases, exact current head and retained-source evidence.
+#   - Persist receipt, skip and one-time photo-upload decisions idempotently.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Coordinate explicit, head-only recovery decisions for a capture queue."""
 
 from dataclasses import dataclass
 from contextlib import nullcontext
+from pathlib import Path
 from typing import Callable, ContextManager
+import uuid
 
-from .linked_upload import LinkedTargetLease, UploadPipelineLease
-from .watch_queue import WatchQueueItem, WatchQueueStore
+from .linked_upload import (LinkedTargetLease, UploadPipelineLease,
+                            capture_linked_source, verify_linked_source)
+from .models import JsonValue
+from .watch_queue import (WatchQueueItem, WatchQueueStore,
+                          observe_watch_source)
 
 
 @dataclass(frozen=True)
@@ -210,6 +215,66 @@ class WatchRecoveryCoordinator:
         except (OSError, ValueError, RuntimeError):
             return False
 
+    def can_approve_photo_upload(self, snapshot: WatchRecoverySnapshot) -> bool:
+        """Probe whether the exact retained uncertain photo can be released.
+
+        Args:
+            snapshot (WatchRecoverySnapshot): Displayed uncertain-head snapshot.
+
+        Returns:
+            bool: True only when all local fences and retained source evidence match.
+        """
+        try:
+            with self._decision_context():
+                self._validate(snapshot)
+                with self.store.lock:
+                    head = self._matching_head(snapshot)
+                    return bool(head is not None and head.state == 'uncertain'
+                                and head.sha256 and not self._earlier_blocker(head)
+                                and self.store.data.get('recovery_intent') is None
+                                and self.store.data.get('approved_upload') is None
+                                and self._source_matches(head))
+        except (OSError, ValueError, RuntimeError):
+            return False
+
+    def approve_photo_upload(
+        self, snapshot: WatchRecoverySnapshot,
+    ) -> WatchRecoverySnapshot | None:
+        """Release one explicitly approved uncertain photo into normal FIFO checks.
+
+        Args:
+            snapshot (WatchRecoverySnapshot): Exact currently displayed head view.
+
+        Returns:
+            WatchRecoverySnapshot | None: Updated view after the approval is durable.
+
+        Raises:
+            ValueError: Context, source, head or linked marker changed.
+            OSError: Durable intent or queue publication failed.
+            RuntimeError: Retained source or linked history verification failed.
+        """
+        with self._decision_context():
+            self._validate(snapshot)
+            with self.store.lock:
+                head = self._matching_head(snapshot)
+                if (head is None or head.state != 'uncertain' or not head.sha256
+                        or self._earlier_blocker(head)
+                        or self.store.data.get('approved_upload') is not None
+                        or not self._source_matches(head)):
+                    raise ValueError('The uncertain photo no longer matches this review.')
+                token = uuid.uuid4().hex
+                approved_at = self.store.clock()
+                intent = self._approval_record(head, snapshot, token, approved_at)
+                row = dict(self.store.data)
+                existing = row.get('recovery_intent')
+                if existing is not None and existing != intent:
+                    raise ValueError('Another recovery decision needs repair first.')
+                row['recovery_intent'] = intent
+                self.store._publish(row)
+                self.linked_review(head, 'approved_photo_upload')
+                self.store.approve_photo_upload(head, self._approval_entry(intent))
+            return self.snapshot()
+
     def skip_head(self, snapshot: WatchRecoverySnapshot) -> WatchRecoverySnapshot | None:
         """Explicitly retain and skip the exact current unresolved source.
 
@@ -298,6 +363,9 @@ class WatchRecoveryCoordinator:
                         head.item_id, head.sequence, head.source.signature):
                     raise ValueError('Recovery intent does not match the current head.')
                 disposition = intent.get('disposition')
+                if disposition == 'approved_photo_upload':
+                    self._repair_approved_photo(head, intent)
+                    return
                 if disposition == 'continue_after_prior_review':
                     repairable = (self._earlier_blocker(head)
                                   or head.state == 'preparing' and head.phase == 'hash'
@@ -373,6 +441,116 @@ class WatchRecoveryCoordinator:
                 self._clear_intent()
             return self.snapshot()
 
+    def _source_matches(self, head: WatchQueueItem) -> bool:
+        """Revalidate retained source identity and bytes against the queue hash.
+
+        Args:
+            head (WatchQueueItem): Exact retained source generation under review.
+
+        Returns:
+            bool: True when the same regular file still has the recorded bytes.
+
+        Raises:
+            OSError: The source cannot be opened or read safely.
+            ValueError: The retained generation or digest no longer matches.
+            RuntimeError: Linked source verification rejected the retained bytes.
+        """
+        path = Path(head.source.path)
+        before = observe_watch_source(path, self.store.clock())
+        if before.signature != head.source.signature or before.size != head.source.size:
+            return False
+        snapshot = capture_linked_source(path, head.sha256, head.source.size)
+        verify_linked_source(snapshot)
+        after = observe_watch_source(path, self.store.clock())
+        return (after.signature == head.source.signature
+                and after.size == head.source.size)
+
+    def _approval_record(
+        self, head: WatchQueueItem, snapshot: WatchRecoverySnapshot,
+        token: str, approved_at: float,
+    ) -> dict[str, JsonValue]:
+        """Create the exact durable cross-file recovery intent for approval.
+
+        Args:
+            head (WatchQueueItem): Exact uncertain FIFO head.
+            snapshot (WatchRecoverySnapshot): User-reviewed context snapshot.
+            token (str): Unique one-use approval token.
+            approved_at (float): Captured approval time in Unix seconds.
+
+        Returns:
+            dict[str, JsonValue]: Queue intent bound to source, target and mode.
+        """
+        return {
+            'item_id': head.item_id, 'sequence': head.sequence,
+            'signature': head.source.signature,
+            'disposition': 'approved_photo_upload',
+            'session_id': snapshot.session_id, 'head_sha256': head.sha256,
+            'source_path': head.source.path, 'source_size': head.source.size,
+            'target_binding': snapshot.target_binding, 'scope': snapshot.scope,
+            'mode': snapshot.expected_mode, 'approval_token': token,
+            'approved_at': approved_at,
+            'prior_phase': head.phase, 'prior_reason': head.reason,
+            'prior_attempts': head.attempts,
+            'prior_http_status': head.http_status,
+            'prior_next_retry_at': head.next_retry_at,
+        }
+
+    @staticmethod
+    def _approval_entry(intent: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        """Project a validated recovery intent into the queue approval record.
+
+        Args:
+            intent (dict[str, JsonValue]): Durable approval recovery intent.
+
+        Returns:
+            dict[str, JsonValue]: Primitive queue capability with pending outcome.
+        """
+        return {
+            'token': intent['approval_token'], 'item_id': intent['item_id'],
+            'sequence': intent['sequence'], 'signature': intent['signature'],
+            'size': intent['source_size'], 'sha256': intent['head_sha256'],
+            'source_path': intent['source_path'], 'session_id': intent['session_id'],
+            'binding': intent['target_binding'], 'scope': intent['scope'],
+            'mode': intent['mode'], 'approved_at': intent['approved_at'],
+            'outcome': 'approved',
+            'prior_phase': intent['prior_phase'],
+            'prior_reason': intent['prior_reason'],
+            'prior_attempts': intent['prior_attempts'],
+            'prior_http_status': intent['prior_http_status'],
+            'prior_next_retry_at': intent['prior_next_retry_at'],
+        }
+
+    def _repair_approved_photo(
+        self, head: WatchQueueItem, intent: dict[str, JsonValue],
+    ) -> None:
+        """Finish an interrupted approval idempotently before queue consumption.
+
+        Args:
+            head (WatchQueueItem): Current unresolved queue head.
+            intent (dict[str, JsonValue]): Strictly restored durable intent.
+
+        Returns:
+            None: Publishes linked review then the same approved queue generation.
+
+        Raises:
+            ValueError: Context or exact source no longer matches the intent.
+            OSError: Linked or queue publication could not be confirmed.
+            RuntimeError: Source or linked history verification failed.
+        """
+        if (head.state != 'uncertain' or self._earlier_blocker(head)
+                or (intent.get('session_id'), intent.get('head_sha256'),
+                    intent.get('source_path'), intent.get('source_size'),
+                    intent.get('target_binding'), intent.get('scope'), intent.get('mode')) != (
+                    self.store.data.get('session_id'), head.sha256, head.source.path,
+                    head.source.size, self.store.binding, self.store.scope,
+                    self.expected_mode)
+                or not isinstance(intent.get('approval_token'), str)
+                or not isinstance(intent.get('approved_at'), (float, int))
+                or not self._source_matches(head)):
+            raise ValueError('Approved photo intent no longer matches its source or target.')
+        self.linked_review(head, 'approved_photo_upload')
+        self.store.approve_photo_upload(head, self._approval_entry(intent))
+
     def _earlier_blocker(self, head: WatchQueueItem) -> bool:
         """Recognize only the existing exact never-dispatched B diagnostic.
 
@@ -413,9 +591,11 @@ class WatchRecoveryCoordinator:
         """
         head = self.store.head()
         if (head is None or (head.item_id, head.sequence, head.source.path,
-                             head.source.signature, head.sha256, head.state) != (
+                             head.source.signature, head.source.size,
+                             head.source.modified_ns, head.sha256, head.state) != (
                 snapshot.item_id, snapshot.sequence, snapshot.source_path,
-                snapshot.source_signature, snapshot.sha256, snapshot.state)):
+                snapshot.source_signature, snapshot.source_size,
+                snapshot.source_mtime_ns, snapshot.sha256, snapshot.state)):
             return None
         return head
 

@@ -112,6 +112,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                                linking.MediaReadTimings, Callable[[], None]], None],
             cancelled: threading.Event, *, timings: linking.MediaReadTimings,
             stats: linking.ThumbnailBatchStats,
+            retry_wait: Callable[[int], None] | None = None,
         ) -> None:
             """Publish one owned image and hold the remaining synthetic stream.
 
@@ -123,6 +124,8 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                 cancelled (threading.Event): Viewer cancellation owner.
                 timings (linking.MediaReadTimings): Physical observations.
                 stats (linking.ThumbnailBatchStats): Numeric group observations.
+                retry_wait (Callable[[int], None] | None): Optional automatic
+                    cooldown observer, unused by this streaming fixture.
 
             Returns:
                 None: The operation remains open until released or cancelled.
@@ -188,6 +191,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                                linking.MediaReadTimings, Callable[[], None]], None],
             cancelled: threading.Event, *, timings: linking.MediaReadTimings,
             stats: linking.ThumbnailBatchStats,
+            retry_wait: Callable[[int], None] | None = None,
         ) -> None:
             """Defer once, then publish through the real Tk callback owner.
 
@@ -199,6 +203,8 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                 cancelled (threading.Event): Current thumbnail cancellation.
                 timings (linking.MediaReadTimings): Physical request metrics.
                 stats (linking.ThumbnailBatchStats): Per-call batch metrics.
+                retry_wait (Callable[[int], None] | None): Optional automatic
+                    cooldown observer, unused by this fixture.
 
             Returns:
                 None: The second call publishes complete decoded fixtures.
@@ -341,6 +347,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
             _cancelled: threading.Event, *,
             timings: linking.MediaReadTimings,
             stats: linking.ThumbnailBatchStats,
+            retry_wait: Callable[[int], None] | None = None,
         ) -> None:
             """Return one local pause without making an HTTP request.
 
@@ -352,6 +359,8 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                 _cancelled (threading.Event): Current operation cancellation.
                 timings (linking.MediaReadTimings): Physical metrics owner.
                 stats (linking.ThumbnailBatchStats): Per-call counters.
+                retry_wait (Callable[[int], None] | None): Optional automatic
+                    cooldown observer, unused by this cancellation fixture.
 
             Returns:
                 None: The viewer receives only the validated transient delay.
@@ -359,7 +368,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
             Raises:
                 linking.LinkingThumbnailBatchDeferred: The fixture's pause.
             """
-            del timings, stats
+            del timings, stats, retry_wait
             raise linking.LinkingThumbnailBatchDeferred(
                 int(linking.THUMBNAIL_BATCH_RETRY_SECONDS),
                 cooldown_source='transient',
@@ -470,6 +479,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                                linking.MediaReadTimings, Callable[[], None]], None],
             cancelled: threading.Event, *, timings: linking.MediaReadTimings,
             stats: linking.ThumbnailBatchStats,
+            retry_wait: Callable[[int], None] | None = None,
         ) -> None:
             """Publish two frames with a barrier around the queued second.
 
@@ -481,6 +491,8 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                 cancelled (threading.Event): Captured batch cancellation signal.
                 timings (linking.MediaReadTimings): Physical batch observations.
                 stats (linking.ThumbnailBatchStats): Bounded batch counters.
+                retry_wait (Callable[[int], None] | None): Optional automatic
+                    cooldown observer, unused by this refresh fixture.
 
             Returns:
                 None: Leaves the second result queued until refresh cancels work.
@@ -734,6 +746,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                                linking.MediaReadTimings, Callable[[], None]], None],
             cancelled: threading.Event, *, timings: linking.MediaReadTimings,
             stats: linking.ThumbnailBatchStats,
+            retry_wait: Callable[[int], None] | None = None,
         ) -> None:
             """Fill the GUI queue and enter one additional publication.
 
@@ -745,11 +758,13 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                 cancelled (threading.Event): Viewer cancellation owner.
                 timings (linking.MediaReadTimings): Physical observations.
                 stats (linking.ThumbnailBatchStats): Numeric group observations.
+                retry_wait (Callable[[int], None] | None): Optional automatic
+                    cooldown observer, unused by this queue-fill fixture.
 
             Returns:
                 None: Attempts every item until cancellation stops publication.
             """
-            del cancelled, timings, stats
+            del cancelled, timings, stats, retry_wait
             body = image_bytes[page.photos[0].image_id]
             for index, photo in enumerate(requested):
                 if index == viewer_module.MEDIA_THUMBNAIL_BATCH_SIZE:
@@ -798,6 +813,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                                linking.MediaReadTimings, Callable[[], None]], None],
             cancelled: threading.Event, *, timings: linking.MediaReadTimings,
             stats: linking.ThumbnailBatchStats,
+            retry_wait: Callable[[int], None] | None = None,
         ) -> None:
             """Publish one complete frame then fail the whole batch operation.
 
@@ -809,6 +825,8 @@ class NativeThumbnailBatchTests(unittest.TestCase):
                 cancelled (threading.Event): Viewer cancellation owner.
                 timings (linking.MediaReadTimings): Physical metrics.
                 stats (linking.ThumbnailBatchStats): Bounded group counters.
+                retry_wait (Callable[[int], None] | None): Optional automatic
+                    cooldown observer, unused by this error fixture.
 
             Returns:
                 None: The deliberately incomplete operation always raises.
@@ -816,7 +834,7 @@ class NativeThumbnailBatchTests(unittest.TestCase):
             Raises:
                 linking.LinkingError: Simulated failed envelope after one item.
             """
-            del cancelled, timings, stats
+            del cancelled, timings, stats, retry_wait
             publish(self._publication(session, gallery_id, requested[0], body),
                     linking.MediaReadTimings(), lambda: None)
             raise linking.LinkingError('Synthetic batch failure.')

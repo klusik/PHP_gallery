@@ -7665,6 +7665,7 @@ class LinkingSession:
         cancelled: threading.Event | None = None, *,
         timings: MediaReadTimings | None = None,
         stats: ThumbnailBatchStats | None = None,
+        retry_wait: Callable[[int], None] | None = None,
     ) -> None:
         """Read a bounded current photo group with one serialized transport.
 
@@ -7677,6 +7678,11 @@ class LinkingSession:
             timings (MediaReadTimings | None): Optional aggregate physical metrics.
             stats (ThumbnailBatchStats | None): Optional fresh per-call counters;
                 do not reuse an instance across operations.
+            retry_wait (Callable[[int], None] | None): Optional worker-only
+                observer for an already-owned automatic cooldown. Positive
+                validated whole seconds announce its wait; zero means that
+                notified cooldown elapsed and retry is proceeding. Observer
+                failures are ignored and do not affect request policy.
 
         Returns:
             None: Authorized hits and complete network results were delivered.
@@ -7747,6 +7753,24 @@ class LinkingSession:
             Raises:
                 LinkingError: The operation was cancelled or must be deferred.
             """
+            notified_wait = False
+
+            def notify_wait(seconds: int) -> None:
+                """Notify the optional observer without owning retry policy.
+
+                Args:
+                    seconds (int): Positive validated delay, or zero on normal
+                        completion of an already-notified automatic wait.
+                Returns:
+                    None: Observer exceptions cannot alter transport behavior.
+                """
+                if retry_wait is None:
+                    return
+                try:
+                    retry_wait(seconds)
+                except Exception:
+                    pass
+
             while True:
                 check_active()
                 with self._lock:
@@ -7757,6 +7781,8 @@ class LinkingSession:
                     )
                 delay = until - time.monotonic()
                 if delay <= 0:
+                    if notified_wait:
+                        notify_wait(0)
                     return
                 if not wait_for_retry or delay >= deadline - time.monotonic():
                     raise LinkingThumbnailBatchDeferred(
@@ -7764,6 +7790,9 @@ class LinkingSession:
                         cooldown_source=source,
                         operation_finished=operation_finished,
                     )
+                if not notified_wait:
+                    notify_wait(max(1, math.ceil(delay)))
+                    notified_wait = True
                 if cancel.wait(min(delay, LINKING_CANCELLATION_POLL_SECONDS)):
                     raise LinkingError('Thumbnail batch operation was cancelled.')
 

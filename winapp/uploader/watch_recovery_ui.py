@@ -103,7 +103,7 @@ def sanitize_recovery_label(value: str) -> str:
 
 
 class WatchRecoveryReviewDialog:
-    """Show an immutable head snapshot and explicit durable receipt/skip actions."""
+    """Show an exact head and explicit photo-approval, receipt and skip actions."""
 
     def __init__(
         self,
@@ -147,6 +147,7 @@ class WatchRecoveryReviewDialog:
         self._closed = False
         self._layout_pending = False
         self._receipt_available = False
+        self._upload_approval_available = False
         self._preview_generation = 0
         self._preview_workers: list[threading.Thread] = []
         self.window = OverlayPanel(parent, self.text("watch_recovery_title"))
@@ -232,7 +233,12 @@ class WatchRecoveryReviewDialog:
         buttons = ttk.Frame(self.body)
         self.buttons = buttons
         buttons.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 0))
-        buttons.columnconfigure((0, 1, 2, 3, 4), weight=1)
+        buttons.columnconfigure((0, 1), weight=1)
+        self.approve_upload_button = Button(
+            buttons, text=self.text("watch_recovery_approve_upload"),
+            command=self.approve_upload, style="Primary.TButton",
+        )
+        self.approve_upload_button.grid(row=0, column=0, sticky="ew", padx=4)
         self.confirm_button = Button(
             buttons, text=self.text("watch_recovery_confirm"), command=self.confirm)
         self.confirm_button.grid(row=0, column=0, sticky="ew", padx=(0, 4))
@@ -250,7 +256,8 @@ class WatchRecoveryReviewDialog:
         self.cancel_button = Button(
             buttons, text=self.text("watch_recovery_cancel"), command=self.close)
         self.cancel_button.grid(row=0, column=4, sticky="ew", padx=(4, 0))
-        self.action_buttons = (self.confirm_button, self.skip_button,
+        self.action_buttons = (self.approve_upload_button,
+                               self.confirm_button, self.skip_button,
                                self.prior_button, self.resume_button,
                                self.cancel_button)
         self.visible_action_buttons = list(self.action_buttons)
@@ -292,6 +299,8 @@ class WatchRecoveryReviewDialog:
             None: Updates dialog labels without touching queue persistence.
         """
         self._preview_generation += 1
+        self._upload_approval_available = False
+        self.approve_upload_button.state(["disabled"])
         self.canvas.yview_moveto(0.0)
         snapshot = self.snapshot
         if snapshot is None:
@@ -341,7 +350,9 @@ class WatchRecoveryReviewDialog:
         else:
             visible_actions = [self.cancel_button]
             if snapshot.state == "uncertain":
-                visible_actions.insert(0, self.confirm_button)
+                visible_actions[0:0] = [
+                    self.approve_upload_button, self.confirm_button,
+                ]
             if (snapshot.state in {"uncertain", "blocked", "auth_required"}
                     or snapshot.state == "retry_wait"
                     and getattr(snapshot, "phase", "") == "source"):
@@ -450,7 +461,7 @@ class WatchRecoveryReviewDialog:
         for index, button in enumerate(self.visible_action_buttons):
             button.grid_configure(row=index // columns, column=index % columns,
                                   sticky="ew", padx=4, pady=2)
-        for column in range(5):
+        for column in range(len(self.action_buttons)):
             self.buttons.columnconfigure(column, weight=1 if column < columns else 0)
 
     def scroll_evidence(self, event: tk.Event) -> str | None:
@@ -544,6 +555,7 @@ class WatchRecoveryReviewDialog:
             local = None
             remote = None
             receipt_available = False
+            upload_approval_available = False
             remote_state = "unavailable"
             remote_kind = "observation"
             local_state = "replaced"
@@ -598,6 +610,23 @@ class WatchRecoveryReviewDialog:
                         receipt_available = bool(receipt_probe(snapshot))
                 except Exception:
                     receipt_available = False
+            approval_probe = getattr(
+                self.coordinator, "can_approve_photo_upload", None,
+            )
+            if (callable(approval_probe) and local_state == "loaded"
+                    and snapshot.state == "uncertain"):
+                try:
+                    upload_approval_available = bool(approval_probe(snapshot))
+                except Exception:
+                    upload_approval_available = False
+            # Local review must remain usable when the comparison server is
+            # slow or unavailable. Publish the validated source before network
+            # evidence; the same generation fence protects both deliveries.
+            self._messages.put((
+                "preview", (generation, snapshot_key, local, None,
+                            receipt_available, "unavailable", "observation",
+                            local_state, local_digest,
+                            upload_approval_available)))
             if self.remote_loader is not None:
                 try:
                     remote_result = self.remote_loader(snapshot)
@@ -620,10 +649,9 @@ class WatchRecoveryReviewDialog:
                 except Exception:
                     remote_state = "decode"
                     remote = None
-            self._messages.put((
-                "preview", (generation, snapshot_key, local, remote,
-                            receipt_available, remote_state, remote_kind,
-                            local_state, local_digest)))
+                self._messages.put((
+                    "remote_preview", (generation, snapshot_key, remote,
+                                       remote_state, remote_kind)))
 
         thread = threading.Thread(
             target=worker, name="watch-recovery-preview", daemon=True)
@@ -682,6 +710,7 @@ class WatchRecoveryReviewDialog:
         receipt_available: bool, remote_state: str, remote_kind: str,
         local_state: str,
         local_digest: str,
+        upload_approval_available: bool = False,
     ) -> None:
         """Create Tk image objects from worker-decoded Pillow images.
 
@@ -693,14 +722,20 @@ class WatchRecoveryReviewDialog:
             remote_kind (str): Remote evidence class; exact receipt or observation.
             local_state (str): Safe exact-source read/decode result category.
             local_digest (str): Computed local source digest, never an upload receipt.
+            upload_approval_available (bool): Worker-validated eligibility for
+                explicitly approving this exact photograph for normal upload.
         Returns:
             None: Updates previews or precise unavailable labels.
         """
         if not self.window.winfo_exists():
             return
         self._receipt_available = receipt_available
+        self._upload_approval_available = bool(
+            upload_approval_available and local_state == "loaded"
+            and self.snapshot is not None and self.snapshot.state == "uncertain"
+            and not self.snapshot.review_blocked_by_earlier_upload
+        )
         self.show_image(self.local_image, local)
-        self.show_image(self.remote_image, remote)
         self.local_var.set(self.local_var.get() + "\n" + self.text(
             "watch_recovery_local_" + local_state))
         if local_digest:
@@ -708,6 +743,32 @@ class WatchRecoveryReviewDialog:
             self.details.insert("end", "\n" + self.text("watch_recovery_computed_hash")
                                 .format(digest=local_digest))
             self.details.configure(state="disabled")
+        self.remote_preview_result(remote, remote_state, remote_kind)
+        if receipt_available and not self.busy:
+            self.confirm_button.state(["!disabled"])
+        if self.busy:
+            return
+        if self._upload_approval_available:
+            self.approve_upload_button.state(["!disabled"])
+            self.status.set(self.text("watch_recovery_approve_hint"))
+        elif (not receipt_available and self.snapshot is not None
+              and not getattr(self.snapshot, "review_blocked_by_earlier_upload", False)
+              and not self.safe_resume_available(self.snapshot)):
+            self.status.set(self.text("watch_recovery_receipt_unavailable"))
+
+    def remote_preview_result(
+        self, remote: "PILImage.Image | None", remote_state: str, remote_kind: str,
+    ) -> None:
+        """Display optional comparison evidence without delaying local approval.
+
+        Args:
+            remote (PILImage.Image | None): Worker-decoded comparison image.
+            remote_state (str): Categorized comparison failure or loaded state.
+            remote_kind (str): Exact receipt or observation evidence class.
+        Returns:
+            None: Updates only the comparison image and its evidence label.
+        """
+        self.show_image(self.remote_image, remote)
         if remote is None:
             self.remote_var.set(self.text("watch_recovery_remote_" + remote_state))
         else:
@@ -715,12 +776,6 @@ class WatchRecoveryReviewDialog:
                             if remote_kind == "receipt"
                             else "watch_recovery_remote_observation")
             self.remote_var.set(self.text(evidence_key))
-        if receipt_available:
-            self.confirm_button.state(["!disabled"])
-        elif (self.snapshot is not None
-              and not getattr(self.snapshot, "review_blocked_by_earlier_upload", False)
-              and not self.safe_resume_available(self.snapshot)):
-            self.status.set(self.text("watch_recovery_receipt_unavailable"))
 
     def show_image(self, owner: ttk.Label, content: "PILImage.Image | None") -> None:
         """Create a Tk image from a worker-decoded Pillow image and retain it.
@@ -748,15 +803,16 @@ class WatchRecoveryReviewDialog:
 
         Args:
             action (str): One of exact receipt confirmation, explicit skip,
-                or review of an earlier blocking upload.
+                photo approval for normal upload, safe resume or earlier review.
         Returns:
             None: Shows success or rejection while preserving pending work.
         """
         if self.busy or self.snapshot is None:
             return
         self.busy = True
-        self.confirm_button.state(["disabled"])
-        self.skip_button.state(["disabled"])
+        for button in self.action_buttons:
+            if button is not self.cancel_button:
+                button.state(["disabled"])
         self.cancel_button.configure(text=self.text("watch_recovery_hide_processing"))
         self.status.set(self.text("watch_recovery_decision_processing"))
         displayed = self.snapshot
@@ -774,7 +830,9 @@ class WatchRecoveryReviewDialog:
             try:
                 gate = getattr(self.coordinator, "decision_gate", None)
                 with (gate if gate is not None else nullcontext()):
-                    if action == "receipt":
+                    if action == "upload":
+                        result = self.coordinator.approve_photo_upload(displayed)
+                    elif action == "receipt":
                         result = self.coordinator.confirm_receipt(displayed)
                     elif action == "skip":
                         result = self.coordinator.skip_head(displayed)
@@ -841,8 +899,11 @@ class WatchRecoveryReviewDialog:
             if getattr(self.snapshot, "review_blocked_by_earlier_upload", False):
                 self.prior_button.state(["!disabled"])
             else:
+                if (self._upload_approval_available
+                        and self.snapshot.state == "uncertain"):
+                    self.approve_upload_button.state(["!disabled"])
                 if self._receipt_available and self.snapshot.state == "uncertain":
-                        self.confirm_button.state(["!disabled"])
+                    self.confirm_button.state(["!disabled"])
                 can_skip = (
                     self.snapshot.state in {"uncertain", "blocked", "auth_required"}
                     or self.snapshot.state == "retry_wait"
@@ -880,6 +941,11 @@ class WatchRecoveryReviewDialog:
                 if (generation == self._preview_generation and self.snapshot is not None
                         and snapshot_key == self.snapshot_key(self.snapshot)):
                     self.preview_result(*result)
+            elif kind == "remote_preview":
+                generation, snapshot_key, *result = payload
+                if (generation == self._preview_generation and self.snapshot is not None
+                        and snapshot_key == self.snapshot_key(self.snapshot)):
+                    self.remote_preview_result(*result)
             elif kind == "preview_failed":
                 generation, snapshot_key = payload
                 if (generation == self._preview_generation and self.snapshot is not None
@@ -895,6 +961,15 @@ class WatchRecoveryReviewDialog:
                 self._snapshot_pending = False
                 self.status.set(self.text("watch_recovery_snapshot_failed"))
         self.window.after(PREVIEW_POLL_MS, self.poll_worker_results)
+
+    def approve_upload(self) -> None:
+        """Approve the displayed correct, nonduplicate photograph for upload.
+
+        Returns:
+            None: One worker validates the exact head and wakes normal FIFO work.
+        """
+        if self._upload_approval_available:
+            self.decide("upload")
 
     def confirm(self) -> None:
         """Confirm an exact durable upload receipt, never an observation.

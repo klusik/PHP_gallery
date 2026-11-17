@@ -2,7 +2,7 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: .github/workflows/issue-380-winapp-ui.yml
 # Module Type: Issue-scoped Native Interface Verification
-# Purpose: Exercise the complete WinApp owner for the integrated interface.
+# Purpose: Exercise the complete WinApp owner for interface and gallery progress.
 # Responsibilities: Delegate test discovery to the central audit and retain
 #   exact-commit reports from real Tk sessions on Linux and Windows.
 # Author: Rudolf Klusal
@@ -14,6 +14,7 @@ on:
   push:
     branches:
       - feature/winapp-1-2-integrated-shell
+      - feature/winapp-gallery-load-progress
   workflow_dispatch:
 
 permissions:
@@ -39,8 +40,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Bind the exact source SHA and immutable comparison base
+        shell: pwsh
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          $actualSource = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actualSource -ne $env:EXPECTED_SOURCE_SHA) {
+            throw 'The checkout does not match the selected event SHA.'
+          }
+          $sourceBase = (git merge-base HEAD origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sourceBase -notmatch '^[0-9a-f]{40}$') {
+            throw 'The immutable origin/main comparison base is unavailable.'
+          }
+          "PHP_GALLERY_SOURCE_BASE=$sourceBase" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/setup-python@v6
         id: python
         with:
@@ -58,13 +75,13 @@ jobs:
         if: runner.os == 'Linux'
         env:
           PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
-          PHP_GALLERY_SOURCE_BASE: 362361414b78a2715379ec5f805c2f2aa677dc37
         run: xvfb-run -a php scripts/audit.php --suite=winapp-partitioned
       - name: Run central WinApp discovery on Windows
         if: runner.os == 'Windows'
         env:
           PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
-          PHP_GALLERY_SOURCE_BASE: 362361414b78a2715379ec5f805c2f2aa677dc37
+          PHP_GALLERY_WATCH_RECOVERY_QA_DIR: cache/test-audit/watch-recovery
+          PHP_GALLERY_REQUIRE_WATCH_RECOVERY_TK: '1'
         run: php scripts/audit.php --suite=winapp-partitioned
       - name: Retain exact-commit test reports
         if: always()

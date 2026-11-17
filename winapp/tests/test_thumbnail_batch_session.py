@@ -12,6 +12,7 @@
 
 import hashlib
 import json
+import socket
 import struct
 import sys
 import threading
@@ -1041,14 +1042,19 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 photos = self.register_page(session, (7,))
                 body = b'{"error":"target_unavailable"}' if status == 404 else b''
                 connection = _Connection(self.response(status, body))
+                retry_waits: list[int] = []
                 with mock.patch.object(
                     linking, '_linking_connection', return_value=connection,
                 ), mock.patch.object(session, '_media_read') as legacy:
                     error = (linking.LinkingGrantRejected if status in (401, 403)
                              else linking.LinkingMediaUnavailable)
                     with self.assertRaises(error):
-                        session.media_thumbnails(42, photos, lambda *_args: None)
+                        session.media_thumbnails(
+                            42, photos, lambda *_args: None,
+                            retry_wait=retry_waits.append,
+                        )
                     legacy.assert_not_called()
+                self.assertEqual([], retry_waits)
                 if status in (401, 403):
                     self.assertFalse(session.available())
 
@@ -1061,6 +1067,7 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
         """
         session = self.make_session()
         photos = self.register_page(session, (7,))
+        retry_waits: list[int] = []
         connection = _Connection(self.response(
             429, retry=TEST_LONG_SERVER_RETRY_SECONDS,
         ))
@@ -1068,13 +1075,19 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
             linking, '_linking_connection', return_value=connection,
         ) as connection_factory:
             with self.assertRaises(linking.LinkingMediaThrottled) as initial:
-                session.media_thumbnails(42, photos, lambda *_args: None)
+                session.media_thumbnails(
+                    42, photos, lambda *_args: None,
+                    retry_wait=retry_waits.append,
+                )
             self.assertEqual(
                 TEST_LONG_SERVER_RETRY_SECONDS,
                 initial.exception.retry_after_seconds,
             )
             with self.assertRaises(linking.LinkingThumbnailBatchDeferred) as deferred:
-                session.media_thumbnails(42, photos, lambda *_args: None)
+                session.media_thumbnails(
+                    42, photos, lambda *_args: None,
+                    retry_wait=retry_waits.append,
+                )
             self.assertEqual(
                 'server_retry_after', deferred.exception.cooldown_source,
             )
@@ -1090,7 +1103,215 @@ class ThumbnailBatchSessionTests(unittest.TestCase):
                 deferred.exception.retry_after_seconds, TEST_LONG_SERVER_RETRY_SECONDS,
             )
             connection_factory.assert_called_once()
+        self.assertEqual([], retry_waits)
         self.assertIsNotNone(connection.request_args)
+
+    def test_internal_transient_retry_reports_its_owned_cooldown(self) -> None:
+        """Report existing 502/503/header-timeout retry waits in order.
+
+        Returns:
+            None: Each transient batch gets one bounded retry and publishes only
+                after the observer receives positive then elapsed notifications.
+        """
+        # Distinct positive photo IDs keep these three cold-cache HTTP cases
+        # independent while preserving their literal gateway/timeout vectors.
+        cases = (('502', 502), ('503', 503), ('header-timeout', None))
+        for case_index, (name, status) in enumerate(cases):
+            with self.subTest(kind=name):
+                session = self.make_session()
+                photos = self.register_page(session, (80 + case_index,))
+                failed = (
+                    self.response(status) if status is not None
+                    else self.response(200)
+                )
+                connections = [
+                    _Connection(failed),
+                    _Connection(self.response(
+                        200, encode_batch((80 + case_index,)),
+                    )),
+                ]
+                pending = iter(connections)
+                events: list[tuple[str, int | None]] = []
+                published: list[
+                    linking.ThumbnailPublication | linking.LegacyThumbnailPublication
+                ] = []
+                response_index = [0]
+
+                def connect(
+                    issuer: SplitResult,
+                    control: linking._LinkingTransportControl,
+                ) -> _Connection:
+                    """Return the next actual attempt's response owner.
+
+                    Args:
+                        issuer (SplitResult): Validated gallery installation.
+                        control (_LinkingTransportControl): Active transport owner.
+                    Returns:
+                        _Connection: One configured first or retry attempt.
+                    """
+                    del issuer, control
+                    return next(pending)
+
+                def read_response(connection: _Connection) -> _Response:
+                    """Inject a header timeout only on the first timeout case.
+
+                    Args:
+                        connection (_Connection): Attempt whose response headers
+                            the transport is currently reading.
+                    Returns:
+                        _Response: Healthy response headers after a normal read.
+                    Raises:
+                        socket.timeout: The first response-header timeout vector.
+                    """
+                    attempt = response_index[0]
+                    response_index[0] += 1
+                    if name == 'header-timeout' and attempt == 0:
+                        raise socket.timeout()
+                    return connection.response
+
+                def publish(
+                    result: linking.ThumbnailPublication
+                    | linking.LegacyThumbnailPublication,
+                    _timings: linking.MediaReadTimings,
+                    check_active: Callable[[], None],
+                ) -> None:
+                    """Record healthy publication after the retry observer.
+
+                    Args:
+                        result (ThumbnailPublication | LegacyThumbnailPublication):
+                            Verified publication from the successful attempt.
+                        _timings (MediaReadTimings): Per-result transport facts.
+                        check_active (Callable[[], None]): Existing operation fence.
+                    Returns:
+                        None: Retains only the successful publication.
+                    """
+                    check_active()
+                    published.append(result)
+                    events.append(('published', None))
+
+                def retry_wait(seconds: int) -> None:
+                    """Capture the already-owned cooldown notifications.
+
+                    Args:
+                        seconds (int): Positive delay or zero after its expiry.
+                    Returns:
+                        None: Preserves callback order for the assertion.
+                    """
+                    events.append(('wait', seconds))
+
+                caller_cancel = threading.Event()
+                with mock.patch.object(
+                    linking, '_linking_connection', side_effect=connect,
+                ) as connection_factory, mock.patch.object(
+                    _Connection, 'getresponse', autospec=True,
+                    side_effect=read_response,
+                ):
+                    session.media_thumbnails(
+                        42, photos, publish, caller_cancel,
+                        retry_wait=retry_wait,
+                    )
+                self.assertEqual(2, connection_factory.call_count)
+                self.assertEqual(2, sum(
+                    connection.request_count for connection in connections
+                ))
+                self.assertEqual(1, len(published))
+                self.assertEqual('wait', events[0][0])
+                self.assertIs(type(events[0][1]), int)
+                self.assertGreater(events[0][1] or 0, 0)
+                self.assertEqual(
+                    [('wait', events[0][1]), ('wait', 0), ('published', None)],
+                    events,
+                )
+                self.assertFalse(caller_cancel.is_set())
+                self.assertTrue(session._request_gate.acquire(blocking=False))
+                session._request_gate.release()
+                self.assertTrue(
+                    linking._LINKING_TRANSPORT_SLOTS.acquire(blocking=False),
+                )
+                linking._LINKING_TRANSPORT_SLOTS.release()
+                self.assertTrue(all(
+                    connection.closed for connection in connections
+                ))
+
+    def test_internal_retry_observer_failure_does_not_change_publication(self) -> None:
+        """Ignore observer exceptions while preserving the owned safe retry.
+
+        Returns:
+            None: A raising observer cannot suppress a healthy second attempt.
+        """
+        session = self.make_session()
+        photos = self.register_page(session, (87,))
+        connections = [
+            _Connection(self.response(503)),
+            _Connection(self.response(200, encode_batch((87,)))),
+        ]
+        pending = iter(connections)
+        published: list[linking.ThumbnailPublication] = []
+        observer_calls: list[int] = []
+
+        def connect(
+            issuer: SplitResult, control: linking._LinkingTransportControl,
+        ) -> _Connection:
+            """Return each of the two configured batch responses.
+
+            Args:
+                issuer (SplitResult): Validated installation issuer.
+                control (_LinkingTransportControl): Active transport owner.
+            Returns:
+                _Connection: The next configured HTTP attempt.
+            """
+            del issuer, control
+            return next(pending)
+
+        def publish(
+            result: linking.ThumbnailPublication
+            | linking.LegacyThumbnailPublication,
+            _timings: linking.MediaReadTimings,
+            check_active: Callable[[], None],
+        ) -> None:
+            """Retain the successfully verified retry result.
+
+            Args:
+                result (ThumbnailPublication | LegacyThumbnailPublication):
+                    Current authorized result.
+                _timings (MediaReadTimings): Per-result transport facts.
+                check_active (Callable[[], None]): Existing operation fence.
+            Returns:
+                None: Retains a result only after its owner check.
+            """
+            check_active()
+            if isinstance(result, linking.ThumbnailPublication):
+                published.append(result)
+
+        def raising_observer(_seconds: int) -> None:
+            """Raise to prove observation errors are isolated.
+
+            Args:
+                _seconds (int): Existing cooldown notice.
+            Returns:
+                None: Raises only from this intentionally faulty observer.
+            """
+            observer_calls.append(_seconds)
+            raise RuntimeError('observer failure')
+
+        with mock.patch.object(
+            linking, '_linking_connection', side_effect=connect,
+        ) as connection_factory:
+            session.media_thumbnails(
+                42, photos, publish, retry_wait=raising_observer,
+            )
+        self.assertEqual(2, connection_factory.call_count)
+        self.assertEqual(2, sum(
+            connection.request_count for connection in connections
+        ))
+        self.assertEqual(1, len(published))
+        self.assertEqual(2, len(observer_calls))
+        self.assertGreater(observer_calls[0], 0)
+        self.assertEqual(0, observer_calls[1])
+        self.assertTrue(session._request_gate.acquire(blocking=False))
+        session._request_gate.release()
+        self.assertTrue(linking._LINKING_TRANSPORT_SLOTS.acquire(blocking=False))
+        linking._LINKING_TRANSPORT_SLOTS.release()
 
     def test_exhausted_transient_retains_cooldown_and_releases_gate(self) -> None:
         """Keep cooldown after a second 503 and leave serialized admission free.

@@ -58,9 +58,16 @@ upload receipt; unavailable sources or media remain visible failures.
 **Confirm already uploaded (receipt)** requires an exact durable acknowledgement.
 **Skip photo** explicitly keeps the original and unknown history while allowing
 the next accepted item to continue. It is counted separately from successful
-uploads. Neither decision silently retries an unknown request. **Cancel / Keep
+uploads. **Photo is OK — upload** means you checked the displayed source and
+confirm that it is not a duplicate. It lets only that same queue head enter the
+ordinary upload order. The server still applies its usual duplicate checks.
+The prior unknown attempt stays in the history, and the one-use approval is
+consumed before dispatch; another unclear result needs a new decision. The
+existing request must finish before the approved head proceeds. **Cancel / Keep
 pending** changes nothing. Reopen retained work after restart with **Review
 pending uploads…** and the same verified target.
+Local preview validation enables photo approval without waiting for an optional
+comparison preview from the server.
 After submitting a decision, **Hide (saving decision…)** hides its progress
 while the authorized durable write finishes; it does not undo that decision.
 In a short window, scroll the evidence while the decision and close controls
@@ -177,6 +184,22 @@ the recorder's existing acquisition cache; it creates no second SimConnect
 connection and performs no disk or network work on a display tick. Stopped,
 paused, disconnected or more-than-three-second-old values become dashes.
 The adjacent **PDF** shortcut opens saved flights and reports.
+
+### Photos loading progress
+
+Gallery reads show a compact themed progress bar inside Photos. Newest-first
+metadata reads report each confirmed page and the cumulative validated photo
+count; when the server does not provide a total, progress remains indeterminate
+instead of inventing a percentage. Thumbnail progress becomes determinate only
+for the visible thumbnails whose results have been confirmed. After an unusually
+long wait, elapsed time and the latest real progress detail remain visible.
+Existing retry waits show their actual server wait/countdown; when no automatic
+retry applies, the existing **Retry** action remains available. Cached
+thumbnails keep precedence. The indicator disappears as soon as the first
+usable viewport is resolved, while remaining reads continue in the background.
+The same behavior applies to Canvas and native gallery rendering. Cancellation
+and session-generation checks prevent stale work from publishing into a newer
+view; Tk updates remain on the GUI thread. See [WinApp patch notes](PATCH_NOTES.md).
 
 ## Windows startup and a single running instance (0.7.0)
 
@@ -915,10 +938,10 @@ at `winapp/dist/0.3.2/winapp-update.json`.
 
 The companion app has its own version in `winapp/VERSION`, independent of the
 PHP
-Gallery CMS release. The current source targets **1.2.2**; this source version
+Gallery CMS release. The current source targets **1.5.1**; this source version
 change does not build or publish an installer. A separately requested build
 will place the installer and generated `winapp-update.json` in
-`winapp/dist/1.2.2/`. Existing version outputs and other version folders remain
+`winapp/dist/1.5.1/`. Existing version outputs and other version folders remain
 preserved.
 
 The update notice fits its wrapped status text and full button row as background
@@ -2846,6 +2869,11 @@ head and a never-sent new head blocked by older target history. See
 `docs/UPLOADER_QUEUE.md` and the recovery section in `TESTING.md` for decision
 and evidence boundaries. No screenshot or source test is installed-client
 acceptance, and feature verification does not publish the 1.1.2 installer.
+
+The **Issue 380 integrated WinApp UI** workflow also covers gallery loading
+progress. Its desktop/narrow screenshots, cache checks, test-audit results and
+gallery-load-progress evidence are tied to the exact event SHA and the current
+origin/main merge base. They do not establish an installed-client PASS.
 
 For a release build, also smoke-test on Windows with the real target gallery,
 tray, local thumbnail runtime, optional SimConnect, and any intentionally

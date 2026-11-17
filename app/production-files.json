@@ -1222,6 +1222,7 @@
         "winapp/uploader/gallery_folders.py",
         "winapp/uploader/gallery_hdr_macos.py",
         "winapp/uploader/gallery_lightbox.py",
+        "winapp/uploader/gallery_load_progress.py",
         "winapp/uploader/gallery_media_cache.py",
         "winapp/uploader/gallery_preload.py",
         "winapp/uploader/gallery_view_order.py",

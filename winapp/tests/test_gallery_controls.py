@@ -38,6 +38,13 @@ SLOW_MEDIA_RESPONSE_TEST_TIMEOUT_SECONDS = 2.0
 # Rationale: A full extra second guarantees age is strictly beyond the TTL.
 CACHE_EXPIRY_TEST_MARGIN_SECONDS = 1.0
 
+# Purpose: Bound waits while a large metadata scan is deliberately held.
+# Type: float. Units: seconds. Scope: one progress observer test; actual value
+# is five seconds so a stalled worker fails promptly without hanging CI.
+# Consumers: test_order_progress_reports_validated_counts_during_large_scans.
+# Rationale: Event waits must fail promptly if the worker stops publishing.
+ORDER_PROGRESS_TEST_TIMEOUT_SECONDS = 5.0
+
 
 def _header_timeout() -> linking.LinkingResponseError:
     """Build the exact sanitized media response-header timeout eligible for retry.
@@ -74,6 +81,203 @@ class GalleryControlTests(unittest.TestCase):
         )
         self.addCleanup(session.close)
         return session
+
+    def test_order_progress_reports_validated_counts_during_large_scans(self) -> None:
+        """Publish incremental validated counts while large scans are held.
+
+        Returns:
+            None: Counts arrive page by page and the complete snapshot still
+                publishes in newest-first order after the worker is released.
+        """
+        # These fixture boundaries exercise medium, multi-page, and large albums.
+        for total in (500, 2000, 5000):
+            with self.subTest(total=total):
+                session = mock.create_autospec(
+                    linking.LinkingSession, instance=True,
+                )
+                entered = threading.Event()
+                release = threading.Event()
+                counts: list[int] = []
+
+                def read_page(
+                    gallery_id: int, after_id: int | None = None,
+                    cancelled: threading.Event | None = None,
+                ) -> linking.LinkedMediaPage:
+                    """Return one bounded ascending slice of the fixture album.
+
+                    Args:
+                        gallery_id (int): Physical gallery requested by the order.
+                        after_id (int | None): Exclusive ascending page cursor.
+                        cancelled (threading.Event | None): Current cancellation.
+                    Returns:
+                        linking.LinkedMediaPage: One ordered metadata page.
+                    """
+                    self.assertEqual(7, gallery_id)
+                    start = (after_id or 0) + 1
+                    stop = min(total, start + linking.NATIVE_MEDIA_PAGE_SIZE - 1)
+                    ids = range(start, stop + 1)
+                    next_after = stop if stop < total else None
+                    return linking.LinkedMediaPage(
+                        7, None,
+                        tuple(linking.LinkedPhoto(value, str(value)) for value in ids),
+                        next_after,
+                    )
+
+                def report(count: int) -> None:
+                    """Record progress and hold the worker after its first page.
+
+                    Args:
+                        count (int): Validated cumulative descriptor count.
+                    Returns:
+                        None: The test controls release from its owner thread.
+                    """
+                    counts.append(count)
+                    if len(counts) == 1:
+                        entered.set()
+                        release.wait(ORDER_PROGRESS_TEST_TIMEOUT_SECONDS)
+
+                session.media_page.side_effect = read_page
+                order = GalleryViewOrder(session, 7)
+                outcomes: list[linking.LinkedMediaPage] = []
+                failures: list[BaseException] = []
+
+                def refresh() -> None:
+                    """Run the scan away from the test assertion thread.
+
+                    Returns:
+                        None: Captures the snapshot or worker exception for checks.
+                    """
+                    try:
+                        outcomes.append(order.page(
+                            None, threading.Event(), progress=report,
+                        ))
+                    except BaseException as error:
+                        failures.append(error)
+
+                worker = threading.Thread(target=refresh, daemon=True)
+                worker.start()
+                try:
+                    self.assertTrue(entered.wait(ORDER_PROGRESS_TEST_TIMEOUT_SECONDS))
+                    self.assertEqual(
+                        [min(total, linking.NATIVE_MEDIA_PAGE_SIZE)], counts,
+                    )
+                finally:
+                    release.set()
+                    worker.join(ORDER_PROGRESS_TEST_TIMEOUT_SECONDS)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual([], failures)
+                self.assertEqual(1, len(outcomes))
+                self.assertEqual(total, counts[-1])
+                self.assertEqual(
+                    sorted(counts), counts,
+                    'Validated cumulative progress must never move backward.',
+                )
+                first_page_size = min(total, linking.NATIVE_MEDIA_PAGE_SIZE)
+                self.assertEqual(first_page_size, len(outcomes[0].photos))
+                self.assertEqual(total, len(order._photos))
+                self.assertEqual(
+                    list(range(total, 0, -1)),
+                    [photo.image_id for photo in order._photos],
+                )
+                self.assertEqual(
+                    list(range(total, total - first_page_size, -1)),
+                    [photo.image_id for photo in outcomes[0].photos],
+                )
+
+    def test_order_progress_skips_unvalidated_pages_and_survives_resume(self) -> None:
+        """Report only valid pages and keep counts when a read safely resumes.
+
+        Returns:
+            None: Invalid cursors publish nothing and quota resumption preserves
+                the earlier validated count without replaying prior rows.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        first = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(1, 'One'),), 1,
+        )
+        malformed = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(3, 'Three'),), 2,
+        )
+        session.media_page.side_effect = [first, linking.LinkingMediaThrottled(), malformed]
+        order = GalleryViewOrder(session, 7)
+        counts: list[int] = []
+        with self.assertRaises(linking.LinkingMediaThrottled):
+            order.page(None, threading.Event(), progress=counts.append)
+        self.assertEqual([1], counts)
+        self.assertEqual([1], [photo.image_id for photo in order._pending])
+        with self.assertRaises(ValueError):
+            order.page(None, threading.Event(), progress=counts.append)
+        self.assertEqual([1], counts)
+        self.assertEqual([], order._pending)
+
+    def test_retrying_callback_runs_only_before_automatic_retry(self) -> None:
+        """Notify the observer only when the owner performs its safe retry.
+
+        Returns:
+            None: Manual resumption and non-retryable errors emit no retry event.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        session.media_page.side_effect = [
+            _header_timeout(),
+            linking.LinkedMediaPage(7, None, (), None),
+        ]
+        order = GalleryViewOrder(session, 7)
+        retries: list[None] = []
+        order.page(None, threading.Event(), retrying=lambda: retries.append(None))
+        self.assertEqual([None], retries)
+
+        denied = mock.create_autospec(linking.LinkingSession, instance=True)
+        denied.can_read_media.return_value = False
+        denied.media_page.side_effect = _header_timeout()
+        with self.assertRaises(linking.LinkingResponseError):
+            GalleryViewOrder(denied, 7).page(
+                None, threading.Event(), retrying=lambda: retries.append(None),
+            )
+        self.assertEqual([None], retries)
+
+    def test_observer_exceptions_do_not_change_read_outcomes(self) -> None:
+        """Ignore observer failures while preserving a valid retry and snapshot.
+
+        Returns:
+            None: A raising progress observer cannot fail a read and a raising
+                retry observer cannot suppress the existing safe retry.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        session.media_page.side_effect = [
+            _header_timeout(),
+            linking.LinkedMediaPage(
+                7, None, (linking.LinkedPhoto(4, 'Four'),), None,
+            ),
+        ]
+
+        def fail_progress(count: int) -> None:
+            """Raise to verify progress observers cannot alter read results.
+
+            Args:
+                count (int): Validated count supplied by the order owner.
+            Returns:
+                None: No value is returned; this fixture always raises.
+            Raises:
+                RuntimeError: Deliberate observer failure.
+            """
+            raise RuntimeError(f'Observer failed at {count}.')
+
+        def fail_retrying() -> None:
+            """Raise to verify retry observers cannot suppress a safe retry.
+
+            Returns:
+                None: No value is returned; this fixture always raises.
+            Raises:
+                RuntimeError: Deliberate observer failure.
+            """
+            raise RuntimeError('Retry observer failed.')
+
+        completed = GalleryViewOrder(session, 7).page(
+            None, threading.Event(), progress=fail_progress,
+            retrying=fail_retrying,
+        )
+        self.assertEqual([4], [photo.image_id for photo in completed.photos])
+        self.assertEqual(2, session.media_page.call_count)
 
     def _snapshot(self, **changes: str | bool) -> dict[str, linking.JsonValue]:
         """Build a complete canonical response with deliberate long text.
@@ -444,8 +648,10 @@ class GalleryControlTests(unittest.TestCase):
 
         session.media_page.side_effect = page_then_cancel
         order = GalleryViewOrder(session, 7)
+        progress: list[int] = []
         with self.assertRaises(ValueError):
-            order.page(None, cancel)
+            order.page(None, cancel, progress=progress.append)
+        self.assertEqual([], progress)
         self.assertEqual([None], [
             call.kwargs['after_id'] for call in session.media_page.call_args_list
         ])

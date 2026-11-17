@@ -78,7 +78,7 @@ head performs that check. Local ZIP extraction and local preview are retained.
 | dispatching | Finish the original request and persist its validated acknowledgement. |
 | retry_wait | Continue local admission; retry this head after its persisted deadline. |
 | auth_required | Retain capture and explain the required authorization action. |
-| uncertain / blocked | Retain the head; no resend or later transfer without resolution. |
+| uncertain / blocked | Retain the head; no automatic resend or later transfer without a decision. |
 | acknowledged | Only now may the following sequence start its pipeline. |
 | skipped | Explicit user disposition permits the next item; the original and unknown history remain retained. |
 
@@ -203,8 +203,18 @@ matching hash or inventory absence cannot confirm an upload.
 for that head. **Skip photo** is a separate explicit decision: it records
 `skipped_by_user`, retains the local source and uncertainty history, and counts
 the item separately from successful uploads. No unknown operation is resent by
-either action. Closing or cancelling review keeps the item pending. Each new
-blocked head requires its own decision.
+either action. **Photo is OK — upload** records the user's confirmation that
+they checked the displayed source and it is not a duplicate. It authorizes only
+the same current head to enter the ordinary FIFO upload path. The server's
+existing duplicate checks still apply; the client does not create a receipt or
+override server decisions. The exact target, session, mode, scope, source hash
+and generation are rechecked outside Tk before dispatch. The previous unknown
+attempt remains in history. The approval is consumed once before dispatch; a
+later ambiguous result requires another user decision. The existing physical
+transport must end before this head can proceed; the review action does not
+start a parallel request. **Cancel / Keep pending** leaves the head unchanged.
+Closing or cancelling review keeps the item pending. Each new blocked head
+requires its own decision.
 After an explicit decision is submitted, **Hide (saving decision…)** only hides
 its progress; the already authorized durable publication completes normally.
 It does not imply cancellation or rollback of that decision.
