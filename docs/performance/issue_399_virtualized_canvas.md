@@ -478,3 +478,50 @@ an incomplete superseded comparison is never accepted as a statistical PASS.
 No local execution, test-registry change, deadline increase, protected write,
 merge or release. No TeX manual impact: internal negative-path coverage with
 unchanged default user behavior.
+
+## Frozen primary comparison and archived readout
+
+The registered central audit completed **120/120 compare processes** for the
+candidate `5e9a050df977dae9423096e4df77864c625b8441` against baseline A
+`ab245719ddf65ccba51a83ac10564a795a03dee9` in
+[workflow run 44052468689](https://github.com/klusik/PHP_gallery/actions/runs/44052468689).
+The run used an EPYC 9V74 host and retained artifact
+[14317966343](https://github.com/klusik/PHP_gallery/actions/runs/44052468689/artifacts/14317966343)
+(SHA-256 `6d4791dd65bac19b8369972c81882b4637df6c9b031525aa8c3a4060711ea102`).
+This records the central audit's completed process set; it does not assert a
+performance improvement or physical presentation latency.
+
+The post-run job-summary publication exceeded its 1 MiB limit after the driver
+wrote both its complete Markdown summary and concise JSON. The archived
+`summary.md` remains the precomputed comparison readout. A diagnostics-only
+reader may expose that Markdown from this exact owned artifact; it does not run
+benchmark children, recalculate statistics, or qualify its own candidate. The
+original full JSON, raw records, and raw events remain in the artifact.
+
+The permanent protocol remains the primary profile: stage `compare`, baseline A
+above, extents 100/500/2000, cold/warm caches, and ten matched process pairs per
+cell (120 compare children). The earlier one-artifact diagnostics selection and
+`diagnostics_only` flag are temporary readout configuration and are not part of
+the default protocol. The separate 5000-photo stress remains nonblocking for
+this primary comparison.
+
+## G4 adoption gate outcome
+
+The central audit passed all 120 scheduled compare processes. The stored
+`scroll100/cold` cell nevertheless violates the adoption guard for both settled
+wheel metrics. These are means of per-process p95 observations; the intervals
+are the existing paired bootstrap 95% confidence bounds for B − A, with ten
+matched process pairs:
+
+| Metric | Optimized control A | Canvas candidate B | Existing paired 95% CI for B − A |
+| --- | ---: | ---: | ---: |
+| `wheel_slow_settled_p95_ms` | 46.855 ms | 78.149 ms | [22.277, 40.705] ms |
+| `wheel_fast_settled_p95_ms` | 26.608 ms | 43.017 ms | [11.994, 22.815] ms |
+
+Both regressions exceed the stated 10 ms and 20% G4 guard. The result is
+**NO-GO for general/default Canvas adoption**. The native renderer remains the
+default and Canvas remains opt-in. This result does not measure physical display
+presentation latency or establish accessibility acceptance.
+
+No TeX manual impact: this records an internal performance decision; it does not
+change user-facing workflows, controls or product behavior.

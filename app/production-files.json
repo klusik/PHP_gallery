@@ -883,6 +883,7 @@
         "docs/performance/issue_362_b1_http_transport_benchmark.md",
         "docs/performance/issue_362_b1_protocol_benchmark.md",
         "docs/performance/issue_362_thumbnail_batch_v1.md",
+        "docs/performance/issue_399_result_readout.md",
         "docs/performance/issue_399_virtualized_canvas.md",
         "galleries/.htaccess",
         "index.php",

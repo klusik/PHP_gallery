@@ -8,7 +8,8 @@
 #   - Install pinned benchmark-only Python dependencies
 #   - Invoke the benchmark exclusively through the central audit suite
 #   - Retain raw benchmark output and audit diagnostics on every outcome
-#   - Inspect authenticated failure artifacts without rerunning their tests
+#   - Inspect authenticated benchmark artifacts without rerunning their tests
+#   - Expose the frozen precomputed Markdown summary on diagnostic-only runs
 #   - Publish validated compact summaries to the authorized issue threads
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
@@ -19,6 +20,7 @@ on:
     branches:
       - feature/361-tk-canvas-performance
       - feature/399-virtualized-canvas-gallery
+      - feature/399-canvas-result-readout
     # Run measurements only when the protocol or its execution owner changes.
     # Production checkpoints use the separate central functional workflow.
     # Feature-only workflows may lack dispatch on the default branch; a
@@ -51,8 +53,8 @@ jobs:
     timeout-minutes: 45
     env:
       PHP_GALLERY_TK_PERF_CANDIDATE: ${{ github.sha }}
-      PHP_GALLERY_TK_PERF_PROTOCOL: ${{ github.ref_name == 'feature/399-virtualized-canvas-gallery' && 'issue_399_tk_protocol.json' || 'issue_361_tk_protocol.json' }}
-      PHP_GALLERY_TK_PERF_PROTOCOL_PATH: ${{ github.ref_name == 'feature/399-virtualized-canvas-gallery' && 'tools/perf/issue_399_tk_protocol.json' || 'tools/perf/issue_361_tk_protocol.json' }}
+      PHP_GALLERY_TK_PERF_PROTOCOL: ${{ (github.ref_name == 'feature/399-virtualized-canvas-gallery' || github.ref_name == 'feature/399-canvas-result-readout') && 'issue_399_tk_protocol.json' || 'issue_361_tk_protocol.json' }}
+      PHP_GALLERY_TK_PERF_PROTOCOL_PATH: ${{ (github.ref_name == 'feature/399-virtualized-canvas-gallery' || github.ref_name == 'feature/399-canvas-result-readout') && 'tools/perf/issue_399_tk_protocol.json' || 'tools/perf/issue_361_tk_protocol.json' }}
     steps:
       - name: Checkout exact source SHA without persisted credentials
         uses: actions/checkout@v7.0.1
@@ -207,9 +209,9 @@ jobs:
             // Type: integer. Units: GitHub issue number.
             // Scope: Optional authenticated artifact review.
             // Consumers: the diagnostic artifact comments below.
-            // Value: 399 on its exact feature branch; otherwise 361.
+            // Value: 399 on the two allowlisted 399 branches; otherwise 361.
             // Rationale: diagnostics stay with the selected 361 or 399 experiment.
-            const DIAGNOSTIC_ISSUE = process.env.GITHUB_REF_NAME === 'feature/399-virtualized-canvas-gallery' ? 399 : 361;
+            const DIAGNOSTIC_ISSUE = ['feature/399-virtualized-canvas-gallery', 'feature/399-canvas-result-readout'].includes(process.env.GITHUB_REF_NAME) ? 399 : 361;
             // Purpose: Read all protocol-selected artifact metadata on one page.
             // Type: integer. Units: artifacts per GitHub API page.
             // Scope: Optional diagnostic artifact lookup.
@@ -217,7 +219,10 @@ jobs:
             // Value: 100.
             // Rationale: GitHub's endpoint maximum avoids missing configured entries.
             const ARTIFACT_PAGE_SIZE = 100;
-            const EXPECTED_BRANCH = process.env.GITHUB_REF_NAME;
+            const READOUT_BRANCH = 'feature/399-canvas-result-readout';
+            const SOURCE_399_BRANCH = 'feature/399-virtualized-canvas-gallery';
+            const EXPECTED_BRANCH = process.env.GITHUB_REF_NAME === READOUT_BRANCH
+              ? SOURCE_399_BRANCH : process.env.GITHUB_REF_NAME;
             const workspace = process.env.GITHUB_WORKSPACE;
             const protocol = JSON.parse(fs.readFileSync(
               path.join(workspace, process.env.PHP_GALLERY_TK_PERF_PROTOCOL_PATH),
@@ -332,7 +337,7 @@ jobs:
               "        # Purpose: Bound the small process ledger and source-failure text reads.",
               "        # Type: int. Units: bytes. Scope: one diagnostic CSV/text member.",
               "        # Consumers: fallback CSV and source-failure reads.",
-              "        # Rationale: 1 MiB leaves ample room for 160 scalar process records.",
+              "        # Rationale: bound compact diagnostics and a complete Markdown result summary.",
               "        MAX_SMALL_DIAGNOSTIC_BYTES = 1024 * 1024",
               "        # Purpose: Bound parse-error messages in the diagnostic comment.",
               "        # Type: int. Units: characters. Scope: one malformed-member example.",
@@ -385,6 +390,20 @@ jobs:
               "                report = {}",
               "                invalid.append(\"report.json parse failure: \" + str(error)[:DIAGNOSTIC_ERROR_CHARACTER_LIMIT])",
               "        parent = report_member.parent",
+              "        summary_members = [",
+              "            name for name in names",
+              "            if PurePosixPath(name).parent == parent and PurePosixPath(name).name == \"summary.md\"",
+              "        ]",
+              "        if len(summary_members) != 1:",
+              "            raise RuntimeError(\"Expected one canonical summary.md.\")",
+              "        summary_member = PurePosixPath(summary_members[0])",
+              "        summary_info = archive.getinfo(summary_members[0])",
+              "        summary_mode = (summary_info.external_attr >> 16) & 0o170000",
+              "        if summary_member.is_absolute() or \"..\" in summary_member.parts or summary_mode == stat.S_IFLNK:",
+              "            raise RuntimeError(\"Archived summary.md has an unsafe path.\")",
+              "        if summary_info.file_size >= MAX_SMALL_DIAGNOSTIC_BYTES:",
+              "            raise RuntimeError(\"Archived summary.md exceeds the size budget.\")",
+              "        stored_markdown = archive.read(summary_info).decode(\"utf-8\")",
               "        record_rows = report.get(\"records\", [])",
               "        if not isinstance(record_rows, list):",
               "            record_rows = []",
@@ -588,6 +607,18 @@ jobs:
               "            \"raw_csv_bytes\": csv_sizes,",
               "            \"children_bytes\": total_child_bytes,",
               "            \"source_failures_line_count\": source_failure_lines,",
+              "            \"stored_plot_members\": sorted(",
+              "                name for name in names",
+              "                if PurePosixPath(name).name in (",
+              "                    \"paired-comparison.png\", \"paired-comparison.svg\",",
+              "                    \"comparison-report-cs.md\",",
+              "                )",
+              "            ),",
+              "            \"viewport_capture_png_count\": sum(",
+              "                PurePosixPath(name).name.endswith(\"-viewport.png\")",
+              "                for name in names",
+              "            ),",
+              "            \"stored_markdown\": stored_markdown,",
               "        }",
               'result_path.write_text(json.dumps(result), encoding="utf-8")',
             ].join('\n');
@@ -658,6 +689,14 @@ jobs:
               const artifactUrl = process.env.GITHUB_SERVER_URL + '/'
                 + context.repo.owner + '/' + context.repo.repo
                 + '/actions/runs/' + run.id + '/artifacts/' + entry.artifact_id;
+              if (entry.kind === 'benchmark') {
+                const stored = diagnostic.benchmark?.stored_markdown;
+                if (typeof stored !== 'string') {
+                  throw new Error('Archived benchmark summary Markdown is missing.');
+                }
+                await core.summary.addRaw(stored).write();
+              }
+
               let body = [
                 '## Issue ' + DIAGNOSTIC_ISSUE + ' diagnostic artifact review — NOT TESTED',
                 '',
@@ -667,6 +706,7 @@ jobs:
                 '- Artifact: [download page](' + artifactUrl + ')',
                 '- Current workflow candidate: <code>' + context.sha + '</code> (not tested by this inspection)',
                 '- Result: diagnostic inspection only; this is not qualification evidence.',
+                '- Full precomputed summary.md was appended verbatim to this workflow job summary.',
                 '',
               ].join('\n');
               if (entry.kind === 'source') {
@@ -710,8 +750,11 @@ jobs:
                     + row.elapsed_seconds + 's; phase metrics='
                     + JSON.stringify(row.phase_timings || {}),
                 ).join('; ') || 'none recorded';
+                const originalOutcomeNote = benchmark.status === 'PASS'
+                  ? 'The archived benchmark passed; this is a read-only result readout, not a test of the current candidate.'
+                  : 'The original run status is retained above; this readout does not qualify the current candidate.';
                 body += [
-                  '### Incomplete benchmark artifact diagnostics',
+                  '### Archived benchmark artifact diagnostics',
                   '',
                   '- Aggregate report status: ' + benchmark.status
                     + '; ' + benchmark.record_count + ' saved process rows from '
@@ -744,8 +787,12 @@ jobs:
                   '- source-failures.md lines: '
                     + (benchmark.source_failures_line_count == null
                       ? 'not present' : benchmark.source_failures_line_count + ' (read once).'),
+                  '- Stored figure/report members: '
+                    + JSON.stringify(benchmark.stored_plot_members)
+                    + '; viewport captures: '
+                    + benchmark.viewport_capture_png_count + '.',
                   '',
-                  'This incomplete run remains FAIL/BLOCKED as reported; the diagnostic does not qualify performance.',
+                  originalOutcomeNote,
                 ].join('\n');
               }
               await github.rest.issues.createComment({
@@ -798,7 +845,8 @@ jobs:
 
       - name: Export issue 399 paired comparison plots
         if: >-
-          success() && env.PHP_GALLERY_TK_PERF_STAGE == 'compare' &&
+          success() && env.PHP_GALLERY_TK_PERF_DIAGNOSTICS_ONLY != 'true' &&
+          env.PHP_GALLERY_TK_PERF_STAGE == 'compare' &&
           env.PHP_GALLERY_TK_PERF_PROTOCOL == 'issue_399_tk_protocol.json'
         shell: pwsh
         env:
@@ -841,7 +889,7 @@ jobs:
             // Consumers: the benchmark summary comment below.
             // Value: 361.
             // Rationale: keep the evidence on its authorized issue thread.
-            const is399 = process.env.GITHUB_REF_NAME === 'feature/399-virtualized-canvas-gallery';
+            const is399 = ['feature/399-virtualized-canvas-gallery', 'feature/399-canvas-result-readout'].includes(process.env.GITHUB_REF_NAME);
             const BENCHMARK_ISSUE = is399 ? 399 : 361;
 
             // Purpose: Target the follow-up thread for baseline/compare evidence.
