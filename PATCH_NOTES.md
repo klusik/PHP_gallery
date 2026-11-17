@@ -1,5 +1,75 @@
 # Patch notes
 
+## Version 1.3.1
+
+Updated the independently versioned WinApp to 1.5.1 with visible gallery-loading
+feedback and a direct way to approve the current pending photograph. Photos
+reported real loading activity, and an uncertain upload could continue after
+the user checked the displayed source.
+
+### Highlights
+
+#### Gallery loading feedback
+
+- Added a compact progress bar inside Photos for both Canvas and native widget
+  rendering. Metadata loading reported the cumulative validated photo count;
+  unknown gallery totals remained indeterminate.
+- Added determinate progress for thumbnails actually presented in the visible
+  viewport. Cached images kept priority, and loading feedback disappeared when
+  the first usable viewport was ready while background work continued.
+- Added elapsed time and the last real progress during long loads. Existing
+  automatic retry waits exposed their countdown, while requests requiring a
+  user decision retained the existing **Retry** action.
+
+#### Pending photograph approval
+
+- Added **Photo is OK — upload** to pending-upload review. After checking the
+  exact displayed source and confirming that it was not a duplicate, the user
+  could release that same FIFO head through the ordinary upload path.
+- Preserved normal server duplicate checks and the previous uncertain attempt
+  in durable history. The approval was consumed once before dispatch; another
+  ambiguous result required a new decision.
+- Kept receipt confirmation, **Skip photo** and **Cancel / Keep pending** as
+  separate choices. Local review became available without waiting for an
+  optional comparison preview from the server.
+
+### Technical Details
+
+#### WinApp
+
+- Added `winapp/uploader/gallery_load_progress.py` and coalesced worker notices
+  drained by the existing Tk event consumer. Preserved cancellation, session
+  and generation fencing without adding network retries or occupying photo
+  result queue capacity with progress reports.
+- Bound explicit approval to the current target, session, mode, scope, source
+  generation and SHA-256. Retained a durable recovery intent and verified linked
+  history publication before releasing the queue head. Existing physical
+  transport completion and normal inventory checks remained required.
+- Updated English, Czech, German and Swedish interface text, WinApp guidance,
+  queue/lifecycle documentation and all four maintained manual sources.
+
+#### Tests
+
+- Added hosted Tk coverage for 500-, 2,000- and 5,000-photo galleries, both
+  renderers, cold and cached opens, live metadata updates, bar animation,
+  timeout/quota/gateway waits, cancellation and stale callbacks.
+- Added durable approval and FIFO tests for restart, changed source bytes,
+  interrupted writes, ordinary duplicate detection and a second ambiguous
+  attempt. Added English/Czech desktop and narrow dialog screenshots.
+
+### User Impact
+
+#### For WinApp users
+
+- Made gallery loading activity, thumbnail preparation and server waits visible
+  without estimated gallery percentages. Added a direct confirmation for the
+  displayed correct, nonduplicate photograph before normal queued upload.
+
+#### For administrators and visitors
+
+- Kept the Gallery web interface, database schema and server authorization
+  unchanged. The delivered behavior changes were in the Windows companion.
+
 ## Version 1.3.0
 
 Updated WinApp gallery rendering and its application shell in PHP Gallery 1.3.0.
