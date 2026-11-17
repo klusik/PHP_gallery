@@ -10073,6 +10073,48 @@ v~commit message. Značky uvnitř zachované historie squashe nové měření
 nespouštějí. Úklid ruší starší funkční a~benchmarkové běhy pouze ve~vlastní
 feature větvi; měření stejného SHA vynechává.
 
+Protokol scrollování používá optimalizovaný kontrolní bod z~PR~398.
+Hlavní matice přijímá 100, 500 a~2~000 fotografií po~64 položkách. Vyžaduje
+12 pilotních, 60 opakovaných baseline a~120 párových srovnávacích procesů.
+Rozsah 5~000 fotografií je~samostatný stress test; jeho vykázaný timeout
+neblokuje P1. Validní opakovaná hlavní baseline dovoluje zahájit Canvas prototyp;
+hned po~první funkční verzi následují cílené hosted testy a~orientační A/B měření.
+Původní pokusy se~čtyřmi rozsahy níže zůstávají historickými selháními. Počáteční geometrie je~900×680 v~počátku
+souřadnic; změna velikosti používá šířku klienta 640 a~960 pixelů po~kontrole
+limitů obrazovky/okna a~před nezměněným čekáním na~přesnou šířku. Plný pilot
+se~16 procesy (běh~44011416072, SHA workflow/harness
+\codeword{01379b6b78ca178d1b87d892c2a3ef27fb830d3f}) i~cílený pilot (běh
+44012529759, SHA \codeword{9d4ea91b0766032aef3153939da06892cce8d23b}) jsou
+neplatné pokusy. Cílený běh žádal 1~100 pixelů, ale~systém Windows omezil klienta na
+1028×680; čekání na~přesnou šířku uvázlo, ačkoli bylo načteno všech 24
+viditelných položek, fronta byla prázdná a~neběžel žádný worker.
+Driver zveřejňuje úplný \codeword{summary.md} i~stručné JSON v~Actions job
+summary. Aplikační baseline A je~\codeword{ab245719ddf65ccba51a83ac10564a795a03dee9};
+SHA workflow/harness jsou samostatné. Baseline není přijata a~změny Canvasu
+zůstávají blokované. Tk feedback neprokazuje fyzické zobrazení.
+
+Recorder odděluje přípravu od~měřených interakcí. Počítá skutečné Tk operace
+v~obou fázích, agreguje časování callbacků přípravy do~pevného počtu, součtu
+a~maxima a~zachovává samostatná časování mountu, první stránky, prvního
+viewportu a~celého katalogu. Měřené studené/teplé scrollování začíná až po
+přijetí katalogu; zahřívací průchod se~vylučuje. Limit 20~000 událostí i~limity
+90/2~400 sekund zůstávají beze změny; zkrácení měřených událostí stále selže.
+
+Příprava fixture používá deterministický archiv s~pevným časovým razítkem,
+vytvořený jednou pro~benchmark driver. Každý nezávislý proces ověří archiv,
+hashe těl a~digest svého katalogu; profily a~cache aplikace zůstávají oddělené.
+Společná příprava i~načtení archivu se~vykazují samostatně. Čas scénáře začíná
+po~ověřeném načtení a~končí před lifecycle; úplný interval procesu zahrnuje
+načtení i~teardown. Časování startu GUI a~CPU interval scrollování se~nemění.
+Tato změna harnessu nedokládá rychlejší vykreslování; baseline P0 není přijata.
+
+Přijetí metadat, Tk idle proxy a~ustálení
+viewportu jsou samostatná měření. Povolený soubor
+\codeword{issue_399_tk_protocol.json} vybírá
+\codeword{PHP_GALLERY_TK_PERF_PROTOCOL}. Implementace Canvasu čeká
+na~přijetí opakované baseline. Nativní kontroly této feature vyžadují
+\codeword{[winapp-full]} nebo ruční spuštění.
+
 Koordinátor částí WinApp jednou zjistí úplný seznam testů. Každý dílčí proces
 načte pouze přidělené místní moduly a~musí vykázat každou vybranou identitu.
 Zůstávají zachovány fixtures modulů a~tříd, úplný důkaz nepřekrývajícího se

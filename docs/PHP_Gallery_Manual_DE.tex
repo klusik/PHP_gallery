@@ -11062,6 +11062,53 @@ beginnen. Markierungen innerhalb der erhaltenen Squash-Historie starten keine
 neue Messung. Die Bereinigung beendet ältere Funktions- und Benchmark-Läufe nur
 im eigenen Feature-Branch und lässt Messungen desselben SHA unverändert.
 
+Das Scroll-Protokoll verwendet den optimierten Kontrollstand aus PR~398.
+Die primäre Matrix nimmt 100, 500 und 2.000 Fotos über echte Seiten mit
+64 Einträgen auf. Sie verlangt 12 Pilot-, 60 wiederholte Baseline- und
+120 gepaarte Vergleichsprozesse. 5.000 Fotos bleiben ein separater Stresstest;
+ein dokumentierter Timeout blockiert P1 nicht. Eine gültige wiederholte
+primäre Baseline erlaubt den Canvas-Prototyp. Nach der ersten funktionalen
+Version folgen sofort gezielte Hosted-Tests und eine orientierende A/B-Messung.
+Die früheren Versuche mit vier Umfängen unten bleiben historische Fehlschläge. Die Anfangsgeometrie ist
+900×680 am Ursprung; Größenänderungen verwenden Clientbreiten von 640 und
+960 Pixeln am Ursprung, nach Prüfung der Bildschirm-/Fenstergrenzen und vor
+der unveränderten exakten Breitenprüfung. Der vollständige Pilot mit 16
+Prozessen (Lauf~44011416072, Workflow-/Harness-SHA
+\codeword{01379b6b78ca178d1b87d892c2a3ef27fb830d3f}) und der gezielte Pilot
+(Lauf~44012529759, SHA \codeword{9d4ea91b0766032aef3153939da06892cce8d23b})
+sind ungültige Versuche. Der gezielte Lauf verlangte 1.100 Pixel, doch Windows
+begrenzte den Client auf 1028×680; das Warten auf die exakte Breite hing,
+obwohl alle 24 sichtbaren Einträge geladen waren und weder Arbeit anstand noch
+ein Worker lief. Der Benchmarktreiber veröffentlicht das vollständige
+\codeword{summary.md} und kompaktes JSON in der Actions-Jobzusammenfassung.
+Anwendungsbaseline A ist \codeword{ab245719ddf65ccba51a83ac10564a795a03dee9};
+Workflow-/Harness-SHAs sind getrennt. Keine Baseline ist angenommen;
+Canvas-Änderungen bleiben gesperrt. Tk-Rückmeldung belegt keine physische Anzeige.
+
+Der Recorder trennt Setup und Messinteraktionen. Er zählt echte Tk-Operationen
+in beiden Phasen, fasst Setup-Callback-Zeiten in festen Anzahl-, Gesamt- und
+Maximalwerten zusammen und hält Zeiten für Mount, erste Seite, erstes
+Viewport und Gesamtkatalog getrennt. Gemessene kalte/warme Scrollereignisse
+beginnen erst nach der Katalogaufnahme; das Warm-up bleibt ausgeschlossen.
+Das Ereignislimit von 20.000 und die Fristen von 90/2.400 Sekunden bleiben
+unverändert; abgeschnittene Messereignisse führen weiterhin zum Fehlschlag.
+
+Die Fixture-Vorbereitung verwendet ein deterministisches Archiv mit festem
+Zeitstempel, das einmal je Benchmark-Driver erstellt wird. Jeder unabhängige
+Prozess prüft Archiv- und Datensatzidentität und lädt nur seinen Katalog;
+Anwendungsprofile und Caches bleiben getrennt. Die gemeinsame Fixture-Zeit wird
+mit dem Archivladen separat ausgewiesen. Der Szenario-Timer beginnt nach
+geprüftem Laden und endet vor dem Lifecycle; der vollständige Prozesszeitraum
+enthält Laden und Teardown. GUI-Startwerte und die CPU-Grenze der Scrollmessung bleiben
+unverändert. Dies belegt keine schnellere Darstellung; eine P0-Baseline ist nicht angenommen.
+
+Metadatenaufnahme, Tk-Idle-Rückmeldung
+und stabiler Viewport bleiben getrennte Messungen. Die freigegebene Datei
+\codeword{issue_399_tk_protocol.json} wird über
+\codeword{PHP_GALLERY_TK_PERF_PROTOCOL} gewählt. Die Canvas-Implementierung
+wartet auf eine angenommene wiederholte Baseline. Native Feature-Prüfungen
+erfordern \codeword{[winapp-full]} oder einen manuellen Start.
+
 Der WinApp-Partitionskoordinator ermittelt das vollständige Testinventar einmal.
 Jeder Kindprozess lädt nur seine zugewiesenen lokalen Module und muss jede
 ausgewählte Identität melden. Modul-/Klassen-Fixtures, der vollständige disjunkte

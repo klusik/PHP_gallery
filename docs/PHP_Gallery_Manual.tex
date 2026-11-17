@@ -10126,6 +10126,49 @@ A~measurement push must begin its~commit message with
 new measurements. Feature cleanup cancels older functional and~benchmark
 runs only on~the~owned feature branch; it~excludes same-SHA measurements.
 
+The~scrolling protocol reuses the~optimized control from~PR~398. The~primary
+matrix admits 100, 500 and~2,000 photos through 64-item pages. It~requires
+12 pilot, 60 repeated-baseline and~120 paired-comparison processes. The~5,000-photo
+case is~a~separate stress test; its~reported timeout does~not~block P1.
+A~valid repeated primary baseline permits the~Canvas prototype, followed
+immediately by~targeted hosted checks and~an~orientational A/B observation.
+The~earlier four-extent attempts below remain historical failures. Initial geometry is~900×680 at~origin; resize uses 640
+and~960 client pixels at~origin after screen/maxsize checks and~before the
+unchanged strict-width wait. The~full-16 pilot (run~44011416072, workflow/
+harness SHA \codeword{01379b6b78ca178d1b87d892c2a3ef27fb830d3f}) and~targeted
+pilot (run~44012529759, SHA
+\codeword{9d4ea91b0766032aef3153939da06892cce8d23b}) are invalid attempts.
+The~targeted run requested 1,100 pixels, but~Windows constrained the~client to
+1028×680; strict width waiting hung although all~24 visible items were loaded
+with no~queued work or~active worker. The~driver publishes the~complete
+\codeword{summary.md} and~concise JSON in~the~Actions job summary.
+Application baseline A is~\codeword{ab245719ddf65ccba51a83ac10564a795a03dee9};
+workflow/harness SHAs are separate. No~baseline is accepted; Canvas changes
+remain gated. Tk feedback does~not~prove physical presentation.
+
+The~recorder separates setup from timed interactions. It~counts actual Tk
+operations in both phases, aggregates setup callback timing as fixed
+count/total/maximum values and~keeps mount, first-page, first-viewport and
+full-catalogue timings separate. Measured cold/warm scroll events begin after
+catalogue admission; warm priming is~excluded. The~20,000-event cap and~90/
+2,400-second deadlines remain unchanged; measured-event truncation still fails.
+
+Fixture setup uses a deterministic stored archive generated once per benchmark
+driver. Each independent child verifies the archive and dataset identity, then
+loads its requested catalogue in its own process with separate application
+profiles and caches. Shared preparation and child archive loading are separate
+metrics. The~scenario timer starts after verified loading and ends before
+lifecycle; the~complete child interval includes loading and teardown. GUI startup timings
+and the primary scroll CPU interval are unchanged. This harness setup change
+does not demonstrate rendering improvement; no P0 baseline is accepted.
+
+Metadata admission, Tk idle feedback, and~settled
+viewports remain separate measurements. Select the~allowlisted
+\codeword{issue_399_tk_protocol.json} through
+\codeword{PHP_GALLERY_TK_PERF_PROTOCOL}. Canvas implementation waits for~an
+accepted repeated baseline. The~feature's native checks require
+\codeword{[winapp-full]} or~manual dispatch.
+
 The~WinApp partition coordinator discovers the~complete test inventory once.
 Each child loads only its~assigned local modules and~must report every selected
 identity. Module/class fixtures, the~complete disjoint identity proof and~the

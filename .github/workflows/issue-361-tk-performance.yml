@@ -18,10 +18,15 @@ on:
   push:
     branches:
       - feature/361-tk-canvas-performance
+      - feature/399-virtualized-canvas-gallery
     # Run measurements only when the protocol or its execution owner changes.
     # Production checkpoints use the separate central functional workflow.
+    # Feature-only workflows may lack dispatch on the default branch; a
+    # marked execution-owner checkpoint requests an exact-SHA push run.
+    # Pair measurements and required native checks share that exact event SHA.
     paths:
       - 'tools/perf/issue_361_tk_*'
+      - 'tools/perf/issue_399_tk_*'
       - 'scripts/audit.php'
       - '.github/workflows/issue-361-tk-performance.yml'
   workflow_dispatch:
@@ -46,6 +51,8 @@ jobs:
     timeout-minutes: 45
     env:
       PHP_GALLERY_TK_PERF_CANDIDATE: ${{ github.sha }}
+      PHP_GALLERY_TK_PERF_PROTOCOL: ${{ github.ref_name == 'feature/399-virtualized-canvas-gallery' && 'issue_399_tk_protocol.json' || 'issue_361_tk_protocol.json' }}
+      PHP_GALLERY_TK_PERF_PROTOCOL_PATH: ${{ github.ref_name == 'feature/399-virtualized-canvas-gallery' && 'tools/perf/issue_399_tk_protocol.json' || 'tools/perf/issue_361_tk_protocol.json' }}
     steps:
       - name: Checkout exact source SHA without persisted credentials
         uses: actions/checkout@v7.0.1
@@ -95,12 +102,15 @@ jobs:
       - name: Select and validate benchmark protocol stage
         id: protocol
         shell: pwsh
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ github.sha }}
         run: |
           $stage = 'pilot'
           $baseline = ''
           $diagnosticsOnly = $false
+          $orientationAb = $false
           $diagnosticArtifactCount = 0
-          $protocolPath = 'tools/perf/issue_361_tk_protocol.json'
+          $protocolPath = $env:PHP_GALLERY_TK_PERF_PROTOCOL_PATH
           if (Test-Path -LiteralPath $protocolPath) {
             $protocol = Get-Content -LiteralPath $protocolPath -Raw |
               ConvertFrom-Json
@@ -125,6 +135,16 @@ jobs:
                 $seenScenarios[$scenario] = $true
               }
             }
+            $orientationProperty = $protocol.PSObject.Properties['orientation_ab']
+            if ($null -ne $orientationProperty) {
+              if ($protocol.orientation_ab -isnot [bool]) {
+                throw 'orientation_ab must be a JSON boolean.'
+              }
+              if ($stage -ne 'pilot') {
+                throw 'orientation_ab is permitted only for the pilot stage.'
+              }
+              $orientationAb = $protocol.orientation_ab
+            }
             $diagnosticsProperty = $protocol.PSObject.Properties['diagnostics_only']
             if ($null -ne $diagnosticsProperty) {
               if ($protocol.diagnostics_only -isnot [bool]) {
@@ -147,6 +167,16 @@ jobs:
           if ($baseline -notmatch '^[0-9a-f]{40}$') {
             throw 'Every benchmark stage requires a valid baseline_sha.'
           }
+          if ($orientationAb -and $stage -ne 'pilot') {
+            throw 'orientation_ab is permitted only for the pilot stage.'
+          }
+          if ($orientationAb -and $baseline -eq $env:EXPECTED_CANDIDATE_SHA) {
+            throw 'orientation_ab requires protocol baseline A to differ from candidate B.'
+          }
+          if ($orientationAb -and $diagnosticsOnly) {
+            throw 'orientation_ab cannot run in diagnostics-only mode.'
+          }
+          $orientationPhase = if ($orientationAb) { 'A' } else { '' }
           "PHP_GALLERY_TK_PERF_STAGE=$stage" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
@@ -154,7 +184,11 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PHP_GALLERY_TK_PERF_DIAGNOSTICS_ONLY=$($diagnosticsOnly.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PHP_GALLERY_TK_PERF_ORIENTATION_AB_PHASE=$orientationPhase" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "has-diagnostic-artifacts=$(([bool]($diagnosticArtifactCount -gt 0)).ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "orientation_ab=$($orientationAb.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Inspect authenticated prior benchmark artifacts
@@ -173,9 +207,9 @@ jobs:
             // Type: integer. Units: GitHub issue number.
             // Scope: Optional authenticated artifact review.
             // Consumers: the diagnostic artifact comments below.
-            // Value: 361.
-            // Rationale: these diagnostics concern issue 361's Tk qualification.
-            const DIAGNOSTIC_ISSUE = 361;
+            // Value: 399 on its exact feature branch; otherwise 361.
+            // Rationale: diagnostics stay with the selected 361 or 399 experiment.
+            const DIAGNOSTIC_ISSUE = process.env.GITHUB_REF_NAME === 'feature/399-virtualized-canvas-gallery' ? 399 : 361;
             // Purpose: Read all protocol-selected artifact metadata on one page.
             // Type: integer. Units: artifacts per GitHub API page.
             // Scope: Optional diagnostic artifact lookup.
@@ -183,10 +217,10 @@ jobs:
             // Value: 100.
             // Rationale: GitHub's endpoint maximum avoids missing configured entries.
             const ARTIFACT_PAGE_SIZE = 100;
-            const EXPECTED_BRANCH = 'feature/361-tk-canvas-performance';
+            const EXPECTED_BRANCH = process.env.GITHUB_REF_NAME;
             const workspace = process.env.GITHUB_WORKSPACE;
             const protocol = JSON.parse(fs.readFileSync(
-              path.join(workspace, 'tools', 'perf', 'issue_361_tk_protocol.json'),
+              path.join(workspace, process.env.PHP_GALLERY_TK_PERF_PROTOCOL_PATH),
               'utf8',
             ));
             if (!Array.isArray(protocol.diagnostic_artifacts)) {
@@ -404,6 +438,23 @@ jobs:
               "            events = child_report.get(\"raw_events\", []) if isinstance(child_report, dict) else []",
               "            if isinstance(events, list):",
               "                event_count += len(events)",
+              "            phase_metrics = child_report.get(\"metrics\", {}) if isinstance(child_report, dict) else {}",
+              "            if not isinstance(phase_metrics, dict):",
+              "                phase_metrics = {}",
+              "            phase_names = (",
+              "                \"first_viewport_mount_ms\", \"first_page_metadata_ms\",",
+              "                \"first_viewport_settle_ms\", \"loaded_catalogue_ms\",",
+              "                \"scenario_elapsed_ms\", \"process_cpu_ms\",",
+              "                \"setup_callback_count\", \"setup_callback_total_ms\",",
+              "                \"setup_callback_max_ms\",",
+              "            )",
+              "            phase_timings = {",
+              "                key: phase_metrics[key] for key in phase_names",
+              "                if isinstance(phase_metrics.get(key), (int, float))",
+              "                and not isinstance(phase_metrics.get(key), bool)",
+              "                and math.isfinite(phase_metrics[key])",
+              "                and phase_metrics[key] >= 0",
+              "            }",
               "            records.append({",
               "                \"source\": row.get(\"source\"),",
               "                \"source_sha\": row.get(\"source_sha\"),",
@@ -413,6 +464,7 @@ jobs:
               "                \"trial\": row.get(\"trial\"),",
               "                \"status\": row.get(\"status\"),",
               "                \"elapsed_seconds\": elapsed,",
+              "                \"phase_timings\": phase_timings,",
               "            })",
               "        pattern = re.compile(",
               "            r\"^(baseline|candidate)-([a-z0-9-]+)-(cold|warm)-(on|off)-(\\d{3})\\.json$\"",
@@ -607,7 +659,7 @@ jobs:
                 + context.repo.owner + '/' + context.repo.repo
                 + '/actions/runs/' + run.id + '/artifacts/' + entry.artifact_id;
               let body = [
-                '## Issue 361 diagnostic artifact review — NOT TESTED',
+                '## Issue ' + DIAGNOSTIC_ISSUE + ' diagnostic artifact review — NOT TESTED',
                 '',
                 '- UTC: ' + new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
                 '- Original source SHA: <code>' + entry.head_sha + '</code>',
@@ -655,7 +707,8 @@ jobs:
                 const slowest = (benchmark.slowest_records || []).map((row) =>
                   row.source + '/' + row.scenario + '/' + row.cache + '/'
                     + row.instrumentation + '#' + row.trial + '='
-                    + row.elapsed_seconds + 's',
+                    + row.elapsed_seconds + 's; phase metrics='
+                    + JSON.stringify(row.phase_timings || {}),
                 ).join('; ') || 'none recorded';
                 body += [
                   '### Incomplete benchmark artifact diagnostics',
@@ -717,6 +770,46 @@ jobs:
           php scripts/audit.php --suite=watcher-tk-performance
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Bind orientation B baseline identity
+        if: success() && steps.protocol.outputs.orientation_ab == 'true'
+        shell: pwsh
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ github.sha }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or
+              $actual -ne $env:EXPECTED_CANDIDATE_SHA) {
+            throw 'Orientation B does not match the exact event SHA.'
+          }
+          "PHP_GALLERY_TK_PERF_BASELINE=$actual" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PHP_GALLERY_TK_PERF_ORIENTATION_AB_PHASE=B" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run the registered Tk performance audit suite for orientation B
+        if: success() && steps.protocol.outputs.orientation_ab == 'true'
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+          PHP_GALLERY_TK_PERF_BASELINE: ${{ github.sha }}
+        run: |
+          php scripts/audit.php --suite=watcher-tk-performance
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Export issue 399 paired comparison plots
+        if: >-
+          success() && env.PHP_GALLERY_TK_PERF_STAGE == 'compare' &&
+          env.PHP_GALLERY_TK_PERF_PROTOCOL == 'issue_399_tk_protocol.json'
+        shell: pwsh
+        env:
+          PYTHON_EXE: ${{ steps.python.outputs.python-path }}
+        run: |
+          # Install plotting-only dependency after every timed benchmark child exits.
+          & $env:PYTHON_EXE -m pip install --disable-pip-version-check matplotlib==3.11.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $env:PYTHON_EXE tools/perf/issue_399_tk_plot.py --audit-root cache/test-audit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Retain exact-SHA benchmark artifacts and audit diagnostics
         id: benchmark-artifact
         if: always()
@@ -748,7 +841,8 @@ jobs:
             // Consumers: the benchmark summary comment below.
             // Value: 361.
             // Rationale: keep the evidence on its authorized issue thread.
-            const BENCHMARK_ISSUE = 361;
+            const is399 = process.env.GITHUB_REF_NAME === 'feature/399-virtualized-canvas-gallery';
+            const BENCHMARK_ISSUE = is399 ? 399 : 361;
 
             // Purpose: Target the follow-up thread for baseline/compare evidence.
             // Type: integer.
@@ -785,9 +879,59 @@ jobs:
               workspace,
               'tools',
               'perf',
-              'issue_361_tk_protocol.json',
+              process.env.PHP_GALLERY_TK_PERF_PROTOCOL,
             );
             const protocol = JSON.parse(fs.readFileSync(protocolPath, 'utf8'));
+            const hasOrientationSelection =
+              Object.prototype.hasOwnProperty.call(protocol, 'orientation_ab');
+            if (
+              hasOrientationSelection
+              && typeof protocol.orientation_ab !== 'boolean'
+            ) {
+              throw new Error('orientation_ab must be a JSON boolean.');
+            }
+            const orientationAb = protocol.orientation_ab === true;
+            if (hasOrientationSelection && protocol.stage !== 'pilot') {
+              throw new Error('orientation_ab is permitted only for the pilot stage.');
+            }
+            const orientationPhase =
+              process.env.PHP_GALLERY_TK_PERF_ORIENTATION_AB_PHASE || '';
+            const orientationB = orientationAb && orientationPhase === 'B';
+            if (
+              orientationAb
+              && orientationPhase === 'A'
+              && report.status === 'PASS'
+            ) {
+              throw new Error(
+                'Orientation A passed but orientation B did not complete.',
+              );
+            }
+            if (
+              orientationAb
+              && (
+                protocol.stage !== 'pilot'
+                || typeof protocol.baseline_sha !== 'string'
+                || !/^[0-9a-f]{40}$/.test(protocol.baseline_sha)
+                || protocol.baseline_sha === context.sha
+                || !['A', 'B'].includes(orientationPhase)
+              )
+            ) {
+              throw new Error(
+                'orientation_ab requires pilot stage and distinct protocol A/candidate B identities.',
+              );
+            }
+            if (!orientationAb && orientationPhase) {
+              throw new Error('Orientation phase is set without orientation_ab.');
+            }
+            if (
+              orientationB
+              && process.env.PHP_GALLERY_TK_PERF_BASELINE !== context.sha
+            ) {
+              throw new Error('Orientation B baseline identity is not the exact candidate SHA.');
+            }
+            const expectedBaselineSha = orientationB
+              ? context.sha
+              : protocol.baseline_sha;
             const centralAuditPath = path.join(auditRoot, 'latest.json');
             if (!fs.existsSync(centralAuditPath)) {
               throw new Error('Central audit latest.json is missing.');
@@ -865,7 +1009,7 @@ jobs:
               || report.stage !== protocol.stage
               || report.stage !== process.env.PHP_GALLERY_TK_PERF_STAGE
               || !validSha(report.baseline_sha)
-              || report.baseline_sha !== protocol.baseline_sha
+              || report.baseline_sha !== expectedBaselineSha
               || report.baseline_sha !== process.env.PHP_GALLERY_TK_PERF_BASELINE
               || !validSha(report.candidate_sha)
               || report.candidate_sha !== context.sha
@@ -959,7 +1103,13 @@ jobs:
             const targetedPilot = (
               report.stage === 'pilot' && report.targeted === true
             );
-            const scopeLines = targetedPilot
+            const scopeLines = orientationB
+              ? [
+                  '- Scope: descriptive same-runner orientation A → B.',
+                  '- Protocol A SHA: `' + protocol.baseline_sha + '`; B uses this candidate SHA.',
+                  '- Separate audit reports are retained; this is NOT a paired comparison or speedup claim.',
+                ]
+              : targetedPilot
               ? [
                   '- Scope: targeted pilot scenarios '
                     + pilotScenarios.join(', ') + '.',
@@ -971,7 +1121,7 @@ jobs:
                   ]
                 : [];
             const header = [
-              '## Issue 361 Tk benchmark: ' + publishedStatus
+              '## Issue ' + BENCHMARK_ISSUE + ' Tk benchmark: ' + publishedStatus
                 + (targetedPilot ? ' — targeted pilot only' : ''),
               '',
               ...scopeLines,
@@ -979,7 +1129,9 @@ jobs:
               '- Driver report: ' + report.status,
               '- Central audit: ' + auditTask.status + ' / ' + centralAudit.status,
               '- UTC: ' + timestamp,
-              '- Candidate source SHA: `' + report.candidate_sha + '`',
+              (is399 && report.stage !== 'compare'
+                ? '- Workflow/harness SHA: `' + report.candidate_sha + '`'
+                : '- Candidate source SHA: `' + report.candidate_sha + '`'),
               '- Baseline source SHA: `' + report.baseline_sha + '`',
               '- Independent records: ' + report.valid_records
                 + ' / ' + report.required_records,

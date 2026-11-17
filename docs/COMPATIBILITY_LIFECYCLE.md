@@ -1,5 +1,25 @@
 # Compatibility lifecycle and retirement register
 
+## Experimental Canvas gallery renderer and native fallback
+
+Owners: WinApp native gallery viewer, the bounded Canvas grid presentation helper,
+and the shared UI theme. Issue #399 adds an internal opt-in retained renderer via
+`PHP_GALLERY_CANVAS_GRID=1`. The native widget renderer remains the default
+because ordinary Canvas primitives do not provide native Button accessibility.
+Physical display smoothness, screen-reader parity and installed-client usage of
+the new backend are unknown. Hosted Tk interaction/resource tests and feedback
+proxies do not establish those properties.
+
+The fallback preserves the existing interaction and accessibility path while
+candidate correctness, performance and accessible operation are qualified.
+Retirement requires reproducible paired performance evidence, all interaction
+and security gates, explicit accessibility acceptance and owner approval; no
+version, usage or production adoption is inferred. Media proof/authorization,
+cache identities, worker cancellation, generation fencing and Tk-thread image
+publication remain owned by the existing viewer. A renderer change grants no
+new network or mutation authority. See the permanent
+[experiment record](performance/issue_399_virtualized_canvas.md).
+
 ## Linked flight report delivery and document titles
 
 Owners: delegated upload controller, existing PDF attachment service and WinApp

@@ -19,7 +19,8 @@ import json
 from pathlib import Path
 import sys
 import tempfile
-from types import ModuleType
+from unittest import mock
+from types import ModuleType, SimpleNamespace
 import unittest
 from typing import TypedDict, cast
 
@@ -105,6 +106,16 @@ CANDIDATE_RATIO = 2.0
 BASELINE_TO_CANDIDATE_RATIO = 0.5
 
 # Structural protocol matrix: four named workloads and two cache-state labels.
+# Purpose: Exercise issue 399 without changing issue 361 default expectations.
+# Type: tuple[str, ...].
+# Units: scenario identifiers.
+# Scope: synthetic issue 399 scroll matrix regressions.
+# Consumers: TkPerformanceProtocolTests test methods.
+# Rationale: Match the four protocol extents while isolating the legacy matrix.
+ISSUE_399_SCENARIOS = (
+    'scroll100', 'scroll500', 'scroll2000', 'scroll5000',
+)
+
 EXPECTED_SCENARIOS = ('dashboard', 'import', 'gallery', 'lightbox')
 EXPECTED_CACHE_STATES = ('cold', 'warm')
 # Forty hexadecimal characters are structural synthetic Git SHA-1 identities.
@@ -285,8 +296,16 @@ class TkPerformanceProtocolTests(unittest.TestCase):
             ChildReportFixture: Synthetic report with mode-appropriate metrics.
         """
         metric_names = list(VALID_METRIC_NAMES)
-        if scenario not in ('gallery', 'lightbox'):
+        if scenario not in ('gallery', 'lightbox') and not scenario.startswith('scroll'):
             metric_names = metric_names[:-1]
+        if scenario.startswith('scroll'):
+            metric_names.extend([
+                'viewport_settle_p95_ms',
+                'wheel_slow_p95_ms',
+                'wheel_fast_p95_ms',
+                'drag_p95_ms',
+                'resize_p95_ms',
+            ])
         if instrumentation == 'off':
             metrics = {
                 'scenario_elapsed_ms': (
@@ -634,6 +653,191 @@ class TkPerformanceProtocolTests(unittest.TestCase):
         self.assertEqual(BENCHMARK.matrix_cells(), expected_cells)
         self.assertEqual(BENCHMARK.WORKLOAD_SEED, EXPECTED_WORKLOAD_SEED)
 
+    def test_issue_399_matrix_is_isolated_from_issue_361_defaults(self) -> None:
+        """Select scroll extents while retaining the legacy default matrix.
+
+        Returns:
+            None: Both independent scenario tuples produce only their own cells.
+        """
+        self.assertEqual(
+            BENCHMARK.matrix_cells(ISSUE_399_SCENARIOS),
+            [
+                (scenario, cache)
+                for scenario in ISSUE_399_SCENARIOS
+                for cache in EXPECTED_CACHE_STATES
+            ],
+        )
+        self.assertEqual(
+            BENCHMARK.select_pilot_scenarios(
+                ['scroll5000', 'scroll100'],
+                ISSUE_399_SCENARIOS,
+            ),
+            ('scroll100', 'scroll5000'),
+        )
+        self.assertEqual(
+            BENCHMARK.matrix_cells(),
+            [
+                (scenario, cache)
+                for scenario in EXPECTED_SCENARIOS
+                for cache in EXPECTED_CACHE_STATES
+            ],
+        )
+
+    def test_issue_399_comparison_keeps_pair_and_minimum_count_rules(self) -> None:
+        """Apply strict paired identity and ten-pair admission to scroll cells.
+
+        Returns:
+            None: Exact scroll pairs summarize, while missing, duplicate, and
+                under-counted pairs are rejected.
+        """
+        records: list[RunRecordFixture] = []
+        for scenario in ISSUE_399_SCENARIOS:
+            for cache in EXPECTED_CACHE_STATES:
+                for trial_offset in range(EXPECTED_PAIR_COUNT):
+                    trial = FIRST_FIXTURE_TRIAL + trial_offset
+                    for source, source_sha in (
+                        ('baseline', self.baseline_sha),
+                        ('candidate', self.candidate_sha),
+                    ):
+                        report = self._make_child_report(
+                            scenario=scenario,
+                            cache=cache,
+                            trial=trial,
+                            source_sha=source_sha,
+                            instrumentation='off',
+                        )
+                        records.append({
+                            'source': source,
+                            'source_sha': source_sha,
+                            'scenario': scenario,
+                            'cache': cache,
+                            'instrumentation': 'off',
+                            'trial': trial,
+                            'elapsed_seconds': CHECKPOINT_ELAPSED_SECONDS,
+                            'returncode': CHECKPOINT_SUCCESS_RETURN_CODE,
+                            'status': 'PASS',
+                            'report': report,
+                        })
+
+        result = BENCHMARK.summarize_comparison(records, ISSUE_399_SCENARIOS)
+        self.assertEqual(
+            set(result),
+            {
+                f'{scenario}/{cache}'
+                for scenario in ISSUE_399_SCENARIOS
+                for cache in EXPECTED_CACHE_STATES
+            },
+        )
+        self.assertTrue(
+            all(group['pairs'] == EXPECTED_PAIR_COUNT for group in result.values()),
+        )
+
+        for invalid in (
+            records[:-2],
+            records + [copy.deepcopy(records[0])],
+            [
+                row for row in records
+                if not (
+                    row['source'] == 'candidate'
+                    and row['scenario'] == ISSUE_399_SCENARIOS[0]
+                    and row['trial'] == FIRST_FIXTURE_TRIAL
+                )
+            ],
+        ):
+            with self.subTest(record_count=len(invalid)):
+                with self.assertRaises(RuntimeError):
+                    BENCHMARK.summarize_comparison(invalid, ISSUE_399_SCENARIOS)
+
+    def test_issue_399_protocol_selection_rejects_unknown_and_traversal_values(
+        self,
+    ) -> None:
+        """Refuse unlisted protocol names and harness paths before execution.
+
+        Returns:
+            None: Unknown protocol and traversal harness selections raise errors.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with mock.patch.object(
+                BENCHMARK,
+                'parse_args',
+                return_value=SimpleNamespace(output=output),
+            ):
+                with mock.patch.dict(
+                    BENCHMARK.os.environ,
+                    {'PHP_GALLERY_TK_PERF_PROTOCOL': '../issue_399_tk_protocol.json'},
+                    clear=False,
+                ):
+                    with self.assertRaisesRegex(ValueError, 'protocol'):
+                        BENCHMARK.run_stage()
+
+                legacy_protocol = {
+                    'stage': 'pilot',
+                    'baseline_sha': BASELINE_SOURCE_SHA,
+                    'matrix': {'scenarios': list(EXPECTED_SCENARIOS)},
+                    'harness': (
+                        'issue_361_tk_workloads.py; same checked-out bytes '
+                        'for both source versions'
+                    ),
+                }
+                with mock.patch.dict(
+                    BENCHMARK.os.environ,
+                    {'PHP_GALLERY_TK_PERF_PROTOCOL': 'issue_361_tk_protocol.json'},
+                    clear=False,
+                ):
+                    with mock.patch.object(
+                        Path,
+                        'read_text',
+                        return_value=json.dumps(legacy_protocol),
+                    ):
+                        with mock.patch.object(Path, 'is_file', return_value=False):
+                            with self.assertRaisesRegex(
+                                RuntimeError,
+                                'harness is absent',
+                            ):
+                                BENCHMARK.run_stage()
+
+                unsafe_protocol = {
+                    'stage': 'pilot',
+                    'baseline_sha': BASELINE_SOURCE_SHA,
+                    'matrix': {'scenarios': list(ISSUE_399_SCENARIOS)},
+                    'harness': 'descriptive historical text',
+                    'workload_script': '../issue_399_tk_scroll.py',
+                }
+                with mock.patch.dict(
+                    BENCHMARK.os.environ,
+                    {'PHP_GALLERY_TK_PERF_PROTOCOL': 'issue_399_tk_protocol.json'},
+                    clear=False,
+                ):
+                    with mock.patch.object(
+                        Path,
+                        'read_text',
+                        return_value=json.dumps(unsafe_protocol),
+                    ):
+                        with self.assertRaisesRegex(ValueError, 'harness'):
+                            BENCHMARK.run_stage()
+
+    def test_issue_399_child_source_sha_mismatch_is_rejected(self) -> None:
+        """Refuse child evidence claiming another immutable source revision.
+
+        Returns:
+            None: A mismatched child source identity fails admission.
+        """
+        report = self._make_child_report(
+            scenario=ISSUE_399_SCENARIOS[0],
+            source_sha=self.baseline_sha,
+            instrumentation='off',
+        )
+        with self.assertRaisesRegex(RuntimeError, 'source'):
+            BENCHMARK.validate_report(
+                report,
+                ISSUE_399_SCENARIOS[0],
+                'cold',
+                FIRST_FIXTURE_TRIAL,
+                self.candidate_sha,
+                'off',
+            )
+
     def test_child_identity_mismatches_are_rejected(self) -> None:
         """Reject source, scenario, cache and process-trial identity drift.
 
@@ -736,6 +940,66 @@ class TkPerformanceProtocolTests(unittest.TestCase):
                     declared_gap,
                     instrumentation='on',
                 )
+
+    def test_scroll_metrics_require_matching_raw_events(self) -> None:
+        """Require every scroll summary and its corresponding raw observations.
+
+        Returns:
+            None: Complete evidence passes; any absent summary or raw kind fails.
+        """
+        metric_events = {
+            'viewport_settle_p95_ms': 'viewport_settle',
+            'wheel_slow_p95_ms': 'wheel_slow',
+            'wheel_fast_p95_ms': 'wheel_fast',
+            'drag_p95_ms': 'drag',
+            'resize_p95_ms': 'resize',
+        }
+        complete = self._make_child_report(
+            scenario='scroll100',
+            instrumentation='on',
+        )
+        accepted = self._validate_child_report(
+            complete,
+            scenario='scroll100',
+            instrumentation='on',
+        )
+        self.assertTrue(
+            all(metric in accepted['metrics'] for metric in metric_events),
+        )
+        self.assertTrue(
+            all(
+                any(
+                    event['metric'] == raw_name
+                    and event['phase'] == 'measured'
+                    for event in accepted['raw_events']
+                )
+                for raw_name in metric_events.values()
+            ),
+        )
+
+        for summary_name, raw_name in metric_events.items():
+            missing_summary = copy.deepcopy(complete)
+            del missing_summary['metrics'][summary_name]
+            with self.subTest(missing_summary=summary_name):
+                with self.assertRaisesRegex(RuntimeError, 'metrics'):
+                    self._validate_child_report(
+                        missing_summary,
+                        scenario='scroll100',
+                        instrumentation='on',
+                    )
+
+            missing_raw = copy.deepcopy(complete)
+            missing_raw['raw_events'] = [
+                event for event in missing_raw['raw_events']
+                if event['metric'] != raw_name
+            ]
+            with self.subTest(missing_raw=raw_name):
+                with self.assertRaisesRegex(RuntimeError, 'raw events'):
+                    self._validate_child_report(
+                        missing_raw,
+                        scenario='scroll100',
+                        instrumentation='on',
+                    )
 
     def test_combined_callback_event_extras_are_validated_and_preserved(self) -> None:
         """Accept combined callback events and reject malformed optional context.

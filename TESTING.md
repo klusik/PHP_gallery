@@ -9744,6 +9744,62 @@ callback/update timing is not physical monitor presentation or proof that
 flicker has disappeared. This opt-in experiment does not replace functional
 WinApp qualification or authorize protected integration.
 
+The active primary matrix, narrowed by the owner on 2026-11-17, contains
+100, 500 and 2000 photos: 12 pilot processes, 60 repeated baseline processes
+and 120 paired-comparison processes. The 5000-photo/79-page case is a separate
+stress test; a reported timeout does not block P1. A valid repeated primary
+baseline is sufficient to start the actual Canvas prototype. Immediately after
+the first functional prototype, run targeted hosted checks and an orientational
+A/B observation, then optimize and complete statistical qualification. Earlier
+16/80/160 counts below belong to the superseded four-extent calibration, not
+the active blocking matrix. No invalid result is reclassified as PASS.
+
+Issue 399 selects its protocol by the allowlisted
+`PHP_GALLERY_TK_PERF_PROTOCOL` filename. Application baseline A is the optimized
+PR 398 checkpoint (`ab245719ddf65ccba51a83ac10564a795a03dee9`); workflow and
+harness SHAs are tracked separately. The pilot admits 100, 500, 2,000 and 5,000
+catalog rows through real 64-item pages. It records Tk idle-proxy input latency,
+not physical presentation. Initial geometry is 900×680 at origin; resize
+scenarios use 640 and 960 client widths at origin, after screen/maxsize
+qualification and before the unchanged strict-width check.
+
+The full-16 pilot at workflow/harness SHA
+`01379b6b78ca178d1b87d892c2a3ef27fb830d3f` (run
+[44011416072](https://github.com/klusik/PHP_gallery/actions/runs/44011416072))
+and targeted diagnostic at SHA `9d4ea91b0766032aef3153939da06892cce8d23b`
+(run [44012529759](https://github.com/klusik/PHP_gallery/actions/runs/44012529759))
+are invalid attempts, not accepted measurements. In the targeted run Windows
+constrained the requested 1,100-pixel client width to 1028×680; the strict
+root-width wait hung despite all 24 visible items being loaded, an empty event
+queue and no active worker. The benchmark driver publishes the full generated `summary.md` and concise JSON
+in the GitHub Actions job summary; issue comments remain compact. No baseline
+is accepted and production Canvas edits remain gated. See
+[the issue 399 protocol](docs/performance/issue_399_virtualized_canvas.md).
+The Tk workflow requires `[tk-measure]`; issue 399 functional checks run only
+for `[winapp-full]` or manual dispatch.
+
+The issue 399 scroll recorder separates setup from timed interaction. It counts
+real Tk operations in both phases, aggregates setup callback timings as fixed
+count/total/maximum values without per-callback raw events, and retains initial
+mount, first-page admission, first viewport and full-catalogue preparation as
+separate scalar timings. Measured cold/warm scroll events start after catalogue
+admission; warm priming is excluded. The 20,000-event cap and 90-second child /
+2,400-second driver deadlines remain unchanged; measured-event truncation still
+fails.
+
+The subsequent full pilot
+[44014467364](https://github.com/klusik/PHP_gallery/actions/runs/44014467364),
+at workflow/harness SHA `5d2bfd26139ded40488fb437bcfc8d6192e5392e`, completed
+the 100/500 extents (8/16 cells). In the 2,000-photo cold/instrumentation-on
+cell, all 50 input actions and three lifecycle transitions passed, then catalogue
+preparation filled the 20,000-event cap and truncated another 20,265
+observations before required interaction-feedback raw evidence existed. This full pilot and partial records
+are invalid, not accepted baseline evidence.
+
+The next harness revision packages the existing deterministic PNG/JPEG fixtures once per driver in a fixed-epoch `ZIP_STORED` archive. A manifest records the seed, fixture generator common-module SHA, Pillow version, and each body's length and SHA-256. Every independent child verifies the expected archive SHA and body hashes, recomputes its prefix dataset digest and checks the mounted gallery, then uses only its requested catalogue in its fresh process; its application profile/session/cache remain isolated. Fixture preparation and child `fixture_load_ms` are separate; `scenario_elapsed_ms` starts after verified loading and ends before lifecycle. The complete driver child interval includes loading, lifecycle and teardown. GUI startup scalars and the primary scroll CPU interval retain their existing boundaries. Bundle input is capped at 128 MiB, its manifest at 1 MiB and each member at 32 MiB; these shared writer/reader bounds preserve the fixed 5000-photo maximum. A diagnostic sidecar is limited to 16 KiB and updated every eight page reads/actions. Bundling is not evidence of application or rendering improvement.
+
+The full 16-process pilot [44016215794](https://github.com/klusik/PHP_gallery/actions/runs/44016215794), at source SHA `612a38df0e7601874a1cc1da4db97459432e705b`, saved 12 rows and timed out at the unchanged outer 90-second limit during the first 5,000-photo cold/instrumentation-on child. Diagnostic comment [6938434856](https://github.com/klusik/PHP_gallery/issues/399#issuecomment-6938434856) reports a 398.6-second sum for 12 saved child intervals and 62.5–78.6-second intervals for saved 2,000-photo cells, but does not prove root cause. The attempt and partial records are invalid; no baseline is accepted.
+
 The issue-scoped `issue-361-winapp-functional.yml` workflow runs the canonical
 Windows `winapp-partitioned` suite and Linux `winapp` suite under Xvfb. macOS
 uses the same complete partitioned suite after an observed whole-discovery

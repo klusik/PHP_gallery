@@ -6,6 +6,7 @@
 # Responsibilities:
 #   - Own inherited button, dialog, range and card components and all ttk styles.
 #   - Share native rounded clipping, material artwork, icons and safe fallbacks.
+#   - Expose immutable palette and geometry tokens for the retained gallery Canvas.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 
@@ -2479,6 +2480,7 @@ class _InlineTooltipState:
     timer: str | None = None
     label: ttk.Label | None = None
     hide: Callable[[tk.Event | None], None] | None = None
+    trigger: tk.Misc | None = None
 
 
 class GalleryIdentityLabel(ttk.Label):
@@ -2588,16 +2590,22 @@ def attach_inline_tooltip(
     widget: tk.Misc,
     message: str | tk.StringVar,
     surface: tk.Misc,
-) -> None:
+    *,
+    anchor_bbox: Callable[[], tuple[int, int, int, int] | None] | None = None,
+    hover_region: Callable[[], bool] | None = None,
+) -> Callable[[], None]:
     """Show themed help only while the pointer remains over its trigger.
 
     Args:
         widget (tk.Misc): Control that owns the pointer-hover activation area.
         message (str | tk.StringVar): Fixed or live accessible description.
         surface (tk.Misc): Existing widget that hosts the placed label.
+        anchor_bbox (Callable[[], tuple[int, int, int, int] | None] | None):
+            Optional live root-coordinate anchor for a retained Canvas tile.
+        hover_region (Callable[[], bool] | None): Optional exact pointer hit test.
     Returns:
-        None: One delay or hover monitor is bound without a separate window;
-            keyboard focus alone never displays a tooltip.
+        Callable[[], None]: Safe callback to refresh after live text or anchor
+            changes. Keyboard focus alone never displays tooltip help.
     """
     state = _InlineTooltipState()
 
@@ -2617,7 +2625,7 @@ def attach_inline_tooltip(
             target = widget.winfo_containing(x, y)
             while target is not None:
                 if target is widget:
-                    return True
+                    return hover_region() if hover_region is not None else True
                 target = target.master
         except (tk.TclError, KeyError):
             return False
@@ -2693,11 +2701,22 @@ def attach_inline_tooltip(
                 max(1, surface.winfo_width() - 2 * gap),
             )
             height = min(label.winfo_reqheight(), surface.winfo_height())
-            x = widget.winfo_rootx() - surface.winfo_rootx() + gap
-            y = (widget.winfo_rooty() - surface.winfo_rooty()
-                 + widget.winfo_height() + gap)
+            anchor = anchor_bbox() if anchor_bbox is not None else None
+            if anchor_bbox is not None and anchor is None:
+                hide()
+                return
+            if anchor is None:
+                anchor_x = widget.winfo_rootx()
+                anchor_y = widget.winfo_rooty()
+                anchor_width = widget.winfo_width()
+                anchor_height = widget.winfo_height()
+            else:
+                anchor_x, anchor_y, anchor_width, anchor_height = anchor
+            x = anchor_x - surface.winfo_rootx() + gap
+            y = (anchor_y - surface.winfo_rooty()
+                 + anchor_height + gap)
             if y + height > surface.winfo_height():
-                y = widget.winfo_rooty() - surface.winfo_rooty() - height - gap
+                y = anchor_y - surface.winfo_rooty() - height - gap
             x = max(0, min(surface.winfo_width() - width, x))
             y = max(0, min(surface.winfo_height() - height, y))
             label.place(x=x, y=y, width=width)
@@ -2757,18 +2776,24 @@ def attach_inline_tooltip(
     widget.bind("<Unmap>", hide, add="+")
     widget.bind("<Configure>", hide, add="+")
     state.hide = hide
+    state.trigger = widget
+    return schedule
 
 
-def hide_inline_tooltip(surface: tk.Misc) -> None:
-    """Hide the one active inline tooltip hosted by a widget surface.
+def hide_inline_tooltip(
+    surface: tk.Misc, trigger: tk.Misc | None = None,
+) -> None:
+    """Hide inline help owned by a surface, optionally for one trigger only.
 
     Args:
         surface (tk.Misc): Existing widget that owns the inline tooltip label.
+        trigger (tk.Misc | None): Optional exact trigger to dismiss.
     Returns:
-        None: No label remains mapped over a content or overlay transition.
+        None: Matching help is hidden; unrelated trigger help is preserved.
     """
     state = getattr(surface, "_inline_tooltip_state", None)
-    if state is not None and state.hide is not None:
+    if (state is not None and state.hide is not None
+            and (trigger is None or state.trigger is trigger)):
         state.hide(None)
 
 
@@ -2908,3 +2933,48 @@ def _guard_help_text(event: tk.Event) -> str | None:
     return "break"
 
 
+
+
+@dataclass(frozen=True)
+class GalleryGridTheme:
+    """Expose central palette and geometry tokens to the retained Photos grid."""
+
+    background: str
+    card_surface: str
+    surface_alt: str
+    ink: str
+    muted: str
+    line: str
+    primary: str
+    focus: str
+    border_inset: int
+    corner_radius: int
+    placeholder_font: str | tuple[str, int]
+
+
+def gallery_grid_theme(master: tk.Misc) -> GalleryGridTheme:
+    """Return the registered palette and existing rounded-tile geometry.
+
+    Args:
+        master (tk.Misc): Existing Photos Canvas or another widget in its Tcl interpreter.
+
+    Returns:
+        GalleryGridTheme: Immutable colors, font and gallery border/radius values.
+    """
+    ensure_component_theme(master)
+    placeholder_font = ttk.Style(master).lookup(
+        "Placeholder.LinkedPhoto.TButton", "font",
+    ) or ("Segoe UI Symbol", GALLERY_PLACEHOLDER_FONT_POINTS)
+    return GalleryGridTheme(
+        background=_PALETTE["background"],
+        card_surface=_PALETTE["card_surface"],
+        surface_alt=_PALETTE["surface_alt"],
+        ink=_PALETTE["ink"],
+        muted=_PALETTE["muted"],
+        line=_PALETTE["line"],
+        primary=_PALETTE["primary"],
+        focus=_PALETTE["focus"],
+        border_inset=GALLERY_TILE_BORDER_INSET,
+        corner_radius=_GALLERY_SELECTION_CORNER_RADIUS,
+        placeholder_font=placeholder_font,
+    )

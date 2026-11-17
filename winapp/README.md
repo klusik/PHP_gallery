@@ -2676,6 +2676,23 @@ ownership follow their existing owners.
 The [performance protocol](../docs/performance/issue_361_tk_canvas.md) records
 baseline evidence, frozen workloads and the required paired comparison.
 
+### Experimental retained Canvas gallery
+
+Issue #399 provides an internal qualification backend selected by
+`PHP_GALLERY_CANVAS_GRID=1` before a viewer is created. It keeps a recycled
+Canvas item pool for the current admitted viewport; catalogue metadata does
+not create one Tk widget or Tcl variable per photo. The existing viewer still
+owns media authorization, caches, workers, cancellation and image publication.
+The native widget renderer remains the default accessible fallback.
+
+The experimental backend requires hosted functional and paired performance
+qualification. Hover help uses one shared tooltip anchored to the current photo.
+Physical display smoothness, installed acceptance and screen-reader parity are
+unverified.
+See [the experiment record](../docs/performance/issue_399_virtualized_canvas.md)
+and [fallback lifecycle](../docs/COMPATIBILITY_LIFECYCLE.md). No release or
+migration is implied by the opt-in prototype.
+
 ## Source organization
 
 `gallery_watch_upload.pyw` remains the compatibility launcher and currently

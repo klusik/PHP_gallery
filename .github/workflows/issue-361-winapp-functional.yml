@@ -15,6 +15,7 @@ on:
   push:
     branches:
       - feature/361-tk-canvas-performance
+      - feature/399-virtualized-canvas-gallery
   workflow_dispatch:
 
 permissions:
@@ -28,6 +29,7 @@ concurrency:
 jobs:
   windows:
     name: Required WinApp regression (Windows)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]') }}
     permissions:
       contents: read
       actions: write
@@ -425,6 +427,7 @@ jobs:
 
   linux:
     name: Required WinApp regression (Linux)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]') }}
     runs-on: ubuntu-24.04
     # Type: integer. Units: minutes. Scope: exact-SHA Linux WinApp regression.
     # Consumers: GitHub Actions job timeout.
@@ -572,6 +575,7 @@ jobs:
 
   macos:
     name: Advisory WinApp regression (macOS; real result shown)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]') }}
     runs-on: macos-15
     continue-on-error: true
     # Type: integer. Units: minutes. Scope: exact-SHA advisory macOS WinApp regression.
@@ -720,6 +724,7 @@ jobs:
           retention-days: 14
 
   audit-contracts:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]') }}
     name: Required audit coordinator contracts (Linux)
     runs-on: ubuntu-24.04
     # Purpose: Bound the existing curated coordinator/source regression owner.
@@ -784,7 +789,7 @@ jobs:
 
   issue-summary:
     name: Publish aggregate exact-SHA result to issue 361
-    if: always()
+    if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.ref_name != 'feature/399-virtualized-canvas-gallery' || contains(github.event.head_commit.message, '[winapp-full]')) }}
     needs:
       - windows
       - linux
@@ -818,13 +823,14 @@ jobs:
             // Type: integer. Units: GitHub issue number. Scope: issue 361 progress.
             // Consumers: this aggregate functional-result comment.
             // Rationale: publish only to the explicitly authorized feature issue.
-            const FUNCTIONAL_ISSUE_NUMBER = 361;
+            const is399 = context.ref === 'refs/heads/feature/399-virtualized-canvas-gallery';
+            const FUNCTIONAL_ISSUE_NUMBER = is399 ? 399 : 361;
             // Purpose: Find this run marker without duplicating a rerun comment.
             // Type: integer. Units: comments per page. Scope: matching this run's existing comment.
             // Consumers: GitHub API pagination while preventing duplicate rerun comments.
             // Rationale: use the documented page cap so all recent bot comments can be scanned.
             const COMMENT_PAGE_SIZE = 100;
-            const marker = `<!-- issue-361-functional-run:${context.runId} -->`;
+            const marker = `<!-- issue-${FUNCTIONAL_ISSUE_NUMBER}-functional-run:${context.runId} -->`;
             const completedAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
             const jobs = [
               ["Windows required", "WINDOWS"],
@@ -832,7 +838,7 @@ jobs:
               ["macOS advisory", "MACOS"],
             ];
             const lines = [
-              "## Issue 361 WinApp functional regression results",
+              `## Issue ${FUNCTIONAL_ISSUE_NUMBER} WinApp functional regression results`,
               "",
               marker,
               `- Event SHA: \`${context.sha}\``,

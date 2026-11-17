@@ -4,7 +4,7 @@
 # Module Type: Windows Tk Regression Test
 # Purpose: Exercise the native linked-gallery viewer with real Tk widgets.
 # Responsibilities:
-#   - Verify grid tiles, bounded thumbnails, lightbox details and photo paging.
+#   - Verify native and opt-in Canvas tiles, bounded thumbnails and photo paging.
 #   - Verify GPS actions, zoom, slideshow and foreground-result fencing.
 #   - Verify closing the viewer or its parent cancels owned work.
 #   - Verify confirmed gallery creation reaches the real Watcher action.
@@ -232,6 +232,19 @@ TEST_NARROW_GRID_COLUMNS_MINIMUM = 1
 # Rationale: Twenty-four photos exceed the viewport at the minimum test size.
 TEST_SCROLL_PHOTO_COUNT = 24
 
+# Purpose: Span multiple viewports for opt-in page and admission checks.
+# Type: int. Units: unique photos. Scope: Canvas paging and rapid-scroll test.
+# Consumers:
+#   NativeGalleryCanvasIntegrationTests.test_canvas_opt_in_pages_and_coalesces_rapid_viewport_scroll.
+# Rationale: Two existing scroll fixture extents keep the pool visibly bounded.
+TEST_CANVAS_VIEWPORT_PHOTO_COUNT = TEST_SCROLL_PHOTO_COUNT * 2
+
+# Purpose: Send a short but coalescible run of genuine wheel events.
+# Type: int. Units: wheel events. Scope: opt-in Canvas viewport regression.
+# Consumers: NativeGalleryCanvasIntegrationTests.test_canvas_opt_in_pages_and_coalesces_rapid_viewport_scroll.
+# Rationale: Six events exercise repeated admission without a long synthetic trace.
+TEST_CANVAS_WHEEL_BURST_COUNT = 6
+
 # Purpose: Match one conventional Windows wheel notch in generated input.
 # Type: int. Units: Tk wheel delta units. Scope: mapped scroll test.
 # Consumers:
@@ -349,6 +362,12 @@ TEST_PARENT_GALLERY_ID = 12
 TEST_FIRST_IMAGE_ID = 301
 TEST_SECOND_IMAGE_ID = 302
 TEST_NEXT_PAGE_IMAGE_ID = 303
+
+# Purpose: Exercise Canvas focus, selection and reordered image retention together.
+# Type: int. Units: synthetic photo records. Scope: one opt-in viewer regression.
+# Consumers: NativeGalleryCanvasIntegrationTests.
+# Rationale: Three records make keyboard movement and reorder reuse observable.
+TEST_CANVAS_GRID_PHOTO_COUNT = 3
 
 
 @unittest.skipUnless(
@@ -10163,6 +10182,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.assertTrue(viewer._events.empty())
 
 
+
     def test_selection_stays_bound_to_loaded_photo_ids_across_refresh(self) -> None:
         """Keep explicit multi-selection tied to current server photo IDs.
 
@@ -10359,5 +10379,5 @@ class NativeGalleryViewerTests(unittest.TestCase):
         canonical.close()
 
 
-if __name__ == '__main__':
-    unittest.main()
+
+

@@ -2,19 +2,25 @@
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/tests/test_tk_performance_recorder.py
 # Module Type: Windows Native UI Regression Tests
-# Purpose: Protect bounded timing collection and independent Tk heartbeat behavior.
+# Purpose: Protect bounded Tk timing and deterministic fixture bundle evidence.
 # Responsibilities:
-#   - Verify warmup and callback rows preserve measured evidence within the cap.
-#   - Verify callback forwarding, exceptions and phase fences remain intact.
-#   - Verify heartbeat deadlines and disabled instrumentation remain safe.
+#   - Verify setup aggregation and strict measured raw-event admission.
+#   - Verify callback forwarding, exceptions, phase fences and heartbeat behavior.
+#   - Verify fixture bundle identity, bounds, paths and byte preservation.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Headless regression checks for the P0 Tk workload recorder."""
 
+import hashlib
 import importlib.util
+import builtins
+import symtable
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+import warnings
+import zipfile
 from types import ModuleType, SimpleNamespace
 from unittest import mock
 
@@ -108,8 +114,91 @@ def load_workload_module() -> ModuleType:
 WORKLOAD = load_workload_module()
 
 
+# Structural path: this regression reads the 399 harness as source, without importing Tk.
+HARNESS_SOURCE_PATH = (
+    REPOSITORY_ROOT / "tools" / "perf" / "issue_399_tk_scroll.py"
+)
+IMPLICIT_MODULE_NAMES = frozenset({
+    "__file__", "__name__", "__doc__", "__package__", "__loader__",
+    "__spec__", "__builtins__",
+})
+
+
+def undefined_global_references(source: str, filename: str) -> set[str]:
+    """Find unresolved global reads in module and nested symbol tables.
+
+    Args:
+        source (str): Python source to analyze without executing or importing it.
+        filename (str): Display filename associated with the source.
+
+    Returns:
+        set[str]: Referenced global names absent from module bindings and builtins.
+    """
+    module_table = symtable.symtable(source, filename, "exec")
+    known_names = {
+        symbol.get_name()
+        for symbol in module_table.get_symbols()
+        if symbol.is_assigned() or symbol.is_imported() or symbol.is_namespace()
+    }
+    known_names.update(dir(builtins))
+    known_names.update(IMPLICIT_MODULE_NAMES)
+    unresolved: set[str] = set()
+    pending = [module_table]
+    while pending:
+        current = pending.pop()
+        pending.extend(current.get_children())
+        unresolved.update(
+            symbol.get_name()
+            for symbol in current.get_symbols()
+            if symbol.is_global()
+            and symbol.is_referenced()
+            and symbol.get_name() not in known_names
+        )
+    return unresolved
+
+
+# Purpose: Keep deterministic archive fixtures small in the regression suite.
+# Type: int. Units: photos. Scope: fixture bundle serialization regression.
+# Consumers: test_fixture_bundle_preserves_generator_bytes_and_rejects_tampering.
+# Rationale: Three entries exercise naming and prefixes without bulk fixture work.
+FIXTURE_BUNDLE_TEST_PHOTO_COUNT = 3
+# Purpose: Bind fixture bundle tests to a stable fixture source identity.
+# Type: str. Units: lowercase hexadecimal SHA-256.
+# Scope: synthetic fixture archive manifest.
+# Consumers: fixture bundle creation and reader validation.
+# Rationale: a fixed valid digest exercises exact source matching.
+FIXTURE_BUNDLE_TEST_COMMON_SHA256 = 'a' * 64
+
+# Purpose: Bind fixture bundle tests to a stable synthetic seed.
+# Type: int. Units: seed. Scope: fixture archive regression.
+# Consumers: fixture bundle generator and reader assertions.
+# Rationale: A distinct positive seed proves identity validation.
+FIXTURE_BUNDLE_TEST_SEED = 399361
+
 class TkPerformanceRecorderTests(unittest.TestCase):
     """Exercise Recorder boundaries without creating a Tk interpreter."""
+
+    def test_issue_399_harness_has_no_unresolved_global_reads(self) -> None:
+        """Catch missing globals in nested harness callbacks without importing Tk.
+
+        Returns:
+            None: Only globally bound names, builtins, and module dunders are read.
+        """
+        harness_source = HARNESS_SOURCE_PATH.read_text(encoding="utf-8")
+        self.assertEqual(
+            set(),
+            undefined_global_references(
+                harness_source,
+                str(HARNESS_SOURCE_PATH),
+            ),
+        )
+        broken_source = "def broken():\n    return missing_checkpoint\n"
+        self.assertEqual(
+            {"missing_checkpoint"},
+            undefined_global_references(broken_source, "broken_harness.py"),
+        )
+
+
 
     def test_warmup_samples_do_not_consume_measured_raw_capacity(self) -> None:
         """Ignore warmup and stale completions while retaining measured overflow.
@@ -140,6 +229,251 @@ class TkPerformanceRecorderTests(unittest.TestCase):
         self.assertTrue(all(
             event["phase"] == "measured" for event in recorder.events
         ))
+
+    def test_fixture_bundle_preserves_generator_bytes_and_rejects_tampering(
+        self,
+    ) -> None:
+        """Verify byte identity, exact source binding, and hostile archive rejection.
+
+        Returns:
+            None: Only an intact bounded archive loads the requested photo prefix.
+        """
+        seed = FIXTURE_BUNDLE_TEST_SEED
+        photo_bodies = WORKLOAD.make_photo_bodies(
+            seed,
+            FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+        )
+        hires_bodies = tuple(
+            WORKLOAD.make_hires_body(seed + index)
+            for index in range(WORKLOAD.HIRES_FIXTURE_VARIANTS)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            archive_path = folder / "fixtures.zip"
+            with (
+                mock.patch.object(
+                    WORKLOAD,
+                    "make_photo_bodies",
+                    return_value=photo_bodies,
+                ) as photo_generator,
+                mock.patch.object(
+                    WORKLOAD,
+                    "make_hires_body",
+                    side_effect=hires_bodies,
+                ) as hires_generator,
+            ):
+                archive_sha256 = WORKLOAD.prepare_fixture_bundle(
+                    archive_path,
+                    seed,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                )
+
+            self.assertEqual(
+                (seed, FIXTURE_BUNDLE_TEST_PHOTO_COUNT),
+                photo_generator.call_args_list[0].args,
+            )
+            self.assertEqual(
+                [
+                    (seed + index,)
+                    for index in range(WORKLOAD.HIRES_FIXTURE_VARIANTS)
+                ],
+                [call.args for call in hires_generator.call_args_list],
+            )
+            loaded_photos, loaded_hires, dataset_sha256 = (
+                WORKLOAD.load_fixture_bundle(
+                    archive_path,
+                    archive_sha256,
+                    seed,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT - 1,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                )
+            )
+            self.assertEqual(photo_bodies[:-1], loaded_photos)
+            self.assertEqual(hires_bodies, loaded_hires)
+            self.assertEqual(
+                hashlib.sha256(b"".join(
+                    hashlib.sha256(body).digest()
+                    for body in photo_bodies[:-1]
+                )).hexdigest(),
+                dataset_sha256,
+            )
+            with self.assertRaisesRegex(ValueError, "source identity mismatch"):
+                WORKLOAD.load_fixture_bundle(
+                    archive_path,
+                    archive_sha256,
+                    seed + 1,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                )
+
+            with self.assertRaisesRegex(ValueError, "source identity mismatch"):
+                WORKLOAD.load_fixture_bundle(
+                    archive_path,
+                    archive_sha256,
+                    seed,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT - 1,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    "b" * 64,
+                )
+
+            corrupted_path = folder / "corrupted.zip"
+            corrupted_path.write_bytes(archive_path.read_bytes() + b"corruption")
+            with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
+                WORKLOAD.load_fixture_bundle(
+                    corrupted_path,
+                    archive_sha256,
+                    seed,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                )
+
+            duplicate_path = folder / "duplicate.zip"
+            with zipfile.ZipFile(archive_path) as source:
+                with zipfile.ZipFile(
+                    duplicate_path,
+                    "w",
+                    compression=zipfile.ZIP_STORED,
+                ) as duplicate:
+                    for info in source.infolist():
+                        duplicate.writestr(info.filename, source.read(info))
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", UserWarning)
+                        duplicate.writestr(
+                            "photos/00000.png",
+                            photo_bodies[0],
+                        )
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                WORKLOAD.load_fixture_bundle(
+                    duplicate_path,
+                    WORKLOAD._fixture_bundle_file_sha256(duplicate_path),
+                    seed,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                )
+
+            unsafe_path = folder / "unsafe.zip"
+            with zipfile.ZipFile(archive_path) as source:
+                with zipfile.ZipFile(
+                    unsafe_path,
+                    "w",
+                    compression=zipfile.ZIP_STORED,
+                ) as unsafe:
+                    for info in source.infolist():
+                        if info.filename == "photos/00000.png":
+                            unsafe.writestr("../outside.png", photo_bodies[0])
+                        else:
+                            unsafe.writestr(info.filename, source.read(info))
+            with self.assertRaisesRegex(ValueError, "unsafe"):
+                WORKLOAD.load_fixture_bundle(
+                    unsafe_path,
+                    WORKLOAD._fixture_bundle_file_sha256(unsafe_path),
+                    seed,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                    FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                )
+
+            with mock.patch.object(
+                WORKLOAD,
+                "FIXTURE_BUNDLE_MEMBER_MAX_BYTES",
+                1,
+            ):
+                with self.assertRaisesRegex(ValueError, "member"):
+                    WORKLOAD.load_fixture_bundle(
+                        archive_path,
+                        archive_sha256,
+                        seed,
+                        FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                        FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                        FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                    )
+            with mock.patch.object(
+                WORKLOAD,
+                "FIXTURE_BUNDLE_MEMBER_MAX_BYTES",
+                1,
+            ):
+                with self.assertRaisesRegex(ValueError, "member exceeds"):
+                    WORKLOAD.load_fixture_bundle(
+                        archive_path,
+                        archive_sha256,
+                        seed,
+                        FIXTURE_BUNDLE_TEST_PHOTO_COUNT - 1,
+                        FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                        FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                    )
+
+            with mock.patch.object(
+                WORKLOAD,
+                "FIXTURE_BUNDLE_MAX_BYTES",
+                1,
+            ):
+                with self.assertRaisesRegex(ValueError, "size bound"):
+                    WORKLOAD.load_fixture_bundle(
+                        archive_path,
+                        archive_sha256,
+                        seed,
+                        FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                        FIXTURE_BUNDLE_TEST_PHOTO_COUNT,
+                        FIXTURE_BUNDLE_TEST_COMMON_SHA256,
+                    )
+
+    def test_setup_flood_aggregates_without_using_measured_raw_capacity(
+        self,
+    ) -> None:
+        """Aggregate setup costs while preserving strict measured overflow.
+
+        Returns:
+            None: Setup is bounded by fixed metric keys; measured events remain
+                individually retained and truncated at their original cap.
+        """
+        recorder = WORKLOAD.Recorder(enabled=True)
+        with mock.patch.object(
+            WORKLOAD,
+            "RAW_EVENT_LIMIT",
+            RAW_LIMIT_TEST_CAP,
+        ):
+            recorder.phase = "setup"
+            for sample_index in range(WARMUP_SAMPLE_COUNT):
+                recorder.add(
+                    "callback",
+                    TEST_EVENT_DURATION_NS,
+                    callback_name=f"setup.callback.{sample_index}",
+                )
+                recorder.add("unregistered_setup_metric", TEST_EVENT_DURATION_NS)
+                recorder._count_operation("widget_create")
+
+            self.assertEqual([], recorder.events)
+            self.assertEqual(0, recorder.truncated)
+            self.assertEqual(
+                {"callback": {
+                    "count": WARMUP_SAMPLE_COUNT,
+                    "total_ns": WARMUP_SAMPLE_COUNT * TEST_EVENT_DURATION_NS,
+                    "max_ns": TEST_EVENT_DURATION_NS,
+                }},
+                recorder.setup_summaries,
+            )
+            self.assertEqual(
+                WARMUP_SAMPLE_COUNT,
+                recorder.operation_counts["widget_create"],
+            )
+
+            recorder.phase = "warmup"
+            recorder.add("callback", TEST_EVENT_DURATION_NS)
+            self.assertEqual(WARMUP_SAMPLE_COUNT, recorder.setup_summaries["callback"]["count"])
+
+            recorder.phase = "measured"
+            for _ in range(RAW_LIMIT_TEST_CAP + 1):
+                recorder.add("callback", TEST_EVENT_DURATION_NS)
+
+        self.assertEqual(RAW_LIMIT_TEST_CAP, len(recorder.events))
+        self.assertEqual(1, recorder.truncated)
+        self.assertTrue(all(event["phase"] == "measured" for event in recorder.events))
+
 
     def test_after_callback_records_one_complete_row_and_forwards_arguments(self) -> None:
         """Preserve exact callback arguments and consolidate timing details.

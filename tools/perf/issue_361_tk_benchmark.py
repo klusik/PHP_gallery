@@ -14,6 +14,7 @@
 import argparse
 import csv
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -28,6 +29,7 @@ import time
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
+from types import ModuleType
 from typing import TypedDict, TypeAlias, cast
 
 
@@ -121,6 +123,212 @@ class RunRecord(TypedDict):
     returncode: int
     status: str
     report: ChildReport
+
+
+# Purpose: Bound authenticated child progress files read after subprocess timeout.
+# Type: int. Units: bytes. Scope: one issue 399 child checkpoint.
+# Consumers: read_child_progress. Rationale: progress is diagnostic, never bulk evidence.
+CHILD_PROGRESS_MAX_BYTES = 16384
+# Purpose: Allow diagnostic clock granularity around the process termination bound.
+# Type: int. Units: seconds. Scope: one timeout progress snapshot.
+# Consumers: read_child_progress. Rationale: diagnostic rounding cannot qualify a run.
+CHILD_PROGRESS_ELAPSED_MARGIN_SECONDS = 1
+CHILD_PROGRESS_PHASES = frozenset({
+    "fixture_load_started",
+    "fixtures_ready",
+    "tk_mounted",
+    "catalogue_loading",
+    "catalogue_ready",
+    "warmup_interactions",
+    "measurement_started",
+    "primary_complete",
+    "lifecycle",
+    "complete",
+    "failed",
+})
+
+
+# Purpose: Bound photo counts accepted from one issue 399 diagnostic checkpoint.
+# Type: int. Units: photos. Scope: one child progress sidecar.
+# Consumers: read_child_progress. Rationale: match the fixed largest protocol extent.
+CHILD_PROGRESS_MAX_PHOTOS = 5000
+# Purpose: Bound raw observations retained by one measured recorder.
+# Type: int. Units: events. Scope: one child progress sidecar.
+# Consumers: read_child_progress. Rationale: the measured raw evidence cap remains unchanged.
+CHILD_PROGRESS_MAX_RAW_EVENTS = 20000
+
+class ChildProgressCheckpoint(TypedDict):
+    """Describe one bounded issue 399 child phase snapshot."""
+
+    source_sha: str
+    scenario: str
+    cache: str
+    instrumentation: str
+    trial: int
+    seed: int
+    phase: str
+    elapsed_seconds: float
+    photo_count: int
+    loaded_photos: int
+    page_reads: int
+    actions: int
+    raw_event_count: int
+    raw_events_truncated: int
+    fixture_bundle_sha256: str | None
+    dataset_sha256: str | None
+
+
+def write_progress_artifact(
+    path: Path, payload: dict[str, str | int | float | list[str]],
+) -> None:
+    """Atomically replace one small driver-owned phase diagnostic.
+
+    Args:
+        path (Path): Destination in the current benchmark output folder.
+        payload (dict[str, str | int | float | list[str]]): Bounded JSON fields.
+
+    Returns:
+        None: The complete JSON checkpoint replaces the prior snapshot.
+
+    Raises:
+        OSError: The checkpoint cannot be written or replaced.
+    """
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=path.name + ".",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary_path = Path(stream.name)
+            stream.write(json.dumps(payload, sort_keys=True) + "\n")
+        temporary_path.replace(path)
+    except Exception:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+        raise
+
+
+def read_child_progress(
+    path: Path, identity: dict[str, str | int],
+) -> ChildProgressCheckpoint | None:
+    """Read a bounded diagnostic checkpoint only when its run identity matches.
+
+    Args:
+        path (Path): Sidecar path for the timed-out issue 399 child.
+        identity (dict[str, str | int]): Expected source/scenario/cache/trial/seed.
+
+    Returns:
+        ChildProgressCheckpoint | None: Valid phase details, or None if absent or invalid.
+            This permanent driver support preserves the original timeout when a
+            hard startup failure cannot write a trustworthy optional sidecar.
+    """
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        if path.stat().st_size > CHILD_PROGRESS_MAX_BYTES:
+            return None
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    required = {
+        "source_sha", "scenario", "cache", "instrumentation", "trial", "seed",
+        "phase", "elapsed_seconds", "photo_count", "loaded_photos",
+        "page_reads", "actions", "raw_event_count", "raw_events_truncated",
+        "fixture_bundle_sha256", "dataset_sha256",
+    }
+    if set(value) != required:
+        return None
+    if any(value.get(key) != expected for key, expected in identity.items()):
+        return None
+    if (not isinstance(value["phase"], str)
+            or value["phase"] not in CHILD_PROGRESS_PHASES):
+        return None
+    elapsed = value["elapsed_seconds"]
+    if (not isinstance(elapsed, (int, float)) or isinstance(elapsed, bool)
+            or elapsed < 0 or elapsed > PROCESS_TIMEOUT_SECONDS + CHILD_PROGRESS_ELAPSED_MARGIN_SECONDS):
+        return None
+    try:
+        if not math.isfinite(float(elapsed)):
+            return None
+    except OverflowError:
+        return None
+    for key in (
+        "trial", "seed", "photo_count", "loaded_photos", "page_reads",
+        "actions", "raw_event_count", "raw_events_truncated",
+    ):
+        if type(value[key]) is not int or value[key] < 0:
+            return None
+    if (value["photo_count"] > CHILD_PROGRESS_MAX_PHOTOS
+            or value["loaded_photos"] > value["photo_count"]
+            or value["raw_event_count"] > CHILD_PROGRESS_MAX_RAW_EVENTS):
+        return None
+    for key in ("fixture_bundle_sha256", "dataset_sha256"):
+        digest = value[key]
+        if digest is not None and (
+            not isinstance(digest, str) or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            return None
+    return cast(ChildProgressCheckpoint, value)
+
+
+def prepare_issue399_bundle(
+    harness: Path,
+    common_path: Path,
+    archive_path: Path,
+    scenarios: tuple[str, ...],
+    seed: int,
+) -> tuple[str, int, float]:
+    """Build the shared issue 399 fixture archive once before child trials.
+
+    Args:
+        harness (Path): Exact checked-out issue 399 harness used by children.
+        common_path (Path): Exact checked-out shared fixture generator module.
+        archive_path (Path): New archive in the run-owned temporary directory.
+        scenarios (tuple[str, ...]): Protocol matrix scenarios to cover.
+        seed (int): Frozen protocol seed.
+
+    Returns:
+        tuple[str, int, float]: Archive SHA-256, included photo count, preparation time.
+
+    Raises:
+        RuntimeError: The selected harness scenarios do not map to bounded extents.
+    """
+    started = time.monotonic()
+    module_name = "_php_gallery_issue399_bundle_harness"
+    spec = importlib.util.spec_from_file_location(module_name, harness)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load selected issue 399 harness")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+        counts = getattr(module, "PHOTO_COUNTS", None)
+        if not isinstance(counts, dict) or not scenarios:
+            raise RuntimeError("issue 399 harness has no scenario extent map")
+        if any(
+            scenario not in counts or type(counts[scenario]) is not int
+            or counts[scenario] < 1
+            for scenario in scenarios
+        ):
+            raise RuntimeError("protocol scenario is not a bounded harness extent")
+        photo_count = max(counts[scenario] for scenario in scenarios)
+        common_module = getattr(module, "common", None)
+        builder = getattr(common_module, "prepare_fixture_bundle", None)
+        if not callable(builder):
+            raise RuntimeError("shared fixture bundle builder is unavailable")
+        archive_sha256 = builder(
+            archive_path, seed, photo_count, sha256_file(common_path),
+        )
+    finally:
+        sys.modules.pop(module_name, None)
+    return archive_sha256, photo_count, time.monotonic() - started
 
 
 class ProgressCheckpoint(TypedDict):
@@ -280,11 +488,15 @@ def extract_commit(source_sha: str, destination: Path) -> None:
         raise RuntimeError(result.stderr.decode("utf-8", "replace")[-DIAGNOSTIC_TAIL_CHARS:])
 
 
-def select_pilot_scenarios(configured: list[str] | None) -> tuple[str, ...]:
+def select_pilot_scenarios(
+    configured: list[str] | None,
+    scenarios: tuple[str, ...] = SCENARIOS,
+) -> tuple[str, ...]:
     """Validate and canonically order an optional pilot scenario subset.
 
     Args:
         configured (list[str] | None): Optional protocol scenario identifiers.
+        scenarios (tuple[str, ...]): Canonical scenario matrix. Defaults to issue 361.
 
     Returns:
         tuple[str, ...]: Nonempty selected scenarios in canonical order.
@@ -293,13 +505,13 @@ def select_pilot_scenarios(configured: list[str] | None) -> tuple[str, ...]:
         ValueError: If the subset is empty, duplicated, or unknown.
     """
     if configured is None:
-        return SCENARIOS
+        return scenarios
     if not configured or len(set(configured)) != len(configured):
         raise ValueError("pilot_scenarios must be nonempty and contain no duplicates")
-    unknown = set(configured).difference(SCENARIOS)
+    unknown = set(configured).difference(scenarios)
     if unknown:
         raise ValueError(f"unknown pilot scenarios: {sorted(unknown)}")
-    return tuple(scenario for scenario in SCENARIOS if scenario in configured)
+    return tuple(scenario for scenario in scenarios if scenario in configured)
 
 
 def matrix_cells(scenarios: tuple[str, ...] = SCENARIOS) -> list[tuple[str, str]]:
@@ -389,8 +601,18 @@ def validate_report(
         },
         "off": {"scenario_elapsed_ms"},
     }[instrumentation]
-    if scenario in ("gallery", "lightbox") and instrumentation == "on":
+    if (
+        scenario in ("gallery", "lightbox") or scenario.startswith("scroll")
+    ) and instrumentation == "on":
         required_metrics.add("image_publication_p95_ms")
+    if scenario.startswith("scroll") and instrumentation == "on":
+        required_metrics.update({
+            "viewport_settle_p95_ms",
+            "wheel_slow_p95_ms",
+            "wheel_fast_p95_ms",
+            "drag_p95_ms",
+            "resize_p95_ms",
+        })
     if not required_metrics <= report["metrics"].keys():
         raise RuntimeError("instrumentation-specific metrics are missing")
     for name, value in report["metrics"].items():
@@ -436,6 +658,11 @@ def validate_report(
             "callback_p95_ms": "callback",
             "interaction_feedback_p95_ms": "interaction_feedback",
             "image_publication_p95_ms": "image_publication",
+            "viewport_settle_p95_ms": "viewport_settle",
+            "wheel_slow_p95_ms": "wheel_slow",
+            "wheel_fast_p95_ms": "wheel_fast",
+            "drag_p95_ms": "drag",
+            "resize_p95_ms": "resize",
         }
         required_raw_metrics = {raw_metric_names[name] for name in required_metrics}
         if not required_raw_metrics <= measured_metrics:
@@ -454,6 +681,10 @@ def run_workload(
     source: str,
     source_sha: str,
     deadline: float,
+    fixture_bundle: Path | None = None,
+    fixture_bundle_sha256: str | None = None,
+    fixture_bundle_photo_count: int | None = None,
+    fixture_common_sha256: str | None = None,
 ) -> RunRecord:
     """Run, preserve, and validate one independent workload process.
 
@@ -468,6 +699,14 @@ def run_workload(
         source (str): Comparison label baseline or candidate.
         source_sha (str): Immutable source SHA supplied to the child.
         deadline (float): Monotonic whole-run deadline.
+        fixture_bundle (Path | None): Shared issue 399 fixture archive; defaults
+            to None to preserve the legacy issue 361 child invocation.
+        fixture_bundle_sha256 (str | None): Expected archive digest; defaults to
+            None only when no bundle is supplied.
+        fixture_bundle_photo_count (int | None): Exact archive catalogue count;
+            defaults to None only when no bundle is supplied.
+        fixture_common_sha256 (str | None): Expected generator module digest;
+            defaults to None only when no bundle is supplied.
 
     Returns:
         RunRecord: Validated process record.
@@ -480,12 +719,31 @@ def run_workload(
     )
     if time.monotonic() >= deadline:
         raise RuntimeError("total deadline exceeded before workload launch")
+    bundle_values = (
+        fixture_bundle, fixture_bundle_sha256, fixture_bundle_photo_count,
+        fixture_common_sha256,
+    )
+    if any(value is not None for value in bundle_values) and (
+        any(value is None for value in bundle_values)
+        or harness.name != "issue_399_tk_scroll.py"
+    ):
+        raise RuntimeError("incomplete or unsupported shared fixture bundle arguments")
     command = [
         sys.executable, str(harness), "--source", str(source_root),
         "--scenario", scenario, "--cache", cache, "--trial", str(trial),
         "--output", str(report_path), "--instrumentation", instrumentation,
         "--seed", str(WORKLOAD_SEED), "--source-id", source_sha,
     ]
+    progress_path: Path | None = None
+    if fixture_bundle is not None:
+        progress_path = output / f"progress-{report_path.stem}.json"
+        command.extend([
+            "--fixture-bundle", str(fixture_bundle),
+            "--fixture-bundle-sha256", str(fixture_bundle_sha256),
+            "--fixture-bundle-photo-count", str(fixture_bundle_photo_count),
+            "--fixture-common-sha256", str(fixture_common_sha256),
+            "--progress", str(progress_path),
+        ])
     started = time.monotonic()
     timeout = min(PROCESS_TIMEOUT_SECONDS, max(1, int(deadline - started)))
     try:
@@ -500,7 +758,27 @@ def run_workload(
         (output / f"{report_path.stem}.stderr.txt").write_text(
             str(error.stderr or ""), encoding="utf-8"
         )
-        raise RuntimeError(f"workload timed out: {report_path.stem}") from error
+        progress_detail = ""
+        if progress_path is not None:
+            checkpoint = read_child_progress(progress_path, {
+                "source_sha": source_sha, "scenario": scenario, "cache": cache,
+                "instrumentation": instrumentation, "trial": trial,
+                "seed": WORKLOAD_SEED,
+            })
+            if checkpoint is not None:
+                progress_detail = (
+                    "; last_phase=" + checkpoint["phase"]
+                    + f"; elapsed={checkpoint['elapsed_seconds']:.1f}s"
+                    + f"; loaded={checkpoint['loaded_photos']}/"
+                    + str(checkpoint["photo_count"])
+                    + f"; pages={checkpoint['page_reads']}"
+                    + f"; actions={checkpoint['actions']}"
+                    + f"; raw={checkpoint['raw_event_count']}"
+                    + f"; truncated={checkpoint['raw_events_truncated']}"
+                )
+        raise RuntimeError(
+            f"workload timed out: {report_path.stem}{progress_detail}"
+        ) from error
     elapsed = time.monotonic() - started
     (output / f"{report_path.stem}.stdout.txt").write_text(
         result.stdout, encoding="utf-8"
@@ -596,11 +874,14 @@ def bootstrap_delta_ci(deltas: list[float], seed_text: str) -> list[float]:
     return [percentile(means, fraction) for fraction in BOOTSTRAP_INTERVAL_FRACTIONS]
 
 
-def summarize_comparison(records: list[RunRecord]) -> ComparisonSummary:
+def summarize_comparison(
+    records: list[RunRecord], scenarios: tuple[str, ...] = SCENARIOS,
+) -> ComparisonSummary:
     """Summarize each scenario/cache using paired independent run samples.
 
     Args:
         records (list[RunRecord]): Validated baseline and candidate records.
+        scenarios (tuple[str, ...]): Scenario matrix to summarize.
 
     Returns:
         ComparisonSummary: Per-cell descriptive and paired statistics.
@@ -609,7 +890,7 @@ def summarize_comparison(records: list[RunRecord]) -> ComparisonSummary:
         RuntimeError: If a required group has fewer than ten complete pairs.
     """
     summary: ComparisonSummary = {}
-    for scenario, cache in matrix_cells():
+    for scenario, cache in matrix_cells(scenarios):
         samples: dict[str, dict[int, dict[str, float]]] = {
             "baseline": {}, "candidate": {},
         }
@@ -672,12 +953,13 @@ def summarize_comparison(records: list[RunRecord]) -> ComparisonSummary:
 
 
 def summarize_baseline(
-    records: list[RunRecord],
+    records: list[RunRecord], scenarios: tuple[str, ...] = SCENARIOS,
 ) -> dict[str, dict[str, dict[str, float]]]:
     """Summarize baseline metrics per scenario/cache from independent processes.
 
     Args:
         records (list[RunRecord]): Valid completed baseline process records.
+        scenarios (tuple[str, ...]): Scenario matrix to summarize.
 
     Returns:
         dict[str, dict[str, dict[str, float]]]: Cell to metric to statistics mapping.
@@ -686,7 +968,7 @@ def summarize_baseline(
         RuntimeError: If a cell has fewer than ten runs or metric sets differ.
     """
     cells: dict[str, list[RunRecord]] = {}
-    for scenario, cache in matrix_cells():
+    for scenario, cache in matrix_cells(scenarios):
         cell = f"{scenario}/{cache}"
         rows = [
             row for row in records
@@ -895,7 +1177,15 @@ def run_stage() -> int:
     output = args.output
     output.mkdir(parents=True, exist_ok=True)
     here = Path(__file__).resolve().parent
-    protocol_path = here / "issue_361_tk_protocol.json"
+    protocol_name = os.environ.get(
+        "PHP_GALLERY_TK_PERF_PROTOCOL", "issue_361_tk_protocol.json"
+    )
+    protocol_paths = {
+        "issue_361_tk_protocol.json", "issue_399_tk_protocol.json",
+    }
+    if protocol_name not in protocol_paths:
+        raise ValueError("unsupported benchmark protocol selection")
+    protocol_path = here / protocol_name
     protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
     stage = os.environ.get("PHP_GALLERY_TK_PERF_STAGE", protocol["stage"])
     baseline_sha = os.environ.get(
@@ -908,16 +1198,34 @@ def run_stage() -> int:
         raise RuntimeError(f"unsupported stage: {stage}")
     if stage == "compare" and not candidate_sha:
         raise RuntimeError("comparison requires immutable candidate SHA")
+    matrix = protocol.get("matrix")
+    if not isinstance(matrix, dict) or not isinstance(matrix.get("scenarios"), list):
+        raise ValueError("protocol matrix.scenarios must be a JSON list")
+    scenarios = tuple(matrix["scenarios"])
+    if not scenarios or any(not isinstance(item, str) for item in scenarios):
+        raise ValueError("protocol matrix.scenarios must contain scenario names")
+    if len(set(scenarios)) != len(scenarios):
+        raise ValueError("protocol matrix.scenarios must be unique")
     configured_scenarios = protocol.get("pilot_scenarios")
     if configured_scenarios is not None and (
         not isinstance(configured_scenarios, list)
         or any(not isinstance(item, str) for item in configured_scenarios)
     ):
         raise ValueError("pilot_scenarios must be a JSON list of scenario names")
-    selected_pilot_scenarios = select_pilot_scenarios(configured_scenarios)
-    targeted_pilot = stage == "pilot" and selected_pilot_scenarios != SCENARIOS
+    selected_pilot_scenarios = select_pilot_scenarios(
+        configured_scenarios, scenarios,
+    )
+    targeted_pilot = stage == "pilot" and selected_pilot_scenarios != scenarios
     pilot_cells = matrix_cells(selected_pilot_scenarios)
-    harness = here / "issue_361_tk_workloads.py"
+    harness_names = {
+        "issue_361_tk_workloads.py", "issue_399_tk_scroll.py",
+    }
+    harness_name = protocol.get(
+        "workload_script", "issue_361_tk_workloads.py"
+    )
+    if harness_name not in harness_names:
+        raise ValueError("unsupported benchmark harness selection")
+    harness = here / harness_name
     if not harness.is_file():
         raise RuntimeError(f"workload harness is absent: {harness.name}")
     deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
@@ -925,6 +1233,7 @@ def run_stage() -> int:
         "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "platform": platform.platform(), "python": sys.version,
         "processor": platform.processor(), "machine": platform.machine(), **host_metadata(),
+        "harness_name": harness.name,
         "harness_sha256": sha256_file(harness),
         "workloads_sha256": sha256_file(here / "issue_361_tk_workloads.py"),
         "driver_sha256": sha256_file(Path(__file__).resolve()),
@@ -949,7 +1258,47 @@ def run_stage() -> int:
     status = "FAIL"
     order = []
     temporary = Path(tempfile.mkdtemp(prefix="issue-361-tk-", dir=output))
+    fixture_bundle: Path | None = None
+    fixture_bundle_sha256: str | None = None
+    fixture_bundle_photo_count: int | None = None
+    fixture_common_sha256: str | None = None
     try:
+        if harness_name == "issue_399_tk_scroll.py":
+            protocol_seed = protocol.get("seed")
+            if type(protocol_seed) is not int or protocol_seed != WORKLOAD_SEED:
+                raise ValueError("issue 399 protocol seed must match the frozen driver seed")
+            preparation_path = output / "fixture-bundle-progress.json"
+            preparation_started = time.monotonic()
+            write_progress_artifact(preparation_path, {
+                "phase": "fixture_bundle_preparation_started",
+                "seed": protocol_seed,
+                "scenarios": list(scenarios),
+                "elapsed_seconds": time.monotonic() - preparation_started,
+            })
+            fixture_bundle = temporary / "issue399-fixtures.zip"
+            fixture_common_path = here / "issue_361_tk_workloads.py"
+            (fixture_bundle_sha256, fixture_bundle_photo_count,
+             preparation_seconds) = prepare_issue399_bundle(
+                harness, fixture_common_path, fixture_bundle, scenarios, protocol_seed,
+            )
+            if time.monotonic() >= deadline:
+                raise RuntimeError("total deadline exceeded during fixture bundle preparation")
+            fixture_common_sha256 = sha256_file(fixture_common_path)
+            metadata.update({
+                "fixture_bundle_sha256": fixture_bundle_sha256,
+                "fixture_bundle_photo_count": fixture_bundle_photo_count,
+                "fixture_bundle_seed": protocol_seed,
+                "fixture_bundle_preparation_seconds": preparation_seconds,
+                "fixture_bundle_common_sha256": fixture_common_sha256,
+            })
+            write_progress_artifact(preparation_path, {
+                "phase": "fixture_bundle_ready",
+                "seed": protocol_seed,
+                "photo_count": fixture_bundle_photo_count,
+                "fixture_bundle_sha256": fixture_bundle_sha256,
+                "common_sha256": fixture_common_sha256,
+                "elapsed_seconds": time.monotonic() - preparation_started,
+            })
         roots: dict[str, Path] = {}
         sources = [("baseline", baseline_sha)]
         if stage == "compare":
@@ -969,12 +1318,12 @@ def run_stage() -> int:
             order = [
                 ("baseline", scenario, cache, trial, "on")
                 for trial in range(MEASURED_REPETITIONS)
-                for scenario, cache in matrix_cells()
+                for scenario, cache in matrix_cells(scenarios)
             ]
         else:
             order = []
             for pair in range(MEASURED_REPETITIONS):
-                for scenario, cache in matrix_cells():
+                for scenario, cache in matrix_cells(scenarios):
                     pair_order = ("baseline", "candidate") if pair % 2 == 0 else (
                         "candidate", "baseline"
                     )
@@ -986,16 +1335,20 @@ def run_stage() -> int:
             record = run_workload(
                 harness, roots[source], output, scenario, cache, trial,
                 instrumentation, source, source_sha, deadline,
+                fixture_bundle=fixture_bundle,
+                fixture_bundle_sha256=fixture_bundle_sha256,
+                fixture_bundle_photo_count=fixture_bundle_photo_count,
+                fixture_common_sha256=fixture_common_sha256,
             )
             records.append(record)
             save_records(output, [record], append=True)
         if stage == "compare":
-            comparison = summarize_comparison(records)
+            comparison = summarize_comparison(records, scenarios)
             (output / "comparison.json").write_text(
                 json.dumps(comparison, indent=2) + "\n", encoding="utf-8"
             )
         elif stage == "baseline":
-            baseline_summary = summarize_baseline(records)
+            baseline_summary = summarize_baseline(records, scenarios)
         else:
             pilot_overhead = summarize_pilot(records, selected_pilot_scenarios)
 

@@ -10371,6 +10371,53 @@ Markörer i bevarad squashhistorik startar ingen ny mätning. Rensningen avsluta
 äldre funktions- och benchmarkkörningar endast på den egna feature-grenen och
 hoppar över mätningar för samma SHA.
 
+Scrollprotokollet använder den optimerade kontrollpunkten från PR~398.
+Den primära matrisen läser 100, 500 och 2~000 foton via riktiga sidor med
+64 objekt. Den kräver 12 pilotprocesser, 60 upprepade baslinjeprocesser och
+120 parade jämförelseprocesser. 5~000 foton är ett separat stresstest;
+en redovisad timeout blockerar inte P1. En giltig upprepad primär baslinje
+tillåter Canvas-prototypen. Efter den första fungerande versionen följer
+riktade Hosted-tester och en orienterande A/B-mätning direkt.
+De tidigare försöken med fyra omfång nedan förblir historiska misslyckanden. Startgeometrin är
+900×680 vid origo; storleksändring använder klientbredderna 640 och 960
+pixlar vid origo, efter kontroll av skärm-/fönstergränser och före den
+oförändrade strikta breddkontrollen. Fullpiloten med 16 processer
+(körning~44011416072, workflow-/harness-SHA
+\codeword{01379b6b78ca178d1b87d892c2a3ef27fb830d3f}) och den riktade piloten
+(körning~44012529759, SHA \codeword{9d4ea91b0766032aef3153939da06892cce8d23b})
+är ogiltiga försök. Den riktade körningen begärde 1~100 pixlar, men Windows
+begränsade klienten till 1028×680; väntan på exakt bredd fastnade trots att
+alla 24 synliga objekt hade lästs in och kön var tom utan aktiv arbetare.
+Benchmarkdrivrutinen publicerar hela \codeword{summary.md} och kompakt JSON
+i Actions-jobbsammanfattningen. Applikationsbaslinje A är
+\codeword{ab245719ddf65ccba51a83ac10564a795a03dee9}; workflow-/harness-SHA
+hålls isär. Ingen baslinje är godkänd; Canvasändringar är spärrade.
+Tk-återkoppling bevisar inte fysisk visning.
+
+Recordern skiljer förberedelse från mätta interaktioner. Den räknar faktiska
+Tk-operationer i båda faserna, sammanställer förberedelsens återanropstider
+som fasta antal-, total- och maxvärden och håller tider för montering, första
+sidan, första viewport och hela katalogen separata. Mätta kalla/varma
+scrollhändelser börjar efter kataloginläsningen; uppvärmningen utesluts.
+Gränsen på 20~000 händelser och tidsgränserna 90/2~400 sekunder är oförändrade;
+avkortade mätdata leder fortfarande till underkänt.
+
+Fixtureförberedelsen använder ett deterministiskt arkiv med fast tidsstämpel,
+skapat en gång per benchmark-driver. Varje oberoende process verifierar arkivets
+och datamängdens identitet och läser sin katalog; appprofiler och cache hålls
+åtskilda. Gemensam förberedelse och arkivinläsning redovisas separat.
+Scenariotiden börjar efter verifierad inläsning och slutar före lifecycle;
+hela processintervallet inkluderar inläsning och teardown. GUI-startmått och CPU-gränsen för
+scrollmätning är oförändrade. Detta bevisar inte snabbare rendering; P0-baslinjen
+är inte accepterad.
+
+Metadata, Tk-idle-återkoppling och stabil
+viewport mäts separat. Den tillåtna filen
+\codeword{issue_399_tk_protocol.json} väljs med
+\codeword{PHP_GALLERY_TK_PERF_PROTOCOL}. Canvas-implementationen väntar på
+en godkänd upprepad baslinje. Nativa feature-kontroller kräver
+\codeword{[winapp-full]} eller manuell start.
+
 WinApps partitionskoordinator identifierar hela testinventariet en gång.
 Varje barnprocess läser bara sina tilldelade lokala moduler och måste rapportera
 varje vald identitet. Modul-/klass-fixtures, fullständigt bevis för disjunkt

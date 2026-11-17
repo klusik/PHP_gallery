@@ -21,6 +21,7 @@ import os
 import platform
 import queue
 import random
+import stat
 from collections import OrderedDict
 import sys
 import tempfile
@@ -29,12 +30,13 @@ import time
 import weakref
 import tkinter as tk
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from tkinter import ttk
 from types import ModuleType, SimpleNamespace, TracebackType
 from typing import Callable, Concatenate, Generic, ParamSpec, Protocol, TypeAlias, TypeVar, TypedDict, cast
 import traceback as traceback_module
 from unittest import mock
+import zipfile
 from PIL import Image, __version__ as PILLOW_VERSION
 
 # Purpose: Provide reproducible synthetic colors and row values.
@@ -84,6 +86,49 @@ SOURCE_ACTIVITY_ROWS = 1000
 # Type: int. Units: photos. Scope: gallery and lightbox scenarios.
 # Consumers: build_gallery. Rationale: 500 rows span eight validated 64-photo pages.
 PHOTO_COUNT = 500
+# Purpose: Version the deterministic archive manifest independently of reports.
+# Type: int. Units: schema version. Scope: one issue 399 fixture manifest.
+# Consumers: bundle writer and reader. Rationale: identify this first fixed layout.
+FIXTURE_BUNDLE_SCHEMA_VERSION = 1
+# Purpose: Preserve private regular-file attributes in every canonical ZIP member.
+# Type: int. Units: Unix mode bits. Scope: generated synthetic fixture members.
+# Consumers: bundle writer. Rationale: regular owner-only files are portable and safe.
+FIXTURE_BUNDLE_FILE_MODE = stat.S_IFREG | 0o600
+# Purpose: Place Unix attributes in their standard ZIP external-attribute field.
+# Type: int. Units: bit positions. Scope: canonical ZIP member headers.
+# Consumers: bundle writer. Rationale: ZIP stores the Unix mode in the upper word.
+FIXTURE_BUNDLE_UNIX_ATTR_SHIFT = 16
+# Purpose: Use a stable platform identifier for the canonical Unix mode field.
+# Type: int. Units: ZIP creator platform ID. Scope: synthetic fixture members.
+# Consumers: bundle writer. Rationale: Unix ID 3 makes archive bytes host-independent.
+FIXTURE_BUNDLE_ZIP_CREATOR = 3
+# Purpose: Bound serialized deterministic fixture bundles used by issue 399.
+# Type: int. Units: bytes. Scope: one owned benchmark-stage archive.
+# Consumers: bundle writer and reader. Rationale: retain bounded temp storage.
+FIXTURE_BUNDLE_MAX_BYTES = 134217728
+# Purpose: Bound the JSON member describing deterministic fixture identities.
+# Type: int. Units: bytes. Scope: one fixture bundle manifest.
+# Consumers: bundle writer and reader. Rationale: 5000 hashes fit below this cap.
+FIXTURE_BUNDLE_MANIFEST_MAX_BYTES = 1048576
+# Purpose: Bound any single image body admitted from the fixture bundle.
+# Type: int. Units: bytes. Scope: one PNG or JPEG member.
+# Consumers: bundle writer and reader. Rationale: generated fixtures are far smaller.
+FIXTURE_BUNDLE_MEMBER_MAX_BYTES = 33554432
+# Purpose: Cap the largest fixture catalogue accepted by the shared bundle code.
+# Type: int. Units: photos. Scope: issue 399 scrolling extents.
+# Consumers: bundle writer and reader. Rationale: match the protocol's largest extent.
+FIXTURE_BUNDLE_MAX_PHOTOS = 5000
+# Purpose: Bound streaming archive digest memory.
+# Type: int. Units: bytes. Scope: one fixture bundle hash operation.
+# Consumers: fixture bundle writer and reader.
+# Rationale: fixed small reads avoid loading the archive as one byte string.
+FIXTURE_BUNDLE_HASH_BLOCK_BYTES = 1048576
+# Purpose: Fix ZIP member timestamps for repeatable archive identities.
+# Type: tuple[int, int, int, int, int, int].
+# Units: ZIP timestamp fields. Scope: every generated fixture bundle.
+# Consumers: prepare_fixture_bundle. Rationale: remove wall-clock variation.
+FIXTURE_BUNDLE_ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+
 # Purpose: Keep one deterministic synthetic thumbnail catalog per child process.
 # Type: dict[int, tuple[bytes, ...]]. Units: seed to image body set. Scope: one process.
 # Consumers: build_gallery. Rationale: Exclude fixture generation from timed UI callbacks.
@@ -271,6 +316,26 @@ AfterMethod: TypeAlias = Callable[
     str | None,
 ]
 JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+
+class FixtureBundleMember(TypedDict):
+    """Describe one allowlisted fixture archive member."""
+
+    name: str
+    size: int
+    sha256: str
+
+
+class FixtureBundleManifest(TypedDict):
+    """Describe deterministic fixture identities bound by the archive digest."""
+
+    schema_version: int
+    seed: int
+    photo_count: int
+    common_sha256: str
+    pillow_version: str
+    photos: list[FixtureBundleMember]
+    hires: list[FixtureBundleMember]
+
 
 
 class WatcherHost(Protocol):
@@ -499,8 +564,28 @@ HEARTBEAT_INTERVAL_MS = 16
 HEARTBEAT_INTERVAL_NS = HEARTBEAT_INTERVAL_MS * NS_PER_MS
 
 
+# Purpose: Bound setup-phase timing summaries to known event metrics.
+# Type: frozenset[str]. Units: event metric names. Scope: one Recorder instance.
+# Consumers: Recorder.add() during the explicit setup phase.
+# Rationale: fixed keys prevent callback-specific or unbounded setup evidence.
+SETUP_AGGREGATE_METRICS = frozenset({
+    "callback",
+    "image_publication",
+    "image_resize_gui",
+    "image_resize_worker",
+})
+
+
+class SetupMetricSummary(TypedDict):
+    """Describe bounded aggregate setup timing for one fixed event metric."""
+
+    count: int
+    total_ns: int
+    max_ns: int
+
+
 class Recorder(Generic[P, R]):
-    """Collect bounded Tk callback timings and measured widget operation counts."""
+    """Collect bounded raw interaction timings and fixed setup aggregates."""
 
     def __init__(self, enabled: bool) -> None:
         """Initialize optional scheduler instrumentation and phase state.
@@ -515,6 +600,8 @@ class Recorder(Generic[P, R]):
         self.phase = "warmup"
         self.events: list[RawEvent] = []
         self.truncated = 0
+        self.setup_summaries: dict[str, SetupMetricSummary] = {}
+        self._setup_lock = threading.Lock()
         self.operation_counts: dict[str, int] = dict.fromkeys(OPERATION_COUNT_KEYS, 0)
         self._original_after: AfterMethod[P, R] | None = None
         self._restore_callbacks: list[Callable[[], None]] = []
@@ -731,15 +818,15 @@ class Recorder(Generic[P, R]):
         self._restore_callbacks.append(lambda: replace_method(original))
 
     def _count_operation(self, operation: str) -> None:
-        """Increment one operation counter only during measured phase.
+        """Increment one operation counter during setup or measurement.
 
         Args:
             operation (str): Stable operation-count key.
 
         Returns:
-            None: The measured-phase count advances by one.
+            None: Explicit setup and measured phases advance the count.
         """
-        if not self.enabled or self.phase != "measured":
+        if not self.enabled or self.phase not in ("setup", "measured"):
             return
         self.operation_counts[operation] = self.operation_counts.get(operation, 0) + 1
 
@@ -867,18 +954,35 @@ class Recorder(Generic[P, R]):
                 lateness in nanoseconds attached to the callback observation.
 
         Returns:
-            None: Warmup samples are discarded; measured samples retain all
-                supplied details until the cap, after which overflow increments.
+            None: Setup samples aggregate under fixed metric keys. Warmup samples
+                are discarded; measured samples retain details until the raw cap.
         """
         event_phase = phase or self.phase
-        if not self.enabled or event_phase != "measured":
+        if not self.enabled:
+            return
+        elapsed = max(0, elapsed_ns)
+        if event_phase == "setup":
+            if metric not in SETUP_AGGREGATE_METRICS:
+                return
+            # GUI callbacks and image workers can publish aggregates together.
+            # Preserve exact counts without depending on interpreter scheduling.
+            with self._setup_lock:
+                summary = self.setup_summaries.setdefault(
+                    metric,
+                    {"count": 0, "total_ns": 0, "max_ns": 0},
+                )
+                summary["count"] += 1
+                summary["total_ns"] += elapsed
+                summary["max_ns"] = max(summary["max_ns"], elapsed)
+            return
+        if event_phase != "measured":
             return
         if len(self.events) >= RAW_EVENT_LIMIT:
             self.truncated += 1
             return
         event: RawEvent = {
             "metric": metric,
-            "ns": max(0, elapsed_ns),
+            "ns": elapsed,
             "phase": event_phase,
         }
         if callback_name is not None:
@@ -1233,27 +1337,390 @@ def make_hires_body(seed: int) -> bytes:
     return stream.getvalue()
 
 
-def make_photo_bodies(seed: int) -> tuple[bytes, ...]:
-    """Encode 500 distinct textured synthetic thumbnails in memory.
+def make_photo_bodies(seed: int, photo_count: int = PHOTO_COUNT) -> tuple[bytes, ...]:
+    """Encode deterministic textured synthetic thumbnails in memory.
 
     Args:
         seed (int): Explicit deterministic PRNG seed from the driver.
+        photo_count (int): Positive whole-number count; defaults to the frozen
+            Issue 361 workload size.
 
     Returns:
         tuple[bytes, ...]: Bounded textured PNG bodies across four dimensions.
+
+    Raises:
+        ValueError: photo_count is not a positive built-in integer.
     """
+    if type(photo_count) is not int or photo_count < 1:
+        raise ValueError("photo_count must be a positive integer.")
     return tuple(
         make_pattern_body(
             THUMBNAIL_SIZE_VARIANTS[index % len(THUMBNAIL_SIZE_VARIANTS)],
             seed + index,
         )
-        for index in range(PHOTO_COUNT)
+        for index in range(photo_count)
     )
+
+
+def _fixture_bundle_json_object(
+    pairs: list[tuple[str, JsonValue]],
+) -> dict[str, JsonValue]:
+    """Reject duplicate keys while decoding the fixture manifest.
+
+    Args:
+        pairs (list[tuple[str, JsonValue]]): JSON object key/value pairs.
+
+    Returns:
+        dict[str, JsonValue]: Unique-key JSON object.
+
+    Raises:
+        ValueError: If the object repeats a key.
+    """
+    result: dict[str, JsonValue] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Fixture manifest contains a duplicate JSON key.")
+        result[key] = value
+    return result
+
+
+def _fixture_sha256(body: bytes) -> str:
+    """Return the lowercase SHA-256 of one exact fixture member.
+
+    Args:
+        body (bytes): Exact image-body bytes.
+
+    Returns:
+        str: Lowercase hexadecimal SHA-256 digest.
+    """
+    return hashlib.sha256(body).hexdigest()
+
+
+def _fixture_bundle_file_sha256(path: Path) -> str:
+    """Hash an archive using bounded reads.
+
+    Args:
+        path (Path): Existing fixture archive.
+
+    Returns:
+        str: Lowercase hexadecimal SHA-256 digest.
+    """
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(
+            lambda: stream.read(FIXTURE_BUNDLE_HASH_BLOCK_BYTES),
+            b"",
+        ):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def prepare_fixture_bundle(
+    archive_path: Path,
+    seed: int,
+    photo_count: int,
+    common_sha256: str,
+) -> str:
+    """Generate and persist one deterministic, source-bound scroll fixture bundle.
+
+    Args:
+        archive_path (Path): New path inside the driver's owned temporary folder.
+        seed (int): Exact workload seed used for every generated fixture.
+        photo_count (int): Largest scenario extent included in the bundle.
+        common_sha256 (str): Exact SHA-256 of this shared workload module.
+
+    Returns:
+        str: SHA-256 digest of the deterministic ZIP archive.
+
+    Raises:
+        ValueError: Inputs exceed the fixed protocol identity or size bounds.
+        OSError: The archive cannot be written or hashed.
+    """
+    if type(seed) is not int or seed < 0:
+        raise ValueError("Fixture bundle seed must be a nonnegative integer.")
+    if (type(photo_count) is not int or photo_count < 1
+            or photo_count > FIXTURE_BUNDLE_MAX_PHOTOS):
+        raise ValueError("Fixture bundle photo count is outside its fixed bound.")
+    if (len(common_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in common_sha256)):
+        raise ValueError("Fixture bundle common SHA-256 is invalid.")
+    if archive_path.exists():
+        raise ValueError("Fixture bundle path must not already exist.")
+
+    photos = make_photo_bodies(seed, photo_count)
+    hires = tuple(
+        make_hires_body(seed + variant)
+        for variant in range(HIRES_FIXTURE_VARIANTS)
+    )
+    photo_members: list[FixtureBundleMember] = []
+    hires_members: list[FixtureBundleMember] = []
+    for index, body in enumerate(photos):
+        if not body or len(body) > FIXTURE_BUNDLE_MEMBER_MAX_BYTES:
+            raise ValueError("Generated photo body exceeds the member bound.")
+        photo_members.append({
+            "name": f"photos/{index:05d}.png",
+            "size": len(body),
+            "sha256": _fixture_sha256(body),
+        })
+    for index, body in enumerate(hires):
+        if not body or len(body) > FIXTURE_BUNDLE_MEMBER_MAX_BYTES:
+            raise ValueError("Generated hires body exceeds the member bound.")
+        hires_members.append({
+            "name": f"hires/{index:02d}.jpg",
+            "size": len(body),
+            "sha256": _fixture_sha256(body),
+        })
+
+    manifest: FixtureBundleManifest = {
+        "schema_version": FIXTURE_BUNDLE_SCHEMA_VERSION,
+        "seed": seed,
+        "photo_count": photo_count,
+        "common_sha256": common_sha256,
+        "pillow_version": PILLOW_VERSION,
+        "photos": photo_members,
+        "hires": hires_members,
+    }
+    manifest_bytes = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    if len(manifest_bytes) > FIXTURE_BUNDLE_MANIFEST_MAX_BYTES:
+        raise ValueError("Fixture manifest exceeds its fixed size bound.")
+
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with archive_path.open("xb") as output_stream:
+            with zipfile.ZipFile(
+                output_stream,
+                mode="w",
+                compression=zipfile.ZIP_STORED,
+                allowZip64=False,
+            ) as archive:
+                for index, body in enumerate(photos):
+                    info = zipfile.ZipInfo(
+                        f"photos/{index:05d}.png",
+                        date_time=FIXTURE_BUNDLE_ZIP_TIMESTAMP,
+                    )
+                    info.compress_type = zipfile.ZIP_STORED
+                    info.create_system = FIXTURE_BUNDLE_ZIP_CREATOR
+                    info.external_attr = FIXTURE_BUNDLE_FILE_MODE << FIXTURE_BUNDLE_UNIX_ATTR_SHIFT
+                    archive.writestr(info, body)
+                for index, body in enumerate(hires):
+                    info = zipfile.ZipInfo(
+                        f"hires/{index:02d}.jpg",
+                        date_time=FIXTURE_BUNDLE_ZIP_TIMESTAMP,
+                    )
+                    info.compress_type = zipfile.ZIP_STORED
+                    info.create_system = FIXTURE_BUNDLE_ZIP_CREATOR
+                    info.external_attr = FIXTURE_BUNDLE_FILE_MODE << FIXTURE_BUNDLE_UNIX_ATTR_SHIFT
+                    archive.writestr(info, body)
+                manifest_info = zipfile.ZipInfo(
+                    "manifest.json",
+                    date_time=FIXTURE_BUNDLE_ZIP_TIMESTAMP,
+                )
+                manifest_info.compress_type = zipfile.ZIP_STORED
+                manifest_info.create_system = FIXTURE_BUNDLE_ZIP_CREATOR
+                manifest_info.external_attr = FIXTURE_BUNDLE_FILE_MODE << FIXTURE_BUNDLE_UNIX_ATTR_SHIFT
+                archive.writestr(manifest_info, manifest_bytes)
+        if archive_path.stat().st_size > FIXTURE_BUNDLE_MAX_BYTES:
+            raise ValueError("Fixture bundle exceeds its fixed archive size bound.")
+        return _fixture_bundle_file_sha256(archive_path)
+    except Exception:
+        archive_path.unlink(missing_ok=True)
+        raise
+
+
+def _validate_fixture_member_rows(
+    value: JsonValue,
+    member_kind: str,
+    expected_count: int,
+) -> list[FixtureBundleMember]:
+    """Validate ordered manifest entries without opening archive members.
+
+    Args:
+        value (JsonValue): Candidate JSON value from the manifest.
+        member_kind (str): Fixed photos or hires member category.
+        expected_count (int): Exact expected number of entries.
+
+    Returns:
+        list[FixtureBundleMember]: Validated names, lengths and digests.
+
+    Raises:
+        ValueError: The member table does not match its exact bounded shape.
+    """
+    if not isinstance(value, list) or len(value) != expected_count:
+        raise ValueError("Fixture manifest member count is invalid.")
+    entries: list[FixtureBundleMember] = []
+    suffix = "png" if member_kind == "photos" else "jpg"
+    for index, item in enumerate(value):
+        if not isinstance(item, dict) or set(item) != {"name", "size", "sha256"}:
+            raise ValueError("Fixture manifest member shape is invalid.")
+        name = item["name"]
+        size = item["size"]
+        digest = item["sha256"]
+        expected_name = f"{member_kind}/{index:05d}.{suffix}" if member_kind == "photos" else f"{member_kind}/{index:02d}.{suffix}"
+        if name != expected_name:
+            raise ValueError("Fixture manifest member path is invalid.")
+        if (type(size) is not int or size < 1
+                or size > FIXTURE_BUNDLE_MEMBER_MAX_BYTES):
+            raise ValueError("Fixture manifest member length is invalid.")
+        if (not isinstance(digest, str) or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)):
+            raise ValueError("Fixture manifest member SHA-256 is invalid.")
+        entries.append({"name": name, "size": size, "sha256": digest})
+    return entries
+
+
+def load_fixture_bundle(
+    archive_path: Path,
+    expected_archive_sha256: str,
+    expected_seed: int,
+    requested_photo_count: int,
+    expected_bundle_photo_count: int,
+    expected_common_sha256: str,
+) -> tuple[tuple[bytes, ...], tuple[bytes, ...], str]:
+    """Verify a fixture archive and load only the requested photo prefix.
+
+    Args:
+        archive_path (Path): Driver-owned ZIP archive; never extracted.
+        expected_archive_sha256 (str): Exact archive digest supplied by the driver.
+        expected_seed (int): Workload seed required by the current child.
+        requested_photo_count (int): Scenario photo count loaded into this process.
+        expected_bundle_photo_count (int): Exact maximum extent in the archive.
+        expected_common_sha256 (str): Exact shared workload source digest.
+
+    Returns:
+        tuple[tuple[bytes, ...], tuple[bytes, ...], str]:
+            Requested photo prefix, both hires bodies, and prefix dataset digest.
+
+    Raises:
+        ValueError: Identity, path, ZIP metadata, length, or content validation fails.
+        OSError: The archive cannot be read.
+    """
+    if (len(expected_archive_sha256) != 64
+            or any(character not in "0123456789abcdef"
+                   for character in expected_archive_sha256)):
+        raise ValueError("Expected fixture archive SHA-256 is invalid.")
+    if (type(requested_photo_count) is not int or requested_photo_count < 1
+            or requested_photo_count > expected_bundle_photo_count
+            or expected_bundle_photo_count > FIXTURE_BUNDLE_MAX_PHOTOS):
+        raise ValueError("Requested fixture extent is outside its fixed bounds.")
+    if type(expected_seed) is not int or expected_seed < 0:
+        raise ValueError("Expected fixture seed must be a nonnegative integer.")
+    if (type(expected_bundle_photo_count) is not int
+            or expected_bundle_photo_count < 1
+            or expected_bundle_photo_count > FIXTURE_BUNDLE_MAX_PHOTOS):
+        raise ValueError("Expected bundle extent is outside its fixed bound.")
+    if (len(expected_common_sha256) != 64
+            or any(character not in "0123456789abcdef"
+                   for character in expected_common_sha256)):
+        raise ValueError("Expected common source SHA-256 is invalid.")
+    if archive_path.is_symlink() or not archive_path.is_file():
+        raise ValueError("Fixture archive must be an owned regular file.")
+    archive_size = archive_path.stat().st_size
+    if archive_size > FIXTURE_BUNDLE_MAX_BYTES:
+        raise ValueError("Fixture archive is absent or exceeds its size bound.")
+    if _fixture_bundle_file_sha256(archive_path) != expected_archive_sha256:
+        raise ValueError("Fixture archive SHA-256 mismatch.")
+
+    try:
+        with zipfile.ZipFile(archive_path, mode="r") as archive:
+            infos = archive.infolist()
+            names = [info.filename for info in infos]
+            if len(names) != len(set(names)):
+                raise ValueError("Fixture archive contains duplicate member paths.")
+            if len(infos) != expected_bundle_photo_count + HIRES_FIXTURE_VARIANTS + 1:
+                raise ValueError("Fixture archive contains an unexpected member count.")
+            info_by_name: dict[str, zipfile.ZipInfo] = {}
+            for info in infos:
+                member = PurePosixPath(info.filename)
+                if (member.is_absolute() or ".." in member.parts
+                        or "\\" in info.filename or ":" in info.filename
+                        or not member.parts or member.as_posix() != info.filename):
+                    raise ValueError("Fixture archive contains an unsafe member path.")
+                if (info.is_dir() or info.flag_bits & 0x1
+                        or info.compress_type != zipfile.ZIP_STORED):
+                    raise ValueError("Fixture archive member type is unsupported.")
+                mode = (info.external_attr >> 16) & 0o170000
+                if mode not in (0, stat.S_IFREG):
+                    raise ValueError("Fixture archive contains a non-regular member.")
+                if (info.file_size < 1
+                        or info.file_size > FIXTURE_BUNDLE_MEMBER_MAX_BYTES):
+                    raise ValueError("Fixture archive member exceeds its size bound.")
+                info_by_name[info.filename] = info
+
+            manifest_info = info_by_name.get("manifest.json")
+            if (manifest_info is None
+                    or manifest_info.file_size > FIXTURE_BUNDLE_MANIFEST_MAX_BYTES):
+                raise ValueError("Fixture archive manifest is absent or too large.")
+            manifest_value = json.loads(
+                archive.read(manifest_info).decode("utf-8"),
+                object_pairs_hook=_fixture_bundle_json_object,
+            )
+            if not isinstance(manifest_value, dict):
+                raise ValueError("Fixture manifest root must be an object.")
+            if set(manifest_value) != {
+                "schema_version", "seed", "photo_count", "common_sha256",
+                "pillow_version", "photos", "hires",
+            }:
+                raise ValueError("Fixture manifest fields are invalid.")
+            if (type(manifest_value["schema_version"]) is not int
+                    or manifest_value["schema_version"] != FIXTURE_BUNDLE_SCHEMA_VERSION
+                    or type(manifest_value["seed"]) is not int
+                    or manifest_value["seed"] != expected_seed
+                    or type(manifest_value["photo_count"]) is not int
+                    or manifest_value["photo_count"] != expected_bundle_photo_count
+                    or manifest_value["common_sha256"] != expected_common_sha256
+                    or manifest_value["pillow_version"] != PILLOW_VERSION):
+                raise ValueError("Fixture manifest source identity mismatch.")
+            photo_rows = _validate_fixture_member_rows(
+                manifest_value["photos"], "photos", expected_bundle_photo_count,
+            )
+            hires_rows = _validate_fixture_member_rows(
+                manifest_value["hires"], "hires", HIRES_FIXTURE_VARIANTS,
+            )
+            expected_names = {
+                "manifest.json",
+                *(entry["name"] for entry in photo_rows),
+                *(entry["name"] for entry in hires_rows),
+            }
+            if set(info_by_name) != expected_names:
+                raise ValueError("Fixture archive member paths do not match manifest.")
+
+            photos: list[bytes] = []
+            for entry in photo_rows[:requested_photo_count]:
+                info = info_by_name[entry["name"]]
+                if info.file_size != entry["size"]:
+                    raise ValueError("Photo body length differs from its manifest.")
+                body = archive.read(info)
+                if (len(body) != entry["size"]
+                        or _fixture_sha256(body) != entry["sha256"]):
+                    raise ValueError("Photo body SHA-256 mismatch.")
+                photos.append(body)
+
+            hires: list[bytes] = []
+            for entry in hires_rows:
+                info = info_by_name[entry["name"]]
+                if info.file_size != entry["size"]:
+                    raise ValueError("Hires body length differs from its manifest.")
+                body = archive.read(info)
+                if (len(body) != entry["size"]
+                        or _fixture_sha256(body) != entry["sha256"]):
+                    raise ValueError("Hires body SHA-256 mismatch.")
+                hires.append(body)
+    except (zipfile.BadZipFile, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("Fixture archive or manifest is malformed.") from error
+
+    dataset_sha = hashlib.sha256(b"".join(
+        hashlib.sha256(body).digest() for body in photos
+    )).hexdigest()
+    return tuple(photos), tuple(hires), dataset_sha
+
 
 def build_gallery(
     root: tk.Tk, source_root: Path, seed: int,
     gallery_id: int = GALLERY_ID,
     thumbnail_memory: "GalleryThumbnailMemory | None" = None,
+    photo_count: int = PHOTO_COUNT,
 ) -> tuple[NativeViewerContract, mock.Mock, FixtureMediaInfo, GalleryFixtureState]:
     """Mount production Photos with protocol-sized pages and prebuilt 4K media.
 
@@ -1263,11 +1730,15 @@ def build_gallery(
         seed (int): Fixture seed for deterministic image patterns.
         gallery_id (int): Exact synthetic gallery ID admitted by this session.
         thumbnail_memory (GalleryThumbnailMemory | None): Session-owned decoded cache.
+        photo_count (int): Positive whole-number catalogue size; defaults to the
+            frozen Issue 361 workload count.
 
     Returns:
         tuple[NativeViewerContract, mock.Mock, FixtureMediaInfo, GalleryFixtureState]:
             Real viewer, strict session fake, bounded dataset facts and live counters.
     """
+    if type(photo_count) is not int or photo_count < 1:
+        raise ValueError("photo_count must be a positive integer.")
     winapp = str(source_root / "winapp")
     if winapp not in sys.path:
         sys.path.insert(0, winapp)
@@ -1282,15 +1753,15 @@ def build_gallery(
     dataset_sha256 = hashlib.sha256(digest_input).hexdigest()
     photos = tuple(
         LinkedPhoto(FIRST_IMAGE_ID + index, f"Synthetic photo {index}")
-        for index in range(PHOTO_COUNT)
+        for index in range(photo_count)
     )
     pages = tuple(
         LinkedMediaPage(
             gallery_id, PARENT_ID, photos[start:start + PHOTO_PAGE_SIZE],
             photos[start + PHOTO_PAGE_SIZE - 1].image_id
-            if start + PHOTO_PAGE_SIZE < PHOTO_COUNT else None,
+            if start + PHOTO_PAGE_SIZE < photo_count else None,
         )
-        for start in range(0, PHOTO_COUNT, PHOTO_PAGE_SIZE)
+        for start in range(0, photo_count, PHOTO_PAGE_SIZE)
     )
     session = mock.create_autospec(LinkingSession, instance=True, spec_set=True)
     session.can_read_media.return_value = True
