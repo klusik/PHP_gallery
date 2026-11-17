@@ -50,15 +50,15 @@ CHILD_TEST_ID_LIMIT = 4096
 CHILD_REASON_LIMIT = 16384
 
 # Purpose: Isolate the observed long-running viewer test module in one child.
-# Type: frozenset[str]. Units: unittest module names. Scope: six WinApp shards.
+# Type: frozenset[str]. Units: unittest module names. Scope: seven WinApp shards.
 # Consumers: partition_test_ids(). Rationale: hosted timings showed the viewer
 # module alone approaches the existing per-child limit; keep all its classes
-# separate from every isolated benchmark and the remaining canonical inventory.
+# separate from measured owners while the canonical remainder uses two shards.
 PARTITION_ISOLATED_MODULES = frozenset({"test_native_gallery_viewer"})
 
 # Purpose: Isolate measured benchmark and preload classes in separate children.
 # Type: tuple[str, ...]. Units: unittest module/class identities.
-# Scope: six WinApp shards. Consumers: partition_test_ids().
+# Scope: seven WinApp shards. Consumers: partition_test_ids().
 # Rationale: the two filesystem cohorts and real-session preload benchmark each
 # approach the existing child deadline and must not share another slow owner.
 # The durable dense-return case has the same filesystem cost and its own class.
@@ -68,6 +68,14 @@ PARTITION_ISOLATED_CLASSES = (
     "test_gallery_preload.GalleryPreloadWorkerTests",
     "test_native_gallery_dense_return.NativeGalleryDenseReturnTests",
 )
+
+
+# Purpose: Split only the canonical remainder into two serial child processes.
+# Type: int. Units: remainder child processes. Scope: seven WinApp shards.
+# Consumers: partition_test_ids(). Rationale: one 1,270-test remainder shard
+# reached its 90-second child cap; two whole-class buckets reduce aggregation
+# without mixing the five previously isolated measured groups.
+PARTITION_REMAINDER_SHARD_COUNT = 2
 
 
 def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:
@@ -80,6 +88,9 @@ def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:
         list[list[str]]: Disjoint class-preserving IDs in stable shard order;
             the measured module and classes each occupy separate
             shards when all configured groups are discovered.
+    Raises:
+        ValueError: The requested count or discovered groups cannot produce
+            unique, non-empty class-preserving partitions.
     """
     if count < 2 or len(test_ids) != len(set(test_ids)):
         raise ValueError("Partition count or canonical test identities are invalid.")
@@ -92,8 +103,12 @@ def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:
     if len(classes) < count:
         raise ValueError("Canonical inventory has fewer classes than partitions.")
 
-    # Count each isolated class plus native-module and canonical-remainder buckets.
-    isolation_group_count = len(PARTITION_ISOLATED_CLASSES) + 2
+    # The viewer module contributes one isolated group; remainder buckets are
+    # class-balanced only after all five measured groups have been removed.
+    isolation_group_count = (
+        len(PARTITION_ISOLATED_CLASSES) + 1
+        + PARTITION_REMAINDER_SHARD_COUNT
+    )
     if count == isolation_group_count:
         viewer_ids: list[str] = []
         benchmark_ids_by_class: dict[str, list[str]] = {
@@ -113,11 +128,15 @@ def partition_test_ids(test_ids: list[str], count: int) -> list[list[str]]:
             benchmark_ids_by_class[class_id]
             for class_id in PARTITION_ISOLATED_CLASSES
         ]
-        if viewer_ids and all(isolated_ids) and remaining_ids:
-            shards = [viewer_ids]
-            shards.extend(isolated_ids)
-            shards.append(remaining_ids)
-            return shards
+        if not viewer_ids or not all(isolated_ids) or not remaining_ids:
+            raise ValueError(
+                "Canonical inventory cannot fill every isolated group and remainder shard."
+            )
+        remainder_shards = partition_test_ids(
+            remaining_ids, PARTITION_REMAINDER_SHARD_COUNT,
+        )
+        shards = [viewer_ids, *isolated_ids, *remainder_shards]
+        return shards
 
     shards: list[list[str]] = [[] for _ in range(count)]
     weights = [0] * count

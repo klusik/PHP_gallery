@@ -734,6 +734,51 @@ The compact instrument tests check IAS/feet/fpm conversion, missing readings,
 pause/stop clearing and the three-second freshness boundary without Tk or native
 connections. They do not establish visual fit or live sampling.
 
+The WinApp support-report regressions cover allowlisted settings/runtime
+snapshots (including finite interval floats while rejecting NaN/Infinity),
+current diagnostic retention, bearer, JWT and quoted JSON credential redaction,
+metadata secrets, URL credentials/query/fragment removal including percent-
+encoded query values while retaining the useful URL path, local identity/path
+and latitude/longitude/altitude filtering, absent and unreadable logs, bounded
+64 KiB tail reading, and dropping a partial first line when the byte boundary
+cuts through it. The report-size ceiling includes its visible truncation marker.
+
+Additional deterministic WinApp cases exercise the actual `FlightUI.show_reports`
+embedded Saved Reports footer mount and actions. Support-report privacy negatives
+cover every component of bracketed, parenthesized and bare comma-separated
+coordinates, including signed scientific notation, plus unfinished bracket and
+parenthesis values at the end of the log tail; useful non-coordinate settings
+remain visible. These hosted tests do not qualify installed menus or physical
+native UI.
+The new test module is discovered
+by the existing WinApp test suite; source-only BASIC does not execute it.
+test_application_shell.py covers actual menu navigation, guarded shortcut
+suppression, and Copy/Save matching the displayed report snapshot.
+test_ui_shell.py covers embedded prompt responses, panel stacking, focus/grab
+restoration, and release of synchronous waits. Neither fixture proves that real
+background workers continue during a modal prompt; keep that behavior in manual
+acceptance.
+The shell's header/close fixture also requires inherited `DialogSurface` and
+`Button` components; the portable UI library guard continues to reject raw
+toolkit controls throughout the shell and file picker. Capture progress keeps
+the existing nonmodal overlay and its automatic-recovery coverage.
+The issue-scoped Issue 380 integrated WinApp UI workflow runs central
+scripts/audit.php --suite=winapp-partitioned on Ubuntu 24.04 under Xvfb and
+Windows Server 2025, retaining exact-commit artifacts. This is the runtime
+evidence owner for report and shell changes; source BASIC alone does not run it,
+and this workflow does not establish FULL qualification or integration.
+Manual Windows acceptance
+must inspect
+the report preview at normal and narrow widths, then exercise Refresh, Copy,
+Save, missing/unreadable logs, and an oversized log. Review the artifact for
+unexpected private data before sharing; redaction is not proof of complete
+anonymization. Check every application panel and notice remains in the root,
+the embedded file/folder picker at normal and narrow widths, including
+background listing, navigation, filters, and cancellation. Check
+F1/Ctrl+O/Ctrl+,/Ctrl+Shift+D dispatch as documented, active panels suppress
+shortcuts, and owner revalidation is retained after synchronous waits.
+Installed-source and packaged-app behavior remain separate acceptance checks.
+
 For Windows acceptance after the flight, inspect the single-line IAS/ALT/V/S
 strip at compact and resized widths, stopped/paused/disconnected states, and the
 PDF shortcut. Exercise saved-flight selection, explicit Finish with automatic
@@ -1696,7 +1741,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.2.8. Release verification uses the
+This guide applies to PHP Gallery Version 1.3.0. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -1984,7 +2029,7 @@ cache accounting still runs after dismissal. Screenshots are retained as
 The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
 SHA through `scripts/audit.php`. It runs `--profile=source-contracts` separately
 from `--suite=winapp-partitioned` on Linux and Windows. The latter keeps the
-central complete discovery and its six serial partitions; it is not
+central complete discovery and its seven serial partitions; it is not
 the narrower `winapp-native` viewer diagnostic. It performs no integration,
 release, installer build or production operation. Ordinary feature BASIC remains
 a separate required source result.
@@ -9729,6 +9774,136 @@ evidence. Default complete discovery and the 90-second child cap remain intact.
 This scope permits hosted native UI verification after a whole-suite timeout;
 it does not repair or qualify an incomplete full Windows run.
 
+The issue-scoped benchmark workflow runs for explicit `[tk-measure]` feature
+commit requests or manual workflow dispatch. This gate prevents an unchanged
+baseline from replaying during ordinary source/functional checkpoints. BASIC
+and the relevant functional workflow remain automatic.
+
+The optional `watcher-tk-performance` audit suite delegates the versioned
+Tkinter benchmark to isolated processes on the hosted Windows runner. Its
+[protocol](docs/performance/issue_361_tk_canvas.md) defines baseline-first
+sequencing, production callback workloads with synthetic offline data,
+cold/warm cache separation, run-level statistics and balanced comparisons on
+one VM. Raw JSON/CSV and environment metadata remain Actions artifacts. Tk
+callback/update timing is not physical monitor presentation or proof that
+flicker has disappeared. This opt-in experiment does not replace functional
+WinApp qualification or authorize protected integration.
+
+The active primary matrix, narrowed by the owner on 2026-11-17, contains
+100, 500 and 2000 photos: 12 pilot processes, 60 repeated baseline processes
+and 120 paired-comparison processes. The 5000-photo/79-page case is a separate
+stress test; a reported timeout does not block P1. A valid repeated primary
+baseline is sufficient to start the actual Canvas prototype. Immediately after
+the first functional prototype, run targeted hosted checks and an orientational
+A/B observation, then optimize and complete statistical qualification. Earlier
+16/80/160 counts below belong to the superseded four-extent calibration, not
+the active blocking matrix. No invalid result is reclassified as PASS.
+
+Issue 399 selects its protocol by the allowlisted
+`PHP_GALLERY_TK_PERF_PROTOCOL` filename. Application baseline A is the optimized
+PR 398 checkpoint (`ab245719ddf65ccba51a83ac10564a795a03dee9`); workflow and
+harness SHAs are tracked separately. The pilot admits 100, 500, 2,000 and 5,000
+catalog rows through real 64-item pages. It records Tk idle-proxy input latency,
+not physical presentation. Initial geometry is 900×680 at origin; resize
+scenarios use 640 and 960 client widths at origin, after screen/maxsize
+qualification and before the unchanged strict-width check.
+
+The full-16 pilot at workflow/harness SHA
+`01379b6b78ca178d1b87d892c2a3ef27fb830d3f` (run
+[44011416072](https://github.com/klusik/PHP_gallery/actions/runs/44011416072))
+and targeted diagnostic at SHA `9d4ea91b0766032aef3153939da06892cce8d23b`
+(run [44012529759](https://github.com/klusik/PHP_gallery/actions/runs/44012529759))
+are invalid attempts, not accepted measurements. In the targeted run Windows
+constrained the requested 1,100-pixel client width to 1028×680; the strict
+root-width wait hung despite all 24 visible items being loaded, an empty event
+queue and no active worker. The benchmark driver publishes the full generated `summary.md` and concise JSON
+in the GitHub Actions job summary; issue comments remain compact. The later
+repeated primary baseline and formal 120-process comparison are recorded in the
+linked experiment; G4 remains a historical measured NO-GO for general performance qualification;
+it is not a statistical PASS. On 2026-11-17, after the user's positive desktop
+scrolling experience, the owner selected Canvas as the persisted default for
+new profiles and legacy profiles missing the setting. Explicit saved False and
+environment value 0 or an invalid present value retain native widgets. This
+product decision does not establish screen-reader parity or general accessibility.
+See
+[the issue 399 protocol](docs/performance/issue_399_virtualized_canvas.md).
+The Tk workflow requires `[tk-measure]`; issue 399 functional checks run only
+for `[winapp-full]` or manual dispatch.
+
+Issue 399 Photos metadata ordering uses a bounded current-session cache of
+complete display metadata only (four galleries and 10,000 rows total). Its
+60-second freshness starts when a complete fetch begins. A reopen may display
+that cached order immediately while a full refresh runs; this does not reuse or
+renew binary-media proof. Eligible RAM thumbnail hits remain usable during metadata refresh, but a RAM miss, including an evicted or expired entry needing proof, waits for catalogue reconciliation before disk or network fallback. Renewal, workspace close, and HTTP 401/403/404 clear
+it; an interrupted refresh may keep an older unexpired complete snapshot. The
+first newest-first open without that snapshot still requires a full ascending
+API read because the server has no reverse cursor and the disk tree cache lacks
+photo IDs/titles. Cold-open delay is not qualified as fixed. For a timeout while awaiting response headers on the read with phase `media` and route `app_linking_media`, with no HTTP status, the validated prefix and cursor are retained. One full refresh invocation permits at most one automatic retry, and only when the prior physical completion event is absent or set. If it is unset, the refresh returns the existing error without waiting or scheduling another attempt, preserving the safe cursor for manual Retry. The retry uses the existing per-request timeout; neither that limit nor metadata freshness is extended. Cancellation, authorization failure, or a malformed response discards partial state. HTTP 429 continues through its existing quota/Retry-After path. A cold open still requires the complete ordered scan.
+
+The issue 399 scroll recorder separates setup from timed interaction. It counts
+real Tk operations in both phases, aggregates setup callback timings as fixed
+count/total/maximum values without per-callback raw events, and retains initial
+mount, first-page admission, first viewport and full-catalogue preparation as
+separate scalar timings. Measured cold/warm scroll events start after catalogue
+admission; warm priming is excluded. The 20,000-event cap and 90-second child /
+2,400-second driver deadlines remain unchanged; measured-event truncation still
+fails.
+
+The subsequent full pilot
+[44014467364](https://github.com/klusik/PHP_gallery/actions/runs/44014467364),
+at workflow/harness SHA `5d2bfd26139ded40488fb437bcfc8d6192e5392e`, completed
+the 100/500 extents (8/16 cells). In the 2,000-photo cold/instrumentation-on
+cell, all 50 input actions and three lifecycle transitions passed, then catalogue
+preparation filled the 20,000-event cap and truncated another 20,265
+observations before required interaction-feedback raw evidence existed. This full pilot and partial records
+are invalid, not accepted baseline evidence.
+
+The next harness revision packages the existing deterministic PNG/JPEG fixtures once per driver in a fixed-epoch `ZIP_STORED` archive. A manifest records the seed, fixture generator common-module SHA, Pillow version, and each body's length and SHA-256. Every independent child verifies the expected archive SHA and body hashes, recomputes its prefix dataset digest and checks the mounted gallery, then uses only its requested catalogue in its fresh process; its application profile/session/cache remain isolated. Fixture preparation and child `fixture_load_ms` are separate; `scenario_elapsed_ms` starts after verified loading and ends before lifecycle. The complete driver child interval includes loading, lifecycle and teardown. GUI startup scalars and the primary scroll CPU interval retain their existing boundaries. Bundle input is capped at 128 MiB, its manifest at 1 MiB and each member at 32 MiB; these shared writer/reader bounds preserve the fixed 5000-photo maximum. A diagnostic sidecar is limited to 16 KiB and updated every eight page reads/actions. Bundling is not evidence of application or rendering improvement.
+
+The full 16-process pilot [44016215794](https://github.com/klusik/PHP_gallery/actions/runs/44016215794), at source SHA `612a38df0e7601874a1cc1da4db97459432e705b`, saved 12 rows and timed out at the unchanged outer 90-second limit during the first 5,000-photo cold/instrumentation-on child. Diagnostic comment [6938434856](https://github.com/klusik/PHP_gallery/issues/399#issuecomment-6938434856) reports a 398.6-second sum for 12 saved child intervals and 62.5–78.6-second intervals for saved 2,000-photo cells, but does not prove root cause. The attempt and partial records are invalid and were not pooled into the later accepted repeated baseline.
+
+
+
+### Planned issue 399 cache-capacity comparison
+
+A separate cache profile is planned as `issue_399_tk_cache_protocol.json`; it is
+not yet implemented or selected, and no capacity results exist. Any pilot limited
+to the small policy will check bridge/control feasibility only, not be an A/B or
+large-cache qualification. The profile will compare
+16 MiB / 256 decoded entries with 256 MiB / 4,096 entries on the same exact
+application SHA, changing only the session-shared decoded-thumbnail memory
+limits. Disk and photo-detail quotas, validation and TTL remain unchanged. It
+will fix one renderer per run, separately covering native widgets and Canvas.
+Each run will cover 100, 500 and 2,000 photos in cold/warm states with ten
+matched independent process pairs per cell. Full down-and-back and repeated
+sweeps must request all N thumbnails; a separate switch must return to and
+fully sweep the original N-photo gallery. The current 100-photo lifecycle sample
+cannot stand in for the larger cache traversal.
+
+Planned per-process summaries include cache hits/misses/evictions/decode
+attempts, PhotoImage publication P95/P99, CPU and peak RSS. GUI events are not
+independent samples and will not be pooled. The profile keeps the central audit,
+ten-pair minimum, 90-second child timeout, 2,400-second driver timeout and
+20,000-event cap. Missing observations, incomplete full sweeps, truncation or
+timeouts block qualification without reducing n or inventing zeros. The 5,000-
+photo case remains nonblocking stress. See [the issue 399 experiment record]
+(docs/performance/issue_399_virtualized_canvas.md) for the current G4 NO-GO and
+separate pending design.
+
+
+The issue-scoped `issue-361-winapp-functional.yml` workflow runs the canonical
+Windows `winapp-partitioned` suite and Linux `winapp` suite under Xvfb. macOS
+uses the same complete partitioned suite after an observed whole-discovery
+timeout; it remains advisory, with actual failures and skips reported. The workflow
+publishes one exact-SHA aggregate checkpoint; advisory failures remain visible.
+
+The optional `winapp-frozen-installer` suite runs the existing real Windows
+builder from an owned temporary source copy and retains the installer, update
+metadata and builder runtime/help/updater-helper smoke evidence. The separate
+`.github/issue-361-validation.json` boolean `frozen_validation` gates this job;
+it does not change the Tk measurement protocol. Building does not install,
+launch an installed GUI, uninstall, publish or qualify the installed lifecycle.
+
 The issue #362 Windows feature job selects `winapp-partitioned`, which still
 discovers the canonical complete `test_*.py` inventory. Based on hosted timeout
 evidence, the coordinator places all classes discovered from
@@ -9736,11 +9911,21 @@ evidence, the coordinator places all classes discovered from
 benchmark classes `ThumbnailCacheSmallBenchmarkTests` and
 `ThumbnailCacheLargeBenchmarkTests` into separate children,
 `GalleryPreloadWorkerTests` into a fourth, and the unchanged durable dense-return
-case in `NativeGalleryDenseReturnTests` into a fifth. The exact remaining
-inventory occupies a sixth. The six children run serially in separate Python processes,
-each under the existing 90-second cap; the coordinator has a 480-second outer
-bound for those unchanged child caps plus inventory and report handling. It
-retains each original schema-1 child report and log. Selected-ID children flush
+case in `NativeGalleryDenseReturnTests` into a fifth. The six-child Windows
+run 43969245636 placed 1,270 tests in its last child, which reached 90.03
+seconds with no structured report after starting
+`FlightDeliveryCoordinationTests.test_legacy_duplicate_or_unproven_zip_is_not_removed`.
+That START record identifies the case active at the deadline; without its END
+record it does not distinguish a case-specific stall from accumulated remainder
+work. Pre-optimization Windows run 43957959829 completed its entire 1,420-test
+inventory; the current candidate discovers 1,427 tests.
+The coordinator therefore splits only the exact remaining inventory into two
+deterministic least-loaded, class-preserving shards; test order within each shard
+follows canonical discovery. All seven children run
+serially in separate Python processes, each under the existing 90-second cap;
+the coordinator retains its 480-second outer bound for child execution plus
+inventory and report handling. It retains each original schema-1 child report
+and log. Selected-ID children flush
 each test's START, END, status and duration to the retained log so a timeout
 identifies the active case. The END record is followed immediately by the full
 FAIL/ERROR traceback, preserving its reason if a later child timeout prevents
@@ -9749,7 +9934,7 @@ JSON report serialization.
 verify this progress evidence itself.
 Report verbosity, schema, child limits and selection remain unchanged. The
 coordinator checks runtime identity and report
-counts, and requires the exact disjoint test-ID union across all six children
+counts, and requires the exact disjoint test-ID union across all seven children
 before merging the real outcomes. Missing, timed-out, malformed, duplicate,
 incomplete or unsuccessful child evidence fails. The ordinary `winapp` suite
 and its 90-second full-process behavior remain unchanged; earlier full-process
@@ -9760,7 +9945,17 @@ The audit owner installs both WinApp source and test import roots explicitly;
 selected children cannot depend on another module alphabetically bootstrapping
 `uploader` imports. The dense-return body and its setup are reused unchanged,
 retaining its cache, transport and measurement assertions in the separate class.
-The 480-second whole-run cap is retained even with six bounded children.
+The 480-second whole-run cap is retained with seven bounded children.
+
+The issue #361 functional workflow also runs the existing central `php-fast`
+suite in a separate required Linux job. That registered suite includes
+`tests/audit_runner_test.php`; the Python partition report fixtures remain in
+the complete WinApp inventory. The workflow retains both native audit reports
+and publishes the actual coordinator-contract job result.
+
+No TeX manual impact: this changes central test process ownership and the
+publication of already-computed performance statistics. Runtime behavior and
+user-facing contracts are unchanged.
 
 Only the coordinator performs complete canonical discovery. An explicitly
 selected child discovers the exact local `test_` modules represented in its ID
@@ -9823,3 +10018,62 @@ by browser approval, and idle Watcher empty-inventory key maintenance. The real
 MySQL linking fixture verifies sliding access/family/key deadlines and keeps
 expired/revoked/wrong-key refusal assertions. Native information-card coverage
 checks effective Listed off for private galleries and the public hide override.
+
+The issue 361 functional workflow scopes concurrency and obsolete-run cleanup
+to its dedicated feature branch. Failed Windows summaries retain compact
+partition coverage/exit/timeout fields and tails of audit-owned child logs;
+incomplete reports remain failures even if their observed tests passed.
+
+The issue #361 Windows seven-partition run 43973205610 completed all 1,427
+canonical identities. Its only error came from the new history fixture's
+negative synthetic Unix timestamp, rejected by Windows `time.localtime`.
+The shared synthetic job factory now uses offsets from 2000-01-01 UTC,
+retaining ordering, row-cap, selection and recovery assertions on all platforms.
+No application timestamp handling or execution deadline changes.
+No TeX manual impact: this is a portable test-data correction only.
+
+The first gated frozen attempt in run 43974284723 was BLOCKED before build
+execution: its adapter treated the central Git resolver's nullable executable
+path as an argument list. The adapter now accepts the existing non-empty string
+contract and constructs the explicit `rev-parse HEAD` argument vector. Exact
+event-SHA and audit-source identity checks remain required. Failed frozen
+summaries retain at most 12,000 terminal diagnostic characters from the central
+report, for compiler, dependency or smoke failure diagnosis on the hosted runner.
+No TeX manual impact: build adapter and failure reporting only.
+
+The next frozen preflight (run 43975529379) exposed Windows PHP `tempnam`
+prefix truncation, documented in [the PHP manual source](https://github.com/php/doc-en/blob/master/reference/filesystem/functions/tempnam.xml).
+Windows keeps three prefix characters. The adapter retains the exact name
+created by `tempnam` and requires both the resolved immediate parent to equal
+the system temp root and the resolved basename to equal that reserved name.
+The existing containment check remains; build/copy/recursive cleanup cannot
+proceed from a differently resolved path. No TeX manual impact: private build
+workspace ownership proof only.
+
+The first issue #361 paired experiment (run 43979228202, source
+`2f92c60503d2690a47fdbb83ae912866b4f55e03`) reached the unchanged 2,400-second
+outer deadline. Its incomplete report and rejected publication remain FAIL;
+partial artifact 14284287759 is diagnostic evidence only. The authenticated
+artifact reader's `benchmark` kind summarizes completed child reports, partial
+combined report validity, recorded process wall time and retained CSV sizes
+without executing a workload or qualifying the current inspection candidate.
+No TeX manual impact: inspection of a failed hosted experiment only.
+
+The issue #361 controller now checkpoints each newly completed process by
+appending its raw CSV rows and compact `progress.jsonl` metadata. Individual
+child JSON/stdout/stderr remain retained; canonical combined JSON/CSV exports
+and final status validation remain the authoritative output on completion or a
+caught failure. This removes repeated all-history serialization between child
+processes without changing workload, metric/statistical code or deadlines.
+Any changed driver hash requires a fresh full pilot and original-control
+numerical baseline before another paired comparison. Progress alone cannot
+qualify the experiment. No TeX manual impact: internal persistence only; the
+existing user-facing benchmark procedure and application controls are unchanged.
+
+The linear-persistence checkpoint fixtures use the existing dashboard report
+factory, which emits the three required drift/callback/feedback probe rows.
+The first new assertion incorrectly expected four, the image-publication row
+used only by Photos/lightbox. The fixture expectation now matches all three
+actual dashboard rows, retaining full identity/content, header and duplication
+checks. The driver, workload and statistical bytes are unchanged by this test
+correction. No TeX manual impact: regression fixture cardinality only.

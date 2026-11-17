@@ -1,5 +1,52 @@
 # Compatibility lifecycle and retirement register
 
+## Experimental Canvas gallery renderer and native fallback
+
+Owners: WinApp native gallery viewer, the bounded Canvas grid presentation helper,
+and the shared UI theme. Issue #399 adds a retained Canvas renderer. The strict
+persisted setting `experimental_canvas_gallery_renderer` defaults to True for
+new profiles and legacy profiles missing that key; an explicit saved False is
+preserved. The choice is resolved once at application startup before any gallery
+opens. `PHP_GALLERY_CANVAS_GRID` takes precedence: absent uses the saved choice,
+exact `1` selects Canvas, and exact `0` or any other present value selects
+native widgets.
+
+On 2026-11-17, after the user's positive desktop scrolling experience, the owner
+changed the product default to Canvas. This is a product priority decision, not
+a statistical PASS. The historical G4 NO-GO remains valid for its measured
+workload and is not reclassified. Physical display smoothness, installed-client
+acceptance, screen-reader parity and general accessibility remain unknown.
+Hosted Tk interaction/resource tests and feedback proxies do not establish
+those properties; native widgets remain the explicit fallback.
+
+The fallback preserves the existing interaction and accessibility path while
+candidate correctness, performance and accessible operation are qualified.
+
+Photos also keeps a separate in-memory current-session cache of complete
+ordering metadata only, bounded to four galleries and 10,000 rows total. Its
+60-second freshness begins at the start of a complete fetch. A reopen can show
+the cached ordering immediately while a normal full refresh proceeds. This
+metadata never authorizes or renews binary-media proof; proof identities and
+TTLs are unchanged, and no image bytes or decoded-image pool are added. RAM
+thumbnail lookup precedes background proof refresh, pending disk I/O does not
+suppress a RAM hit, and late binary responses cannot replace the currently
+matching image. A RAM miss, including an evicted or expired entry needing proof, still waits for catalogue reconciliation before disk or network fallback. Renewal, workspace close and HTTP 401/403/404 clear the cache;
+an interrupted refresh may retain an older unexpired complete snapshot. Without
+a complete current-session metadata snapshot, the first newest-first open still
+requires a serial ascending API read because the server has no reverse cursor
+and the disk tree cache lacks photo IDs/titles. The cold-open delay remains
+unqualified. For a timeout while awaiting response headers on the read with phase `media` and route `app_linking_media`, with no HTTP status, the validated prefix and cursor are retained. One full refresh invocation permits at most one automatic retry, and only when the prior physical completion event is absent or set. If it is unset, the refresh returns the existing error without waiting or scheduling another attempt, preserving the safe cursor for manual Retry. The retry uses the existing per-request timeout; neither that limit nor metadata freshness is extended. Cancellation, authorization failure, or a malformed response discards partial state. HTTP 429 continues through its existing quota/Retry-After path. A cold open still requires the complete ordered scan.
+
+The fallback preserves the existing interaction and accessibility path while
+candidate correctness, performance and accessible operation are qualified.
+Retirement requires reproducible paired performance evidence, all interaction
+and security gates, explicit accessibility acceptance and owner approval; no
+version, usage or production adoption is inferred. Media proof/authorization,
+cache identities, worker cancellation, generation fencing and Tk-thread image
+publication remain owned by the existing viewer. A renderer change grants no
+new network or mutation authority. See the permanent
+[experiment record](performance/issue_399_virtualized_canvas.md).
+
 ## Linked flight report delivery and document titles
 
 Owners: delegated upload controller, existing PDF attachment service and WinApp
@@ -1092,6 +1139,24 @@ thumbnail. A matching disk entry can be reused immediately. The bounded
 decoded thumbnail cache belongs to the live Photos session and follows the
 current catalogue's validation. A legacy no-store 304
 causes one unconditional fetch. A refusal yields no stale body.
+
+The planned issue 399 cache-capacity comparison treats the single session-shared
+decoded-PIL LRU as a separate bounded layer: 16 MiB / 256 entries versus
+256 MiB / 4,096 entries. The limit is not per viewer and is not an RSS cap:
+conservative accounting uses four bytes per pixel and excludes allocator, Tk and
+widget overhead. PhotoImages may be recreated when bounded Tk slots re-admit
+viewport items; a shared PIL hit avoids decode work only when validation proof
+remains eligible. Session entries survive gallery switches and clear at
+workspace/session teardown; a standalone viewer's own cache clears on close.
+The planned experiment would leave the disk cache, photo-detail quota,
+validation and TTL unchanged. It has not run and no capacity result exists.
+Renderer measurements stay separate. The persisted renderer is now default-on
+for new/missing settings by the explicit 2026-11-17 owner decision, while saved
+False and the native environment override remain available. The historical G4
+NO-GO remains a measured result, not a current product default. See [the issue
+399 experiment record](performance/issue_399_virtualized_canvas.md).
+
+
 
 Audio persistence requires `X-PHP-Gallery-Track-Cache: 1`,
 `Cache-Control: private, no-cache`, and
@@ -5405,3 +5470,44 @@ Unlink also removes expired saved links without requiring a live bearer.
 Local removal preserves queued originals and exact destination history and is
 independent of best-effort server revocation. The original installed failure's
 precise transport/storage cause is unknown from the supplied diagnostic report.
+## WinApp in-window shell and support reports
+
+The Windows companion's native File/Edit/View/Tools/Help menu and embedded
+panels, including file/folder selection, keep secondary workflows in the
+existing root while preserving background jobs. Informational notices use a
+dismissible, scrollable, nonblocking strip with a 32-item queue and an omitted-
+notice count; they do not take focus or a grab. Confirmations and text/integer
+input remain modal and wait for a response. Independent progress panels defer
+until the current input/decision panel closes, while admitted background work
+continues. During an input panel, non-edit menu actions and navigation shortcuts
+are suppressed, but ordinary
+text editing remains available. Directory listings run on a bounded worker.
+Synchronous input continuation must preserve the
+existing owner revalidation before any protected action.
+EmbeddedWindow inherits the central DialogSurface/GlassCard appearance and
+uses central Button controls, including notices and file selection. It adds
+panel-stack behavior without a separate style or corner implementation.
+Capture progress retains the existing nonmodal OverlayPanel, fixed footer and
+automatic recovery without repair buttons. These inherited paths permanently
+share the same native clipping and flat fallback owner; installed acceptance
+of this rebased combination remains unknown until exercised on Windows.
+The support report is built offline from allowlisted settings/runtime facts,
+the current diagnostic snapshot, and at most the final 64 KiB of the existing
+application log. Missing/unreadable log sections and tail truncation are
+reported explicitly; if the byte boundary cuts a log line, the partial first
+line is dropped and marked. Credential fields including bearer and quoted JSON
+values, URL credentials/query/fragment, local paths and recognized identity or
+coordinate fields are filtered. URL host/path remain useful context. These
+filters reduce accidental disclosure but cannot guarantee anonymization;
+no raw configuration file or photographs are attached. Preview before sharing
+remains part of the user workflow. Copy and Save are explicit local actions,
+with no automatic transmission.
+
+This shell consolidates the Windows interface and gives users a reviewable
+support artifact without changing server access or job ownership. Retain the
+existing owner checks and background workers as the behavior boundary. Usage
+prevalence, installed-source acceptance, and real Windows narrow-layout review
+are unknown; hosted source/native coverage does not establish installed
+behavior. Keep these compatibility paths while supported installations may
+use them, and require installed Windows acceptance before claiming release
+qualification.

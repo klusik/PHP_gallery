@@ -21,8 +21,34 @@ import unittest
 from unittest import mock
 
 from uploader import app_linking as linking
+from uploader import gallery_view_order as order_module
 from uploader import gallery_view_preferences as preferences
 from uploader.gallery_view_order import GalleryViewOrder
+
+
+# Purpose: Bound waits for one simulated blocked media response in concurrency tests.
+# Type: float. Units: seconds. Scope: one deterministic GalleryViewOrder test.
+# Consumers: test_cached_order_is_available_during_slow_header_timeout.
+# Rationale: A bounded event wait prevents a broken worker from hanging CI.
+SLOW_MEDIA_RESPONSE_TEST_TIMEOUT_SECONDS = 2.0
+
+# Purpose: Move the stale-cache test beyond floating-point boundary rounding.
+# Type: float. Units: seconds. Scope: one PHOTO_CACHE_FRESH_SECONDS test.
+# Consumers: test_session_order_cache_is_fresh_bounded_and_auth_scoped.
+# Rationale: A full extra second guarantees age is strictly beyond the TTL.
+CACHE_EXPIRY_TEST_MARGIN_SECONDS = 1.0
+
+
+def _header_timeout() -> linking.LinkingResponseError:
+    """Build the exact sanitized media response-header timeout eligible for retry.
+
+    Returns:
+        linking.LinkingResponseError: Response-free dispatched media read timeout.
+    """
+    return linking.LinkingResponseError(
+        'media', 'app_linking_media', None, 'other', 'timeout',
+        transport_step='headers',
+    )
 
 
 class GalleryControlTests(unittest.TestCase):
@@ -172,6 +198,470 @@ class GalleryControlTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             GalleryViewOrder(session, 7).page(None, threading.Event())
         self.assertEqual(1, session.media_page.call_count)
+
+    def test_unfinished_transport_blocks_retry_until_manual_resume(self) -> None:
+        """Keep the current cursor while the transport still owns completion.
+
+        Returns:
+            None: Manual Retry resumes after the original response worker finishes.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        first = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(1, 'Oldest'),), 1,
+        )
+        last = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(2, 'Newest'),), None,
+        )
+        operation_finished = threading.Event()
+        unfinished_timeout = linking.LinkingResponseError(
+            'media', 'app_linking_media', None, 'other', 'timeout',
+            transport_step='headers',
+            operation_finished=operation_finished,
+        )
+        session.media_page.side_effect = [
+            first, unfinished_timeout, last,
+        ]
+        order = GalleryViewOrder(session, 7)
+        cancel = threading.Event()
+        with self.assertRaises(linking.LinkingResponseError):
+            order.page(None, cancel)
+        self.assertEqual([None, 1], [
+            call.kwargs['after_id'] for call in session.media_page.call_args_list
+        ])
+        self.assertEqual([1], [photo.image_id for photo in order._pending])
+        self.assertEqual(1, order._pending_cursor)
+        self.assertTrue(order._resuming)
+        operation_finished.set()
+        completed = order.page(None, cancel)
+        self.assertEqual([2, 1], [
+            photo.image_id for photo in completed.photos
+        ])
+        self.assertEqual([None, 1, 1], [
+            call.kwargs['after_id'] for call in session.media_page.call_args_list
+        ])
+
+    def test_header_timeout_after_session_authority_loss_is_not_retried(self) -> None:
+        """Discard partial rows rather than retry after current authority is lost.
+
+        Returns:
+            None: The media read stops without a transport retry.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        session.can_read_media.return_value = False
+        first = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(1, 'One'),), 1,
+        )
+        session.media_page.side_effect = [first, _header_timeout()]
+        order = GalleryViewOrder(session, 7)
+        with self.assertRaises(linking.LinkingResponseError):
+            order.page(None, threading.Event())
+        self.assertEqual([None, 1], [
+            call.kwargs['after_id'] for call in session.media_page.call_args_list
+        ])
+        self.assertEqual([], order._pending)
+        self.assertIsNone(order._pending_cursor)
+        self.assertFalse(order._resuming)
+        self.assertIsNone(order._refresh_started_at)
+
+    def test_reverse_retries_one_header_timeout_and_keeps_page_cursor(self) -> None:
+        """Retry one response-header timeout at the exact validated cursor.
+
+        Returns:
+            None: One failed page is retried and the complete reverse order is published.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        first = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(1, 'Oldest'),), 1,
+        )
+        last = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(2, 'Newest'),), None,
+        )
+        session.media_page.side_effect = [first, _header_timeout(), last]
+        order = GalleryViewOrder(session, 7)
+        with mock.patch.object(
+            order_module.time, 'monotonic', side_effect=[123.0],
+        ):
+            completed = order.page(None, threading.Event())
+        self.assertEqual([2, 1], [
+            photo.image_id for photo in completed.photos
+        ])
+        self.assertEqual([None, 1, 1], [
+            call.kwargs['after_id'] for call in session.media_page.call_args_list
+        ])
+        session.cache_recent_media_order.assert_called_once_with(
+            7, completed.photos, 123.0,
+        )
+
+    def test_second_header_timeout_preserves_cursor_for_manual_retry(self) -> None:
+        """Bound automatic retries to one per refresh and retain original age.
+
+        Returns:
+            None: The next user Retry resumes the exact pending media cursor.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        first = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(1, 'Oldest'),), 1,
+        )
+        last = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(2, 'Newest'),), None,
+        )
+        session.media_page.side_effect = [
+            first, _header_timeout(), _header_timeout(), last,
+        ]
+        order = GalleryViewOrder(session, 7)
+        cancel = threading.Event()
+        with mock.patch.object(
+            order_module.time, 'monotonic', return_value=234.0,
+        ):
+            with self.assertRaises(linking.LinkingResponseError):
+                order.page(None, cancel)
+            self.assertEqual([1], [photo.image_id for photo in order._pending])
+            self.assertEqual(1, order._pending_cursor)
+            self.assertTrue(order._resuming)
+            self.assertEqual(234.0, order._refresh_started_at)
+            completed = order.page(None, cancel)
+        self.assertEqual([2, 1], [
+            photo.image_id for photo in completed.photos
+        ])
+        self.assertEqual([None, 1, 1, 1], [
+            call.kwargs['after_id'] for call in session.media_page.call_args_list
+        ])
+        session.cache_recent_media_order.assert_called_once_with(
+            7, completed.photos, 234.0,
+        )
+
+    def test_auth_and_malformed_pages_clear_preserved_prefix(self) -> None:
+        """Clear an interrupted prefix for authority or catalogue validation errors.
+
+        Returns:
+            None: HTTP refusal and malformed paging remain non-retryable.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        first = linking.LinkedMediaPage(
+            7, None, (linking.LinkedPhoto(1, 'One'),), 1,
+        )
+        refused = linking.LinkingResponseError(
+            'media', 'app_linking_media', 401, 'json', 'http_status',
+        )
+        session.media_page.side_effect = [first, refused]
+        order = GalleryViewOrder(session, 7)
+        with self.assertRaises(linking.LinkingResponseError):
+            order.page(None, threading.Event())
+        self.assertEqual([], order._pending)
+        self.assertIsNone(order._pending_cursor)
+        self.assertFalse(order._resuming)
+        self.assertIsNone(order._refresh_started_at)
+        self.assertEqual([None, 1], [
+            call.kwargs['after_id'] for call in session.media_page.call_args_list
+        ])
+
+        malformed_session = mock.create_autospec(
+            linking.LinkingSession, instance=True,
+        )
+        malformed_session.media_page.side_effect = [
+            first,
+            linking.LinkedMediaPage(
+                7, None, (linking.LinkedPhoto(3, 'Three'),), 2,
+            ),
+        ]
+        malformed_order = GalleryViewOrder(malformed_session, 7)
+        with self.assertRaises(ValueError):
+            malformed_order.page(None, threading.Event())
+        self.assertEqual([], malformed_order._pending)
+        self.assertIsNone(malformed_order._pending_cursor)
+        self.assertFalse(malformed_order._resuming)
+        self.assertIsNone(malformed_order._refresh_started_at)
+
+    def test_header_timeout_after_cancellation_is_not_retried(self) -> None:
+        """Stop after cancellation even if the pending request reports a timeout.
+
+        Returns:
+            None: A cancelled viewer generation gets no automatic transport retry.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        cancel = threading.Event()
+
+        def cancel_then_timeout(
+            gallery_id: int, after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> linking.LinkedMediaPage:
+            """Set cancellation and emulate a raced response-header timeout.
+
+            Args:
+                gallery_id (int): Expected physical gallery identity.
+                after_id (int | None): First page has no continuation.
+                cancelled (threading.Event | None): Captured viewer cancellation.
+            Returns:
+                linking.LinkedMediaPage: Unused because the transport times out.
+            Raises:
+                linking.LinkingResponseError: Raced response-header timeout.
+            """
+            self.assertEqual(7, gallery_id)
+            self.assertIsNone(after_id)
+            self.assertIs(cancelled, cancel)
+            cancel.set()
+            raise _header_timeout()
+
+        session.media_page.side_effect = cancel_then_timeout
+        order = GalleryViewOrder(session, 7)
+        with self.assertRaises(linking.LinkingResponseError):
+            order.page(None, cancel)
+        self.assertEqual(1, session.media_page.call_count)
+        self.assertEqual([], order._pending)
+        self.assertIsNone(order._pending_cursor)
+        self.assertFalse(order._resuming)
+        self.assertIsNone(order._refresh_started_at)
+
+    def test_cancelled_order_read_clears_a_validated_prefix(self) -> None:
+        """Discard partial display state when the viewer cancels a page read.
+
+        Returns:
+            None: A later viewer generation cannot reuse the cancelled prefix.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        cancel = threading.Event()
+
+        def page_then_cancel(
+            gallery_id: int, after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> linking.LinkedMediaPage:
+            """Return one valid page then cancel before the next continuation.
+
+            Args:
+                gallery_id (int): Expected physical gallery identity.
+                after_id (int | None): Exclusive cursor supplied by the order.
+                cancelled (threading.Event | None): Viewer operation cancellation.
+            Returns:
+                linking.LinkedMediaPage: One valid page whose continuation is not used.
+            """
+            self.assertEqual(7, gallery_id)
+            self.assertIsNone(after_id)
+            self.assertIs(cancelled, cancel)
+            cancel.set()
+            return linking.LinkedMediaPage(
+                7, None, (linking.LinkedPhoto(1, 'One'),), 1,
+            )
+
+        session.media_page.side_effect = page_then_cancel
+        order = GalleryViewOrder(session, 7)
+        with self.assertRaises(ValueError):
+            order.page(None, cancel)
+        self.assertEqual([None], [
+            call.kwargs['after_id'] for call in session.media_page.call_args_list
+        ])
+        self.assertEqual([], order._pending)
+        self.assertIsNone(order._pending_cursor)
+        self.assertFalse(order._resuming)
+        self.assertIsNone(order._refresh_started_at)
+
+    def test_cached_order_is_available_during_slow_header_timeout(self) -> None:
+        """Keep a fresh display snapshot available while headers stall then time out.
+
+        Returns:
+            None: A background refresh failure does not block the cached first page.
+        """
+        session = mock.create_autospec(linking.LinkingSession, instance=True)
+        cached_rows = (
+            linking.LinkedPhoto(3, 'Newest'),
+            linking.LinkedPhoto(2, 'Middle'),
+            linking.LinkedPhoto(1, 'Oldest'),
+        )
+        session.recent_media_order.return_value = cached_rows
+        entered = threading.Event()
+        release = threading.Event()
+        worker_errors: list[BaseException] = []
+
+        def slow_header_page(
+            gallery_id: int, after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> linking.LinkedMediaPage:
+            """Block the simulated first media response at its headers.
+
+            Args:
+                gallery_id (int): Expected gallery identity.
+                after_id (int | None): First page has no continuation.
+                cancelled (threading.Event | None): Viewer cancellation token.
+            Returns:
+                linking.LinkedMediaPage: Unused because this response times out.
+            Raises:
+                linking.LinkingResponseError: Simulated response-header timeout.
+            """
+            self.assertEqual(7, gallery_id)
+            self.assertIsNone(after_id)
+            entered.set()
+            release.wait()
+            raise linking.LinkingResponseError(
+                'media', 'app_linking_media', None, 'other', 'timeout',
+                transport_step='headers',
+            )
+
+        def refresh() -> None:
+            """Attempt an ordinary authoritative refresh in a worker thread.
+
+            Returns:
+                None: Captures the expected timeout for assertions on the owner thread.
+            """
+            try:
+                order.page(None, threading.Event())
+            except linking.LinkingResponseError as error:
+                worker_errors.append(error)
+
+        session.media_page.side_effect = slow_header_page
+        order = GalleryViewOrder(session, 7)
+        worker = threading.Thread(target=refresh, daemon=True)
+        worker.start()
+        try:
+            self.assertTrue(entered.wait(SLOW_MEDIA_RESPONSE_TEST_TIMEOUT_SECONDS))
+            cached_page = order.cached_page()
+            self.assertIsNotNone(cached_page)
+            self.assertEqual([3, 2, 1], [
+                photo.image_id for photo in cached_page.photos
+            ])
+        finally:
+            release.set()
+            worker.join(SLOW_MEDIA_RESPONSE_TEST_TIMEOUT_SECONDS)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(1, len(worker_errors))
+        self.assertEqual('headers', worker_errors[0].transport_step)
+        self.assertEqual(2, session.media_page.call_count)
+
+    def test_session_order_cache_is_fresh_bounded_and_auth_scoped(self) -> None:
+        """Retain only fresh complete rows in the existing live session.
+
+        Returns:
+            None: Expired metadata and refused server authority cannot be reused.
+        """
+        session = self._session(editing=False)
+        verified_at = time.monotonic()
+        rows = (
+            linking.LinkedPhoto(
+                3, 'Newest', thumbnail_etag='"' + 'a' * 64 + '"',
+                thumbnail_verified_at=verified_at,
+            ),
+            linking.LinkedPhoto(2, 'Older'),
+        )
+        self.assertTrue(session.cache_recent_media_order(
+            7, rows, verified_at,
+        ))
+        self.assertEqual(rows, session.recent_media_order(7))
+        self.assertEqual(
+            {}, session._public_media_descriptors,
+            'Display metadata must not create thumbnail proof rows.',
+        )
+        self.assertEqual({}, session._private_preload_proofs)
+
+        self.assertFalse(session.cache_recent_media_order(
+            8, rows, verified_at - linking.PHOTO_CACHE_FRESH_SECONDS,
+        ))
+        order = GalleryViewOrder(session, 7)
+        self.assertIsNotNone(order.cached_page())
+        with mock.patch.object(
+            linking.time, 'monotonic',
+            return_value=(
+                verified_at + linking.PHOTO_CACHE_FRESH_SECONDS
+                + CACHE_EXPIRY_TEST_MARGIN_SECONDS
+            ),
+        ):
+            self.assertIsNone(session.recent_media_order(7))
+            self.assertIsNone(order.cached_page())
+
+        self.assertTrue(session.cache_recent_media_order(
+            7, rows, time.monotonic(),
+        ))
+        order = GalleryViewOrder(session, 7)
+        self.assertIsNotNone(order.cached_page())
+        session.close()
+        self.assertIsNone(order.cached_page())
+
+        auth_session = self._session(editing=False)
+        auth_now = time.monotonic()
+        self.assertTrue(auth_session.cache_recent_media_order(
+            7, rows, auth_now,
+        ))
+        auth_order = GalleryViewOrder(auth_session, 7)
+        self.assertIsNotNone(auth_order.cached_page())
+        with mock.patch.object(
+            auth_session, '_media_read',
+            side_effect=linking.LinkingMediaUnavailable(),
+        ):
+            with self.assertRaises(linking.LinkingMediaUnavailable):
+                auth_session.media_page(7)
+        self.assertIsNone(auth_order.cached_page())
+
+        renewal_session = self._session(editing=False)
+        renewal_now = time.monotonic()
+        self.assertTrue(renewal_session.cache_recent_media_order(
+            7, rows, renewal_now,
+        ))
+        renewed_token = linking.TOKEN_PREFIX + base64.urlsafe_b64encode(
+            b'h' * linking.ATTEMPT_RANDOM_BYTES,
+        ).rstrip(b'=').decode('ascii')
+
+        def renew_session(
+            cancelled: threading.Event,
+        ) -> tuple[str, float]:
+            """Return a fresh test bearer through the existing session owner.
+
+            Args:
+                cancelled (threading.Event): Session-level cancellation state.
+            Returns:
+                tuple[str, float]: New bearer and monotonic deadline.
+            """
+            self.assertFalse(cancelled.is_set())
+            return (
+                renewed_token,
+                time.monotonic() + linking.LINKING_MAX_TOKEN_LIFETIME_SECONDS,
+            )
+
+        renewal_session._renew = renew_session
+        renewal_session._expires_at = renewal_now - 1.0
+        renewal_session._renew_if_expired(None)
+        self.assertIsNone(renewal_session.recent_media_order(7))
+
+    def test_session_order_cache_evicts_oldest_and_clears_on_close(self) -> None:
+        """Enforce the per-session gallery and row bounds and close cleanup.
+
+        Returns:
+            None: The cache retains at most its named gallery limit until close.
+        """
+        session = self._session(editing=False)
+        current = time.monotonic()
+        for gallery_id in range(1, linking.MEDIA_RECENT_ORDER_GALLERY_LIMIT + 1):
+            self.assertTrue(session.cache_recent_media_order(
+                gallery_id, (), current,
+            ))
+        self.assertIsNotNone(session.recent_media_order(1))
+        self.assertTrue(session.cache_recent_media_order(
+            linking.MEDIA_RECENT_ORDER_GALLERY_LIMIT + 1, (), current,
+        ))
+        # The access above moved gallery 1 to MRU; inserting gallery 5 evicts 2.
+        self.assertIsNotNone(session.recent_media_order(1))
+        self.assertIsNone(session.recent_media_order(2))
+        self.assertIsNotNone(session.recent_media_order(
+            linking.MEDIA_RECENT_ORDER_GALLERY_LIMIT + 1,
+        ))
+        large_rows = tuple(
+            linking.LinkedPhoto(image_id, str(image_id))
+            for image_id in range(
+                linking.MEDIA_RECENT_ORDER_PHOTO_LIMIT, 0, -1,
+            )
+        )
+        self.assertTrue(session.cache_recent_media_order(
+            100, large_rows, current,
+        ))
+        self.assertEqual(
+            linking.MEDIA_RECENT_ORDER_PHOTO_LIMIT,
+            len(session.recent_media_order(100)),
+        )
+        self.assertTrue(session.cache_recent_media_order(
+            101, (linking.LinkedPhoto(101, 'Newer'),), current,
+        ))
+        self.assertIsNone(session.recent_media_order(100))
+        self.assertEqual(
+            101, session.recent_media_order(101)[0].image_id,
+        )
+        session.close()
+        self.assertIsNone(session.recent_media_order(101))
 
     def test_existing_admin_visibility_grants_never_gain_metadata_writes(self) -> None:
         """Require new explicit approval before reading an edit snapshot.

@@ -43,6 +43,7 @@ import math
 import mimetypes
 import multiprocessing
 import os
+import platform
 import shutil
 import queue
 import re
@@ -69,6 +70,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    cast,
 )
 from urllib import error, parse, request
 
@@ -97,6 +99,13 @@ WATCHER_EVENT_IDLE_POLL_MS = 200
 # Consumers: WatcherApp.build_watch_tab.
 # Rationale: 420 wraps long retry/review explanations within narrow desktop layouts.
 WATCH_QUEUE_STATUS_WRAP_PIXELS = 420
+# Purpose: Keep explanatory runtime-setting text inside the compact settings card.
+# Type: int.
+# Units: logical Tk pixels.
+# Scope: runtime preference helper labels.
+# Consumers: WatcherApp.build_settings_tab.
+# Rationale: 650 logical pixels keeps runtime help inside its settings card.
+WATCHER_RUNTIME_HELP_WRAP_PIXELS = 650
 # Purpose: Bound authorized gallery traversal used only for a recovery preview.
 # Type: int. Units: pages. Scope: one recovery dialog's observation fallback.
 # Consumers: WatcherApp._load_watch_recovery_remote.
@@ -108,6 +117,30 @@ WATCH_RECOVERY_PREVIEW_PAGE_LIMIT = 32
 # Rationale: One active media request retains its own session timeout; larger
 #   traversals are reported unavailable instead of delaying explicit review.
 WATCH_RECOVERY_PREVIEW_TIME_LIMIT_SECONDS = 15.0
+
+# Purpose: Bound rows retained by the two manual-import detail tables.
+# Type: int.
+# Units: visible Treeview rows.
+# Scope: preflight and selected-job item views.
+# Consumers: WatcherApp.refresh_import_item_tree.
+# Rationale: Preserve the existing 1000-item UI admission cap.
+WATCHER_IMPORT_TREE_ROW_LIMIT = 1000
+
+# Purpose: Bound durable jobs rendered in the Activity history table.
+# Type: int.
+# Units: visible Treeview rows.
+# Scope: newest-first import-job history.
+# Consumers: WatcherApp.refresh_job_history.
+# Rationale: Preserve the existing 200-job history view cap.
+WATCHER_JOB_HISTORY_TREE_ROW_LIMIT = 200
+
+# Purpose: Bound events rendered in the filtered Activity drawer.
+# Type: int.
+# Units: visible Treeview rows.
+# Scope: one activity filter selection.
+# Consumers: WatcherApp.refresh_activity_drawer.
+# Rationale: Preserve the existing 100-event drawer cap.
+WATCHER_ACTIVITY_DRAWER_ROW_LIMIT = 100
 
 # Dispatch helper/version modes before application configuration or logging.
 if __name__ == "__main__":
@@ -150,7 +183,12 @@ if __name__ == "__main__":
 import logging
 from logging.handlers import RotatingFileHandler
 
-from uploader.config import CONFIG_SCHEMA_VERSION, DEFAULTS as REDESIGN_CONFIG_DEFAULTS, migrate_config_payload
+from uploader.config import (
+    CONFIG_SCHEMA_VERSION,
+    DEFAULTS as REDESIGN_CONFIG_DEFAULTS,
+    migrate_config_payload,
+    resolve_canvas_gallery_renderer_enabled,
+)
 from uploader.config_snapshot import ConfigSnapshot, ConfigSnapshotError, ConfigSnapshotStore
 from uploader.credential_store import WindowsUploadModeStore
 from uploader.macos_mode import MacUploadModeStore, assert_local_macos_profile
@@ -159,6 +197,7 @@ from uploader.mode_coordinator import (
     ModeView,
 )
 from uploader.diagnostics import redact_text
+from uploader.support_report import build_support_report, save_support_report
 from uploader.linked_upload import (
     LINKED_UPLOAD_CHUNK_BYTES,
     LINKED_UPLOAD_FILE_MAX_BYTES,
@@ -267,8 +306,15 @@ except ImportError:  # pragma: no cover
     ttk = None
 
 if tk is not None:
+    from uploader import ui_file_picker as filedialog
+    from uploader.ui_shell import (
+        EmbeddedWindow,
+        active_panel,
+        initialize_shell,
+        messagebox,
+    )
     from uploader.ui_theme import (
-        Button, Dialog,
+        Button,
         GalleryIdentityLabel,
         GlassCard,
         MetricCard, METRIC_ICON_SIZE,
@@ -879,6 +925,9 @@ class WatcherConfig:
         staging_cleanup_age_hours (float): Age before unowned staging expires.
         close_to_tray (bool): Keep background work when closing to the tray.
         start_with_windows (bool): Start the installed app in the tray at logon.
+        experimental_canvas_gallery_renderer (bool): Persisted renderer
+            choice; new and missing legacy values default to Canvas, while
+            explicit False keeps the native gallery renderer.
         activity_history_limit (int): Maximum retained durable activity
             records.
         watched_folder (str): Local folder to observe for newly added images.
@@ -959,6 +1008,9 @@ class WatcherConfig:
     staging_cleanup_age_hours: float = float(REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"])
     close_to_tray: bool = bool(REDESIGN_CONFIG_DEFAULTS["close_to_tray"])
     start_with_windows: bool = bool(REDESIGN_CONFIG_DEFAULTS["start_with_windows"])
+    experimental_canvas_gallery_renderer: bool = bool(
+        REDESIGN_CONFIG_DEFAULTS["experimental_canvas_gallery_renderer"]
+    )
     activity_history_limit: int = int(REDESIGN_CONFIG_DEFAULTS["activity_history_limit"])
     ai_worker_enabled: bool = False
     ai_worker_poll_seconds: float = DEFAULT_AI_WORKER_POLL_SECONDS
@@ -1024,6 +1076,9 @@ class WatcherConfig:
             staging_cleanup_age_hours=float(data.get("staging_cleanup_age_hours", REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"]) or REDESIGN_CONFIG_DEFAULTS["staging_cleanup_age_hours"]),
             close_to_tray=bool(data.get("close_to_tray", REDESIGN_CONFIG_DEFAULTS["close_to_tray"])),
             start_with_windows=data["start_with_windows"] is True,
+            experimental_canvas_gallery_renderer=(
+                data["experimental_canvas_gallery_renderer"] is True
+            ),
             activity_history_limit=int(data.get("activity_history_limit", REDESIGN_CONFIG_DEFAULTS["activity_history_limit"]) or REDESIGN_CONFIG_DEFAULTS["activity_history_limit"]),
             ai_worker_enabled=bool(data.get("ai_worker_enabled", False)),
             ai_worker_poll_seconds=float(data.get("ai_worker_poll_seconds", DEFAULT_AI_WORKER_POLL_SECONDS) or DEFAULT_AI_WORKER_POLL_SECONDS),
@@ -1075,6 +1130,9 @@ class WatcherConfig:
             "staging_cleanup_age_hours": self.staging_cleanup_age_hours,
             "close_to_tray": self.close_to_tray,
             "start_with_windows": self.start_with_windows,
+            "experimental_canvas_gallery_renderer": (
+                self.experimental_canvas_gallery_renderer
+            ),
             "activity_history_limit": self.activity_history_limit,
             "ai_worker_enabled": self.ai_worker_enabled,
             "ai_worker_poll_seconds": self.ai_worker_poll_seconds,
@@ -8189,6 +8247,17 @@ def protected_staging_job_ids(jobs: List[ImportJob]) -> List[str]:
     ]
 
 
+@dataclass
+class _TreeRowSnapshot:
+    """Retain bounded projected rows and Activity objects for one Treeview."""
+
+    rows: Dict[str, Tuple[str | int | float, ...]]
+    order: List[str]
+    retained_activity_events: Tuple[ActivityEvent, ...] = field(
+        default_factory=tuple,
+    )
+
+
 class WatcherApp:
     """
     Tkinter user interface for the watched-folder uploader.
@@ -8229,6 +8298,7 @@ class WatcherApp:
         # Establish the display context before Tk creates its first window.
         prepare_windows_display()
         self.root = tk.Tk()
+        initialize_shell(self.root)
         self.linking_manager = LinkingManager(
             self.root, self.linked_target_change_refusal, self.linked_target_changed,
             self.probe_linked_uncertain_upload, self.publish_linked_recovery,
@@ -8251,6 +8321,13 @@ class WatcherApp:
 
         self.config_store = config_store or ConfigStore()
         self.config = self.config_store.load()
+        # Freeze the effective renderer choice for this process. Settings edits
+        # are persisted immediately but take effect only after application restart.
+        self._canvas_grid_enabled_at_startup = (
+            resolve_canvas_gallery_renderer_enabled(
+                self.config.experimental_canvas_gallery_renderer,
+            )
+        )
         self._ui_layout_path = CONFIG_DIR / "ui-layout.json"
         display_bounds = _layout_display_bounds(self.root)
         loaded_layout = _read_ui_layout(
@@ -8403,6 +8480,9 @@ class WatcherApp:
         self.close_to_tray_var = tk.BooleanVar(value=self.config.close_to_tray)
         self.start_with_windows_var = tk.BooleanVar(
             value=self.config.start_with_windows,
+        )
+        self.experimental_canvas_gallery_renderer_var = tk.BooleanVar(
+            value=self.config.experimental_canvas_gallery_renderer,
         )
         self.settings_advanced_visible_var = tk.BooleanVar(value=False)
         self.ai_worker_enabled_var = tk.BooleanVar(value=self.config.ai_worker_enabled)
@@ -8568,6 +8648,7 @@ class WatcherApp:
             Photos is selected by default; startup mode remains withdrawn.
         """
         configure_theme(self.root)
+        self.build_menu()
         self.gallery_title_var.trace_add(
             "write",
             lambda *_trace_info: self.refresh_watcher_header(),
@@ -8811,6 +8892,167 @@ class WatcherApp:
         ).pack(side='left', padx=(4, 0))
         header.request_layout()
         return header
+
+    def build_menu(self) -> None:
+        """Connect the native application menu to existing command owners.
+
+        Returns:
+            None: Installs keyboard-accessible menus and guarded shortcuts.
+        """
+        menu = tk.Menu(self.root, tearoff=False)
+        self.root.configure(menu=menu)
+        self._edit_focus = None
+        file_menu = tk.Menu(menu, tearoff=False)
+        menu.add_cascade(label="File", underline=0, menu=file_menu)
+        for label, action, shortcut in (
+            ("Import files…", self.select_manual_files, "Ctrl+O"),
+            ("Import folder…", self.select_manual_folder, ""),
+            ("Import ZIP archive…", self.select_manual_zip, ""),
+        ):
+            file_menu.add_command(
+                label=label, accelerator=shortcut,
+                command=lambda callback=action: self.menu_command(callback),
+            )
+        file_menu.add_separator()
+        file_menu.add_command(
+            label="Open watched folder",
+            command=lambda: self.menu_command(self.open_watched_folder),
+        )
+        file_menu.add_command(
+            label="Open log folder",
+            command=lambda: self.menu_command(self.open_config_folder),
+        )
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=lambda: self.menu_command(self.close))
+
+        edit = tk.Menu(menu, tearoff=False, postcommand=self.remember_edit_focus)
+        menu.add_cascade(label="Edit", underline=0, menu=edit)
+        for label, event, shortcut in (
+            ("Cut", "<<Cut>>", "Ctrl+X"),
+            ("Copy", "<<Copy>>", "Ctrl+C"),
+            ("Paste", "<<Paste>>", "Ctrl+V"),
+            ("Select all", "<<SelectAll>>", "Ctrl+A"),
+        ):
+            edit.add_command(
+                label=label, accelerator=shortcut,
+                command=lambda sequence=event: self.menu_edit(sequence),
+            )
+        edit.add_separator()
+        edit.add_command(
+            label="Settings…", accelerator="Ctrl+,",
+            command=lambda: self.menu_command(lambda: self.select_tab("settings")),
+        )
+        view = tk.Menu(menu, tearoff=False)
+        menu.add_cascade(label="View", underline=0, menu=view)
+        for name, label in (
+            ("photos", "Photos"), ("watch", "Watcher"), ("import", "Import"),
+            ("activity", "Activity"), ("ai", "AI"), ("settings", "Settings"),
+        ):
+            view.add_command(
+                label=label,
+                command=lambda key=name: self.menu_command(lambda: self.select_tab(key)),
+            )
+        tools = tk.Menu(menu, tearoff=False)
+        menu.add_cascade(label="Tools", underline=0, menu=tools)
+        for label, action in (
+            ("Watcher settings…", self.open_watcher_settings),
+            ("Refresh upload queue", self.refresh_upload_queue),
+            ("Gallery connections…", self.open_gallery_links),
+            ("API-key connection…", self.open_connection_dialog),
+            ("Check for updates…", self.updates.check),
+            ("Support diagnostics…", self.open_support_report),
+        ):
+            tools.add_command(
+                label=label,
+                command=lambda callback=action: self.menu_command(callback),
+            )
+        help_menu = tk.Menu(menu, tearoff=False)
+        menu.add_cascade(label="Help", underline=0, menu=help_menu)
+        help_menu.add_command(
+            label="Using PHP Gallery", accelerator="F1",
+            command=lambda: self.menu_command(self.open_help),
+        )
+        help_menu.add_command(
+            label="Support diagnostics…", accelerator="Ctrl+Shift+D",
+            command=lambda: self.menu_command(self.open_support_report),
+        )
+        help_menu.add_command(
+            label="About PHP Gallery",
+            command=lambda: self.menu_command(self.open_about),
+        )
+        for sequence, callback in (
+            ("<Control-o>", self.select_manual_files),
+            ("<Control-comma>", lambda: self.select_tab("settings")),
+            ("<Control-Shift-D>", self.open_support_report),
+            ("<F1>", self.open_help),
+        ):
+            self.root.bind(
+                sequence, lambda _event, action=callback: self.menu_command(action),
+                add="+",
+            )
+        self.menu_bar = menu
+
+    def menu_command(self, callback: Callable[[], None]) -> str:
+        """Dispatch a menu or shortcut only when no panel owns the interaction.
+
+        Args:
+            callback (Callable[[], None]): Existing application action to run.
+        Returns:
+            str: Tk break marker so shortcuts never reach background controls.
+        """
+        if active_panel(self.root) is None and not self.exiting:
+            callback()
+        return "break"
+
+    def remember_edit_focus(self) -> None:
+        """Remember the focused editor before the native Edit menu opens.
+
+        Returns:
+            None: Retains the actual text control receiving the next edit action.
+        """
+        self._edit_focus = self.root.focus_get()
+
+    def menu_edit(self, sequence: str) -> None:
+        """Send a standard editing event to the focused control.
+
+        Args:
+            sequence (str): Tk Cut, Copy, Paste or SelectAll virtual event.
+        Returns:
+            None: Edits only a surviving focused control, including panel text.
+        """
+        target = self._edit_focus
+        if target is not None and target.winfo_exists():
+            target.event_generate(sequence)
+
+    def open_help(self) -> None:
+        """Present operating guidance inside the application window.
+
+        Returns:
+            None: Opens a dismissible help panel without starting background work.
+        """
+        messagebox.showinfo(
+            "Using PHP Gallery",
+            "Connect a gallery, choose a Watcher folder, then explicitly start "
+            "capture. Finish drains accepted photographs before completing.\n\n"
+            "Use File to choose an import source. Review preflight before "
+            "starting an import. View switches between Photos, Watcher, Import, "
+            "Activity, AI and Settings.\n\n"
+            "Help → Support diagnostics builds a local report you can review, "
+            "copy or save for support. Review it before sharing; nothing is sent "
+            "automatically.", parent=self.root,
+        )
+
+    def open_about(self) -> None:
+        """Show the independent application version and attribution in place.
+
+        Returns:
+            None: Displays version and license information in the main window.
+        """
+        messagebox.showinfo(
+            "About PHP Gallery", f"{APP_DISPLAY_NAME} {APP_VERSION}\n"
+            "Author: Rudolf Klusal\nMIT License\n"
+            "https://github.com/klusik/PHP_gallery", parent=self.root,
+        )
 
     def build_gallery_link_bar(self, header: "ttk.Frame") -> None:
         """Group the selected site, gallery picker and connection actions.
@@ -9675,6 +9917,7 @@ class WatcherApp:
             diagnostic_callback=lambda message: self.events.put(
                 ('warning', '[Photos] ' + message),
             ),
+            canvas_grid_enabled=self._canvas_grid_enabled_at_startup,
         )
         self.photos_workspace.grid(row=0, column=0, sticky="nsew")
         self._sync_watcher_recording()
@@ -10338,7 +10581,7 @@ class WatcherApp:
                 parent=self.root,
             )
             return
-        dialog = Dialog(self.root)
+        dialog = EmbeddedWindow(self.root)
         dialog.title("Watcher settings")
         dialog.transient(self.root)
         dialog.resizable(True, True)
@@ -10762,7 +11005,7 @@ class WatcherApp:
             lambda _event: self.refresh_activity_drawer(),
         )
         Button(controls, text="Retry failed", command=self.retry_failed_import).pack(side="left")
-        Button(controls, text="Copy diagnostics", command=self.copy_diagnostics).pack(side="right")
+        Button(controls, text="Support diagnostics…", command=self.open_support_report).pack(side="right")
         event_table = ttk.Frame(events, style="Card.TFrame")
         event_table.grid(row=2, column=0, sticky="ew")
         event_table.columnconfigure(0, weight=1)
@@ -10805,7 +11048,8 @@ class WatcherApp:
         diagnostic_actions.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         Button(diagnostic_actions, text="Open app folder", command=self.open_config_folder).pack(side="left")
         Button(diagnostic_actions, text="Open log file", command=self.open_log_file).pack(side="left", padx=8)
-        Button(diagnostic_actions, text="Copy redacted diagnostics", command=self.copy_diagnostics).pack(side="left")
+        Button(diagnostic_actions, text="Support diagnostics…", command=self.open_support_report).pack(side="left")
+        Button(diagnostic_actions, text="Copy report", command=self.copy_diagnostics).pack(side="left", padx=8)
         self.log_text = tk.Text(
             diagnostics, height=9, wrap="word", relief="flat", padx=8, pady=6,
             font="TkFixedFont",
@@ -10865,7 +11109,7 @@ class WatcherApp:
         ttk.Label(runtime, text="APP & INTEGRATIONS", style="Eyebrow.TLabel").grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 7)
         )
-        ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, style="Muted.TLabel", wraplength=650).grid(
+        ttk.Label(runtime, textvariable=self.thumbnail_runtime_var, style="Muted.TLabel", wraplength=WATCHER_RUNTIME_HELP_WRAP_PIXELS).grid(
             row=1, column=0, columnspan=2, sticky="w", pady=5
         )
         Button(runtime, text="Repair dependencies", command=self.repair_dependencies).grid(row=1, column=2, padx=(8, 0), pady=5)
@@ -10891,12 +11135,29 @@ class WatcherApp:
             text="Installed Windows app only. This switch saves immediately.",
             style="Muted.TLabel",
         ).grid(row=5, column=1, columnspan=2, sticky="w", pady=(3, 0))
+        # Grid row indices keep the immediate option, its help, save and
+        # advanced controls in that order inside the runtime preferences card.
+        ttk.Checkbutton(
+            runtime,
+            text="Experimental Canvas gallery renderer",
+            variable=self.experimental_canvas_gallery_renderer_var,
+            command=self.save_canvas_renderer_preference,
+        ).grid(row=6, column=1, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(
+            runtime,
+            text=(
+                "Use experimental virtualized Canvas rendering for photo "
+                "galleries. Requires application restart."
+            ),
+            style="Muted.TLabel",
+            wraplength=WATCHER_RUNTIME_HELP_WRAP_PIXELS,
+        ).grid(row=7, column=1, columnspan=2, sticky="w", pady=(2, 0))
         Button(
             runtime,
             text="✓  Save settings",
             command=self.save_config,
             style="Primary.TButton",
-        ).grid(row=6, column=1, sticky="w", pady=(10, 0))
+        ).grid(row=8, column=1, sticky="w", pady=(10, 0))
 
         advanced_toggle = ttk.Checkbutton(
             runtime,
@@ -10905,7 +11166,7 @@ class WatcherApp:
             command=self.toggle_settings_advanced,
         )
         advanced_toggle.grid(
-            row=7, column=0, columnspan=3, sticky="w", pady=(8, 0),
+            row=9, column=0, columnspan=3, sticky="w", pady=(8, 0),
         )
         advanced = GlassCard(parent, padding=(14, 10))
         self.settings_advanced_frame = advanced
@@ -11209,6 +11470,9 @@ class WatcherApp:
             staging_cleanup_age_hours=staging_cleanup_hours,
             close_to_tray=bool(self.close_to_tray_var.get()),
             start_with_windows=bool(self.start_with_windows_var.get()),
+            experimental_canvas_gallery_renderer=(
+                self.experimental_canvas_gallery_renderer_var.get() is True
+            ),
             activity_history_limit=self.config.activity_history_limit,
             ai_worker_enabled=bool(self.ai_worker_enabled_var.get()),
             ai_worker_poll_seconds=ai_worker_poll,
@@ -11496,36 +11760,145 @@ class WatcherApp:
         self.retry_failed_button.configure(state="normal" if any(item.state in RECOVERABLE_ITEM_STATES or item.state == "failed_permanent" for item in job.items) else "disabled")
         self.activity_job_summary_var.set(self.describe_job(job))
 
+    def _reconcile_tree_rows(
+        self,
+        tree: ttk.Treeview,
+        rows: List[Tuple[str, Tuple[str | int | float, ...]]],
+        retained_activity_events: Tuple[ActivityEvent, ...] = (),
+    ) -> None:
+        """Apply ordered row changes without rebuilding retained Treeview items.
+
+        Args:
+            tree (ttk.Treeview): Watcher-owned table whose rows this owner controls.
+            rows (List[Tuple[str, Tuple[str | int | float, ...]]]): Ordered
+                stable item IDs paired with their displayed cell values.
+            retained_activity_events (Tuple[ActivityEvent, ...]): Bounded
+                event objects whose visible IIDs must remain non-recyclable.
+                Defaults to an empty tuple for non-Activity tables.
+
+        Returns:
+            None: Adds, updates, removes and reorders only the required rows.
+
+        Raises:
+            ValueError: The desired rows contain a duplicate stable item ID.
+        """
+        desired_order = [item_id for item_id, _values in rows]
+        desired_rows = {item_id: values for item_id, values in rows}
+        if len(desired_order) != len(desired_rows):
+            raise ValueError("Treeview row identities must be unique.")
+
+        snapshot = cast(
+            Optional[_TreeRowSnapshot],
+            getattr(tree, "_watcher_row_snapshot", None),
+        )
+        current_order = list(tree.get_children(""))
+        if snapshot is None:
+            snapshot = _TreeRowSnapshot(
+                rows={}, order=current_order.copy(),
+            )
+            setattr(tree, "_watcher_row_snapshot", snapshot)
+
+        selected_before = tuple(tree.selection())
+        focused_before = tree.focus()
+        vertical_view = tuple(float(value) for value in tree.yview())
+        horizontal_view = tuple(float(value) for value in tree.xview())
+        desired_ids = set(desired_order)
+        current_ids = set(current_order)
+        structure_changed = False
+
+        for item_id in current_order.copy():
+            if item_id not in desired_ids:
+                tree.delete(item_id)
+                current_order.remove(item_id)
+                current_ids.remove(item_id)
+                structure_changed = True
+
+        for index, (item_id, values) in enumerate(rows):
+            inserted = item_id not in current_ids
+            if inserted:
+                tree.insert("", index, iid=item_id, values=values)
+                current_order.insert(index, item_id)
+                current_ids.add(item_id)
+                structure_changed = True
+            elif current_order[index] != item_id:
+                tree.move(item_id, "", index)
+                current_order.remove(item_id)
+                current_order.insert(index, item_id)
+                structure_changed = True
+
+            if not inserted and snapshot.rows.get(item_id) != values:
+                tree.item(item_id, values=values)
+
+        snapshot.rows = desired_rows
+        snapshot.order = desired_order
+        snapshot.retained_activity_events = retained_activity_events
+
+        surviving_selection = tuple(
+            item_id for item_id in selected_before
+            if item_id in desired_ids
+        )
+        selected_after = tuple(tree.selection())
+        if set(selected_after) != set(surviving_selection):
+            if surviving_selection:
+                tree.selection_set(*surviving_selection)
+            elif selected_after:
+                tree.selection_remove(*selected_after)
+
+        if focused_before in desired_ids:
+            if tree.focus() != focused_before:
+                tree.focus(focused_before)
+        elif focused_before and tree.focus():
+            tree.focus("")
+
+        if structure_changed:
+            if vertical_view:
+                tree.yview_moveto(vertical_view[0])
+            if horizontal_view:
+                tree.xview_moveto(horizontal_view[0])
+
     def refresh_import_item_tree(self, job: Optional[ImportJob]) -> None:
-        """Refresh preflight/current item rows from one job snapshot."""
+        """Reconcile preflight and selected-job item details from one snapshot.
+
+        Args:
+            job (Optional[ImportJob]): Current job to render, or None to clear
+                both manual-import detail tables.
+
+        Returns:
+            None: The bounded item views match the current job snapshot.
+        """
         if not hasattr(self, "import_item_tree"):
             return
-        for iid in self.import_item_tree.get_children():
-            self.import_item_tree.delete(iid)
-        if hasattr(self, "activity_item_tree"):
-            for iid in self.activity_item_tree.get_children():
-                self.activity_item_tree.delete(iid)
-        if job is None:
-            return
-        for item in job.items[:1000]:
-            reason = item.reason
-            self.import_item_tree.insert(
-                "",
-                "end",
-                iid=item.id,
-                values=(Path(item.source_label).name or item.source_label, self.format_bytes(item.size), item.local_decode, item.state, reason),
-            )
-        if hasattr(self, "activity_item_tree"):
-            for item in job.items[:1000]:
-                detail = item.reason
-                if not detail and item.server_result:
-                    detail = f"uploaded={item.server_result.get('uploaded', 0)}, scanned={item.server_result.get('scanned', 0)}"
-                self.activity_item_tree.insert(
-                    "",
-                    "end",
-                    iid="activity-" + item.id,
-                    values=(Path(item.source_label).name or item.source_label, item.state, item.attempt_count, detail),
+        items = (
+            job.items[:WATCHER_IMPORT_TREE_ROW_LIMIT]
+            if job is not None else []
+        )
+        item_rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
+        activity_rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
+        for item in items:
+            filename = Path(item.source_label).name or item.source_label
+            item_rows.append((
+                item.id,
+                (
+                    filename,
+                    self.format_bytes(item.size),
+                    item.local_decode,
+                    item.state,
+                    item.reason,
+                ),
+            ))
+            detail = item.reason
+            if not detail and item.server_result:
+                detail = (
+                    f"uploaded={item.server_result.get('uploaded', 0)}, "
+                    f"scanned={item.server_result.get('scanned', 0)}"
                 )
+            activity_rows.append((
+                "activity-" + item.id,
+                (filename, item.state, item.attempt_count, detail),
+            ))
+        self._reconcile_tree_rows(self.import_item_tree, item_rows)
+        if hasattr(self, "activity_item_tree"):
+            self._reconcile_tree_rows(self.activity_item_tree, activity_rows)
 
     def describe_job(self, job: ImportJob) -> str:
         """Return one compact status sentence for Activity and tray views."""
@@ -12990,6 +13363,56 @@ class WatcherApp:
         self.config = config
         self.apply_startup_registration()
 
+    def save_canvas_renderer_preference(self) -> None:
+        """Persist the renderer choice immediately without changing this process.
+
+        Returns:
+            None: Saves only this preference, rolls the switch back on refusal
+                or failure, and requests a restart after a successful change.
+        """
+        previous = self.config.experimental_canvas_gallery_renderer
+        requested = self.experimental_canvas_gallery_renderer_var.get() is True
+        if requested == previous:
+            return
+        if getattr(self, "updates", None) is not None and self.updates.blocked():
+            self.experimental_canvas_gallery_renderer_var.set(previous)
+            messagebox.showwarning(
+                "Configuration",
+                "Finish the active update before changing this setting.",
+                parent=self.root,
+            )
+            return
+        if self.api_key_revoke_running:
+            self.experimental_canvas_gallery_renderer_var.set(previous)
+            messagebox.showwarning(
+                "Configuration",
+                "Wait for API-key revocation to finish before changing this setting.",
+                parent=self.root,
+            )
+            return
+        try:
+            saved = self._save_owned_config(replace(
+                self.config,
+                experimental_canvas_gallery_renderer=requested,
+            ))
+        except Exception as exc:  # noqa: BLE001
+            self.experimental_canvas_gallery_renderer_var.set(previous)
+            messagebox.showerror(
+                "Configuration error", str(exc), parent=self.root,
+            )
+            return
+        self.config = saved
+        self.write_log(
+            "Experimental Canvas gallery renderer setting saved; restart required.",
+            "success",
+        )
+        messagebox.showinfo(
+            "Restart required",
+            "The setting was saved. Restart the application for the "
+            "experimental Canvas gallery renderer to take effect.",
+            parent=self.root,
+        )
+
     def apply_startup_registration(self) -> None:
         """Apply the saved preference and expose registry errors for retry.
 
@@ -14027,7 +14450,7 @@ class WatcherApp:
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
         self.restore_from_tray()
-        dialog = Dialog(self.root)
+        dialog = EmbeddedWindow(self.root)
         dialog.title("Gallery connection and API key")
         dialog.transient(self.root)
         dialog.geometry(CONNECTION_DIALOG_GEOMETRY)
@@ -16007,16 +16430,32 @@ class WatcherApp:
         self.write_log("Recovered unfinished import for explicit review. No upload was started automatically.", "warning")
 
     def refresh_job_history(self) -> None:
-        """Refresh the durable import-job history table."""
+        """Reconcile the newest durable import jobs into the history table.
+
+        Returns:
+            None: The bounded history view retains stable job row identities.
+        """
         if not hasattr(self, "job_history_tree"):
             return
-        for iid in self.job_history_tree.get_children():
-            self.job_history_tree.delete(iid)
-        for job in self.job_store.list_jobs()[:200]:
+        rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
+        jobs = self.job_store.list_jobs()[:WATCHER_JOB_HISTORY_TREE_ROW_LIMIT]
+        for job in jobs:
             counts = job.counts()
-            created = time.strftime("%Y-%m-%d %H:%M", time.localtime(job.created_at))
-            status = f"uploaded {counts['uploaded']}, duplicate {counts['duplicates']}, failed {counts['failed']}, cancelled {counts['cancelled']}, active {counts['active']}"
-            self.job_history_tree.insert("", "end", iid=job.id, values=(created, job.source_label, job.target_gallery_label, status))
+            created = time.strftime(
+                "%Y-%m-%d %H:%M", time.localtime(job.created_at),
+            )
+            status = (
+                f"uploaded {counts['uploaded']}, "
+                f"duplicate {counts['duplicates']}, "
+                f"failed {counts['failed']}, "
+                f"cancelled {counts['cancelled']}, "
+                f"active {counts['active']}"
+            )
+            rows.append((
+                job.id,
+                (created, job.source_label, job.target_gallery_label, status),
+            ))
+        self._reconcile_tree_rows(self.job_history_tree, rows)
 
     def select_history_job(self, _event: Any = None) -> None:
         """Select one durable job from Activity for inspection or explicit retry."""
@@ -16133,11 +16572,11 @@ class WatcherApp:
             setattr(self, attribute, None)
 
     def refresh_activity_drawer(self) -> None:
-        """Render retained events with the current filter and cancel stale work.
+        """Reconcile the recent events shown by the selected Activity filter.
 
         Returns:
-            None: Cancels a pending coalesced render, updates the visible rows,
-                and increments the drawer-render observation count.
+            None: Cancels a pending coalesced render and updates the bounded
+                newest-first rows without replacing retained event identities.
         """
         callback_id = self._activity_render_after_id
         self._activity_render_after_id = None
@@ -16149,11 +16588,17 @@ class WatcherApp:
         if not hasattr(self, "activity_drawer"):
             return
         self._activity_drawer_flush_count += 1
-        for iid in self.activity_drawer.get_children():
-            self.activity_drawer.delete(iid)
         selected = self.activity_filter_var.get().strip().lower() or "all"
 
         def visible(event: ActivityEvent) -> bool:
+            """Return whether one event matches the selected Activity filter.
+
+            Args:
+                event (ActivityEvent): Persisted event under consideration.
+
+            Returns:
+                bool: True when the existing filter policy includes the event.
+            """
             level = event.level.lower()
             message = event.message.lower()
             if selected == "all":
@@ -16163,18 +16608,46 @@ class WatcherApp:
             if selected == "failed":
                 return level == "error" or "failed" in message
             if selected == "succeeded":
-                return level == "success" or "uploaded" in message or "finished" in message or "stored" in message
+                return (
+                    level == "success" or "uploaded" in message
+                    or "finished" in message or "stored" in message
+                )
             if selected == "skipped":
                 return "skip" in message or "duplicate" in message
             if selected == "active":
-                return any(token in message for token in ("started", "running", "uploading", "preflight", "paused", "stopping"))
+                return any(token in message for token in (
+                    "started", "running", "uploading", "preflight",
+                    "paused", "stopping",
+                ))
             return True
 
-        rows = [event for event in self.activity_events if visible(event)][-100:]
-        for index, event in enumerate(reversed(rows)):
-            stamp = time.strftime("%H:%M:%S", time.localtime(event.timestamp))
+        occurrences: Dict[int, int] = {}
+        identified: List[Tuple[ActivityEvent, str]] = []
+        for event in self.activity_events:
+            identity = id(event)
+            occurrence = occurrences.get(identity, 0)
+            occurrences[identity] = occurrence + 1
+            if visible(event):
+                identified.append((event, f"event-{identity}-{occurrence}"))
+
+        displayed_events = list(reversed(
+            identified[-WATCHER_ACTIVITY_DRAWER_ROW_LIMIT:],
+        ))
+        rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
+        for event, item_id in displayed_events:
+            stamp = time.strftime(
+                "%H:%M:%S", time.localtime(event.timestamp),
+            )
             filename = Path(event.filename).name if event.filename else ""
-            self.activity_drawer.insert("", "end", iid=f"event-{index}-{int(event.timestamp * 1000)}", values=(stamp, event.level, filename, event.operation, event.message))
+            rows.append((
+                item_id,
+                (stamp, event.level, filename, event.operation, event.message),
+            ))
+        self._reconcile_tree_rows(
+            self.activity_drawer,
+            rows,
+            tuple(event for event, _item_id in displayed_events),
+        )
 
     def _watch_diagnostic_snapshot(self) -> Dict[str, JsonValue]:
         """Read current Watcher identity, intent, scan and transport evidence.
@@ -16243,12 +16716,13 @@ class WatcherApp:
                 'reason': head.reason if head is not None else journal.data.get('error', ''),
             }
 
-    def copy_diagnostics(self) -> None:
-        """Copy redacted runtime, current Watcher and Finish diagnostics.
+    def diagnostic_snapshot(self) -> str:
+        """Collect linking, updater, runtime, Watcher and Finish observations.
 
         Returns:
-            None: Copies bounded support snapshots with live session, scan,
-                dispatch, operation generation and trigger fields, without secrets.
+            str: Redacted snapshot with live session, scan, dispatch, operation
+                generation and trigger fields, without filesystem reads or
+                network requests.
         """
         job_summary = self.describe_job(self.current_job) if self.current_job is not None else "No selected job"
         capability_summary = ", ".join(
@@ -16307,7 +16781,7 @@ class WatcherApp:
                 ),
                 f"OS: {os.name}",
                 f"Gallery URL: {self.gallery_url_var.get().strip()}",
-                f"API key: {self.api_key_var.get().strip()}",
+                f"API key configured: {bool(self.api_key_var.get().strip())}",
                 f"Connection: {self.connection_status_var.get()} | {self.connection_detail_var.get()}",
                 "Browser linking: " + (
                     self.linking_manager.diagnostics_snapshot()
@@ -16345,10 +16819,146 @@ class WatcherApp:
                 recent,
             ]
         )
-        safe = redact_text(raw, [self.api_key_var.get().strip()], redact_paths=True)
+        return redact_text(raw, [self.api_key_var.get().strip()], redact_paths=True)
+
+    def support_report(self) -> str:
+        """Build the local support report from current owners and a bounded log.
+
+        Returns:
+            str: Privacy-filtered report with runtime, settings and log status.
+        """
+        config = self.config
+        settings = {
+            key: value for key, value in config.to_dict().items()
+            if type(value) in (str, int, float, bool) or value is None
+        }
+        return build_support_report(
+            WatcherApp.diagnostic_snapshot(self), settings,
+            {
+                "app_version": APP_VERSION,
+                "python_version": sys.version.split()[0],
+                "platform": platform.system() + " " + platform.release(),
+                "machine": platform.machine(),
+                "runtime": "installed" if getattr(sys, "frozen", False) else "source",
+                "tk": str(self.root.tk.call("info", "patchlevel")),
+                "pillow": str(getattr(Image, "__version__", "unavailable")),
+            }, LOG_PATH, secrets=(self.api_key_var.get().strip(),),
+        )
+
+    def copy_diagnostics(self) -> None:
+        """Copy the complete redacted support report after explicit selection.
+
+        Returns:
+            None: Replaces the clipboard and records the local copy action.
+        """
+        safe = WatcherApp.support_report(self)
         self.root.clipboard_clear()
         self.root.clipboard_append(safe)
         self.write_log("Redacted diagnostic details copied to clipboard.", "system")
+
+    def open_support_report(self) -> None:
+        """Present a reviewable support report in the main application window.
+
+        Returns:
+            None: Opens a read-only preview with refresh, copy and local save.
+        """
+        existing = getattr(self, "_support_panel", None)
+        if existing is not None and existing.winfo_exists():
+            existing.deiconify()
+            return
+        panel = EmbeddedWindow(self.root)
+        panel.title("Support diagnostics")
+        self._support_panel = panel
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(2, weight=1)
+        description = ttk.Label(
+            panel,
+            text="Review this report before sharing. Credentials, local paths "
+            "and URL query values are filtered. Files and photographs are not "
+            "attached. Nothing is sent automatically.",
+            wraplength=WINDOW_SUMMARY_WRAP, padding=(16, 12),
+        )
+        description.grid(row=0, column=0, sticky="ew")
+        actions = ttk.Frame(panel, padding=(16, 0, 16, 10))
+        actions.grid(row=1, column=0, sticky="ew")
+        body = ttk.Frame(panel, padding=(16, 0, 16, 0))
+        body.grid(row=2, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
+        preview = tk.Text(
+            body, wrap="word", font="TkFixedFont", relief="flat",
+            background=_PALETTE["surface"], foreground=_PALETTE["ink"],
+            selectbackground=_PALETTE["primary_pressed"], padx=12, pady=10,
+        )
+        scrollbar = ttk.Scrollbar(body, orient="vertical", command=preview.yview)
+        preview.configure(yscrollcommand=scrollbar.set)
+        preview.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        status = tk.StringVar(master=panel)
+        ttk.Label(panel, textvariable=status, padding=(16, 10)).grid(
+            row=3, column=0, sticky="ew",
+        )
+        report = ""
+
+        def refresh() -> None:
+            """Replace the preview with a fresh passive diagnostic snapshot.
+
+            Returns:
+                None: Updates report text and collection status without HTTP.
+            """
+            nonlocal report
+            try:
+                report = self.support_report()
+            except (OSError, ValueError, RuntimeError, tk.TclError) as exc:
+                status.set("Report collection failed: " + type(exc).__name__)
+                return
+            preview.configure(state="normal")
+            preview.delete("1.0", "end")
+            preview.insert("1.0", report)
+            preview.configure(state="disabled")
+            status.set(f"Report ready · {len(report):,} characters · collected locally")
+
+        def copy_report() -> None:
+            """Copy exactly the report currently displayed for review.
+
+            Returns:
+                None: Replaces clipboard contents only after a report exists.
+            """
+            if report:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(report)
+                status.set("Displayed report copied to clipboard.")
+
+        def save_report() -> None:
+            """Save the displayed report to an explicitly selected destination.
+
+            Returns:
+                None: Saves UTF-8 text or retains the preview on cancel/failure.
+            """
+            if not report:
+                return
+            selected = filedialog.asksaveasfilename(
+                parent=panel, title="Save support report", defaultextension=".txt",
+                initialdir=str(CONFIG_DIR),
+                initialfile="PHP-Gallery-support-" + time.strftime("%Y%m%d-%H%M%S") + ".txt",
+                filetypes=(("Text files", "*.txt"), ("All files", "*.*")),
+            )
+            if not selected:
+                return
+            try:
+                save_support_report(Path(selected), report)
+            except OSError as exc:
+                status.set("Could not save report: " + type(exc).__name__)
+            else:
+                status.set("Displayed report saved locally. Nothing was sent.")
+
+        Button(actions, text="Refresh report", command=refresh).pack(side="left")
+        Button(actions, text="Copy report", command=copy_report).pack(side="left", padx=8)
+        Button(actions, text="Save report…", command=save_report, style="Primary.TButton").pack(side="left")
+        Button(actions, text="Close", command=panel.destroy).pack(side="right")
+        panel.grab_set()
+        preview.focus_set()
+        refresh()
 
     def refresh_watcher_header(self) -> None:
         """Show compact Watcher state, queue size and last scan artwork.

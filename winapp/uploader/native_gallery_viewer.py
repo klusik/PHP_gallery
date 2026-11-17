@@ -70,12 +70,14 @@ from .gallery_lightbox import (
     PhotoLightbox,
     detect_black_matte_crop,
 )
+from .canvas_gallery_grid import CanvasGalleryGrid, CanvasTileProxy, TooltipValue
 from .ui_theme import (
-    Button, GALLERY_TILE_BORDER_INSET, _attach_tooltip, ensure_component_theme,
-    icon_button,
+    Button, GALLERY_TILE_BORDER_INSET, _attach_tooltip,
+    ensure_component_theme, gallery_grid_theme, icon_button,
 )
 from .tk_scroll_input import vertical_scroll_delta
 from .gallery_view_preferences import normalize_card_format
+from .config import resolve_canvas_gallery_renderer_enabled
 from .gallery_view_order import GalleryViewOrder
 
 try:
@@ -140,20 +142,20 @@ MEDIA_VIEWPORT_COALESCE_MS = 24
 # Rationale: One row avoids edge churn while keeping Tk image retention bounded.
 MEDIA_THUMBNAIL_OVERSCAN_ROWS = 1
 
-# Purpose: Keep visible decoded thumbnails warm across album selections.
+# Purpose: Bound session-shared thumbnail identity-index bookkeeping.
 # Type: int. Units: decoded images. Scope: one shared live-session cache.
 # Consumers: _NativeGalleryViewer._remember_thumbnail.
-# Rationale: 256 bounds bookkeeping independently of raster dimensions. The
-# byte cap is authoritative for full-sized images, including wide viewports.
-MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT = 256
+# Rationale: 4096 supports large albums while keeping each session's index
+# bounded independently of raster dimensions.
+MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT = 4096
 
 # Purpose: Bound decoded thumbnail memory across album selections.
 # Type: int. Units: bytes. Scope: one shared live-session cache.
 # Consumers: _NativeGalleryViewer._remember_thumbnail.
-# Rationale: 16 MiB retains two 84-item bands (60 visible plus two 12-item
-# overscan rows) at four accounted bytes per pixel, with room for history.
+# Rationale: 256 MiB retains useful decoded previews across album visits under
+# one strict session cap; rasters allocate only on authorized cache admission.
 # Visible entries lead eviction; speculative overscan cannot displace history.
-MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 16 * 1024 * 1024
+MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 256 * 1024 * 1024
 
 # Purpose: Bound thumbnail proof age and validator-free decoded reuse.
 # Type: float. Units: seconds. Scope: one entry in a live session cache.
@@ -189,22 +191,52 @@ class GalleryThumbnailMemory:
             tuple[int, int, bool | None, str | None, int | None],
             tuple['Image.Image', int, float],
         ] = OrderedDict()
+        # Map photo identity to its sole current proof key; this owns no rasters.
+        self.identity_keys: dict[
+            tuple[int, int],
+            tuple[int, int, bool | None, str | None, int | None],
+        ] = {}
         self.size_bytes = 0
+        self.hits = 0
+        self.misses = 0
         self.evictions = 0
         self.admission_refusals = 0
         self.expirations = 0
         self.validator_changes = 0
 
+    def metrics_snapshot(self) -> dict[str, int]:
+        """Return fixed cumulative counters without retaining photo identities.
+
+        Returns:
+            dict[str, int]: Copy with keys hits, misses, evictions, bytes,
+                entries, admission_refusals, expirations, and validator_changes.
+                Hits and misses count authorized full-key lookups, not unique
+                photos or physical media reads. Counters survive clear; a new
+                owner starts at zero.
+        """
+        with self.lock:
+            return {
+                'hits': self.hits,
+                'misses': self.misses,
+                'evictions': self.evictions,
+                'bytes': self.size_bytes,
+                'entries': len(self.entries),
+                'admission_refusals': self.admission_refusals,
+                'expirations': self.expirations,
+                'validator_changes': self.validator_changes,
+            }
+
     def clear(self) -> None:
         """Release every retained raster when its owning session ends.
 
         Returns:
-            None: No decoded gallery pixels remain in this cache.
+            None: No decoded gallery pixels or identity mappings remain.
         """
         with self.lock:
             for image, _size, _stored_at in self.entries.values():
                 image.close()
             self.entries.clear()
+            self.identity_keys.clear()
             self.size_bytes = 0
 
     def remove_photos(
@@ -221,17 +253,30 @@ class GalleryThumbnailMemory:
         """
         targets = set(image_ids)
         with self.lock:
-            for key in tuple(self.entries):
-                if key[0] == gallery_id and key[1] in targets:
-                    image, size, _stored_at = self.entries.pop(key)
-                    self.size_bytes -= size
-                    image.close()
+            for image_id in targets:
+                identity = (gallery_id, image_id)
+                key = self.identity_keys.pop(identity, None)
+                if key is None:
+                    continue
+                cached = self.entries.pop(key, None)
+                if cached is None:
+                    continue
+                image, size, _stored_at = cached
+                self.size_bytes -= size
+                image.close()
 
 # Purpose: Identify a tile whose authorized preview could not be loaded.
 # Type: str. Units: one visible Unicode glyph. Scope: unavailable photo tile.
 # Consumers: _NativeGalleryViewer._show_thumbnail.
 # Rationale: A neutral image mark avoids substituting server filenames for media.
 MEDIA_THUMBNAIL_PLACEHOLDER = '▧'
+
+# Purpose: Bound the sanitized title retained for one gallery tile.
+# Type: int. Units: characters. Scope: one tile title and its tooltip string.
+# Consumers: _NativeGalleryViewer._accept_page and _accept_refresh.
+# Rationale: 160 characters preserve useful names without retaining long labels.
+MEDIA_TILE_LABEL_MAX_CHARS = 160
+
 
 # Purpose: Keep adjacent photo cards close while preserving a visible gap.
 # Type: int. Units: pixels. Scope: horizontal and vertical photo-grid gutters.
@@ -793,6 +838,7 @@ class _NativeGalleryViewer:
         photo_selected: Callable[[LinkedPhoto], None] | None = None,
         observation_callback: Callable[[str], None] | None = None,
         newest_first: bool = False,
+        canvas_grid_enabled: bool | None = None,
     ) -> None:
         """Create the embedded view and start its first bounded page load.
 
@@ -815,6 +861,8 @@ class _NativeGalleryViewer:
             observation_callback (Callable[[str], None] | None): Optional
                 receiver for bounded, non-failure observation summaries.
             newest_first (bool): Reverse the complete metadata sequence locally.
+            canvas_grid_enabled (bool | None): Resolved renderer preference;
+                None uses the configured factory default and environment choice.
 
         Returns:
             None: The viewer owns the returned child frame until it is destroyed.
@@ -830,6 +878,19 @@ class _NativeGalleryViewer:
         self._owns_thumbnail_memory = thumbnail_memory is None
         self._thumbnail_memory = thumbnail_memory or GalleryThumbnailMemory()
         self._context_menu = context_menu
+        # Native Buttons remain the explicit saved opt-out and accessibility
+        # fallback while Canvas is the factory default. _NativeGalleryViewer
+        # owns this fallback; retain it until physical and screen-reader checks,
+        # paired performance qualification, and owner approval. See
+        # docs/COMPATIBILITY_LIFECYCLE.md#issue-399-canvas-grid-fallback.
+        # Read the resolved renderer choice once for this viewer's lifetime.
+        self._canvas_grid_enabled = (
+            canvas_grid_enabled
+            if canvas_grid_enabled is not None
+            else resolve_canvas_gallery_renderer_enabled(True)
+        )
+        self._canvas_grid: CanvasGalleryGrid | None = None
+        self._grid_content_height: int = 0
         self._diagnostic_callback = diagnostic_callback
         self._on_photo_selected = photo_selected
         self._observation_callback = observation_callback
@@ -955,8 +1016,8 @@ class _NativeGalleryViewer:
         self._detail_cache_bytes = 0
         self._pending_prefetch_ids: list[int] = []
         self._prefetch_direction = 1
-        self._tile_buttons: list[ttk.Button] = []
-        self._tile_tooltips: list[tk.StringVar] = []
+        self._tile_buttons: list[ttk.Button | CanvasTileProxy] = []
+        self._tile_tooltips: list[tk.StringVar | TooltipValue] = []
         self._tile_titles: list[str] = []
         self._page_request_cursor: int | None = None
         self._page_request_mode = 'next'
@@ -1103,11 +1164,6 @@ class _NativeGalleryViewer:
         self.grid_canvas.configure(yscrollcommand=self._set_grid_scrollbar)
         self.grid_canvas.pack(side='left', fill='both', expand=True)
         self.grid_scrollbar.pack(side='right', fill='y')
-        self.grid_frame = ttk.Frame(self.grid_canvas, style='Card.TFrame')
-        self.grid_window = self.grid_canvas.create_window(
-            (0, 0), window=self.grid_frame, anchor='nw',
-        )
-        self.grid_frame.bind('<Configure>', self._on_grid_configure)
         self.grid_canvas.bind('<Configure>', self._on_grid_resize)
         self.grid_canvas.bind('<Configure>', self._on_grid_viewport, add='+')
         self.grid_canvas.bind('<Map>', self._on_grid_viewport, add='+')
@@ -1118,13 +1174,37 @@ class _NativeGalleryViewer:
         self._bind_precise_scroll(self.grid_canvas)
         self.grid_canvas.bind('<Button-4>', self._on_grid_wheel, add='+')
         self.grid_canvas.bind('<Button-5>', self._on_grid_wheel, add='+')
-        self.grid_frame.bind('<MouseWheel>', self._on_grid_wheel, add='+')
-        self._bind_precise_scroll(self.grid_frame)
-        self.grid_frame.bind('<Button-4>', self._on_grid_wheel, add='+')
-        self.grid_frame.bind('<Button-5>', self._on_grid_wheel, add='+')
-        for sequence in ('<Button-3>', '<Button-2>', '<Control-Button-1>'):
-            self.grid_canvas.bind(sequence, self._on_empty_context, add='+')
-            self.grid_frame.bind(sequence, self._on_empty_context, add='+')
+        if self._canvas_grid_enabled:
+            self.grid_canvas.configure(takefocus=True)
+            self.grid_frame: ttk.Frame | None = None
+            self.grid_window: int | None = None
+            self._canvas_grid = CanvasGalleryGrid(
+                self.grid_canvas,
+                gallery_id=self.gallery.gallery_id,
+                gutter=MEDIA_GRID_GUTTER,
+                placeholder=MEDIA_THUMBNAIL_PLACEHOLDER,
+                theme=gallery_grid_theme(self.grid_canvas),
+                select=self.select_photo,
+                range_select=self.select_photo_range,
+                toggle=self._toggle_canvas_photo_selection,
+                open_photo=self._open_grid_photo,
+                key=self._tile_key,
+                context=self._canvas_context,
+                viewport=self._canvas_viewport_changed,
+            )
+        else:
+            self.grid_frame = ttk.Frame(self.grid_canvas, style='Card.TFrame')
+            self.grid_window = self.grid_canvas.create_window(
+                (0, 0), window=self.grid_frame, anchor='nw',
+            )
+            self.grid_frame.bind('<Configure>', self._on_grid_configure)
+            self.grid_frame.bind('<MouseWheel>', self._on_grid_wheel, add='+')
+            self._bind_precise_scroll(self.grid_frame)
+            self.grid_frame.bind('<Button-4>', self._on_grid_wheel, add='+')
+            self.grid_frame.bind('<Button-5>', self._on_grid_wheel, add='+')
+            for sequence in ('<Button-3>', '<Button-2>', '<Control-Button-1>'):
+                self.grid_canvas.bind(sequence, self._on_empty_context, add='+')
+                self.grid_frame.bind(sequence, self._on_empty_context, add='+')
 
 
         actions = ttk.Frame(shell, style='Card.TFrame')
@@ -1325,6 +1405,8 @@ class _NativeGalleryViewer:
         Returns:
             None: The canvas scroll region follows the complete tile grid.
         """
+        if getattr(self, '_canvas_grid', None) is not None:
+            return
         bounds = self.grid_canvas.bbox('all')
         self.grid_canvas.configure(scrollregion=bounds)
         if bounds is not None and bounds[3] <= self.grid_canvas.winfo_height():
@@ -1346,11 +1428,14 @@ class _NativeGalleryViewer:
         self._on_grid_viewport(None)
 
     def _visible_photo_indices(self) -> tuple[int, ...]:
-        """Return tile indices whose actual widget bounds intersect the viewport.
+        """Return photo indices whose renderer bounds intersect the viewport.
 
         Returns:
             tuple[int, ...]: Visible indices eligible for thumbnail requests.
         """
+        canvas_grid = getattr(self, '_canvas_grid', None)
+        if canvas_grid is not None:
+            return canvas_grid.visible_indices()
         top = self.grid_canvas.winfo_rooty() - self.grid_frame.winfo_rooty()
         bottom = top + self.grid_canvas.winfo_height()
         columns = max(1, self._grid_columns)
@@ -1450,6 +1535,11 @@ class _NativeGalleryViewer:
                     min(len(self._photos), (last_row + 1) * columns),
                 ))
             self._admitted_thumbnail_indices = admitted
+            canvas_grid = getattr(self, '_canvas_grid', None)
+            if canvas_grid is not None:
+                canvas_grid.reconcile(tuple(sorted(admitted)))
+                # Reapply authoritative owner selection after slot reuse.
+                self._render_photo_selection()
             self._thumbnail_pending = [
                 index for index in self._thumbnail_pending if index in admitted
             ]
@@ -1464,9 +1554,6 @@ class _NativeGalleryViewer:
             self._thumbnail_disk_lane.retain(
                 self.gallery.gallery_id, self._photos, tuple(admitted_order),
             )
-            if self._queue_thumbnail_proof_refresh():
-                self._dispatch_pending_work()
-                return
             self._warm_thumbnail_pending = [
                 item for item in self._warm_thumbnail_pending
                 if (item[0] == self.gallery.gallery_id
@@ -1476,10 +1563,6 @@ class _NativeGalleryViewer:
             for index in admitted_order:
                 identity = (self.gallery.gallery_id, index, self._photos[index])
                 if (index not in self._thumbnail_loaded
-                        and index not in self._thumbnail_pending
-                        and not self._thumbnail_disk_lane.contains(
-                            self.gallery.gallery_id, index, self._photos[index],
-                        )
                         and identity not in self._warm_thumbnail_pending):
                     self._warm_thumbnail_pending.append(identity)
             self._warm_thumbnail_pending.sort(
@@ -1501,15 +1584,18 @@ class _NativeGalleryViewer:
                         or wanted[:len(unfinished)] != unfinished):
                     self._thumbnail_cancelled.set()
             self._drain_warm_thumbnail_slice()
+            if self._queue_thumbnail_proof_refresh():
+                self._dispatch_pending_work()
+                return
             bounds = self.grid_canvas.bbox('all')
-            scrollable = bool(
-                bounds is not None
-                and bounds[3] > self.grid_canvas.winfo_height()
+            content_height = (
+                self._grid_content_height if canvas_grid is not None
+                else bounds[3] if bounds is not None else 0
             )
-            viewport_not_filled = bool(
-                bounds is not None
-                and bounds[3] <= self.grid_canvas.winfo_height()
-            )
+            scrollable = content_height > self.grid_canvas.winfo_height()
+            viewport_not_filled = (
+                bounds is not None or canvas_grid is not None
+            ) and content_height <= self.grid_canvas.winfo_height()
             near_scroll_end = bool(
                 scrollable and visible
                 and max(visible) >= len(self._photos) - self._grid_columns * 2
@@ -1611,7 +1697,26 @@ class _NativeGalleryViewer:
                     and index in self._admitted_thumbnail_indices
                     and index < len(self._photos)
                     and self._photos[index] == photo):
-                cached = self._cached_thumbnail(photo)
+                if not self.session.can_read_media():
+                    self.close()
+                    return
+                current_key = self._thumbnail_memory_key(photo)
+                if (current_key is not None
+                        and index < len(self._photo_images)
+                        and self._photo_images[index] is not None):
+                    count += 1
+                    continue
+                cached = self._cached_thumbnail(
+                    photo, expected_key=current_key,
+                )
+                if cached is not None and not self.session.can_read_media():
+                    cached.close()
+                    self.close()
+                    return
+                if (cached is not None
+                        and self._thumbnail_memory_key(photo) != current_key):
+                    cached.close()
+                    cached = None
                 if cached is not None:
                     self._thumbnail_warm_cache_hit_count += 1
                     attach_started = time.perf_counter()
@@ -1619,9 +1724,16 @@ class _NativeGalleryViewer:
                     self._thumbnail_tk_ms += (
                         time.perf_counter() - attach_started
                     ) * 1000.0
-                elif index not in self._thumbnail_pending:
-                    self._thumbnail_disk_lane.submit(gallery_id, index, photo)
-                    self._schedule_queue_poll()
+                elif (not self._refresh_pending
+                      and self._worker_kind != 'refresh'
+                      and index not in self._thumbnail_pending):
+                    if not self._thumbnail_disk_lane.contains(
+                        gallery_id, index, photo,
+                    ):
+                        self._thumbnail_disk_lane.submit(
+                            gallery_id, index, photo,
+                        )
+                        self._schedule_queue_poll()
             count += 1
         self._thumbnail_pending.sort(
             key=lambda index: (
@@ -1676,6 +1788,8 @@ class _NativeGalleryViewer:
         if not 0 <= index < len(self._photo_images):
             self._thumbnail_loaded.discard(index)
             return
+        # Tk images stay viewport-scoped; warm session rasters intentionally
+        # recreate PhotoImages on readmission instead of retaining a second pool.
         canonical = self._canonical_thumbnail_images.pop(index, None)
         if canonical is not None:
             canonical.close()
@@ -1757,6 +1871,8 @@ class _NativeGalleryViewer:
         retained = sum(
             image is not None for image in self._photo_images
         )
+        memory_state = self._thumbnail_memory.metrics_snapshot()
+        renderer = 'canvas' if self._canvas_grid_enabled else 'native'
         with self._thumbnail_metrics_lock:
             transport = ' '.join(
                 f'{name}={value:.2f}'
@@ -1789,11 +1905,15 @@ class _NativeGalleryViewer:
             f'discarded={self._thumbnail_discarded_count} '
             f'cancelled_reads={self._thumbnail_cancelled_read_count} '
             f'disk_discarded={self._thumbnail_disk_lane.discarded_results} '
-            f'memory_bytes={self._thumbnail_memory.size_bytes} '
-            f'evictions={self._thumbnail_memory.evictions} '
-            f'admission_refusals={self._thumbnail_memory.admission_refusals} '
-            f'expired={self._thumbnail_memory.expirations} '
-            f'validator_changes={self._thumbnail_memory.validator_changes} '
+            f'renderer={renderer} '
+            f'memory_entries={memory_state["entries"]} '
+            f'memory_capacity_entries={MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT} '
+            f'memory_bytes={memory_state["bytes"]} '
+            f'memory_capacity_bytes={MEDIA_THUMBNAIL_CACHE_MAX_BYTES} '
+            f'evictions={memory_state["evictions"]} '
+            f'admission_refusals={memory_state["admission_refusals"]} '
+            f'expired={memory_state["expirations"]} '
+            f'validator_changes={memory_state["validator_changes"]} '
             f'proof_refreshes={self._thumbnail_proof_refresh_count} '
             f'batches={self._thumbnail_batch_count} '
             f'dispatch_groups={self._thumbnail_batch_count} '
@@ -1836,16 +1956,23 @@ class _NativeGalleryViewer:
     def _on_grid_resize(
         self, event: tk.Event, *, force: bool = False,
     ) -> None:
-        """Resize the embedded grid and recompute its responsive columns.
+        """Resize the native grid or relayout the opt-in Canvas renderer.
 
         Args:
-            event (tk.Event): Canvas resize event with its current pixel width.
-            force (bool): Reapply row and column geometry after format change.
+            event (tk.Event): Canvas configure event with current pixel dimensions.
+            force (bool): Reapply native row geometry after a format change.
 
         Returns:
-            None: Fixed cells keep the selected card size and compact gutters;
-                any remaining horizontal space stays after the final column.
+            None: The active renderer updates columns, extent, and viewport admission.
         """
+        canvas_grid = getattr(self, '_canvas_grid', None)
+        if canvas_grid is not None:
+            self._layout_canvas_grid(
+                event.width,
+                int(getattr(event, 'height', self.grid_canvas.winfo_height())),
+            )
+            self._on_grid_viewport(event)
+            return
         self.grid_canvas.itemconfigure(self.grid_window, width=event.width)
         tile_width, tile_height = self._card_dimensions()
         columns = max(1, event.width
@@ -2027,7 +2154,11 @@ class _NativeGalleryViewer:
             bounds = self.grid_canvas.bbox('all')
             if bounds is None:
                 return
-            content_height = bounds[3] - bounds[1]
+            content_height = (
+                self._grid_content_height
+                if getattr(self, '_canvas_grid', None) is not None
+                else bounds[3] - bounds[1]
+            )
             if content_height <= 0:
                 return
             current = self.grid_canvas.yview()
@@ -2187,6 +2318,10 @@ class _NativeGalleryViewer:
         """
         if not 0 <= index < len(self._tile_buttons):
             return
+        canvas_grid = getattr(self, '_canvas_grid', None)
+        if canvas_grid is not None:
+            canvas_grid.focus(index, force=True)
+            return
         tile = self._tile_buttons[index]
         tile.focus_set()
         tile_y = tile.winfo_y()
@@ -2221,14 +2356,33 @@ class _NativeGalleryViewer:
         if key == 'space':
             self.toggle_photo_selection(self._photos[index].image_id)
             return 'break'
-        delta = {
-            'Left': -1, 'Right': 1,
-            'Up': -max(1, self._grid_columns),
-            'Down': max(1, self._grid_columns),
-        }.get(key)
-        if delta is None:
+        canvas_grid = getattr(self, '_canvas_grid', None)
+        target: int | None = None
+        if canvas_grid is not None and key == 'Home':
+            target = 0
+        elif canvas_grid is not None and key == 'End':
+            target = len(self._photos) - 1
+        elif canvas_grid is not None and key in ('Prior', 'Next'):
+            cell_height = (
+                self._card_dimensions()[1] + MEDIA_GRID_GUTTER
+                + 2 * GALLERY_TILE_BORDER_INSET
+            )
+            page_rows = max(
+                1, self.grid_canvas.winfo_height() // max(1, cell_height),
+            )
+            page_delta = page_rows * max(1, self._grid_columns)
+            target = index + (-page_delta if key == 'Prior' else page_delta)
+        else:
+            delta = {
+                'Left': -1, 'Right': 1,
+                'Up': -max(1, self._grid_columns),
+                'Down': max(1, self._grid_columns),
+            }.get(key)
+            if delta is not None:
+                target = index + delta
+        if target is None:
             return None
-        target = max(0, min(len(self._photos) - 1, index + delta))
+        target = max(0, min(len(self._photos) - 1, target))
         # Tk ShiftMask extends the anchor; Control (or macOS Command) moves
         # focus without discarding the existing multi-selection.
         command_mask = 0x0008 if sys.platform == 'darwin' else 0x0004
@@ -2288,7 +2442,14 @@ class _NativeGalleryViewer:
         Returns:
             None: Tile identity and thumbnail bytes remain unchanged.
         """
-        current = range(len(self._photos)) if indexes is None else indexes
+        canvas_grid = getattr(self, '_canvas_grid', None)
+        if canvas_grid is None:
+            current = range(len(self._photos)) if indexes is None else indexes
+        elif indexes is None:
+            current = tuple(canvas_grid.active_indices)
+        else:
+            active = set(canvas_grid.active_indices)
+            current = tuple(index for index in indexes if index in active)
         for index in current:
             if not 0 <= index < len(self._photos):
                 continue
@@ -2303,6 +2464,77 @@ class _NativeGalleryViewer:
                 'LinkedPhoto.TButton' if self._photo_images[index] is not None else
                 'Placeholder.LinkedPhoto.TButton'
             ))
+
+    def _toggle_canvas_photo_selection(self, index: int) -> bool:
+        """Toggle the selection for one Canvas proxy's loaded photo index.
+
+        Args:
+            index (int): Zero-based photo index supplied by the Canvas helper.
+
+        Returns:
+            bool: True when the exact loaded photo is selected after toggling.
+        """
+        if not 0 <= index < len(self._photos):
+            return False
+        return self.toggle_photo_selection(self._photos[index].image_id)
+
+    def _canvas_context(
+        self, index: int | None, event: tk.Event,
+    ) -> str | None:
+        """Dispatch Canvas context input to the photo or empty-grid owner.
+
+        Args:
+            index (int | None): Photo index under the pointer, or None for empty space.
+            event (tk.Event): Native Canvas context event.
+
+        Returns:
+            str | None: Existing menu callback result, or None when unhandled.
+        """
+        if index is None:
+            return self._on_empty_context(event)
+        return self._on_photo_context(index, event)
+
+    def _canvas_viewport_changed(self) -> None:
+        """Queue the current Canvas viewport through the existing admission owner.
+
+        Returns:
+            None: The shared viewport coalescer retains thumbnail and paging policy.
+        """
+        self._on_grid_viewport(None)
+
+    def _layout_canvas_grid(
+        self, width: int | None = None, height: int | None = None,
+    ) -> None:
+        """Update Canvas geometry and scrolling from the helper's logical extent.
+
+        Args:
+            width (int | None): Current Canvas width, or None to query Tk.
+            height (int | None): Current Canvas height, or None to query Tk.
+
+        Returns:
+            None: Columns, scrollregion, and scrollbar follow all loaded metadata.
+        """
+        canvas_grid = getattr(self, '_canvas_grid', None)
+        if canvas_grid is None:
+            return
+        canvas_width = max(
+            1, int(width if width is not None else self.grid_canvas.winfo_width()),
+        )
+        canvas_height = max(
+            1, int(height if height is not None else self.grid_canvas.winfo_height()),
+        )
+        columns, content_height = canvas_grid.layout(
+            canvas_width, canvas_height, self._card_dimensions(),
+        )
+        self._grid_columns = max(1, columns)
+        self._grid_content_height = max(0, content_height)
+        self.grid_canvas.configure(scrollregion=(
+            0, 0, canvas_width, self._grid_content_height,
+        ))
+        if self._grid_content_height <= canvas_height:
+            self.grid_scrollbar.pack_forget()
+        elif not self.grid_scrollbar.winfo_manager():
+            self.grid_scrollbar.pack(side='right', fill='y')
 
     def _on_empty_context(self, event: tk.Event) -> str | None:
         """Dispatch an empty-grid context action for child-gallery creation.
@@ -2658,7 +2890,6 @@ class _NativeGalleryViewer:
         # until the next existing revision interval permits another attempt.
         self._thumbnail_proof_refresh_attempt_at = now
         self._thumbnail_proof_refresh_count += 1
-        self._cancel_thumbnail_gui_slice()
         self._thumbnail_disk_lane.invalidate()
         if self._worker_kind == 'thumbnail_batch':
             self._thumbnail_cancelled.set()
@@ -2675,7 +2906,6 @@ class _NativeGalleryViewer:
         if self._closed:
             return
         self._cancel_thumbnail_resume()
-        self._cancel_thumbnail_gui_slice()
         self._thumbnail_disk_lane.invalidate()
         if self._worker_kind == 'thumbnail_batch':
             self._thumbnail_cancelled.set()
@@ -2739,13 +2969,14 @@ class _NativeGalleryViewer:
             self._active_media_cancelled = None
 
     def _accept_refresh(self, pages: tuple[LinkedMediaPage, ...]) -> None:
-        """Reconcile a refreshed snapshot while preserving scroll and selection.
+        """Reconcile refreshed metadata while preserving view and photo identity.
 
         Args:
             pages (tuple[LinkedMediaPage, ...]): Ordered pages through loaded extent.
 
         Returns:
-            None: Equal snapshots leave tiles and decoded thumbnails untouched.
+            None: Equal metadata keeps the UI untouched; reordered data restores
+                focused photo identity when the Canvas still owns keyboard focus.
         """
         self._cancel_thumbnail_resume()
         # An accepted authoritative snapshot permits a new network attempt.
@@ -2776,9 +3007,65 @@ class _NativeGalleryViewer:
             # stayed equal. Restore its work without rebuilding any tile.
             self._on_grid_viewport(None)
             return
+        same_ordered_ids = bool(
+            photos and len(photos) == len(self._photos)
+            # Page/prefetch navigation intents remain owned by full reconciliation.
+            and not self._select_first_after_page
+            and not self._wrap_after_metadata
+            and not self._prefetch_edge_direction
+            and tuple(photo.image_id for photo in photos)
+            == tuple(photo.image_id for photo in self._photos)
+            and len(self._tile_buttons) == len(self._photos)
+            and len(self._photo_images) == len(self._photos)
+            and len(self._tile_tooltips) == len(self._photos)
+            and len(self._tile_titles) == len(self._photos)
+        )
         self._cancel_grid_viewport_callback()
         self._cancel_thumbnail_gui_slice()
         self._thumbnail_disk_lane.invalidate()
+        if same_ordered_ids:
+            previous_photos = self._photos
+            previous_images = tuple(self._photo_images)
+            self._photos = photos
+            self._next_after = pages[-1].next_after
+            self._loading_more = False
+            self._page_request_mode = 'next'
+            self._empty_page = False
+            self._thumbnail_index = 0
+            self._thumbnail_loaded.clear()
+            self._thumbnail_pending.clear()
+            self._thumbnail_cancelled.clear()
+            self.retry_button.configure(state='disabled')
+            self.retry_button.pack_forget()
+            self.status.pack_forget()
+            self.status.configure(text='')
+            changed_indexes: list[int] = []
+            for index, photo in enumerate(photos):
+                retain_image = (
+                    previous_images[index] is not None
+                    and comparable(previous_photos[index]) == comparable(photo)
+                )
+                if retain_image:
+                    self._thumbnail_loaded.add(index)
+                else:
+                    self._release_thumbnail_image(index)
+                    changed_indexes.append(index)
+                title = ''.join(
+                    char if char.isprintable() else ' '
+                    for char in photo.title
+                ).strip()
+                full_label = (
+                    title[:MEDIA_TILE_LABEL_MAX_CHARS] or self._text('linking_media_open')
+                )
+                if (self._tile_titles[index] != full_label
+                        or not retain_image):
+                    self._tile_titles[index] = full_label
+                    self._tile_tooltips[index].set(full_label)
+            self._render_photo_selection(tuple(changed_indexes))
+            self.rearm_first_viewport_diagnostics()
+            if self.on_photos_changed is not None:
+                self.on_photos_changed()
+            return
         anchor_id = (
             self._photos[self._selection_anchor_index].image_id
             if self._selection_anchor_index is not None
@@ -2797,8 +3084,20 @@ class _NativeGalleryViewer:
         selected = (self._photos[self._slide_index].image_id
                     if self._lightbox is not None and self._photos
                     and self._slide_index < len(self._photos) else None)
-        for tile in self._tile_buttons:
-            tile.destroy()
+        canvas_grid = getattr(self, '_canvas_grid', None)
+        focused_photo_id: int | None = None
+        focused_old_index: int | None = None
+        if (canvas_grid is not None
+                and self.grid_canvas.focus_get() is self.grid_canvas):
+            focused_old_index = canvas_grid.focused_index
+            if (focused_old_index is not None
+                    and 0 <= focused_old_index < len(self._photos)):
+                focused_photo_id = self._photos[focused_old_index].image_id
+        if canvas_grid is not None:
+            canvas_grid.reset_catalogue()
+        else:
+            for tile in self._tile_buttons:
+                tile.destroy()
         self._tile_buttons.clear()
         self._photo_images.clear()
         self._tile_tooltips.clear()
@@ -2838,6 +3137,19 @@ class _NativeGalleryViewer:
             if id(image) not in retained_image_ids
         )
         self._render_photo_selection()
+        if (canvas_grid is not None and focused_photo_id is not None
+                and self.grid_canvas.focus_get() is self.grid_canvas
+                and self._photos):
+            restored_focus = next(
+                (index for index, photo in enumerate(self._photos)
+                 if photo.image_id == focused_photo_id),
+                None,
+            )
+            if restored_focus is None:
+                restored_focus = min(
+                    focused_old_index or 0, len(self._photos) - 1,
+                )
+            canvas_grid.focus(restored_focus, ensure_visible=False)
         if selected is not None:
             index = next((i for i, photo in enumerate(self._photos)
                           if photo.image_id == selected), None)
@@ -3006,10 +3318,23 @@ class _NativeGalleryViewer:
         """
         self._page_request_cursor = None
         self._page_request_mode = 'initial'
+        order = getattr(self, '_view_order', None)
+        cached_order = order.cached_page() if order is not None else None
+        if (isinstance(cached_order, LinkedMediaPage)
+                and not cached_order.cover_only
+                and self.session.can_read_media()
+                and not self._closed and self._worker is None
+                and self._events.empty()):
+            self._events.put_nowait((
+                self._generation, 'page_recent', (cached_order, None),
+            ))
+            self._schedule_queue_poll(
+                MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS,
+            )
+            return
         recent = getattr(self.session, 'recent_media_page', None)
         page = (recent(self.gallery.gallery_id)
-                if callable(recent) and getattr(self, '_view_order', None) is None
-                else None)
+                if callable(recent) and order is None else None)
         if (isinstance(page, LinkedMediaPage) and not page.cover_only and not self._closed
                 and self._worker is None and self._events.empty()):
             # A cover descriptor cannot imply a complete one-photo album.
@@ -3133,6 +3458,7 @@ class _NativeGalleryViewer:
             self._photos = ()
         self._page_request_mode = 'next'
         old_count = len(self._photos)
+        canvas_grid = getattr(self, '_canvas_grid', None)
         photos = page.photos
         self._photos += photos
         self._next_after = page.next_after
@@ -3148,6 +3474,8 @@ class _NativeGalleryViewer:
         self._refresh_audio_button()
         self._empty_page = not bool(self._photos)
         if old_count == 0:
+            if canvas_grid is not None:
+                canvas_grid.reset_catalogue()
             # Rebuilt descriptors invalidate the prior visible-band measurement.
             self._measured_visible = frozenset()
             self._viewport_measure_epoch = None
@@ -3163,111 +3491,119 @@ class _NativeGalleryViewer:
             photo = self._photos[index]
             title = ''.join(char if char.isprintable() else ' '
                             for char in photo.title).strip()
-            full_label = title[:160] or self._text('linking_media_open')
-            tile = Button(
-                self.grid_frame,
-                text=MEDIA_THUMBNAIL_PLACEHOLDER,
-                image='',
-                compound='none',
-                width=-1,
-                style='Placeholder.LinkedPhoto.TButton',
-                command=lambda selected=index: self.select_photo(selected),
-                takefocus=True,
-            )
-            row = index // max(1, getattr(self, '_grid_columns', 1))
-            tile_height = self._card_dimensions()[1]
-            self.grid_frame.grid_rowconfigure(
-                row, minsize=(tile_height + MEDIA_GRID_GUTTER
-                              + 2 * GALLERY_TILE_BORDER_INSET),
-            )
-            tile.grid(
-                row=row,
-                column=index % max(1, getattr(self, '_grid_columns', 1)),
-                # Keep unused row and column space outside the image rim.
-                sticky='',
-                padx=MEDIA_GRID_GUTTER // 2,
-                pady=MEDIA_GRID_GUTTER // 2,
-            )
-            self._tile_buttons.append(tile)
-            tile.bind('<MouseWheel>', self._on_grid_wheel, add='+')
-            self._bind_precise_scroll(tile)
-            tile.bind('<Button-4>', self._on_grid_wheel, add='+')
-            tile.bind('<Button-5>', self._on_grid_wheel, add='+')
-            tile.bind(
-                '<Button-1>',
-                lambda _event, selected=index: (
-                    self.select_photo(selected), 'break',
-                )[1],
-            )
-            tile.bind(
-                '<Double-Button-1>',
-                lambda _event, selected=index: (
-                    self._open_grid_photo(selected), 'break',
-                )[1],
-            )
-            tile.bind(
-                '<Shift-Button-1>',
-                lambda _event, selected=index: (
-                    self.select_photo_range(selected), 'break',
-                )[1],
-            )
-            tile.bind(
-                '<Return>',
-                lambda _event, selected=index: (
-                    self._open_grid_photo(selected), 'break',
-                )[1],
-            )
-            for sequence in (
-                '<Left>', '<Right>', '<Up>', '<Down>', '<space>', '<KP_Enter>',
-            ):
-                tile.bind(
-                    sequence,
-                    lambda event, selected=index: self._tile_key(
-                        selected, event,
-                    ),
+            full_label = title[:MEDIA_TILE_LABEL_MAX_CHARS] or self._text('linking_media_open')
+            if canvas_grid is not None:
+                tile = canvas_grid.append(index, photo.image_id, full_label)
+                self._tile_buttons.append(tile)
+                self._tile_tooltips.append(tile.tooltip)
+                self._tile_titles.append(full_label)
+            else:
+                tile = Button(
+                    self.grid_frame,
+                    text=MEDIA_THUMBNAIL_PLACEHOLDER,
+                    image='',
+                    compound='none',
+                    width=-1,
+                    style='Placeholder.LinkedPhoto.TButton',
+                    command=lambda selected=index: self.select_photo(selected),
+                    takefocus=True,
                 )
-            context_sequences = ('<Button-3>', '<Button-2>')
-            if sys.platform == 'darwin':
-                context_sequences += ('<Control-Button-1>',)
-            for sequence in context_sequences:
+                row = index // max(1, getattr(self, '_grid_columns', 1))
+                tile_height = self._card_dimensions()[1]
+                self.grid_frame.grid_rowconfigure(
+                    row, minsize=(tile_height + MEDIA_GRID_GUTTER
+                                  + 2 * GALLERY_TILE_BORDER_INSET),
+                )
+                tile.grid(
+                    row=row,
+                    column=index % max(1, getattr(self, '_grid_columns', 1)),
+                    # Keep unused row and column space outside the image rim.
+                    sticky='',
+                    padx=MEDIA_GRID_GUTTER // 2,
+                    pady=MEDIA_GRID_GUTTER // 2,
+                )
+                self._tile_buttons.append(tile)
+                tile.bind('<MouseWheel>', self._on_grid_wheel, add='+')
+                self._bind_precise_scroll(tile)
+                tile.bind('<Button-4>', self._on_grid_wheel, add='+')
+                tile.bind('<Button-5>', self._on_grid_wheel, add='+')
                 tile.bind(
-                    sequence,
+                    '<Button-1>',
+                    lambda _event, selected=index: (
+                        self.select_photo(selected), 'break',
+                    )[1],
+                )
+                tile.bind(
+                    '<Double-Button-1>',
+                    lambda _event, selected=index: (
+                        self._open_grid_photo(selected), 'break',
+                    )[1],
+                )
+                tile.bind(
+                    '<Shift-Button-1>',
+                    lambda _event, selected=index: (
+                        self.select_photo_range(selected), 'break',
+                    )[1],
+                )
+                tile.bind(
+                    '<Return>',
+                    lambda _event, selected=index: (
+                        self._open_grid_photo(selected), 'break',
+                    )[1],
+                )
+                for sequence in (
+                    '<Left>', '<Right>', '<Up>', '<Down>', '<space>', '<KP_Enter>',
+                ):
+                    tile.bind(
+                        sequence,
+                        lambda event, selected=index: self._tile_key(
+                            selected, event,
+                        ),
+                    )
+                context_sequences = ('<Button-3>', '<Button-2>')
+                if sys.platform == 'darwin':
+                    context_sequences += ('<Control-Button-1>',)
+                for sequence in context_sequences:
+                    tile.bind(
+                        sequence,
+                        lambda event, selected=index: self._on_photo_context(
+                            selected, event,
+                        ),
+                        add='+',
+                    )
+                if sys.platform != 'darwin':
+                    tile.bind(
+                        '<Control-Button-1>',
+                        lambda _event, selected=index: (
+                            self.toggle_photo_selection(
+                                self._photos[selected].image_id,
+                            ), 'break',
+                        )[1] if selected < len(self._photos) else 'break',
+                        add='+',
+                    )
+                elif sys.platform == 'darwin':
+                    tile.bind(
+                        '<Command-Button-1>',
+                        lambda _event, selected=index: (
+                            self.toggle_photo_selection(
+                                self._photos[selected].image_id,
+                            ), 'break',
+                        )[1] if selected < len(self._photos) else 'break',
+                        add='+',
+                    )
+                tile.bind(
+                    '<Shift-F10>',
                     lambda event, selected=index: self._on_photo_context(
                         selected, event,
                     ),
                     add='+',
                 )
-            if sys.platform != 'darwin':
-                tile.bind(
-                    '<Control-Button-1>',
-                    lambda _event, selected=index: (
-                        self.toggle_photo_selection(
-                            self._photos[selected].image_id,
-                        ), 'break',
-                    )[1] if selected < len(self._photos) else 'break',
-                    add='+',
-                )
-            elif sys.platform == 'darwin':
-                tile.bind(
-                    '<Command-Button-1>',
-                    lambda _event, selected=index: (
-                        self.toggle_photo_selection(
-                            self._photos[selected].image_id,
-                        ), 'break',
-                    )[1] if selected < len(self._photos) else 'break',
-                    add='+',
-                )
-            tile.bind(
-                '<Shift-F10>',
-                lambda event, selected=index: self._on_photo_context(
-                    selected, event,
-                ),
-                add='+',
-            )
-            tooltip = tk.StringVar(master=self.frame, value=full_label)
-            self._tile_tooltips.append(tooltip)
-            self._tile_titles.append(full_label)
-            _attach_tooltip(tile, tooltip)
+                tooltip = tk.StringVar(master=self.frame, value=full_label)
+                self._tile_tooltips.append(tooltip)
+                self._tile_titles.append(full_label)
+                _attach_tooltip(tile, tooltip)
+        if canvas_grid is not None:
+            self._layout_canvas_grid()
         self._render_photo_selection()
         self.retry_button.configure(state='disabled')
         self.retry_button.pack_forget()
@@ -3634,6 +3970,7 @@ class _NativeGalleryViewer:
         if (self._media_throttled or self._http_thumbnail_failure_latched
                 or self._thumbnail_resume_after_id is not None
                 or not self._thumbnail_pending
+                or bool(self._warm_thumbnail_pending)
                 or not self.grid_canvas.winfo_viewable()
                 or self._thumbnail_cancelled.is_set() or self._closed
                 or self._worker is not None
@@ -4031,6 +4368,12 @@ class _NativeGalleryViewer:
                         if result.image is not None:
                             result.image.close()
                         continue
+                    if (result.index < len(self._photo_images)
+                            and self._photo_images[result.index] is not None):
+                        if result.image is not None:
+                            result.image.close()
+                        self._thumbnail_discarded_count += 1
+                        continue
                     self._thumbnail_queue_wait_ms += max(
                         0.0,
                         (time.perf_counter() - result.enqueued_at) * 1000.0,
@@ -4189,6 +4532,9 @@ class _NativeGalleryViewer:
                 and self._photos[local.index] == local.photo
                 and not self._refresh_pending
             )
+            if (valid and local.index < len(self._photo_images)
+                    and self._photo_images[local.index] is not None):
+                valid = False
             if not valid:
                 if local.image is not None:
                     local.image.close()
@@ -4877,22 +5223,34 @@ class _NativeGalleryViewer:
             private_identity[0] if private_identity is not None else None,
         )
 
-    def _cached_thumbnail(self, photo: LinkedPhoto) -> 'Image.Image | None':
+    def _cached_thumbnail(
+        self,
+        photo: LinkedPhoto,
+        *,
+        expected_key: (
+            tuple[int, int, bool | None, str | None, int | None] | None
+        ) = None,
+    ) -> 'Image.Image | None':
         """Return unchanged decoded pixels only under current session authority.
 
         Args:
             photo (LinkedPhoto): Current server-authorized photo descriptor.
-
+            expected_key (tuple[int, int, bool | None, str | None, int | None] | None):
+                Key observed before the bounded Tk callback, or None when no
+                cache identity was available.
         Returns:
             Image.Image | None: Independent raster copy, or None after a miss,
                 public freshness expiry, or refusal by the live private proof.
         """
+        if not self.session.can_read_media():
+            return None
         key = self._thumbnail_memory_key(photo)
-        if key is None:
+        if key is None or (expected_key is not None and key != expected_key):
             return None
         with self._thumbnail_memory.lock:
             cached = self._thumbnail_memory.entries.get(key)
             if cached is None:
+                self._thumbnail_memory.misses += 1
                 return None
             image, _size, stored_at = cached
             verified_at = photo.thumbnail_verified_at
@@ -4906,10 +5264,14 @@ class _NativeGalleryViewer:
                     > MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS):
                 self._thumbnail_memory.entries.pop(key, None)
                 self._thumbnail_memory.size_bytes -= _size
+                if self._thumbnail_memory.identity_keys.get(key[:2]) == key:
+                    self._thumbnail_memory.identity_keys.pop(key[:2], None)
                 self._thumbnail_memory.expirations += 1
+                self._thumbnail_memory.misses += 1
                 image.close()
                 return None
             self._thumbnail_memory.entries.move_to_end(key)
+            self._thumbnail_memory.hits += 1
             return image.copy()
 
     def _remember_thumbnail(self, photo: LinkedPhoto, image: 'Image.Image') -> None:
@@ -4938,9 +5300,13 @@ class _NativeGalleryViewer:
             return
         memory = self._thumbnail_memory
         with memory.lock:
-            for old_key in tuple(memory.entries):
-                if old_key[:2] == key[:2] and old_key != key:
-                    old_image, old_size, _stored_at = memory.entries.pop(old_key)
+            identity = key[:2]
+            old_key = memory.identity_keys.get(identity)
+            if old_key is not None and old_key != key:
+                old = memory.entries.pop(old_key, None)
+                memory.identity_keys.pop(identity, None)
+                if old is not None:
+                    old_image, old_size, _stored_at = old
                     memory.size_bytes -= old_size
                     memory.validator_changes += 1
                     old_image.close()
@@ -4969,6 +5335,7 @@ class _NativeGalleryViewer:
                 memory.size_bytes -= previous[1]
                 previous[0].close()
             memory.entries[key] = (image, size, time.monotonic())
+            memory.identity_keys[identity] = key
             memory.size_bytes += size
             while (len(memory.entries) > MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT
                    or memory.size_bytes > MEDIA_THUMBNAIL_CACHE_MAX_BYTES):
@@ -4979,6 +5346,8 @@ class _NativeGalleryViewer:
                 )
                 evicted, evicted_size, _stored_at = memory.entries.pop(victim)
                 memory.size_bytes -= evicted_size
+                if memory.identity_keys.get(victim[:2]) == victim:
+                    memory.identity_keys.pop(victim[:2], None)
                 memory.evictions += 1
                 evicted.close()
 
@@ -6135,6 +6504,9 @@ class _NativeGalleryViewer:
             image.close()
         self._detail_cache.clear()
         self._detail_cache_bytes = 0
+        canvas_grid = getattr(self, '_canvas_grid', None)
+        if canvas_grid is not None:
+            canvas_grid.close()
         if self._owns_thumbnail_memory:
             self._thumbnail_memory.clear()
         for canonical in self._canonical_thumbnail_images.values():
@@ -6207,6 +6579,7 @@ def mount_native_gallery_view(
     photo_selected: Callable[[LinkedPhoto], None] | None = None,
     observation_callback: Callable[[str], None] | None = None,
     newest_first: bool = False,
+    canvas_grid_enabled: bool | None = None,
 ) -> ttk.Frame:
     """Mount an inline, bounded gallery reader for a selected gallery.
 
@@ -6229,6 +6602,8 @@ def mount_native_gallery_view(
         observation_callback (Callable[[str], None] | None): Optional thread-safe
             receiver for allowlisted non-failure observations.
         newest_first (bool): Apply a local reverse order on all metadata refreshes.
+        canvas_grid_enabled (bool | None): Resolved renderer preference;
+            None uses the configured factory default and environment choice.
 
     Returns:
         ttk.Frame: Child view whose destruction releases worker and UI resources.
@@ -6246,5 +6621,6 @@ def mount_native_gallery_view(
         photo_selected=photo_selected,
         observation_callback=observation_callback,
         newest_first=newest_first,
+        canvas_grid_enabled=canvas_grid_enabled,
     )
     return viewer.frame

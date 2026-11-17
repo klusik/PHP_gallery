@@ -19,7 +19,8 @@
 Versioned configuration migration and normalization for the Windows uploader.
 """
 
-from typing import Any, Dict, Tuple
+import os
+from typing import Any, Dict, Mapping, Tuple
 
 # Purpose: Offer a compact set of shared thumbnail quota choices.
 # Type: tuple[int, ...]. Units: GiB. Scope: per-user ordinary thumbnail storage.
@@ -59,9 +60,16 @@ DEFAULTS: Dict[str, Any] = {
     "start_with_windows": True,
     "delete_uploaded_files": True,
     "activity_history_limit": 500,
+    "experimental_canvas_gallery_renderer": True,
 }
 
 ALLOWED_EXTRA_KEYS = set(DEFAULTS)
+
+# Purpose: Name the optional environment override for experimental rendering.
+# Type: str. Units: environment variable name. Scope: one process startup.
+# Consumers: resolve_canvas_gallery_renderer_enabled. Rationale: keep the
+#   override explicit for legacy benchmark and launcher callers.
+CANVAS_GALLERY_RENDERER_ENVIRONMENT_VARIABLE = "PHP_GALLERY_CANVAS_GRID"
 
 
 def _clamp_int(value: Any, default: int, low: int, high: int) -> int:
@@ -131,4 +139,33 @@ def migrate_config_payload(data: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
     result["activity_history_limit"] = _clamp_int(
         result.get("activity_history_limit"), DEFAULTS["activity_history_limit"], 50, 5000
     )
+    result["experimental_canvas_gallery_renderer"] = (
+        result.get(
+            "experimental_canvas_gallery_renderer",
+            DEFAULTS["experimental_canvas_gallery_renderer"],
+        ) is True
+    )
     return result, result != original
+
+
+def resolve_canvas_gallery_renderer_enabled(
+    saved: bool, environment: Mapping[str, str] | None = None,
+) -> bool:
+    """Resolve the frozen startup choice for the experimental Canvas renderer.
+
+    An explicit environment value is authoritative for compatibility with
+    benchmark and legacy callers. Unknown values fail closed rather than
+    enabling an experimental renderer accidentally.
+
+    Args:
+        saved (bool): Strict saved preference; only the literal True enables it.
+        environment (Mapping[str, str] | None): Environment source for testing
+            or embedding; None reads the current process environment.
+
+    Returns:
+        bool: Whether Canvas rendering is enabled for the current process.
+    """
+    source = os.environ if environment is None else environment
+    if CANVAS_GALLERY_RENDERER_ENVIRONMENT_VARIABLE not in source:
+        return saved is True
+    return source[CANVAS_GALLERY_RENDERER_ENVIRONMENT_VARIABLE] == "1"

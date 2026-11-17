@@ -17,6 +17,7 @@
  *   - Apply bounded subprocess timeouts and continue after individual failures
  *   - Produce Markdown, JSON, and per-suite logs under cache/test-audit
  *   - Qualify split hosted owners against one candidate and a complete PHP shard partition
+ *   - Route opt-in issue-scoped performance and frozen-installer diagnostics through central reporting
  *
  * Author:
  *   Rudolf Klusal
@@ -38,7 +39,7 @@
  * @phpstan-type AuditBuilderReport array{schema_version:int,file_count:int,directory:?string,zip:?string,archive_sha256:?string,timestamp:int,timings:array{source_validation_seconds:float,copy_seconds:float,zip_seconds:float,verification_seconds:float,total_seconds:float}}
  *
  * Last Updated:
- *   2026-10-15
+ *   2026-11-16
  */
 
 declare(strict_types=1);
@@ -133,6 +134,36 @@ const AUDIT_C1_TREE_HTTP_TIMEOUT_SECONDS = 300;
 const AUDIT_THUMBNAIL_BATCH_VIEWER_TIMEOUT_SECONDS = 180;
 
 /**
+ * Bound the issue 361 Tk performance pilot including its subprocesses.
+ * @var int
+ * Units: seconds. Scope: one opt-in hosted issue 361 benchmark suite.
+ * Consumers: audit_run_watcher_tk_performance() via run_process().
+ * Rationale: the workflow allows 45 minutes and reserves five minutes for
+ * setup, dependency installation, artifact upload and runner shutdown.
+ */
+const AUDIT_ISSUE_361_TK_PERFORMANCE_TIMEOUT_SECONDS = 2400;
+
+/**
+ * Bound one isolated WinApp frozen executable and installer build.
+ * @var int
+ * Units: seconds. Scope: one opt-in Windows frozen-installer audit child.
+ * Consumers: audit_run_winapp_frozen_installer() through run_process().
+ * Rationale: allow the builder's isolated dependency install, onefile build,
+ * runtime/helper smokes and Inno compilation while staying below the
+ * workflow's 45-minute job ceiling.
+ */
+const AUDIT_WINAPP_FROZEN_INSTALLER_TIMEOUT_SECONDS = 1800;
+
+/**
+ * Bound Git identity verification before the isolated build starts.
+ * @var int
+ * Units: seconds. Scope: one opt-in frozen-installer audit child.
+ * Consumers: audit_run_winapp_frozen_installer() through run_process().
+ * Rationale: Git must respond promptly when binding the build to GITHUB_SHA.
+ */
+const AUDIT_WINAPP_FROZEN_GIT_TIMEOUT_SECONDS = 30;
+
+/**
  * Retain the original complete WinApp unittest discovery deadline.
  * @var int
  * Units: seconds. Scope: one complete WinApp regression child.
@@ -148,9 +179,10 @@ const AUDIT_WINAPP_TIMEOUT_SECONDS = 90;
  * @var int
  * Units: seconds. Scope: one partitioned WinApp coordinator process.
  * Consumers: audit_run_winapp_partitioned().
- * Rationale: retain the existing 480-second whole-run ceiling while six
- *     measured class groups keep their unchanged 90-second child deadlines.
- *     The complete identity proof still refuses any unfinished child.
+ * Rationale: preserve the existing 480-second whole-run ceiling and 90-second
+ *     child caps while splitting the canonical remainder into two class-
+ *     preserving shards beside five isolated measured groups. Incomplete
+ *     aggregate coverage remains a failure.
  */
 const AUDIT_WINAPP_PARTITIONED_TIMEOUT_SECONDS = 480;
 
@@ -195,6 +227,8 @@ if ($options['help']) {
       php scripts/audit.php --suite=thumbnail-batch-viewer
       php scripts/audit.php --suite=issue-362-c1-tree-http
       php scripts/audit.php --suite=issue-362-c1-photos-workspace
+      php scripts/audit.php --suite=watcher-tk-performance
+      php scripts/audit.php --suite=winapp-frozen-installer
       php scripts/audit.php --profile basic --changed
 
     Options:
@@ -221,10 +255,12 @@ if ($options['help']) {
       candidate-preflight  Read-only generated-artifact and CI-workflow integrity gate before heavy CI.
       source-contracts  Shared whole-tree syntax, declaration, policy and architecture owners.
       portable  Shared full Node and WinApp owners.
-      winapp-partitioned  Complete WinApp inventory in six serial class-preserving processes.
+      winapp-partitioned  Complete WinApp inventory in seven serial class-preserving processes.
       thumbnail-batch-viewer  Owned exact-SHA Windows Tk thumbnail benchmark.
       issue-362-c1-tree-http Current-SHA disposable gallery tree diagnostics.
       issue-362-c1-photos-workspace Current-SHA Windows PhotosWorkspace diagnostics.
+      watcher-tk-performance Opt-in issue 361 Tk performance benchmark.
+      winapp-frozen-installer Opt-in real Windows frozen executable and installer build.
       hosted-full  One exact-candidate PHP/runtime shard (hosted shard environment required).
       basic --changed  Lint the immutable PHP_GALLERY_SOURCE_BASE delta; evaluator/config changes expand to full tree, missing base blocks.
     TEXT);
@@ -283,6 +319,8 @@ $knownSuites = [
     'thumbnail-batch-http',
     'issue-362-c1-tree-http',
     'issue-362-c1-photos-workspace',
+    'watcher-tk-performance',
+    'winapp-frozen-installer',
     'thumbnail-batch',
     'php-regression',
     'php-fast',
@@ -1764,7 +1802,7 @@ function audit_run_winapp(?array $python, bool $nativeOnly = false): array
 }
 
 /**
- * Run complete WinApp discovery in six serial, structured child processes.
+ * Run complete WinApp discovery in seven serial, structured child processes.
  *
  * @param list<string>|null $python Python executable and option prefix, or null when unavailable.
  * @return array{id:'winapp-partitioned',label:string,status:'PASS'|'FAIL'|'BLOCKED'|'SKIP',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{}|array{problems:list<string>}|array{report_file:?string,report_schema_valid:bool,successful:?bool,runtime:array{python_version:string,python_implementation:string,platform:string,executable:string,suite_settings:array{start_directory:string,pattern:string,runner:string,verbosity:int}}|null,tests:list<array{id:string,status:string,reason:?string,duration_seconds:float,subtests:list<array{id:string,status:string,reason:string}>}>,fixture_errors:list<array{phase:string,id:string,reason:string}>,fixture_skips:list<array{phase:string,id:string,reason:string}>,partition_processes:list<array{partition:int,test_count:int,exit_code:?int,timed_out:bool,duration_seconds:float,report_present:bool,report_valid:bool,report_successful:?bool,coverage_complete:bool,expected_test_ids:list<string>,observed_test_ids:list<string>}>,partition_proof:array{partition_count:int,complete:bool,exact_union:bool,expected_test_ids:list<string>,observed_test_ids:list<string>,total_duration_seconds:int|float}|null,gaps:list<string>,process:array{exit_code:?int,timed_out:bool,duration_seconds:float},result_reason:?string,problems:list<string>}} Full-suite outcomes with exact partition and real process evidence.
@@ -1774,7 +1812,7 @@ function audit_run_winapp_partitioned(?array $python): array
     global $root, $runDirectory, $persistReports;
     $started = microtime(true);
     $id = 'winapp-partitioned';
-    $label = 'WinApp complete regression (six serial class partitions)';
+    $label = 'WinApp complete regression (seven serial class partitions)';
     if (!is_dir($root . '/winapp/tests')) {
         return task_result(
             $id,
@@ -1835,7 +1873,7 @@ function audit_run_winapp_partitioned(?array $python): array
         @unlink($reportPath);
     }
     $counts = $evaluated['counts'];
-    $summary = $counts['total'] . ' tests across six serial class partitions: '
+    $summary = $counts['total'] . ' tests across seven serial class partitions: '
         . $counts['passed'] . ' pass / ' . $counts['failed'] . ' fail / '
         . $counts['errors'] . ' error / ' . $counts['skipped'] . ' skip.';
     if (is_array($evaluated['partition_proof'])) {
@@ -1871,6 +1909,535 @@ function audit_run_winapp_partitioned(?array $python): array
             'process' => $evaluated['process'],
             'result_reason' => $evaluated['reason'],
             'problems' => $evaluated['problems'],
+        ],
+    );
+}
+
+/**
+ * Run the opt-in issue 361 Tk performance benchmark through the audit runner.
+ *
+ * @param list<string>|null $python Resolved Python command, or null if unavailable.
+ * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>,report_file?:string,report_status?:'PASS'|'FAIL'|'BLOCKED'}} Normalized exact-input benchmark result with its retained report path.
+ */
+function audit_run_watcher_tk_performance(?array $python): array
+{
+    global $root, $runDirectory;
+    $id = 'watcher-tk-performance';
+    $label = 'Issue 361 Tk performance benchmark';
+    if ($python === null) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Python executable was not found.',
+            null,
+            ['problems' => ['Python is required for the Tk performance benchmark.']],
+        );
+    }
+
+    $stage = trim((string) getenv('PHP_GALLERY_TK_PERF_STAGE'));
+    if (!in_array($stage, ['pilot', 'baseline', 'compare'], true)) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'PHP_GALLERY_TK_PERF_STAGE must be pilot, baseline or compare.',
+            null,
+            ['problems' => ['Missing or invalid PHP_GALLERY_TK_PERF_STAGE.']],
+        );
+    }
+    $candidate = trim((string) getenv('PHP_GALLERY_TK_PERF_CANDIDATE'));
+    $expectedCandidate = trim((string) getenv('GITHUB_SHA'));
+    if (
+        preg_match('/^[a-f0-9]{40}$/D', $candidate) !== 1
+        || preg_match('/^[a-f0-9]{40}$/D', $expectedCandidate) !== 1
+        || $candidate !== $expectedCandidate
+    ) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Candidate SHA is missing or does not match this GitHub run.',
+            null,
+            ['problems' => ['PHP_GALLERY_TK_PERF_CANDIDATE must equal GITHUB_SHA.']],
+        );
+    }
+    $baseline = trim((string) getenv('PHP_GALLERY_TK_PERF_BASELINE'));
+    if (preg_match('/^[a-f0-9]{40}$/D', $baseline) !== 1) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'A valid baseline application SHA is required for every stage.',
+            null,
+            ['problems' => ['PHP_GALLERY_TK_PERF_BASELINE is missing or invalid.']],
+        );
+    }
+
+    $outputDirectory = $runDirectory . '/issue-361';
+    $reportPath = $outputDirectory . '/report.json';
+    $process = run_process(array_merge($python, [
+        $root . '/tools/perf/issue_361_tk_benchmark.py',
+        '--output',
+        $outputDirectory,
+    ]), $root, AUDIT_ISSUE_361_TK_PERFORMANCE_TIMEOUT_SECONDS);
+    $report = is_file($reportPath)
+        ? json_decode((string) file_get_contents($reportPath), true)
+        : null;
+    $output = audit_process_output($process);
+    $log = audit_write_log($id, [
+        'Stage: ' . $stage,
+        'Candidate: ' . $candidate,
+        'Baseline: ' . ($baseline !== '' ? $baseline : '(not set)'),
+        $output,
+    ]);
+    $validReport = is_array($report)
+        && ($report['schema_version'] ?? null) === 1
+        && in_array($report['status'] ?? null, ['PASS', 'FAIL', 'BLOCKED'], true)
+        && ($report['stage'] ?? null) === $stage
+        && ($report['candidate_sha'] ?? null) === $candidate
+        && ($report['baseline_sha'] ?? null) === $baseline;
+    if (!$validReport) {
+        $message = !is_file($reportPath)
+            ? 'Benchmark did not produce report.json.'
+            : 'Benchmark report is invalid, has unsupported fields, or does not match the requested inputs.';
+        return task_result(
+            $id,
+            $label,
+            STATUS_FAIL,
+            (float) $process['duration'],
+            [],
+            $message,
+            $log,
+            [
+                'problems' => [$message, $output],
+                'report_file' => relative_path($reportPath, $root),
+            ],
+        );
+    }
+
+    $reportStatus = $report['status'];
+    $status = $reportStatus === 'BLOCKED'
+        ? STATUS_BLOCKED
+        : ($reportStatus === 'PASS' ? STATUS_PASS : STATUS_FAIL);
+    if (process_status($process) !== STATUS_PASS && $status === STATUS_PASS) {
+        $status = STATUS_FAIL;
+    }
+    $reason = trim((string) ($report['summary'] ?? $report['reason'] ?? ''));
+    if ($reason === '') {
+        $reason = $reportStatus === 'PASS'
+            ? 'Benchmark report validated.'
+            : 'Benchmark reported ' . $reportStatus . '.';
+    }
+    $problems = $status === STATUS_PASS ? [] : [$reason, $output];
+    return task_result(
+        $id,
+        $label,
+        $status,
+        (float) $process['duration'],
+        [],
+        $reason,
+        $log,
+        [
+            'problems' => $problems,
+            'report_file' => relative_path($reportPath, $root),
+            'report_status' => $reportStatus,
+        ],
+    );
+}
+
+/**
+ * Build a real frozen WinApp executable and Inno installer in an isolated copy.
+ * Use the central resolver's non-empty Git path to verify the event SHA before
+ * copying tracked build inputs into the owned temporary directory.
+ *
+ * @param list<string>|null $python Resolved Python command, or null if unavailable.
+ * @return array{id:string,label:string,status:'PASS'|'FAIL'|'BLOCKED',duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems:list<string>,artifact_directory?:?string}} Normalized build result with retained installer evidence.
+ */
+function audit_run_winapp_frozen_installer(?array $python): array
+{
+    global $root, $runDirectory, $git, $sourceIdentity;
+    $id = 'winapp-frozen-installer';
+    $label = 'Real WinApp frozen executable and installer build';
+    $started = microtime(true);
+    $candidate = trim((string) getenv('GITHUB_SHA'));
+    // PHP_INT_SIZE is the host's native pointer-width proxy for the x64 builder.
+    if (PHP_OS_FAMILY !== 'Windows' || PHP_INT_SIZE !== 8) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'The real frozen installer build requires hosted 64-bit Windows.',
+            null,
+            ['problems' => ['This suite requires a native Windows x64 runner.']],
+        );
+    }
+    if ($python === null) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Python executable was not found.',
+            null,
+            ['problems' => [
+                'Python 3.14 x64 is required to build the WinApp installer.',
+            ]],
+        );
+    }
+    if (
+        preg_match('/^[a-f0-9]{40}$/D', $candidate) !== 1
+        || !is_string($git)
+        || $git === ''
+    ) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'The exact GitHub event SHA or Git executable is unavailable.',
+            null,
+            ['problems' => [
+                'The build requires a valid GITHUB_SHA and Git executable.',
+            ]],
+        );
+    }
+    $head = run_process(
+        [$git, 'rev-parse', 'HEAD'],
+        $root,
+        AUDIT_WINAPP_FROZEN_GIT_TIMEOUT_SECONDS,
+    );
+    $checkedOutSha = trim((string) $head['stdout']);
+    if (
+        process_status($head) !== STATUS_PASS
+        || $checkedOutSha !== $candidate
+        || ($sourceIdentity['head_sha'] ?? null) !== $candidate
+    ) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            (float) $head['duration'],
+            [],
+            'The audit checkout does not match the exact GitHub event SHA.',
+            null,
+            ['problems' => [
+                'Refusing to build from a checkout with unverified identity.',
+            ]],
+        );
+    }
+
+    $compiler = 'C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe';
+    if (!is_file($compiler)) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Hosted Inno Setup 6 is unavailable.',
+            null,
+            ['problems' => [
+                'Expected hosted compiler at ' . $compiler . '.',
+            ]],
+        );
+    }
+
+    $temporaryPath = tempnam(sys_get_temp_dir(), 'php-gallery-winapp-build-');
+    if (
+        $temporaryPath === false
+        || !unlink($temporaryPath)
+        || !mkdir($temporaryPath)
+    ) {
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'Unable to create an owned temporary build directory.',
+            null,
+            ['problems' => [
+                'The isolated WinApp source copy could not be prepared.',
+            ]],
+        );
+    }
+    // Windows tempnam() keeps only three prefix characters. Retain the exact
+    // exclusively created name as ownership proof instead of assuming a prefix.
+    $temporaryOwnedBasename = basename($temporaryPath);
+    $temporaryRealPath = realpath($temporaryPath);
+    $temporaryRoot = realpath(sys_get_temp_dir());
+    if (
+        $temporaryRealPath === false
+        || $temporaryRoot === false
+        || strncasecmp(
+            $temporaryRealPath,
+            $temporaryRoot . DIRECTORY_SEPARATOR,
+            strlen($temporaryRoot . DIRECTORY_SEPARATOR),
+        ) !== 0
+        || strcasecmp(dirname($temporaryRealPath), $temporaryRoot) !== 0
+        || basename($temporaryRealPath) !== $temporaryOwnedBasename
+    ) {
+        @rmdir($temporaryPath);
+        return task_result(
+            $id,
+            $label,
+            STATUS_BLOCKED,
+            0.0,
+            [],
+            'The temporary build directory did not resolve inside the system temp root.',
+            null,
+            ['problems' => [
+                'Refusing to copy or clean an unverified temporary directory.',
+            ]],
+        );
+    }
+
+    $sourceDirectory = $root . '/winapp';
+    $copyDirectory = $temporaryRealPath . '/winapp';
+    $artifactDirectory = $runDirectory . '/winapp-frozen-installer';
+    $log = null;
+    $status = STATUS_FAIL;
+    $summary = 'The real frozen installer build failed.';
+    $problems = [];
+    $artifactRelativePath = null;
+    $duration = 0.0;
+
+    try {
+        // installer.iss reads the repository license above SourceRoot.
+        // Retain that tracked input beside the isolated winapp directory.
+        if (!is_file($root . '/LICENSE') || !copy(
+            $root . '/LICENSE',
+            $temporaryRealPath . '/LICENSE',
+        )) {
+            throw new RuntimeException(
+                'Unable to copy the tracked installer license input.',
+            );
+        }
+        if (!is_dir($sourceDirectory) || !mkdir($copyDirectory)) {
+            throw new RuntimeException('Tracked winapp source directory is unavailable.');
+        }
+        $excludedDirectories = [
+            '.git',
+            '__pycache__',
+            '.pytest_cache',
+            'build',
+            'dist',
+        ];
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator(
+                $sourceDirectory,
+                FilesystemIterator::SKIP_DOTS,
+            ),
+            RecursiveIteratorIterator::SELF_FIRST,
+        );
+        $sourcePrefixLength = strlen($sourceDirectory) + 1;
+        foreach ($iterator as $entry) {
+            if (!$entry instanceof SplFileInfo || $entry->isLink()) {
+                continue;
+            }
+            $sourcePath = $entry->getPathname();
+            $relativePath = substr($sourcePath, $sourcePrefixLength);
+            $segments = preg_split('~[\\\\/]~', $relativePath) ?: [];
+            if (array_intersect($segments, $excludedDirectories) !== []) {
+                continue;
+            }
+            $targetPath = $copyDirectory . DIRECTORY_SEPARATOR . $relativePath;
+            if ($entry->isDir()) {
+                if (!is_dir($targetPath) && !mkdir($targetPath)) {
+                    throw new RuntimeException(
+                        'Unable to create isolated source directory.',
+                    );
+                }
+                continue;
+            }
+            $targetParent = dirname($targetPath);
+            if (
+                !is_dir($targetParent)
+                && !mkdir($targetParent, 0777, true)
+            ) {
+                throw new RuntimeException(
+                    'Unable to create an isolated source parent directory.',
+                );
+            }
+            if (!copy($sourcePath, $targetPath)) {
+                throw new RuntimeException(
+                    'Unable to copy a tracked WinApp build input.',
+                );
+            }
+        }
+
+        foreach ([
+            'build_installer.py',
+            'requirements-build.txt',
+            'requirements.txt',
+            'VERSION',
+            'installer.iss',
+            'gallery_watch_upload.pyw',
+            'assets/tray-icon.ico',
+            'uploader/runtime_check.py',
+            'uploader/resources',
+            'SimConnect.dll',
+        ] as $requiredInput) {
+            $path = $copyDirectory . '/' . $requiredInput;
+            if (!file_exists($path)) {
+                throw new RuntimeException(
+                    'Required tracked installer input is missing: ' . $requiredInput,
+                );
+            }
+        }
+        if (!mkdir($artifactDirectory)) {
+            throw new RuntimeException(
+                'Unable to create the audit artifact directory.',
+            );
+        }
+
+        $process = run_process(
+            array_merge($python, [
+                $copyDirectory . '/build_installer.py',
+                '--iscc',
+                $compiler,
+            ]),
+            $copyDirectory,
+            AUDIT_WINAPP_FROZEN_INSTALLER_TIMEOUT_SECONDS,
+        );
+        $duration = (float) $process['duration'];
+        $output = audit_process_output($process);
+        $log = audit_write_log($id, [
+            'Candidate SHA: ' . $candidate,
+            'Compiler: ' . $compiler,
+            'Builder output:',
+            $output,
+            'Installer installation and uninstall are not tested.',
+        ]);
+        audit_record_slow_check($label, $duration);
+
+        $processPassed =
+            ($process['exit_code'] ?? null) === 0
+            && empty($process['timed_out'])
+            && empty($process['blocked']);
+        if (!$processPassed) {
+            $status = !empty($process['blocked'])
+                ? STATUS_BLOCKED
+                : STATUS_FAIL;
+            $summary = !empty($process['timed_out'])
+                ? 'The frozen installer build exceeded its bounded timeout.'
+                : (
+                    $status === STATUS_BLOCKED
+                        ? 'The frozen installer child process could not be started.'
+                        : 'The frozen installer builder returned a failure.'
+                );
+            $problems[] = $summary;
+            if ($output !== '') {
+                $problems[] = $output;
+            }
+        } else {
+            // The builder publishes only the setup EXE and its JSON descriptor.
+            $installerFiles = [];
+            $metadataFiles = [];
+            $distDirectory = $copyDirectory . '/dist';
+            if (is_dir($distDirectory)) {
+                $outputs = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator(
+                        $distDirectory,
+                        FilesystemIterator::SKIP_DOTS,
+                    ),
+                    RecursiveIteratorIterator::LEAVES_ONLY,
+                );
+                foreach ($outputs as $outputFile) {
+                    if (
+                        !$outputFile instanceof SplFileInfo
+                        || !$outputFile->isFile()
+                    ) {
+                        continue;
+                    }
+                    if (
+                        str_ends_with(
+                            strtolower($outputFile->getFilename()),
+                            '-setup.exe',
+                        )
+                    ) {
+                        $installerFiles[] = $outputFile->getPathname();
+                    } elseif (
+                        $outputFile->getFilename() === 'winapp-update.json'
+                    ) {
+                        $metadataFiles[] = $outputFile->getPathname();
+                    }
+                }
+            }
+            if (count($installerFiles) !== 1 || count($metadataFiles) !== 1) {
+                $summary = 'Builder succeeded without exactly one installer and metadata pair.';
+                $problems[] = $summary;
+            } else {
+                foreach (array_merge($installerFiles, $metadataFiles) as $outputFile) {
+                    if (!copy(
+                        $outputFile,
+                        $artifactDirectory . '/' . basename($outputFile),
+                    )) {
+                        throw new RuntimeException(
+                            'Unable to retain completed installer evidence.',
+                        );
+                    }
+                }
+                $status = STATUS_PASS;
+                $artifactRelativePath = relative_path($artifactDirectory, $root);
+                $summary = 'Real frozen executable and Inno installer built; installer installation was not tested.';
+            }
+        }
+    } catch (Throwable $exception) {
+        $status = STATUS_FAIL;
+        $summary = 'Unable to complete the isolated frozen installer build.';
+        $problems[] = $exception->getMessage();
+        if ($log === null) {
+            $log = audit_write_log($id, [
+                'Candidate SHA: ' . $candidate,
+                $exception->getMessage(),
+            ]);
+        }
+    } finally {
+        $cleanup = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator(
+                $temporaryRealPath,
+                FilesystemIterator::SKIP_DOTS,
+            ),
+            RecursiveIteratorIterator::CHILD_FIRST,
+        );
+        foreach ($cleanup as $entry) {
+            if (!$entry instanceof SplFileInfo || $entry->isLink()) {
+                continue;
+            }
+            if ($entry->isDir()) {
+                @rmdir($entry->getPathname());
+            } else {
+                @unlink($entry->getPathname());
+            }
+        }
+        @rmdir($temporaryRealPath);
+    }
+
+    return task_result(
+        $id,
+        $label,
+        $status,
+        max($duration, microtime(true) - $started),
+        [],
+        $summary,
+        $log,
+        [
+            'problems' => $problems,
+            'artifact_directory' => $artifactRelativePath,
         ],
     );
 }
@@ -2750,6 +3317,8 @@ function audit_suite_console_label(string $suiteId): string
         'thumbnail-batch-http' => 'Disposable thumbnail batch HTTP',
         'issue-362-c1-tree-http' => 'Current-SHA gallery tree HTTP diagnostics',
         'issue-362-c1-photos-workspace' => 'Current-SHA real PhotosWorkspace Tk diagnostics',
+        'watcher-tk-performance' => 'Issue 361 Tk performance benchmark',
+        'winapp-frozen-installer' => 'Real WinApp frozen executable and installer build',
         'php-regression' => 'PHP regression',
         'thumbnail-batch' => 'Thumbnail batch PHP regression',
         'php-fast' => 'PHP regression (fast)',
@@ -2766,7 +3335,7 @@ function audit_suite_console_label(string $suiteId): string
         'browser-map' => 'Chromium browser integration',
         'website' => 'Static project website',
         'winapp' => 'WinApp regression',
-        'winapp-partitioned' => 'WinApp complete regression (six serial class partitions)',
+        'winapp-partitioned' => 'WinApp complete regression (seven serial class partitions)',
         'winapp-native' => 'WinApp native viewer diagnostic',
         'mutation-contracts' => 'Admin mutation contracts',
         'version-audit' => 'Runtime hardening audit',
@@ -2851,6 +3420,8 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
 
     $task = match ($suiteId) {
         'thumbnail-batch-viewer' => audit_run_thumbnail_batch_viewer($python),
+        'watcher-tk-performance' => audit_run_watcher_tk_performance($python),
+        'winapp-frozen-installer' => audit_run_winapp_frozen_installer($python),
         'thumbnail-batch-http' => audit_run_php_command(
             'thumbnail-batch-http',
             'Disposable thumbnail batch HTTP',

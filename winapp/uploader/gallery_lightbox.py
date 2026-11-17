@@ -1297,11 +1297,15 @@ class PhotoLightbox:
                 and self._source_image is not None):
             self._render_image()
 
-    def _show_controls(self) -> None:
+    def _show_controls(self, *, render: bool = True) -> None:
         """Restore the existing overlay toolbar and edge navigation.
 
+        Args:
+            render (bool): Render the photo after laying out controls. Defaults
+                to True. Set false
+                when the caller will render once after its final state changes.
         Returns:
-            None: The same controls retain their current button states.
+            None: Controls are restored and optional rendering follows geometry.
         """
         self._toolbar.place(relx=0.5, rely=0.025, anchor="n")
         self._previous_edge.place(relx=0.025, rely=0.5, anchor="w")
@@ -1310,7 +1314,8 @@ class PhotoLightbox:
         if self._active and self._source_image is not None:
             # Resolve mapped control geometry before clipping the native tiles.
             self._overlay.update_idletasks()
-            self._render_image()
+            if render:
+                self._render_image()
 
     def enter_fullscreen(self) -> None:
         """Enter fullscreen once and leave controls available on pointer motion.
@@ -1351,7 +1356,7 @@ class PhotoLightbox:
                 except tk.TclError:
                     pass
                 self._control_hide_job = None
-            self._show_controls()
+            self._show_controls(render=False)
         self._canvas.focus_set()
         if self._active and self._source_image is not None:
             self._render_image()

@@ -585,7 +585,7 @@ class UpdateControllerTests(unittest.TestCase):
             with (
                 patch.dict(sys.modules, {'tkinter': tkinter_stub}),
                 patch('uploader.ui_theme.Button', ttk_stub.Button),
-                patch('uploader.ui_theme.Dialog', tkinter_stub.Toplevel),
+                patch('uploader.update_ui.EmbeddedWindow', return_value=window),
             ):
                 controller.open_updates()
             self.assertEqual(len(operations), 1)

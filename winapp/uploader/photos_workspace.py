@@ -472,6 +472,8 @@ class PhotosWorkspace(ttk.Frame):
         storage_surface (tk.Misc | None): Global context-card placement surface.
         diagnostic_callback (Callable[[str], None] | None): Optional receiver
             for sanitized Photos failures.
+        canvas_grid_enabled (bool): Frozen process-startup decision selecting
+            experimental Canvas rendering; this workspace never re-reads config.
     """
 
     def __init__(
@@ -509,6 +511,7 @@ class PhotosWorkspace(ttk.Frame):
         storage_parent: tk.Misc | None = None,
         storage_surface: tk.Misc | None = None,
         diagnostic_callback: Callable[[str], None] | None = None,
+        canvas_grid_enabled: bool = False,
     ) -> None:
         """Create the gallery, viewer and optional metadata panes.
 
@@ -572,6 +575,8 @@ class PhotosWorkspace(ttk.Frame):
                 contextual card, or None to use the Photos workspace.
             diagnostic_callback (Callable[[str], None] | None): Optional
                 thread-safe host receiver for accepted safe Photos failures.
+            canvas_grid_enabled (bool): Frozen process-startup renderer choice;
+                changing saved configuration cannot alter existing workspaces.
 
         Returns:
             None: Starts a bounded asynchronous catalogue read when available.
@@ -580,6 +585,7 @@ class PhotosWorkspace(ttk.Frame):
         self._session_provider = session_provider
         self._connect = connect
         self._language = language
+        self._canvas_grid_enabled = canvas_grid_enabled is True
         self._manager = manager
         self._format_bytes = format_bytes
         self._manage_link = manage_link
@@ -3603,6 +3609,7 @@ class PhotosWorkspace(ttk.Frame):
                     gallery.gallery_id, 'oldest',
                 ) == 'newest' else {}),
                 thumbnail_memory=self._thumbnail_memory,
+                canvas_grid_enabled=self._canvas_grid_enabled,
                 context_menu=lambda photo, event: self._viewer_context(
                     gallery.gallery_id, photo, event,
                 ),

@@ -254,11 +254,11 @@ class AuditReportingTests(unittest.TestCase):
             self.assertEqual(1, len(matching))
 
     def test_partition_isolates_slow_canonical_groups(self) -> None:
-        """Keep the viewer module and all measured classes isolated.
+        """Isolate five measured groups and split only the class remainder.
 
         Returns:
-            None: Viewer, both cache cohorts, preload benchmark and complete
-                remainder occupy separate shards with exact disjoint coverage.
+            None: Seven deterministic shards preserve every class and prove
+                exact disjoint coverage of the canonical test IDs.
         """
         viewer_ids = [
             'test_native_gallery_viewer.NativeGalleryViewerTests.test_one',
@@ -278,37 +278,45 @@ class AuditReportingTests(unittest.TestCase):
         dense_return_ids = [
             'test_native_gallery_dense_return.NativeGalleryDenseReturnTests.test_dense_return',
         ]
-        complement_ids = ['test_upload.UploadTests.test_eight']
+        complement_ids = [
+            'test_upload.UploadTests.test_eight',
+            'test_sync.SyncTests.test_nine',
+            'test_upload.UploadTests.test_ten',
+        ]
         canonical_ids = (
             viewer_ids + small_benchmark_ids + large_benchmark_ids
             + preload_benchmark_ids + dense_return_ids + complement_ids
         )
 
-        shards = partition_test_ids(canonical_ids, 6)
+        shards = partition_test_ids(canonical_ids, 7)
 
         self.assertEqual(set(viewer_ids), set(shards[0]))
         self.assertEqual(set(small_benchmark_ids), set(shards[1]))
         self.assertEqual(set(large_benchmark_ids), set(shards[2]))
         self.assertEqual(set(preload_benchmark_ids), set(shards[3]))
         self.assertEqual(set(dense_return_ids), set(shards[4]))
-        self.assertEqual(set(complement_ids), set(shards[5]))
-        self.assertEqual(
-            set(canonical_ids),
-            set(shards[0]) | set(shards[1]) | set(shards[2])
-            | set(shards[3]) | set(shards[4]) | set(shards[5]),
-        )
-        self.assertFalse(set(shards[0]) & set(shards[1]))
-        self.assertFalse(set(shards[0]) & set(shards[2]))
-        self.assertFalse(set(shards[0]) & set(shards[3]))
-        self.assertFalse(set(shards[0]) & set(shards[4]))
-        self.assertFalse(set(shards[1]) & set(shards[2]))
-        self.assertFalse(set(shards[1]) & set(shards[3]))
-        self.assertFalse(set(shards[1]) & set(shards[4]))
-        self.assertFalse(set(shards[2]) & set(shards[3]))
-        self.assertFalse(set(shards[2]) & set(shards[4]))
-        self.assertFalse(set(shards[3]) & set(shards[4]))
-        for shard in shards[:-1]:
-            self.assertFalse(set(shard) & set(shards[-1]))
+        # The repeated Upload class stays whole and retains canonical order.
+        self.assertEqual([complement_ids[0], complement_ids[2]], shards[5])
+        self.assertEqual([complement_ids[1]], shards[6])
+        self.assertEqual(shards, partition_test_ids(canonical_ids, 7))
+        flattened_ids = [test_id for shard in shards for test_id in shard]
+        self.assertEqual(set(canonical_ids), set(flattened_ids))
+        self.assertEqual(len(canonical_ids), len(flattened_ids))
+        for class_id in {
+            test_id.rpartition('.')[0] for test_id in canonical_ids
+        }:
+            owners = [
+                index for index, shard in enumerate(shards)
+                if any(test_id.rpartition('.')[0] == class_id for test_id in shard)
+            ]
+            self.assertEqual(1, len(owners))
+        incomplete_groups = [
+            test_id for test_id in canonical_ids
+            if not test_id.startswith('test_native_gallery_viewer.')
+        ]
+        incomplete_groups.append('test_extra.ExtraTests.test_ten')
+        with self.assertRaises(ValueError):
+            partition_test_ids(incomplete_groups, 7)
 
     def test_partition_merge_rejects_missing_duplicate_and_unsuccessful_children(self) -> None:
         """Prevent incomplete, duplicated or failed child evidence from passing.

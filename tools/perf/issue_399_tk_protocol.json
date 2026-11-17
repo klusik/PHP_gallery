@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "stage": "compare",
+  "baseline_sha": "ab245719ddf65ccba51a83ac10564a795a03dee9",
+  "candidate_sha_env": "PHP_GALLERY_TK_PERF_CANDIDATE",
+  "default_candidate_env": "GITHUB_SHA",
+  "harness": "Issue 399 scrolling workload; same checked-out bytes for both source versions",
+  "workload_script": "issue_399_tk_scroll.py",
+  "matrix": {
+    "scenarios": [
+      "scroll100",
+      "scroll500",
+      "scroll2000"
+    ],
+    "cache": [
+      "cold",
+      "warm"
+    ],
+    "instrumentation": [
+      "on",
+      "off"
+    ]
+  },
+  "seed": 3612026,
+  "pilot": {
+    "runs_per_instrumentation_cell": 1,
+    "order": "on/off alternates by scenario/cache cell",
+    "interpretation": "descriptive overhead only; n=1 is not inferential",
+    "targeting": "Optional pilot_scenarios restricts diagnostic cells only; targeted pilot cannot qualify baseline/comparison. The unfiltered primary pilot has 12 children."
+  },
+  "baseline": {
+    "minimum_measured_runs_per_scenario_cache_cell": 10,
+    "warmup": "per fresh process and excluded from measured summaries",
+    "order": "deterministic round-robin over scenario/cache cells"
+  },
+  "compare": {
+    "minimum_pairs_per_scenario_cache_cell": 10,
+    "pair_order": "baseline/candidate then candidate/baseline alternating by pair",
+    "pairing": "same VM, harness, dependencies, protocol, seed, scenario, and cache",
+    "statistics": "independent processes; GUI events are never pooled as independent runs"
+  },
+  "statistics": {
+    "summary": [
+      "mean",
+      "median",
+      "sample_stddev",
+      "p50",
+      "p95",
+      "p99",
+      "min",
+      "max"
+    ],
+    "paired_delta": "candidate minus baseline per pair",
+    "ratios": [
+      "candidate/baseline",
+      "baseline/candidate"
+    ],
+    "bootstrap_resamples": 2000,
+    "bootstrap_interval": "paired mean delta percentile bounds at 2.5 and 97.5 percent",
+    "bootstrap_seed": "SHA-256 of scenario/cache/metric identifier"
+  },
+  "timeouts": {
+    "workload_process_seconds": 90,
+    "total_driver_seconds": 2400
+  },
+  "reports": {
+    "required_child_fields": [
+      "schema_version",
+      "seed",
+      "status",
+      "metrics",
+      "operations",
+      "resources",
+      "metadata",
+      "raw_events",
+      "raw_events_truncated",
+      "failure",
+      "missing_metrics",
+      "missing_required_metrics",
+      "scenario",
+      "cache",
+      "trial",
+      "source"
+    ],
+    "metric_name_suffixes": [
+      "_ms",
+      "_count",
+      "_bytes"
+    ],
+    "metric_values": "finite and nonnegative",
+    "raw_events_truncated": "integer count; must equal zero for a qualifying child report",
+    "missing_required_metrics": "must be empty",
+    "required_by_instrumentation": {
+      "on": [
+        "event_loop_drift_p95_ms",
+        "callback_p95_ms",
+        "interaction_feedback_p95_ms",
+        "image_publication_p95_ms"
+      ],
+      "on_scroll": [
+        "viewport_settle_p95_ms",
+        "wheel_slow_p95_ms",
+        "wheel_fast_p95_ms",
+        "drag_p95_ms",
+        "resize_p95_ms"
+      ],
+      "off": [
+        "scenario_elapsed_ms"
+      ]
+    },
+    "raw_event_names": {
+      "event_loop_drift_p95_ms": "event_loop_drift",
+      "callback_p95_ms": "callback",
+      "interaction_feedback_p95_ms": "interaction_feedback",
+      "image_publication_p95_ms": "image_publication",
+      "viewport_settle_p95_ms": "viewport_settle",
+      "wheel_slow_p95_ms": "wheel_slow",
+      "wheel_fast_p95_ms": "wheel_fast",
+      "drag_p95_ms": "drag",
+      "resize_p95_ms": "resize"
+    }
+  },
+  "artifacts": [
+    "report.json",
+    "raw_records.csv",
+    "raw_events.csv",
+    "metadata.json",
+    "summary.json",
+    "summary.md",
+    "comparison.json when stage is compare",
+    "fixture-bundle-progress.json",
+    "progress-*.json (diagnostic only)"
+  ],
+  "physical_monitor_latency": "unavailable; explicitly not inferred",
+  "policy_notes": {
+    "scroll_metrics": "Scroll-only metrics are required in addition to common instrumented metrics; each must have matching measured raw-event evidence. Missing observations block qualification; no zero values are synthesized.",
+    "matrix": "Primary matrix: three loaded extents (100, 500, 2000), two cache states and two instrumentation modes; pilot 12, baseline 60, compare 120. Separate 5000 stress is nonblocking by explicit owner instruction.",
+    "repetitions": "Ten independent processes per baseline cell and ten matched process pairs per comparison cell.",
+    "bootstrap": "Two thousand deterministic paired resamples produce the 95 percent percentile interval.",
+    "timeouts": "Each child is limited to 90 seconds and the full driver invocation to 2400 seconds.",
+    "lifecycle": "A separate 100-photo sample performs one gallery switch and two reopens after primary timings; 64-photo paging, IDs and viewer-owned timer/worker teardown must validate."
+  },
+  "renderer_request": "PHP_GALLERY_CANVAS_GRID=1 for both sources; the optimized control ignores the experimental opt-in",
+  "measurement_phases": {
+    "setup": "Fresh mount and real catalogue admission: separate scalar durations and fixed callback/image timing count-total-max aggregates; no per-callback raw rows or startup heartbeat percentiles",
+    "warmup": "Warm cache trace priming and lifecycle verification excluded from primary operation counts and raw events",
+    "measured": "Already-admitted catalogue interactions: complete raw observations with unchanged 20000-event cap and strict zero-truncation admission",
+    "operation_counts": "Actual setup plus measured Tk/Pillow operations; no warm replay or lifecycle operations"
+  },
+  "fixture_bundle": {
+    "format": "ZIP_STORED",
+    "schema_version": 1,
+    "scope": "One exact-generator archive prepared per driver before independent children; no application/cache sharing",
+    "identity": "Fixed ZIP epoch, seed, Pillow version, common-source SHA-256, member sizes/hashes and driver-supplied archive SHA-256; each child recomputes its loaded prefix dataset hash",
+    "accounting": "Stage preparation seconds and per-child fixture_load_ms are separate; scenario_elapsed_ms starts after verified fixture loading and ends before lifecycle; driver child elapsed_seconds includes loading and teardown",
+    "bounds": {
+      "archive_bytes": 134217728,
+      "manifest_bytes": 1048576,
+      "member_bytes": 33554432,
+      "maximum_photos": 5000
+    },
+    "progress": "Bounded diagnostic-only progress sidecars at phase transitions and every eight page reads/input actions; never accepted instead of child success JSON"
+  },
+  "stress": {
+    "scenario": "scroll5000",
+    "photo_count": 5000,
+    "pages": 79,
+    "scope": "Separate stress observation only; any timeout is reported and does not block the primary P0 baseline or P1",
+    "activation": "Run separately after the first functional Canvas prototype using the existing protocol/workflow; never merge stress failures into a successful primary matrix"
+  }
+}

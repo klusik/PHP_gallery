@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "stage": "compare",
+  "baseline_sha": "362361414b78a2715379ec5f805c2f2aa677dc37",
+  "candidate_sha_env": "PHP_GALLERY_TK_PERF_CANDIDATE",
+  "default_candidate_env": "GITHUB_SHA",
+  "harness": "issue_361_tk_workloads.py; same checked-out bytes for both source versions",
+  "matrix": {
+    "scenarios": [
+      "dashboard",
+      "import",
+      "gallery",
+      "lightbox"
+    ],
+    "cache": [
+      "cold",
+      "warm"
+    ],
+    "instrumentation": [
+      "on",
+      "off"
+    ]
+  },
+  "seed": 3612026,
+  "pilot": {
+    "runs_per_instrumentation_cell": 1,
+    "order": "on/off alternates by scenario/cache cell",
+    "interpretation": "descriptive overhead only; n=1 is not inferential",
+    "targeting": "optional pilot_scenarios restricts pilot cells only; targeted pilot cannot qualify a baseline or comparison; run an unfiltered 16-child pilot before baseline"
+  },
+  "baseline": {
+    "minimum_measured_runs_per_scenario_cache_cell": 10,
+    "warmup": "per fresh process and excluded from measured summaries",
+    "order": "deterministic round-robin over scenario/cache cells"
+  },
+  "compare": {
+    "minimum_pairs_per_scenario_cache_cell": 10,
+    "pair_order": "baseline/candidate then candidate/baseline alternating by pair",
+    "pairing": "same VM, harness, dependencies, protocol, seed, scenario, and cache",
+    "statistics": "independent processes; GUI events are never pooled as independent runs"
+  },
+  "statistics": {
+    "summary": [
+      "mean",
+      "median",
+      "sample_stddev",
+      "p50",
+      "p95",
+      "p99",
+      "min",
+      "max"
+    ],
+    "paired_delta": "candidate minus baseline per pair",
+    "ratios": [
+      "candidate/baseline",
+      "baseline/candidate"
+    ],
+    "bootstrap_resamples": 2000,
+    "bootstrap_interval": "paired mean delta percentile bounds at 2.5 and 97.5 percent",
+    "bootstrap_seed": "SHA-256 of scenario/cache/metric identifier"
+  },
+  "timeouts": {
+    "workload_process_seconds": 90,
+    "total_driver_seconds": 2400
+  },
+  "reports": {
+    "required_child_fields": [
+      "schema_version",
+      "seed",
+      "status",
+      "metrics",
+      "operations",
+      "resources",
+      "metadata",
+      "raw_events",
+      "raw_events_truncated",
+      "failure",
+      "missing_metrics",
+      "missing_required_metrics",
+      "scenario",
+      "cache",
+      "trial",
+      "source"
+    ],
+    "metric_name_suffixes": [
+      "_ms",
+      "_count",
+      "_bytes"
+    ],
+    "metric_values": "finite and nonnegative",
+    "raw_events_truncated": "integer count; must equal zero for a qualifying child report",
+    "missing_required_metrics": "must be empty; optional missing_metrics may report unavailable physical presentation latency",
+    "required_by_instrumentation": {
+      "on": [
+        "event_loop_drift_p95_ms",
+        "callback_p95_ms",
+        "interaction_feedback_p95_ms"
+      ],
+      "on_gallery_or_lightbox_adds": [
+        "image_publication_p95_ms"
+      ],
+      "off": [
+        "scenario_elapsed_ms"
+      ]
+    },
+    "raw_event_names": {
+      "event_loop_drift_p95_ms": "event_loop_drift",
+      "callback_p95_ms": "callback",
+      "interaction_feedback_p95_ms": "interaction_feedback",
+      "image_publication_p95_ms": "image_publication"
+    }
+  },
+  "artifacts": [
+    "report.json",
+    "raw_records.csv",
+    "raw_events.csv",
+    "metadata.json",
+    "summary.json",
+    "summary.md",
+    "comparison.json when stage is compare"
+  ],
+  "physical_monitor_latency": "unavailable; explicitly not inferred"
+}
