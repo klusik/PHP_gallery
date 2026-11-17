@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.3.0}
+\newcommand{\version}{1.3.1}
 \newcommand{\manualdate}{17 November 2026}
 
 \hypersetup{
@@ -1820,7 +1820,14 @@ gallery number or~hash is~not~an~upload receipt. \ui{Confirm already uploaded}
 requires the~exact durable acknowledgement. \ui{Skip photo} records
 an~explicit skip, keeps the~original and~unknown history, and~allows
 the~next FIFO item. Skips are~counted separately from successful uploads.
-Cancel leaves the~item pending. Each later unknown needs its~own decision.
+\ui{Photo is OK — upload} means you checked the displayed source and confirm
+it is correct and not a duplicate. It approves only that same FIFO head for
+the ordinary upload path; the server still performs its existing duplicate
+checks. The earlier unknown attempt stays in history. Approval is used once
+before dispatch, and another unclear result requires a new decision. The
+current transport must finish before the approved head proceeds.
+\ui{Cancel / Keep pending} leaves the item unchanged. Each later unknown needs
+its~own decision.
 After submitting a~decision, \ui{Hide (saving decision)} only hides progress;
 the~already authorized durable publication finishes normally.
 In~a~short window, evidence scrolls while the~decision and~close controls
@@ -2241,6 +2248,18 @@ The~initial authorized photo page appears before optional presentation settings
 are~loaded through the~same worker. A~green preload indicator means verified
 encoded files; detail decoding and~required private server checks still occur.
 These paths are~shared by~Windows and~macOS; installed latency needs a~live test.
+Photos now shows a~compact in-gallery progress bar: for~newest-first display,
+metadata progress reports each confirmed page and~the~cumulative validated
+photo count, while an~unknown total remains indeterminate. Thumbnail progress
+counts only confirmed visible thumbnails. After an~unusually long wait,
+elapsed time and~the~latest
+real progress detail remain visible. Existing retry waits show their actual
+server wait/countdown; otherwise the~existing manual \ui{Retry} remains
+available. Cached thumbnails retain precedence. The~indicator disappears once
+the~first usable viewport is~resolved while remaining reads continue in~the
+background. Canvas and~native rendering share this behavior; cancellation
+and~session-generation checks fence stale results, and~Tk publication stays
+on~the~GUI thread.
 Recent album metadata appears immediately from the~same live session while
 a~fresh server read follows, without client visibility filtering. Unchanged
 refreshes keep tiles and~update their verification ages. Large JPEG thumbnail

@@ -3,6 +3,7 @@
 # Purpose: Watch a local folder and upload stable images to PHP Gallery.
 # Responsibilities:
 #   - Coordinate local observation, multipart transport and retry state while PHP owns authorization and storage.
+#   - Route one explicitly approved uncertain photo through ordinary FIFO and duplicate checks.
 # Repository: https://github.com/klusik/PHP_gallery
 #
 # File: winapp/gallery_watch_upload.pyw
@@ -1885,6 +1886,47 @@ class LinkedUploadState(UploadState):
         self._history_created = False
         self._disk_baseline: Optional[Dict[str, JsonValue]] = None
         super().__init__(state_path)
+        self.data.setdefault('reviewed_upload_attempts', [])
+
+    @staticmethod
+    def _valid_reviewed_upload_attempt(value: JsonValue) -> bool:
+        """Validate an archived uncertain marker and its one-use approval.
+
+        Args:
+            value (JsonValue): One complete retained upload-attempt entry.
+
+        Returns:
+            bool: True only for the known uncertainty marker and typed details.
+        """
+        if (not isinstance(value, dict)
+                or set(value) != {'approval_token', 'source_path', 'sha256', 'failure'}
+                or not isinstance(value.get('approval_token'), str)
+                or re.fullmatch(r'[a-f0-9]{32}', value['approval_token']) is None
+                or not isinstance(value.get('source_path'), str)
+                or not Path(value['source_path']).is_absolute()
+                or not isinstance(value.get('sha256'), str)
+                or re.fullmatch(r'[a-f0-9]{64}', value['sha256']) is None
+                or not isinstance(value.get('failure'), dict)):
+            return False
+        failure = value['failure']
+        allowed_failure_keys = {
+            'sha256', 'uncertain', 'reviewed', 'last_error',
+            'last_failed_at', 'approval_token',
+        }
+        return bool(
+            set(failure).issubset(allowed_failure_keys)
+            and failure.get('uncertain') is True
+            and failure.get('sha256') == value['sha256']
+            and ('reviewed' not in failure or failure['reviewed'] is True)
+            and ('last_error' not in failure or isinstance(failure['last_error'], str))
+            and ('last_failed_at' not in failure
+                 or type(failure['last_failed_at']) in (int, float)
+                 and math.isfinite(failure['last_failed_at'])
+                 and failure['last_failed_at'] >= 0)
+            and ('approval_token' not in failure
+                 or isinstance(failure['approval_token'], str)
+                 and re.fullmatch(r'[a-f0-9]{32}', failure['approval_token']) is not None)
+        )
 
     def _safe_existing_document(self) -> Optional[Dict[str, JsonValue]]:
         """Read a linked state document without repairing ambiguous history.
@@ -1892,8 +1934,8 @@ class LinkedUploadState(UploadState):
         Returns:
             Optional[Dict[str, JsonValue]]: Schema version, uploaded path and
                 hash maps, failure rows, jobs and recent events, or None before
-                any scoped history exists. Reviewed failure rows retain the
-                uncertain flag and SHA-256.
+                any scoped history exists. Reviewed failure rows and archived
+                upload attempts retain the uncertain flag and SHA-256.
 
         Raises:
             ValueError: Stored history is unreadable or lacks required sections.
@@ -1944,6 +1986,14 @@ class LinkedUploadState(UploadState):
                     'uploaded_paths', 'uploaded_hashes', 'failures', 'jobs',
                 )) or not isinstance(data.get('recent_events'), list)):
             raise ValueError('Linked upload state requires recovery.')
+        data.setdefault('reviewed_upload_attempts', [])
+        reviewed_attempts = data['reviewed_upload_attempts']
+        if (not isinstance(reviewed_attempts, list)
+                or any(not self._valid_reviewed_upload_attempt(entry)
+                       for entry in reviewed_attempts)
+                or len({entry['approval_token'] for entry in reviewed_attempts})
+                != len(reviewed_attempts)):
+            raise ValueError('Reviewed upload attempt history is malformed.')
         for value in data['failures'].values():
             if (not isinstance(value, dict)
                     or ('uncertain' in value and type(value['uncertain']) is not bool)
@@ -2115,12 +2165,66 @@ class LinkedUploadState(UploadState):
             return False
         return super().retry_allowed(path, file_hash)
 
-    def mark_uncertain(self, path: Path, file_hash: str) -> None:
+    def approve_uncertain_repeat(
+        self, path: Path, file_hash: str, approval_token: str,
+    ) -> None:
+        """Archive and review one exact unknown attempt for explicit re-upload.
+
+        Args:
+            path (Path): Exact retained source path shown to the user.
+            file_hash (str): SHA-256 attached to the current uncertain head.
+            approval_token (str): One-use token from the durable queue intent.
+
+        Returns:
+            None: Retains the original failure in append-only reviewed history.
+
+        Raises:
+            ValueError: The marker, token or other unresolved history changed.
+            OSError: The linked state cannot be durably published.
+            RuntimeError: Publication cannot be confirmed by readback.
+        """
+        prior = next((entry for entry in self.data['reviewed_upload_attempts']
+                      if entry['approval_token'] == approval_token), None)
+        if prior is not None:
+            if prior['source_path'] != str(path) or prior['sha256'] != file_hash:
+                raise ValueError('Photo approval token belongs to another upload.')
+            # The token can be present in memory after a failed save. Repair
+            # must confirm the archive on disk before releasing the queue head.
+            with accepted_work_owner(CONFIG_DIR):
+                current = self._safe_existing_document()
+                if current != self._disk_baseline or current != self.data:
+                    raise ValueError(
+                        'Linked upload approval was not durably confirmed; reopen recovery.'
+                    )
+            return
+        pending = [(name, entry) for name, entry in self.data['failures'].items()
+                   if isinstance(entry, dict) and entry.get('uncertain') is True
+                   and entry.get('reviewed') is not True]
+        failure = self.data['failures'].get(str(path))
+        if (len(pending) > 1 or pending and pending[0] != (str(path), failure)
+                or not isinstance(failure, dict)
+                or failure.get('uncertain') is not True
+                or failure.get('sha256') != file_hash):
+            raise ValueError('The exact uncertain upload cannot be approved.')
+        self.data['reviewed_upload_attempts'].append({
+            'approval_token': approval_token, 'source_path': str(path),
+            'sha256': file_hash, 'failure': copy.deepcopy(failure),
+        })
+        failure['reviewed'] = True
+        self.save()
+
+    def mark_uncertain(
+        self, path: Path, file_hash: str, *,
+        user_confirmed_repeat: bool = False, approval_token: str = '',
+    ) -> None:
         """Persist an ambiguous transfer without scheduling an automatic retry.
 
         Args:
             path (Path): Source retained for explicit human review.
             file_hash (str): Lowercase SHA-256 of the attempted source.
+            user_confirmed_repeat (bool): Whether this exact dispatch consumed
+                the user's one-time photo approval.
+            approval_token (str): Matching archived one-time approval token.
 
         Returns:
             None: Preserves an unresolved marker scoped to this exact gallery.
@@ -2128,10 +2232,32 @@ class LinkedUploadState(UploadState):
         Raises:
             OSError: The marker cannot be persisted.
             ValueError: The journal is unsafe, or this source or another
-                unreviewed marker already owns the transfer boundary.
+                unreviewed marker already owns the transfer boundary, or the
+                one-use approval does not match this archived attempt.
             RuntimeError: Publication could not be confirmed by readback.
         """
         existing = self.data['failures'].get(str(path))
+        if user_confirmed_repeat:
+            archived = any(
+                entry['approval_token'] == approval_token
+                and entry['source_path'] == str(path)
+                and entry['sha256'] == file_hash
+                for entry in self.data['reviewed_upload_attempts']
+            )
+            if (not approval_token or not archived or not isinstance(existing, dict)
+                    or existing.get('uncertain') is not True
+                    or existing.get('sha256') != file_hash
+                    or existing.get('reviewed') is not True
+                    or self.has_unresolved_upload()):
+                raise ValueError('Explicit photo approval is unavailable or stale.')
+            self.data['failures'][str(path)] = {
+                'sha256': file_hash, 'uncertain': True,
+                'approval_token': approval_token,
+                'last_error': 'Upload result uncertain; review the gallery manually.',
+                'last_failed_at': time.time(),
+            }
+            self.save()
+            return
         if (self.has_unresolved_upload()
                 or self.has_uncertain_source(path, file_hash)) and not (
             isinstance(existing, dict) and existing.get('uncertain') is True
@@ -5714,13 +5840,27 @@ class WatcherThread(threading.Thread):
 
             Args:
                 item (WatchQueueItem): Exact reviewed queue head.
-                disposition (str): Durable receipt confirmation or explicit skip.
+                disposition (str): Receipt, skip, prior review or one-photo approval.
 
             Returns:
                 None: Retains the linked uncertainty as reviewed evidence.
             """
+            if self.linked_target is None:
+                return
             state = self.state
             if state is None:
+                return
+            if disposition == 'approved_photo_upload':
+                intent = journal.data.get('recovery_intent')
+                if (not isinstance(intent, dict)
+                        or intent.get('item_id') != item.item_id
+                        or intent.get('source_path') != item.source.path
+                        or intent.get('head_sha256') != item.sha256
+                        or not isinstance(intent.get('approval_token'), str)):
+                    raise ValueError('Approved linked upload intent is unavailable.')
+                state.approve_uncertain_repeat(
+                    Path(item.source.path), item.sha256, intent['approval_token'],
+                )
                 return
             failure = state.data['failures'].get(item.source.path)
             if (not isinstance(failure, dict)
@@ -5862,6 +6002,8 @@ class WatcherThread(threading.Thread):
             earlier_blocker_review=earlier_blocker_review,
             decision_gate=self._recovery_gate,
         )
+        self._watch_mode_reader = current_mode
+        self._watch_binding_reader = current_binding
 
     def _has_exact_saved_watch_receipt(self, item: WatchQueueItem) -> bool:
         """Prove a queue-bound server insertion from durable linked history.
@@ -6253,6 +6395,9 @@ class WatcherThread(threading.Thread):
         item = journal.head()
         if item is None:
             return
+        approved_upload = journal.approved_upload_matches(
+            item, 'linked' if self.linked_target is not None else 'legacy',
+        )
         if self._pending_transport is not None and not self._pending_transport.is_set():
             return
         path = Path(item.source.path)
@@ -6294,7 +6439,16 @@ class WatcherThread(threading.Thread):
                 if item.state != 'stabilizing':
                     journal.update(item, state='stabilizing', phase='stability', reason='')
                 return
+            if (approved_upload and observe_watch_source(
+                    path, time.time()).signature != item.source.signature):
+                journal.update(item, state='blocked', phase='source',
+                               reason='Approved source generation changed; review required.')
+                return
             file_hash = sha256_file(path)
+            if approved_upload and file_hash != item.sha256:
+                journal.update(item, state='blocked', phase='source',
+                               reason='Approved source bytes changed; review required.')
+                return
             expected = self._expected_source_hashes.get(str(path))
             if expected and expected != file_hash:
                 journal.update(item, state='blocked', phase='source',
@@ -6302,13 +6456,24 @@ class WatcherThread(threading.Thread):
                 return
             size = path.stat().st_size
             source_snapshot = capture_linked_source(path, file_hash, size)
+            if approved_upload:
+                if observe_watch_source(path, time.time()).signature != item.source.signature:
+                    journal.update(item, state='blocked', phase='source',
+                                   reason='Approved source generation changed; review required.')
+                    return
+                verify_linked_source(source_snapshot)
             item = journal.update(item, sha256=file_hash, state='preparing', phase='hash')
             self._active_queue_item = item
+            approved_upload = journal.approved_upload_matches(
+                item, 'linked' if self.linked_target is not None else 'legacy',
+            )
             if self.linked_target is not None and self.state.has_unresolved_upload():
                 journal.update(item, state='blocked', phase='prior_upload_review',
                                reason='Earlier linked upload has an unknown result; review required.')
                 return
-            if self.linked_target is not None and self.state.has_uncertain_source(path, file_hash):
+            if (self.linked_target is not None
+                    and self.state.has_uncertain_source(path, file_hash)
+                    and not approved_upload):
                 journal.update(item, state='uncertain', phase='recovery',
                                reason='This source has an unknown earlier upload; review required.')
                 return
@@ -6440,10 +6605,32 @@ class WatcherThread(threading.Thread):
             raise UploadPreparationError(
                 'Stop was requested before this upload began.'
             )
-        self._queue.update(item, state='dispatching', phase='upload', reason='')
+        approval = None
+        mode_reader = getattr(self, '_watch_mode_reader', None)
+        binding_reader = getattr(self, '_watch_binding_reader', None)
+        current_mode = (mode_reader() if callable(mode_reader)
+                        else 'linked' if self.linked_target is not None else 'legacy')
+        current_binding = binding_reader() if callable(binding_reader) else self._queue.binding
+        pending_approval = self._queue.approved_upload_matches(item)
+        if pending_approval:
+            if (current_binding != self._queue.binding
+                    or not self._queue.approved_upload_matches(item, current_mode)):
+                raise ValueError('Approved photo target changed before dispatch.')
+            approval = self._queue.begin_approved_upload_dispatch(item, current_mode)
+        else:
+            self._queue.update(item, state='dispatching', phase='upload', reason='')
         self._watch_dispatch_started = True
         if self.linked_target is not None:
-            self.state.mark_uncertain(Path(item.source.path), item.sha256)
+            if approval is None:
+                self.state.mark_uncertain(Path(item.source.path), item.sha256)
+            else:
+                token = approval.get('token')
+                if not isinstance(token, str):
+                    raise ValueError('Consumed photo approval token is malformed.')
+                self.state.mark_uncertain(
+                    Path(item.source.path), item.sha256,
+                    user_confirmed_repeat=True, approval_token=token,
+                )
         if self._dispatch_observer is not None:
             self._dispatch_observer()
         self._transport_active.set()

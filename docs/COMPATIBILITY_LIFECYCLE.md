@@ -1,5 +1,49 @@
 # Compatibility lifecycle and retirement register
 
+## Gallery opening progress
+
+Owners: the native gallery viewer, `GalleryViewOrder` and its compact
+`GalleryLoadProgress` presentation controller. Opening progress is shared by
+Canvas and native widgets. The existing media-page contract supplies an
+exclusive cursor, not an authoritative gallery total. Metadata therefore stays
+indeterminate and reports only the cumulative validated photo count. A
+newest-first scan reports after each validated page through one coalescing,
+generation-fenced count slot drained by the existing Tk event consumer. Counts
+never occupy the bounded photo-result queue or delay its final page delivery.
+Invalid or cancelled pages add no progress.
+An observer failure cannot change the accepted catalogue or its retry policy.
+
+Visible-thumbnail progress uses the current visible descriptors and actual Tk
+images. Cached images retain their existing priority while a fresh catalogue
+read runs. Once the first resolved visible band contains usable photographs,
+the indicator hides for that viewer's lifetime; diagnostic rearming does not
+bring it back. An entirely unavailable band remains a failure with the existing
+Retry action. These display counts grant no media authority and do not renew
+descriptor or cache freshness.
+
+Elapsed and last-progress details appear after ten seconds, without inferring
+that a slow response is frozen. A retry countdown describes only a wait already
+owned by the transport/viewer. The existing single safe metadata header-timeout
+retry remains immediate; metadata quota failures and other terminal reads keep
+their manual Retry behavior. Thumbnail transient cooldowns keep their existing
+automatic resume, Retry-After and prior-operation completion fences. No new
+request, replay, timeout extension or retry limit is introduced by progress.
+Unknown retry delays remain unknown in the interface.
+The thumbnail session's optional worker observer also reports the existing
+internal gateway/timeout retry: positive whole seconds announce a real owned
+cooldown, and zero announces its normal expiry. Cancellation and manual deferral
+do not manufacture a retry notice. Observer exceptions cannot fail the read.
+Wait notices use a separate coalesced slot under the same viewer lock and Tk
+consumer; neither progress slot consumes photograph-result capacity.
+
+The controller owns one elapsed/countdown timer plus the native progressbar's
+animation, and cancels them on completion, terminal error or viewer close. All
+Tk changes occur on the GUI thread. Source/native regression evidence does not
+establish installed-client behavior, real-server latency or physical display
+smoothness; those acceptance results remain unknown until exercised on the
+target installation. Both renderer paths remain supported under their existing
+retirement requirements.
+
 ## Experimental Canvas gallery renderer and native fallback
 
 Owners: WinApp native gallery viewer, the bounded Canvas grid presentation helper,
@@ -1243,7 +1287,12 @@ attempt, unchanged source identity and hash, and the exact prior uncertain
 state with no prior receipt; the reply must confirm one uploaded image, report
 a nonnegative scan count, and carry a positive image ID after the server's
 gallery and `fresh_insert_v1` checks. Unknown or lost replies, hashes or
-inventory never clear the marker. This does not permit retry or deletion and
+inventory never clear the marker. The current WinApp recovery path permits a
+single explicit user-approved dispatch for the same current FIFO head after
+the displayed source is checked as correct and not a duplicate. It consumes
+that approval before dispatch, rechecks its bound target/session/mode/scope and
+source identity, and still uses ordinary server duplicate checks. This does
+not permit automatic retry or deletion and
 does not establish exactly-once behavior. Linked flight
 data stays local and cannot implicitly use a saved legacy key for AI or PDF
 upload. The new bounded server recovery probe supplies positive file-byte

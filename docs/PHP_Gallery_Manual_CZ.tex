@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.3.0}
+\newcommand{\version}{1.3.1}
 \newcommand{\manualdate}{17.~listopadu~2026}
 
 \hypersetup{
@@ -2213,6 +2213,16 @@ První schválená stránka fotek se zobrazí před načtením volitelných nast
 presentation přes stejné pracovní vlákno. Zelená ikona přednačtení znamená
 ověřené zakódované soubory; dekódování detailů a~povinné ověřování soukromých
 dat serverem zůstává. Tyto cesty sdílí Windows i~macOS; latenci ověří živý test.
+Photos nyní zobrazuje kompaktní průběh načítání přímo v~galerii: při řazení
+od nejnovějších hlásí čtení metadat každou potvrzenou stránku a~souhrnný počet
+fotografií; při neznámém celkovém počtu zůstává průběh neurčitý. Průběh náhledů
+počítá pouze potvrzené viditelné náhledy. Při neobvykle dlouhém čekání zůstává
+viditelná doba čekání a~poslední skutečný údaj o~průběhu. Existující čekání na
+opakování ukazuje skutečný serverový odpočet; jinak zůstává dostupná stávající
+ruční akce \ui{Retry}. Uložené náhledy mají přednost. Indikátor zmizí po načtení
+prvního použitelného viewportu, zatímco další čtení pokračují na pozadí. Stejné
+chování platí pro vykreslení Canvas i~nativní; zrušení a~kontrola generace
+session blokují zastaralé výsledky a~zveřejnění v~Tk zůstává ve vlákně GUI.
 Nedávná metadata alba se zobrazí ihned ze stejné živé session a~současně se
 obnoví ze serveru, bez dalšího filtrování viditelnosti v~klientovi. Nezměněná
 obnova zachová dlaždice a~aktualizuje stáří ověření. Velké varianty náhledů JPEG
@@ -2561,6 +2571,12 @@ Nečinný Watcher spustí výslovné kliknutí na \ui{Start Watcher}; při běhu
 kontextové tlačítko nabízí \ui{Stop Watcher}. Během dokončování otevře
 \ui{Show progress}. Po~přerušení otevře \ui{Review pending uploads} původní
 frontu. Znovu připojte a~vyberte stejnou galerii, poté zvolte \ui{Retry}.
+Akce \ui{Photo is OK — upload} znamená, že jste zobrazený zdroj zkontrolovali
+a~potvrdili, že je v~pořádku a~nejde o~duplikát. Uvolní pouze stejnou hlavu
+FIFO do běžného uploadu; server dál provádí své kontroly duplicit.
+Předchozí nejistý pokus zůstane v~historii. Jednorázové schválení se spotřebuje
+před odesláním; další nejasný výsledek vyžaduje nové rozhodnutí. Dosavadní
+probíhající request musí skončit, než tato hlava pokračuje.
 U~propojené relace volba \ui{Keep files locally} po~zastavení pracovníků
 uzavře frontu a~ponechá fotky, zprávy i~historii. Po~uzavření je~znovu
 k~dispozici \ui{Start Watcher}. \ui{Check folder only} provede

@@ -6,6 +6,7 @@
 # Responsibilities:
 #   - Exercise head-only confirmation and user skip across restart.
 #   - Verify stale snapshots and missing receipt evidence are rejected.
+#   - Verify one-photo approval preserves FIFO and prior uncertainty evidence.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 """Exercise exact-head recovery decisions against durable queue publications."""
@@ -13,6 +14,7 @@
 import sys
 import tempfile
 import threading
+import os
 import unittest
 from unittest import mock
 import copy
@@ -93,12 +95,17 @@ class WatchRecoveryTests(unittest.TestCase):
         self.lease.acquire()
         self.addCleanup(self.lease.release)
 
-    def coordinator(self, receipt: bool = False, active: bool = False) -> WatchRecoveryCoordinator:
+    def coordinator(
+        self, receipt: bool = False, active: bool = False,
+        target: str = 'a' * 64, mode: str = 'legacy',
+    ) -> WatchRecoveryCoordinator:
         """Bind callbacks to the current synthetic recovery context.
 
         Args:
             receipt (bool): Whether the exact durable-receipt stub accepts the head.
             active (bool): Whether a transport is currently in flight.
+            target (str): Current target binding used by this coordinator.
+            mode (str): Current legacy or linked mode used by this coordinator.
 
         Returns:
             WatchRecoveryCoordinator: Recovery service bound to held local ownership.
@@ -135,7 +142,7 @@ class WatchRecoveryTests(unittest.TestCase):
 
         return WatchRecoveryCoordinator(
             self.store, self.lease, None, receipt_lookup, transport_active,
-            'a' * 64, 'legacy', linked_review,
+            target, mode, linked_review,
         )
 
     def add_items(self, count: int) -> list[Path]:
@@ -587,3 +594,109 @@ class WatchRecoveryTests(unittest.TestCase):
         self.assertEqual(before, self.store.path.read_bytes())
         self.assertEqual('uncertain', self.store.head().state)
         self.assertTrue(source.exists())
+
+    def test_explicit_photo_approval_preserves_fifo_and_is_consumed_at_dispatch(self) -> None:
+        """Release only the approved head, retaining its order and one-use fence.
+
+        Returns:
+            None: Approval moves the exact first source into preparation then
+                atomically disappears when its write-ahead dispatch is recorded.
+        """
+        paths = self.add_items(2)
+        head = self.store.head()
+        assert head is not None
+        digest = hashlib.sha256(paths[0].read_bytes()).hexdigest()
+        head = self.store.update(head, sha256=digest)
+        snapshot = self.coordinator().snapshot()
+        assert snapshot is not None
+
+        self.assertFalse(self.coordinator(active=True).can_approve_photo_upload(snapshot))
+        self.assertFalse(self.coordinator(target='b' * 64).can_approve_photo_upload(snapshot))
+        self.assertFalse(self.coordinator(mode='linked').can_approve_photo_upload(snapshot))
+        self.assertTrue(self.coordinator().can_approve_photo_upload(snapshot))
+        approved = self.coordinator().approve_photo_upload(snapshot)
+        assert approved is not None
+        current = self.store.head()
+        assert current is not None
+        self.assertEqual((head.item_id, head.sequence),
+                         (current.item_id, current.sequence))
+        self.assertEqual('preparing', current.state)
+        self.assertEqual('approved', self.store.data['approved_upload']['outcome'])
+        self.assertEqual('Outcome unknown.',
+                         self.store.data['approval_history'][0]['prior_reason'])
+        self.assertTrue(self.store.approved_upload_matches(current))
+        self.assertFalse(self.store.approved_upload_matches(current, 'linked'))
+        with self.assertRaises(ValueError):
+            self.coordinator().approve_photo_upload(snapshot)
+        self.assertTrue(paths[0].exists())
+        self.assertEqual(str(paths[1]), self.store.items()[1].source.path)
+
+        restored = WatchQueueStore(
+            self.store.path, self.store.binding, self.folder, False,
+        )
+        restored.restore()
+        restored_head = restored.head()
+        assert restored_head is not None
+        self.assertTrue(restored.approved_upload_matches(restored_head, 'legacy'))
+
+        consumed = restored.begin_approved_upload_dispatch(restored_head, 'legacy')
+        self.assertTrue(consumed['token'])
+        self.assertIsNone(restored.data['approved_upload'])
+        self.assertFalse(restored.approved_upload_matches(restored_head))
+        self.assertEqual('dispatched', restored.data['approval_history'][0]['outcome'])
+        self.assertEqual('dispatching', restored.head().state)
+
+    def test_explicit_photo_approval_rejects_changed_source_bytes(self) -> None:
+        """Do not bind displayed approval to replacement bytes at the same path.
+
+        Returns:
+            None: Changed local source fails both the capability probe and commit.
+        """
+        path = self.add_items(1)[0]
+        head = self.store.head()
+        assert head is not None
+        head = self.store.update(
+            head, sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        )
+        snapshot = self.coordinator().snapshot()
+        assert snapshot is not None
+        before = path.stat()
+        path.write_bytes(b'replaced')
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        service = self.coordinator()
+        self.assertFalse(service.can_approve_photo_upload(snapshot))
+        with self.assertRaises((OSError, ValueError, RuntimeError)):
+            service.approve_photo_upload(snapshot)
+        self.assertIsNone(self.store.data.get('approved_upload'))
+        self.assertEqual('uncertain', self.store.head().state)
+
+    def test_restore_rejects_pending_capability_on_unknown_or_dispatching_head(self) -> None:
+        """Reject journals that claim both active write-ahead and unused consent.
+
+        Returns:
+            None: Pending approval can survive only before the dispatch boundary.
+        """
+        path = self.add_items(1)[0]
+        head = self.store.head()
+        assert head is not None
+        head = self.store.update(
+            head, sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        )
+        snapshot = self.coordinator().snapshot()
+        assert snapshot is not None
+        self.coordinator().approve_photo_upload(snapshot)
+        baseline = copy.deepcopy(self.store.data)
+
+        for state in ('uncertain', 'dispatching'):
+            corrupted = copy.deepcopy(baseline)
+            corrupted['items'][0]['state'] = state
+            self.store._publish(corrupted)
+            current = self.store.head()
+            assert current is not None
+            self.assertFalse(self.store.approved_upload_matches(current))
+            restored = WatchQueueStore(
+                self.store.path, self.store.binding, self.folder, False,
+            )
+            with self.assertRaises(ValueError):
+                restored.restore()
+            self.store._publish(copy.deepcopy(baseline))

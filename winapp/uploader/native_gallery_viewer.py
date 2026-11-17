@@ -5,6 +5,7 @@
 # Purpose: Display bearer-authorized gallery media inside the Photos workspace.
 # Responsibilities:
 #   - Mount one bounded page and its thumbnails without worker-side Tk calls.
+#   - Show coalesced metadata and visible-thumbnail progress without delaying photos.
 #   - Render selected details, prefetch nearby photos and run manual slideshows.
 #   - Play explicitly selected MP3/WAV tracks through Windows winmm only.
 # Author: Rudolf Klusal
@@ -79,6 +80,7 @@ from .tk_scroll_input import vertical_scroll_delta
 from .gallery_view_preferences import normalize_card_format
 from .config import resolve_canvas_gallery_renderer_enabled
 from .gallery_view_order import GalleryViewOrder
+from .gallery_load_progress import GalleryLoadProgress
 
 try:
     from PIL import Image, ImageTk
@@ -719,6 +721,7 @@ _WorkerPayload: TypeAlias = (
     LinkedMediaPage
     | LinkedPresentation
     | str
+    | int
     | tuple[LinkedMediaPage, ...]
     | tuple[LinkedMediaPage, LinkedPresentation | None]
     | tuple[threading.Event, int, bytes | None]
@@ -920,6 +923,11 @@ class _NativeGalleryViewer:
         self._events: queue.Queue[_WorkerEvent] = queue.Queue(
             maxsize=MEDIA_THUMBNAIL_BATCH_SIZE,
         )
+        # Counts coalesce separately so progress cannot occupy a raster/result
+        # slot and delay the first usable page. The existing Tk drain owns both.
+        self._load_progress_lock = threading.Lock()
+        self._pending_load_progress: tuple[int, int] | None = None
+        self._pending_load_wait: tuple[int, int | None, bool] | None = None
         self._thumbnail_result_lock = threading.Lock()
         self._thumbnail_metrics_lock = threading.Lock()
         self._thumbnail_performance = ThumbnailPerformanceWindow()
@@ -1144,8 +1152,7 @@ class _NativeGalleryViewer:
                 text=gallery_title or self._text('linking_media_title'),
                 style='Section.TLabel',
             ).pack(anchor='w')
-        self.status = ttk.Label(shell, text=self._text('linking_media_loading'))
-        self.status.pack(anchor='w', pady=(4, 8))
+        self.status = ttk.Label(shell, text='')
 
         body = ttk.Frame(shell, style='Card.TFrame')
         body.pack(fill='both', expand=True)
@@ -1157,6 +1164,9 @@ class _NativeGalleryViewer:
         right.pack(fill='both', expand=True)
         self.grid_canvas = tk.Canvas(
             right, highlightthickness=0, background=surface,
+        )
+        self._load_progress = GalleryLoadProgress(
+            self.grid_canvas, self._text,
         )
         self.grid_scrollbar = ttk.Scrollbar(
             right, orient='vertical', command=self.grid_canvas.yview,
@@ -1513,6 +1523,14 @@ class _NativeGalleryViewer:
             visible = tuple(self._visible_photo_indices())
             visible_set = set(visible)
             self._visible_thumbnail_indices = visible_set
+            indicator = getattr(self, '_load_progress', None)
+            if indicator is not None and indicator.active and visible:
+                completed = sum(
+                    index < len(self._photo_images)
+                    and self._photo_images[index] is not None
+                    for index in visible_set
+                )
+                indicator.thumbnails(completed, len(visible_set))
             if visible_set != self._measured_visible:
                 self._measured_visible = frozenset(visible_set)
                 self._viewport_measure_epoch = self._viewport_performance.begin(
@@ -1585,6 +1603,10 @@ class _NativeGalleryViewer:
                     self._thumbnail_cancelled.set()
             self._drain_warm_thumbnail_slice()
             if self._queue_thumbnail_proof_refresh():
+                # Presented RAM images can make this viewport usable while
+                # catalogue proof refresh remains pending. Hide loading feedback
+                # without settling its separately fenced diagnostic epoch.
+                self._observe_visible_viewport_settled()
                 self._dispatch_pending_work()
                 return
             bounds = self.grid_canvas.bbox('all')
@@ -1635,6 +1657,29 @@ class _NativeGalleryViewer:
         """
         epoch = self._viewport_measure_epoch
         visible = self._visible_thumbnail_indices
+        indicator = getattr(self, '_load_progress', None)
+        if (indicator is not None and indicator.active and visible
+                and not self._closed
+                and self.frame.winfo_viewable()
+                and self._viewport_after_id is None
+                and visible <= self._admitted_thumbnail_indices
+                and visible <= self._thumbnail_loaded
+                and all(index < len(self._photo_images) for index in visible)):
+            available = sum(
+                self._photo_images[index] is not None for index in visible
+            )
+            if available:
+                indicator.hide()
+            elif indicator.phase not in ('error', 'waiting'):
+                indicator.fail(self._text('linking_media_load_failed'))
+                self._http_batch_retry_indices = tuple(sorted(visible))
+                self.status.pack(anchor='w', pady=(4, 8))
+                self.status.configure(
+                    text=self._text('linking_media_load_failed'),
+                )
+                self.retry_button.configure(state='normal')
+                self.retry_button.pack(side='left', padx=(8, 0))
+                self._retry_kind = 'thumbnail'
         if (self._closed or epoch is None or not visible
                 or self._viewport_after_id is not None
                 or not self.frame.winfo_viewable()
@@ -2681,6 +2726,27 @@ class _NativeGalleryViewer:
         if self.track_menu is not None:
             self._selected_track_index = self.track_menu.current()
 
+    def _queue_load_wait(
+        self, generation: int, seconds: int | None, automatic: bool,
+    ) -> None:
+        """Coalesce a real worker wait without occupying a photograph result slot.
+
+        Args:
+            generation (int): Captured worker generation owning this wait.
+            seconds (int | None): Confirmed retry delay; None is unknown and
+                automatic zero reports that an observed cooldown has ended.
+            automatic (bool): Whether the existing owner schedules the retry.
+        Returns:
+            None: The existing Tk drain consumes only the latest live notice.
+        """
+        indicator = getattr(self, '_load_progress', None)
+        if indicator is None or not indicator.active:
+            return
+        with self._load_progress_lock:
+            if (not self._closed and not self._cancelled.is_set()
+                    and generation == self._generation):
+                self._pending_load_wait = (generation, seconds, automatic)
+
     def _launch(
         self,
         kind: str,
@@ -2742,11 +2808,19 @@ class _NativeGalleryViewer:
                     diagnostic_callback=self._diagnostic_callback,
                 )
                 self._events.put((generation, kind + '_unavailable', error_payload))
-            except LinkingMediaThrottled:
+            except LinkingMediaThrottled as exc:
                 if (self._cancelled.is_set()
                         or (operation_cancelled is not None
                             and operation_cancelled.is_set())):
                     return
+                indicator = getattr(self, '_load_progress', None)
+                if (indicator is not None and indicator.active
+                        and kind in (
+                            'page', 'more', 'slide_more', 'refresh', 'thumbnail',
+                        )):
+                    self._queue_load_wait(
+                        generation, exc.retry_after_seconds, False,
+                    )
                 self._events.put((generation, kind + '_throttled', error_payload))
             except Exception as exc:
                 if (self._cancelled.is_set()
@@ -3275,6 +3349,9 @@ class _NativeGalleryViewer:
                 self.retry_button.configure(state='disabled')
                 self.retry_button.pack_forget()
                 self.status.pack_forget()
+            indicator = getattr(self, '_load_progress', None)
+            if indicator is not None:
+                indicator.resume()
             self._dispatch_pending_work()
 
         # Cooldown seconds come from the already validated session result.
@@ -3297,9 +3374,48 @@ class _NativeGalleryViewer:
         Returns:
             LinkedMediaPage: Existing ascending page or a full-snapshot reverse page.
         """
+        indicator = getattr(self, '_load_progress', None)
+        if indicator is not None and indicator.active:
+            with self._load_progress_lock:
+                if not self._closed and not self._cancelled.is_set():
+                    # Starting a metadata read changes phase, not real progress.
+                    self._pending_load_progress = (self._generation, 0)
         order = getattr(self, '_view_order', None)
         if order is not None:
-            return order.page(after_id, cancelled or self._cancelled)
+            generation = self._generation
+            operation_cancelled = cancelled or self._cancelled
+
+            def report_progress(count: int) -> None:
+                """Coalesce confirmed counts without occupying a photo-result slot.
+
+                Args:
+                    count (int): Cumulative accepted metadata row count.
+                Returns:
+                    None: Only the latest live-generation count awaits Tk delivery.
+                """
+                indicator = getattr(self, '_load_progress', None)
+                if indicator is None or not indicator.active:
+                    return
+                with self._load_progress_lock:
+                    if not self._closed and not operation_cancelled.is_set():
+                        self._pending_load_progress = (generation, count)
+
+            def report_retrying() -> None:
+                """Publish the existing safe retry notice without blocking.
+
+                Returns:
+                    None: The existing Tk drain receives an unknown-delay retry.
+                """
+                indicator = getattr(self, '_load_progress', None)
+                if (self._closed or operation_cancelled.is_set()
+                        or indicator is None or not indicator.active):
+                    return
+                self._queue_load_wait(generation, None, True)
+
+            return order.page(
+                after_id, operation_cancelled,
+                progress=report_progress, retrying=report_retrying,
+            )
         if after_id is None:
             return self.session.media_page(
                 self.gallery.gallery_id, cancelled=cancelled,
@@ -3473,6 +3589,12 @@ class _NativeGalleryViewer:
         self._tracks = tracks
         self._refresh_audio_button()
         self._empty_page = not bool(self._photos)
+        indicator = getattr(self, '_load_progress', None)
+        if indicator is not None and indicator.active:
+            if self._photos:
+                indicator.metadata(len(self._photos))
+            else:
+                indicator.hide()
         if old_count == 0:
             if canvas_grid is not None:
                 canvas_grid.reset_catalogue()
@@ -3898,12 +4020,26 @@ class _NativeGalleryViewer:
                 if image is not None:
                     image.close()
 
+        def retry_wait(seconds: int) -> None:
+            """Forward an existing internal retry wait to the owning Tk drain.
+
+            Args:
+                seconds (int): Positive actual cooldown, or zero when it ended.
+            Returns:
+                None: A cancelled batch cannot publish a current wait notice.
+            """
+            if not cancelled.is_set():
+                self._queue_load_wait(generation, seconds, True)
+
         try:
             self.session.media_thumbnails(
                 gallery_id, photos, publish, cancelled,
                 timings=physical, stats=stats,
+                retry_wait=retry_wait,
             )
-        except LinkingMediaThrottled:
+        except LinkingMediaThrottled as error:
+            deferred_seconds = error.retry_after_seconds
+            prior_operation_finished = error.operation_finished
             outcome = 'throttled'
         except LinkingThumbnailBatchDeferred as error:
             deferred_seconds = error.retry_after_seconds
@@ -4269,6 +4405,26 @@ class _NativeGalleryViewer:
         if not self.session.can_read_media():
             self.close()
             return
+        # Some isolated lifecycle fixtures bypass construction; only a normally
+        # constructed viewer owns this optional presentation mailbox.
+        progress_lock = getattr(self, '_load_progress_lock', None)
+        if progress_lock is not None:
+            with progress_lock:
+                progress = self._pending_load_progress
+                self._pending_load_progress = None
+                wait = self._pending_load_wait
+                self._pending_load_wait = None
+            if progress is not None and progress[0] == self._generation:
+                indicator = getattr(self, '_load_progress', None)
+                if indicator is not None:
+                    indicator.metadata(progress[1])
+            if wait is not None and wait[0] == self._generation:
+                indicator = getattr(self, '_load_progress', None)
+                if indicator is not None:
+                    if wait[1] == 0 and wait[2]:
+                        indicator.resume()
+                    else:
+                        indicator.waiting(wait[1], wait[2])
         cache_changed = False
         gui_started = time.perf_counter()
         gui_count = 0
@@ -4438,6 +4594,10 @@ class _NativeGalleryViewer:
                 elif kind == 'prefetch_error':
                     pass
                 elif kind.endswith('_throttled'):
+                    indicator = getattr(self, '_load_progress', None)
+                    if (indicator is not None and indicator.active
+                            and indicator.phase != 'waiting'):
+                        indicator.waiting(None, False)
                     self._media_throttled = True
                     self._pending_prefetch_ids.clear()
                     self._pending_detail_index = None
@@ -4464,6 +4624,9 @@ class _NativeGalleryViewer:
                             self._text('linking_media_throttled'),
                         )
                 elif kind == 'page_unavailable':
+                    indicator = getattr(self, '_load_progress', None)
+                    if indicator is not None and indicator.active:
+                        indicator.fail(self._text('linking_media_load_failed'))
                     self.status.pack(anchor='w', pady=(4, 8))
                     self.status.configure(
                         text=self._text('linking_media_gallery_unavailable'),
@@ -4483,6 +4646,12 @@ class _NativeGalleryViewer:
                     self.retry_button.pack(side='left', padx=(8, 0))
                     self._retry_kind = 'detail'
                 elif kind.endswith('_error'):
+                    if kind in ('page_error', 'more_error'):
+                        indicator = getattr(self, '_load_progress', None)
+                        if indicator is not None and indicator.active:
+                            indicator.fail(
+                                self._text('linking_media_load_failed'),
+                            )
                     self.status.pack(anchor='w', pady=(4, 8))
                     self.status.configure(text=self._text('linking_media_error'))
                     if kind.startswith('detail'):
@@ -4637,6 +4806,11 @@ class _NativeGalleryViewer:
                             self._thumbnail_proof_refresh_count += 1
                             self._refresh_pending = True
                     elif completion.outcome == 'deferred_transient':
+                        indicator = getattr(self, '_load_progress', None)
+                        if indicator is not None:
+                            indicator.waiting(
+                                completion.deferred_seconds, True,
+                            )
                         self._http_batch_retry_indices = completion.remaining
                         self.status.pack(anchor='w', pady=(4, 8))
                         self.status.configure(
@@ -4653,6 +4827,18 @@ class _NativeGalleryViewer:
                     elif completion.outcome in (
                         'throttled', 'error', 'deferred_wait',
                     ):
+                        indicator = getattr(self, '_load_progress', None)
+                        if indicator is not None:
+                            if completion.outcome == 'error':
+                                indicator.fail(
+                                    self._text('linking_media_load_failed'),
+                                )
+                            elif completion.outcome in (
+                                'throttled', 'deferred_wait',
+                            ):
+                                indicator.waiting(
+                                    completion.deferred_seconds, False,
+                                )
                         self._http_batch_retry_indices = completion.remaining
                         self._media_throttled = completion.outcome in (
                             'throttled', 'deferred_wait',
@@ -5171,6 +5357,18 @@ class _NativeGalleryViewer:
                     logging.getLogger(__name__).warning(
                         'First visible thumbnail diagnostic callback failed.',
                     )
+        if presented_on_tk and index in self._visible_thumbnail_indices:
+            indicator = getattr(self, '_load_progress', None)
+            if indicator is not None and indicator.active:
+                indicator.compact()
+                indicator.thumbnails(
+                    sum(
+                        visible_index < len(self._photo_images)
+                        and self._photo_images[visible_index] is not None
+                        for visible_index in self._visible_thumbnail_indices
+                    ),
+                    len(self._visible_thumbnail_indices),
+                )
         # A natural-aspect image can be shorter than its placeholder inside a
         # fixed row. The frame extent then stays unchanged, so its Configure
         # event cannot repair visible indices at the edge of the viewport.
@@ -5866,6 +6064,9 @@ class _NativeGalleryViewer:
         Returns:
             None: The user action resumes one selected foreground request.
         """
+        indicator = getattr(self, '_load_progress', None)
+        if indicator is not None:
+            indicator.rearm()
         self.retry_button.configure(state='disabled')
         self._media_throttled = False
         self._http_thumbnail_failure_latched = False
@@ -6487,6 +6688,14 @@ class _NativeGalleryViewer:
         self._stop_slideshow()
         self._stop_audio()
         self._close_music_panel()
+        progress_lock = getattr(self, '_load_progress_lock', None)
+        if progress_lock is not None:
+            with progress_lock:
+                self._pending_load_progress = None
+                self._pending_load_wait = None
+        indicator = getattr(self, '_load_progress', None)
+        if indicator is not None:
+            indicator.close()
         if self._lightbox is not None:
             self._unbind_lightbox_shortcuts()
             self._lightbox.dismiss()

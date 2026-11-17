@@ -144,6 +144,10 @@ class FakeCoordinator:
         self.skips = 0
         self.prior_reviews = 0
         self.resumes = 0
+        self.upload_approvals = 0
+        self.upload_approval_available = True
+        self.approval_started: threading.Event | None = None
+        self.approval_release: threading.Event | None = None
 
     def snapshot(self) -> Snapshot:
         """Return the currently captured immutable head.
@@ -208,6 +212,36 @@ class FakeCoordinator:
         self.resumes += 1
         return self.current
 
+    def can_approve_photo_upload(self, snapshot: Snapshot) -> bool:
+        """Report whether the captured uncertain source is locally approvable.
+
+        Args:
+            snapshot (Snapshot): Exact displayed queue-head token.
+        Returns:
+            bool: True only for the current eligible fixture head.
+        """
+        return snapshot == self.current and self.upload_approval_available
+
+    def approve_photo_upload(self, snapshot: Snapshot) -> Snapshot | None:
+        """Record one explicit approval while preserving the exact fixture head.
+
+        Args:
+            snapshot (Snapshot): Exact displayed queue-head token.
+        Returns:
+            Snapshot | None: Current head when approved, or None when stale.
+        """
+        if not self.can_approve_photo_upload(snapshot):
+            return None
+        if self.approval_started is not None:
+            self.approval_started.set()
+        if self.approval_release is not None:
+            self.approval_release.wait(UI_ASYNC_WAIT_SECONDS)
+        if snapshot != self.current:
+            return None
+        self.upload_approvals += 1
+        self.upload_approval_available = False
+        return self.current
+
 
 def make_snapshot(path: Path) -> Snapshot:
     """Build exact source metadata for the local preview fixture.
@@ -241,11 +275,19 @@ class WatchRecoveryTranslationTests(unittest.TestCase):
                 confirm = recovery_text(language, "watch_recovery_confirm").lower()
                 skip = recovery_text(language, "watch_recovery_skip").lower()
                 cancel = recovery_text(language, "watch_recovery_cancel").lower()
+                approve_upload = recovery_text(
+                    language, "watch_recovery_approve_upload",
+                ).lower()
+                approve_hint = recovery_text(
+                    language, "watch_recovery_approve_hint",
+                )
                 self.assertNotEqual(confirm, skip)
                 self.assertNotEqual(skip, cancel)
                 self.assertTrue(confirm)
                 self.assertTrue(skip)
                 self.assertTrue(cancel)
+                self.assertTrue(approve_upload)
+                self.assertTrue(approve_hint)
 
     def test_unknown_locale_uses_english_receipt_label(self) -> None:
         """Keep unsupported locales understandable through English fallback.
@@ -310,11 +352,43 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             dialog.window.winfo_toplevel().geometry("740x520+30+30")
             root.update()
             deadline = time.time() + UI_ASYNC_WAIT_SECONDS
-            while not hasattr(dialog.local_image, "image") and time.time() < deadline:
+            while (not hasattr(dialog.local_image, "image")
+                   or not dialog._upload_approval_available) \
+                    and time.time() < deadline:
                 root.update()
                 time.sleep(UI_POLL_INTERVAL_SECONDS)
+            self.assertTrue(dialog._upload_approval_available)
+            self.assertIn(dialog.approve_upload_button,
+                          dialog.visible_action_buttons)
+            self.assertTrue(
+                dialog.approve_upload_button.instate(["!disabled"]),
+            )
+            self.assertTrue(dialog.confirm_button.instate(["disabled"]))
+            self.assertEqual(
+                recovery_text("en", "watch_recovery_approve_upload"),
+                dialog.approve_upload_button.cget("text"),
+            )
+            self.assertEqual(
+                recovery_text("en", "watch_recovery_approve_hint"),
+                dialog.status.get(),
+            )
             self.capture(dialog, "desktop.png")
             self.assert_actions_inside(dialog)
+            dialog.window.winfo_toplevel().geometry("390x560+30+30")
+            root.update()
+            self.capture(dialog, "approve-upload-narrow.png")
+            self.assert_actions_inside(dialog)
+            dialog.window.winfo_toplevel().geometry("740x520+30+30")
+            root.update()
+            dialog.approve_upload_button.invoke()
+            deadline = time.time() + UI_ASYNC_WAIT_SECONDS
+            while dialog.busy and time.time() < deadline:
+                root.update()
+                time.sleep(UI_POLL_INTERVAL_SECONDS)
+            self.assertEqual(1, coordinator.upload_approvals)
+            self.assertIn(dialog.approve_upload_button,
+                          dialog.visible_action_buttons)
+            self.assertTrue(dialog.approve_upload_button.instate(["disabled"]))
             self.assertFalse(dialog.skip_button.instate(["disabled"]))
             dialog.skip_button.invoke()
             deadline = time.time() + UI_ASYNC_WAIT_SECONDS
@@ -371,6 +445,9 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                 root.update()
                 time.sleep(UI_POLL_INTERVAL_SECONDS)
             self.assertIn(replaced_label, dialog.local_var.get())
+            self.assertIn(dialog.approve_upload_button,
+                          dialog.visible_action_buttons)
+            self.assertTrue(dialog.approve_upload_button.instate(["disabled"]))
             old_started = threading.Event()
             old_release = threading.Event()
             current_started = threading.Event()
@@ -402,10 +479,19 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             self.assertTrue(old_started.wait(UI_ASYNC_WAIT_SECONDS))
             current = replace(make_snapshot(source), item_id="item-current")
             coordinator.current = current
+            coordinator.upload_approval_available = True
             dialog.snapshot = current
             dialog.populate()
+            self.assertFalse(dialog._upload_approval_available)
+            self.assertIn(dialog.approve_upload_button,
+                          dialog.visible_action_buttons)
+            self.assertTrue(dialog.approve_upload_button.instate(["disabled"]))
             current_worker = dialog._preview_workers[-1]
             self.assertTrue(current_started.wait(UI_ASYNC_WAIT_SECONDS))
+            dialog.poll_worker_results()
+            self.assertTrue(dialog._upload_approval_available)
+            self.assertTrue(dialog.approve_upload_button.instate(["!disabled"]))
+            self.assertFalse(current_release.is_set())
             current_release.set()
             current_worker.join(UI_ASYNC_WAIT_SECONDS)
             self.assertFalse(current_worker.is_alive())
@@ -446,6 +532,8 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             self.assertIn("target-021", prior_status)
             self.assertNotIn(dialog.confirm_button, dialog.visible_action_buttons)
             self.assertNotIn(dialog.skip_button, dialog.visible_action_buttons)
+            self.assertNotIn(dialog.approve_upload_button,
+                             dialog.visible_action_buttons)
             dialog.window.winfo_toplevel().geometry("390x650+30+30")
             root.update()
             self.capture(dialog, "prior-narrow.png")
@@ -515,6 +603,8 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                              restored_dialog.visible_action_buttons)
             self.assertNotIn(restored_dialog.skip_button,
                              restored_dialog.visible_action_buttons)
+            self.assertNotIn(restored_dialog.approve_upload_button,
+                             restored_dialog.visible_action_buttons)
             self.assertIn(
                 recovery_text("en", "watch_recovery_resume_available"),
                 restored_dialog.status.get(),
@@ -526,6 +616,79 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                 time.sleep(UI_POLL_INTERVAL_SECONDS)
             self.assertEqual(1, coordinator.resumes)
             restored_dialog.close()
+            root.update()
+            czech_source = Path(directory) / "czech-pending.png"
+            Image.new("RGB", (64, 48), LOCAL_PREVIEW_MARKER).save(czech_source)
+            czech_coordinator = FakeCoordinator(make_snapshot(czech_source))
+            czech_dialog = WatchRecoveryReviewDialog(
+                root, czech_coordinator, "cs", "Galerie 021")
+            deadline = time.time() + UI_ASYNC_WAIT_SECONDS
+            while (not czech_dialog._upload_approval_available
+                   and time.time() < deadline):
+                root.update()
+                time.sleep(UI_POLL_INTERVAL_SECONDS)
+            self.assertTrue(czech_dialog._upload_approval_available)
+            self.assertEqual(
+                recovery_text("cs", "watch_recovery_approve_upload"),
+                czech_dialog.approve_upload_button.cget("text"),
+            )
+            self.assertEqual(
+                recovery_text("cs", "watch_recovery_approve_hint"),
+                czech_dialog.status.get(),
+            )
+            czech_dialog.window.winfo_toplevel().geometry("740x520+30+30")
+            root.update()
+            self.capture(czech_dialog, "approve-upload-czech-desktop.png")
+            czech_dialog.window.winfo_toplevel().geometry("390x650+30+30")
+            root.update()
+            self.capture(czech_dialog, "approve-upload-czech-narrow.png")
+            self.assert_actions_inside(czech_dialog)
+            czech_coordinator.approval_started = threading.Event()
+            czech_coordinator.approval_release = threading.Event()
+            czech_dialog.approve_upload_button.invoke()
+            self.assertTrue(czech_coordinator.approval_started.wait(
+                UI_ASYNC_WAIT_SECONDS,
+            ))
+            self.assertTrue(czech_dialog.busy)
+            self.assertTrue(czech_dialog.approve_upload_button.instate(
+                ["disabled"],
+            ))
+            self.assertTrue(czech_dialog.skip_button.instate(["disabled"]))
+            self.assertTrue(czech_dialog.confirm_button.instate(["disabled"]))
+            czech_dialog.approve_upload_button.invoke()
+            czech_dialog.cancel_button.invoke()
+            self.assertTrue(czech_dialog.window.winfo_exists())
+            self.assertEqual(0, czech_coordinator.upload_approvals)
+            self.assertEqual("uncertain", czech_coordinator.current.state)
+            changed_head = replace(
+                czech_coordinator.current, item_id="changed-head",
+            )
+            czech_coordinator.current = changed_head
+            czech_coordinator.approval_release.set()
+            decision_thread = czech_dialog._decision_thread
+            self.assertIsNotNone(decision_thread)
+            decision_thread.join(UI_ASYNC_WAIT_SECONDS)
+            self.assertFalse(decision_thread.is_alive())
+            deadline = time.time() + UI_ASYNC_WAIT_SECONDS
+            while czech_dialog.window.winfo_exists() and time.time() < deadline:
+                root.update()
+                time.sleep(UI_POLL_INTERVAL_SECONDS)
+            self.assertFalse(czech_dialog.window.winfo_exists())
+            self.assertEqual(0, czech_coordinator.upload_approvals)
+            self.assertEqual("changed-head", czech_coordinator.current.item_id)
+            self.assertEqual("uncertain", czech_coordinator.current.state)
+            root.update()
+            cleared_dialog = WatchRecoveryReviewDialog(
+                root, SimpleNamespace(snapshot=lambda: None), "en", "Gallery 021",
+            )
+            deadline = time.time() + UI_ASYNC_WAIT_SECONDS
+            while cleared_dialog._snapshot_pending and time.time() < deadline:
+                root.update()
+                time.sleep(UI_POLL_INTERVAL_SECONDS)
+            self.assertFalse(cleared_dialog._snapshot_pending)
+            self.assertNotIn(cleared_dialog.approve_upload_button,
+                             cleared_dialog.visible_action_buttons)
+            cleared_dialog.close()
             root.update()
         root.destroy()
 
@@ -948,8 +1111,15 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         self.assertGreater(dialog.details.winfo_width(), 0)
         self.assertGreater(dialog.details.winfo_height(), 0)
         detail_text = dialog.details.get("1.0", "end-1c")
+        self.assertIsNotNone(dialog.snapshot)
+        details_template = dialog.text("watch_recovery_file_details")
+        target_heading = details_template.split(
+            "{binding}", 1,
+        )[0].rsplit("\n", 1)[-1]
         self.assertIn("SHA-256:", detail_text)
-        self.assertIn("Verified target:", detail_text)
+        self.assertIn(target_heading, detail_text)
+        self.assertIn(dialog.snapshot.target_binding, detail_text)
+        self.assertIn(dialog.snapshot.sha256[:16], detail_text)
         self.assertIn("#444", dialog.local_var.get())
         self.assertEqual(
             ttk.Style(window).lookup("TFrame", "background"),

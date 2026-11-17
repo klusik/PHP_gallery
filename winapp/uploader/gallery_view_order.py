@@ -11,6 +11,7 @@
 # License: MIT License (see LICENSE file in repository)
 """Reuse complete session metadata before a fresh newest-first refresh."""
 
+from collections.abc import Callable
 import threading
 import time
 
@@ -90,13 +91,21 @@ class GalleryViewOrder:
         )
 
     def page(
-        self, after_id: int | None, cancelled: threading.Event,
+        self, after_id: int | None, cancelled: threading.Event, *,
+        progress: Callable[[int], None] | None = None,
+        retrying: Callable[[], None] | None = None,
     ) -> LinkedMediaPage:
         """Read a reverse page, refreshing the complete snapshot at its start.
 
         Args:
             after_id (int | None): Last displayed photo, or None to refresh all.
             cancelled (threading.Event): Owning viewer or refresh cancellation.
+            progress (Callable[[int], None] | None): Optional worker callback
+                receiving the cumulative validated photo count after each page.
+                Observer exceptions are ignored and never alter read outcomes.
+            retrying (Callable[[], None] | None): Optional worker callback
+                called immediately before an eligible automatic header-timeout
+                retry. Observer exceptions are ignored.
         Returns:
             LinkedMediaPage: Reverse-ordered metadata with an exclusive local
                 continuation; no binary downloads or server settings writes.
@@ -109,7 +118,7 @@ class GalleryViewOrder:
                 Retry without resetting the original snapshot age.
         """
         if after_id is None:
-            self._refresh(cancelled)
+            self._refresh(cancelled, progress=progress, retrying=retrying)
         if cancelled.is_set():
             raise ValueError("Gallery order read was cancelled.")
         start = 0
@@ -146,11 +155,21 @@ class GalleryViewOrder:
             self._gallery_id, self._parent_id, rows, next_after,
         )
 
-    def _refresh(self, cancelled: threading.Event) -> None:
+    def _refresh(
+        self, cancelled: threading.Event, *,
+        progress: Callable[[int], None] | None = None,
+        retrying: Callable[[], None] | None = None,
+    ) -> None:
         """Collect a complete reverse snapshot with bounded safe read resumption.
 
         Args:
             cancelled (threading.Event): Captured viewer or refresh cancellation.
+            progress (Callable[[int], None] | None): Optional worker callback
+                receiving validated cumulative photo counts. Observer exceptions
+                are ignored and never alter read outcomes.
+            retrying (Callable[[], None] | None): Optional worker callback
+                called immediately before an eligible automatic header-timeout
+                retry. Observer exceptions are ignored.
         Returns:
             None: Publishes only a complete bounded metadata snapshot.
         Raises:
@@ -184,6 +203,11 @@ class GalleryViewOrder:
                         and self._is_retryable_header_timeout(error, cancelled)
                     ):
                         automatic_retries += 1
+                        if retrying is not None:
+                            try:
+                                retrying()
+                            except Exception:
+                                pass
                         continue
                     raise
                 if (page.gallery_id != self._gallery_id
@@ -191,9 +215,22 @@ class GalleryViewOrder:
                         or any(left.image_id >= right.image_id
                                for left, right in zip(page.photos, page.photos[1:]))):
                     raise ValueError('Invalid gallery order snapshot.')
-                self._pending.extend(page.photos)
-                if len(self._pending) > VIEW_ORDER_MAX_PHOTOS:
+                pending_count = len(self._pending) + len(page.photos)
+                if pending_count > VIEW_ORDER_MAX_PHOTOS:
                     raise ValueError('Gallery order snapshot exceeds its bound.')
+                if (page.next_after is not None
+                        and (not page.photos
+                             or page.next_after != page.photos[-1].image_id
+                             or page.next_after <= (cursor or 0))):
+                    raise ValueError('Gallery order cursor did not advance.')
+                if cancelled.is_set():
+                    break
+                self._pending.extend(page.photos)
+                if progress is not None:
+                    try:
+                        progress(len(self._pending))
+                    except Exception:
+                        pass
                 if page.next_after is None:
                     if cancelled.is_set():
                         break
@@ -212,9 +249,6 @@ class GalleryViewOrder:
                     self._resuming = False
                     self._refresh_started_at = None
                     return
-                if (not page.photos or page.next_after != page.photos[-1].image_id
-                        or page.next_after <= (cursor or 0)):
-                    raise ValueError('Gallery order cursor did not advance.')
                 self._pending_cursor = page.next_after
                 self._resuming = True
             raise ValueError('Gallery order read was cancelled.')

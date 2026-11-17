@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.3.0}
+\newcommand{\version}{1.3.1}
 \newcommand{\manualdate}{17.~November~2026}
 
 \hypersetup{
@@ -2478,6 +2478,20 @@ Die erste autorisierte Fotoseite erscheint vor optionalen
 Präsentationseinstellungen über denselben Worker. Grün bedeutet verifizierte
 kodierte Dateien; Detaildekodierung und nötige private Serverprüfungen bleiben.
 Windows und macOS teilen diese Wege; installierte Latenz braucht einen Live-Test.
+Photos zeigt nun einen kompakten Fortschrittsbalken direkt in der Galerie:
+Bei der Sortierung \ui{Neueste zuerst} meldet jeder bestätigte Abruf einer
+Metadatenseite den kumulierten Zähler validierter Fotos; bei unbekannter
+Gesamtzahl bleibt der
+Fortschritt unbestimmt. Der Miniaturfortschritt zählt nur bestätigte sichtbare
+Miniaturen. Nach ungewöhnlich langem Warten bleiben verstrichene Zeit und der
+letzte tatsächliche Fortschritt sichtbar. Bestehende Wiederholungswartezeiten
+zeigen die echte Serverwartezeit beziehungsweise den Countdown; andernfalls
+bleibt die vorhandene manuelle Aktion \ui{Retry} verfügbar. Gespeicherte
+Miniaturen haben Vorrang. Der Indikator verschwindet, sobald der erste nutzbare
+Ansichtsbereich aufgelöst ist; weitere Lesevorgänge laufen im Hintergrund.
+Canvas und native Darstellung teilen dieses Verhalten. Abbruch und
+Sitzungsgenerationsprüfung sperren veraltete Ergebnisse; Tk-Veröffentlichung
+bleibt im GUI-Thread.
 Aktuelle Albumsnapshots derselben Sitzung erscheinen sofort, während der Server
 sie erneuert, ohne zusätzliche Sichtbarkeitsfilter im Client. Gleiche Zeilen
 behalten Kacheln und erhalten aktuelle Prüfzeiten. Große JPEG-Miniaturen
@@ -2880,7 +2894,14 @@ heißt dieselbe kontextabhängige Schaltfläche \ui{Stop Watcher}.
 Beim Abschluss öffnet \ui{Show progress} den Fortschritt. Nach einer
 Unterbrechung öffnet \ui{Review pending uploads} die ursprüngliche
 Warteschlange. Verbinden Sie dieselbe Galerie erneut, wählen Sie sie aus
-und klicken Sie auf \ui{Retry}. In einer verknüpften Sitzung schließt
+und klicken Sie auf \ui{Retry}. \ui{Photo is OK — upload} bedeutet, dass Sie
+die angezeigte Quelle geprüft haben und bestätigen, dass sie korrekt und kein
+Duplikat ist. Die Freigabe lässt nur denselben FIFO-Kopf den normalen Uploadweg
+nehmen; die vorhandenen Duplikatprüfungen des Servers bleiben aktiv.
+Der vorherige unklare Versuch bleibt im Verlauf. Die einmalige Freigabe wird
+vor dem Senden verbraucht; ein weiteres unklares Ergebnis erfordert eine neue
+Entscheidung. Der laufende Request muss enden, bevor dieser Kopf fortfährt.
+In einer verknüpften Sitzung schließt
 \ui{Keep files locally} die Warteschlange nach dem Stopp der Worker. Fotos,
 Berichte und Verlauf bleiben erhalten. Danach ist \ui{Start Watcher} wieder
 verfügbar.
