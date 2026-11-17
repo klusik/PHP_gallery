@@ -11046,12 +11046,29 @@ SHA müssen erfolgreich sein. Der~Release-Workflow erstellt alle vier
 PDF-Handbücher einmal nach den~letzten Quelländerungen, nicht bei~jeder
 Entwicklungsänderung.
 
+Die optionale Audit-Suite \codeword{watcher-tk-performance} misst die
+bestehende Tkinter/ttk-Oberfläche mit synthetischen Offline-Daten auf einem
+gehosteten Windows-Runner. Ihr versioniertes Protokoll trennt kalte und warme
+Anwendungscaches, erfasst exakte Quellen und Runner-Umgebung und verlangt
+wiederholte Baseline-Messungen vor der Optimierung. Der abschließende Vergleich
+paart unveränderte Baseline und Kandidat in getrennten Prozessen derselben VM.
+Callback-Abschluss und Tk-Übergabe belegen weder die physische Bildschirmanzeige
+noch die Beseitigung von Flackern. Rohmessungen und Unsicherheit bleiben von der
+Funktionsqualifikation getrennt; das Experiment erteilt keine Merge- oder
+Release-Berechtigung.
+
+Eine Messanforderung muss mit \codeword{[tk-measure]} in der Commit-Nachricht
+beginnen. Markierungen innerhalb der erhaltenen Squash-Historie starten keine
+neue Messung. Die Bereinigung beendet ältere Funktions- und Benchmark-Läufe nur
+im eigenen Feature-Branch und lässt Messungen desselben SHA unverändert.
+
 Der WinApp-Partitionskoordinator ermittelt das vollständige Testinventar einmal.
 Jeder Kindprozess lädt nur seine zugewiesenen lokalen Module und muss jede
 ausgewählte Identität melden. Modul-/Klassen-Fixtures, der vollständige disjunkte
 Identitätsnachweis und die bisherigen Prozess-/Koordinatorfristen bleiben Pflicht.
-Sechs serielle Gruppen isolieren den unveränderten dichten Cache-Rückkehrfall
-vom Viewer; jeder Prozess erhält explizite Quell-/Test-Importpfade.
+Sieben serielle Gruppen erhalten fünf exklusive Messgruppen und zwei
+deterministische Rest-Shards, die Klassen zusammenhalten. Jeder Prozess erhält
+explizite Quell-/Test-Importpfade.
 
 Der gehostete portable WinApp-Job installiert die vorhandene Pillow-Anforderung
 in den für das Audit ausgewählten Python-Interpreter, damit der Pixeltest für

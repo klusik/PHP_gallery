@@ -1,0 +1,1276 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-361-tk-performance.yml
+# Module Type: Issue-Scoped Performance Qualification Workflow
+# Purpose: Run the opt-in Windows Tk performance protocol for issue 361.
+# Responsibilities:
+#   - Bind the selected benchmark stage and source SHAs to the exact event commit
+#   - Install pinned benchmark-only Python dependencies
+#   - Invoke the benchmark exclusively through the central audit suite
+#   - Retain raw benchmark output and audit diagnostics on every outcome
+#   - Inspect authenticated failure artifacts without rerunning their tests
+#   - Publish validated compact summaries to the authorized issue threads
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Issue 361 Tk performance benchmark
+
+on:
+  push:
+    branches:
+      - feature/361-tk-canvas-performance
+    # Run measurements only when the protocol or its execution owner changes.
+    # Production checkpoints use the separate central functional workflow.
+    paths:
+      - 'tools/perf/issue_361_tk_*'
+      - 'scripts/audit.php'
+      - '.github/workflows/issue-361-tk-performance.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  tk-performance:
+    name: Issue 361 Tk performance
+    # Squash commits preserve the original request as a message prefix; later
+    # history may append text, so only that leading marker requests measurement.
+    # Ordinary checkpoints leave the frozen benchmark untouched.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, '[tk-measure]') }}
+    runs-on: windows-2025
+    # Type: integer. Units: minutes. Scope: one hosted benchmark workflow job.
+    # Consumers: GitHub Actions job timeout.
+    # Rationale: the central child is capped at 40 minutes; five minutes remain
+    # for checkout, dependency setup, diagnostics and artifact upload.
+    timeout-minutes: 45
+    env:
+      PHP_GALLERY_TK_PERF_CANDIDATE: ${{ github.sha }}
+    steps:
+      - name: Checkout exact source SHA without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          # Preserve commit history; fetch historical blobs only when needed.
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Verify exact source SHA and immutable source base
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:EXPECTED_SHA) {
+            throw 'Checkout does not match the event SHA.'
+          }
+          git fetch --no-tags origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to fetch origin/main.' }
+          $sourceBase = (git merge-base HEAD origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sourceBase -notmatch '^[0-9a-f]{40}$') {
+            throw 'Unable to resolve the immutable origin/main merge base.'
+          }
+          "PHP_GALLERY_SOURCE_BASE=$sourceBase" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install Python 3.14.10
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+
+      - name: Install pinned benchmark dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check Pillow==12.0.0 psutil==7.1.3
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Select and validate benchmark protocol stage
+        id: protocol
+        shell: pwsh
+        run: |
+          $stage = 'pilot'
+          $baseline = ''
+          $diagnosticsOnly = $false
+          $diagnosticArtifactCount = 0
+          $protocolPath = 'tools/perf/issue_361_tk_protocol.json'
+          if (Test-Path -LiteralPath $protocolPath) {
+            $protocol = Get-Content -LiteralPath $protocolPath -Raw |
+              ConvertFrom-Json
+            $stage = [string]$protocol.stage
+            $baseline = [string]$protocol.baseline_sha
+            $pilotScenariosProperty =
+              $protocol.PSObject.Properties['pilot_scenarios']
+            if ($null -ne $pilotScenariosProperty) {
+              if ($stage -ne 'pilot' -or
+                  $protocol.pilot_scenarios -isnot [System.Array] -or
+                  $protocol.pilot_scenarios.Count -eq 0) {
+                throw 'pilot_scenarios must be a nonempty array for pilot stage.'
+              }
+              $allowedScenarios = @($protocol.matrix.scenarios)
+              $seenScenarios = @{}
+              foreach ($scenario in $protocol.pilot_scenarios) {
+                if ($scenario -isnot [string] -or
+                    $scenario -notin $allowedScenarios -or
+                    $seenScenarios.ContainsKey($scenario)) {
+                  throw 'pilot_scenarios must be a unique subset of matrix.scenarios.'
+                }
+                $seenScenarios[$scenario] = $true
+              }
+            }
+            $diagnosticsProperty = $protocol.PSObject.Properties['diagnostics_only']
+            if ($null -ne $diagnosticsProperty) {
+              if ($protocol.diagnostics_only -isnot [bool]) {
+                throw 'diagnostics_only must be a JSON boolean.'
+              }
+              $diagnosticsOnly = $protocol.diagnostics_only
+            }
+            $artifactsProperty =
+              $protocol.PSObject.Properties['diagnostic_artifacts']
+            if ($null -ne $artifactsProperty) {
+              if ($protocol.diagnostic_artifacts -isnot [System.Array]) {
+                throw 'diagnostic_artifacts must be a JSON array.'
+              }
+              $diagnosticArtifactCount = $protocol.diagnostic_artifacts.Count
+            }
+          }
+          if ($stage -notin @('pilot', 'baseline', 'compare')) {
+            throw 'Protocol stage must be pilot, baseline or compare.'
+          }
+          if ($baseline -notmatch '^[0-9a-f]{40}$') {
+            throw 'Every benchmark stage requires a valid baseline_sha.'
+          }
+          "PHP_GALLERY_TK_PERF_STAGE=$stage" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          "PHP_GALLERY_TK_PERF_BASELINE=$baseline" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PHP_GALLERY_TK_PERF_DIAGNOSTICS_ONLY=$($diagnosticsOnly.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "has-diagnostic-artifacts=$(([bool]($diagnosticArtifactCount -gt 0)).ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Inspect authenticated prior benchmark artifacts
+        if: always() && steps.protocol.outputs.has-diagnostic-artifacts == 'true'
+        uses: actions/github-script@v9.0.0
+        env:
+          PYTHON_EXE: ${{ steps.python.outputs.python-path }}
+        with:
+          script: |
+            const { execFileSync } = require('node:child_process');
+            const fs = require('node:fs');
+            const os = require('node:os');
+            const path = require('node:path');
+
+            // Purpose: Keep diagnostic evidence on the benchmark's owning issue.
+            // Type: integer. Units: GitHub issue number.
+            // Scope: Optional authenticated artifact review.
+            // Consumers: the diagnostic artifact comments below.
+            // Value: 361.
+            // Rationale: these diagnostics concern issue 361's Tk qualification.
+            const DIAGNOSTIC_ISSUE = 361;
+            // Purpose: Read all protocol-selected artifact metadata on one page.
+            // Type: integer. Units: artifacts per GitHub API page.
+            // Scope: Optional diagnostic artifact lookup.
+            // Consumers: listWorkflowRunArtifacts pagination.
+            // Value: 100.
+            // Rationale: GitHub's endpoint maximum avoids missing configured entries.
+            const ARTIFACT_PAGE_SIZE = 100;
+            const EXPECTED_BRANCH = 'feature/361-tk-canvas-performance';
+            const workspace = process.env.GITHUB_WORKSPACE;
+            const protocol = JSON.parse(fs.readFileSync(
+              path.join(workspace, 'tools', 'perf', 'issue_361_tk_protocol.json'),
+              'utf8',
+            ));
+            if (!Array.isArray(protocol.diagnostic_artifacts)) {
+              throw new Error('diagnostic_artifacts must be a JSON array.');
+            }
+
+            const pythonExtractor = [
+              'import json',
+              'import stat',
+              'import sys',
+              'from pathlib import Path, PurePosixPath',
+              'from zipfile import ZipFile',
+              '',
+              'archive_path = Path(sys.argv[1])',
+              'output_root = Path(sys.argv[2]).resolve()',
+              'result_path = Path(sys.argv[3])',
+              'kind = sys.argv[4]',
+              'output_root.mkdir(parents=True, exist_ok=True)',
+              'with ZipFile(archive_path) as archive:',
+              '    names = archive.namelist()',
+              '    source_names = [',
+              '        name for name in names',
+              '        if PurePosixPath(name).name == "source-failures.md"',
+              '    ]',
+              '    pilot_names = [',
+              '        name for name in names',
+              '        if PurePosixPath(name).name',
+              '        == "baseline-gallery-warm-on-000.json"',
+              '    ]',
+              '    if len(source_names) > 1:',
+              '        raise RuntimeError("Expected at most one source-failures.md.")',
+              '    if kind == "source" and len(source_names) != 1:',
+              '        raise RuntimeError(',
+              '            "Expected exactly one source-failures.md in source artifact."',
+              '        )',
+              '    if kind == "pilot" and len(pilot_names) != 1:',
+              '        raise RuntimeError(',
+              '            "Expected exactly one baseline-gallery-warm-on-000.json."',
+              '        )',
+              '    result = {}',
+              '    selected = list(source_names) if kind == "source" else []',
+              '    if kind == "pilot":',
+              '        selected.extend(pilot_names)',
+              '    for name in selected:',
+              '        member = PurePosixPath(name)',
+              '        if member.is_absolute() or ".." in member.parts:',
+              '            raise RuntimeError("Artifact contains an unsafe path.")',
+              '        info = archive.getinfo(name)',
+              '        mode = (info.external_attr >> 16) & 0o170000',
+              '        if mode == stat.S_IFLNK:',
+              '            raise RuntimeError("Artifact contains a symbolic link.")',
+              '        target = (output_root / Path(*member.parts)).resolve()',
+              '        try:',
+              '            target.relative_to(output_root)',
+              '        except ValueError as error:',
+              '            raise RuntimeError(',
+              '                "Artifact path escaped its private directory."',
+              '            ) from error',
+              '        target.parent.mkdir(parents=True, exist_ok=True)',
+              '        target.write_bytes(archive.read(info))',
+              '        if member.name == "source-failures.md":',
+              '            result["source_failures"] = target.read_text(encoding="utf-8")',
+              '        else:',
+              '            report = json.loads(target.read_text(encoding="utf-8"))',
+              '            events = report.get("raw_events", [])',
+              '            metrics = (',
+              '                "event_loop_drift", "callback",',
+              '                "interaction_feedback", "image_publication",',
+              '            )',
+              '            result["pilot"] = {',
+              '                "missing_required_metrics": report.get(',
+              '                    "missing_required_metrics",',
+              '                ),',
+              '                "raw_events_truncated": report.get(',
+              '                    "raw_events_truncated",',
+              '                ),',
+              '                "failure": report.get("failure"),',
+              '                "operations": report.get("operations"),',
+              '                "measured_sample_counts": {',
+              '                    metric: sum(',
+              '                        1 for event in events',
+              '                        if event.get("metric") == metric',
+              '                        and event.get("phase") == "measured"',
+              '                    )',
+              '                    for metric in metrics',
+              '                },',
+              '            }',
+              "    if kind == \"benchmark\":",
+              "        import csv",
+              "        import io",
+              "        import math",
+              "        import re",
+              "        # Purpose: Bound memory used while inspecting one aggregate report.",
+              "        # Type: int. Units: bytes. Scope: one benchmark report JSON.",
+              "        # Consumers: report_info size validation below.",
+              "        # Rationale: parse up to 100 MB; larger aggregates use the small CSV ledger.",
+              "        MAX_REPORT_JSON_BYTES = 100000000",
+              "        # Purpose: Bound total expanded child evidence read during inspection.",
+              "        # Type: int. Units: bytes. Scope: canonical child JSON members.",
+              "        # Consumers: total_child_bytes guard below.",
+              "        # Rationale: 1 GiB covers up to 160 bounded raw reports; each is discarded",
+              "        # after compact counters are retained, so this is a read-work bound.",
+              "        MAX_CHILD_JSON_BYTES = 1024 * 1024 * 1024",
+              "        # Purpose: Bound memory used for one parsed child report.",
+              "        # Type: int. Units: bytes. Scope: one child JSON member.",
+              "        # Consumers: per-member size guard below.",
+              "        # Rationale: 32 MiB accommodates the existing 20,000-event payload cap.",
+              "        MAX_SINGLE_CHILD_JSON_BYTES = 32 * 1024 * 1024",
+              "        # Purpose: Bound the small process ledger and source-failure text reads.",
+              "        # Type: int. Units: bytes. Scope: one diagnostic CSV/text member.",
+              "        # Consumers: fallback CSV and source-failure reads.",
+              "        # Rationale: 1 MiB leaves ample room for 160 scalar process records.",
+              "        MAX_SMALL_DIAGNOSTIC_BYTES = 1024 * 1024",
+              "        # Purpose: Bound parse-error messages in the diagnostic comment.",
+              "        # Type: int. Units: characters. Scope: one malformed-member example.",
+              "        # Consumers: exception summaries below.",
+              "        # Rationale: 160 characters identify the issue without dumping a payload.",
+              "        DIAGNOSTIC_ERROR_CHARACTER_LIMIT = 160",
+              "        # Purpose: Bound detail lists in the compact diagnostic comment.",
+              "        # Type: int. Units: entries. Scope: malformed/missing examples.",
+              "        # Consumers: invalid and missing identity lists below.",
+              "        # Rationale: counts remain complete while examples stay compact.",
+              "        DETAIL_EXAMPLE_LIMIT = 10",
+              "        # Purpose: Show only the slowest persisted workload intervals.",
+              "        # Type: int. Units: records. Scope: one diagnostic comment.",
+              "        # Consumers: sorted slowest record sample below.",
+              "        # Rationale: identify long child runs without dumping every record.",
+              "        SLOWEST_RECORD_LIMIT = 5",
+              "        report_members = [",
+              "            name for name in names",
+              "            if PurePosixPath(name).parts[-2:] == (\"issue-361\", \"report.json\")",
+              "        ]",
+              "        if len(report_members) > 1:",
+              "            raise RuntimeError(\"Duplicate canonical aggregate reports.\")",
+              "        if report_members:",
+              "            report_name = report_members[0]",
+              "            report_member = PurePosixPath(report_name)",
+              "            report_info = archive.getinfo(report_name)",
+              "        else:",
+              "            ledger_members = [",
+              "                name for name in names",
+              "                if PurePosixPath(name).parts[-2:] == (\"issue-361\", \"raw_records.csv\")",
+              "            ]",
+              "            if len(ledger_members) != 1:",
+              "                raise RuntimeError(\"Expected one canonical CSV ledger when aggregate is absent.\")",
+              "            report_member = PurePosixPath(ledger_members[0]).parent / \"report.json\"",
+              "            report_info = None",
+              "        if report_member.is_absolute() or \"..\" in report_member.parts:",
+              "            raise RuntimeError(\"Benchmark artifact contains an unsafe report path.\")",
+              "        invalid = []",
+              "        report = {}",
+              "        if report_info is None:",
+              "            invalid.append(\"Combined JSON absent; using durable CSV ledger.\")",
+              "        elif report_info.file_size > MAX_REPORT_JSON_BYTES:",
+              "            invalid.append(\"Aggregate JSON exceeds parse budget; using CSV ledger.\")",
+              "        else:",
+              "            try:",
+              "                report = json.loads(archive.read(report_info))",
+              "                if not isinstance(report, dict):",
+              "                    raise ValueError(\"aggregate JSON is not an object\")",
+              "            except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:",
+              "                report = {}",
+              "                invalid.append(\"report.json parse failure: \" + str(error)[:DIAGNOSTIC_ERROR_CHARACTER_LIMIT])",
+              "        parent = report_member.parent",
+              "        record_rows = report.get(\"records\", [])",
+              "        if not isinstance(record_rows, list):",
+              "            record_rows = []",
+              "            invalid.append(\"report.json records is not a list\")",
+              "        record_origin = \"aggregate JSON\"",
+              "        if not record_rows:",
+              "            ledger_members = [",
+              "                name for name in names",
+              "                if PurePosixPath(name).parent == parent",
+              "                and PurePosixPath(name).name == \"raw_records.csv\"",
+              "            ]",
+              "            if len(ledger_members) == 1:",
+              "                ledger_info = archive.getinfo(ledger_members[0])",
+              "                if ledger_info.file_size <= MAX_SMALL_DIAGNOSTIC_BYTES:",
+              "                    record_origin = \"raw_records.csv fallback\"",
+              "                    with archive.open(ledger_info) as ledger_stream:",
+              "                        reader = csv.DictReader(io.TextIOWrapper(ledger_stream, encoding=\"utf-8\"))",
+              "                        for ledger_row in reader:",
+              "                            try:",
+              "                                row = dict(ledger_row)",
+              "                                row[\"elapsed_seconds\"] = float(row[\"elapsed_seconds\"])",
+              "                                row[\"trial\"] = int(row[\"trial\"])",
+              "                                if not math.isfinite(row[\"elapsed_seconds\"]) or row[\"elapsed_seconds\"] < 0:",
+              "                                    raise ValueError(\"invalid elapsed_seconds\")",
+              "                                if any(row.get(key) is None for key in (",
+              "                                    \"source\", \"source_sha\", \"scenario\", \"cache\",",
+              "                                    \"instrumentation\", \"status\",",
+              "                                )):",
+              "                                    raise ValueError(\"incomplete CSV identity row\")",
+              "                                record_rows.append(row)",
+              "                            except (KeyError, TypeError, ValueError) as error:",
+              "                                invalid.append(\"CSV row: \" + str(error)[:DIAGNOSTIC_ERROR_CHARACTER_LIMIT])",
+              "                else:",
+              "                    invalid.append(\"CSV ledger exceeds its diagnostic byte budget.\")",
+              "        elapsed_count = 0",
+              "        elapsed_total = 0.0",
+              "        event_count = 0",
+              "        records = []",
+              "        for row in record_rows:",
+              "            if not isinstance(row, dict):",
+              "                invalid.append(\"report.json contains a malformed record\")",
+              "                continue",
+              "            elapsed = row.get(\"elapsed_seconds\")",
+              "            if isinstance(elapsed, (int, float)) and not isinstance(elapsed, bool) and math.isfinite(elapsed) and elapsed >= 0:",
+              "                elapsed_total += elapsed",
+              "                elapsed_count += 1",
+              "            else:",
+              "                invalid.append(\"report.json contains invalid elapsed_seconds\")",
+              "                elapsed = None",
+              "            child_report = row.get(\"report\")",
+              "            events = child_report.get(\"raw_events\", []) if isinstance(child_report, dict) else []",
+              "            if isinstance(events, list):",
+              "                event_count += len(events)",
+              "            records.append({",
+              "                \"source\": row.get(\"source\"),",
+              "                \"source_sha\": row.get(\"source_sha\"),",
+              "                \"scenario\": row.get(\"scenario\"),",
+              "                \"cache\": row.get(\"cache\"),",
+              "                \"instrumentation\": row.get(\"instrumentation\"),",
+              "                \"trial\": row.get(\"trial\"),",
+              "                \"status\": row.get(\"status\"),",
+              "                \"elapsed_seconds\": elapsed,",
+              "            })",
+              "        pattern = re.compile(",
+              "            r\"^(baseline|candidate)-([a-z0-9-]+)-(cold|warm)-(on|off)-(\\d{3})\\.json$\"",
+              "        )",
+              "        children = []",
+              "        missing_or_mismatched = []",
+              "        total_child_bytes = 0",
+              "        failure_members = [",
+              "            name for name in names",
+              "            if PurePosixPath(name).name == \"source-failures.md\"",
+              "        ]",
+              "        if len(failure_members) > 1:",
+              "            raise RuntimeError(\"Expected at most one source-failures.md.\")",
+              "        source_failure_lines = None",
+              "        if failure_members:",
+              "            failure_info = archive.getinfo(failure_members[0])",
+              "            if failure_info.file_size <= MAX_SMALL_DIAGNOSTIC_BYTES:",
+              "                text = archive.read(failure_info).decode(\"utf-8\")",
+              "                source_failure_lines = len(text.splitlines())",
+              "            else:",
+              "                invalid.append(\"source-failures.md exceeds text inspection budget.\")",
+              "        for name in names:",
+              "            member = PurePosixPath(name)",
+              "            match = pattern.fullmatch(member.name)",
+              "            if member.parent != parent or not match:",
+              "                continue",
+              "            if member.is_absolute() or \"..\" in member.parts:",
+              "                raise RuntimeError(\"Benchmark artifact contains an unsafe child path.\")",
+              "            info = archive.getinfo(name)",
+              "            mode = (info.external_attr >> 16) & 0o170000",
+              "            if mode == stat.S_IFLNK:",
+              "                raise RuntimeError(\"Benchmark artifact contains a symbolic link.\")",
+              "            total_child_bytes += info.file_size",
+              "            if total_child_bytes > MAX_CHILD_JSON_BYTES:",
+              "                invalid.append(\"Total child inspection byte budget exceeded.\")",
+              "                break",
+              "            if info.file_size > MAX_SINGLE_CHILD_JSON_BYTES:",
+              "                invalid.append(member.name + \": child parse byte budget exceeded\")",
+              "                continue",
+              "            label, scenario, cache, instrumentation, trial_text = match.groups()",
+              "            try:",
+              "                child = json.loads(archive.read(info))",
+              "                trial = int(trial_text)",
+              "                expected = {\"scenario\": scenario, \"cache\": cache, \"trial\": trial}",
+              "                if any(child.get(key) != value for key, value in expected.items()):",
+              "                    raise ValueError(\"identity differs from canonical filename\")",
+              "                if not isinstance(child.get(\"source\"), str) or len(child[\"source\"]) != 40:",
+              "                    raise ValueError(\"source SHA is missing or malformed\")",
+              "                if not isinstance(child.get(\"raw_events\"), list):",
+              "                    raise ValueError(\"raw_events is not a list\")",
+              "                truncated = child.get(\"raw_events_truncated\")",
+              "                if isinstance(truncated, bool) or not isinstance(truncated, int) or truncated < 0:",
+              "                    raise ValueError(\"raw_events_truncated is missing or mistyped\")",
+              "                flags = {",
+              "                    \"status\": child.get(\"status\"),",
+              "                    \"missing_required_metrics\": child.get(\"missing_required_metrics\"),",
+              "                    \"raw_events_truncated\": truncated,",
+              "                    \"failure\": child.get(\"failure\"),",
+              "                    \"raw_event_count\": len(child[\"raw_events\"]),",
+              "                }",
+              "                if not isinstance(flags[\"missing_required_metrics\"], list):",
+              "                    flags[\"invalid_missing_required_metrics\"] = True",
+              "                record_match = any(",
+              "                    row.get(\"source\") == label",
+              "                    and row.get(\"source_sha\") == child[\"source\"]",
+              "                    and row.get(\"scenario\") == scenario",
+              "                    and row.get(\"cache\") == cache",
+              "                    and row.get(\"instrumentation\") == instrumentation",
+              "                    and row.get(\"trial\") == trial",
+              "                    for row in records",
+              "                )",
+              "                if not record_match:",
+              "                    missing_or_mismatched.append(member.name + \" absent/mismatched in report records\")",
+              "                children.append({",
+              "                    \"file\": member.name, \"source_label\": label,",
+              "                    \"scenario\": scenario, \"cache\": cache,",
+              "                    \"instrumentation\": instrumentation, \"trial\": trial,",
+              "                    \"flags\": flags,",
+              "                })",
+              "            except (UnicodeDecodeError, json.JSONDecodeError, ValueError, AttributeError) as error:",
+              "                invalid.append(member.name + \": \" + str(error)[:DIAGNOSTIC_ERROR_CHARACTER_LIMIT])",
+              "        counts = {}",
+              "        for child in children:",
+              "            key = \"/\".join((",
+              "                child[\"source_label\"], child[\"scenario\"], child[\"cache\"],",
+              "                child[\"instrumentation\"],",
+              "            ))",
+              "            counts[key] = counts.get(key, 0) + 1",
+              "        csv_sizes = {}",
+              "        for basename in (\"raw_records.csv\", \"raw_events.csv\"):",
+              "            matches = [",
+              "                name for name in names",
+              "                if PurePosixPath(name).parent == parent",
+              "                and PurePosixPath(name).name == basename",
+              "            ]",
+              "            csv_sizes[basename] = archive.getinfo(matches[0]).file_size if len(matches) == 1 else None",
+              "        slowest = sorted(",
+              "            (row for row in records if row[\"elapsed_seconds\"] is not None),",
+              "            key=lambda row: row[\"elapsed_seconds\"], reverse=True,",
+              "        )[:SLOWEST_RECORD_LIMIT]",
+              "        result[\"benchmark\"] = {",
+              "            \"report_bytes\": report_info.file_size if report_info is not None else None,",
+              "            \"status\": report.get(\"status\", \"unfinalized/unknown\"),",
+              "            \"valid_records\": report.get(\"valid_records\"),",
+              "            \"required_records\": report.get(\"required_records\"),",
+              "            \"record_count\": len(record_rows),",
+              "            \"record_origin\": record_origin,",
+              "            \"record_elapsed_count\": elapsed_count,",
+              "            \"child_json_count\": len(children),",
+              "            \"child_counts_by_source_cell_mode\": counts,",
+              "            \"invalid_or_malformed\": invalid[:DETAIL_EXAMPLE_LIMIT],",
+              "            \"missing_or_mismatched\": missing_or_mismatched[:DETAIL_EXAMPLE_LIMIT],",
+              "            \"record_elapsed_seconds_sum\": round(elapsed_total, 3) if elapsed_count else None,",
+              "            \"failed_children\": sum(row[\"flags\"][\"status\"] != \"PASS\" for row in children),",
+              "            \"children_with_missing_required_metrics\": sum(bool(row[\"flags\"][\"missing_required_metrics\"]) or row[\"flags\"].get(\"invalid_missing_required_metrics\", False) for row in children),",
+              "            \"children_with_truncated_raw_events\": sum(row[\"flags\"][\"raw_events_truncated\"] > 0 for row in children),",
+              "            \"last_record\": records[-1] if records else None,",
+              "            \"slowest_records\": slowest,",
+              "            \"raw_event_count_in_records\": event_count if record_origin == \"aggregate JSON\" else None,",
+              "            \"child_raw_event_count\": sum(row[\"flags\"][\"raw_event_count\"] for row in children),",
+              "            \"raw_csv_bytes\": csv_sizes,",
+              "            \"children_bytes\": total_child_bytes,",
+              "            \"source_failures_line_count\": source_failure_lines,",
+              "        }",
+              'result_path.write_text(json.dumps(result), encoding="utf-8")',
+            ].join('\n');
+            for (const entry of protocol.diagnostic_artifacts) {
+              if (
+                !entry
+                || !Number.isSafeInteger(entry.artifact_id)
+                || !Number.isSafeInteger(entry.run_id)
+                || typeof entry.head_sha !== 'string'
+                || !/^[0-9a-f]{40}$/.test(entry.head_sha)
+                || !['source', 'pilot', 'benchmark'].includes(entry.kind)
+              ) {
+                throw new Error('A diagnostic artifact entry is malformed.');
+              }
+              const runResponse = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: entry.run_id,
+              });
+              const run = runResponse.data;
+              if (
+                run.id !== entry.run_id
+                || run.head_sha !== entry.head_sha
+                || run.head_branch !== EXPECTED_BRANCH
+              ) {
+                throw new Error('Diagnostic workflow run identity does not match protocol.');
+              }
+              const artifactResponse =
+                await github.rest.actions.listWorkflowRunArtifacts({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: entry.run_id,
+                  per_page: ARTIFACT_PAGE_SIZE,
+                });
+              const artifact = artifactResponse.data.artifacts.find(
+                (item) => item.id === entry.artifact_id,
+              );
+              if (!artifact || artifact.expired) {
+                throw new Error('Expected diagnostic artifact is missing or expired.');
+              }
+              if (
+                artifact.workflow_run
+                && artifact.workflow_run.id !== entry.run_id
+              ) {
+                throw new Error('Diagnostic artifact belongs to a different run.');
+              }
+              const downloaded = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: entry.artifact_id,
+                archive_format: 'zip',
+              });
+              const privateDirectory = fs.mkdtempSync(
+                path.join(os.tmpdir(), 'issue-361-diagnostic-'),
+              );
+              const archivePath = path.join(privateDirectory, 'artifact.zip');
+              const extractionPath = path.join(privateDirectory, 'selected');
+              const outputPath = path.join(privateDirectory, 'diagnostic.json');
+              fs.writeFileSync(archivePath, Buffer.from(downloaded.data));
+              execFileSync(process.env.PYTHON_EXE, [
+                '-c', pythonExtractor, archivePath, extractionPath,
+                outputPath, entry.kind,
+              ], { stdio: 'ignore' });
+              const diagnostic = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+              const runUrl = process.env.GITHUB_SERVER_URL + '/'
+                + context.repo.owner + '/' + context.repo.repo
+                + '/actions/runs/' + run.id;
+              const artifactUrl = process.env.GITHUB_SERVER_URL + '/'
+                + context.repo.owner + '/' + context.repo.repo
+                + '/actions/runs/' + run.id + '/artifacts/' + entry.artifact_id;
+              let body = [
+                '## Issue 361 diagnostic artifact review — NOT TESTED',
+                '',
+                '- UTC: ' + new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+                '- Original source SHA: <code>' + entry.head_sha + '</code>',
+                '- Original workflow run: [#' + run.id + '](' + runUrl + ')',
+                '- Artifact: [download page](' + artifactUrl + ')',
+                '- Current workflow candidate: <code>' + context.sha + '</code> (not tested by this inspection)',
+                '- Result: diagnostic inspection only; this is not qualification evidence.',
+                '',
+              ].join('\n');
+              if (entry.kind === 'source') {
+                if (typeof diagnostic.source_failures !== 'string') {
+                  throw new Error('Source failure findings are missing.');
+                }
+                body += '### Source findings\n\n' + diagnostic.source_failures;
+              } else if (entry.kind === 'pilot') {
+                const pilot = diagnostic.pilot;
+                if (!pilot) {
+                  throw new Error('Pilot diagnostic report is missing.');
+                }
+                body += [
+                  '### Baseline gallery warm instrumentation failure',
+                  '',
+                  '- missing_required_metrics: <code>' + JSON.stringify(pilot.missing_required_metrics) + '</code>',
+                  '- raw_events_truncated: <code>' + pilot.raw_events_truncated + '</code>',
+                  '- failure: ' + String(pilot.failure || 'None recorded.').replace(/\s+/g, ' '),
+                  '- operations: <code>' + JSON.stringify(pilot.operations) + '</code>',
+                  '- Measured raw samples: ' + Object.entries(pilot.measured_sample_counts)
+                    .map(([metric, count]) => '<code>' + metric + '</code>: ' + count)
+                    .join(', '),
+                  '',
+                ].join('\n');
+              } else {
+                const benchmark = diagnostic.benchmark;
+                if (!benchmark) {
+                  throw new Error('Benchmark diagnostic report is missing.');
+                }
+                const duration = run.run_started_at && run.updated_at
+                  ? Math.max(0, (Date.parse(run.updated_at) - Date.parse(run.run_started_at)) / 1000)
+                  : null;
+                const childSeconds = Number.isFinite(benchmark.record_elapsed_seconds_sum)
+                  ? benchmark.record_elapsed_seconds_sum : null;
+                const outsideChildren = duration === null || childSeconds === null
+                  ? 'unavailable'
+                  : (duration - childSeconds).toFixed(1) + ' s';
+                const slowest = (benchmark.slowest_records || []).map((row) =>
+                  row.source + '/' + row.scenario + '/' + row.cache + '/'
+                    + row.instrumentation + '#' + row.trial + '='
+                    + row.elapsed_seconds + 's',
+                ).join('; ') || 'none recorded';
+                body += [
+                  '### Incomplete benchmark artifact diagnostics',
+                  '',
+                  '- Aggregate report status: ' + benchmark.status
+                    + '; ' + benchmark.record_count + ' saved process rows from '
+                    + benchmark.record_origin
+                    + (benchmark.valid_records == null ? '' : '; valid=' + benchmark.valid_records)
+                    + (benchmark.required_records == null ? '' : '/' + benchmark.required_records)
+                    + '; ' + benchmark.report_bytes + ' bytes.',
+                  '- Standalone child JSON files: ' + benchmark.child_json_count
+                    + ' (these do not prove validation/acceptance); counts by source/cell/mode: <code>'
+                    + JSON.stringify(benchmark.child_counts_by_source_cell_mode) + '</code>.',
+                  '- Sum of ' + benchmark.record_elapsed_count + ' saved child intervals: '
+                    + (childSeconds === null ? 'unavailable' : childSeconds.toFixed(1))
+                    + ' s; workflow wall interval: '
+                    + (duration === null ? 'unavailable' : duration.toFixed(1) + ' s')
+                    + ' ; workflow time outside saved child intervals: ' + outsideChildren
+                    + ' (includes setup, export and any unrecorded child).',
+                  '- Child failures: ' + benchmark.failed_children
+                    + '; missing required metrics: ' + benchmark.children_with_missing_required_metrics
+                    + '; truncated event payloads: ' + benchmark.children_with_truncated_raw_events + '.',
+                  '- Raw events in aggregate: ' + benchmark.raw_event_count_in_records
+                    + '; in child JSON files: ' + benchmark.child_raw_event_count + '.',
+                  '- CSV sizes: <code>' + JSON.stringify(benchmark.raw_csv_bytes) + '</code>;'
+                    + ' child JSON bytes: ' + benchmark.children_bytes + '.',
+                  '- Last saved record: <code>' + JSON.stringify(benchmark.last_record) + '</code>.',
+                  '- Slowest saved child intervals: ' + slowest + '.',
+                  '- Malformed entries: <code>'
+                    + JSON.stringify(benchmark.invalid_or_malformed) + '</code>.',
+                  '- Missing or mismatched children: <code>'
+                    + JSON.stringify(benchmark.missing_or_mismatched) + '</code>.',
+                  '- source-failures.md lines: '
+                    + (benchmark.source_failures_line_count == null
+                      ? 'not present' : benchmark.source_failures_line_count + ' (read once).'),
+                  '',
+                  'This incomplete run remains FAIL/BLOCKED as reported; the diagnostic does not qualify performance.',
+                ].join('\n');
+              }
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: DIAGNOSTIC_ISSUE,
+                body,
+              });
+            }
+            if (process.env.PHP_GALLERY_TK_PERF_DIAGNOSTICS_ONLY === 'true') {
+              core.setFailed(
+                'Diagnostic-only artifact inspection; current candidate was not tested.',
+              );
+            }
+
+      - name: Run the registered Tk performance audit suite
+        if: env.PHP_GALLERY_TK_PERF_DIAGNOSTICS_ONLY != 'true'
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          php scripts/audit.php --suite=watcher-tk-performance
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Retain exact-SHA benchmark artifacts and audit diagnostics
+        id: benchmark-artifact
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-361-tk-performance-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: this benchmark run's audit output.
+          # Consumers: GitHub Actions artifact retention.
+          # Rationale: retain bounded exact-SHA evidence for review without
+          # long-term duplication.
+          retention-days: 14
+
+      - name: Publish validated issue 361 and protocol summaries
+        if: always() && env.PHP_GALLERY_TK_PERF_DIAGNOSTICS_ONLY != 'true'
+        uses: actions/github-script@v9.0.0
+        env:
+          ARTIFACT_URL: ${{ steps.benchmark-artifact.outputs.artifact-url }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+
+            // Purpose: Target the issue that owns the benchmark work.
+            // Type: integer.
+            // Units: GitHub issue number.
+            // Scope: this issue-scoped performance workflow.
+            // Consumers: the benchmark summary comment below.
+            // Value: 361.
+            // Rationale: keep the evidence on its authorized issue thread.
+            const BENCHMARK_ISSUE = 361;
+
+            // Purpose: Target the follow-up thread for baseline/compare evidence.
+            // Type: integer.
+            // Units: GitHub issue number.
+            // Scope: baseline and compare benchmark summaries.
+            // Consumers: the protocol summary comment below.
+            // Value: 397.
+            // Rationale: retain the related protocol decision with its evidence.
+            const PROTOCOL_ISSUE = 397;
+
+            const workspace = process.env.GITHUB_WORKSPACE;
+            const auditRoot = path.join(workspace, 'cache', 'test-audit');
+            if (!fs.existsSync(auditRoot)) {
+              throw new Error('Central audit output directory is missing.');
+            }
+
+            const candidates = fs.readdirSync(auditRoot, { withFileTypes: true })
+              .filter((entry) => entry.isDirectory())
+              .map((entry) => path.join(auditRoot, entry.name))
+              .filter((directory) =>
+                fs.existsSync(path.join(directory, 'issue-361', 'report.json')))
+              .sort((left, right) =>
+                fs.statSync(right).mtimeMs - fs.statSync(left).mtimeMs);
+            if (candidates.length === 0) {
+              throw new Error('The central audit produced no issue-361 report.');
+            }
+
+            const outputDirectory = path.join(candidates[0], 'issue-361');
+            const report = JSON.parse(fs.readFileSync(
+              path.join(outputDirectory, 'report.json'),
+              'utf8',
+            ));
+            const protocolPath = path.join(
+              workspace,
+              'tools',
+              'perf',
+              'issue_361_tk_protocol.json',
+            );
+            const protocol = JSON.parse(fs.readFileSync(protocolPath, 'utf8'));
+            const centralAuditPath = path.join(auditRoot, 'latest.json');
+            if (!fs.existsSync(centralAuditPath)) {
+              throw new Error('Central audit latest.json is missing.');
+            }
+            const centralAudit = JSON.parse(
+              fs.readFileSync(centralAuditPath, 'utf8'),
+            );
+            const auditTask = Array.isArray(centralAudit.tasks)
+              ? centralAudit.tasks.find(
+                  (task) => task.id === 'watcher-tk-performance',
+                )
+              : null;
+            const acceptedStatuses = ['PASS', 'FAIL', 'BLOCKED'];
+            const validSha = (value) =>
+              typeof value === 'string' && /^[0-9a-f]{40}$/.test(value);
+            const validHash = (value) =>
+              typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
+
+            const matrix = protocol.matrix;
+            if (
+              !matrix
+              || !Array.isArray(matrix.scenarios)
+              || !Array.isArray(matrix.cache)
+              || !Array.isArray(matrix.instrumentation)
+              || matrix.scenarios.length === 0
+              || matrix.cache.length === 0
+              || matrix.instrumentation.length === 0
+            ) {
+              throw new Error('Benchmark protocol matrix is invalid.');
+            }
+            const hasPilotSelection =
+              Object.prototype.hasOwnProperty.call(protocol, 'pilot_scenarios');
+            const configuredPilotScenarios = hasPilotSelection
+              ? protocol.pilot_scenarios
+              : matrix.scenarios;
+            if (
+              !Array.isArray(configuredPilotScenarios)
+              || configuredPilotScenarios.length === 0
+              || configuredPilotScenarios.some(
+                (scenario) => !matrix.scenarios.includes(scenario),
+              )
+              || new Set(configuredPilotScenarios).size
+                !== configuredPilotScenarios.length
+            ) {
+              throw new Error('pilot_scenarios is not a unique matrix subset.');
+            }
+            const pilotScenarios = matrix.scenarios.filter(
+              (scenario) => configuredPilotScenarios.includes(scenario),
+            );
+            const expectedTargetedPilot = (
+              report.stage === 'pilot'
+              && pilotScenarios.length !== matrix.scenarios.length
+            );
+            const expectedPilotComplete = (
+              report.stage === 'pilot'
+              && !expectedTargetedPilot
+              && report.status === 'PASS'
+            );
+            const expectedRecords = report.stage === 'pilot'
+              ? pilotScenarios.length * matrix.cache.length
+                * matrix.instrumentation.length
+                * protocol.pilot.runs_per_instrumentation_cell
+              : report.stage === 'baseline'
+                ? matrix.scenarios.length * matrix.cache.length
+                  * protocol.baseline.minimum_measured_runs_per_scenario_cache_cell
+                : matrix.scenarios.length * matrix.cache.length
+                  * protocol.compare.minimum_pairs_per_scenario_cache_cell * 2;
+
+            // Schema version 1 is the issue 361 report contract. Forty hex
+            // characters identify a Git SHA; sixty-four identify SHA-256 digests.
+            // A PASS also needs a nonempty complete process schedule.
+            if (
+              report.schema_version !== 1
+              || !acceptedStatuses.includes(report.status)
+              || report.stage !== protocol.stage
+              || report.stage !== process.env.PHP_GALLERY_TK_PERF_STAGE
+              || !validSha(report.baseline_sha)
+              || report.baseline_sha !== protocol.baseline_sha
+              || report.baseline_sha !== process.env.PHP_GALLERY_TK_PERF_BASELINE
+              || !validSha(report.candidate_sha)
+              || report.candidate_sha !== context.sha
+              || !Number.isInteger(report.valid_records)
+              || !Number.isInteger(report.required_records)
+              || report.valid_records < 0
+              || report.valid_records > report.required_records
+              || report.required_records !== expectedRecords
+              || (report.stage === 'pilot'
+                && (
+                  report.targeted !== expectedTargetedPilot
+                  || report.pilot_complete !== expectedPilotComplete
+                  || JSON.stringify(report.pilot_scenarios)
+                    !== JSON.stringify(pilotScenarios)
+                ))
+              || (report.status === 'PASS'
+                && report.valid_records !== report.required_records)
+            ) {
+              throw new Error(
+                'Issue 361 report is invalid or is not bound to the requested inputs.',
+              );
+            }
+
+            const acceptedAuditStatuses = ['PASS', 'FAIL', 'BLOCKED'];
+            if (
+              centralAudit.schema_version !== 1
+              || centralAudit.profile !== 'suite:watcher-tk-performance'
+              || !centralAudit.source
+              || centralAudit.source.head_sha !== context.sha
+              || !acceptedAuditStatuses.includes(centralAudit.status)
+              || !auditTask
+              || !acceptedAuditStatuses.includes(auditTask.status)
+            ) {
+              throw new Error('Central audit report is invalid or stale.');
+            }
+            const publishedStatus = (
+              report.status === 'FAIL'
+              || centralAudit.status === 'FAIL'
+              || auditTask.status === 'FAIL'
+            )
+              ? 'FAIL'
+              : (
+                report.status === 'BLOCKED'
+                || centralAudit.status === 'BLOCKED'
+                || auditTask.status === 'BLOCKED'
+              )
+                ? 'BLOCKED'
+                : 'PASS';
+
+            const metadata = report.metadata;
+            if (
+              !metadata
+              || typeof metadata.created_at_utc !== 'string'
+              || !Number.isFinite(Date.parse(metadata.created_at_utc))
+              || !validHash(metadata.harness_sha256)
+              || !validHash(metadata.workloads_sha256)
+            ) {
+              throw new Error('Issue 361 report metadata is incomplete or invalid.');
+            }
+
+            const summaryPath = path.join(outputDirectory, 'summary.md');
+            const summary = fs.existsSync(summaryPath)
+              ? fs.readFileSync(summaryPath, 'utf8').trim()
+              : '';
+            if (report.status === 'PASS' && summary === '') {
+              throw new Error('A PASS report has no compact summary.md.');
+            }
+            // Keep the report timestamp in ISO-8601 UTC at second precision.
+            const timestamp = new Date(metadata.created_at_utc)
+              .toISOString()
+              .replace(/\.\d{3}Z$/, 'Z');
+            const server = process.env.GITHUB_SERVER_URL;
+            const runUrl = server + '/' + context.repo.owner + '/'
+              + context.repo.repo + '/actions/runs/' + context.runId;
+            let artifactLink = '';
+            const artifactUrl = process.env.ARTIFACT_URL;
+            if (artifactUrl) {
+              const parsedArtifact = new URL(artifactUrl);
+              const expectedPrefix = '/' + context.repo.owner + '/'
+                + context.repo.repo + '/actions/runs/' + context.runId
+                + '/artifacts/';
+              if (
+                parsedArtifact.origin !== server
+                || !parsedArtifact.pathname.startsWith(expectedPrefix)
+              ) {
+                throw new Error('Artifact URL does not belong to this workflow run.');
+              }
+              artifactLink = ' | [Artifact](' + artifactUrl + ')';
+            }
+
+            const targetedPilot = (
+              report.stage === 'pilot' && report.targeted === true
+            );
+            const scopeLines = targetedPilot
+              ? [
+                  '- Scope: targeted pilot scenarios '
+                    + pilotScenarios.join(', ') + '.',
+                  '- This is NOT full pilot qualification and NOT baseline.',
+                ]
+              : report.stage === 'pilot'
+                ? [
+                    '- Scope: full one-run descriptive pilot; NOT baseline.',
+                  ]
+                : [];
+            const header = [
+              '## Issue 361 Tk benchmark: ' + publishedStatus
+                + (targetedPilot ? ' — targeted pilot only' : ''),
+              '',
+              ...scopeLines,
+              '- Stage: ' + report.stage,
+              '- Driver report: ' + report.status,
+              '- Central audit: ' + auditTask.status + ' / ' + centralAudit.status,
+              '- UTC: ' + timestamp,
+              '- Candidate source SHA: `' + report.candidate_sha + '`',
+              '- Baseline source SHA: `' + report.baseline_sha + '`',
+              '- Independent records: ' + report.valid_records
+                + ' / ' + report.required_records,
+              '- Harness SHA-256: `' + metadata.harness_sha256 + '`',
+              '- Workload SHA-256: `' + metadata.workloads_sha256 + '`',
+              '- Driver/statistics SHA-256: `' + metadata.driver_sha256 + '`',
+              '- Protocol semantics SHA-256: `' + metadata.protocol_semantic_sha256 + '`',
+              '- Host: ' + metadata.cpu_model + '; cores=' + metadata.logical_cores
+                + '; RAM=' + metadata.memory_total_bytes + '; Windows=' + metadata.windows_build
+                + '; image=' + metadata.runner_image + '/' + metadata.runner_image_version,
+              '- Native runtime: ' + JSON.stringify(report.records?.[0]?.report?.metadata || {}),
+              '- [Workflow run](' + runUrl + ')' + artifactLink,
+              '',
+            ].join('\n');
+            const centralAuditPassed =
+              centralAudit.status === 'PASS' && auditTask.status === 'PASS';
+            // Bound compact issue diagnostics to 500 characters.
+            // Type: number. Units: characters. Scope: one issue checkpoint.
+            // Consumers: failureReason formatting below.
+            // Rationale: preserve the actionable cause without dumping child logs.
+            const FAILURE_REASON_CHARACTER_LIMIT = 500;
+            const failureReason = String(
+              report.status !== 'PASS'
+                ? report.metadata?.error || report.failure || auditTask.summary
+                  || 'No failure reason recorded.'
+                : auditTask.status !== 'PASS'
+                  ? auditTask.summary || centralAudit.summary
+                    || 'Central audit did not pass.'
+                  : centralAudit.summary || 'Central audit did not pass.',
+            )
+              .replace(/\s+/g, ' ')
+              .replace(/(?:[A-Za-z]:\\|(?:^|\s)\/)[^\s]*/g, '[path]')
+              .slice(0, FAILURE_REASON_CHARACTER_LIMIT);
+            const failureLine = publishedStatus === 'PASS'
+              ? ''
+              : '\n- Failure reason: ' + failureReason;
+            const latencyMetricNames = [
+              'event_loop_drift_p95_ms',
+              'event_loop_drift_p99_ms',
+              'event_loop_drift_max_ms',
+              'interaction_feedback_max_ms',
+              'callback_p95_ms',
+              'interaction_feedback_p95_ms',
+              'image_publication_p95_ms',
+            ];
+            const resourceMetricNames = [
+              'process_cpu_ms',
+              'process_peak_rss_bytes',
+              'callback_WatcherApp_refresh_import_item_tree_total_ms',
+              'callback_WatcherApp_refresh_job_history_total_ms',
+              'callback_WatcherApp_refresh_activity_drawer_total_ms',
+              'callback_WatcherApp_update_monitor_state_total_ms',
+              'callback_PhotoLightbox__render_image_total_ms',
+              'image_resize_gui_total_ms',
+              'image_resize_worker_total_ms',
+              'thumbnail_prepare_total_ms', 'detail_prepare_total_ms',
+            ];
+            const operationNames = [
+              'actions', 'rows', 'details_presented',
+              'rapid_switches_completed', 'zoom_actions', 'pan_actions',
+              'fullscreen_actions', 'gallery_switches_completed',
+              'refresh_changed_completed', 'drained_events',
+              'gallery_reopens_completed', 'widget_create', 'widget_destroy',
+              'treeview_insert', 'treeview_item_update', 'treeview_delete',
+              'canvas_create', 'canvas_itemconfigure', 'canvas_coords',
+              'canvas_delete', 'tk_photoimage_create', 'pillow_resize',
+            ];
+            const formatNumber = (value) =>
+              Number.isFinite(value) ? String(Number(value.toFixed(3))) : 'n/a';
+            const median = (values) => {
+              const ordered = values.filter(Number.isFinite).sort((a, b) => a - b);
+              if (ordered.length === 0) {
+                return null;
+              }
+              const middle = Math.floor(ordered.length / 2);
+              return ordered.length % 2 === 0
+                ? (ordered[middle - 1] + ordered[middle]) / 2
+                : ordered[middle];
+            };
+            const records = Array.isArray(report.records) ? report.records : [];
+            const compactLines = ['### Compact per-cell observations', ''];
+            if (report.stage === 'pilot') {
+              compactLines.push(
+                '| Scenario / cache | Instrumentation | Latency metrics | CPU ms | Peak RSS bytes | Key operations |',
+                '| --- | --- | --- | ---: | ---: | --- |',
+              );
+              for (const row of records) {
+                const child = row.report || {};
+                const metrics = child.metrics || {};
+                const selectedLatency = latencyMetricNames
+                  .filter((name) => name !== 'image_publication_p95_ms'
+                    || ['gallery', 'lightbox'].includes(row.scenario))
+                  .map((name) => name + '=' + formatNumber(metrics[name]))
+                  .join('; ');
+                const operations = Object.fromEntries(
+                  operationNames.filter((name) =>
+                    Number.isFinite(child.operations?.[name]))
+                    .map((name) => [name, child.operations[name]]),
+                );
+                compactLines.push(
+                  '| ' + row.scenario + ' / ' + row.cache
+                    + ' | ' + row.instrumentation
+                    + ' | ' + selectedLatency
+                    + ' | ' + formatNumber(metrics.process_cpu_ms)
+                    + ' | ' + formatNumber(metrics.process_peak_rss_bytes)
+                    + ' | ' + JSON.stringify(operations) + ' |',
+                );
+              }
+              compactLines.push(
+                '',
+                'Instrumentation overhead (pilot n=1 per mode; descriptive only):',
+                '',
+                '| Scenario / cache | On seconds | Off seconds | Absolute overhead seconds | Percent overhead |',
+                '| --- | ---: | ---: | ---: | ---: |',
+              );
+              for (const [cell, overhead] of Object.entries(
+                report.pilot_overhead || {},
+              )) {
+                compactLines.push(
+                  '| ' + cell
+                    + ' | ' + formatNumber(overhead.instrumentation_on_seconds)
+                    + ' | ' + formatNumber(overhead.instrumentation_off_seconds)
+                    + ' | ' + formatNumber(overhead.absolute_overhead_seconds)
+                    + ' | ' + formatNumber(overhead.percent_overhead) + ' |',
+                );
+              }
+            } else if (report.stage === 'baseline') {
+              compactLines.push(
+                '| Scenario / cache | Metric | Median | P95 |',
+                '| --- | --- | ---: | ---: |',
+              );
+              for (const [cell, metrics] of Object.entries(
+                report.baseline_summary || {},
+              )) {
+                const scenario = cell.split('/')[0];
+                const selected = [
+                  ...latencyMetricNames.filter((name) =>
+                    name !== 'image_publication_p95_ms'
+                    || ['gallery', 'lightbox'].includes(scenario)),
+                  ...resourceMetricNames,
+                ];
+                for (const name of selected) {
+                  const stats = metrics[name];
+                  if (stats) {
+                    compactLines.push(
+                      '| ' + cell + ' | ' + name
+                        + ' | ' + formatNumber(stats.median)
+                        + ' | ' + formatNumber(stats.p95) + ' |',
+                    );
+                  }
+                }
+                const cellRecords = records.filter(
+                  (row) => row.scenario + '/' + row.cache === cell,
+                );
+                const operationStats = Object.fromEntries(
+                  operationNames.map((name) => [
+                    name,
+                    median(cellRecords.map((row) => row.report?.operations?.[name])),
+                  ]).filter((entry) => entry[1] !== null),
+                );
+                compactLines.push(
+                  '| ' + cell + ' | median key operations | - | '
+                    + JSON.stringify(operationStats) + ' |',
+                );
+              }
+            } else {
+              compactLines.push(
+                '| Scenario / cache | Metric | Baseline mean / median / P95 | Candidate mean / median / P95 | Mean delta | Mean delta % | Baseline / candidate | Paired mean-delta 95% CI |',
+                '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+              );
+              for (const [cell, group] of Object.entries(report.comparison || {})) {
+                const scenario = cell.split('/')[0];
+                const metrics = group.metrics || {};
+                const selected = [
+                  ...latencyMetricNames.filter((name) =>
+                    name !== 'image_publication_p95_ms'
+                    || ['gallery', 'lightbox'].includes(scenario)),
+                  ...resourceMetricNames,
+                ];
+                for (const name of selected) {
+                  const stats = metrics[name];
+                  if (stats) {
+                    compactLines.push(
+                      '| ' + cell + ' | ' + name
+                        + ' | ' + formatNumber(stats.baseline.mean)
+                        + ' / ' + formatNumber(stats.baseline.median)
+                        + ' / ' + formatNumber(stats.baseline.p95)
+                        + ' | ' + formatNumber(stats.candidate.mean)
+                        + ' / ' + formatNumber(stats.candidate.median)
+                        + ' / ' + formatNumber(stats.candidate.p95)
+                        + ' | ' + formatNumber(stats.absolute_delta_mean)
+                        + ' | ' + formatNumber(stats.percent_delta_mean)
+                        + ' | ' + formatNumber(stats.baseline_to_candidate_ratio)
+                        + ' | [' + formatNumber(stats.paired_delta_ci95?.[0])
+                        + ', ' + formatNumber(stats.paired_delta_ci95?.[1])
+                        + '] |',
+                    );
+                  }
+                }
+                const cellRecords = records.filter(
+                  (row) => row.scenario + '/' + row.cache === cell,
+                );
+                const operationStats = Object.fromEntries(
+                  ['baseline', 'candidate'].map((source) => [
+                    source,
+                    Object.fromEntries(operationNames.map((name) => [
+                      name,
+                      median(cellRecords.filter((row) => row.source === source)
+                        .map((row) => row.report?.operations?.[name])),
+                    ]).filter((entry) => entry[1] !== null)),
+                  ]),
+                );
+                compactLines.push(
+                  '| ' + cell + ' | median key operations | - | '
+                    + JSON.stringify(operationStats) + ' | - | - | - | - |',
+                );
+              }
+            }
+            if (report.stage === 'compare') {
+              compactLines.push(
+                '',
+                'Comparison statistics use ten independent paired process values '
+                  + 'per cell. Delta and its paired bootstrap interval mean '
+                  + 'candidate minus control; interval bounds are in the metric '
+                  + 'units. Tail and maximum metric names retain their within-run '
+                  + 'meaning; the table summarizes those run-level values.',
+              );
+            }
+            const compactSummary = compactLines.join('\n');
+            // Purpose: Retain actionable first-child failure evidence in the checkpoint.
+            // Type: integer. Units: characters. Scope: one failed workflow comment.
+            // Consumers: childFailureDiagnostic below.
+            // Rationale: 10000 keeps a bounded traceback and operation context;
+            // the complete JSON and raw records remain in the artifact.
+            const CHILD_FAILURE_DIAGNOSTIC_CHARACTER_LIMIT = 10000;
+            let childFailureDiagnostic = '';
+            if (report.status !== 'PASS') {
+              for (const name of fs.readdirSync(outputDirectory).sort()) {
+                if (!/^(baseline|candidate)-.+\.json$/.test(name)) continue;
+                const child = JSON.parse(fs.readFileSync(path.join(outputDirectory, name), 'utf8'));
+                if (child.status === 'PASS') continue;
+                const detail = {
+                  file: name, status: child.status, failure: child.failure,
+                  failure_traceback: child.failure_traceback,
+                  missing_required_metrics: child.missing_required_metrics,
+                  raw_events_truncated: child.raw_events_truncated,
+                  operations: child.operations, resources: child.resources,
+                };
+                childFailureDiagnostic = '\n\n### First failed child diagnostic\n\n'
+                  + '\x60\x60\x60json\n'
+                  + JSON.stringify(detail, null, 2).slice(0, CHILD_FAILURE_DIAGNOSTIC_CHARACTER_LIMIT)
+                  + '\n\x60\x60\x60\n';
+                break;
+              }
+            }
+            // Keep issue comments below GitHub's comment-size limit and leave
+            // room for the evidence header. Full summaries and raw rows stay in
+            // the linked workflow artifact.
+            // Purpose: Bound the complete comment body published for one run.
+            // Type: integer. Units: characters. Scope: one issue comment.
+            // Consumers: issue summary publication below.
+            // Value: 50000.
+            // Rationale: leave margin beneath GitHub's 65,536-character limit.
+            const ISSUE_COMMENT_CHARACTER_LIMIT = 50000;
+            let body = summary && centralAuditPassed
+              ? header + compactSummary + failureLine
+              : header + 'Compact statistics are unavailable or the central audit '
+                + 'did not pass.' + failureLine;
+            body += childFailureDiagnostic;
+            if (body.length > ISSUE_COMMENT_CHARACTER_LIMIT) {
+              if (!artifactLink) {
+                throw new Error('Compact summary exceeded the limit without an artifact link.');
+              }
+              body = header + 'Compact per-cell summary exceeded the publication limit. '
+                + 'Full statistics and raw records are retained in the linked artifact.'
+                + failureLine;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: BENCHMARK_ISSUE,
+              body,
+            });
+            if (report.stage === 'baseline' || report.stage === 'compare') {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: PROTOCOL_ISSUE,
+                body,
+              });
+            }
+            if (publishedStatus !== 'PASS') {
+              core.setFailed('Benchmark publication status is ' + publishedStatus + '.');
+            }

@@ -1984,7 +1984,7 @@ cache accounting still runs after dismissal. Screenshots are retained as
 The issue-scoped **Issue 381 Watcher recovery** workflow checks the exact feature
 SHA through `scripts/audit.php`. It runs `--profile=source-contracts` separately
 from `--suite=winapp-partitioned` on Linux and Windows. The latter keeps the
-central complete discovery and its six serial partitions; it is not
+central complete discovery and its seven serial partitions; it is not
 the narrower `winapp-native` viewer diagnostic. It performs no integration,
 release, installer build or production operation. Ordinary feature BASIC remains
 a separate required source result.
@@ -9729,6 +9729,34 @@ evidence. Default complete discovery and the 90-second child cap remain intact.
 This scope permits hosted native UI verification after a whole-suite timeout;
 it does not repair or qualify an incomplete full Windows run.
 
+The issue-scoped benchmark workflow runs for explicit `[tk-measure]` feature
+commit requests or manual workflow dispatch. This gate prevents an unchanged
+baseline from replaying during ordinary source/functional checkpoints. BASIC
+and the relevant functional workflow remain automatic.
+
+The optional `watcher-tk-performance` audit suite delegates the versioned
+Tkinter benchmark to isolated processes on the hosted Windows runner. Its
+[protocol](docs/performance/issue_361_tk_canvas.md) defines baseline-first
+sequencing, production callback workloads with synthetic offline data,
+cold/warm cache separation, run-level statistics and balanced comparisons on
+one VM. Raw JSON/CSV and environment metadata remain Actions artifacts. Tk
+callback/update timing is not physical monitor presentation or proof that
+flicker has disappeared. This opt-in experiment does not replace functional
+WinApp qualification or authorize protected integration.
+
+The issue-scoped `issue-361-winapp-functional.yml` workflow runs the canonical
+Windows `winapp-partitioned` suite and Linux `winapp` suite under Xvfb. macOS
+uses the same complete partitioned suite after an observed whole-discovery
+timeout; it remains advisory, with actual failures and skips reported. The workflow
+publishes one exact-SHA aggregate checkpoint; advisory failures remain visible.
+
+The optional `winapp-frozen-installer` suite runs the existing real Windows
+builder from an owned temporary source copy and retains the installer, update
+metadata and builder runtime/help/updater-helper smoke evidence. The separate
+`.github/issue-361-validation.json` boolean `frozen_validation` gates this job;
+it does not change the Tk measurement protocol. Building does not install,
+launch an installed GUI, uninstall, publish or qualify the installed lifecycle.
+
 The issue #362 Windows feature job selects `winapp-partitioned`, which still
 discovers the canonical complete `test_*.py` inventory. Based on hosted timeout
 evidence, the coordinator places all classes discovered from
@@ -9736,11 +9764,21 @@ evidence, the coordinator places all classes discovered from
 benchmark classes `ThumbnailCacheSmallBenchmarkTests` and
 `ThumbnailCacheLargeBenchmarkTests` into separate children,
 `GalleryPreloadWorkerTests` into a fourth, and the unchanged durable dense-return
-case in `NativeGalleryDenseReturnTests` into a fifth. The exact remaining
-inventory occupies a sixth. The six children run serially in separate Python processes,
-each under the existing 90-second cap; the coordinator has a 480-second outer
-bound for those unchanged child caps plus inventory and report handling. It
-retains each original schema-1 child report and log. Selected-ID children flush
+case in `NativeGalleryDenseReturnTests` into a fifth. The six-child Windows
+run 43969245636 placed 1,270 tests in its last child, which reached 90.03
+seconds with no structured report after starting
+`FlightDeliveryCoordinationTests.test_legacy_duplicate_or_unproven_zip_is_not_removed`.
+That START record identifies the case active at the deadline; without its END
+record it does not distinguish a case-specific stall from accumulated remainder
+work. Pre-optimization Windows run 43957959829 completed its entire 1,420-test
+inventory; the current candidate discovers 1,427 tests.
+The coordinator therefore splits only the exact remaining inventory into two
+deterministic least-loaded, class-preserving shards; test order within each shard
+follows canonical discovery. All seven children run
+serially in separate Python processes, each under the existing 90-second cap;
+the coordinator retains its 480-second outer bound for child execution plus
+inventory and report handling. It retains each original schema-1 child report
+and log. Selected-ID children flush
 each test's START, END, status and duration to the retained log so a timeout
 identifies the active case. The END record is followed immediately by the full
 FAIL/ERROR traceback, preserving its reason if a later child timeout prevents
@@ -9749,7 +9787,7 @@ JSON report serialization.
 verify this progress evidence itself.
 Report verbosity, schema, child limits and selection remain unchanged. The
 coordinator checks runtime identity and report
-counts, and requires the exact disjoint test-ID union across all six children
+counts, and requires the exact disjoint test-ID union across all seven children
 before merging the real outcomes. Missing, timed-out, malformed, duplicate,
 incomplete or unsuccessful child evidence fails. The ordinary `winapp` suite
 and its 90-second full-process behavior remain unchanged; earlier full-process
@@ -9760,7 +9798,17 @@ The audit owner installs both WinApp source and test import roots explicitly;
 selected children cannot depend on another module alphabetically bootstrapping
 `uploader` imports. The dense-return body and its setup are reused unchanged,
 retaining its cache, transport and measurement assertions in the separate class.
-The 480-second whole-run cap is retained even with six bounded children.
+The 480-second whole-run cap is retained with seven bounded children.
+
+The issue #361 functional workflow also runs the existing central `php-fast`
+suite in a separate required Linux job. That registered suite includes
+`tests/audit_runner_test.php`; the Python partition report fixtures remain in
+the complete WinApp inventory. The workflow retains both native audit reports
+and publishes the actual coordinator-contract job result.
+
+No TeX manual impact: this changes central test process ownership and the
+publication of already-computed performance statistics. Runtime behavior and
+user-facing contracts are unchanged.
 
 Only the coordinator performs complete canonical discovery. An explicitly
 selected child discovers the exact local `test_` modules represented in its ID
@@ -9823,3 +9871,62 @@ by browser approval, and idle Watcher empty-inventory key maintenance. The real
 MySQL linking fixture verifies sliding access/family/key deadlines and keeps
 expired/revoked/wrong-key refusal assertions. Native information-card coverage
 checks effective Listed off for private galleries and the public hide override.
+
+The issue 361 functional workflow scopes concurrency and obsolete-run cleanup
+to its dedicated feature branch. Failed Windows summaries retain compact
+partition coverage/exit/timeout fields and tails of audit-owned child logs;
+incomplete reports remain failures even if their observed tests passed.
+
+The issue #361 Windows seven-partition run 43973205610 completed all 1,427
+canonical identities. Its only error came from the new history fixture's
+negative synthetic Unix timestamp, rejected by Windows `time.localtime`.
+The shared synthetic job factory now uses offsets from 2000-01-01 UTC,
+retaining ordering, row-cap, selection and recovery assertions on all platforms.
+No application timestamp handling or execution deadline changes.
+No TeX manual impact: this is a portable test-data correction only.
+
+The first gated frozen attempt in run 43974284723 was BLOCKED before build
+execution: its adapter treated the central Git resolver's nullable executable
+path as an argument list. The adapter now accepts the existing non-empty string
+contract and constructs the explicit `rev-parse HEAD` argument vector. Exact
+event-SHA and audit-source identity checks remain required. Failed frozen
+summaries retain at most 12,000 terminal diagnostic characters from the central
+report, for compiler, dependency or smoke failure diagnosis on the hosted runner.
+No TeX manual impact: build adapter and failure reporting only.
+
+The next frozen preflight (run 43975529379) exposed Windows PHP `tempnam`
+prefix truncation, documented in [the PHP manual source](https://github.com/php/doc-en/blob/master/reference/filesystem/functions/tempnam.xml).
+Windows keeps three prefix characters. The adapter retains the exact name
+created by `tempnam` and requires both the resolved immediate parent to equal
+the system temp root and the resolved basename to equal that reserved name.
+The existing containment check remains; build/copy/recursive cleanup cannot
+proceed from a differently resolved path. No TeX manual impact: private build
+workspace ownership proof only.
+
+The first issue #361 paired experiment (run 43979228202, source
+`2f92c60503d2690a47fdbb83ae912866b4f55e03`) reached the unchanged 2,400-second
+outer deadline. Its incomplete report and rejected publication remain FAIL;
+partial artifact 14284287759 is diagnostic evidence only. The authenticated
+artifact reader's `benchmark` kind summarizes completed child reports, partial
+combined report validity, recorded process wall time and retained CSV sizes
+without executing a workload or qualifying the current inspection candidate.
+No TeX manual impact: inspection of a failed hosted experiment only.
+
+The issue #361 controller now checkpoints each newly completed process by
+appending its raw CSV rows and compact `progress.jsonl` metadata. Individual
+child JSON/stdout/stderr remain retained; canonical combined JSON/CSV exports
+and final status validation remain the authoritative output on completion or a
+caught failure. This removes repeated all-history serialization between child
+processes without changing workload, metric/statistical code or deadlines.
+Any changed driver hash requires a fresh full pilot and original-control
+numerical baseline before another paired comparison. Progress alone cannot
+qualify the experiment. No TeX manual impact: internal persistence only; the
+existing user-facing benchmark procedure and application controls are unchanged.
+
+The linear-persistence checkpoint fixtures use the existing dashboard report
+factory, which emits the three required drift/callback/feedback probe rows.
+The first new assertion incorrectly expected four, the image-publication row
+used only by Photos/lightbox. The fixture expectation now matches all three
+actual dashboard rows, retaining full identity/content, header and duplication
+checks. The driver, workload and statistical bytes are unchanged by this test
+correction. No TeX manual impact: regression fixture cardinality only.

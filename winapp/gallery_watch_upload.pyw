@@ -69,6 +69,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    cast,
 )
 from urllib import error, parse, request
 
@@ -108,6 +109,30 @@ WATCH_RECOVERY_PREVIEW_PAGE_LIMIT = 32
 # Rationale: One active media request retains its own session timeout; larger
 #   traversals are reported unavailable instead of delaying explicit review.
 WATCH_RECOVERY_PREVIEW_TIME_LIMIT_SECONDS = 15.0
+
+# Purpose: Bound rows retained by the two manual-import detail tables.
+# Type: int.
+# Units: visible Treeview rows.
+# Scope: preflight and selected-job item views.
+# Consumers: WatcherApp.refresh_import_item_tree.
+# Rationale: Preserve the existing 1000-item UI admission cap.
+WATCHER_IMPORT_TREE_ROW_LIMIT = 1000
+
+# Purpose: Bound durable jobs rendered in the Activity history table.
+# Type: int.
+# Units: visible Treeview rows.
+# Scope: newest-first import-job history.
+# Consumers: WatcherApp.refresh_job_history.
+# Rationale: Preserve the existing 200-job history view cap.
+WATCHER_JOB_HISTORY_TREE_ROW_LIMIT = 200
+
+# Purpose: Bound events rendered in the filtered Activity drawer.
+# Type: int.
+# Units: visible Treeview rows.
+# Scope: one activity filter selection.
+# Consumers: WatcherApp.refresh_activity_drawer.
+# Rationale: Preserve the existing 100-event drawer cap.
+WATCHER_ACTIVITY_DRAWER_ROW_LIMIT = 100
 
 # Dispatch helper/version modes before application configuration or logging.
 if __name__ == "__main__":
@@ -8189,6 +8214,17 @@ def protected_staging_job_ids(jobs: List[ImportJob]) -> List[str]:
     ]
 
 
+@dataclass
+class _TreeRowSnapshot:
+    """Retain bounded projected rows and Activity objects for one Treeview."""
+
+    rows: Dict[str, Tuple[str | int | float, ...]]
+    order: List[str]
+    retained_activity_events: Tuple[ActivityEvent, ...] = field(
+        default_factory=tuple,
+    )
+
+
 class WatcherApp:
     """
     Tkinter user interface for the watched-folder uploader.
@@ -11496,36 +11532,145 @@ class WatcherApp:
         self.retry_failed_button.configure(state="normal" if any(item.state in RECOVERABLE_ITEM_STATES or item.state == "failed_permanent" for item in job.items) else "disabled")
         self.activity_job_summary_var.set(self.describe_job(job))
 
+    def _reconcile_tree_rows(
+        self,
+        tree: ttk.Treeview,
+        rows: List[Tuple[str, Tuple[str | int | float, ...]]],
+        retained_activity_events: Tuple[ActivityEvent, ...] = (),
+    ) -> None:
+        """Apply ordered row changes without rebuilding retained Treeview items.
+
+        Args:
+            tree (ttk.Treeview): Watcher-owned table whose rows this owner controls.
+            rows (List[Tuple[str, Tuple[str | int | float, ...]]]): Ordered
+                stable item IDs paired with their displayed cell values.
+            retained_activity_events (Tuple[ActivityEvent, ...]): Bounded
+                event objects whose visible IIDs must remain non-recyclable.
+                Defaults to an empty tuple for non-Activity tables.
+
+        Returns:
+            None: Adds, updates, removes and reorders only the required rows.
+
+        Raises:
+            ValueError: The desired rows contain a duplicate stable item ID.
+        """
+        desired_order = [item_id for item_id, _values in rows]
+        desired_rows = {item_id: values for item_id, values in rows}
+        if len(desired_order) != len(desired_rows):
+            raise ValueError("Treeview row identities must be unique.")
+
+        snapshot = cast(
+            Optional[_TreeRowSnapshot],
+            getattr(tree, "_watcher_row_snapshot", None),
+        )
+        current_order = list(tree.get_children(""))
+        if snapshot is None:
+            snapshot = _TreeRowSnapshot(
+                rows={}, order=current_order.copy(),
+            )
+            setattr(tree, "_watcher_row_snapshot", snapshot)
+
+        selected_before = tuple(tree.selection())
+        focused_before = tree.focus()
+        vertical_view = tuple(float(value) for value in tree.yview())
+        horizontal_view = tuple(float(value) for value in tree.xview())
+        desired_ids = set(desired_order)
+        current_ids = set(current_order)
+        structure_changed = False
+
+        for item_id in current_order.copy():
+            if item_id not in desired_ids:
+                tree.delete(item_id)
+                current_order.remove(item_id)
+                current_ids.remove(item_id)
+                structure_changed = True
+
+        for index, (item_id, values) in enumerate(rows):
+            inserted = item_id not in current_ids
+            if inserted:
+                tree.insert("", index, iid=item_id, values=values)
+                current_order.insert(index, item_id)
+                current_ids.add(item_id)
+                structure_changed = True
+            elif current_order[index] != item_id:
+                tree.move(item_id, "", index)
+                current_order.remove(item_id)
+                current_order.insert(index, item_id)
+                structure_changed = True
+
+            if not inserted and snapshot.rows.get(item_id) != values:
+                tree.item(item_id, values=values)
+
+        snapshot.rows = desired_rows
+        snapshot.order = desired_order
+        snapshot.retained_activity_events = retained_activity_events
+
+        surviving_selection = tuple(
+            item_id for item_id in selected_before
+            if item_id in desired_ids
+        )
+        selected_after = tuple(tree.selection())
+        if set(selected_after) != set(surviving_selection):
+            if surviving_selection:
+                tree.selection_set(*surviving_selection)
+            elif selected_after:
+                tree.selection_remove(*selected_after)
+
+        if focused_before in desired_ids:
+            if tree.focus() != focused_before:
+                tree.focus(focused_before)
+        elif focused_before and tree.focus():
+            tree.focus("")
+
+        if structure_changed:
+            if vertical_view:
+                tree.yview_moveto(vertical_view[0])
+            if horizontal_view:
+                tree.xview_moveto(horizontal_view[0])
+
     def refresh_import_item_tree(self, job: Optional[ImportJob]) -> None:
-        """Refresh preflight/current item rows from one job snapshot."""
+        """Reconcile preflight and selected-job item details from one snapshot.
+
+        Args:
+            job (Optional[ImportJob]): Current job to render, or None to clear
+                both manual-import detail tables.
+
+        Returns:
+            None: The bounded item views match the current job snapshot.
+        """
         if not hasattr(self, "import_item_tree"):
             return
-        for iid in self.import_item_tree.get_children():
-            self.import_item_tree.delete(iid)
-        if hasattr(self, "activity_item_tree"):
-            for iid in self.activity_item_tree.get_children():
-                self.activity_item_tree.delete(iid)
-        if job is None:
-            return
-        for item in job.items[:1000]:
-            reason = item.reason
-            self.import_item_tree.insert(
-                "",
-                "end",
-                iid=item.id,
-                values=(Path(item.source_label).name or item.source_label, self.format_bytes(item.size), item.local_decode, item.state, reason),
-            )
-        if hasattr(self, "activity_item_tree"):
-            for item in job.items[:1000]:
-                detail = item.reason
-                if not detail and item.server_result:
-                    detail = f"uploaded={item.server_result.get('uploaded', 0)}, scanned={item.server_result.get('scanned', 0)}"
-                self.activity_item_tree.insert(
-                    "",
-                    "end",
-                    iid="activity-" + item.id,
-                    values=(Path(item.source_label).name or item.source_label, item.state, item.attempt_count, detail),
+        items = (
+            job.items[:WATCHER_IMPORT_TREE_ROW_LIMIT]
+            if job is not None else []
+        )
+        item_rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
+        activity_rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
+        for item in items:
+            filename = Path(item.source_label).name or item.source_label
+            item_rows.append((
+                item.id,
+                (
+                    filename,
+                    self.format_bytes(item.size),
+                    item.local_decode,
+                    item.state,
+                    item.reason,
+                ),
+            ))
+            detail = item.reason
+            if not detail and item.server_result:
+                detail = (
+                    f"uploaded={item.server_result.get('uploaded', 0)}, "
+                    f"scanned={item.server_result.get('scanned', 0)}"
                 )
+            activity_rows.append((
+                "activity-" + item.id,
+                (filename, item.state, item.attempt_count, detail),
+            ))
+        self._reconcile_tree_rows(self.import_item_tree, item_rows)
+        if hasattr(self, "activity_item_tree"):
+            self._reconcile_tree_rows(self.activity_item_tree, activity_rows)
 
     def describe_job(self, job: ImportJob) -> str:
         """Return one compact status sentence for Activity and tray views."""
@@ -16007,16 +16152,32 @@ class WatcherApp:
         self.write_log("Recovered unfinished import for explicit review. No upload was started automatically.", "warning")
 
     def refresh_job_history(self) -> None:
-        """Refresh the durable import-job history table."""
+        """Reconcile the newest durable import jobs into the history table.
+
+        Returns:
+            None: The bounded history view retains stable job row identities.
+        """
         if not hasattr(self, "job_history_tree"):
             return
-        for iid in self.job_history_tree.get_children():
-            self.job_history_tree.delete(iid)
-        for job in self.job_store.list_jobs()[:200]:
+        rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
+        jobs = self.job_store.list_jobs()[:WATCHER_JOB_HISTORY_TREE_ROW_LIMIT]
+        for job in jobs:
             counts = job.counts()
-            created = time.strftime("%Y-%m-%d %H:%M", time.localtime(job.created_at))
-            status = f"uploaded {counts['uploaded']}, duplicate {counts['duplicates']}, failed {counts['failed']}, cancelled {counts['cancelled']}, active {counts['active']}"
-            self.job_history_tree.insert("", "end", iid=job.id, values=(created, job.source_label, job.target_gallery_label, status))
+            created = time.strftime(
+                "%Y-%m-%d %H:%M", time.localtime(job.created_at),
+            )
+            status = (
+                f"uploaded {counts['uploaded']}, "
+                f"duplicate {counts['duplicates']}, "
+                f"failed {counts['failed']}, "
+                f"cancelled {counts['cancelled']}, "
+                f"active {counts['active']}"
+            )
+            rows.append((
+                job.id,
+                (created, job.source_label, job.target_gallery_label, status),
+            ))
+        self._reconcile_tree_rows(self.job_history_tree, rows)
 
     def select_history_job(self, _event: Any = None) -> None:
         """Select one durable job from Activity for inspection or explicit retry."""
@@ -16133,11 +16294,11 @@ class WatcherApp:
             setattr(self, attribute, None)
 
     def refresh_activity_drawer(self) -> None:
-        """Render retained events with the current filter and cancel stale work.
+        """Reconcile the recent events shown by the selected Activity filter.
 
         Returns:
-            None: Cancels a pending coalesced render, updates the visible rows,
-                and increments the drawer-render observation count.
+            None: Cancels a pending coalesced render and updates the bounded
+                newest-first rows without replacing retained event identities.
         """
         callback_id = self._activity_render_after_id
         self._activity_render_after_id = None
@@ -16149,11 +16310,17 @@ class WatcherApp:
         if not hasattr(self, "activity_drawer"):
             return
         self._activity_drawer_flush_count += 1
-        for iid in self.activity_drawer.get_children():
-            self.activity_drawer.delete(iid)
         selected = self.activity_filter_var.get().strip().lower() or "all"
 
         def visible(event: ActivityEvent) -> bool:
+            """Return whether one event matches the selected Activity filter.
+
+            Args:
+                event (ActivityEvent): Persisted event under consideration.
+
+            Returns:
+                bool: True when the existing filter policy includes the event.
+            """
             level = event.level.lower()
             message = event.message.lower()
             if selected == "all":
@@ -16163,18 +16330,46 @@ class WatcherApp:
             if selected == "failed":
                 return level == "error" or "failed" in message
             if selected == "succeeded":
-                return level == "success" or "uploaded" in message or "finished" in message or "stored" in message
+                return (
+                    level == "success" or "uploaded" in message
+                    or "finished" in message or "stored" in message
+                )
             if selected == "skipped":
                 return "skip" in message or "duplicate" in message
             if selected == "active":
-                return any(token in message for token in ("started", "running", "uploading", "preflight", "paused", "stopping"))
+                return any(token in message for token in (
+                    "started", "running", "uploading", "preflight",
+                    "paused", "stopping",
+                ))
             return True
 
-        rows = [event for event in self.activity_events if visible(event)][-100:]
-        for index, event in enumerate(reversed(rows)):
-            stamp = time.strftime("%H:%M:%S", time.localtime(event.timestamp))
+        occurrences: Dict[int, int] = {}
+        identified: List[Tuple[ActivityEvent, str]] = []
+        for event in self.activity_events:
+            identity = id(event)
+            occurrence = occurrences.get(identity, 0)
+            occurrences[identity] = occurrence + 1
+            if visible(event):
+                identified.append((event, f"event-{identity}-{occurrence}"))
+
+        displayed_events = list(reversed(
+            identified[-WATCHER_ACTIVITY_DRAWER_ROW_LIMIT:],
+        ))
+        rows: List[Tuple[str, Tuple[str | int | float, ...]]] = []
+        for event, item_id in displayed_events:
+            stamp = time.strftime(
+                "%H:%M:%S", time.localtime(event.timestamp),
+            )
             filename = Path(event.filename).name if event.filename else ""
-            self.activity_drawer.insert("", "end", iid=f"event-{index}-{int(event.timestamp * 1000)}", values=(stamp, event.level, filename, event.operation, event.message))
+            rows.append((
+                item_id,
+                (stamp, event.level, filename, event.operation, event.message),
+            ))
+        self._reconcile_tree_rows(
+            self.activity_drawer,
+            rows,
+            tuple(event for event, _item_id in displayed_events),
+        )
 
     def _watch_diagnostic_snapshot(self) -> Dict[str, JsonValue]:
         """Read current Watcher identity, intent, scan and transport evidence.

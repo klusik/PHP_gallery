@@ -8142,10 +8142,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer.close()
 
     def test_refresh_preserves_unchanged_tiles_and_loads_new_photos(self) -> None:
-        """Refresh the selected album without refetching unchanged thumbnails.
+        """Keep equal-refresh tiles and test membership/order full reconciliation.
 
         Returns:
-            None: Equal snapshots preserve tiles and changed snapshots retain images.
+            None: Membership and order changes rebuild tiles but retain valid images.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -8178,14 +8178,147 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'Changed refresh did not add the new photo.',
         )
         self.assertTrue(all(viewer._photo_images[:len(page.photos)]))
+        membership_tiles = tuple(viewer._tile_buttons)
+        self.assertNotEqual(old_tiles, membership_tiles)
+
+        self.assertTrue(viewer.select_photo(0))
+        anchor_id = viewer._photos[viewer._selection_anchor_index].image_id
+        reordered_photos = tuple(reversed(viewer._photos))
+        session.media_page.return_value = LinkedMediaPage(
+            page.gallery_id, page.parent_id, reordered_photos, None,
+        )
+        viewer.refresh_photos()
+        self._wait_until(
+            lambda: viewer._worker is None
+            and tuple(photo.image_id for photo in viewer._photos)
+            == tuple(photo.image_id for photo in reordered_photos),
+            'The reordered refresh did not settle.',
+        )
+        self.assertNotEqual(membership_tiles, tuple(viewer._tile_buttons))
+        self.assertEqual((TEST_FIRST_IMAGE_ID,), viewer.selected_photo_ids())
+        self.assertEqual(
+            anchor_id,
+            viewer._photos[viewer._selection_anchor_index].image_id,
+        )
+        viewer.close()
+
+    def test_same_order_metadata_refresh_reuses_tiles_and_view_state(self) -> None:
+        """Update one changed preview in place without moving the gallery view.
+
+        Returns:
+            None: Same-order metadata keeps tile owners, selection and scroll;
+                existing descriptor comparison invalidates only the changed image.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        initial_proof = time.monotonic()
+        photos: list[LinkedPhoto] = []
+        for index in range(TEST_SCROLL_PHOTO_COUNT):
+            image_id = TEST_FIRST_IMAGE_ID + index
+            image_bytes[image_id] = self._png((index, 80, 160))
+            etag = '"' + hashlib.sha256(image_bytes[image_id]).hexdigest() + '"'
+            photos.append(LinkedPhoto(
+                image_id,
+                f'Refresh photo {index + 1}',
+                cache_eligible=True,
+                thumbnail_etag=etag,
+                thumbnail_verified_at=initial_proof,
+            ))
+        current_page = LinkedMediaPage(
+            page.gallery_id, page.parent_id, tuple(photos), None,
+        )
+        session = self._session(current_page, presentation, image_bytes)
+        viewer = self._open_viewer(
+            session,
+            LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Refresh'),
+        )
+        self._wait_until(
+            lambda: len(viewer._photos) == len(photos)
+            and viewer._worker is None
+            and viewer._viewport_after_id is None
+            and all(viewer._photo_images[index]
+                    for index in viewer._admitted_thumbnail_indices),
+            'Initial refreshed-photo thumbnails did not settle.',
+        )
+        viewer.grid_canvas.yview_moveto(1.0)
+        viewer._on_grid_viewport(None)
+        self._wait_until(
+            lambda: bool(viewer._visible_thumbnail_indices)
+            and viewer._worker is None
+            and viewer._viewport_after_id is None
+            and all(viewer._photo_images[index]
+                    for index in viewer._admitted_thumbnail_indices),
+            'The bottom thumbnail band did not settle.',
+        )
+
+        changed_index = min(viewer._visible_thumbnail_indices)
+        retained_index = next(
+            index for index in sorted(viewer._admitted_thumbnail_indices)
+            if index != changed_index
+        )
+        self.assertTrue(viewer.toggle_photo_selection(
+            viewer._photos[changed_index].image_id,
+        ))
+        tiles = tuple(viewer._tile_buttons)
+        previous_image = viewer._photo_images[changed_index]
+        retained_image = viewer._photo_images[retained_index]
+        selected_ids = viewer.selected_photo_ids()
+        selection_anchor = viewer._selection_anchor_index
+        scroll_position = viewer.grid_canvas.yview()
+        self.assertGreater(scroll_position[0], 0.0)
+        viewport_epoch = viewer._viewport_measure_epoch
+        self.assertIsNotNone(viewport_epoch)
+        reads_before_refresh = session.media_photo.call_count
+        refreshed_proof = time.monotonic()
+        changed_photo = replace(
+            viewer._photos[changed_index],
+            title='Renamed visible photo',
+            thumbnail_verified_at=refreshed_proof,
+        )
+        refreshed_photos = tuple(
+            changed_photo if index == changed_index else replace(
+                photo, thumbnail_verified_at=refreshed_proof,
+            )
+            for index, photo in enumerate(viewer._photos)
+        )
+        session.media_page.return_value = LinkedMediaPage(
+            page.gallery_id, page.parent_id, refreshed_photos, None,
+        )
+
+        viewer.refresh_photos()
+        self._wait_until(
+            lambda: viewer._worker is None
+            and viewer._viewport_after_id is None
+            and viewer._photo_images[changed_index] is not None
+            and viewer._photo_images[changed_index] is not previous_image
+            and viewer._photo_images[retained_index] is retained_image,
+            'The same-order refresh did not replace only its changed image.',
+        )
+        self.assertEqual(tiles, tuple(viewer._tile_buttons))
+        self.assertEqual(
+            'Renamed visible photo',
+            viewer._tile_titles[changed_index],
+        )
+        self.assertEqual(
+            'Renamed visible photo',
+            viewer._tile_tooltips[changed_index].get(),
+        )
+        self.assertEqual(selected_ids, viewer.selected_photo_ids())
+        self.assertEqual(selection_anchor, viewer._selection_anchor_index)
+        self.assertEqual(scroll_position, viewer.grid_canvas.yview())
+        self.assertNotEqual(viewport_epoch, viewer._viewport_measure_epoch)
+        self.assertEqual(
+            refreshed_proof,
+            viewer._photos[changed_index].thumbnail_verified_at,
+        )
+        self.assertEqual(reads_before_refresh, session.media_photo.call_count)
         viewer.close()
 
     def test_unproven_refresh_replaces_only_changed_visible_thumbnail(self) -> None:
-        """Invalidate a displayed no-ETag tile after an authorized new page.
+        """Invalidate only previews whose proof or validator changed.
 
         Returns:
-            None: Real Tk PhotoImage, viewer RAM and binary read are refreshed;
-                the unrelated strongly proven tile keeps its existing image.
+            None: No-ETag proof renewal and strong-ETag replacement update one
+                image while unchanged tile widgets and sibling images remain.
         """
         page, presentation, image_bytes = self._gallery_data()
         initial_epoch = time.monotonic()
@@ -8213,6 +8346,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             and all(viewer._photo_images) and viewer._worker is None,
             'Initial two real Tk thumbnails were not mounted.',
         )
+        tiles = tuple(viewer._tile_buttons)
         old_first, old_stable = viewer._photo_images
         initial_reads = session.media_photo.call_count
         self.assertEqual(2, initial_reads)
@@ -8238,9 +8372,46 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'Fresh metadata did not invalidate the unproven rendered tile.',
         )
         self.assertIs(old_stable, viewer._photo_images[1])
+        self.assertEqual(tiles, tuple(viewer._tile_buttons))
         self.assertEqual(initial_reads + 1, session.media_photo.call_count)
         actual = viewer._cached_thumbnail(refreshed_first)
         expected = viewer._prepare_thumbnail(image_bytes[TEST_FIRST_IMAGE_ID])
+        try:
+            self.assertIsNotNone(actual)
+            assert actual is not None
+            self.assertEqual(expected.tobytes(), actual.tobytes())
+        finally:
+            expected.close()
+            if actual is not None:
+                actual.close()
+
+        image_before_etag_change = viewer._photo_images[1]
+        image_before_second = viewer._photo_images[0]
+        changed_body = self._png((40, 50, 210))
+        image_bytes[TEST_SECOND_IMAGE_ID] = changed_body
+        changed_etag = '"' + hashlib.sha256(changed_body).hexdigest() + '"'
+        changed_stable = replace(
+            refreshed_stable,
+            thumbnail_etag=changed_etag,
+            thumbnail_verified_at=time.monotonic(),
+        )
+        session.media_page.return_value = LinkedMediaPage(
+            page.gallery_id, page.parent_id,
+            (refreshed_first, changed_stable), None,
+        )
+        viewer.refresh_photos()
+        self._wait_until(
+            lambda: viewer._worker is None
+            and viewer._photo_images[0] is image_before_second
+            and viewer._photo_images[1] is not None
+            and viewer._photo_images[1] is not image_before_etag_change
+            and viewer._thumbnail_loaded == {0, 1},
+            'A changed strong ETag did not invalidate only its preview.',
+        )
+        self.assertEqual(tiles, tuple(viewer._tile_buttons))
+        self.assertEqual(initial_reads + 2, session.media_photo.call_count)
+        actual = viewer._cached_thumbnail(changed_stable)
+        expected = viewer._prepare_thumbnail(changed_body)
         try:
             self.assertIsNotNone(actual)
             assert actual is not None

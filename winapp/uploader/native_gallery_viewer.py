@@ -233,6 +233,13 @@ class GalleryThumbnailMemory:
 # Rationale: A neutral image mark avoids substituting server filenames for media.
 MEDIA_THUMBNAIL_PLACEHOLDER = '▧'
 
+# Purpose: Bound the sanitized title retained for one gallery tile.
+# Type: int. Units: characters. Scope: one tile title and its tooltip string.
+# Consumers: _NativeGalleryViewer._accept_page and _accept_refresh.
+# Rationale: 160 characters preserve useful names without retaining long labels.
+MEDIA_TILE_LABEL_MAX_CHARS = 160
+
+
 # Purpose: Keep adjacent photo cards close while preserving a visible gap.
 # Type: int. Units: pixels. Scope: horizontal and vertical photo-grid gutters.
 # Consumers: _NativeGalleryViewer._on_grid_resize and _accept_page.
@@ -2745,7 +2752,8 @@ class _NativeGalleryViewer:
             pages (tuple[LinkedMediaPage, ...]): Ordered pages through loaded extent.
 
         Returns:
-            None: Equal snapshots leave tiles and decoded thumbnails untouched.
+            None: Equal metadata keeps the UI untouched; same-order changes update
+                existing tiles and invalidate only images rejected by comparison.
         """
         self._cancel_thumbnail_resume()
         # An accepted authoritative snapshot permits a new network attempt.
@@ -2776,9 +2784,65 @@ class _NativeGalleryViewer:
             # stayed equal. Restore its work without rebuilding any tile.
             self._on_grid_viewport(None)
             return
+        same_ordered_ids = bool(
+            photos and len(photos) == len(self._photos)
+            # Page/prefetch navigation intents remain owned by full reconciliation.
+            and not self._select_first_after_page
+            and not self._wrap_after_metadata
+            and not self._prefetch_edge_direction
+            and tuple(photo.image_id for photo in photos)
+            == tuple(photo.image_id for photo in self._photos)
+            and len(self._tile_buttons) == len(self._photos)
+            and len(self._photo_images) == len(self._photos)
+            and len(self._tile_tooltips) == len(self._photos)
+            and len(self._tile_titles) == len(self._photos)
+        )
         self._cancel_grid_viewport_callback()
         self._cancel_thumbnail_gui_slice()
         self._thumbnail_disk_lane.invalidate()
+        if same_ordered_ids:
+            previous_photos = self._photos
+            previous_images = tuple(self._photo_images)
+            self._photos = photos
+            self._next_after = pages[-1].next_after
+            self._loading_more = False
+            self._page_request_mode = 'next'
+            self._empty_page = False
+            self._thumbnail_index = 0
+            self._thumbnail_loaded.clear()
+            self._thumbnail_pending.clear()
+            self._thumbnail_cancelled.clear()
+            self.retry_button.configure(state='disabled')
+            self.retry_button.pack_forget()
+            self.status.pack_forget()
+            self.status.configure(text='')
+            changed_indexes: list[int] = []
+            for index, photo in enumerate(photos):
+                retain_image = (
+                    previous_images[index] is not None
+                    and comparable(previous_photos[index]) == comparable(photo)
+                )
+                if retain_image:
+                    self._thumbnail_loaded.add(index)
+                else:
+                    self._release_thumbnail_image(index)
+                    changed_indexes.append(index)
+                title = ''.join(
+                    char if char.isprintable() else ' '
+                    for char in photo.title
+                ).strip()
+                full_label = (
+                    title[:MEDIA_TILE_LABEL_MAX_CHARS] or self._text('linking_media_open')
+                )
+                if (self._tile_titles[index] != full_label
+                        or not retain_image):
+                    self._tile_titles[index] = full_label
+                    self._tile_tooltips[index].set(full_label)
+            self._render_photo_selection(tuple(changed_indexes))
+            self.rearm_first_viewport_diagnostics()
+            if self.on_photos_changed is not None:
+                self.on_photos_changed()
+            return
         anchor_id = (
             self._photos[self._selection_anchor_index].image_id
             if self._selection_anchor_index is not None
@@ -3163,7 +3227,7 @@ class _NativeGalleryViewer:
             photo = self._photos[index]
             title = ''.join(char if char.isprintable() else ' '
                             for char in photo.title).strip()
-            full_label = title[:160] or self._text('linking_media_open')
+            full_label = title[:MEDIA_TILE_LABEL_MAX_CHARS] or self._text('linking_media_open')
             tile = Button(
                 self.grid_frame,
                 text=MEDIA_THUMBNAIL_PLACEHOLDER,

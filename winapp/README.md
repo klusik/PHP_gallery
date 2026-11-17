@@ -2658,6 +2658,24 @@ If Pillow is unavailable:
 The macOS source build runs in its normal Tk window. The Windows tray uses
 pystray when available.
 
+## UI rendering
+
+Import and Activity tables update changed rows while keeping surviving row
+selection, keyboard focus and scroll state. Their visible limits remain 1,000
+items per item view, 200 durable jobs and 100 filtered recent events. Refreshing
+the tables preserves the existing item fields, event filters and explicit job
+selection/recovery actions.
+
+A Photos metadata refresh with the same ordered photo IDs retains its tile
+widgets. Changed descriptors still use the existing image invalidation and
+fresh-proof rules; membership or order changes retain full reconciliation.
+Fullscreen exit lays out controls and resolves their geometry before one
+settled-quality repaint. Image quality, cache bounds and foreground/worker
+ownership follow their existing owners.
+
+The [performance protocol](../docs/performance/issue_361_tk_canvas.md) records
+baseline evidence, frozen workloads and the required paired comparison.
+
 ## Source organization
 
 `gallery_watch_upload.pyw` remains the compatibility launcher and currently

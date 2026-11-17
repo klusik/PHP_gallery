@@ -965,6 +965,79 @@ class PhotoPresentationPolicyTests(unittest.TestCase):
         lightbox._fit_tooltip.set.assert_called_with("show_original_frame")
         source.close()
 
+    def test_fullscreen_exit_restores_controls_before_one_final_render(self) -> None:
+        """Restore window controls and render once at the settled geometry.
+
+        Returns:
+            None: The previous window state and controls are restored before
+                one default-quality image render.
+        """
+        try:
+            from uploader.gallery_lightbox import PhotoLightbox
+        except ImportError:
+            self.skipTest("Tk is required for the lightbox control owner.")
+
+        lightbox = object.__new__(PhotoLightbox)
+        events: list[str] = []
+        lightbox._fullscreen = True
+        lightbox._fullscreen_restore = False
+        lightbox._control_hide_job = "pending-control-hide"
+        lightbox._active = True
+        lightbox._source_image = object()
+        lightbox._controls_visible = False
+        lightbox.window = mock.Mock()
+        lightbox._overlay = mock.Mock()
+        lightbox._canvas = mock.Mock()
+        lightbox._toolbar = mock.Mock()
+        lightbox._previous_edge = mock.Mock()
+        lightbox._next_edge = mock.Mock()
+        lightbox._canvas.focus_set.side_effect = lambda: events.append("focus")
+        lightbox._render_image = mock.Mock(
+            side_effect=lambda: events.append("render"),
+        )
+        lightbox._toolbar.place.side_effect = lambda **kwargs: events.append(
+            "toolbar",
+        )
+        lightbox._previous_edge.place.side_effect = (
+            lambda **kwargs: events.append("previous")
+        )
+        lightbox._next_edge.place.side_effect = lambda **kwargs: events.append(
+            "next",
+        )
+        lightbox._overlay.update_idletasks.side_effect = (
+            lambda: events.append("geometry")
+        )
+
+        PhotoLightbox._toggle_fullscreen(lightbox)
+
+        self.assertFalse(lightbox._fullscreen)
+        self.assertIsNone(lightbox._fullscreen_restore)
+        self.assertIsNone(lightbox._control_hide_job)
+        self.assertTrue(lightbox._controls_visible)
+        lightbox.window.attributes.assert_called_once_with(
+            "-fullscreen",
+            False,
+        )
+        lightbox.window.after_cancel.assert_called_once_with(
+            "pending-control-hide",
+        )
+        # Fractions below are the existing Tk placement geometry: centered
+        # toolbar near the top and navigation at the two horizontal edges.
+        lightbox._toolbar.place.assert_called_once_with(
+            relx=0.5, rely=0.025, anchor="n",
+        )
+        lightbox._previous_edge.place.assert_called_once_with(
+            relx=0.025, rely=0.5, anchor="w",
+        )
+        lightbox._next_edge.place.assert_called_once_with(
+            relx=0.975, rely=0.5, anchor="e",
+        )
+        lightbox._canvas.focus_set.assert_called_once_with()
+        # No resampling override selects the renderer's settled LANCZOS path.
+        lightbox._render_image.assert_called_once_with()
+        self.assertLess(events.index("geometry"), events.index("focus"))
+        self.assertLess(events.index("focus"), events.index("render"))
+
     def test_combined_side_and_top_mattes_are_detected(self) -> None:
         """Detect paired side and top bars without changing source pixels.
 

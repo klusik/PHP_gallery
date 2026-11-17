@@ -1,0 +1,883 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/issue-361-winapp-functional.yml
+# Module Type: Issue-Scoped Cross-Platform Functional Regression Workflow
+# Purpose: Run authoritative WinApp functional regressions for issue 361.
+# Responsibilities:
+#   - Bind each regression job to the exact workflow event SHA and immutable main base
+#   - Run the central audit suite on Windows, Linux and advisory macOS
+#   - Retain exact-SHA outcomes and publish compact actual-status summaries
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Issue 361 WinApp functional regressions
+
+on:
+  push:
+    branches:
+      - feature/361-tk-canvas-performance
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Superseded feature checks must not hold the single macOS queue indefinitely.
+concurrency:
+  group: issue-361-functional-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Required WinApp regression (Windows)
+    permissions:
+      contents: read
+      actions: write
+    runs-on: windows-2025
+    # Type: integer. Units: minutes. Scope: exact-SHA Windows WinApp regression.
+    # Consumers: GitHub Actions job timeout.
+    # Rationale: the central partition coordinator is capped at eight minutes;
+    # setup, full dependency installation, reporting and artifact upload need margin.
+    timeout-minutes: 15
+    outputs:
+      audit_status: ${{ steps.audit-summary.outputs.status }}
+      audit_counts: ${{ steps.audit-summary.outputs.counts }}
+      frozen_validation: ${{ steps.frozen-protocol.outputs.enabled }}
+    steps:
+      - name: Cancel superseded runs of this feature workflow
+        # Housekeeping is not source qualification; actual audits still run if
+        # GitHub cannot cancel an obsolete queued run. Concurrency owns new runs.
+        continue-on-error: true
+        uses: actions/github-script@v9.0.0
+        with:
+          script: |
+            // Purpose: Keep superseded functional and Tk-measure runs out of runner queues.
+            // Type: string. Units: Git branch. Scope: issue 361/399 feature workflows.
+            // Consumers: branch-scoped workflow run listing and cancellation.
+            // Rationale: restrict cleanup to the two explicitly owned feature branches.
+            const OWNED_BRANCHES = [
+              'feature/361-tk-canvas-performance',
+              'feature/399-virtualized-canvas-gallery',
+            ];
+            // Purpose: Bound active-run metadata requests at the GitHub page maximum.
+            // Type: integer. Units: runs per page. Scope: owned workflow lookup.
+            // Consumers: github.paginate. Rationale: 100 avoids unnecessary page calls.
+            const RUN_PAGE_SIZE = 100;
+            const current = await github.rest.actions.getWorkflowRun({
+              owner: context.repo.owner, repo: context.repo.repo, run_id: context.runId,
+            });
+            const ownedBranch = current.data.head_branch;
+            if (!OWNED_BRANCHES.includes(ownedBranch)) {
+              throw new Error('Refusing cancellation outside an owned feature branch.');
+            }
+            const performanceWorkflow = await github.rest.actions.getWorkflow({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'issue-361-tk-performance.yml',
+            });
+            if (performanceWorkflow.data.path !== '.github/workflows/issue-361-tk-performance.yml') {
+              throw new Error('Tk performance workflow identity did not match its owned path.');
+            }
+            const ownedWorkflowIds = [
+              current.data.workflow_id,
+              performanceWorkflow.data.id,
+            ];
+            for (const workflowId of ownedWorkflowIds) {
+              for (const status of ['queued', 'in_progress']) {
+                const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  workflow_id: workflowId, branch: ownedBranch,
+                  status, per_page: RUN_PAGE_SIZE,
+                });
+                for (const run of runs) {
+                  if (run.id >= context.runId || run.head_sha === context.sha
+                      || run.head_branch !== ownedBranch
+                      || run.workflow_id !== workflowId) continue;
+                  try {
+                    await github.rest.actions.cancelWorkflowRun({
+                      owner: context.repo.owner, repo: context.repo.repo, run_id: run.id,
+                    });
+                    core.info('Cancelled superseded owned run ' + run.id + ' at ' + run.head_sha);
+                  } catch (error) {
+                    // A completed-run race needs no cleanup; other errors remain visible.
+                    if (error.status !== 409) throw error;
+                    core.info('Owned run already completed: ' + run.id);
+                  }
+                }
+              }
+            }
+
+      - name: Checkout exact event SHA without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Verify exact source SHA and immutable main base
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:EXPECTED_SHA) {
+            throw 'Checkout does not match the event SHA.'
+          }
+          git fetch --no-tags origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to fetch origin/main.' }
+          $sourceBase = (git merge-base HEAD origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sourceBase -notmatch '^[0-9a-f]{40}$') {
+            throw 'Unable to resolve the immutable origin/main merge base.'
+          }
+          "PHP_GALLERY_SOURCE_BASE=$sourceBase" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Read optional frozen build gate
+        id: frozen-protocol
+        shell: pwsh
+        run: |
+          $config = Get-Content -LiteralPath '.github/issue-361-validation.json' -Raw |
+            ConvertFrom-Json
+          $property = $config.PSObject.Properties['frozen_validation']
+          $enabled = $false
+          if ($null -ne $property) {
+            if ($property.Value -isnot [bool]) {
+              throw 'frozen_validation must be a JSON boolean.'
+            }
+            $enabled = $property.Value
+          }
+          "enabled=$($enabled.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Install PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install Python 3.14.10
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+
+      - name: Install authoritative WinApp dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run central complete WinApp partitioned suite
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          php scripts/audit.php --suite=winapp-partitioned
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Summarize actual central audit result and failures
+        id: audit-summary
+        if: always()
+        shell: pwsh
+        run: |
+          $status = 'BLOCKED'
+          $counts = '{}'
+          $lines = @('## Required Windows WinApp result: BLOCKED', '')
+          $reportPath = 'cache/test-audit/latest.json'
+          try {
+            if (-not (Test-Path -LiteralPath $reportPath)) {
+              $lines += 'Central audit latest.json was not produced for this exact-SHA run.'
+            } else {
+              $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+              $task = @($report.tasks | Where-Object {
+                $_.id -eq 'winapp-partitioned'
+              }) | Select-Object -First 1
+              if ($null -eq $task) {
+                $lines += 'The partitioned WinApp task is missing from the central audit report.'
+              } else {
+                $status = [string]$task.status
+                $counts = $task.counts | ConvertTo-Json -Compress -Depth 5
+                $lines = @(
+                  "## Required Windows WinApp result: $status",
+                  '',
+                  "- Event SHA: $env:GITHUB_SHA",
+                  "- Central audit profile: $($report.profile) / $($report.status)",
+                  "- Task: winapp-partitioned",
+                  "- Counts: $counts",
+                  "- Summary: $($task.summary)",
+                  '',
+                  '### Failed test IDs and reasons'
+                )
+                # Type: integer. Units: findings. Scope: one Windows job summary.
+                # Consumers: compact diagnostic rendering from the central report.
+                # Rationale: retain actionable failures while bounding runner output.
+                $findingLimit = 25
+                # Type: integer. Units: characters. Scope: each rendered test reason.
+                # Consumers: compact diagnostic rendering from the central report.
+                # Rationale: preserve useful context without unbounded output.
+                $reasonLimit = 320
+                $failureStatuses = @('FAIL', 'ERROR', 'UNEXPECTED_SUCCESS')
+                $findings = @($task.details.tests | Where-Object {
+                  $_.status -in $failureStatuses
+                })
+                $findingLines = @()
+                $selectedFindings = @($findings | Select-Object -First $findingLimit)
+                foreach ($finding in $selectedFindings) {
+                  $reason = ([string]$finding.reason) -replace '[\r\n]+', ' '
+                  if ($reason.Length -gt $reasonLimit) {
+                    $reason = $reason.Substring(0, $reasonLimit) + '…'
+                  }
+                  $findingLines += "- $($finding.id) [$($finding.status)]: $reason"
+                }
+                foreach ($fixture in @($task.details.fixture_errors)) {
+                  $reason = ([string]$fixture.reason) -replace '[\r\n]+', ' '
+                  if ($reason.Length -gt $reasonLimit) {
+                    $reason = $reason.Substring(0, $reasonLimit) + '…'
+                  }
+                  $findingLines += "- fixture $($fixture.id) [$($fixture.phase)]: $reason"
+                }
+                if ($findingLines.Count -eq 0) {
+                  $findingLines += '- No failed tests or fixture errors were reported.'
+                } else {
+                  $omitted = $findings.Count - [Math]::Min($findings.Count, $findingLimit)
+                  if ($omitted -gt 0) {
+                    $findingLines += "- $omitted additional failed tests omitted; see retained structured report."
+                  }
+                }
+                $lines += $findingLines
+                if ($status -ne 'PASS') {
+                  $lines += @('', '### Incomplete partition diagnostics')
+                  foreach ($partition in @($task.details.partition_processes)) {
+                    $compact = [ordered]@{
+                      partition = $partition.partition
+                      expected = $partition.test_count
+                      observed = @($partition.observed_test_ids).Count
+                      exit_code = $partition.exit_code
+                      timed_out = $partition.timed_out
+                      seconds = $partition.duration_seconds
+                      report_present = $partition.report_present
+                      report_valid = $partition.report_valid
+                      coverage_complete = $partition.coverage_complete
+                    }
+                    $lines += ($compact | ConvertTo-Json -Compress)
+                  }
+                  # Purpose: Keep the failing point from audit-owned child output.
+                  # Type: integer. Units: lines per child log. Scope: failed Windows run.
+                  # Consumers: Get-Content -Tail. Rationale: 24 retains last active test and cause.
+                  $childLogTailLines = 24
+                  $ownedRoot = [IO.Path]::GetFullPath((Join-Path $env:GITHUB_WORKSPACE 'cache/test-audit'))
+                  $childLogs = @(Get-ChildItem -LiteralPath $ownedRoot -Filter 'partition-*.log' -Recurse -File)
+                  foreach ($childLog in $childLogs) {
+                    $fullPath = [IO.Path]::GetFullPath($childLog.FullName)
+                    if (-not $fullPath.StartsWith($ownedRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+                      throw 'Child log escaped the audit-owned root.'
+                    }
+                    $lines += ('### ' + $childLog.Name)
+                    $lines += @(Get-Content -LiteralPath $fullPath -Tail $childLogTailLines)
+                  }
+                }
+              }
+            }
+          } catch {
+            $lines += "Central audit summary could not be parsed: $($_.Exception.Message)"
+          }
+          "status=$status" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          "counts=$counts" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          $lines | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          $lines | Write-Output
+
+      - name: Retain Windows audit report and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-361-winapp-windows-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: one exact-SHA Windows audit run.
+          # Consumers: GitHub Actions artifact retention.
+          # Rationale: keep reviewable diagnostics for a short qualification window.
+          retention-days: 14
+
+  frozen-installer:
+    name: Opt-in real frozen executable and installer build
+    needs: windows
+    if: ${{ always() && needs.windows.result == 'success' && needs.windows.outputs.frozen_validation == 'true' }}
+    runs-on: windows-2025
+    # Type: integer. Units: minutes. Scope: one exact-SHA isolated WinApp build.
+    # Consumers: GitHub Actions job deadline.
+    # Rationale: allow the 30-minute central builder timeout plus runtime setup,
+    # audit reporting and artifact retention without extending other test owners.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact event SHA without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Verify exact source SHA and immutable main base
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:EXPECTED_SHA) {
+            throw 'Checkout does not match the event SHA.'
+          }
+          git fetch --no-tags origin main
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to fetch origin/main.' }
+          $sourceBase = (git merge-base HEAD origin/main).Trim()
+          if ($LASTEXITCODE -ne 0 -or $sourceBase -notmatch '^[0-9a-f]{40}$') {
+            throw 'Unable to resolve the immutable origin/main merge base.'
+          }
+          "PHP_GALLERY_SOURCE_BASE=$sourceBase" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install Python 3.14.10
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+
+      - name: Run central real frozen-installer suite
+        shell: pwsh
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          php scripts/audit.php --suite=winapp-frozen-installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Summarize exact-SHA frozen build result
+        if: always()
+        shell: pwsh
+        run: |
+          $lines = @('## Real WinApp frozen build', '')
+          $reportPath = 'cache/test-audit/latest.json'
+          if (-not (Test-Path -LiteralPath $reportPath)) {
+            $lines += @(
+              '- Status: BLOCKED',
+              '- Central audit latest.json was not produced for this exact-SHA run.'
+            )
+          } else {
+            $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+            $task = @($report.tasks | Where-Object {
+              $_.id -eq 'winapp-frozen-installer'
+            }) | Select-Object -First 1
+            if ($null -eq $task) {
+              $lines += @(
+                '- Status: BLOCKED',
+                '- The frozen-installer task is missing from the central audit report.'
+              )
+            } else {
+              $lines += @(
+                "- Event SHA: $env:GITHUB_SHA",
+                "- Central audit profile: $($report.profile) / $($report.status)",
+                "- Build status: $($task.status)",
+                "- Summary: $($task.summary)"
+              )
+              if ($task.details.artifact_directory) {
+                $lines += "- Retained evidence: $($task.details.artifact_directory)"
+              }
+              if ($task.status -ne 'PASS') {
+                # Purpose: Retain an actionable tail of failed builder diagnostics.
+                # Type: integer. Units: characters. Scope: failed frozen audit.
+                # Consumers: compact failure output in this step and job summary.
+                # Rationale: twelve thousand characters retain terminal compiler,
+                # dependency or smoke tracebacks without printing full build logs.
+                $BUILD_FAILURE_DIAGNOSTIC_CHARACTER_LIMIT = 12000
+                $problemText = (@($task.details.problems) |
+                  ForEach-Object { [string] $_ }) -join [Environment]::NewLine
+                if ($problemText.Length -gt $BUILD_FAILURE_DIAGNOSTIC_CHARACTER_LIMIT) {
+                  $problemText = $problemText.Substring(
+                    $problemText.Length - $BUILD_FAILURE_DIAGNOSTIC_CHARACTER_LIMIT
+                  )
+                }
+                if ($problemText) {
+                  $lines += @('### Build failure details', $problemText)
+                }
+              }
+            }
+          }
+          $lines += '- Installer installation and uninstall were not tested.'
+          $lines | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          $lines | Write-Output
+
+      - name: Retain central audit report and frozen installer evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-361-winapp-frozen-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: one exact-SHA frozen build attempt.
+          # Consumers: GitHub Actions artifact retention.
+          # Rationale: preserve installer and audit logs for review.
+          retention-days: 14
+
+  linux:
+    name: Required WinApp regression (Linux)
+    runs-on: ubuntu-24.04
+    # Type: integer. Units: minutes. Scope: exact-SHA Linux WinApp regression.
+    # Consumers: GitHub Actions job timeout.
+    # Rationale: bound the xvfb-backed central suite and preserve setup/report margin.
+    timeout-minutes: 15
+    outputs:
+      audit_status: ${{ steps.audit-summary.outputs.status }}
+      audit_counts: ${{ steps.audit-summary.outputs.counts }}
+    steps:
+      - name: Checkout exact event SHA without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Verify exact source SHA and immutable main base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --no-tags origin main
+          source_base="$(git merge-base HEAD origin/main)"
+          test "$source_base" != ""
+          test "${#source_base}" -eq 40
+          echo "PHP_GALLERY_SOURCE_BASE=$source_base" >> "$GITHUB_ENV"
+
+      - name: Install PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install Python 3.14.10
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+
+      - name: Install authoritative WinApp dependencies
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+
+      - name: Run central WinApp suite under xvfb
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: xvfb-run -a php scripts/audit.php --suite=winapp
+
+      - name: Summarize actual central audit result and failures
+        id: audit-summary
+        if: always()
+        env:
+          WINAPP_AUDIT_TASK: winapp
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          # Type: integer. Units: findings. Scope: one cross-platform job summary.
+          # Consumers: compact diagnostic rendering from the central report.
+          # Rationale: retain actionable failures while bounding runner output.
+          FINDING_LIMIT = 25
+          # Type: integer. Units: characters. Scope: each rendered test reason.
+          # Consumers: compact diagnostic rendering from the central report.
+          # Rationale: preserve useful context without unbounded output.
+          REASON_LIMIT = 320
+          report_path = Path("cache/test-audit/latest.json")
+          lines = ["## Required Linux WinApp result", ""]
+          status = "BLOCKED"
+          counts = "{}"
+          try:
+              if not report_path.is_file():
+                  lines.append("- Central audit latest.json was not produced for this exact-SHA run.")
+              else:
+                  report = json.loads(report_path.read_text(encoding="utf-8"))
+                  task = next(
+                      (
+                          item for item in report.get("tasks", [])
+                          if item.get("id") == os.environ["WINAPP_AUDIT_TASK"]
+                      ),
+                      None,
+                  )
+                  if task is None:
+                      lines.append("- The WinApp task is missing from the central audit report.")
+                  else:
+                      status = str(task.get("status", "BLOCKED"))
+                      counts = json.dumps(task.get("counts", {}), sort_keys=True)
+                      lines.extend([
+                          f"- Event SHA: {os.environ['GITHUB_SHA']}",
+                          f"- Central audit profile: {report.get('profile')} / {report.get('status')}",
+                          f"- Task status: {status}",
+                          f"- Counts: {counts}",
+                          f"- Summary: {task.get('summary', '')}",
+                          "",
+                          "### Failed test IDs and reasons",
+                      ])
+                      tests = task.get("details", {}).get("tests", [])
+                      failures = [
+                          item for item in tests
+                          if item.get("status") in {"FAIL", "ERROR", "UNEXPECTED_SUCCESS"}
+                      ]
+                      findings = []
+                      for item in failures[:FINDING_LIMIT]:
+                          reason = " ".join(str(item.get("reason") or "").split())
+                          if len(reason) > REASON_LIMIT:
+                              reason = reason[:REASON_LIMIT] + "…"
+                          findings.append(
+                              f"- {item.get('id', 'unknown')} [{item.get('status')}]: {reason}"
+                          )
+                      for item in task.get("details", {}).get("fixture_errors", []):
+                          reason = " ".join(str(item.get("reason") or "").split())
+                          if len(reason) > REASON_LIMIT:
+                              reason = reason[:REASON_LIMIT] + "…"
+                          findings.append(
+                              f"- fixture {item.get('id', 'unknown')} [{item.get('phase')}]: {reason}"
+                          )
+                      if not findings:
+                          findings.append("- No failed tests or fixture errors were reported.")
+                      elif len(failures) > FINDING_LIMIT:
+                          findings.append(
+                              f"- {len(failures) - FINDING_LIMIT} additional failed tests omitted; see retained structured report."
+                          )
+                      lines.extend(findings)
+          except (OSError, ValueError, TypeError, AttributeError) as error:
+              lines.append(f"- Central audit summary could not be parsed: {error}")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"status={status}\ncounts={counts}\n")
+          PY
+
+      - name: Retain Linux audit report and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-361-winapp-linux-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: one exact-SHA Linux audit run.
+          # Consumers: GitHub Actions artifact retention.
+          # Rationale: keep reviewable diagnostics for a short qualification window.
+          retention-days: 14
+
+  macos:
+    name: Advisory WinApp regression (macOS; real result shown)
+    runs-on: macos-15
+    continue-on-error: true
+    # Type: integer. Units: minutes. Scope: exact-SHA advisory macOS WinApp regression.
+    # Consumers: GitHub Actions job timeout.
+    # Rationale: preserve per-child deadlines while the existing complete
+    # partition proof avoids an observed whole-discovery timeout.
+    timeout-minutes: 15
+    outputs:
+      audit_status: ${{ steps.audit-summary.outputs.status }}
+      audit_counts: ${{ steps.audit-summary.outputs.counts }}
+    steps:
+      - name: Checkout exact event SHA without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Verify exact source SHA and immutable main base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git fetch --no-tags origin main
+          source_base="$(git merge-base HEAD origin/main)"
+          test "$source_base" != ""
+          test "${#source_base}" -eq 40
+          echo "PHP_GALLERY_SOURCE_BASE=$source_base" >> "$GITHUB_ENV"
+
+      - name: Install PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install Python 3.14.10
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+
+      - name: Install authoritative WinApp dependencies
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+
+      - name: Run advisory central WinApp suite
+        env:
+          PHP_GALLERY_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: php scripts/audit.php --suite=winapp-partitioned
+
+      - name: Summarize actual central audit result and failures
+        id: audit-summary
+        if: always()
+        env:
+          WINAPP_AUDIT_TASK: winapp-partitioned
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          # Type: integer. Units: findings. Scope: one cross-platform job summary.
+          # Consumers: compact diagnostic rendering from the central report.
+          # Rationale: retain actionable failures while bounding runner output.
+          FINDING_LIMIT = 25
+          # Type: integer. Units: characters. Scope: each rendered test reason.
+          # Consumers: compact diagnostic rendering from the central report.
+          # Rationale: preserve useful context without unbounded output.
+          REASON_LIMIT = 320
+          report_path = Path("cache/test-audit/latest.json")
+          lines = ["## Advisory macOS WinApp result (actual status; never forced to PASS)", ""]
+          status = "BLOCKED"
+          counts = "{}"
+          try:
+              if not report_path.is_file():
+                  lines.append("- Central audit latest.json was not produced for this exact-SHA run.")
+              else:
+                  report = json.loads(report_path.read_text(encoding="utf-8"))
+                  task = next(
+                      (
+                          item for item in report.get("tasks", [])
+                          if item.get("id") == os.environ["WINAPP_AUDIT_TASK"]
+                      ),
+                      None,
+                  )
+                  if task is None:
+                      lines.append("- The WinApp task is missing from the central audit report.")
+                  else:
+                      status = str(task.get("status", "BLOCKED"))
+                      counts = json.dumps(task.get("counts", {}), sort_keys=True)
+                      lines.extend([
+                          f"- Event SHA: {os.environ['GITHUB_SHA']}",
+                          f"- Central audit profile: {report.get('profile')} / {report.get('status')}",
+                          f"- Task status: {status}",
+                          f"- Counts: {counts}",
+                          f"- Summary: {task.get('summary', '')}",
+                          "",
+                          "### Failed test IDs and reasons",
+                      ])
+                      tests = task.get("details", {}).get("tests", [])
+                      failures = [
+                          item for item in tests
+                          if item.get("status") in {"FAIL", "ERROR", "UNEXPECTED_SUCCESS"}
+                      ]
+                      findings = []
+                      for item in failures[:FINDING_LIMIT]:
+                          reason = " ".join(str(item.get("reason") or "").split())
+                          if len(reason) > REASON_LIMIT:
+                              reason = reason[:REASON_LIMIT] + "…"
+                          findings.append(
+                              f"- {item.get('id', 'unknown')} [{item.get('status')}]: {reason}"
+                          )
+                      for item in task.get("details", {}).get("fixture_errors", []):
+                          reason = " ".join(str(item.get("reason") or "").split())
+                          if len(reason) > REASON_LIMIT:
+                              reason = reason[:REASON_LIMIT] + "…"
+                          findings.append(
+                              f"- fixture {item.get('id', 'unknown')} [{item.get('phase')}]: {reason}"
+                          )
+                      if not findings:
+                          findings.append("- No failed tests or fixture errors were reported.")
+                      elif len(failures) > FINDING_LIMIT:
+                          findings.append(
+                              f"- {len(failures) - FINDING_LIMIT} additional failed tests omitted; see retained structured report."
+                          )
+                      lines.extend(findings)
+          except (OSError, ValueError, TypeError, AttributeError) as error:
+              lines.append(f"- Central audit summary could not be parsed: {error}")
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
+              stream.write(f"status={status}\ncounts={counts}\n")
+          PY
+
+      - name: Retain macOS audit report and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-361-winapp-macos-advisory-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: one exact-SHA advisory audit run.
+          # Consumers: GitHub Actions artifact retention.
+          # Rationale: keep advisory skips and platform diagnostics reviewable.
+          retention-days: 14
+
+  audit-contracts:
+    name: Required audit coordinator contracts (Linux)
+    runs-on: ubuntu-24.04
+    # Purpose: Bound the existing curated coordinator/source regression owner.
+    # Type: integer. Units: minutes. Scope: one hosted php-fast audit.
+    # Consumers: GitHub Actions job timeout.
+    # Rationale: fifteen minutes allow setup and the central bounded PHP fixtures.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact event SHA without persisted credentials
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - name: Verify exact source SHA and immutable main base
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git fetch --no-tags origin main
+          source_base="$(git merge-base HEAD origin/main)"
+          [[ "$source_base" =~ ^[0-9a-f]{40}$ ]]
+          echo "PHP_GALLERY_SOURCE_BASE=$source_base" >> "$GITHUB_ENV"
+
+      - name: Install PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Install Python 3.14.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.10'
+
+      - name: Install authoritative WinApp dependencies for audit fixtures
+        run: python -m pip install --disable-pip-version-check -r winapp/requirements.txt
+
+      - name: Run central curated audit and source contracts
+        env:
+          PHP_GALLERY_PYTHON: python
+        run: php scripts/audit.php --suite=php-fast
+
+      - name: Retain central coordinator contract evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: issue-361-audit-contracts-${{ github.sha }}
+          path: cache/test-audit/**
+          if-no-files-found: warn
+          # Purpose: Retain exact-SHA coordinator regression evidence.
+          # Type: integer. Units: days. Scope: this workflow artifact.
+          # Consumers: Actions artifact retention.
+          # Rationale: fourteen days matches the associated WinApp raw evidence.
+          retention-days: 14
+
+  issue-summary:
+    name: Publish aggregate exact-SHA result to issue 361
+    if: always()
+    needs:
+      - windows
+      - linux
+      - macos
+      - audit-contracts
+    runs-on: ubuntu-24.04
+    # Type: integer. Units: minutes. Scope: one issue progress comment.
+    # Consumers: GitHub Actions summary publisher.
+    # Rationale: leave margin for the GitHub API request while bounding retries.
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Publish or update one aggregate run comment
+        uses: actions/github-script@v9.0.0
+        env:
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+          WINDOWS_STATUS: ${{ needs.windows.outputs.audit_status }}
+          WINDOWS_COUNTS: ${{ needs.windows.outputs.audit_counts }}
+          LINUX_RESULT: ${{ needs.linux.result }}
+          LINUX_STATUS: ${{ needs.linux.outputs.audit_status }}
+          LINUX_COUNTS: ${{ needs.linux.outputs.audit_counts }}
+          MACOS_RESULT: ${{ needs.macos.result }}
+          MACOS_STATUS: ${{ needs.macos.outputs.audit_status }}
+          MACOS_COUNTS: ${{ needs.macos.outputs.audit_counts }}
+          AUDIT_CONTRACTS_RESULT: ${{ needs.audit-contracts.result }}
+        with:
+          script: |
+            // Purpose: Publish functional evidence to the authorized owning issue.
+            // Type: integer. Units: GitHub issue number. Scope: issue 361 progress.
+            // Consumers: this aggregate functional-result comment.
+            // Rationale: publish only to the explicitly authorized feature issue.
+            const FUNCTIONAL_ISSUE_NUMBER = 361;
+            // Purpose: Find this run marker without duplicating a rerun comment.
+            // Type: integer. Units: comments per page. Scope: matching this run's existing comment.
+            // Consumers: GitHub API pagination while preventing duplicate rerun comments.
+            // Rationale: use the documented page cap so all recent bot comments can be scanned.
+            const COMMENT_PAGE_SIZE = 100;
+            const marker = `<!-- issue-361-functional-run:${context.runId} -->`;
+            const completedAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+            const jobs = [
+              ["Windows required", "WINDOWS"],
+              ["Linux required", "LINUX"],
+              ["macOS advisory", "MACOS"],
+            ];
+            const lines = [
+              "## Issue 361 WinApp functional regression results",
+              "",
+              marker,
+              `- Event SHA: \`${context.sha}\``,
+              `- Completed (UTC): ${completedAt}`,
+              `- Workflow run: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              "",
+            ];
+            for (const [label, prefix] of jobs) {
+              const result = process.env[`${prefix}_RESULT`] || "unknown";
+              const actualStatus = process.env[`${prefix}_STATUS`] || "BLOCKED";
+              const counts = process.env[`${prefix}_COUNTS`] || "{}";
+              lines.push(`- ${label}: **${actualStatus}** (job ${result}); counts: \`${counts}\``);
+            }
+            lines.push(
+              `- Audit coordinator/source contracts required: **${process.env.AUDIT_CONTRACTS_RESULT || "unknown"}** (central php-fast suite)`,
+            );
+            lines.push(
+              "",
+              "Failed test IDs and reasons are in each platform job summary and retained audit artifacts. macOS remains advisory and its actual status is shown."
+            );
+            const body = lines.join("\n");
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: FUNCTIONAL_ISSUE_NUMBER,
+              per_page: COMMENT_PAGE_SIZE,
+            });
+            const previous = comments.find(
+              (comment) =>
+                comment.user?.type === "Bot" &&
+                typeof comment.body === "string" &&
+                comment.body.includes(marker)
+            );
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previous.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: FUNCTIONAL_ISSUE_NUMBER,
+                body,
+              });
+            }

@@ -10058,12 +10058,28 @@ Všechny povinné joby a~kontrola přesného SHA musejí uspět. Release workflo
 sestaví všechny čtyři PDF příručky jednou po~posledních úpravách zdrojů, nikoli
 při běžném vývoji.
 
+Volitelná auditní sada \codeword{watcher-tk-performance} měří existující
+rozhraní Tkinter/ttk se~syntetickými offline daty na~hostovaném Windows runneru.
+Verzovaný protokol odděluje studenou a~zahřátou aplikační mezipaměť, zaznamenává
+přesné zdroje i~prostředí runneru a~vyžaduje opakovanou baseline před
+optimalizací. Závěrečné srovnání páruje neměnnou baseline s~kandidátem
+v~samostatných procesech na~stejné VM. Dokončení callbacku ani předání Tk
+neprokazují fyzické zobrazení na~monitoru či~odstranění blikání. Surová měření
+a~nejistota zůstávají oddělené od~funkční kvalifikace; experiment neuděluje
+oprávnění ke~sloučení ani vydání.
+
+Požadavek na~měření musí začínat značkou \codeword{[tk-measure]}
+v~commit message. Značky uvnitř zachované historie squashe nové měření
+nespouštějí. Úklid ruší starší funkční a~benchmarkové běhy pouze ve~vlastní
+feature větvi; měření stejného SHA vynechává.
+
 Koordinátor částí WinApp jednou zjistí úplný seznam testů. Každý dílčí proces
 načte pouze přidělené místní moduly a~musí vykázat každou vybranou identitu.
 Zůstávají zachovány fixtures modulů a~tříd, úplný důkaz nepřekrývajícího se
 pokrytí i~dosavadní časové limity procesů a~koordinátoru.
-Šest sériových skupin odděluje nezměněný scénář návratu do~husté trvalé cache
-od~prohlížeče; každý proces má výslovně připravené importy zdrojů a~testů.
+Sedm sériových skupin zachovává pět výhradních měřených skupin a~dva
+deterministické shardy zbývajících tříd. Každý proces má výslovně připravené
+importy zdrojů a~testů.
 
 Hostovaný přenosný job WinApp instaluje existující požadavek Pillow
 do~interpretu Pythonu vybraného pro~audit, takže test pixelů odznaku na~liště

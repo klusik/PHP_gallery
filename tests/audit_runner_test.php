@@ -1495,17 +1495,18 @@ $partitionedWinappReport = $winappReport;
 $partitionedWinappReport['tests'] = [
     array_replace($winappReport['tests'][0], ['id' => 'suite.NativeViewer.test_one']),
     array_replace($winappReport['tests'][0], ['id' => 'suite.ThumbnailIndex.test_two']),
-    array_replace($winappReport['tests'][0], ['id' => 'suite.Complement.test_three']),
-    array_replace($winappReport['tests'][0], ['id' => 'suite.OtherComplement.test_four']),
-    array_replace($winappReport['tests'][0], ['id' => 'suite.PreloadBenchmark.test_five']),
-    array_replace($winappReport['tests'][0], ['id' => 'suite.DenseReturn.test_six']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.ThumbnailLarge.test_three']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.PreloadBenchmark.test_four']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.DenseReturn.test_five']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.Complement.test_six']),
+    array_replace($winappReport['tests'][0], ['id' => 'suite.OtherComplement.test_seven']),
 ];
 $partitionedWinappReport['counts'] = array_fill_keys(
     array_keys($winappReport['counts']),
     0,
 );
-$partitionedWinappReport['counts']['total'] = 6;
-$partitionedWinappReport['counts']['passed'] = 6;
+$partitionedWinappReport['counts']['total'] = 7;
+$partitionedWinappReport['counts']['passed'] = 7;
 $partitionedIds = array_column($partitionedWinappReport['tests'], 'id');
 $partitionedWinappReport['partition_processes'] = [
     [
@@ -1562,23 +1563,34 @@ $partitionedWinappReport['partition_processes'] = [
         'expected_test_ids' => [$partitionedIds[5]],
         'observed_test_ids' => [$partitionedIds[5]],
     ],
+    [
+        'partition' => 7, 'test_count' => 1, 'exit_code' => 0,
+        'timed_out' => false, 'duration_seconds' => 0.1,
+        'report_present' => true, 'report_valid' => true,
+        'report_successful' => true,
+        'coverage_complete' => true,
+        'expected_test_ids' => [$partitionedIds[6]],
+        'observed_test_ids' => [$partitionedIds[6]],
+    ],
 ];
+// Seven synthetic 0.1-second children sum to 0.7 seconds. These structural
+// evidence values exercise report consistency and do not set execution limits.
 $partitionedWinappReport['partition_proof'] = [
-    'partition_count' => 6, 'complete' => true, 'exact_union' => true,
+    'partition_count' => 7, 'complete' => true, 'exact_union' => true,
     'expected_test_ids' => $partitionedIds,
     'observed_test_ids' => $partitionedIds,
-    'total_duration_seconds' => 0.6,
+    'total_duration_seconds' => 0.7,
 ];
 $partitionedWinappSuccess = audit_evaluate_winapp_report(
     json_encode($partitionedWinappReport),
-    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.6],
+    ['exit_code' => 0, 'timed_out' => false, 'duration_seconds' => 0.7],
     false,
     true,
 );
 audit_test_assert(
     $partitionedWinappSuccess['status'] === 'PASS'
-        && count($partitionedWinappSuccess['partition_processes']) === 6,
-    'Only exact, disjoint and successful six-way partitions may qualify full discovery.',
+        && count($partitionedWinappSuccess['partition_processes']) === 7,
+    'Only exact, disjoint and successful seven-way partitions may qualify full discovery.',
 );
 $partitionCorruptions = [
     'null child success' => static function (array &$report): void {
