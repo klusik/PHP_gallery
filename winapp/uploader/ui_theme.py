@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, TypeAlias
 
 if TYPE_CHECKING:
     from PIL import ImageTk
+    from uploader.ui_shell import EmbeddedWindow
 
     ThemeImage: TypeAlias = tk.PhotoImage | ImageTk.PhotoImage
 else:
@@ -2797,11 +2798,11 @@ def hide_inline_tooltip(
         state.hide(None)
 
 
-def place_dialog(dialog: tk.Toplevel, owner: tk.Misc) -> None:
+def place_dialog(dialog: "tk.Toplevel | EmbeddedWindow", owner: tk.Misc) -> None:
     """Center a child window over the window that opened it.
 
     Args:
-        dialog (tk.Toplevel): Fully populated child window awaiting display.
+        dialog (tk.Toplevel | EmbeddedWindow): Populated child awaiting display.
         owner (tk.Misc): Invoking widget or its active application toplevel.
     Returns:
         None: Sets transient ownership and nearby requested-size geometry.
@@ -2825,18 +2826,22 @@ def _show_help(owner: tk.Misc, title: str, body: str) -> None:
     """Display a modal-style help panel with selectable content.
 
     Args:
-        owner (tk.Misc): Widget whose toplevel owns the help dialog.
+        owner (tk.Misc): Invoking widget owning the embedded help panel.
         title (str): Concise title shown in the dialog heading and chrome.
         body (str): Plain text content users may select or copy.
 
     Returns:
         None: The help overlay is focused and dismissed by Escape or close.
     """
+    # Shell behavior depends on this library's DialogSurface. Resolve the shell
+    # only when help opens, keeping theme construction independent of the host.
+    from uploader.ui_shell import EmbeddedWindow
+
     try:
         parent = owner.winfo_toplevel()
         previous_grab = parent.grab_current()
         previous_focus = parent.focus_get()
-        dialog = Dialog(parent)
+        dialog = EmbeddedWindow(owner)
     except tk.TclError:
         return
 
@@ -2860,7 +2865,6 @@ def _show_help(owner: tk.Misc, title: str, body: str) -> None:
             pass
 
     dialog.title(title or "Help")
-    dialog.configure(background=_PALETTE["surface"])
     dialog.transient(parent)
     dialog.resizable(True, True)
     dialog.minsize(_HELP_MIN_WIDTH, _HELP_MIN_HEIGHT)

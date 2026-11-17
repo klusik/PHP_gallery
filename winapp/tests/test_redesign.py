@@ -554,6 +554,7 @@ class PhotosCatalogueHostTests(unittest.TestCase):
         app._ui_layout_state = MAIN.ViewLayoutState(
             1100, 760, 20, 30, 'normal', 210,
         )
+        app._canvas_grid_enabled_at_startup = True
         address = mock.Mock()
         address.trace_add.return_value = 'photos-address-trace'
         app.linking_manager = types.SimpleNamespace(
@@ -599,6 +600,7 @@ class PhotosCatalogueHostTests(unittest.TestCase):
             MAIN.WatcherApp.build_photos_tab(app, parent)
 
         kwargs = build.call_args.kwargs
+        self.assertIs(kwargs['canvas_grid_enabled'], True)
         self.assertIs(app, kwargs['load_selected_gallery'].__self__)
         self.assertIs(app, kwargs['save_selected_gallery'].__self__)
         self.assertIs(app, kwargs['load_card_format'].__self__)

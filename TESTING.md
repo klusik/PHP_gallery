@@ -734,6 +734,51 @@ The compact instrument tests check IAS/feet/fpm conversion, missing readings,
 pause/stop clearing and the three-second freshness boundary without Tk or native
 connections. They do not establish visual fit or live sampling.
 
+The WinApp support-report regressions cover allowlisted settings/runtime
+snapshots (including finite interval floats while rejecting NaN/Infinity),
+current diagnostic retention, bearer, JWT and quoted JSON credential redaction,
+metadata secrets, URL credentials/query/fragment removal including percent-
+encoded query values while retaining the useful URL path, local identity/path
+and latitude/longitude/altitude filtering, absent and unreadable logs, bounded
+64 KiB tail reading, and dropping a partial first line when the byte boundary
+cuts through it. The report-size ceiling includes its visible truncation marker.
+
+Additional deterministic WinApp cases exercise the actual `FlightUI.show_reports`
+embedded Saved Reports footer mount and actions. Support-report privacy negatives
+cover every component of bracketed, parenthesized and bare comma-separated
+coordinates, including signed scientific notation, plus unfinished bracket and
+parenthesis values at the end of the log tail; useful non-coordinate settings
+remain visible. These hosted tests do not qualify installed menus or physical
+native UI.
+The new test module is discovered
+by the existing WinApp test suite; source-only BASIC does not execute it.
+test_application_shell.py covers actual menu navigation, guarded shortcut
+suppression, and Copy/Save matching the displayed report snapshot.
+test_ui_shell.py covers embedded prompt responses, panel stacking, focus/grab
+restoration, and release of synchronous waits. Neither fixture proves that real
+background workers continue during a modal prompt; keep that behavior in manual
+acceptance.
+The shell's header/close fixture also requires inherited `DialogSurface` and
+`Button` components; the portable UI library guard continues to reject raw
+toolkit controls throughout the shell and file picker. Capture progress keeps
+the existing nonmodal overlay and its automatic-recovery coverage.
+The issue-scoped Issue 380 integrated WinApp UI workflow runs central
+scripts/audit.php --suite=winapp-partitioned on Ubuntu 24.04 under Xvfb and
+Windows Server 2025, retaining exact-commit artifacts. This is the runtime
+evidence owner for report and shell changes; source BASIC alone does not run it,
+and this workflow does not establish FULL qualification or integration.
+Manual Windows acceptance
+must inspect
+the report preview at normal and narrow widths, then exercise Refresh, Copy,
+Save, missing/unreadable logs, and an oversized log. Review the artifact for
+unexpected private data before sharing; redaction is not proof of complete
+anonymization. Check every application panel and notice remains in the root,
+the embedded file/folder picker at normal and narrow widths, including
+background listing, navigation, filters, and cancellation. Check
+F1/Ctrl+O/Ctrl+,/Ctrl+Shift+D dispatch as documented, active panels suppress
+shortcuts, and owner revalidation is retained after synchronous waits.
+Installed-source and packaged-app behavior remain separate acceptance checks.
+
 For Windows acceptance after the flight, inspect the single-line IAS/ALT/V/S
 strip at compact and resized widths, stopped/paused/disconnected states, and the
 PDF shortcut. Exercise saved-flight selection, explicit Finish with automatic
@@ -9772,11 +9817,28 @@ are invalid attempts, not accepted measurements. In the targeted run Windows
 constrained the requested 1,100-pixel client width to 1028×680; the strict
 root-width wait hung despite all 24 visible items being loaded, an empty event
 queue and no active worker. The benchmark driver publishes the full generated `summary.md` and concise JSON
-in the GitHub Actions job summary; issue comments remain compact. No baseline
-is accepted and production Canvas edits remain gated. See
+in the GitHub Actions job summary; issue comments remain compact. The later
+repeated primary baseline and formal 120-process comparison are recorded in the
+linked experiment; G4 remains a historical measured NO-GO for general performance qualification;
+it is not a statistical PASS. On 2026-11-17, after the user's positive desktop
+scrolling experience, the owner selected Canvas as the persisted default for
+new profiles and legacy profiles missing the setting. Explicit saved False and
+environment value 0 or an invalid present value retain native widgets. This
+product decision does not establish screen-reader parity or general accessibility.
+See
 [the issue 399 protocol](docs/performance/issue_399_virtualized_canvas.md).
 The Tk workflow requires `[tk-measure]`; issue 399 functional checks run only
 for `[winapp-full]` or manual dispatch.
+
+Issue 399 Photos metadata ordering uses a bounded current-session cache of
+complete display metadata only (four galleries and 10,000 rows total). Its
+60-second freshness starts when a complete fetch begins. A reopen may display
+that cached order immediately while a full refresh runs; this does not reuse or
+renew binary-media proof. Eligible RAM thumbnail hits remain usable during metadata refresh, but a RAM miss, including an evicted or expired entry needing proof, waits for catalogue reconciliation before disk or network fallback. Renewal, workspace close, and HTTP 401/403/404 clear
+it; an interrupted refresh may keep an older unexpired complete snapshot. The
+first newest-first open without that snapshot still requires a full ascending
+API read because the server has no reverse cursor and the disk tree cache lacks
+photo IDs/titles. Cold-open delay is not qualified as fixed. For a timeout while awaiting response headers on the read with phase `media` and route `app_linking_media`, with no HTTP status, the validated prefix and cursor are retained. One full refresh invocation permits at most one automatic retry, and only when the prior physical completion event is absent or set. If it is unset, the refresh returns the existing error without waiting or scheduling another attempt, preserving the safe cursor for manual Retry. The retry uses the existing per-request timeout; neither that limit nor metadata freshness is extended. Cancellation, authorization failure, or a malformed response discards partial state. HTTP 429 continues through its existing quota/Retry-After path. A cold open still requires the complete ordered scan.
 
 The issue 399 scroll recorder separates setup from timed interaction. It counts
 real Tk operations in both phases, aggregates setup callback timings as fixed
@@ -9798,7 +9860,36 @@ are invalid, not accepted baseline evidence.
 
 The next harness revision packages the existing deterministic PNG/JPEG fixtures once per driver in a fixed-epoch `ZIP_STORED` archive. A manifest records the seed, fixture generator common-module SHA, Pillow version, and each body's length and SHA-256. Every independent child verifies the expected archive SHA and body hashes, recomputes its prefix dataset digest and checks the mounted gallery, then uses only its requested catalogue in its fresh process; its application profile/session/cache remain isolated. Fixture preparation and child `fixture_load_ms` are separate; `scenario_elapsed_ms` starts after verified loading and ends before lifecycle. The complete driver child interval includes loading, lifecycle and teardown. GUI startup scalars and the primary scroll CPU interval retain their existing boundaries. Bundle input is capped at 128 MiB, its manifest at 1 MiB and each member at 32 MiB; these shared writer/reader bounds preserve the fixed 5000-photo maximum. A diagnostic sidecar is limited to 16 KiB and updated every eight page reads/actions. Bundling is not evidence of application or rendering improvement.
 
-The full 16-process pilot [44016215794](https://github.com/klusik/PHP_gallery/actions/runs/44016215794), at source SHA `612a38df0e7601874a1cc1da4db97459432e705b`, saved 12 rows and timed out at the unchanged outer 90-second limit during the first 5,000-photo cold/instrumentation-on child. Diagnostic comment [6938434856](https://github.com/klusik/PHP_gallery/issues/399#issuecomment-6938434856) reports a 398.6-second sum for 12 saved child intervals and 62.5–78.6-second intervals for saved 2,000-photo cells, but does not prove root cause. The attempt and partial records are invalid; no baseline is accepted.
+The full 16-process pilot [44016215794](https://github.com/klusik/PHP_gallery/actions/runs/44016215794), at source SHA `612a38df0e7601874a1cc1da4db97459432e705b`, saved 12 rows and timed out at the unchanged outer 90-second limit during the first 5,000-photo cold/instrumentation-on child. Diagnostic comment [6938434856](https://github.com/klusik/PHP_gallery/issues/399#issuecomment-6938434856) reports a 398.6-second sum for 12 saved child intervals and 62.5–78.6-second intervals for saved 2,000-photo cells, but does not prove root cause. The attempt and partial records are invalid and were not pooled into the later accepted repeated baseline.
+
+
+
+### Planned issue 399 cache-capacity comparison
+
+A separate cache profile is planned as `issue_399_tk_cache_protocol.json`; it is
+not yet implemented or selected, and no capacity results exist. Any pilot limited
+to the small policy will check bridge/control feasibility only, not be an A/B or
+large-cache qualification. The profile will compare
+16 MiB / 256 decoded entries with 256 MiB / 4,096 entries on the same exact
+application SHA, changing only the session-shared decoded-thumbnail memory
+limits. Disk and photo-detail quotas, validation and TTL remain unchanged. It
+will fix one renderer per run, separately covering native widgets and Canvas.
+Each run will cover 100, 500 and 2,000 photos in cold/warm states with ten
+matched independent process pairs per cell. Full down-and-back and repeated
+sweeps must request all N thumbnails; a separate switch must return to and
+fully sweep the original N-photo gallery. The current 100-photo lifecycle sample
+cannot stand in for the larger cache traversal.
+
+Planned per-process summaries include cache hits/misses/evictions/decode
+attempts, PhotoImage publication P95/P99, CPU and peak RSS. GUI events are not
+independent samples and will not be pooled. The profile keeps the central audit,
+ten-pair minimum, 90-second child timeout, 2,400-second driver timeout and
+20,000-event cap. Missing observations, incomplete full sweeps, truncation or
+timeouts block qualification without reducing n or inventing zeros. The 5,000-
+photo case remains nonblocking stress. See [the issue 399 experiment record]
+(docs/performance/issue_399_virtualized_canvas.md) for the current G4 NO-GO and
+separate pending design.
+
 
 The issue-scoped `issue-361-winapp-functional.yml` workflow runs the canonical
 Windows `winapp-partitioned` suite and Linux `winapp` suite under Xvfb. macOS

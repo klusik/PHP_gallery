@@ -1,16 +1,17 @@
 # Project: PHP Gallery
 # Repository: https://github.com/klusik/PHP_gallery
 # File: winapp/tests/test_native_gallery_viewer.py
-# Module Type: Windows Tk Regression Test
-# Purpose: Exercise the native linked-gallery viewer with real Tk widgets.
+# Module Type: Windows Tk and Cache Regression Test
+# Purpose: Exercise the linked-gallery viewer and shared thumbnail cache.
 # Responsibilities:
 #   - Verify native and opt-in Canvas tiles, bounded thumbnails and photo paging.
+#   - Verify shared cache limits, proof identity, expiry and owner cleanup.
 #   - Verify GPS actions, zoom, slideshow and foreground-result fencing.
 #   - Verify closing the viewer or its parent cancels owned work.
 #   - Verify confirmed gallery creation reaches the real Watcher action.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
-"""Windows-only Tk regression coverage for the linked-gallery viewer."""
+"""Regression coverage for shared cache policy and the Windows gallery viewer."""
 
 import ctypes
 import gc
@@ -75,15 +76,17 @@ except ModuleNotFoundError as exc:
     Image = None
     ImageTk = None
 
+if tk is not None:
+    from uploader import native_gallery_viewer
+else:
+    native_gallery_viewer = None
+
 if sys.platform == 'win32' and tk is not None and Image is not None:
-    from uploader import (
-        gallery_lightbox, native_gallery_viewer, photos_workspace, ui_theme,
-    )
+    from uploader import gallery_lightbox, photos_workspace, ui_theme
     from uploader.gallery_preload import GalleryPreloadWorker
     from uploader.windows_display import prepare_windows_display
 else:
     gallery_lightbox = None
-    native_gallery_viewer = None
     photos_workspace = None
     ui_theme = None
 
@@ -173,8 +176,8 @@ TEST_WIDE_VIEWPORT_PHOTO_COUNT = 120
 # Purpose: Exercise dense 21:9 rows over four real metadata pages.
 # Type: int. Units: photos. Scope: dense cache-return Windows fixture.
 # Consumers: test_dense_return_renews_catalogue_and_reuses_disk.
-# Rationale: 240 entries exceed one wide viewport while fitting the unchanged
-# 256-entry decoded limit, so renewal and forced RAM eviction are independent.
+# Rationale: 240 records span multiple viewports while staying below the shared
+# LRU entry cap; the test explicitly clears RAM before isolating disk return.
 TEST_DENSE_CACHE_PHOTO_COUNT = 240
 
 # Purpose: Keep the isolated media session alive during native cache assertions.
@@ -182,6 +185,18 @@ TEST_DENSE_CACHE_PHOTO_COUNT = 240
 # Consumers: test_dense_return_renews_catalogue_and_reuses_disk.
 # Rationale: Five minutes covers real Tk scheduling without altering proof TTL.
 TEST_CACHE_SESSION_SECONDS = 300.0
+
+# Purpose: Pin the requested shared thumbnail LRU entry capacity.
+# Type: int. Units: decoded images. Scope: shared thumbnail cache policy test.
+# Consumers: GalleryThumbnailMemoryPolicyTests.
+# Rationale: 4096 entries bound session identity bookkeeping for large albums.
+TEST_EXPECTED_THUMBNAIL_CACHE_ENTRY_LIMIT = 4096
+
+# Purpose: Pin the requested shared thumbnail LRU byte capacity.
+# Type: int. Units: bytes. Scope: shared thumbnail cache policy test.
+# Consumers: GalleryThumbnailMemoryPolicyTests.
+# Rationale: 256 MiB supports decoded return reuse under one strict cap.
+TEST_EXPECTED_THUMBNAIL_CACHE_MAX_BYTES = 256 * 1024 * 1024
 
 # Purpose: Exercise viewport event coalescing without relying on machine speed.
 # Type: int. Units: synthetic Tk signals. Scope: one burst regression.
@@ -368,6 +383,42 @@ TEST_NEXT_PAGE_IMAGE_ID = 303
 # Consumers: NativeGalleryCanvasIntegrationTests.
 # Rationale: Three records make keyboard movement and reorder reuse observable.
 TEST_CANVAS_GRID_PHOTO_COUNT = 3
+
+
+@unittest.skipIf(
+    native_gallery_viewer is None,
+    'Decoded thumbnail policy requires the optional Tk runtime.',
+)
+class GalleryThumbnailMemoryPolicyTests(unittest.TestCase):
+    """Verify decoded thumbnail capacity is configured without reservation."""
+
+    def test_shared_capacity_is_exact_and_lazy(self) -> None:
+        """Pin the larger shared LRU policy while its initial state stays empty.
+
+        Returns:
+            None: The policy values are exact and no raster bytes are reserved.
+        """
+        self.assertEqual(
+            TEST_EXPECTED_THUMBNAIL_CACHE_ENTRY_LIMIT,
+            native_gallery_viewer.MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT,
+        )
+        self.assertEqual(
+            TEST_EXPECTED_THUMBNAIL_CACHE_MAX_BYTES,
+            native_gallery_viewer.MEDIA_THUMBNAIL_CACHE_MAX_BYTES,
+        )
+        memory = native_gallery_viewer.GalleryThumbnailMemory()
+        self.assertEqual({}, memory.entries)
+        self.assertEqual({}, memory.identity_keys)
+        self.assertEqual(0, memory.size_bytes)
+        self.assertEqual(
+            {
+                'hits': 0, 'misses': 0, 'evictions': 0, 'bytes': 0,
+                'entries': 0, 'admission_refusals': 0, 'expirations': 0,
+                'validator_changes': 0,
+            },
+            memory.metrics_snapshot(),
+        )
+        memory.clear()
 
 
 @unittest.skipUnless(
@@ -2303,8 +2354,14 @@ class NativeGalleryViewerTests(unittest.TestCase):
             return result
 
         session.media_photo.side_effect = read_and_count
+        viewer._cancel_thumbnail_gui_slice()
+        for index in tuple(viewer._admitted_thumbnail_indices):
+            viewer._release_thumbnail_image(index)
+        viewer._thumbnail_memory.clear()
         viewer._thumbnail_loaded.clear()
         viewer._thumbnail_pending = sorted(viewer._admitted_thumbnail_indices)
+        # This test directly exercises the serialized network batch, so no
+        # bounded warm-RAM descriptors remain ahead of its synthetic work.
         # Normal dispatch clears a previous viewport's cancellation before
         # starting the next batch; this fixture invokes the worker directly.
         viewer._thumbnail_cancelled.clear()
@@ -2356,10 +2413,17 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         viewer._closed = False
         viewer.window = self.root
+        viewer.session = mock.create_autospec(
+            LinkingSession, instance=True, spec_set=True,
+        )
+        viewer.session.can_read_media.return_value = True
+        viewer.session.can_reuse_cached_media.return_value = True
+        viewer.session.can_read_admin_media.return_value = False
         viewer.gallery = LinkedGallery(
             TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Warm slice',
         )
         viewer._photos = photos
+        viewer._photo_images = [None] * len(photos)
         viewer._admitted_thumbnail_indices = set(range(len(photos)))
         viewer._visible_thumbnail_indices = set(range(len(photos)))
         viewer._thumbnail_pending = []
@@ -2371,15 +2435,24 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._thumbnail_tk_ms = 0.0
         viewer._thumbnail_warm_cache_hit_count = 0
 
-        def make_copy(_photo: LinkedPhoto) -> 'Image.Image':
+        def make_copy(
+            _photo: LinkedPhoto,
+            *,
+            expected_key: (
+                tuple[int, int, bool | None, str | None, int | None] | None
+            ) = None,
+        ) -> 'Image.Image':
             """Return a separate tiny raster for one simulated cache hit.
 
             Args:
                 _photo (LinkedPhoto): Descriptor looked up by the warm slice.
+                expected_key (tuple[int, int, bool | None, str | None, int | None] | None):
+                    Key observed by the authorized cache probe.
 
             Returns:
                 Image.Image: Independent RGB copy owned by the GUI slice.
             """
+            self.assertIsNotNone(expected_key)
             return Image.new('RGB', (2, 2), (20, 40, 60))
 
         def attach(
@@ -2551,8 +2624,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
         """Deliver a result published between queue inspection and worker exit.
 
         Returns:
-            None: A controlled interleaving preserves the generation and worker
-                until its final image has a scheduled Tk delivery.
+            None: Generation and worker survive until the final queued image is
+                scheduled and attached; a duplicate current result is then freed.
         """
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
@@ -2564,7 +2637,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'The queue fixture did not finish its initial thumbnails.',
         )
         generation = viewer._generation
-        retained = viewer._photo_images[0]
+        previous_image = viewer._photo_images[0]
+        viewer._release_thumbnail_image(0)
         result = native_gallery_viewer._ThumbnailResult(
             TEST_GALLERY_ID, 0, page.photos[0], Image.new('RGB', (1, 1)),
             MediaReadTimings(), 0.0, time.perf_counter(),
@@ -2595,7 +2669,29 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._poll_queue()
         self.assertTrue(viewer._events.empty())
         self.assertIsNone(viewer._worker)
-        self.assertIsNot(retained, viewer._photo_images[0])
+        self.assertIsNotNone(viewer._photo_images[0])
+        self.assertIsNot(previous_image, viewer._photo_images[0])
+        with self.assertRaises(ValueError):
+            result.image.getpixel((0, 0))
+
+        # A duplicate current-proof result must not replace a real Tk image.
+        retained = viewer._photo_images[0]
+        duplicate_image = Image.new('RGB', (1, 1))
+        duplicate = native_gallery_viewer._ThumbnailResult(
+            TEST_GALLERY_ID, 0, page.photos[0], duplicate_image,
+            MediaReadTimings(), 0.0, time.perf_counter(),
+        )
+        discarded_before = viewer._thumbnail_discarded_count
+        viewer._events.put((
+            viewer._generation, 'thumbnail_batch_item', duplicate,
+        ))
+        viewer._poll_queue()
+        self.assertIs(retained, viewer._photo_images[0])
+        self.assertEqual(
+            discarded_before + 1, viewer._thumbnail_discarded_count,
+        )
+        with self.assertRaises(ValueError):
+            duplicate_image.getpixel((0, 0))
         viewer.close()
 
     def test_stale_and_closed_thumbnail_results_release_rasters(self) -> None:
@@ -3416,6 +3512,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         )
         for index in range(len(page.photos)):
             viewer._release_thumbnail_image(index)
+        viewer._thumbnail_memory.clear()
         # Tile zero is reserved by the independent disk lane. Tile one is the
         # already admitted network operation; both remain visible and wanted.
         viewer._thumbnail_pending = [1]
@@ -3444,6 +3541,19 @@ class NativeGalleryViewerTests(unittest.TestCase):
             None: Visible admission evicts oldest history within the byte cap;
                 overscan, expiry and validator replacement release ownership.
         """
+        self.assertEqual(
+            TEST_EXPECTED_THUMBNAIL_CACHE_ENTRY_LIMIT,
+            native_gallery_viewer.MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT,
+        )
+        self.assertEqual(
+            TEST_EXPECTED_THUMBNAIL_CACHE_MAX_BYTES,
+            native_gallery_viewer.MEDIA_THUMBNAIL_CACHE_MAX_BYTES,
+        )
+        empty_memory = native_gallery_viewer.GalleryThumbnailMemory()
+        self.assertEqual({}, empty_memory.entries)
+        self.assertEqual({}, empty_memory.identity_keys)
+        self.assertEqual(0, empty_memory.size_bytes)
+        empty_memory.clear()
         page, presentation, image_bytes = self._gallery_data()
         session = self._session(page, presentation, image_bytes)
         viewer = self._open_viewer(
@@ -3457,6 +3567,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
         viewer._photos = (*page.photos, extra)
         memory = viewer._thumbnail_memory
         memory.clear()
+        self._assert_thumbnail_identity_index(memory)
         # Exactly two maximum-size RGB entries exercise the byte boundary
         # independently of the production entry-count ceiling.
         one_entry_bytes = (
@@ -3476,6 +3587,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
                     Image.new('RGB', native_gallery_viewer.MEDIA_THUMBNAIL_SIZE),
                 )
             self.assertEqual(one_entry_bytes * 2, memory.size_bytes)
+            self._assert_thumbnail_identity_index(memory)
             viewer._visible_thumbnail_indices = {0}
             speculative = Image.new(
                 'RGB', native_gallery_viewer.MEDIA_THUMBNAIL_SIZE,
@@ -3483,6 +3595,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             viewer._remember_thumbnail(extra, speculative)
             self.assertEqual(1, memory.admission_refusals)
             self.assertEqual(0, memory.evictions)
+            self._assert_thumbnail_identity_index(memory)
             with self.assertRaises(ValueError):
                 speculative.getpixel((0, 0))
             viewer._visible_thumbnail_indices = {2}
@@ -3491,6 +3604,7 @@ class NativeGalleryViewerTests(unittest.TestCase):
             )
             self.assertEqual(1, memory.evictions)
             self.assertEqual(one_entry_bytes * 2, memory.size_bytes)
+            self._assert_thumbnail_identity_index(memory)
             self.assertIsNone(viewer._cached_thumbnail(page.photos[0]))
             changed = LinkedPhoto(extra.image_id, extra.title, thumbnail_etag='"' + 'a' * 64 + '"')
             viewer._photos = (*page.photos, changed)
@@ -3498,6 +3612,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
                 changed, Image.new('RGB', native_gallery_viewer.MEDIA_THUMBNAIL_SIZE),
             )
             self.assertEqual(1, memory.validator_changes)
+            self._assert_thumbnail_identity_index(memory)
+        misses_before_expiry = memory.metrics_snapshot()['misses']
         with mock.patch.object(
             native_gallery_viewer.time, 'monotonic',
             return_value=(
@@ -3506,7 +3622,24 @@ class NativeGalleryViewerTests(unittest.TestCase):
         ):
             self.assertIsNone(viewer._cached_thumbnail(changed))
         self.assertEqual(1, memory.expirations)
+        self.assertGreater(
+            memory.metrics_snapshot()['misses'], misses_before_expiry,
+        )
         self.assertEqual(one_entry_bytes, memory.size_bytes)
+        self._assert_thumbnail_identity_index(memory)
+        retained = tuple(
+            item[0] for item in memory.entries.values()
+        )
+        memory.remove_photos(
+            TEST_GALLERY_ID,
+            tuple(photo.image_id for photo in viewer._photos),
+        )
+        self.assertEqual({}, memory.entries)
+        self.assertEqual({}, memory.identity_keys)
+        self.assertEqual(0, memory.size_bytes)
+        for image in retained:
+            with self.assertRaises(ValueError):
+                image.getpixel((0, 0))
         viewer.close()
 
     def test_decoded_thumbnail_cache_reuses_verified_album_previews(self) -> None:
@@ -3528,12 +3661,17 @@ class NativeGalleryViewerTests(unittest.TestCase):
             and all(first._photo_images),
             'The first album mount did not fill its visible thumbnail cache.',
         )
+        self._assert_thumbnail_identity_index(memory)
         # This fixture allocates one host per mount. Release its geometry so
         # a later viewer has the same viewport as a replacement in Photos.
         first_host = first.frame.master
         first.close()
+        self.assertEqual([], first._photo_images)
+        self.assertTrue(memory.entries)
+        self._assert_thumbnail_identity_index(memory)
         first_host.destroy()
         initial_reads = session.media_photo.call_count
+        before_return = memory.metrics_snapshot()
 
         second = self._open_viewer(session, gallery, memory)
         self._wait_until(
@@ -3542,6 +3680,10 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'A previously visited album did not reuse decoded thumbnails.',
         )
         self.assertEqual(initial_reads, session.media_photo.call_count)
+        self.assertGreater(
+            memory.metrics_snapshot()['hits'], before_return['hits'],
+        )
+        self._assert_thumbnail_identity_index(memory)
         second_host = second.frame.master
         second.close()
         second_host.destroy()
@@ -3573,12 +3715,40 @@ class NativeGalleryViewerTests(unittest.TestCase):
             )
         self.assertEqual(initial_reads + 1, session.media_photo.call_count)
         self.assertEqual(1, len(memory.entries))
+        self._assert_thumbnail_identity_index(memory)
         self.assertEqual(
             changed.photos[0].thumbnail_etag,
             session.media_photo.call_args.kwargs['thumbnail_etag'],
         )
         third.close()
+        self.assertEqual([], third._photo_images)
+        self._assert_thumbnail_identity_index(memory)
+        retained = tuple(
+            item[0] for item in memory.entries.values()
+        )
+        self.assertEqual(
+            {key[:2]: key for key in memory.entries},
+            memory.identity_keys,
+        )
+        before_clear = memory.metrics_snapshot()
         memory.clear()
+        after_clear = memory.metrics_snapshot()
+        self.assertEqual(
+            {
+                key: value for key, value in before_clear.items()
+                if key not in {'bytes', 'entries'}
+            },
+            {
+                key: value for key, value in after_clear.items()
+                if key not in {'bytes', 'entries'}
+            },
+        )
+        self.assertEqual({}, memory.entries)
+        self.assertEqual({}, memory.identity_keys)
+        self.assertEqual(0, memory.size_bytes)
+        for image in retained:
+            with self.assertRaises(ValueError):
+                image.getpixel((0, 0))
 
     def test_private_thumbnail_ram_uses_thumbnail_identity_scope(self) -> None:
         """Use thumbnail proof scope for RAM tiles and default scope for detail.
@@ -3639,6 +3809,15 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'thumbnail' not in call.kwargs
             for call in session.private_preload_cache_identity.call_args_list
         ))
+        misses_before_denied_key = (
+            viewer._thumbnail_memory.metrics_snapshot()['misses']
+        )
+        session.can_reuse_cached_media.return_value = False
+        self.assertIsNone(viewer._cached_thumbnail(photo))
+        self.assertEqual(
+            misses_before_denied_key,
+            viewer._thumbnail_memory.metrics_snapshot()['misses'],
+        )
         viewer.close()
 
     def _fullscreen_enabled(self, window: 'tk.Misc') -> bool:
@@ -4199,11 +4378,28 @@ class NativeGalleryViewerTests(unittest.TestCase):
             'The optional presentation was not applied after release.',
         )
 
+    def _assert_thumbnail_identity_index(
+        self,
+        memory: native_gallery_viewer.GalleryThumbnailMemory,
+    ) -> None:
+        """Assert the photo identity map exactly matches resident LRU keys.
+
+        Args:
+            memory (GalleryThumbnailMemory): Shared decoded thumbnail owner.
+
+        Returns:
+            None: Every resident full proof key has one matching identity entry.
+        """
+        expected = {key[:2]: key for key in memory.entries}
+        self.assertEqual(expected, memory.identity_keys)
+
     def _open_viewer(
         self,
         session: LinkingSession,
         gallery: LinkedGallery,
         thumbnail_memory: 'native_gallery_viewer.GalleryThumbnailMemory | None' = None,
+        canvas_grid_enabled: bool | None = False,
+        newest_first: bool = False,
     ) -> 'native_gallery_viewer._NativeGalleryViewer':
         """Mount the public API and retain its real embedded controller.
 
@@ -4211,6 +4407,9 @@ class NativeGalleryViewerTests(unittest.TestCase):
             session (LinkingSession): Autospecced media session for this case.
             gallery (LinkedGallery): Explicit physical gallery selected by test.
             thumbnail_memory (GalleryThumbnailMemory | None): Shared session cache.
+            canvas_grid_enabled (bool | None): Explicit renderer choice;
+                False keeps native tests on the native-widget compatibility path.
+            newest_first (bool): Use the real viewer's local reverse order.
 
         Returns:
             native_gallery_viewer._NativeGalleryViewer: Actual controller whose
@@ -4224,6 +4423,8 @@ class NativeGalleryViewerTests(unittest.TestCase):
             gallery,
             lambda: 'en',
             thumbnail_memory=thumbnail_memory,
+            newest_first=newest_first,
+            canvas_grid_enabled=canvas_grid_enabled,
         )
         frame.pack(fill='both', expand=True)
         self.root.update_idletasks()

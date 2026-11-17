@@ -2186,7 +2186,29 @@ av kortformatet. Varje uppdatering använder den igen: nya foton hamnar först
 när nyaste först är valt. Rutnät, lightbox och bildspel delar ordningen;
 webbplatsen lagrar inte valet. Omvänd visning läser först hela den begränsade
 metadatasekvensen och bläddrar sedan lokalt utan att förladda bildfiler.
-Efter en kvotpaus fortsätter Retry från den verifierade metadatamarkören.
+Efter en kvotpaus fortsätter Retry från den verifierade metadatamarkören. Vid timeout när svarshuvuden väntas får högst en automatisk retry göras per
+fullständig uppdatering, och endast om föregående fysiska begäran har avslutats.
+Annars finns det befintliga timeoutfelet och den verifierade markören kvar för
+\ui{Retry}; ingen ytterligare väntan eller begäran schemaläggs. Gränser per
+begäran och metadataålder är oförändrade. Avbrott, behörighetsfel och felaktiga
+svar rensar delresultatet. En kall visning med nyaste först kräver fortfarande
+en fullständig metadatagenomgång.
+
+WinApp har dessutom en separat cache med fullständiga ordningsmetadata endast
+för den aktuella sessionen, begränsad till fyra gallerier och totalt 10 000
+rader. Giltighetstiden på 60 sekunder börjar när en fullständig hämtning startar.
+Vid återöppning kan den sparade ordningen visas direkt medan den vanliga
+fullständiga uppdateringen körs. Cachen innehåller inga bildbytes och ger eller
+förnyar inte bevis för binärmedia; bevisidentiteter och TTL är oförändrade.
+RAM-uppslag för miniatyrbilder görs före bakgrundsuppdatering av bevis; en
+pågående diskläsning blockerar inte en RAM-träff, och ett sent binärt svar kan
+inte ersätta bilden som för närvarande matchar. En RAM-miss, även för en utmönstrad eller utgången post som behöver bevis, väntar fortfarande på katalogavstämning före disk- eller nätverksläsning. Förnyad session, stängd
+arbetsyta och HTTP 401/403/404 tömmer metadatacachen. En avbruten vanlig
+uppdatering kan behålla en äldre, fortfarande giltig fullständig ögonblicksbild.
+Utan en fullständig ögonblicksbild från den aktuella sessionen kräver den första
+visningen med nyaste först fortfarande en fullständig seriell stigande API-läsning:
+servern har ingen omvänd markör och trädets disklager saknar foto-ID:n och titlar.
+Det hävdas inte att fördröjningen vid kallstart är löst.
 
 Båda gallerimenyerna grupperar information/åtkomst, lokal cache, verktyg och
 skapande kompakt. I~\ui{Galleriinformation} använder synlighet den befintliga
@@ -2301,7 +2323,7 @@ Jämför kall och varm bläddring separat; mätningarna bevisar inte FPS.
 Aktuella auktoriserade diskfynd behandlas av en separat disk-/avkodningstråd med
 fyra resultatplatser; Admin-återanvändning kräver ett färskt kontobundet
 katalogbevis.
-Avkodad LRU räknar fyra byte per pixel inom 16~MiB och~256 poster. Synliga
+Avkodad LRU räknar fyra byte per pixel inom 256~MiB och~4~096 poster. Synliga
 poster prioriteras vid eviction; overscan tränger inte undan färsk historik
 när cachen är full. Tk-bilder begränsas till det tillåtna radbandet.
 Seriella medie-GETs kan återanvända en HTTP/1.1-anslutning och en verifierande
@@ -2364,7 +2386,7 @@ ger viewport/Watcher en tur; spekulativa warm-köer blockerar inte förladdning.
 Hostinghastighet och faktisk variant kräver ett överenskommet live-test.
 Högerinspektören sparar sin egen önskade bredd vid döljning, omstart och resize.
 RAM är endast denna Windows-process working set eller macOS RSS utan barnprocesser;
-process-VRAM är okänt. Decoded-minnet förblir begränsat till~16~MiB.
+process-VRAM är okänt. Decoded-minnet förblir begränsat till~256~MiB.
 Varje del~rensar bara sina minst nyligen använda poster; stora foton tränger
 inte undan miniatyrbilder. Galleriers bevarande och~privata förladdningsval
 delas fortfarande. När~bevarande stängs av~kontrolleras först plats för~alla
@@ -2731,6 +2753,58 @@ blir tillgängligt inom fem sekunder visas fönstret. Registreringen tillhör de
 användare som kör appen; installation som uttryckligen startas upphöjd kan
 använda
 det kontot.
+
+Den inbyggda menyraden grupperar kommandon under \ui{File}, \ui{Edit},
+\ui{View}, \ui{Tools} och~\ui{Help}. \ui{File} importerar filer, mappar
+eller ZIP-arkiv; \texttt{Ctrl+O} öppnar filvalet. \ui{Edit} har
+textredigering och~\ui{Settings}; \texttt{Ctrl+,} öppnar inställningarna.
+\ui{View} växlar mellan Photos, Watcher, Import, Activity, AI och~Settings.
+\ui{Tools} innehåller Watcher-/anslutningsåtgärder, köuppdatering,
+uppdateringskontroll och~supportdiagnostik. \ui{Help} öppnar användarhjälpen
+med \texttt{F1}, supportdiagnostiken med \texttt{Ctrl+Shift+D} och About.
+Navigeringsflikarna finns kvar. En panel som äger inmatningen spärrar
+menykommandon och~dessa kortkommandon tills den stängs.
+
+Inställningar, hjälp, anslutningsfrågor och meddelanden visas i huvudfönstret.
+Informationsmeddelanden visas i en icke-blockerande, avvisbar remsa med
+rullbar text. Den köar högst 32 meddelanden och visar antalet äldsta som
+utelämnats; den tar inte fokus eller greppar inmatningen. Bekräftelser och
+text-/heltalspromptar är fortsatt modala paneler som väntar på svar medan
+bakgrundsjobb fortsätter. Oberoende förloppspaneler väntar tills den aktuella
+besluts-/inmatningspanelen stängs. När en sådan panel är öppen blockeras
+övriga menyåtgärder och navigeringsgenvägar, men vanlig textredigering är tillgänglig
+i den fokuserade editorn. Åtgärder som beror på en sparad ägare kontrollerar
+ägaren på nytt före utförandet. Fil- och mappval visas också i en inbäddad
+panel; en begränsad kataloglista läses i en bakgrundstråd.
+
+Inställningen “Experimental Canvas gallery renderer” är aktiverad som standard
+för nya profiler och äldre profiler som saknar den sparade nyckeln; ett uttryckligt
+sparat False väljer fortfarande inbyggda widgets. Valet löses vid programstart
+innan någon Photos-vy öppnas. Hjälptexten lyder exakt:
+“Use experimental virtualized Canvas rendering for photo galleries.
+Requires application restart.” Ändringar kräver omstart av appen. Den valfria
+variabeln \codeword{PHP_GALLERY_CANVAS_GRID} har företräde: utan den gäller det
+sparade valet; exakt \codeword{1} aktiverar Canvas; exakt \codeword{0} och alla
+andra angivna värden väljer inbyggda widgets. Ägarbeslutet den 2026-11-17 följde
+en positiv upplevelse av desktopscrollning; det är inte ett statistiskt PASS
+eller en allmän tillgänglighetskvalificering.
+
+Inbäddade paneler ärver utseende och knappar från det centrala dialogbiblioteket;
+panelstapeln definierar ingen separat stil. Capture-förloppet behåller sin
+icke-modala overlay, fasta sidfot och automatiska återhämtning utan
+reparationsknappar.
+
+\ui{Support diagnostics…} öppnar en lokal förhandsvisning med \ui{Refresh},
+\ui{Copy} och~\ui{Save}. Rapporten innehåller tillåtna inställningar och
+körningsfakta, den aktuella diagnostikbilden och högst de senaste 64~KiB av
+den befintliga apploggen. Saknade eller oläsbara loggavsnitt, trunkerad svans
+och en borttagen ofullständig första rad markeras. Rapporten
+använder inte nätverket och filtrerar igenkännbara
+autentiseringsuppgifter, URL-frågeparametrar/fragment, lokala sökvägar,
+identitetsfält, e-postadresser och igenkända koordinatfält. Fullständig
+anonymisering kan inte garanteras; granska förhandsvisningen innan delning.
+Ingen rå konfigurationsfil eller några fotografier bifogas. Kopiering och
+sparande är uttryckliga lokala åtgärder; appen skickar inte rapporten.
 
 \subsection{Uppdateringsmeddelande och indikatorer}
 
@@ -10408,14 +10482,47 @@ och datamängdens identitet och läser sin katalog; appprofiler och cache hålls
 åtskilda. Gemensam förberedelse och arkivinläsning redovisas separat.
 Scenariotiden börjar efter verifierad inläsning och slutar före lifecycle;
 hela processintervallet inkluderar inläsning och teardown. GUI-startmått och CPU-gränsen för
-scrollmätning är oförändrade. Detta bevisar inte snabbare rendering; P0-baslinjen
-är inte accepterad.
+scrollmätning är oförändrade. Två upprepade P0-pilotkörningar och den formella jämförelsen med 120 processer
+är accepterade. Jämförelsen klarade den centrala granskningen, men G4 förblir
+ett historiskt NO-GO för allmän prestandakvalificering; ägarbeslutet den
+2026-11-17 ändrar inte den bedömningen. Efter användarens positiva erfarenhet av
+desktopscrollning blev Canvas det sparade standardvalet för nya profiler och
+äldre profiler som saknar inställningsnyckeln. Ett uttryckligt sparat False
+behåller inbyggda widgets. Tk-proxymått visar varken fysisk visning eller
+skärmläsarparitet.
 
 Metadata, Tk-idle-återkoppling och stabil
 viewport mäts separat. Den tillåtna filen
 \codeword{issue_399_tk_protocol.json} väljs med
-\codeword{PHP_GALLERY_TK_PERF_PROTOCOL}. Canvas-implementationen väntar på
-en godkänd upprepad baslinje. Nativa feature-kontroller kräver
+\codeword{PHP_GALLERY_TK_PERF_PROTOCOL}. En separat kapacitetsprofil planeras under namnet
+\codeword{issue_399_tk_cache_protocol.json}. Den är inte implementerad eller
+vald för en körning; det finns inga kapacitetsresultat. Den ska jämföra
+16~MiB/256 poster med 256~MiB/4~096 poster för varje fast renderer, kataloger
+med 100, 500 och 2~000 foton i kallt/varmt läge och tio oberoende matchade
+processpar per cell. Den enda sessionsdelade avkodade PIL-LRU:n använder
+konservativ beräkning med 4~byte per pixel; den begränsar inte RSS och utesluter
+allokerare, Tk och widgetöverhead. PhotoImages kan återskapas när begränsade
+Tk-platser återinförs i viewporten; en berättigad PIL-träff sparar bara
+avkodning. Sessionsposter överlever galleribyten och rensas vid workspace/session;
+en fristående viewers egen cache rensas när den stängs. Disk-/detaljkvoter,
+validering och TTL är oförändrade. Planerade fulla svep nedåt och tillbaka samt
+upprepade svep måste begära alla N miniatyrbilder; återgången öppnar och sveper
+den ursprungliga N-fotokatalogen igen. Det befintliga 100-foto-lifecykeltestet
+är ingen kapacitetsmätning för 2~000 foton. Den planerade rapporten sammanfattar
+cacheträffar/-missar, eviction, avkodningsförsök, PhotoImage-publikationens
+P95/P99, CPU och peak RSS per process; indatahändelser poolas inte. Timeout,
+saknade räknare eller trunkering blockerar kvalificering; gränserna 90~sekunder
+per process, 2~400~sekunder för driver och 20~000 händelser ändras inte.
+5~000 foton förblir separat icke-blockerande stresstest. Inget kapacitetsresultat
+finns; planen ändrar inte G4-NO-GO eller standardvalet av inbyggda widgets.
+Den sparade inställningen
+\codeword{experimental_canvas_gallery_renderer} är en strikt boolean med standardvärdet false, inläst vid start. Exakt etikett är
+“Experimental Canvas gallery renderer”; hjälptexten är “Use experimental
+virtualized Canvas rendering for photo galleries. Requires application
+restart.” Ändringar kräver omstart. \codeword{PHP_GALLERY_CANVAS_GRID} har
+företräde: utan variabel används sparat värde, exakt \codeword{1} aktiverar
+Canvas, exakt \codeword{0} väljer inbyggda widgets och alla andra angivna värden
+väljer inbyggda widgets. Nativa feature-kontroller kräver
 \codeword{[winapp-full]} eller manuell start.
 
 WinApps partitionskoordinator identifierar hela testinventariet en gång.

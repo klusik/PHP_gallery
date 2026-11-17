@@ -6,6 +6,7 @@
 # Responsibilities:
 #   - Verify logical keyboard focus and selection across reordered photos.
 #   - Verify refresh identity, paging, viewport admission and root cleanup.
+#   - Verify shared decoded reuse while Tk images remain viewer-scoped.
 #   - Verify preview-failure feedback, live access revocation and context targets.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
@@ -63,7 +64,35 @@ class NativeGalleryCanvasIntegrationTests(unittest.TestCase):
     _png = viewer_tests.NativeGalleryViewerTests._png
     _gallery_data = viewer_tests.NativeGalleryViewerTests._gallery_data
     _session = viewer_tests.NativeGalleryViewerTests._session
-    _open_viewer = viewer_tests.NativeGalleryViewerTests._open_viewer
+
+    def _open_viewer(
+        self,
+        session: viewer_tests.LinkingSession,
+        gallery: LinkedGallery,
+        thumbnail_memory: (
+            native_gallery_viewer.GalleryThumbnailMemory | None
+        ) = None,
+        canvas_grid_enabled: bool | None = None,
+        newest_first: bool = False,
+    ) -> native_gallery_viewer._NativeGalleryViewer:
+        """Mount a viewer with Canvas factory-default semantics for this suite.
+
+        Args:
+            session (LinkingSession): Autospecced media session for the case.
+            gallery (LinkedGallery): Exact gallery displayed by the viewer.
+            thumbnail_memory (GalleryThumbnailMemory | None): Optional shared
+                session cache reused across viewer mounts.
+            canvas_grid_enabled (bool | None): Explicit resolved choice, or None
+                to use the configured factory default and environment.
+            newest_first (bool): Use the real viewer's local reverse order.
+        Returns:
+            _NativeGalleryViewer: Controller mounted in this test's real root.
+        """
+        return viewer_tests.NativeGalleryViewerTests._open_viewer(
+            self, session, gallery, thumbnail_memory, canvas_grid_enabled,
+            newest_first,
+        )
+
     _assert_no_browsing_toplevels = (
         viewer_tests.NativeGalleryViewerTests._assert_no_browsing_toplevels
     )
@@ -596,6 +625,342 @@ class NativeGalleryCanvasIntegrationTests(unittest.TestCase):
         self.assertIsNone(viewer._worker)
         self.assertEqual(media_page_requests, session.media_page.call_count)
         self.assertEqual(media_photo_requests, session.media_photo.call_count)
+
+    def test_explicit_native_choice_overrides_canvas_environment_opt_in(self) -> None:
+        """Mount real native tiles when startup explicitly resolves Canvas off.
+
+        Returns:
+            None: An already-resolved startup False choice wins over raw env.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Album')
+        with mock.patch.dict(
+            native_gallery_viewer.os.environ,
+            {'PHP_GALLERY_CANVAS_GRID': '1'},
+        ):
+            viewer = self._open_viewer(
+                session, gallery, canvas_grid_enabled=False,
+            )
+        self.addCleanup(viewer.close)
+        self._wait_until(
+            lambda: len(viewer._photos) == len(page.photos)
+            and all(viewer._photo_images) and viewer._worker is None,
+            'The explicitly native viewer did not mount its photo tiles.',
+        )
+        self.assertIsNone(viewer._canvas_grid)
+        self.assertIsNotNone(viewer.grid_window)
+        self.assertTrue(all(
+            isinstance(tile, viewer_tests.ttk.Button)
+            for tile in viewer._tile_buttons
+        ))
+
+    def test_canvas_factory_default_is_enabled_without_environment_override(self) -> None:
+        """Use Canvas when the persisted factory choice is enabled by default.
+
+        Returns:
+            None: An absent environment override uses the application factory
+                default and mounts the actual Canvas renderer.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        gallery = LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Album')
+        with mock.patch.dict(native_gallery_viewer.os.environ):
+            native_gallery_viewer.os.environ.pop(
+                'PHP_GALLERY_CANVAS_GRID', None,
+            )
+            viewer = self._open_viewer(session, gallery)
+        self.addCleanup(viewer.close)
+        self._wait_until(
+            lambda: len(viewer._photos) == len(page.photos)
+            and bool(viewer._visible_thumbnail_indices)
+            and viewer._visible_thumbnail_indices <= viewer._thumbnail_loaded
+            and all(
+                viewer._photo_images[index] is not None
+                for index in viewer._visible_thumbnail_indices
+            )
+            and viewer._worker is None,
+            'The factory-default Canvas viewport did not settle its images.',
+        )
+        self.assertIsNotNone(viewer._canvas_grid)
+        self.assertIsNone(viewer.grid_window)
+        self.assertTrue(viewer._visible_thumbnail_indices)
+        self.assertTrue(all(
+            viewer._photo_images[index] is not None
+            for index in viewer._visible_thumbnail_indices
+        ))
+        diagnostics = viewer.render_diagnostics()
+        self.assertIn('renderer=canvas', diagnostics)
+        self.assertIn(
+            'memory_capacity_entries='
+            f'{native_gallery_viewer.MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT}',
+            diagnostics,
+        )
+        self.assertIn(
+            'memory_capacity_bytes='
+            f'{native_gallery_viewer.MEDIA_THUMBNAIL_CACHE_MAX_BYTES}',
+            diagnostics,
+        )
+
+    def test_canvas_reuses_fresh_memory_during_a_delayed_page_refresh(self) -> None:
+        """Re-admit a decoded raster while a catalogue refresh is waiting.
+
+        Returns:
+            None: Fresh authorized RAM pixels are republished without a second
+                media read; the independent metadata refresh remains in flight.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        memory = native_gallery_viewer.GalleryThumbnailMemory()
+        gallery = LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Album')
+        viewer = self._open_viewer(
+            session, gallery, memory, canvas_grid_enabled=True,
+        )
+        self.addCleanup(viewer.close)
+        self._wait_until(
+            lambda: len(viewer._photos) == len(page.photos)
+            and all(viewer._photo_images) and viewer._worker is None,
+            'Initial Canvas thumbnails did not settle before refresh.',
+        )
+        initial_reads = session.media_photo.call_count
+        initial_hits = memory.metrics_snapshot()['hits']
+        viewer._release_thumbnail_image(0)
+        entered = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
+
+        def delayed_page(
+            gallery_id: int,
+            after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> LinkedMediaPage:
+            """Hold the authoritative refresh until the RAM hit is observed.
+
+            Args:
+                gallery_id (int): Physical gallery requested by the viewer.
+                after_id (int | None): Exclusive metadata cursor, if supplied.
+                cancelled (threading.Event | None): Refresh cancellation token.
+            Returns:
+                LinkedMediaPage: The same authorized metadata for the fixture.
+            """
+            self.assertEqual(TEST_GALLERY_ID, gallery_id)
+            self.assertIsNone(after_id)
+            entered.set()
+            release.wait(TEST_GUI_WAIT_SECONDS)
+            if cancelled is not None and cancelled.is_set():
+                return LinkedMediaPage(
+                    TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, (), None,
+                )
+            return page
+
+        session.media_page.side_effect = delayed_page
+        viewer.refresh_photos()
+        self._wait_until(
+            lambda: entered.is_set()
+            and viewer._worker_kind == 'refresh',
+            'The delayed authoritative metadata refresh did not start.',
+        )
+        self.assertIsNone(viewer._photo_images[0])
+        viewer._on_grid_viewport(None)
+        self._wait_until(
+            lambda: viewer._photo_images[0] is not None
+            and viewer._worker_kind == 'refresh',
+            'A fresh decoded RAM raster waited behind the metadata refresh.',
+        )
+        self.assertEqual(initial_reads, session.media_photo.call_count)
+        self.assertGreater(memory.metrics_snapshot()['hits'], initial_hits)
+        release.set()
+        self._wait_until(
+            lambda: viewer._worker is None and viewer._photo_images[0] is not None,
+            'The authorized refresh did not finish after releasing its page.',
+        )
+
+    def test_cached_newest_order_refreshes_once_after_ram_render(self) -> None:
+        """Render a fresh cached reverse order while one full refresh runs.
+
+        Returns:
+            None: The cached page's RAM thumbnails publish before the blocked
+                authoritative sweep, and no duplicate full sweep follows it.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        memory = native_gallery_viewer.GalleryThumbnailMemory()
+        gallery = LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Album')
+        first = self._open_viewer(
+            session, gallery, memory, canvas_grid_enabled=True,
+        )
+        self._wait_until(
+            lambda: len(first._photos) == len(page.photos)
+            and all(first._photo_images) and first._worker is None,
+            'Source Canvas thumbnails did not settle.',
+        )
+        original_media_reads = session.media_photo.call_count
+        first_host = first.frame.master
+        first.close()
+        first_host.destroy()
+
+        newest_first = tuple(reversed(page.photos))
+        session.cache_recent_media_order(
+            TEST_GALLERY_ID,
+            newest_first,
+            native_gallery_viewer.time.monotonic(),
+        )
+        session.recent_media_order.return_value = newest_first
+        entered = threading.Event()
+        release = threading.Event()
+        self.addCleanup(release.set)
+        read_count: list[int] = []
+
+        def delayed_page(
+            gallery_id: int,
+            after_id: int | None = None,
+            cancelled: threading.Event | None = None,
+        ) -> LinkedMediaPage:
+            """Hold the one authoritative full-order refresh for observation.
+
+            Args:
+                gallery_id (int): Physical gallery requested by the viewer.
+                after_id (int | None): Exclusive server cursor, if supplied.
+                cancelled (threading.Event | None): Viewer cancellation token.
+            Returns:
+                LinkedMediaPage: Complete ascending metadata from the fixture.
+            """
+            self.assertEqual(TEST_GALLERY_ID, gallery_id)
+            read_count.append(1)
+            if len(read_count) == 1:
+                entered.set()
+                release.wait(TEST_GUI_WAIT_SECONDS)
+            return page
+
+        session.media_page.side_effect = delayed_page
+        newest = self._open_viewer(
+            session,
+            gallery,
+            memory,
+            canvas_grid_enabled=True,
+            newest_first=True,
+        )
+        self.addCleanup(newest.close)
+        self._wait_until(
+            lambda: entered.is_set()
+            and newest._worker_kind == 'refresh'
+            and tuple(newest._photos) == newest_first
+            and bool(newest._visible_thumbnail_indices)
+            and newest._visible_thumbnail_indices <= newest._thumbnail_loaded
+            and all(
+                newest._photo_images[index] is not None
+                for index in newest._visible_thumbnail_indices
+            ),
+            'The cached reverse-order viewport did not render during refresh.',
+        )
+        self.assertTrue(newest._visible_thumbnail_indices)
+        self.assertTrue(all(
+            newest._photo_images[index] is not None
+            for index in newest._visible_thumbnail_indices
+        ))
+        self.assertEqual(original_media_reads, session.media_photo.call_count)
+        release.set()
+        self._wait_until(
+            lambda: newest._worker is None
+            and newest._worker_kind is None
+            and not newest._refresh_pending
+            and newest._events.empty(),
+            'The authoritative cached-order refresh did not settle.',
+        )
+        self.assertEqual(1, len(read_count))
+        self.assertEqual(original_media_reads, session.media_photo.call_count)
+
+    def test_canvas_return_reuses_session_rasters_with_viewport_tk_ownership(self) -> None:
+        """Reuse decoded shared pixels while releasing each closed viewer's Tk refs.
+
+        Returns:
+            None: Canvas re-entry hits the same session LRU without another
+                media read; PhotoImages remain viewer-scoped and clear on close.
+        """
+        page, presentation, image_bytes = self._gallery_data()
+        session = self._session(page, presentation, image_bytes)
+        memory = native_gallery_viewer.GalleryThumbnailMemory()
+        gallery = LinkedGallery(TEST_GALLERY_ID, TEST_PARENT_GALLERY_ID, 'Album')
+        with mock.patch.dict(
+            native_gallery_viewer.os.environ,
+            {'PHP_GALLERY_CANVAS_GRID': '0'},
+        ):
+            first = self._open_viewer(
+                session, gallery, memory, canvas_grid_enabled=True,
+            )
+        self._wait_until(
+            lambda: len(first._photos) == len(page.photos)
+            and all(first._photo_images) and first._worker is None,
+            'Canvas cache source thumbnails did not settle.',
+        )
+        self.assertIsNotNone(first._canvas_grid)
+        initial_reads = session.media_photo.call_count
+        first_host = first.frame.master
+        first.close()
+        self.assertEqual([], first._photo_images)
+        self.assertEqual(
+            first._thumbnail_image_create_count,
+            first._thumbnail_image_release_count,
+        )
+        self.assertTrue(memory.entries)
+        first_host.destroy()
+
+        before_return = memory.metrics_snapshot()
+        with mock.patch.dict(
+            native_gallery_viewer.os.environ,
+            {'PHP_GALLERY_CANVAS_GRID': '0'},
+        ):
+            second = self._open_viewer(
+                session, gallery, memory, canvas_grid_enabled=True,
+            )
+        self._wait_until(
+            lambda: len(second._photos) == len(page.photos)
+            and all(second._photo_images) and second._worker is None,
+            'Canvas decoded-cache return did not settle.',
+        )
+        self.assertIsNotNone(second._canvas_grid)
+        self.assertEqual(initial_reads, session.media_photo.call_count)
+        self.assertGreater(second._thumbnail_warm_cache_hit_count, 0)
+        after_return = memory.metrics_snapshot()
+        self.assertGreater(after_return['hits'], before_return['hits'])
+        self.assertLessEqual(
+            sum(image is not None for image in second._photo_images),
+            len(second._admitted_thumbnail_indices),
+        )
+        self.assertGreater(second._thumbnail_image_create_count, 0)
+
+        second_host = second.frame.master
+        second.close()
+        self.assertEqual([], second._photo_images)
+        self.assertEqual(
+            second._thumbnail_image_create_count,
+            second._thumbnail_image_release_count,
+        )
+        second_host.destroy()
+        retained = tuple(image for image, _size, _at in memory.entries.values())
+        self.assertEqual(
+            {key[:2]: key for key in memory.entries},
+            memory.identity_keys,
+        )
+        before_clear = memory.metrics_snapshot()
+        memory.clear()
+        after_clear = memory.metrics_snapshot()
+        self.assertEqual(
+            {
+                key: value for key, value in before_clear.items()
+                if key not in {'bytes', 'entries'}
+            },
+            {
+                key: value for key, value in after_clear.items()
+                if key not in {'bytes', 'entries'}
+            },
+        )
+        self.assertEqual({}, memory.entries)
+        self.assertEqual({}, memory.identity_keys)
+        self.assertEqual(0, memory.size_bytes)
+        for image in retained:
+            with self.assertRaises(ValueError):
+                image.getpixel((0, 0))
 
     def test_canvas_context_callback_receives_exact_photo_identity(self) -> None:
         """Route an actual Canvas context press to the exact loaded photo owner.

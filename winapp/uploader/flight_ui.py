@@ -22,8 +22,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Protocol
 import tkinter as tk
-from tkinter import filedialog, ttk
-from uploader import overlay as messagebox
+from tkinter import ttk
+from uploader import ui_file_picker as filedialog
+from uploader.ui_shell import EmbeddedWindow, active_panel, messagebox
 
 from uploader.flight_jobs import (
     REPORT_LANGUAGES,
@@ -54,7 +55,7 @@ from uploader.flight_simbrief import (
     DispatchPlan, fetch_dispatch, identity_query, import_dispatch, load_dispatch,
 )
 from uploader.flight_navdata import remember_plan
-from uploader.ui_theme import Button, Dialog, GlassCard, icon_button, place_dialog
+from uploader.ui_theme import Button, GlassCard, icon_button, place_dialog
 from uploader.overlay import OverlayPanel, layout_actions
 from uploader.simconnect_flight import (
     METRES_PER_FOOT,
@@ -366,8 +367,8 @@ class FlightUI:
         self.report_sort_column = "started"
         self.report_sort_descending = True
         self.dialog: OverlayPanel | None = None
-        self.settings_dialog: OverlayPanel | None = None
-        self.report_dialog: OverlayPanel | None = None
+        self.settings_dialog: EmbeddedWindow | None = None
+        self.report_dialog: EmbeddedWindow | None = None
         self.report_tree: ttk.Treeview | None = None
         self.report_rows: dict[str, SavedFlight] = {}
         self.report_files: dict[str, tuple[str, ReportRevision, str]] = {}
@@ -471,13 +472,16 @@ class FlightUI:
                 self.task_tree.heading("#0", text=title)
 
     def dialog_owner(self) -> tk.Misc:
-        """Find the invoking window so related dialogs stay together.
+        """Find the active panel for a user-invoked related dialog.
 
         Returns:
-            tk.Misc: Focused application toplevel, or the main window.
+            tk.Misc: Active embedded panel, focused root widget, or main root.
         """
+        panel = active_panel(self.host.root)
+        if panel is not None:
+            return panel
         focused = self.host.root.focus_get()
-        return focused.winfo_toplevel() if focused is not None else self.host.root
+        return focused if focused is not None else self.host.root
 
     def prompt_simbrief_identity(self, identity: str) -> str | None:
         """Ask for one validated identity in the application's themed dialog.
@@ -489,7 +493,7 @@ class FlightUI:
         """
         owner = self.dialog_owner()
         previous_grab, previous_focus = owner.grab_current(), owner.focus_get()
-        dialog = Dialog(owner)
+        dialog = EmbeddedWindow(owner)
         dialog.withdraw()
         dialog.title("SimBrief")
         dialog.resizable(False, False)
@@ -846,10 +850,12 @@ class FlightUI:
             self.settings_dialog.focus_set()
             return
         owner = self.dialog_owner()
-        dialog = OverlayPanel(owner, self.capture_text("flight_settings"))
+        dialog = EmbeddedWindow(owner)
+        dialog.withdraw()
         self.settings_dialog = dialog
+        dialog.title(self.capture_text("flight_settings"))
         dialog.protocol('WM_DELETE_WINDOW', dialog.destroy)
-        panel = GlassCard(dialog.body, padding=(12, 8))
+        panel = GlassCard(dialog, padding=(12, 8))
         panel.pack(fill="both", expand=True, padx=12, pady=12)
         panel.columnconfigure(0, weight=1)
         ttk.Label(
@@ -997,11 +1003,16 @@ class FlightUI:
             self.refresh_reports()
             return
         owner = self.dialog_owner()
-        self.report_dialog = OverlayPanel(owner, self.text("saved_reports"))
-        panel = GlassCard(self.report_dialog.body, padding=(8, 4))
+        self.report_dialog = EmbeddedWindow(owner)
+        self.report_dialog.withdraw()
+        self.report_dialog.title(self.text("saved_reports"))
+        self.report_dialog.transient(self.host.root)
+        panel = GlassCard(self.report_dialog, padding=(16, 12))
         panel.pack(fill="both", expand=True, padx=10, pady=10)
         panel.columnconfigure(0, weight=1)
         panel.rowconfigure(1, weight=1)
+        report_footer = ttk.Frame(panel, style="Card.TFrame")
+        report_footer.grid(row=3, column=0, sticky="ew", pady=(8, 0))
         hint = ttk.Label(
             panel, text=self.text("report_actions_hint"), wraplength=620,
             style="Muted.TLabel",
@@ -1040,7 +1051,7 @@ class FlightUI:
             hint.configure(wraplength=max(1, event.width - 16)),
             detail_label.configure(wraplength=max(1, event.width - 16)),
         ))
-        actions = ttk.Frame(self.report_dialog.footer, style="Card.TFrame")
+        actions = ttk.Frame(report_footer, style="Card.TFrame")
         actions.pack(fill="x", pady=(8, 0))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
@@ -1065,7 +1076,7 @@ class FlightUI:
         Button(
             actions, text=self.text("open_pdf"), command=self.open_selected_pdf,
         ).grid(row=1, column=1, sticky="ew")
-        tools = ttk.Frame(self.report_dialog.footer, style="Card.TFrame")
+        tools = ttk.Frame(report_footer, style="Card.TFrame")
         tools.pack(fill="x", pady=(8, 0))
         tools.bind('<Configure>', lambda _event: layout_actions(
             tools, [button for button in tools.winfo_children() if isinstance(button, ttk.Button)],
@@ -2751,7 +2762,8 @@ class FlightUI:
             self.dialog.destroy()
             self._animation_running = False
         self._progress_local_mode = mode
-        owner = self.dialog_owner()
+        # Background progress must not become a child of an unrelated prompt.
+        owner = self.host.root
         self.dialog = OverlayPanel(owner, self.capture_text("flight_progress"))
         frame = self.dialog.body
         frame.columnconfigure(0, weight=1)

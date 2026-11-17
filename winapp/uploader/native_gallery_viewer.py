@@ -77,6 +77,7 @@ from .ui_theme import (
 )
 from .tk_scroll_input import vertical_scroll_delta
 from .gallery_view_preferences import normalize_card_format
+from .config import resolve_canvas_gallery_renderer_enabled
 from .gallery_view_order import GalleryViewOrder
 
 try:
@@ -141,20 +142,20 @@ MEDIA_VIEWPORT_COALESCE_MS = 24
 # Rationale: One row avoids edge churn while keeping Tk image retention bounded.
 MEDIA_THUMBNAIL_OVERSCAN_ROWS = 1
 
-# Purpose: Keep visible decoded thumbnails warm across album selections.
+# Purpose: Bound session-shared thumbnail identity-index bookkeeping.
 # Type: int. Units: decoded images. Scope: one shared live-session cache.
 # Consumers: _NativeGalleryViewer._remember_thumbnail.
-# Rationale: 256 bounds bookkeeping independently of raster dimensions. The
-# byte cap is authoritative for full-sized images, including wide viewports.
-MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT = 256
+# Rationale: 4096 supports large albums while keeping each session's index
+# bounded independently of raster dimensions.
+MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT = 4096
 
 # Purpose: Bound decoded thumbnail memory across album selections.
 # Type: int. Units: bytes. Scope: one shared live-session cache.
 # Consumers: _NativeGalleryViewer._remember_thumbnail.
-# Rationale: 16 MiB retains two 84-item bands (60 visible plus two 12-item
-# overscan rows) at four accounted bytes per pixel, with room for history.
+# Rationale: 256 MiB retains useful decoded previews across album visits under
+# one strict session cap; rasters allocate only on authorized cache admission.
 # Visible entries lead eviction; speculative overscan cannot displace history.
-MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 16 * 1024 * 1024
+MEDIA_THUMBNAIL_CACHE_MAX_BYTES = 256 * 1024 * 1024
 
 # Purpose: Bound thumbnail proof age and validator-free decoded reuse.
 # Type: float. Units: seconds. Scope: one entry in a live session cache.
@@ -190,22 +191,52 @@ class GalleryThumbnailMemory:
             tuple[int, int, bool | None, str | None, int | None],
             tuple['Image.Image', int, float],
         ] = OrderedDict()
+        # Map photo identity to its sole current proof key; this owns no rasters.
+        self.identity_keys: dict[
+            tuple[int, int],
+            tuple[int, int, bool | None, str | None, int | None],
+        ] = {}
         self.size_bytes = 0
+        self.hits = 0
+        self.misses = 0
         self.evictions = 0
         self.admission_refusals = 0
         self.expirations = 0
         self.validator_changes = 0
 
+    def metrics_snapshot(self) -> dict[str, int]:
+        """Return fixed cumulative counters without retaining photo identities.
+
+        Returns:
+            dict[str, int]: Copy with keys hits, misses, evictions, bytes,
+                entries, admission_refusals, expirations, and validator_changes.
+                Hits and misses count authorized full-key lookups, not unique
+                photos or physical media reads. Counters survive clear; a new
+                owner starts at zero.
+        """
+        with self.lock:
+            return {
+                'hits': self.hits,
+                'misses': self.misses,
+                'evictions': self.evictions,
+                'bytes': self.size_bytes,
+                'entries': len(self.entries),
+                'admission_refusals': self.admission_refusals,
+                'expirations': self.expirations,
+                'validator_changes': self.validator_changes,
+            }
+
     def clear(self) -> None:
         """Release every retained raster when its owning session ends.
 
         Returns:
-            None: No decoded gallery pixels remain in this cache.
+            None: No decoded gallery pixels or identity mappings remain.
         """
         with self.lock:
             for image, _size, _stored_at in self.entries.values():
                 image.close()
             self.entries.clear()
+            self.identity_keys.clear()
             self.size_bytes = 0
 
     def remove_photos(
@@ -222,11 +253,17 @@ class GalleryThumbnailMemory:
         """
         targets = set(image_ids)
         with self.lock:
-            for key in tuple(self.entries):
-                if key[0] == gallery_id and key[1] in targets:
-                    image, size, _stored_at = self.entries.pop(key)
-                    self.size_bytes -= size
-                    image.close()
+            for image_id in targets:
+                identity = (gallery_id, image_id)
+                key = self.identity_keys.pop(identity, None)
+                if key is None:
+                    continue
+                cached = self.entries.pop(key, None)
+                if cached is None:
+                    continue
+                image, size, _stored_at = cached
+                self.size_bytes -= size
+                image.close()
 
 # Purpose: Identify a tile whose authorized preview could not be loaded.
 # Type: str. Units: one visible Unicode glyph. Scope: unavailable photo tile.
@@ -801,6 +838,7 @@ class _NativeGalleryViewer:
         photo_selected: Callable[[LinkedPhoto], None] | None = None,
         observation_callback: Callable[[str], None] | None = None,
         newest_first: bool = False,
+        canvas_grid_enabled: bool | None = None,
     ) -> None:
         """Create the embedded view and start its first bounded page load.
 
@@ -823,6 +861,8 @@ class _NativeGalleryViewer:
             observation_callback (Callable[[str], None] | None): Optional
                 receiver for bounded, non-failure observation summaries.
             newest_first (bool): Reverse the complete metadata sequence locally.
+            canvas_grid_enabled (bool | None): Resolved renderer preference;
+                None uses the configured factory default and environment choice.
 
         Returns:
             None: The viewer owns the returned child frame until it is destroyed.
@@ -838,14 +878,17 @@ class _NativeGalleryViewer:
         self._owns_thumbnail_memory = thumbnail_memory is None
         self._thumbnail_memory = thumbnail_memory or GalleryThumbnailMemory()
         self._context_menu = context_menu
-        # The native Button renderer stays default because each photo has a
-        # real keyboard and screen-reader focus target. Canvas remains opt-in
-        # until physical and screen-reader checks plus paired performance
-        # qualification pass. _NativeGalleryViewer owns this fallback; retire
-        # it only after those proofs and owner approval. See
+        # Native Buttons remain the explicit saved opt-out and accessibility
+        # fallback while Canvas is the factory default. _NativeGalleryViewer
+        # owns this fallback; retain it until physical and screen-reader checks,
+        # paired performance qualification, and owner approval. See
         # docs/COMPATIBILITY_LIFECYCLE.md#issue-399-canvas-grid-fallback.
-        # Read the explicit experiment opt-in once for this viewer's lifetime.
-        self._canvas_grid_enabled = os.environ.get('PHP_GALLERY_CANVAS_GRID') == '1'
+        # Read the resolved renderer choice once for this viewer's lifetime.
+        self._canvas_grid_enabled = (
+            canvas_grid_enabled
+            if canvas_grid_enabled is not None
+            else resolve_canvas_gallery_renderer_enabled(True)
+        )
         self._canvas_grid: CanvasGalleryGrid | None = None
         self._grid_content_height: int = 0
         self._diagnostic_callback = diagnostic_callback
@@ -1511,9 +1554,6 @@ class _NativeGalleryViewer:
             self._thumbnail_disk_lane.retain(
                 self.gallery.gallery_id, self._photos, tuple(admitted_order),
             )
-            if self._queue_thumbnail_proof_refresh():
-                self._dispatch_pending_work()
-                return
             self._warm_thumbnail_pending = [
                 item for item in self._warm_thumbnail_pending
                 if (item[0] == self.gallery.gallery_id
@@ -1523,10 +1563,6 @@ class _NativeGalleryViewer:
             for index in admitted_order:
                 identity = (self.gallery.gallery_id, index, self._photos[index])
                 if (index not in self._thumbnail_loaded
-                        and index not in self._thumbnail_pending
-                        and not self._thumbnail_disk_lane.contains(
-                            self.gallery.gallery_id, index, self._photos[index],
-                        )
                         and identity not in self._warm_thumbnail_pending):
                     self._warm_thumbnail_pending.append(identity)
             self._warm_thumbnail_pending.sort(
@@ -1548,6 +1584,9 @@ class _NativeGalleryViewer:
                         or wanted[:len(unfinished)] != unfinished):
                     self._thumbnail_cancelled.set()
             self._drain_warm_thumbnail_slice()
+            if self._queue_thumbnail_proof_refresh():
+                self._dispatch_pending_work()
+                return
             bounds = self.grid_canvas.bbox('all')
             content_height = (
                 self._grid_content_height if canvas_grid is not None
@@ -1658,7 +1697,26 @@ class _NativeGalleryViewer:
                     and index in self._admitted_thumbnail_indices
                     and index < len(self._photos)
                     and self._photos[index] == photo):
-                cached = self._cached_thumbnail(photo)
+                if not self.session.can_read_media():
+                    self.close()
+                    return
+                current_key = self._thumbnail_memory_key(photo)
+                if (current_key is not None
+                        and index < len(self._photo_images)
+                        and self._photo_images[index] is not None):
+                    count += 1
+                    continue
+                cached = self._cached_thumbnail(
+                    photo, expected_key=current_key,
+                )
+                if cached is not None and not self.session.can_read_media():
+                    cached.close()
+                    self.close()
+                    return
+                if (cached is not None
+                        and self._thumbnail_memory_key(photo) != current_key):
+                    cached.close()
+                    cached = None
                 if cached is not None:
                     self._thumbnail_warm_cache_hit_count += 1
                     attach_started = time.perf_counter()
@@ -1666,9 +1724,16 @@ class _NativeGalleryViewer:
                     self._thumbnail_tk_ms += (
                         time.perf_counter() - attach_started
                     ) * 1000.0
-                elif index not in self._thumbnail_pending:
-                    self._thumbnail_disk_lane.submit(gallery_id, index, photo)
-                    self._schedule_queue_poll()
+                elif (not self._refresh_pending
+                      and self._worker_kind != 'refresh'
+                      and index not in self._thumbnail_pending):
+                    if not self._thumbnail_disk_lane.contains(
+                        gallery_id, index, photo,
+                    ):
+                        self._thumbnail_disk_lane.submit(
+                            gallery_id, index, photo,
+                        )
+                        self._schedule_queue_poll()
             count += 1
         self._thumbnail_pending.sort(
             key=lambda index: (
@@ -1723,6 +1788,8 @@ class _NativeGalleryViewer:
         if not 0 <= index < len(self._photo_images):
             self._thumbnail_loaded.discard(index)
             return
+        # Tk images stay viewport-scoped; warm session rasters intentionally
+        # recreate PhotoImages on readmission instead of retaining a second pool.
         canonical = self._canonical_thumbnail_images.pop(index, None)
         if canonical is not None:
             canonical.close()
@@ -1804,6 +1871,8 @@ class _NativeGalleryViewer:
         retained = sum(
             image is not None for image in self._photo_images
         )
+        memory_state = self._thumbnail_memory.metrics_snapshot()
+        renderer = 'canvas' if self._canvas_grid_enabled else 'native'
         with self._thumbnail_metrics_lock:
             transport = ' '.join(
                 f'{name}={value:.2f}'
@@ -1836,11 +1905,15 @@ class _NativeGalleryViewer:
             f'discarded={self._thumbnail_discarded_count} '
             f'cancelled_reads={self._thumbnail_cancelled_read_count} '
             f'disk_discarded={self._thumbnail_disk_lane.discarded_results} '
-            f'memory_bytes={self._thumbnail_memory.size_bytes} '
-            f'evictions={self._thumbnail_memory.evictions} '
-            f'admission_refusals={self._thumbnail_memory.admission_refusals} '
-            f'expired={self._thumbnail_memory.expirations} '
-            f'validator_changes={self._thumbnail_memory.validator_changes} '
+            f'renderer={renderer} '
+            f'memory_entries={memory_state["entries"]} '
+            f'memory_capacity_entries={MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT} '
+            f'memory_bytes={memory_state["bytes"]} '
+            f'memory_capacity_bytes={MEDIA_THUMBNAIL_CACHE_MAX_BYTES} '
+            f'evictions={memory_state["evictions"]} '
+            f'admission_refusals={memory_state["admission_refusals"]} '
+            f'expired={memory_state["expirations"]} '
+            f'validator_changes={memory_state["validator_changes"]} '
             f'proof_refreshes={self._thumbnail_proof_refresh_count} '
             f'batches={self._thumbnail_batch_count} '
             f'dispatch_groups={self._thumbnail_batch_count} '
@@ -2817,7 +2890,6 @@ class _NativeGalleryViewer:
         # until the next existing revision interval permits another attempt.
         self._thumbnail_proof_refresh_attempt_at = now
         self._thumbnail_proof_refresh_count += 1
-        self._cancel_thumbnail_gui_slice()
         self._thumbnail_disk_lane.invalidate()
         if self._worker_kind == 'thumbnail_batch':
             self._thumbnail_cancelled.set()
@@ -2834,7 +2906,6 @@ class _NativeGalleryViewer:
         if self._closed:
             return
         self._cancel_thumbnail_resume()
-        self._cancel_thumbnail_gui_slice()
         self._thumbnail_disk_lane.invalidate()
         if self._worker_kind == 'thumbnail_batch':
             self._thumbnail_cancelled.set()
@@ -3247,10 +3318,23 @@ class _NativeGalleryViewer:
         """
         self._page_request_cursor = None
         self._page_request_mode = 'initial'
+        order = getattr(self, '_view_order', None)
+        cached_order = order.cached_page() if order is not None else None
+        if (isinstance(cached_order, LinkedMediaPage)
+                and not cached_order.cover_only
+                and self.session.can_read_media()
+                and not self._closed and self._worker is None
+                and self._events.empty()):
+            self._events.put_nowait((
+                self._generation, 'page_recent', (cached_order, None),
+            ))
+            self._schedule_queue_poll(
+                MEDIA_THUMBNAIL_RESULT_CONTINUATION_MS,
+            )
+            return
         recent = getattr(self.session, 'recent_media_page', None)
         page = (recent(self.gallery.gallery_id)
-                if callable(recent) and getattr(self, '_view_order', None) is None
-                else None)
+                if callable(recent) and order is None else None)
         if (isinstance(page, LinkedMediaPage) and not page.cover_only and not self._closed
                 and self._worker is None and self._events.empty()):
             # A cover descriptor cannot imply a complete one-photo album.
@@ -3886,6 +3970,7 @@ class _NativeGalleryViewer:
         if (self._media_throttled or self._http_thumbnail_failure_latched
                 or self._thumbnail_resume_after_id is not None
                 or not self._thumbnail_pending
+                or bool(self._warm_thumbnail_pending)
                 or not self.grid_canvas.winfo_viewable()
                 or self._thumbnail_cancelled.is_set() or self._closed
                 or self._worker is not None
@@ -4283,6 +4368,12 @@ class _NativeGalleryViewer:
                         if result.image is not None:
                             result.image.close()
                         continue
+                    if (result.index < len(self._photo_images)
+                            and self._photo_images[result.index] is not None):
+                        if result.image is not None:
+                            result.image.close()
+                        self._thumbnail_discarded_count += 1
+                        continue
                     self._thumbnail_queue_wait_ms += max(
                         0.0,
                         (time.perf_counter() - result.enqueued_at) * 1000.0,
@@ -4441,6 +4532,9 @@ class _NativeGalleryViewer:
                 and self._photos[local.index] == local.photo
                 and not self._refresh_pending
             )
+            if (valid and local.index < len(self._photo_images)
+                    and self._photo_images[local.index] is not None):
+                valid = False
             if not valid:
                 if local.image is not None:
                     local.image.close()
@@ -5129,22 +5223,34 @@ class _NativeGalleryViewer:
             private_identity[0] if private_identity is not None else None,
         )
 
-    def _cached_thumbnail(self, photo: LinkedPhoto) -> 'Image.Image | None':
+    def _cached_thumbnail(
+        self,
+        photo: LinkedPhoto,
+        *,
+        expected_key: (
+            tuple[int, int, bool | None, str | None, int | None] | None
+        ) = None,
+    ) -> 'Image.Image | None':
         """Return unchanged decoded pixels only under current session authority.
 
         Args:
             photo (LinkedPhoto): Current server-authorized photo descriptor.
-
+            expected_key (tuple[int, int, bool | None, str | None, int | None] | None):
+                Key observed before the bounded Tk callback, or None when no
+                cache identity was available.
         Returns:
             Image.Image | None: Independent raster copy, or None after a miss,
                 public freshness expiry, or refusal by the live private proof.
         """
+        if not self.session.can_read_media():
+            return None
         key = self._thumbnail_memory_key(photo)
-        if key is None:
+        if key is None or (expected_key is not None and key != expected_key):
             return None
         with self._thumbnail_memory.lock:
             cached = self._thumbnail_memory.entries.get(key)
             if cached is None:
+                self._thumbnail_memory.misses += 1
                 return None
             image, _size, stored_at = cached
             verified_at = photo.thumbnail_verified_at
@@ -5158,10 +5264,14 @@ class _NativeGalleryViewer:
                     > MEDIA_THUMBNAIL_MEMORY_FRESH_SECONDS):
                 self._thumbnail_memory.entries.pop(key, None)
                 self._thumbnail_memory.size_bytes -= _size
+                if self._thumbnail_memory.identity_keys.get(key[:2]) == key:
+                    self._thumbnail_memory.identity_keys.pop(key[:2], None)
                 self._thumbnail_memory.expirations += 1
+                self._thumbnail_memory.misses += 1
                 image.close()
                 return None
             self._thumbnail_memory.entries.move_to_end(key)
+            self._thumbnail_memory.hits += 1
             return image.copy()
 
     def _remember_thumbnail(self, photo: LinkedPhoto, image: 'Image.Image') -> None:
@@ -5190,9 +5300,13 @@ class _NativeGalleryViewer:
             return
         memory = self._thumbnail_memory
         with memory.lock:
-            for old_key in tuple(memory.entries):
-                if old_key[:2] == key[:2] and old_key != key:
-                    old_image, old_size, _stored_at = memory.entries.pop(old_key)
+            identity = key[:2]
+            old_key = memory.identity_keys.get(identity)
+            if old_key is not None and old_key != key:
+                old = memory.entries.pop(old_key, None)
+                memory.identity_keys.pop(identity, None)
+                if old is not None:
+                    old_image, old_size, _stored_at = old
                     memory.size_bytes -= old_size
                     memory.validator_changes += 1
                     old_image.close()
@@ -5221,6 +5335,7 @@ class _NativeGalleryViewer:
                 memory.size_bytes -= previous[1]
                 previous[0].close()
             memory.entries[key] = (image, size, time.monotonic())
+            memory.identity_keys[identity] = key
             memory.size_bytes += size
             while (len(memory.entries) > MEDIA_THUMBNAIL_CACHE_ENTRY_LIMIT
                    or memory.size_bytes > MEDIA_THUMBNAIL_CACHE_MAX_BYTES):
@@ -5231,6 +5346,8 @@ class _NativeGalleryViewer:
                 )
                 evicted, evicted_size, _stored_at = memory.entries.pop(victim)
                 memory.size_bytes -= evicted_size
+                if memory.identity_keys.get(victim[:2]) == victim:
+                    memory.identity_keys.pop(victim[:2], None)
                 memory.evictions += 1
                 evicted.close()
 
@@ -6462,6 +6579,7 @@ def mount_native_gallery_view(
     photo_selected: Callable[[LinkedPhoto], None] | None = None,
     observation_callback: Callable[[str], None] | None = None,
     newest_first: bool = False,
+    canvas_grid_enabled: bool | None = None,
 ) -> ttk.Frame:
     """Mount an inline, bounded gallery reader for a selected gallery.
 
@@ -6484,6 +6602,8 @@ def mount_native_gallery_view(
         observation_callback (Callable[[str], None] | None): Optional thread-safe
             receiver for allowlisted non-failure observations.
         newest_first (bool): Apply a local reverse order on all metadata refreshes.
+        canvas_grid_enabled (bool | None): Resolved renderer preference;
+            None uses the configured factory default and environment choice.
 
     Returns:
         ttk.Frame: Child view whose destruction releases worker and UI resources.
@@ -6501,5 +6621,6 @@ def mount_native_gallery_view(
         photo_selected=photo_selected,
         observation_callback=observation_callback,
         newest_first=newest_first,
+        canvas_grid_enabled=canvas_grid_enabled,
     )
     return viewer.frame

@@ -172,6 +172,17 @@ NATIVE_MEDIA_PAGE_SIZE = 64
 # Rationale: Sixteen first pages retain at most 1024 descriptors. Private
 # proofs use their own per-gallery row cap; all original proof ages remain.
 MEDIA_RECENT_PAGE_LIMIT = 16
+
+# Purpose: Bound complete ordered photo snapshots retained for immediate returns.
+# Type: int. Units: galleries. Scope: one live LinkingSession.
+# Consumers: LinkingSession._recent_media_orders.
+# Rationale: Four galleries cover recent browsing without retaining a workspace dump.
+MEDIA_RECENT_ORDER_GALLERY_LIMIT = 4
+# Purpose: Bound all complete ordered photo rows retained in one session.
+# Type: int. Units: photo descriptors. Scope: one live LinkingSession.
+# Consumers: LinkingSession.cache_recent_media_order.
+# Rationale: Ten thousand rows bound metadata while covering common gallery returns.
+MEDIA_RECENT_ORDER_PHOTO_LIMIT = 10_000
 # Purpose: Bound RAM-only private proof rows while paginated albums are open.
 # Type: int. Units: photo descriptors. Scope: one gallery per live session.
 # Consumers: LinkingSession.media_page.
@@ -5254,6 +5265,12 @@ class LinkingSession:
         self._recent_media_pages: OrderedDict[
             int, tuple[float, LinkedMediaPage]
         ] = OrderedDict()
+        # Complete newest-first display snapshots are metadata only. Their
+        # original per-photo proof timestamps remain unchanged and are checked
+        # by media_photo before any cached binary can be reused.
+        self._recent_media_orders: OrderedDict[
+            int, tuple[float, tuple[LinkedPhoto, ...]]
+        ] = OrderedDict()
         # The most recent authorized public page supersedes previous
         # thumbnail descriptions, including removed rows and unproven bytes.
         self._public_media_descriptors: OrderedDict[
@@ -5396,6 +5413,7 @@ class LinkingSession:
             self._expires_at = expires_at
             self._private_preload_generation += 1
             self._recent_media_pages.clear()
+            self._recent_media_orders.clear()
             self._public_media_descriptors.clear()
             self._public_unverified_confirmations.clear()
             self._private_preload_proofs.clear()
@@ -6145,6 +6163,7 @@ class LinkingSession:
                     self._private_preload_generation += 1
                     self._private_preload_proofs.pop(gallery_id, None)
                     self._recent_media_pages.pop(gallery_id, None)
+                    self._recent_media_orders.pop(gallery_id, None)
             raise
         if payload is None:
             raise LinkingError('Gallery photo page was not accepted.')
@@ -6341,6 +6360,102 @@ class LinkingSession:
                 return None
             self._recent_media_pages.move_to_end(gallery_id)
             return page
+
+    def cache_recent_media_order(
+        self, gallery_id: int, photos: tuple[LinkedPhoto, ...],
+        validated_at: float,
+    ) -> bool:
+        """Retain one complete display order within the existing metadata freshness window.
+
+        Args:
+            gallery_id (int): Exact physical gallery represented by the rows.
+            photos (tuple[LinkedPhoto, ...]): Complete newest-first validated rows.
+            validated_at (float): Monotonic start time of the full page read.
+
+        Returns:
+            bool: True when the live session retained the bounded snapshot;
+                False when it is stale, oversized, malformed or the session ended.
+                This cache never creates or renews thumbnail authorization.
+        """
+        if (not _native_media_id(gallery_id) or not isinstance(photos, tuple)
+                or len(photos) > MEDIA_RECENT_ORDER_PHOTO_LIMIT
+                or type(validated_at) not in (int, float)
+                or not math.isfinite(validated_at)):
+            return False
+        if any(
+            not isinstance(photo, LinkedPhoto)
+            or type(photo.image_id) is not int
+            or not _native_media_id(photo.image_id)
+            or not isinstance(photo.title, str)
+            or not _native_media_title(photo.title)
+            for photo in photos
+        ):
+            return False
+        if any(
+            left.image_id <= right.image_id
+            for left, right in zip(photos, photos[1:])
+        ):
+            return False
+        now = time.monotonic()
+        if not 0 <= now - validated_at < PHOTO_CACHE_FRESH_SECONDS:
+            return False
+        if not self.can_read_media():
+            return False
+        with self._lock:
+            now = time.monotonic()
+            if (self._closed or now >= self._expires_at
+                    or not 0 <= now - validated_at < PHOTO_CACHE_FRESH_SECONDS):
+                return False
+            self._recent_media_orders.pop(gallery_id, None)
+            for old_gallery_id, (stored_at, _rows) in tuple(
+                self._recent_media_orders.items()
+            ):
+                if not 0 <= now - stored_at < PHOTO_CACHE_FRESH_SECONDS:
+                    self._recent_media_orders.pop(old_gallery_id, None)
+            retained_rows = sum(
+                len(rows) for _stored_at, rows in self._recent_media_orders.values()
+            )
+            while (
+                self._recent_media_orders
+                and (
+                    len(self._recent_media_orders) >= MEDIA_RECENT_ORDER_GALLERY_LIMIT
+                    or retained_rows + len(photos) > MEDIA_RECENT_ORDER_PHOTO_LIMIT
+                )
+            ):
+                _old_gallery_id, (_stored_at, old_rows) = (
+                    self._recent_media_orders.popitem(last=False)
+                )
+                retained_rows -= len(old_rows)
+            self._recent_media_orders[gallery_id] = (validated_at, photos)
+            return True
+
+    def recent_media_order(
+        self, gallery_id: int,
+    ) -> tuple[LinkedPhoto, ...] | None:
+        """Return fresh metadata for a recently completed newest-first listing.
+
+        Args:
+            gallery_id (int): Exact physical gallery requested by the viewer.
+
+        Returns:
+            tuple[LinkedPhoto, ...] | None: Complete display-only order for the
+                same live session, or None when unavailable/stale. Returned
+                descriptor proof timestamps are unchanged; this lookup never
+                authorizes binary media or renews a proof.
+        """
+        if not _native_media_id(gallery_id) or not self.can_read_media():
+            return None
+        now = time.monotonic()
+        with self._lock:
+            entry = self._recent_media_orders.get(gallery_id)
+            if self._closed or now >= self._expires_at or entry is None:
+                return None
+            stored_at, photos = entry
+            if not 0 <= now - stored_at < PHOTO_CACHE_FRESH_SECONDS:
+                self._recent_media_orders.pop(gallery_id, None)
+                return None
+            self._recent_media_orders.move_to_end(gallery_id)
+            return photos
 
     def media_gallery_info(
         self, gallery_id: int, cancelled: threading.Event | None = None,
@@ -9520,6 +9635,7 @@ class LinkingSession:
             self._visibility_snapshot = None
             self._private_preload_generation += 1
             self._recent_media_pages.clear()
+            self._recent_media_orders.clear()
             self._public_media_descriptors.clear()
             self._public_unverified_confirmations.clear()
             self._private_preload_proofs.clear()

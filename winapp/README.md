@@ -1115,6 +1115,12 @@ navigation hints and upload/create actions wait.
 Maintainer UI diagnostics can select `native_only` in the existing hosted
 WinApp workflow. This runs the central `winapp-native` suite on Windows and
 records its exact narrower scope; it cannot qualify complete WinApp coverage.
+The issue-scoped **Issue 380 integrated WinApp UI** workflow runs central
+`scripts/audit.php --suite=winapp-partitioned` discovery on Ubuntu 24.04 with
+Xvfb and Windows Server 2025, retaining exact-commit artifacts. It owns runtime
+coverage for the integrated shell and support report; feature BASIC remains
+source-only, and this workflow alone does not establish FULL qualification or
+integration.
 Loaded galleries remain usable while the loading status above the tree and a
 small smooth spinning ring beside it indicate more work. The indicator covers
 initial reads and paced continuation, then stops on completion, error or
@@ -1141,6 +1147,44 @@ also has Settings, updates, and help controls. Icon controls have
 hover tooltips and keyboard focus; help opens usage guidance.
 Long pages and dialogs scroll with the mouse wheel or scrollbar; text and table
 controls keep their own scrolling.
+
+The native menu bar groups commands under **File**, **Edit**, **View**,
+**Tools**, and **Help**. File imports files, a folder, or a ZIP; **Ctrl+O**
+opens file import. Edit provides standard text editing and **Settings…**;
+**Ctrl+,** opens Settings. View switches among Photos, Watcher, Import,
+Activity, AI, and Settings. Tools contains watcher and connection controls,
+queue refresh, update checking, and support diagnostics. Help opens usage
+guidance with **F1**, support diagnostics with **Ctrl+Shift+D**, and About.
+The navigation tabs remain available. While a decision or input panel is open,
+non-edit menu actions and navigation shortcuts are suppressed; ordinary text
+editing commands continue to work in the focused editor.
+
+Settings, help, connection prompts, and notices are presented within the main
+window. Informational notices use a nonblocking, dismissible strip with
+scrollable text; notices queue up to 32, and the strip reports how many oldest
+notices were omitted. They do not take a grab or move focus. Confirmations and
+text/integer entry remain modal panels that wait for the user's answer while
+existing background work continues. Independent progress panels wait until
+the current decision/input panel closes. Actions that need a saved owner still
+revalidate that owner before acting. File and folder selection also use an
+embedded panel; directory listing runs in a worker and remains bounded.
+
+Embedded panels inherit `DialogSurface -> GlassCard`; their action controls
+use the same central `Button` as the workspace. Panel stacking adds behavior
+without defining another skin. Capture progress retains its nonmodal
+`OverlayPanel` with a fixed footer and automatic recovery without repair buttons.
+
+**Support diagnostics…** opens a local report preview with **Refresh**,
+**Copy**, and **Save** actions. The report includes allowlisted settings and
+runtime facts, the current diagnostic snapshot, and up to the last 64 KiB of
+the existing application log. Missing or unreadable log sections are labeled;
+a truncated tail and any dropped partial first line are marked. The report
+builder performs no network access
+and filters credential-like values, URL query/fragment data, local paths,
+identity labels, email addresses, and recognized coordinate fields. Redaction
+cannot guarantee complete anonymization: review the preview before sharing it.
+No raw configuration file or photographs are attached. Copying or saving is
+explicit; the application does not send the report.
 
 The Watcher screen keeps the selected folder path, watcher status, and source
 deletion warning visible. **▶ Start Watcher** starts only after an explicit
@@ -1503,9 +1547,9 @@ cannot issue HTTP requests. Its ready queue holds at most four results, plus
 one in-flight decode. A miss returns to the existing serialized network owner;
 pending identities prevent duplicate admission. Private Admin cache bytes still
 require live server revalidation and cannot use this disk-only shortcut.
-The shared decoded LRU has a 16 MiB byte cap, accounting four bytes per pixel,
-and a secondary 256-entry cap. This covers two 84-item bands at the maximum
-144-by-144 raster size. Visible entries take eviction priority; when full,
+The session-shared decoded LRU has a 256 MiB byte cap and a 4,096-entry cap,
+using conservative four-bytes-per-pixel accounting. This is a decoded-image
+cache limit, not an RSS cap. Visible entries take eviction priority; when full,
 speculative overscan is refused rather than displacing recent history.
 Expired session/proof data and changed validators cannot authorize a warm hit.
 Tk images remain limited to the visible and adjacent-row band. Releasing an
@@ -1567,6 +1611,20 @@ can continue across a quota window without starting the scan again.
 Cancellation or an incomplete catalogue never reports a
 partial reversal as a complete ordered view. A local **!** means the rule is
 applied for this session but its disk save failed.
+
+Photos retains a separate current-session cache of complete ordering metadata
+only (up to four galleries and 10,000 rows total). Its 60-second freshness
+starts when a complete fetch begins. Reopening can show the cached order
+immediately while the normal full refresh runs. Metadata does not grant or renew
+binary-media proof; proof identities and TTLs remain unchanged, and the cache
+contains no image bytes or decoded-image pool. RAM thumbnail lookup runs before
+background proof refresh; a pending disk read does not block a RAM hit, and a
+late binary response cannot replace the currently matching image. A RAM miss, including an evicted or expired entry needing proof, still waits for catalogue reconciliation before disk or network fallback. Session
+renewal, workspace close and HTTP 401/403/404 clear the metadata cache. An
+interrupted refresh may retain an older unexpired complete snapshot. A cold
+newest-first open without a complete current-session snapshot still needs the
+full ascending API read: the server has no reverse cursor and the disk tree
+cache lacks photo IDs/titles. The cold-open delay is not claimed fixed. For a timeout while awaiting response headers on the read with phase `media` and route `app_linking_media`, with no HTTP status, the validated prefix and cursor are retained. One full refresh invocation permits at most one automatic retry, and only when the prior physical completion event is absent or set. If it is unset, the refresh returns the existing error without waiting or scheduling another attempt, preserving the safe cursor for manual Retry. The retry uses the existing per-request timeout; neither that limit nor metadata freshness is extended. Cancellation, authorization failure, or a malformed response discards partial state. HTTP 429 continues through its existing quota/Retry-After path. A cold open still requires the complete ordered scan.
 
 Both gallery-menu triggers share compact Information & access, Local cache,
 Edit & tools and Create categories. **Gallery information** keeps inventory,
@@ -1711,8 +1769,7 @@ authorized offline coverage. RAM is explicitly current-process resident memory:
 Windows working set or macOS RSS, excluding children. VRAM stays unavailable; no GPU/game
 memory is attributed to the uploader. Selecting a quota saves it immediately;
 no Save button or confirmation is required. A save failure keeps the previous
-value and reports the error inline. Accounting scopes do not change. Decoded
-16 MiB/256-item bounds remain.
+value and reports the error inline. Accounting scopes do not change. Decoded thumbnail limits are 256 MiB and 4,096 entries per Photos session.
 Retained reads skip duplicate-cleanup locking when the exact ordinary candidate
 does not exist. Existing candidates still receive the full locked checks.
 A bounded decoded
@@ -1759,7 +1816,8 @@ are required.
 All action buttons use `ui_theme.Button`; `SmoothIconButton` derives from it.
 Both buttons and cards inherit `_RoundedSurface`, which owns clipping, resize
 tracking and GDI cleanup once. Native child dialogs use `Dialog`; in-window
-dialogs use `OverlayPanel -> DialogSurface -> GlassCard`. Ranges use `Slider`
+dialogs use `OverlayPanel` or `EmbeddedWindow -> DialogSurface -> GlassCard`.
+Ranges use `Slider`
 and the central `TScale` styles. Selected and placeholder gallery tiles inherit
 `LinkedPhoto.TButton`, overriding only state or placeholder typography.
 Every ttk style definition lives in `ui_theme.py`. Consumers choose registered
@@ -2678,20 +2736,47 @@ baseline evidence, frozen workloads and the required paired comparison.
 
 ### Experimental retained Canvas gallery
 
-Issue #399 provides an internal qualification backend selected by
-`PHP_GALLERY_CANVAS_GRID=1` before a viewer is created. It keeps a recycled
+Issue #399 provides an experimental Canvas renderer. The persisted setting is
+resolved at application startup before any photo viewer is created; the
+`PHP_GALLERY_CANVAS_GRID` environment override takes precedence. It keeps a recycled
 Canvas item pool for the current admitted viewport; catalogue metadata does
 not create one Tk widget or Tcl variable per photo. The existing viewer still
 owns media authorization, caches, workers, cancellation and image publication.
-The native widget renderer remains the default accessible fallback.
-
 The experimental backend requires hosted functional and paired performance
 qualification. Hover help uses one shared tooltip anchored to the current photo.
 Physical display smoothness, installed acceptance and screen-reader parity are
 unverified.
-See [the experiment record](../docs/performance/issue_399_virtualized_canvas.md)
-and [fallback lifecycle](../docs/COMPATIBILITY_LIFECYCLE.md). No release or
-migration is implied by the opt-in prototype.
+
+The persisted setting `experimental_canvas_gallery_renderer` defaults to Canvas
+for new profiles and legacy profiles missing the key; explicit saved False
+continues to select native widgets. It is resolved once at startup. The
+`PHP_GALLERY_CANVAS_GRID` override takes precedence: absent follows the saved
+choice, exact `1` forces Canvas, and exact `0` or any other present value
+forces native widgets. The 2026-11-17 owner decision followed a positive desktop
+scrolling experience; it does not claim a statistical PASS or general
+accessibility qualification. Native widgets remain the explicit fallback. Its
+exact label is “Experimental Canvas gallery renderer”; the help is “Use
+experimental virtualized Canvas rendering for photo galleries. Requires
+application restart.” There is no hot switch. The `PHP_GALLERY_CANVAS_GRID`
+override takes precedence: if absent, the saved setting applies; exact `1`
+forces Canvas, exact `0` forces native widgets, and any other present value
+forces native widgets.
+
+The candidate decoded-PIL LRU is lazy and shared once within the live Photos
+session, with a 256 MiB / 4,096-entry limit. The limit is not per viewer or an
+RSS cap: conservative four-bytes-per-pixel accounting excludes allocator, Tk and
+widget overhead. PhotoImages can be recreated when bounded Tk slots re-admit
+viewport items; an eligible shared-PIL hit avoids decode work only. Session
+entries survive gallery switches and clear at workspace/session teardown; a
+standalone viewer-owned cache clears on close. Disk cache, photo-detail quotas,
+validation and TTL are separate and unchanged. A paired capacity experiment is
+planned to compare this with 16 MiB / 256 entries; it has not been selected or
+run, and no capacity results exist. It does not change the historical G4 NO-GO or provide any capacity
+result. Canvas is now default-on for new profiles and missing legacy settings by
+the 2026-11-17 owner decision; saved False and the native environment override
+remain available. This does not constitute a statistical PASS. See [the issue
+399 record](../docs/performance/issue_399_virtualized_canvas.md).
+
 
 ## Source organization
 

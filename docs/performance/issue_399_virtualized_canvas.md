@@ -10,7 +10,7 @@ A/B observation, then optimize and complete statistical qualification. Earlier
 16/80/160 counts below belong to the superseded four-extent calibration, not
 the active blocking matrix. No invalid result is reclassified as PASS.
 
-This opt-in experiment measures Photos rendering at fixed loaded catalogue extents and records metadata admission separately. The existing issue 361 benchmark driver remains the execution and evidence owner. Select it with PHP_GALLERY_TK_PERF_PROTOCOL=issue_399_tk_protocol.json; the protocol workload_script selects the issue 399 harness. The central audit remains the only test orchestrator. The primary pilot has two complete independent PASS executions. This repeated descriptive baseline admits the opt-in prototype under the owner's revised priority; inferential statistical qualification remains pending.
+This opt-in experiment measures Photos rendering at fixed loaded catalogue extents and records metadata admission separately. The existing issue 361 benchmark driver remains the execution and evidence owner. Select it with PHP_GALLERY_TK_PERF_PROTOCOL=issue_399_tk_protocol.json; the protocol workload_script selects the issue 399 harness. The central audit remains the only test orchestrator. The primary pilot has two complete independent PASS executions. This repeated descriptive baseline admits the prototype under the owner's revised priority; inferential statistical qualification remains pending. The persisted product default changed to Canvas on 2026-11-17, without changing these historical measurements or claiming a statistical PASS.
 
 ## Source and workload identity
 
@@ -104,12 +104,16 @@ three transition timings are reported separately; it does not claim a 5000-photo
 switch result. Optional screenshots are limited to trial zero with instrumentation
 on, use complete source/scenario/cache/trial file identities, and remain advisory.
 
-Both sources receive `PHP_GALLERY_CANVAS_GRID=1`. The optimized control ignores
-that future opt-in; a candidate can implement it without changing frozen harness
-bytes. The report records the actual renderer. Keyboard focus requires either the
+Both sources receive `PHP_GALLERY_CANVAS_GRID=1`. The frozen baseline ignores
+the request and keeps its native renderer; the candidate resolves the request at
+startup. New profiles and legacy profiles missing the persisted renderer field
+now default to Canvas, while an explicit saved False or an environment value of
+0 selects native widgets. The report records the actual renderer.
+
+Keyboard focus requires either the
 exact native tile or a focused Canvas with the exact logical photo index. This
 is functional focus validation, not a screen-reader accessibility certification.
-The production renderer was unchanged during the accepted P0 descriptive baseline. The subsequent prototype is an isolated opt-in; the native renderer remains the default accessible fallback.
+The production renderer was unchanged during the accepted P0 descriptive baseline. The subsequent prototype remains isolated. On 2026-11-17, after the user's positive desktop scrolling experience, the owner changed the persisted default to Canvas for new profiles and legacy profiles missing the setting; explicit saved False and an environment value of 0 or any invalid present value still select native widgets. This product decision does not turn a measured NO-GO into a PASS or qualify screen-reader accessibility. The native renderer remains the explicit fallback.
 
 ## Pilot harness repair
 
@@ -222,8 +226,9 @@ The control creates 114/514/2014 native widgets at the three extents, while live
 PhotoImages are already admission-bounded. P1 targets this catalogue-sized
 widget/layout work with retained Canvas primitives bounded by the existing
 admitted viewport. The viewer continues to own authorization, media/cache,
-workers, cancellation, generations and UI-thread publication. The native path
-remains the default accessible fallback while the Canvas path is qualified.
+workers, cancellation, generations and UI-thread publication. The native path remains the explicit fallback. The persisted Canvas choice
+is now default-on for new/missing settings by the 2026-11-17 owner decision;
+accessibility qualification remains open.
 
 Before initial A/B, correct the anticipatory Canvas harness key precondition:
 focus the target logical tile as the native path already does. Do not change
@@ -236,7 +241,7 @@ before candidate timings: correctness/security and current-viewport resource
 bounds are mandatory; the primary large-catalogue latency hypothesis requires
 paired improvement and uncertainty assessment. A pilot is descriptive and
 cannot decide adoption. Physical display latency and screen-reader parity
-remain unverified; the default native fallback is retained.
+remain unverified; the native renderer was still the default at that historical checkpoint; the later owner decision documented below changed the persisted default to Canvas.
 
 No TeX manual impact for this checkpoint: it records experiment admission and
 architecture, without changing the default product flow or maintainer command.
@@ -429,7 +434,7 @@ control A. The existing workload/harness/driver, dependencies, deadlines,
 raw-event limits and statistical definitions remain unchanged. Source checks,
 Windows/Linux and frozen validation must pass at the exact candidate before
 claiming qualification. Physical display and screen-reader acceptance remain
-unverified; retain the default native accessibility path. Actual final outcomes
+unverified; keep native widgets available as the explicit fallback. Actual final outcomes
 belong to the linked issue/PR and immutable generated workflow artifacts.
 
 The compare workflow is dispatched only after current required functional
@@ -518,10 +523,79 @@ matched process pairs:
 | `wheel_slow_settled_p95_ms` | 46.855 ms | 78.149 ms | [22.277, 40.705] ms |
 | `wheel_fast_settled_p95_ms` | 26.608 ms | 43.017 ms | [11.994, 22.815] ms |
 
-Both regressions exceed the stated 10 ms and 20% G4 guard. The result is
-**NO-GO for general/default Canvas adoption**. The native renderer remains the
-default and Canvas remains opt-in. This result does not measure physical display
-presentation latency or establish accessibility acceptance.
+Both regressions exceed the stated 10 ms and 20% G4 guard. The measured result
+remains a **historical G4 NO-GO** for general performance qualification; it is
+not reclassified or erased by the later product decision. On 2026-11-17, after
+the user's positive desktop scrolling experience, the owner selected Canvas as
+the persisted default for new profiles and legacy profiles missing the setting.
+Explicit saved False and environment value 0 or an invalid present value retain
+the native renderer. This is a product priority decision, not a statistical PASS.
+The G4 experiment does not measure physical display latency or establish
+accessibility acceptance.
 
-No TeX manual impact: this records an internal performance decision; it does not
-change user-facing workflows, controls or product behavior.
+The TeX manuals summarize the current default and native fallback and link to
+this historical result; they do not repeat the full statistics table.
+
+
+
+## Current Photos metadata-order cache
+
+The metadata-order cache is distinct from the planned decoded-PIL capacity
+experiment below. It improves same-session reopening only; it does not provide
+a cold newest-first index or authorize image bytes.
+
+
+Photos metadata ordering has a separate in-memory, current-session cache of
+complete metadata only: at most four galleries and 10,000 rows total, with
+freshness measured from the start of the complete fetch using
+`PHOTO_CACHE_FRESH_SECONDS` (60 seconds). Reopening can show the cached order
+immediately while the normal full refresh runs. This cache holds no image bytes
+or decoded-image pool and never grants or renews binary-media proof; proof
+identities and TTLs are unchanged. A RAM thumbnail hit is checked before a
+background proof refresh, a pending disk read does not suppress that RAM hit,
+and a late binary response cannot replace the currently matching image. A RAM miss, including an evicted or expired entry needing proof, still waits for catalogue reconciliation before disk or network fallback. Renewal,
+workspace close, and HTTP 401/403/404 clear the metadata cache. An interrupted
+ordinary refresh may retain an older unexpired complete snapshot; expired order
+is not shown. The first newest-first open without a complete current-session
+snapshot still needs the full serial ascending API read: the disk tree cache has
+no photo IDs or titles, and the server exposes no reverse cursor. This does not
+claim to fix the historical cold-open delay or timeout. For a timeout while awaiting response headers on the read with phase `media` and route `app_linking_media`, with no HTTP status, the validated prefix and cursor are retained. One full refresh invocation permits at most one automatic retry, and only when the prior physical completion event is absent or set. If it is unset, the refresh returns the existing error without waiting or scheduling another attempt, preserving the safe cursor for manual Retry. The retry uses the existing per-request timeout; neither that limit nor metadata freshness is extended. Cancellation, authorization failure, or a malformed response discards partial state. HTTP 429 continues through its existing quota/Retry-After path. A cold open still requires the complete ordered scan.
+
+## Planned decoded-thumbnail cache capacity experiment
+
+The planned profile is named `issue_399_tk_cache_protocol.json`; it is not yet
+implemented or selected for a run, and no cache-capacity results exist. Any
+small-policy pilot would check bridge/control feasibility only, not be an A/B or
+large-cache qualification. The profile is intended to compare two allowlisted treatments on the same exact application
+SHA: 16 MiB / 256 entries and 256 MiB / 4,096 entries. Only the in-memory
+decoded-thumbnail limits would vary; both treatments use the same identity
+index. One lazy decoded-PIL LRU is shared within the live Photos session, not a
+256 MiB allocation per viewer. Disk-cache and photo-detail quotas, validator
+rules and TTL remain unchanged. Session entries survive gallery switches and
+clear at workspace/session teardown; a standalone viewer's own cache clears on
+close. PhotoImages can still be recreated when bounded Tk slots re-admit
+viewport items; a shared PIL hit avoids decode work only when cache proof
+remains eligible. Four-bytes-per-pixel accounting is conservative and excludes
+allocator, Tk and widget overhead; 256 MiB is a decoded-cache cap, not an RSS
+limit.
+
+The renderer would be fixed per run (native widgets, then Canvas), and the runs
+would remain separate. Each would compare 100, 500 and 2,000 photos in cold/warm
+states with ten independent matched process pairs per cell (60 pairs / 120 child
+processes). Cold would measure the first complete down-and-back thumbnail
+sweep. Warm would prime the same sweep outside measured timing, then measure a
+repeated sweep. Every sweep must request all N thumbnails; metadata admission
+alone does not fill the decoded-image cache. A separate gallery-switch phase
+must return to and fully reopen the original N-photo gallery, so the existing
+100-photo lifecycle sample cannot serve as a 2,000-photo capacity result.
+
+The planned report would summarize per-process cache hits, misses, evictions,
+decode attempts, PhotoImage publication P95/P99, CPU and peak RSS; GUI events
+would not be pooled as independent samples. Source/treatment mismatches,
+missing counters, raw-event truncation or the existing 90-second child /
+2,400-second driver timeout would remain visible failures or blocks, with no
+lower repetition count or synthetic zero. The 5,000-photo case remains separate
+nonblocking stress. This unrun plan does not qualify or alter the historical G4 NO-GO. The
+2026-11-17 owner decision makes Canvas the persisted default for new/missing
+settings; native widgets remain available through saved False or environment
+override. No statistical PASS or accessibility claim follows from that choice.
