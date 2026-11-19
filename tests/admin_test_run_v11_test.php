@@ -768,4 +768,21 @@ assert_admin_test_run_v11(
     'Test Run storage cleanup/retention and report ownership checks must remain bounded and explicit.',
 );
 
+// A fresh child supplies only authentication and filesystem-read observation;
+// its copied production module writes exclusively beneath its private temp root.
+$summaryOutput = [];
+$summaryExit = 0;
+exec(
+    escapeshellarg(PHP_BINARY) . ' '
+        . escapeshellarg(__DIR__ . '/support/admin_report_summary_probe.php')
+        . ' 2>&1',
+    $summaryOutput,
+    $summaryExit,
+);
+assert_admin_test_run_v11(
+    $summaryExit === 0
+        && implode("\n", $summaryOutput) === 'Compact report summary probe passed.',
+    'Compact metadata history probe failed: ' . implode("\n", $summaryOutput),
+);
+
 fwrite(STDOUT, "Admin Test Run v1.1.3 regression tests passed.\n");

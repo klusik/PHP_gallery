@@ -48,7 +48,8 @@ use function Gallery\Core\url_for;
 /**
  * Atomically write one JSON diagnostics file.
  *
- * @param array<string,mixed> $payload Structured JSON-safe payload.
+ * @phpstan-type AdminRunJsonValue null|bool|int|float|string|array<array-key,AdminRunJsonValue>
+ * @param array<string,AdminRunJsonValue> $payload JSON object with recursively JSON-safe values.
  * @param string $path Destination JSON file path.
  * @return void Atomically replaces the destination with the encoded payload.
  */
@@ -64,14 +65,162 @@ function admin_test_run_write_json(string $path, array $payload): void
     if (!is_string($json)) {
         throw new RuntimeException('Could not encode Admin test-run JSON.');
     }
-    $temporary = $path . '.tmp-' . bin2hex(random_bytes(4));
-    if (@file_put_contents($temporary, $json . "\n", LOCK_EX) === false) {
-        @unlink($temporary);
-        throw new RuntimeException('Could not write Admin test-run JSON.');
+    $isReport = basename($path) === 'report.json';
+    if ($isReport && is_link($path . '.publish.lock')) {
+        throw new RuntimeException('Invalid Admin report publication lock.');
     }
-    if (!@rename($temporary, $path)) {
-        @unlink($temporary);
-        throw new RuntimeException('Could not publish Admin test-run JSON.');
+    $lock = $isReport ? @fopen($path . '.publish.lock', 'c') : null;
+    if ($isReport && (!is_resource($lock) || !flock($lock, LOCK_EX))) {
+        if (is_resource($lock)) {
+            fclose($lock);
+        }
+        throw new RuntimeException('Could not lock Admin report publication.');
+    }
+    try {
+        $temporary = $path . '.tmp-' . bin2hex(random_bytes(4));
+        if (@file_put_contents($temporary, $json . "\n", LOCK_EX) === false) {
+            @unlink($temporary);
+            throw new RuntimeException('Could not write Admin test-run JSON.');
+        }
+        // Remove the prior projection before replacement, including same-size writes.
+        $summaryPath = dirname($path) . DIRECTORY_SEPARATOR . 'report-summary.json';
+        if ($isReport && is_file($summaryPath) && !@unlink($summaryPath)) {
+            @unlink($temporary);
+            throw new RuntimeException('Could not invalidate Admin report summary.');
+        }
+        if (!@rename($temporary, $path)) {
+            @unlink($temporary);
+            throw new RuntimeException('Could not publish Admin test-run JSON.');
+        }
+        if ($isReport) {
+            // The authoritative report is already durable; projection failure must
+            // preserve it. Missing summaries use the permanent legacy read path.
+            try {
+                admin_test_run_write_json($summaryPath, [
+                    'version' => 1, // Structural sidecar format, not a policy limit.
+                    'source' => admin_test_run_report_identity($path),
+                    'report' => admin_test_run_report_projection($payload),
+                ]);
+            } catch (Throwable) {
+                @unlink($summaryPath);
+            }
+        }
+    } finally {
+        if (is_resource($lock)) {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+}
+
+/**
+ * Bound one compact projection read before JSON decoding.
+ * Type: int. Units: bytes. Scope: one finalized report summary.
+ * Consumers: admin_test_run_listing_report().
+ * Rationale: 64 KiB accommodates metadata while excluding multi-MiB traces;
+ * oversized metadata retains the authoritative legacy path without truncation.
+ */
+const ADMIN_TEST_RUN_SUMMARY_MAX_BYTES = 65536;
+
+/**
+ * Identify the published report without reading its diagnostic body.
+ * @param string $path Authoritative report path.
+ * @return array{size:int,mtime:int,ctime:int,ino:int}|null File identity, or null when absent.
+ */
+function admin_test_run_report_identity(string $path): ?array
+{
+    clearstatcache(true, $path);
+    $stat = @stat($path);
+    if (!is_array($stat) || !is_file($path)) {
+        return null;
+    }
+    return [
+        'size' => (int) $stat['size'],
+        'mtime' => (int) $stat['mtime'],
+        'ctime' => (int) $stat['ctime'],
+        'ino' => (int) $stat['ino'],
+    ];
+}
+
+/**
+ * Project the fields consumed by the listing without retaining client traces.
+ * @param array{admin?:array{id?:int},created_at?:string,finalized_at?:string,target?:array{page?:string,request_target?:string},request_lifecycle?:array{completed_count?:int,all_completed_cleanly?:bool},request_concurrency?:array{peak_concurrent_php_requests?:int}} $report Stored report; other diagnostic fields are ignored.
+ * @return array{admin:array{id:int},created_at:string,finalized_at:string,target:array{page:string,request_target:string},request_lifecycle:array{completed_count:int,all_completed_cleanly:bool},request_concurrency:array{peak_concurrent_php_requests:int}} Compact ownership and display metadata.
+ */
+function admin_test_run_report_projection(array $report): array
+{
+    return [
+        'admin' => ['id' => (int) ($report['admin']['id'] ?? 0)],
+        'created_at' => (string) ($report['created_at'] ?? ''),
+        'finalized_at' => (string) ($report['finalized_at'] ?? ''),
+        'target' => [
+            'page' => (string) ($report['target']['page'] ?? ''),
+            'request_target' => (string) ($report['target']['request_target'] ?? ''),
+        ],
+        'request_lifecycle' => [
+            'completed_count' => (int) ($report['request_lifecycle']['completed_count'] ?? 0),
+            'all_completed_cleanly' => !empty($report['request_lifecycle']['all_completed_cleanly']),
+        ],
+        'request_concurrency' => [
+            'peak_concurrent_php_requests' => (int) ($report['request_concurrency']['peak_concurrent_php_requests'] ?? 0),
+        ],
+    ];
+}
+
+/**
+ * Read validated compact metadata, retaining old reports when no sidecar works.
+ * @param string $directory Validated application-owned run directory.
+ * @return array{admin:array{id:int},created_at:string,finalized_at:string,target:array{page:string,request_target:string},request_lifecycle:array{completed_count:int,all_completed_cleanly:bool},request_concurrency:array{peak_concurrent_php_requests:int}}|array{} Report projection, or empty when no readable authoritative report exists.
+ */
+function admin_test_run_listing_report(string $directory): array
+{
+    $path = $directory . DIRECTORY_SEPARATOR . 'report.json';
+    $lockPath = $path . '.publish.lock';
+    $lock = !is_link($lockPath) && is_file($lockPath) ? @fopen($lockPath, 'r') : null;
+    if (is_resource($lock) && !flock($lock, LOCK_SH)) {
+        fclose($lock);
+        $lock = null;
+    }
+    try {
+        $identity = admin_test_run_report_identity($path);
+        if (is_link($path) || $identity === null) {
+            return [];
+        }
+        $summaryPath = $directory . DIRECTORY_SEPARATOR . 'report-summary.json';
+        // One sentinel byte distinguishes an oversized sidecar from an admitted one.
+        $raw = !is_resource($lock) || is_link($summaryPath) ? false : @file_get_contents(
+            $summaryPath, false, null, 0, ADMIN_TEST_RUN_SUMMARY_MAX_BYTES + 1,
+        );
+        $summary = is_string($raw) && strlen($raw) <= ADMIN_TEST_RUN_SUMMARY_MAX_BYTES
+            ? json_decode($raw, true) : null;
+        if (
+            is_array($summary)
+            && ($summary['version'] ?? null) === 1
+            && ($summary['source'] ?? null) === $identity
+            && is_array($summary['report'] ?? null)
+            && is_int($summary['report']['admin']['id'] ?? null)
+            && is_string($summary['report']['created_at'] ?? null)
+            && is_string($summary['report']['finalized_at'] ?? null)
+            && is_string($summary['report']['target']['page'] ?? null)
+            && is_string($summary['report']['target']['request_target'] ?? null)
+            && is_int($summary['report']['request_lifecycle']['completed_count'] ?? null)
+            && is_bool($summary['report']['request_lifecycle']['all_completed_cleanly'] ?? null)
+            && is_int($summary['report']['request_concurrency']['peak_concurrent_php_requests'] ?? null)
+            && $summary['report'] === admin_test_run_report_projection($summary['report'])
+            && admin_test_run_report_identity($path) === $identity
+        ) {
+            return $summary['report'];
+        }
+        // Permanent compatibility: stored/downloaded historical reports have no
+        // sidecar. Storage owns this fallback; retirement requires proven complete
+        // migration of retained runs and owner approval (see report-summary.md).
+        $report = admin_test_run_read_json($path);
+        return $report ? admin_test_run_report_projection($report) : [];
+    } finally {
+        if (is_resource($lock)) {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 }
 
@@ -203,6 +352,8 @@ function admin_test_run_cleanup_old_reports(): array
         $size = 0;
         foreach ([
             'report.json',
+            'report-summary.json',
+            'report.json.publish.lock',
             'report.zip',
             'meta.json',
             'browser.json',
@@ -435,13 +586,11 @@ function admin_test_run_recent_reports(int $limit = 10): array
         if (!admin_test_run_token_valid((string) $name)) {
             continue;
         }
-        $report = admin_test_run_read_json(
-            $root
-                . DIRECTORY_SEPARATOR
-                . $name
-                . DIRECTORY_SEPARATOR
-                . 'report.json',
-        );
+        $directory = $root . DIRECTORY_SEPARATOR . $name;
+        if (is_link($directory) || !is_dir($directory)) {
+            continue;
+        }
+        $report = admin_test_run_listing_report($directory);
         if (!$report || !admin_test_run_owned_by_current_admin($report)) {
             continue;
         }
@@ -479,7 +628,8 @@ function admin_test_run_recent_reports(int $limit = 10): array
 /**
  * Return the latest finalized run for the current target, if any.
  *
- * @return array<string,mixed>|null
+ * @param string $target Request target to normalize and match.
+ * @return array{token:string,created_at:string,finalized_at:string,target_page:string,target:string,request_count:int,peak_concurrency:int,all_closed:bool,zip_available:bool}|null Newest matching report among the current Admin's latest twenty, or null.
  */
 function admin_test_run_latest_for_target(string $target): ?array
 {

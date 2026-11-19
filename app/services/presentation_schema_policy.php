@@ -325,30 +325,32 @@ function presentation_gps_exif_schema_status(): array
 }
 
 /** Return three-state readiness for optional public attachment-count snapshots.
+ * Prime only these requested tables, retaining every normal availability check.
  * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Both snapshot tables and every column used by the reader/writer.
  */
 function presentation_gallery_attachment_usage_schema_status(): array
 {
-    return presentation_schema_tables_status(
-        'presentation.gallery_attachment_usage',
-        [
-            'gallery_attachment_usage_state' => [
-                'gallery_id',
-                'kind',
-                'state',
-                'revision',
-                'updated_at',
-            ],
-            'gallery_attachment_usage_items' => [
-                'gallery_id',
-                'kind',
-                'source_id',
-                'sha256',
-                'asset_id',
-                'album_id',
-                'hidden',
-            ],
+    $tables = [
+        'gallery_attachment_usage_state' => [
+            'gallery_id',
+            'kind',
+            'state',
+            'revision',
+            'updated_at',
         ],
+        'gallery_attachment_usage_items' => [
+            'gallery_id',
+            'kind',
+            'source_id',
+            'sha256',
+            'asset_id',
+            'album_id',
+            'hidden',
+        ],
+    ];
+    schema_inspection_prime_optional_table_snapshots(array_keys($tables));
+    return presentation_schema_tables_status(
+        'presentation.gallery_attachment_usage', $tables,
     );
 }
 

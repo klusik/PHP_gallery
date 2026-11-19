@@ -1,5 +1,19 @@
 # PHP Gallery Database Documentation
 
+## Request-local metadata acceleration
+
+The music catalog, music repository and public attachment-usage readiness owners
+optionally prime table/column snapshots from their existing requirement maps
+when called. They still execute every ordinary readiness check; no capability
+or unavailable schema becomes available merely because batching was attempted.
+The original gallery startup primer and its table bound remain unchanged.
+
+A failed optional bulk attempt disables further optional priming for that
+request. Individual inspection keeps its available/missing/unknown semantics,
+and the existing schema reset clears the acceleration failure together with
+schema facts. This creates no schema object, migration or saved setting. See
+[domain schema snapshots](docs/performance/domain-schema-primer.md).
+
 ## Linked gallery creation reservations
 
 Migration `202611050001_linked_gallery_create_reservations.php` adds an InnoDB
@@ -126,7 +140,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 1.3.1. Version 0.97 adds the recoverable gallery-trash
+application version 1.4.0. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in

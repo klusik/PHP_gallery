@@ -377,11 +377,14 @@ use function Gallery\Models\app_settings_model_set;
  *
  * Long-running maintenance/update requests can call this after schema changes or
  * fixture replacement. Normal web requests start with an empty process-local cache.
+ *
+ * @return void Clears setting values and the rewrite environment observation.
  */
 function app_settings_reset_request_cache(): void
 {
     $GLOBALS['cms_app_settings_cache'] = [];
     $GLOBALS['cms_app_settings_cache_loaded'] = false;
+    url_rewrite_reset_request_observation();
 }
 
 /**
@@ -550,10 +553,65 @@ function url_rewrite_enabled(): bool
  * Persist the clean URL rewrite preference.
  *
  * @param bool $enabled Enabled flag.
+ * @return void Saves the preference and discards retained environment evidence.
  */
 function set_url_rewrite_enabled(bool $enabled): void
 {
     set_app_setting('url_rewrite_enabled', $enabled ? '1' : '0');
+    url_rewrite_reset_request_observation();
+}
+
+/**
+ * Discard the bounded request-local rewrite environment observation.
+ *
+ * @return void Subsequent compatibility reads inspect the current marker files.
+ */
+function url_rewrite_reset_request_observation(): void
+{
+    unset($GLOBALS['cms_url_rewrite_request_observation']);
+}
+
+/**
+ * Observe whether an unmarked loaded owner can replace rewrite markers.
+ *
+ * Included files are monotonic within a PHP request. Scan each new path once,
+ * then retain a positive result for old in-memory updater and rollback code.
+ * Marked owners promise to latch writer activity before mutation, so merely
+ * declaring those owners does not disable observation reuse in public renders.
+ * No updater function is referenced or loaded by this passive observation.
+ *
+ * @return bool True after an owner lacking the invalidation promise is loaded.
+ */
+function url_rewrite_writer_owner_loaded(): bool
+{
+    static $checkedFileCount = 0;
+    static $writerOwnerLoaded = false;
+    if ($writerOwnerLoaded) {
+        return true;
+    }
+    $includedFiles = get_included_files();
+    $includedFileCount = count($includedFiles);
+    for (; $checkedFileCount < $includedFileCount; $checkedFileCount++) {
+        $path = strtolower(str_replace('\\', '/', $includedFiles[$checkedFileCount]));
+        $filename = basename($path);
+        $invalidationMarker = match (true) {
+            $filename === 'updates_filesystem.php' =>
+                __NAMESPACE__ . '\\UPDATES_FILESYSTEM_INVALIDATES_REWRITE_OBSERVATIONS',
+            $filename === 'update_server_policy_reconciliation.php' =>
+                __NAMESPACE__ . '\\UPDATE_SERVER_POLICY_INVALIDATES_REWRITE_OBSERVATIONS',
+            str_ends_with($path, '/updates_jobs/activation.php') =>
+                __NAMESPACE__ . '\\UPDATE_ACTIVATION_INVALIDATES_REWRITE_OBSERVATIONS',
+            default => null,
+        };
+        if ($invalidationMarker !== null && (
+            !defined($invalidationMarker)
+            || constant($invalidationMarker) !== true
+        )) {
+            $writerOwnerLoaded = true;
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -584,9 +642,14 @@ function url_rewrite_marker_file_ok(string $path): bool
  * remaining checks look for the files and server indicators that this project
  * needs on typical Apache, LiteSpeed, and compatible shared hosting.
  *
- * @param ?array $server Server value.
- * @param string|null $root Override used by tests.
- * @return array{enabled:bool,status:string,supported:bool,confidence:string,reasons:list<string>,details:array<string,mixed>} Runtime rewrite preference and compatibility evidence, with a status/confidence assessment and explanatory details.
+ * Marker files form a request snapshot, never an authorization decision. The
+ * setting is read live and every environment input participates in cache identity.
+ * Active writers and unmarked legacy owners bypass reuse because they can
+ * replace policy files in-process without a safe retained observation.
+ *
+ * @param array{SERVER_SOFTWARE?:string,REQUEST_URI?:string,SCRIPT_NAME?:string,REDIRECT_URL?:string}|null $server Consumed request environment fields; null reads the actual server values.
+ * @param string|null $root Project root override; null uses the installed root.
+ * @return array{enabled:bool,status:string,supported:bool,confidence:string,reasons:list<string>,details:array<string,bool|string>} Runtime rewrite preference and compatibility evidence, with a status/confidence assessment and explanatory details.
  */
 function url_rewrite_compatibility(
     ?array $server = null,
@@ -595,7 +658,47 @@ function url_rewrite_compatibility(
     $server = $server ?? request_data('server');
     $root = $root ?? dirname(__DIR__, 2);
     $enabled = url_rewrite_enabled();
+    $identity = [
+        $root,
+        $enabled,
+        (string) ($server['SERVER_SOFTWARE'] ?? ''),
+        (string) ($server['REQUEST_URI'] ?? ''),
+        (string) ($server['SCRIPT_NAME'] ?? ''),
+        (string) ($server['REDIRECT_URL'] ?? ''),
+    ];
+    // Marked declarations may belong to public runtime closures. Actual writes
+    // latch bypass before mutation; old unmarked owners remain conservative.
+    $canReuse = empty($GLOBALS['cms_url_rewrite_writer_active'])
+        && !url_rewrite_writer_owner_loaded();
+    $cached = $GLOBALS['cms_url_rewrite_request_observation'] ?? null;
+    if ($canReuse && is_array($cached) && $cached['identity'] === $identity) {
+        return $cached['observation'];
+    }
+    // Keep only the latest environment, bounding memory independently of URLs.
+    url_rewrite_reset_request_observation();
+    $observation = url_rewrite_observe_compatibility($server, $root, $enabled);
+    if ($canReuse) {
+        $GLOBALS['cms_url_rewrite_request_observation'] = [
+            'identity' => $identity,
+            'observation' => $observation,
+        ];
+    }
+    return $observation;
+}
 
+/**
+ * Inspect rewrite marker files and server evidence without retaining results.
+ *
+ * @param array{SERVER_SOFTWARE?:string,REQUEST_URI?:string,SCRIPT_NAME?:string,REDIRECT_URL?:string,...} $server Current request evidence used by rewrite detection.
+ * @param string $root Project root containing the root/public marker files.
+ * @param bool $enabled Live administrator preference for clean URLs.
+ * @return array{enabled:bool,status:string,supported:bool,confidence:string,reasons:list<string>,details:array<string,bool|string>} Compatibility diagnostics including marker and server evidence.
+ */
+function url_rewrite_observe_compatibility(
+    array $server,
+    string $root,
+    bool $enabled,
+): array {
     $rootHtaccess = rtrim($root, '/\\') . DIRECTORY_SEPARATOR . '.htaccess';
     $publicHtaccess =
         rtrim($root, '/\\')

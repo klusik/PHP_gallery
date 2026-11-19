@@ -1,0 +1,159 @@
+# Project: PHP Gallery
+# Repository: https://github.com/klusik/PHP_gallery
+# File: .github/workflows/gallery-request-performance.yml
+# Module Type: Focused Read-only Qualification Workflow
+# Purpose: Prepare metadata and exercise existing gallery request-path regressions.
+# Responsibilities:
+#   - Preserve feature history and source leases without publishing refs/statuses.
+#   - Retain exact-source generated artifacts and disposable database evidence.
+# Author: Rudolf Klusal
+# License: MIT License (see LICENSE file in repository)
+name: Focused gallery request qualification
+on:
+  push:
+    branches:
+      - feature/performance-audit-local-prototypes
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gallery-request-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  gallery-request:
+    name: Focused gallery requests (PHP ${{ matrix.php }}, ${{ matrix.label }})
+    if: ${{ github.repository == 'klusik/PHP_gallery' && github.ref_type == 'branch' && startsWith(github.ref_name, 'feature/') }}
+    runs-on: ubuntu-24.04
+    # Bound provisioning, canonical generation and existing focused children.
+    # Type: integer. Units: minutes. Scope: one matrix job.
+    # Consumers: Actions timeout. Rationale: 25 preserves the database owner budget.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.1'
+            database: mariadb:10.11
+            label: mariadb-10.11
+          - php: '8.5'
+            database: mysql:8.4
+            label: mysql-8.4
+    services:
+      database:
+        image: ${{ matrix.database }}
+        # Existing disposable service pattern: no installation config or host data.
+        env:
+          MYSQL_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+          MYSQL_ROOT_HOST: '%'
+        # Native MySQL port 3306 is mapped to the fixture's disposable port 13316.
+        ports:
+          - 13316:3306
+        options: --hostname gallery-workflow-ci
+    env:
+      # Bound the reused generic pool; these are independent native runner jobs.
+      # Type: integer. Units: processes. Scope: each focused matrix job.
+      # Consumers: central PHP worker pool. Rationale: four retains its default cap.
+      PHP_GALLERY_AUDIT_WORKERS: '4'
+      PHP_GALLERY_AUDIT_CANDIDATE: ${{ github.sha }}
+      PHP_GALLERY_BROWSER: disabled
+      GALLERY_WORKFLOW_BROWSER: disabled
+      GALLERY_WORKFLOW_ENABLE: disposable-only
+      GALLERY_WORKFLOW_DB_HOST: 127.0.0.1
+      # Type: integer. Units: TCP port. Scope: disposable CI service.
+      # Consumers: existing fixture safety policy. Rationale: 13316 is its owned port.
+      GALLERY_WORKFLOW_DB_PORT: '13316'
+      GALLERY_WORKFLOW_DB_USER: gallery_workflow_runner
+      GALLERY_WORKFLOW_REQUIRED: '1'
+      GALLERY_WORKFLOW_CI_ROOT_PASSWORD: gallery-workflow-disposable-ci-only
+      GALLERY_RUNTIME_NORMALIZATION: unicode
+      GALLERY_SESSION_REQUIRED: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, pdo_sqlite, curl, gd, zip, dom, mbstring, intl
+          ini-values: error_reporting=E_ALL, display_errors=On
+          coverage: none
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Guard exact feature source and freeze main comparison base
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = 'klusik/PHP_gallery'
+          test "${GITHUB_REF_TYPE}" = 'branch'
+          case "${GITHUB_REF_NAME}" in feature/*) ;; *) exit 1 ;; esac
+          case "$(git remote get-url origin)" in
+            https://github.com/klusik/PHP_gallery|https://github.com/klusik/PHP_gallery.git) ;;
+            *) echo 'Unexpected origin repository.' >&2; exit 1 ;;
+          esac
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          test "$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)" = "${GITHUB_SHA}"
+          main_sha="$(git rev-parse origin/main)"
+          source_base="$(git merge-base "${GITHUB_SHA}" "${main_sha}")"
+          test -n "${source_base}"
+          git cat-file -e "${source_base}^{commit}"
+          echo "PHP_GALLERY_SOURCE_BASE=${source_base}" >> "${GITHUB_ENV}"
+          echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct "${GITHUB_SHA}")" >> "${GITHUB_ENV}"
+          mkdir -p cache/gallery-request-preparation
+          printf '{"source_sha":"%s","source_tree":"%s","source_base":"%s","main_sha":"%s","run_id":"%s","attempt":"%s"}\n' "${GITHUB_SHA}" "$(git rev-parse HEAD^{tree})" "${source_base}" "${main_sha}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" > cache/gallery-request-preparation/source.json
+          printf '%s\n' "${GITHUB_REF_NAME}" > cache/gallery-request-preparation/source-branch.txt
+      - name: Prepare and read-only verify canonical metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          php scripts/prepare_candidate.php
+          php scripts/prepare_candidate.php --check
+          while IFS= read -r path; do
+            case "${path}" in
+              app/runtime/modules.php|app/production-files.json|app/core-manifest.json) ;;
+              *) echo 'Unexpected authored source change during preparation.' >&2; exit 1 ;;
+            esac
+          done < <(git diff --name-only)
+          sha256sum app/runtime/modules.php app/production-files.json app/core-manifest.json > cache/gallery-request-preparation/generated-sha256.txt
+      - name: Central focused suite using the existing disposable principal and Fixture
+        run: php scripts/gallery_workflow_ci.php --gallery-request
+      - name: Recheck exact source lease after execution
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$(git remote get-url origin)" in
+            https://github.com/klusik/PHP_gallery|https://github.com/klusik/PHP_gallery.git) ;;
+            *) echo 'Unexpected origin repository.' >&2; exit 1 ;;
+          esac
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(git ls-remote --heads origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)" = "${GITHUB_SHA}"
+      - name: Retain complete source-qualified generated metadata
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: gallery-request-prepared-${{ github.sha }}-php-${{ matrix.php }}
+          path: |
+            app/runtime/modules.php
+            app/production-files.json
+            app/core-manifest.json
+            cache/gallery-request-preparation/*
+          if-no-files-found: error
+          # Type: integer. Units: days. Scope: focused artifacts.
+          # Consumers: artifact retention. Rationale: seven days supports review/persistence.
+          retention-days: 7
+      - name: Retain focused central summaries, source failures and child logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: gallery-request-evidence-${{ github.sha }}-php-${{ matrix.php }}
+          path: cache/test-audit/**/*
+          if-no-files-found: warn
+          # Type: integer. Units: days. Scope: focused diagnostics.
+          # Consumers: artifact retention. Rationale: seven days matches generated evidence.
+          retention-days: 7

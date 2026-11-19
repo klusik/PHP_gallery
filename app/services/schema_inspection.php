@@ -88,6 +88,17 @@ const SCHEMA_INSPECTION_DIAGNOSTIC_FAILED = 'Database schema inspection failed.'
 const SCHEMA_INSPECTION_INDEX_COLUMN_LIMIT = 16;
 
 /**
+ * Bound diagnostic schema-query provenance independently of query volume.
+ * Type: integer.
+ * Units: distinct validated schema object identities.
+ * Scope: one explicitly observed Smart Gallery controller window.
+ * Consumers: schema_inspection_record_query_provenance.
+ * Rationale: 256 identities retain useful domain evidence with bounded memory;
+ *     attempts for additional identities increment only the drop counter.
+ */
+const SCHEMA_INSPECTION_QUERY_PROVENANCE_LIMIT = 256;
+
+/**
  * Return the request-local schema inspection cache by reference.
  *
  * The cache deliberately lives in process memory only. It avoids repeated
@@ -154,6 +165,8 @@ function schema_inspection_set_query_executor_for_tests(?callable $executor): vo
  * Tests use this function between scenarios. Migration and repair workflows
  * must also call it after successful DDL when they inspect, modify, and verify
  * schema state inside the same PHP process.
+ *
+ * @return void Clears schema facts, snapshots and optional-primer failure state.
  */
 function schema_inspection_reset_request_cache(): void
 {
@@ -161,6 +174,7 @@ function schema_inspection_reset_request_cache(): void
     $cache = [];
     $snapshots = &schema_inspection_table_snapshot_cache();
     $snapshots = [];
+    unset($GLOBALS['cms_schema_optional_priming_failed']);
 }
 
 /**
@@ -291,6 +305,34 @@ function schema_inspection_prime_table_snapshots(array $tables): bool
         }
     }
     return true;
+}
+
+/**
+ * Attempt optional domain priming once until failure disables this acceleration.
+ *
+ * A false result is only an acceleration failure, never evidence that a schema
+ * object is absent. Callers must still execute their ordinary readiness checks.
+ * The existing startup primer is independent of this request-local latch.
+ * This permanent acceleration fallback supports unavailable metadata/driver
+ * environments; the schema owner resets it with schema facts after DDL or tests.
+ * Removing it requires every supported environment to guarantee bulk metadata.
+ * @param list<string> $tables Existing domain requirement-map keys only.
+ * @return bool True when snapshots are ready; false means use normal inspection.
+ */
+function schema_inspection_prime_optional_table_snapshots(array $tables): bool
+{
+    if (!empty($GLOBALS['cms_schema_optional_priming_failed'])) {
+        return false;
+    }
+    try {
+        $ready = schema_inspection_prime_table_snapshots($tables);
+    } catch (Throwable) {
+        $ready = false;
+    }
+    if (!$ready) {
+        $GLOBALS['cms_schema_optional_priming_failed'] = true;
+    }
+    return $ready;
 }
 
 /**
@@ -464,6 +506,8 @@ function schema_inspection_query_definition(
  * Names are validated before this function is called and are still passed as
  * bound values. This function returns true only when information_schema yields
  * a row. Query exceptions are handled by the outer inspection boundary.
+ * An explicitly initialized private diagnostic observation records validated
+ * query identities in finally, without changing the returned value or failure.
  *
  * @param string $objectType Table, column, or index.
  * @param string $table Owning table name.
@@ -475,11 +519,79 @@ function schema_inspection_execute_query(
     string $table,
     string $object,
 ): bool {
-    $override = &schema_inspection_query_executor_override();
-    if (is_callable($override)) {
-        return (bool) $override($objectType, $table, $object);
+    $started = is_array($GLOBALS['cms_schema_query_provenance'] ?? null)
+        ? microtime(true) : null;
+    $completed = false;
+    try {
+        $override = &schema_inspection_query_executor_override();
+        $exists = is_callable($override)
+            ? (bool) $override($objectType, $table, $object)
+            : schema_inspection_model_object_exists($objectType, $table, $object);
+        $completed = true;
+        return $exists;
+    } finally {
+        if ($started !== null) {
+            try {
+                schema_inspection_record_query_provenance(
+                    $objectType, $table, $object, $completed,
+                    (microtime(true) - $started) * 1000,
+                );
+            } catch (Throwable) {
+                // Diagnostic recording cannot replace a result or query failure.
+            }
+        }
     }
-    return schema_inspection_model_object_exists($objectType, $table, $object);
+}
+
+/**
+ * Record bounded validated identities for actual existence-query attempts only.
+ *
+ * No SQL, parameters, exception text or database names enter this observation.
+ * A successful missing-object read is a success; only thrown queries fail.
+ * @param string $objectType Supported table, column or ordinary index kind.
+ * @param string $table Owning table identifier, validated again for diagnostics.
+ * @param string $object Column/index identifier; table queries record no object.
+ * @param bool $completed Whether execution returned normally, including false.
+ * @param float $elapsedMs Existing execution elapsed time in milliseconds.
+ * @return void Updates the explicitly initialized private observation, if any.
+ */
+function schema_inspection_record_query_provenance(
+    string $objectType,
+    string $table,
+    string $object,
+    bool $completed,
+    float $elapsedMs,
+): void {
+    if (!is_array($GLOBALS['cms_schema_query_provenance'] ?? null)
+        || !in_array($objectType, [
+            SCHEMA_INSPECTION_OBJECT_TABLE,
+            SCHEMA_INSPECTION_OBJECT_COLUMN,
+            SCHEMA_INSPECTION_OBJECT_INDEX,
+        ], true)) {
+        return;
+    }
+    $table = schema_inspection_validate_identifier($table, 'table');
+    $object = $objectType === SCHEMA_INSPECTION_OBJECT_TABLE
+        ? '' : schema_inspection_validate_identifier($object, $objectType);
+    $observation = &$GLOBALS['cms_schema_query_provenance'];
+    $key = $objectType . ':' . $table . ':' . $object;
+    if (!isset($observation['entries'][$key])) {
+        if (count($observation['entries']) >= SCHEMA_INSPECTION_QUERY_PROVENANCE_LIMIT) {
+            $observation['dropped_attempts']++;
+            return;
+        }
+        $observation['entries'][$key] = [
+            'object_type' => $objectType, 'table' => $table, 'object' => $object,
+            'attempts' => 0, 'succeeded' => 0, 'failed' => 0,
+            'elapsed_ms_sum' => 0.0, 'elapsed_ms_max' => 0.0,
+        ];
+    }
+    $entry = &$observation['entries'][$key];
+    $elapsedMs = max(0.0, $elapsedMs);
+    $entry['attempts']++;
+    $entry[$completed ? 'succeeded' : 'failed']++;
+    $entry['elapsed_ms_sum'] += $elapsedMs;
+    $entry['elapsed_ms_max'] = max($entry['elapsed_ms_max'], $elapsedMs);
 }
 
 /**

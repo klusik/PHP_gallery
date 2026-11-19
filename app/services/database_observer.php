@@ -39,7 +39,7 @@ namespace Gallery\Services;
 use Throwable;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\request_data;
-use function Gallery\Models\telemetry_model_upsert_db_query_metric_aggregate;
+use function Gallery\Models\telemetry_model_upsert_db_query_metric_aggregates;
 
 /**
  * Return a privacy-safe SQL operation bucket.
@@ -324,8 +324,9 @@ function telemetry_flush_db_query_buffer(): void
     $state['buffer'] = [];
     $state['suppressed'] = true;
     try {
+        $rows = [];
         foreach ($buffer as $row) {
-            telemetry_model_upsert_db_query_metric_aggregate([
+            $rows[] = [
                 (string) $row['bucket_start'],
                 (string) $row['route_name'],
                 (string) $row['operation'],
@@ -339,8 +340,9 @@ function telemetry_flush_db_query_buffer(): void
                 (int) $row['rows_returned_sum'],
                 (int) $row['rows_affected_sum'],
                 now_sql(),
-            ]);
+            ];
         }
+        telemetry_model_upsert_db_query_metric_aggregates($rows);
     } catch (Throwable $exception) {
         if (function_exists(__NAMESPACE__ . '\\admin_log_event')) {
             try {

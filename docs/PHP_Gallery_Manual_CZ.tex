@@ -65,8 +65,8 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.3.1}
-\newcommand{\manualdate}{17.~listopadu~2026}
+\newcommand{\version}{1.4.0}
+\newcommand{\manualdate}{19.~listopadu~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -10135,6 +10135,35 @@ Pro diagnostiku s~dočasnou MySQL nabízí
 \filepath{scripts/gallery_workflow_mysql.php} režim
 \codeword{--audit-php-regression} přes centrální PHP regresní sadu. K~izolaci
 mezipaměti checkoutu je nutná také jeho samostatná izolovaná kopie.
+
+Cílená sada \codeword{gallery-request} vybírá existující PHP
+regresí z~centrálního registru: náhledy, veřejné URL, Smart galerie,
+telemetrii, Admin reporty, sessions, access/NSFW policy, runtime moduly,
+centrální auditní evidence a~feature-policy core/adapters.
+Dočasný CI režim \codeword{--gallery-request} předá řízení
+\codeword{--audit-gallery-request}; každý vybraný child musí mít PASS bez
+skrytých SKIP. Read-only workflow
+\filepath{.github/workflows/gallery-request-performance.yml} zachová historii
+feature větve, připne PHP~8.1/MariaDB~10.11 a~PHP~8.5/MySQL~8.4 na~event SHA
+a~zmrazenou main merge-base a~připraví/ověří všechny tři generované metadata
+soubory. Uchovejte úplné artefakty, identitu zdrojů, stručné reporty a~child logs.
+Výstupy uložte pouze do~povolené feature větve; nové SHA vyžaduje čerstvý BASIC,
+hostovanou přípravu a~shodu bytů s~uloženými výstupy. BASIC, cílené regrese
+a~FULL zůstávají oddělené; chráněná integrace, squash i~publikace vyžadují
+samostatné schválení. Volitelný \filepath{scripts/gallery_http_compare.py}
+porovnává přesné čisté commity baseline/kandidáta přes připnutý localhost:
+pět střídavých bloků, třicet vln na~variantu, C1/C2/C4/C8, časy odpovědí a~hashe
+markupu bez uživatelských cookies. Spouštějte jej mimo sandbox; zachová feature
+ref a~obnoví checkout bez reset/force. Pozorování neprokazují reload serveru/
+OPcache ani nenahrazují hosted kvalifikaci. Viz \filepath{TESTING.md}
+a~\filepath{docs/performance/gallery-http-comparison.md}.
+Pro každý session scénář \texttt{same} zadejte
+\filepath{--session-cookie-name} s~výslovně nakonfigurovaným názvem PHP session
+cookie dané instalace, nikdy s~její hodnotou. Syntetickou session vytvořte
+zahřívacím požadavkem bez cookies; před měřeným opakovaným použitím vyžadujte
+odpovídající odpověď \texttt{Set-Cookie}. Nepřebírejte cookies z~prohlížeče
+a~neukládejte jejich hodnoty do~důkazů. Chybějící nebo neodpovídající potvrzení
+session zneplatní celou skupinu měření se~stejnou session.
 
 Povinná hostovaná kvalifikace zahrnuje PHP/Node/WinApp testy, zdrojové
 kontrakty, Chromium, skutečné MySQL/MariaDB scénáře, kompatibilitu PHP a~povinné

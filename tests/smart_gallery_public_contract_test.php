@@ -190,7 +190,10 @@ smart_gallery_public_contract_assert(
 );
 smart_gallery_public_contract_assert(
     php_source_contains($controller,
-        '$imageHasPublicGps = gallery_allows_gps_maps($source) && image_has_gps($image);',
+        '$imageHasPublicGps = public_render_profile_span('
+        . "'smart_gallery_card_gps_policy',"
+        . 'static fn(): bool => gallery_allows_gps_maps($source),'
+        . ') && image_has_gps($image);',
     )
         && php_source_contains($controller,
             'image_map_point($image, $source, true, $bundle)',
@@ -349,7 +352,11 @@ smart_gallery_public_contract_assert(
     php_source_contains($controller, "\$_GET['source_gallery_id']")
         && php_source_contains(
             $controller,
-            'smart_gallery_count_images($gallery, true, $sourceGalleryId)',
+            "smart_gallery_count_images(\$gallery, true, \$sourceGalleryId, \$sourceSummary['count_proof'],)",
+        )
+        && php_source_contains(
+            $controller,
+            "unset(\$sourceSummary['count_proof']);",
         )
         && php_source_contains(
             $controller,

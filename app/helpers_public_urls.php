@@ -299,14 +299,30 @@ function image_public_media_url(array $image, array $gallery): string
  */
 function image_public_asset_url_with_version(string $url, array $image): string
 {
+    return image_public_asset_url_with_cache_version(
+        $url,
+        image_public_asset_version($image),
+    );
+}
+
+/**
+ * Decorate a complete asset route with preview state and its prepared revision.
+ *
+ * @param string $url Complete public media or thumbnail route.
+ * @param string $version Cache revision prepared from the current image row.
+ * @return string Preview-aware URL with the unchanged revision query encoding.
+ */
+function image_public_asset_url_with_cache_version(
+    string $url,
+    string $version,
+): string {
     if ((string) ($_GET['preview'] ?? '') === 'visual') {
         $url = public_visual_preview_url(
             $url,
             (string) ($_GET['view_as'] ?? '') === 'anonymous',
         );
     }
-    // $version stores the source/derivative identity used only for browser cache invalidation.
-    $version = image_public_asset_version($image);
+    // $version represents source/derivative identity, never authorization.
     if ($version === '') {
         return $url;
     }
@@ -379,6 +395,51 @@ function image_public_thumbnail_url(
             . $format,
         $image,
     );
+}
+
+/**
+ * Build one image's public thumbnail URLs using a call-local route context.
+ *
+ * Route and revision observations live only for this synchronous batch. A later
+ * call resolves them again, including after configuration or image mutations.
+ *
+ * @param array{url_slug?:string|null,filename?:string|null,id?:int|string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null} $image Current image route and revision fields.
+ * @param array{url_path?:string|null,slug?:string|null,folder_path?:string|null,title?:string|null} $gallery Current owning gallery route fields.
+ * @param array<string,list<int>> $sizesByFormat Requested widths grouped by format.
+ * @return array<string,array<int,string>> Versioned URLs retaining input format keys and width order.
+ */
+function image_public_thumbnail_urls(
+    array $image,
+    array $gallery,
+    array $sizesByFormat,
+): array {
+    $urls = [];
+    if ($sizesByFormat === []) {
+        return $urls;
+    }
+    $clean = url_rewrite_should_emit_clean_urls();
+    $base = $clean
+        ? rtrim(image_public_route_url($image, $gallery), '/')
+        : image_public_route_path($image, $gallery);
+    $version = image_public_asset_version($image);
+    foreach ($sizesByFormat as $format => $sizes) {
+        $urls[$format] = [];
+        $normalizedFormat = $format === 'webp' ? 'webp' : 'jpg';
+        foreach ($sizes as $size) {
+            $url = $clean
+                ? $base . '/thumb-' . $size . '.' . $normalizedFormat
+                : url_for('public_thumb', [
+                    'public_path' => $base,
+                    'size' => $size,
+                    'format' => $normalizedFormat,
+                ]);
+            $urls[$format][$size] = image_public_asset_url_with_cache_version(
+                $url,
+                $version,
+            );
+        }
+    }
+    return $urls;
 }
 
 /**

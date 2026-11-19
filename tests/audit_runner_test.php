@@ -1017,6 +1017,82 @@ audit_test_assert(
     'Complete structured PHP PASS results must satisfy the mandatory disposable DB owner.',
 );
 
+// Focused selection stays a subset of normal source-tree discovery rather
+// than replacing FULL's ordinary PHP owner or weakening its required children.
+$galleryRequestNames = $registry['gallery_request_tests'] ?? [];
+$discoveredPhpNames = array_map(
+    static fn(string $path): string => basename($path),
+    glob(__DIR__ . '/*_test.php') ?: [],
+);
+audit_test_assert(
+    array_is_list($galleryRequestNames)
+        && $galleryRequestNames !== []
+        && count(array_unique($galleryRequestNames)) === count($galleryRequestNames)
+        && array_diff($galleryRequestNames, $discoveredPhpNames) === []
+        && array_intersect($galleryRequestNames, $registry['packaging_tests']) === []
+        && array_diff([
+            'audit_runner_test.php',
+            'feature_policy_core_test.php',
+            'feature_policy_adapters_test.php',
+        ], $galleryRequestNames) === []
+        && in_array('php-regression', $profiles['full'], true)
+        && in_array('php-regression', $profiles['release'], true)
+        && !in_array('gallery-request', $profiles['full'], true)
+        && !in_array('gallery-request', $profiles['release'], true),
+    'Focused gallery membership must be unique, existing and additive to unchanged FULL discovery.',
+);
+$galleryRequestFixture = $mandatoryFixture;
+$galleryRequestFixture['id'] = 'gallery-request';
+$galleryRequestFixture['details']['tests'] = array_map(
+    static fn(string $name): array => [
+        'name' => $name,
+        'status' => 'PASS',
+        'exit_code' => 0,
+        'timed_out' => false,
+    ],
+    $galleryRequestNames,
+);
+$galleryRequestFixture['counts']['passed'] = count($galleryRequestNames);
+$galleryRequestFixture['counts']['total'] = count($galleryRequestNames);
+audit_test_assert(
+    missing_required_php_test_passes($galleryRequestFixture, $galleryRequestNames) === [],
+    'The focused suite ID must accept complete individual PASS evidence.',
+);
+$missingGalleryRequest = $galleryRequestFixture;
+array_pop($missingGalleryRequest['details']['tests']);
+$missingGalleryRequest['counts']['passed']--;
+$missingGalleryRequest['counts']['total']--;
+audit_test_assert(
+    missing_required_php_test_passes($missingGalleryRequest, $galleryRequestNames)
+        === [end($galleryRequestNames)],
+    'The focused suite must reject a missing child despite internally consistent counts.',
+);
+$duplicateGalleryRequest = $galleryRequestFixture;
+$duplicateGalleryRequest['details']['tests'][] = $duplicateGalleryRequest['details']['tests'][0];
+$duplicateGalleryRequest['counts']['passed']++;
+$duplicateGalleryRequest['counts']['total']++;
+audit_test_assert(
+    missing_required_php_test_passes($duplicateGalleryRequest, $galleryRequestNames)
+        === $galleryRequestNames,
+    'The focused suite must reject duplicate child identities despite matching totals.',
+);
+$skippedGalleryRequest = $galleryRequestFixture;
+$skippedGalleryRequest['details']['tests'][0]['status'] = 'SKIP';
+$skippedGalleryRequest['counts']['passed']--;
+$skippedGalleryRequest['counts']['skipped']++;
+audit_test_assert(
+    missing_required_php_test_passes($skippedGalleryRequest, $galleryRequestNames)
+        === [$galleryRequestNames[0]],
+    'A focused suite-level PASS must not hide an individually skipped child.',
+);
+$timedOutGalleryRequest = $galleryRequestFixture;
+$timedOutGalleryRequest['details']['tests'][0]['timed_out'] = true;
+audit_test_assert(
+    missing_required_php_test_passes($timedOutGalleryRequest, $galleryRequestNames)
+        === [$galleryRequestNames[0]],
+    'A focused child marked PASS with a timeout must remain unqualified.',
+);
+
 $generalRequired = $registry['hosted_full_required_php_tests'] ?? null;
 audit_test_assert(
     $generalRequired === ['runtime_module_plan_test.php'],

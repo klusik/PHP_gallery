@@ -28,7 +28,163 @@
 
 declare(strict_types=1);
 
+namespace Gallery\Services {
+    /**
+     * Check writer invalidation immediately before a native fixture mutation.
+     * @return void Throws if an enabled fixture still observes stale markers.
+     */
+    function updater_rewrite_fixture_before_mutation(): void
+    {
+        if (empty($GLOBALS['updater_rewrite_fixture_spy'])) {
+            return;
+        }
+        if (($GLOBALS['cms_url_rewrite_writer_active'] ?? false) !== true
+            || isset($GLOBALS['cms_url_rewrite_request_observation'])) {
+            throw new \RuntimeException('Rewrite observations survived until a native writer call.');
+        }
+        $GLOBALS['updater_rewrite_fixture_mutations']++;
+    }
+
+    /**
+     * Exercise native copy after checking the updater's writer boundary.
+     * @param string $from Source path owned by the temporary fixture.
+     * @param string $to Destination path owned by the temporary fixture.
+     * @return bool Native copy success or failure.
+     */
+    function copy(string $from, string $to): bool
+    {
+        updater_rewrite_fixture_before_mutation();
+        return \copy($from, $to);
+    }
+
+    /**
+     * Exercise native rename or inject a post-copy activation failure.
+     * @param string $from Prepared temporary fixture path.
+     * @param string $to Active temporary fixture destination.
+     * @return bool Native result, or false for the explicitly injected failure.
+     */
+    function rename(string $from, string $to): bool
+    {
+        updater_rewrite_fixture_before_mutation();
+        if (!empty($GLOBALS['updater_rewrite_fixture_spy'])
+            && !empty($GLOBALS['updater_rewrite_fixture_fail_rename'])) {
+            return false;
+        }
+        return \rename($from, $to);
+    }
+
+    /**
+     * Exercise native removal after checking invalidation at the writer boundary.
+     * @param string $path File path owned by the temporary fixture.
+     * @return bool Native unlink success or failure.
+     */
+    function unlink(string $path): bool
+    {
+        updater_rewrite_fixture_before_mutation();
+        return \unlink($path);
+    }
+}
+
+namespace {
 require_once __DIR__ . '/../app/services/updates.php';
+
+/**
+ * Give the new rewrite-writer fixture an isolated temporary directory suffix.
+ * Type: integer.
+ * Units: random bytes before hexadecimal encoding.
+ * Scope: the rewrite-writer contract scenario in this fixture process.
+ * Consumers: rewriteFixture temporary-directory creation.
+ * Rationale: six bytes preserve the established fixture suffix size while
+ *     avoiding accidental collisions between concurrently running processes.
+ */
+const UPDATER_REWRITE_FIXTURE_NONCE_BYTES = 6;
+
+// Merely loading the marked writer owners must not disable request reuse.
+if (!\Gallery\Services\UPDATES_FILESYSTEM_INVALIDATES_REWRITE_OBSERVATIONS
+    || !\Gallery\Services\UPDATE_SERVER_POLICY_INVALIDATES_REWRITE_OBSERVATIONS
+    || !\Gallery\Services\UPDATE_ACTIVATION_INVALIDATES_REWRITE_OBSERVATIONS
+    || !empty($GLOBALS['cms_url_rewrite_writer_active'])) {
+    throw new RuntimeException('Marked updater owners must remain passive until invoked.');
+}
+$rewriteFixture = sys_get_temp_dir() . '/php-gallery-updater-rewrite-'
+    . bin2hex(random_bytes(UPDATER_REWRITE_FIXTURE_NONCE_BYTES));
+mkdir($rewriteFixture);
+$rewriteSource = $rewriteFixture . '/release.htaccess';
+$rewriteDestination = $rewriteFixture . '/.htaccess';
+file_put_contents($rewriteSource, "# incoming rewrite marker\n");
+file_put_contents($rewriteDestination, "# original rewrite marker\n");
+$GLOBALS['updater_rewrite_fixture_spy'] = true;
+$GLOBALS['updater_rewrite_fixture_mutations'] = 0;
+try {
+    $GLOBALS['cms_url_rewrite_request_observation'] = ['stale' => true];
+    \Gallery\Services\application_update_server_policy_replace_file($rewriteSource, $rewriteDestination);
+    if (file_get_contents($rewriteDestination) !== "# incoming rewrite marker\n"
+        || $GLOBALS['updater_rewrite_fixture_mutations'] === 0) {
+        throw new RuntimeException('Actual policy replacement did not exercise the writer contract.');
+    }
+    unset($GLOBALS['cms_url_rewrite_writer_active']);
+    $GLOBALS['cms_url_rewrite_request_observation'] = ['stale' => true];
+    // Distinct staged bytes make an accidental active overwrite observable.
+    file_put_contents($rewriteSource, "# distinct failed replacement marker\n");
+    $GLOBALS['updater_rewrite_fixture_fail_rename'] = true;
+    $failedReplacement = false;
+    try {
+        \Gallery\Services\application_update_server_policy_replace_file($rewriteSource, $rewriteDestination);
+    } catch (RuntimeException) {
+        $failedReplacement = true;
+    }
+    $GLOBALS['updater_rewrite_fixture_fail_rename'] = false;
+    if (!$failedReplacement
+        || ($GLOBALS['cms_url_rewrite_writer_active'] ?? false) !== true
+        || isset($GLOBALS['cms_url_rewrite_request_observation'])
+        || file_get_contents($rewriteDestination) !== "# incoming rewrite marker\n") {
+        throw new RuntimeException('Partial replacement failure lost invalidation or changed the prior active marker.');
+    }
+    unset($GLOBALS['cms_url_rewrite_writer_active']);
+    $GLOBALS['cms_url_rewrite_request_observation'] = ['stale' => true];
+    \Gallery\Services\application_update_remove_path($rewriteDestination);
+    if (is_file($rewriteDestination)
+        || ($GLOBALS['cms_url_rewrite_writer_active'] ?? false) !== true
+        || isset($GLOBALS['cms_url_rewrite_request_observation'])) {
+        throw new RuntimeException('Actual marker removal did not preserve the writer latch.');
+    }
+} finally {
+    unset($GLOBALS['updater_rewrite_fixture_spy'], $GLOBALS['updater_rewrite_fixture_fail_rename']);
+    foreach (glob($rewriteFixture . '/*') ?: [] as $temporaryRewriteFile) {
+        unlink($temporaryRewriteFile);
+    }
+    if (is_file($rewriteDestination)) {
+        unlink($rewriteDestination);
+    }
+    rmdir($rewriteFixture);
+    // Only this isolated test simulates a new request between contract scenarios.
+    unset($GLOBALS['cms_url_rewrite_writer_active'], $GLOBALS['cms_url_rewrite_request_observation']);
+}
+
+// Independent mutation entry points must invalidate before validation, leases,
+// staging or deletion can throw; this also covers older loaded settings owners.
+foreach ([
+    'updates_filesystem.php' => [
+        'application_update_copy_files', 'application_update_remove_malformed_root_files',
+        'application_update_remove_path', 'application_update_stage_path_for_prune',
+        'application_update_delete_tree_slice',
+    ],
+    'update_server_policy_reconciliation.php' => ['application_update_server_policy_replace_file'],
+    'updates_jobs/activation.php' => ['application_update_job_activate'],
+] as $writerFile => $boundaries) {
+    $writerSource = (string) file_get_contents(__DIR__ . '/../app/services/' . $writerFile);
+    foreach ($boundaries as $boundary) {
+        $declaration = strpos($writerSource, 'function ' . $boundary . '(');
+        $bodyStart = $declaration === false ? false : strpos($writerSource, '{', $declaration);
+        $latchStart = $bodyStart === false ? false : strpos($writerSource, "\$GLOBALS['cms_url_rewrite_writer_active'] = true;", $bodyStart);
+        $clearStart = $bodyStart === false ? false : strpos($writerSource, "unset(\$GLOBALS['cms_url_rewrite_request_observation']);", $bodyStart);
+        if ($bodyStart === false || $latchStart === false || $clearStart === false
+            || trim((string) preg_replace('/\/\/[^\n]*\n/', '', substr($writerSource, $bodyStart + 1, $latchStart - $bodyStart - 1))) !== ''
+            || $clearStart < $latchStart) {
+            throw new RuntimeException('Updater writer does not invalidate at entry: ' . $boundary);
+        }
+    }
+}
 
 $updatesController = (string) file_get_contents(__DIR__
     . '/../app/controllers/updates.php');
@@ -307,3 +463,5 @@ if (class_exists(ZipArchive::class) && DIRECTORY_SEPARATOR !== '\\') {
 }
 
 echo "Updater safety model tests passed.\n";
+
+}

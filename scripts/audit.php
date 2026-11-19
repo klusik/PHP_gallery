@@ -33,7 +33,7 @@
  *   - The source test tree is intentionally absent from normal production deployment packages.
  *   - CI-first agents qualify the prepared SHA through hosted GitHub Actions; local profiles are exceptional diagnostics.
  *
- * @phpstan-type AuditPhpRegistry array{packaging_tests:list<string>,php_fast_tests:list<string>,thumbnail_batch_tests:list<string>,php_test_requirements:array<string,array{extensions?:list<string>,reason?:string,timeout?:int,serial?:bool,serial_reason?:string,missing_status?:string}>,hosted_full_required_php_tests:list<string>,hosted_full_php_shard_count:int}
+ * @phpstan-type AuditPhpRegistry array{packaging_tests:list<string>,php_fast_tests:list<string>,thumbnail_batch_tests:list<string>,gallery_request_tests:list<string>,php_test_requirements:array<string,array{extensions?:list<string>,reason?:string,timeout?:int,serial?:bool,serial_reason?:string,missing_status?:string}>,hosted_full_required_php_tests:list<string>,hosted_full_php_shard_count:int}
  * @phpstan-type AuditPhpChild array{name:string,status:string,exit_code:?int,timed_out:bool,duration_seconds:float,serial:bool,metrics?:array<string,int|float>,metrics_error?:string}
  * @phpstan-type AuditPhpTask array{id:string,label:string,status:string,duration_seconds:float,counts:array<string,int>,summary:string,log:?string,details:array{problems?:list<string>,gaps?:list<string>,workers?:int,serial_tests?:int,tests?:list<AuditPhpChild>,shard?:array{index:int,total:int,selected_tests:int}}}
  * @phpstan-type AuditBuilderReport array{schema_version:int,file_count:int,directory:?string,zip:?string,archive_sha256:?string,timestamp:int,timings:array{source_validation_seconds:float,copy_seconds:float,zip_seconds:float,verification_seconds:float,total_seconds:float}}
@@ -224,6 +224,7 @@ if ($options['help']) {
       php scripts/audit.php [--profile basic|quick|thumbnail-batch|full|release|release-preflight|release-stage-b|candidate-preflight|source-contracts|portable|hosted-full]
       php scripts/audit.php --suite <suite-id>
       php scripts/audit.php --suite=winapp-partitioned
+      php scripts/audit.php --suite=gallery-request
       php scripts/audit.php --suite=thumbnail-batch-viewer
       php scripts/audit.php --suite=issue-362-c1-tree-http
       php scripts/audit.php --suite=issue-362-c1-photos-workspace
@@ -322,6 +323,7 @@ $knownSuites = [
     'watcher-tk-performance',
     'winapp-frozen-installer',
     'thumbnail-batch',
+    'gallery-request',
     'php-regression',
     'php-fast',
     'packaging',
@@ -660,7 +662,7 @@ function audit_process_output(array $process): string
  *
  * @param AuditPhpRegistry $registry Central child registries, extension requirements, isolation settings and mandatory child names.
  * @param string $suiteId Complete regression, fast feedback, thumbnail batch
- *     fixtures or database-independent packaging owner; defaults to complete regression.
+ *     fixtures, focused gallery request paths or database-independent packaging; defaults to complete regression.
  * @param array{valid:bool,index:?int,total:?int,owner:?string,candidate:?string,error:?string}|null $shard Validated hosted FULL shard context, or null for an unsharded suite.
  * @return AuditPhpTask Normalized child counts, individual timed outcomes and actionable failures; missing requirements block the suite.
  */
@@ -674,6 +676,7 @@ function audit_run_php_regression(
     $testDirectory = $root . '/tests';
     $label = match ($suiteId) {
         'thumbnail-batch' => 'Thumbnail batch PHP regression',
+        'gallery-request' => 'Gallery request-path PHP regression',
         'php-fast' => 'PHP regression (fast)',
         'packaging' => 'Production packaging policy and smoke',
         default => 'PHP regression',
@@ -695,6 +698,10 @@ function audit_run_php_regression(
 
     $packagingNames = $registry['packaging_tests'] ?? [];
     $files = match ($suiteId) {
+        'gallery-request' => array_map(
+            static fn(string $name): string => $testDirectory . '/' . $name,
+            $registry['gallery_request_tests'] ?? [],
+        ),
         'thumbnail-batch' => array_map(
             static fn(string $name): string => $testDirectory . '/' . $name,
             $registry['thumbnail_batch_tests'] ?? [],
@@ -952,11 +959,12 @@ function audit_run_php_regression(
         $details,
     );
 
-    // Packaging is mandatory even outside Actions; unrelated optional PHP SKIPs
-    // cannot hide missing smoke coverage or PHP_BINARY module-loader proofs.
+    // Packaging and focused gallery children are mandatory outside Actions too;
+    // optional SKIPs cannot hide their required individual PASS evidence.
     if (
         (
             $suiteId === 'packaging'
+            || $suiteId === 'gallery-request'
             || (
                 $suiteId === 'php-regression'
                 && getenv('GITHUB_ACTIONS') === 'true'
@@ -966,7 +974,9 @@ function audit_run_php_regression(
     ) {
         $required = $suiteId === 'packaging'
             ? $packagingNames
-            : $registry['hosted_full_required_php_tests'] ?? null;
+            : ($suiteId === 'gallery-request'
+                ? $registry['gallery_request_tests'] ?? null
+                : $registry['hosted_full_required_php_tests'] ?? null);
         $validRequired =
             is_array($required) && array_is_list($required) && $required !== [];
         if ($validRequired) {
@@ -991,7 +1001,9 @@ function audit_run_php_regression(
                 )))
                 : $required;
         $missing = !$validRequired
-            ? ['invalid hosted_full_required_php_tests registry']
+            ? [$suiteId === 'gallery-request'
+                ? 'invalid gallery_request_tests registry'
+                : 'invalid hosted_full_required_php_tests registry']
             : (
                 $ownedRequired === []
                     ? []
@@ -3321,6 +3333,7 @@ function audit_suite_console_label(string $suiteId): string
         'winapp-frozen-installer' => 'Real WinApp frozen executable and installer build',
         'php-regression' => 'PHP regression',
         'thumbnail-batch' => 'Thumbnail batch PHP regression',
+        'gallery-request' => 'Gallery request-path PHP regression',
         'php-fast' => 'PHP regression (fast)',
         'packaging' => 'Production packaging policy and smoke',
         'production-package' => 'Required production packaging',
@@ -3444,6 +3457,7 @@ foreach ($suiteIds as $suiteIndex => $suiteId) {
         ),
         'php-fast' => audit_run_php_regression($registry, 'php-fast'),
         'thumbnail-batch' => audit_run_php_regression($registry, 'thumbnail-batch'),
+        'gallery-request' => audit_run_php_regression($registry, 'gallery-request'),
         'packaging' => audit_run_php_regression($registry, 'packaging'),
         'production-package' => audit_run_production_package($registry),
         'runtime-performance' => audit_run_runtime_performance($registry),

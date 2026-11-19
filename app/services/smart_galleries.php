@@ -2467,24 +2467,89 @@ function smart_gallery_contains_image_for_accessible_ids(
     );
 }
 
+/**
+ * Identify the complete resolved count scope without retaining authorization data.
+ *
+ * @param array{rules:array<string,scalar|null|array<array-key,scalar|null>>,accessible_gallery_ids:list<int>,allow_nsfw:bool,sort_mode:string,sort_direction:string} $semantic Resolved canonical query inputs before source filtering.
+ * @param bool $publicOnly Whether public image visibility applies.
+ * @return string|null Exact scope digest, or null when JSON cannot encode inputs.
+ */
+function smart_gallery_count_scope_key(array $semantic, bool $publicOnly): ?string
+{
+    $encoded = json_encode([
+        $semantic['rules'], $semantic['accessible_gallery_ids'],
+        $publicOnly, $semantic['allow_nsfw'],
+    ]);
+    return is_string($encoded) ? hash('sha256', $encoded) : null;
+}
+
+/**
+ * Reuse raw grouped counts only for an equal freshly resolved read scope.
+ *
+ * The proof is synchronous call-local data, never a reusable cache or authority.
+ * Callers must not carry it across mutations. Localization and source-context
+ * availability deliberately do not enter these raw image counts.
+ * @param array{rules:array<string,scalar|null|array<array-key,scalar|null>>,accessible_gallery_ids:list<int>,allow_nsfw:bool,sort_mode:string,sort_direction:string} $semantic Fresh unfiltered canonical query inputs.
+ * @param bool $publicOnly Whether public image visibility applies.
+ * @param int $sourceGalleryId Source filter; zero means the complete result.
+ * @param array{scope:?string,rows:list<array{gallery_id:int|string,image_count:int|string}>}|null $proof Immediate raw grouped result, or null for ordinary count callers.
+ * @return int|null Exact grouped count, or null when the normal SQL count is needed.
+ */
+function smart_gallery_count_from_source_proof(
+    array $semantic,
+    bool $publicOnly,
+    int $sourceGalleryId,
+    ?array $proof,
+): ?int {
+    if ($proof === null) {
+        return null;
+    }
+    $scope = smart_gallery_count_scope_key($semantic, $publicOnly);
+    if ($scope === null || $proof['scope'] !== $scope) {
+        return null;
+    }
+    if ($sourceGalleryId > 0
+        && !in_array($sourceGalleryId, $semantic['accessible_gallery_ids'], true)) {
+        return null;
+    }
+    $total = 0;
+    foreach ($proof['rows'] as $row) {
+        if ($sourceGalleryId <= 0 || (int) $row['gallery_id'] === $sourceGalleryId) {
+            $total += max(0, (int) $row['image_count']);
+        }
+    }
+    return $total;
+}
+
 /** Count matching accessible images without loading image rows into PHP.
  *
  * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
  * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
  * @param int $sourceGalleryId Optional physical source gallery filter; zero means no filter.
+ * @param array{scope:?string,rows:list<array{gallery_id:int|string,image_count:int|string}>}|null $sourceCountProof Immediate raw source-summary count proof; never retain across mutations.
  * @return int Count of matching accessible images.
  */
 function smart_gallery_count_images(
     array $gallery,
     bool $publicOnly,
     int $sourceGalleryId = 0,
+    ?array $sourceCountProof = null,
 ): int {
     $semantic = smart_gallery_query_semantics(
         $gallery,
         $publicOnly,
-        null,
-        $sourceGalleryId,
     );
+    $groupedCount = smart_gallery_count_from_source_proof(
+        $semantic, $publicOnly, $sourceGalleryId, $sourceCountProof,
+    );
+    if ($groupedCount !== null) {
+        return $groupedCount;
+    }
+    if ($sourceGalleryId > 0) {
+        $semantic['accessible_gallery_ids'] = in_array(
+            $sourceGalleryId, $semantic['accessible_gallery_ids'], true,
+        ) ? [$sourceGalleryId] : [];
+    }
     return \Gallery\Models\smart_gallery_model_count_images(
         $semantic['rules'],
         $semantic['accessible_gallery_ids'],
@@ -2596,7 +2661,7 @@ function smart_gallery_image_position(
  * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
  * @param int $selectedSourceGalleryId Source gallery selected in view state; zero means none.
 
- * @return array{total_images:int,gallery_count:int,selected_gallery_id:int,selected_valid:bool,items:list<array{gallery_id:int,title:string,breadcrumb:string,breadcrumb_compact:string,source_url:string,image_count:int,selected:bool}>} Canonical source counts and localized provenance items, with selected-source validity.
+ * @return array{total_images:int,gallery_count:int,selected_gallery_id:int,selected_valid:bool,items:list<array{gallery_id:int,title:string,breadcrumb:string,breadcrumb_compact:string,source_url:string,image_count:int,selected:bool}>,count_proof:array{scope:?string,rows:list<array{gallery_id:int|string,image_count:int|string}>}} Canonical source counts and localized provenance items, with selected-source validity and private synchronous count proof.
  */
 function smart_gallery_source_summary(
     array $gallery,
@@ -2681,6 +2746,10 @@ function smart_gallery_source_summary(
         'selected_gallery_id' => max(0, $selectedSourceGalleryId),
         'selected_valid' => $selectedValid,
         'items' => $items,
+        'count_proof' => [
+            'scope' => smart_gallery_count_scope_key($semantic, $publicOnly),
+            'rows' => $rows,
+        ],
     ];
 }
 

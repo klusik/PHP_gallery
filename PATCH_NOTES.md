@@ -1,5 +1,71 @@
 # Patch notes
 
+## Version 1.4.0
+
+PHP Gallery 1.4.0 reduced the time spent preparing Smart Gallery pages and
+made Admin Test diagnostics cheaper to list and record.
+
+### Highlights
+
+#### Faster Smart Gallery pages
+
+- Batched thumbnail metadata and source lookups for the current page of
+  authorized images and removed repeated work while preparing gallery cards.
+  In the paired localhost Friedrichshafen benchmark, p95 time to first byte fell
+  from 1,230 ms to 312 ms for sequential requests without a session cookie.
+  [#404](https://github.com/klusik/PHP_gallery/issues/404)
+
+#### Admin Test diagnostics
+
+- Used compact summaries to list finalized Test runs. Older runs and runs
+  with invalid summaries remained accessible through the original reports.
+  Expanded render diagnostics with Smart card timings and schema query
+  provenance. [#404](https://github.com/klusik/PHP_gallery/issues/404)
+
+### Technical Details
+
+#### Backend
+
+- Reused grouped Smart counts only when gallery rules, accessible source IDs,
+  audience and NSFW scope matched. Other requests used the existing filtered
+  count. Thumbnail reuse stayed within the authorized page and its source
+  identity.
+- Reused image route inputs and rewrite observations within a request.
+  Updater writes invalidated prior observations, and compatibility paths
+  served hosts where rewrite support could not be established. Reused
+  structural capability definitions while evaluating live settings and
+  dependencies for each decision.
+- Batched optional music and attachment schema checks on demand. Disabled
+  features skipped the optional checks. If a batch failed, per-object checks
+  distinguished available, confirmed missing and unknown schema. Operations
+  requiring confirmed readiness used the established fail-closed checks.
+- Published bounded summaries alongside complete Admin Test reports and checked
+  their current report identity before using them in listings. Exports used
+  the authenticated, authoritative report path. Batched database telemetry
+  upserts into bounded statements using the existing schema.
+
+#### Tests and diagnostics
+
+- Added `scripts/gallery_http_compare.py` for paired loopback comparisons with
+  recorded source identities and verified session cohorts. The qualified
+  local runs checked response status, image order, and source parity.
+- Expanded regression coverage for Smart page visibility, thumbnail ownership,
+  URL rewrite invalidation, optional schema fallback, report compatibility
+  and telemetry aggregation. Updated all four maintained manual sources.
+
+### User Impact
+
+#### For visitors
+
+- Reduced the wait for the first HTML byte of the tested Smart Gallery.
+  At eight concurrent requests sharing a session, local p95 was 2.16 seconds.
+
+#### For administrators
+
+- Reduced the amount of report data read to list new Test runs and added
+  timings to help locate expensive work during Smart Gallery rendering.
+  Upgrades use the existing database schema.
+
 ## Version 1.3.1
 
 Updated the independently versioned WinApp to 1.5.1 with visible gallery-loading

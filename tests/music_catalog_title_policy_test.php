@@ -145,5 +145,29 @@ namespace {
         'Unknown extension remains in the basename fallback',
     );
 
+    // These real readiness owners must retain the existing executor fallback;
+    // SQLite storage is never asked to implement information_schema metadata.
+    foreach (['available', 'missing', 'unknown'] as $schemaState) {
+        \Gallery\Services\schema_inspection_set_query_executor_for_tests(
+            static function (string $kind, string $table, string $object) use ($schemaState): bool {
+                if ($schemaState === 'unknown') {
+                    throw new RuntimeException('fixture metadata unavailable');
+                }
+                return $schemaState !== 'missing';
+            },
+        );
+        music_catalog_title_assert(
+            $schemaState,
+            \Gallery\Services\music_catalog_schema_status()['state'],
+            'Optional catalog priming preserves ordinary readiness',
+        );
+        music_catalog_title_assert(
+            $schemaState,
+            \Gallery\Services\music_repository_schema_status()['state'],
+            'Optional repository priming preserves ordinary readiness',
+        );
+    }
+    \Gallery\Services\schema_inspection_set_query_executor_for_tests(null);
+
     echo "PASS: music catalog public title policy\n";
 }

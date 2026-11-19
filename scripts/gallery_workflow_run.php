@@ -8,6 +8,7 @@
  * Responsibilities:
  *   - Own the isolated application lifecycle and pass checks to the central audit.
  * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  * Run a disposable real-database application through development checks or the central audit.
  */
 declare(strict_types=1);
@@ -55,6 +56,7 @@ try {
                 '--development',
                 '--audit-quick',
                 '--audit-php-regression',
+                '--audit-gallery-request',
                 '--audit',
                 '--release',
                 '--route-probes',
@@ -129,6 +131,37 @@ try {
             'PASS gallery workflow route lifecycle probes captured ('
                 . $routeProbeLabel
                 . ")\n";
+    } elseif ($mode === '--audit-gallery-request') {
+        // The existing fixture owns the database, HTTP server and teardown.
+        // Missing capabilities and per-child SKIPs cannot qualify this suite.
+        putenv('GALLERY_WORKFLOW_REQUIRED=1');
+        $stage = 'central gallery request-path suite';
+        $fixture->run(
+            [PHP_BINARY, __DIR__ . '/audit.php', '--suite=gallery-request'],
+            GALLERY_WORKFLOW_CENTRAL_AUDIT_TIMEOUT_SECONDS,
+            $stage,
+        );
+        $report = json_decode(
+            (string) file_get_contents(dirname(__DIR__) . '/cache/test-audit/latest.json'),
+            true,
+            512, // JSON decoder structural depth, matching existing audit reports.
+            JSON_THROW_ON_ERROR,
+        );
+        $tasks = array_values(array_filter(
+            $report['tasks'] ?? [],
+            static fn(array $task): bool => ($task['id'] ?? '') === 'gallery-request',
+        ));
+        check(count($tasks) === 1, 'One exact focused-suite result is required.');
+        $registry = require __DIR__ . '/audit_registry.php';
+        $required = $registry['gallery_request_tests'];
+        $task = $tasks[0];
+        check(
+            ($task['status'] ?? '') === 'PASS'
+                && ($task['counts']['passed'] ?? 0) === count($required)
+                && missing_required_php_test_passes($task, $required) === [],
+            'Every selected gallery request-path child must produce an unambiguous PASS.',
+        );
+        echo "PASS gallery workflow central gallery request-path suite completed\n";
     } elseif ($mode === '--audit-php-regression') {
         // A missing owned DB fixture must fail rather than silently skip its
         // required workflow children. The central audit remains the only

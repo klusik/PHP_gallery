@@ -601,6 +601,7 @@ $registry = [
 
 $registry['php_fast_tests'] = $phpRegistry['quick_tests'];
 $registry['thumbnail_batch_tests'] = $phpRegistry['thumbnail_batch_tests'];
+$registry['gallery_request_tests'] = $phpRegistry['gallery_request_tests'];
 // Reuse the exact quick profile and append only the isolated feature owner.
 $registry['profiles']['thumbnail-batch'] = array_merge(
     $registry['profiles']['quick'], ['thumbnail-batch'],

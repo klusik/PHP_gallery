@@ -1741,7 +1741,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.3.1. Release verification uses the
+This guide applies to PHP Gallery Version 1.4.0. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -10118,3 +10118,70 @@ used only by Photos/lightbox. The fixture expectation now matches all three
 actual dashboard rows, retaining full identity/content, header and duplication
 checks. The driver, workload and statistical bytes are unchanged by this test
 correction. No TeX manual impact: regression fixture cardinality only.
+
+
+## Focused gallery request qualification and exact-source measurements
+
+The central `gallery-request` suite selects existing PHP regressions only
+from `scripts/audit_php_registry.php`: thumbnail identity/lookup budget/format
+metadata/markup/rendering, public media rewrite/settings and actual updater
+writer invalidation/safety/recovery/resumable behavior, Smart Gallery
+rules/public contracts and source-map hardening, telemetry observer/populated
+compaction, Admin test-run reports, sessions, access/NSFW schema policy and
+runtime dependencies/module plan/split paths, plus disposable workflow safety,
+central audit evidence and feature-policy core/adapters.
+FULL retains ordinary discovery and unchanged owners. The
+reused generic pool preserves serial barriers, extension requirements and child
+logs. Every selected child must have unambiguous PASS, zero exit and no timeout;
+SKIP, missing, duplicate or malformed child evidence cannot qualify the suite.
+
+`gallery_workflow_ci.php --gallery-request` reuses the existing disposable
+service hostname, restricted schema-local runner and root-password scrubbing,
+then calls `gallery_workflow_run.php --audit-gallery-request`. The validated
+Fixture owns the private migrated database, isolated HTTP server and teardown;
+`GALLERY_WORKFLOW_REQUIRED=1` makes unavailable database coverage fail visibly.
+Existing modes keep their original required-child checks. This is correctness
+coverage, not load testing or external-provider network probing.
+
+`.github/workflows/gallery-request-performance.yml` runs automatically only on
+`feature/performance-audit-local-prototypes` pushes; manual dispatch supports
+`feature/*` branches. Two independent native jobs use PHP 8.1/MariaDB 10.11 and
+PHP 8.5/MySQL 8.4, pin exact event SHA and freeze the observed main merge-base.
+They check source leases before/after execution, retain no checkout credentials,
+hold only `contents: read`, prepare/check canonical metadata and never publish
+refs/statuses. There is no one-commit admission, protected integration, squash
+or history rewrite.
+
+`gallery-request-prepared-<source-sha>-php-<version>` retains complete original
+`app/runtime/modules.php`, `app/production-files.json`, `app/core-manifest.json`,
+input SHA/tree/base and byte digests. `gallery-request-evidence-<source-sha>-php-
+<version>` retains central JSON/Markdown, source-failure evidence when emitted
+and complete child logs, including failed runs. Compare both matrix outcomes and
+generated outputs before persisting only the three generated paths on the
+authorized feature branch. Failed preparation artifacts are not freshness proof.
+The resulting new SHA requires fresh BASIC and this workflow's own hosted
+re-preparation/check; compare persisted bytes with those new exact-SHA outputs.
+Earlier-SHA evidence cannot qualify a later source. Feature history is preserved.
+
+BASIC checks changed syntax/declarations, focused coverage checks its explicit
+correctness scope, and FULL still requires the complete protected matrix and
+separate integration authorization. None proves installed-server performance or
+browser acceptance. `scripts/gallery_http_compare.py` independently compares
+exact clean ancestral baseline/candidate commits through pinned localhost in
+five alternating blocks and thirty waves per arm with C1/C2/C4/C8. It records
+response timing/markup hashes without user cookies and restores the original
+feature checkout without reset/force. Run it outside the sandbox and follow
+`docs/performance/gallery-http-comparison.md`; checkout provenance does not
+independently establish server/OPcache reload. Experimental timings do not
+replace hosted qualification.
+
+Any comparison containing a `same` session case must supply
+`--session-cookie-name` with the installation's explicitly configured PHP
+session cookie **name**, never a cookie value. Start the synthetic session with
+a warmup request containing no cookies; admission requires a matching
+`Set-Cookie` response before measured requests reuse that session. Do not import
+browser cookies or persist session values in evidence. Missing or mismatched
+admission invalidates the entire same-session cohort. Earlier runner evidence
+that assumed `PHPSESSID` without verifying the configured cookie name does not
+qualify same-session behavior; fresh no-cookie cohorts remain independently
+assessable.

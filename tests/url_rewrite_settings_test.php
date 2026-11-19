@@ -36,6 +36,8 @@
 
 declare(strict_types=1);
 
+namespace {
+
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\image_public_asset_version;
 use function Gallery\Core\image_public_media_url;
@@ -311,9 +313,164 @@ try {
         ]), '/'),
         'missing public path uses safe stored slug instead of physical folder name',
     );
+    $observationServer = [
+        'SERVER_SOFTWARE' => 'Apache/2.4',
+        'REQUEST_URI' => '/index.php?page=observation',
+        'SCRIPT_NAME' => '/index.php',
+        'REDIRECT_URL' => '',
+    ];
+    $markerPaths = [$supportedRoot . '/.htaccess', $supportedRoot . '/public/.htaccess'];
+    $validRules = "<IfModule mod_rewrite.c>\nRewriteEngine On\nRewriteRule ^ index.php [L]\n</IfModule>\n";
+    // Each vector changes one actual environment input, including the mount.
+    $serverChanges = [
+        ['SERVER_SOFTWARE' => 'IIS'],
+        ['REQUEST_URI' => '/index.php?page=changed'],
+        ['SCRIPT_NAME' => '/nested/public/index.php'],
+        ['REDIRECT_URL' => '/gallery/changed'],
+    ];
+    foreach ($serverChanges as $serverChange) {
+        foreach ($markerPaths as $markerPath) {
+            file_put_contents($markerPath, $validRules);
+        }
+        \Gallery\Services\url_rewrite_reset_request_observation();
+        $primed = url_rewrite_compatibility($observationServer, $supportedRoot);
+        foreach ($markerPaths as $markerPath) {
+            file_put_contents($markerPath, '# Invalid rewrite marker');
+        }
+        assert_url_rewrite_same(
+            $primed,
+            url_rewrite_compatibility($observationServer, $supportedRoot),
+            'same-context hit retains the current request marker snapshot',
+        );
+        $changed = url_rewrite_compatibility(
+            array_replace($observationServer, $serverChange),
+            $supportedRoot,
+        );
+        assert_url_rewrite_same(
+            false,
+            $changed['details']['root_htaccess'],
+            'changed request identity inspects corrupt root marker again',
+        );
+        assert_url_rewrite_same(
+            false,
+            $changed['details']['public_htaccess'],
+            'changed request identity inspects corrupt public marker again',
+        );
+    }
+    $missing = url_rewrite_compatibility($observationServer, $unsupportedRoot);
+    assert_url_rewrite_same('unsupported', $missing['status'], 'changed root refuses missing markers');
+    $GLOBALS['cms_app_settings_cache']['url_rewrite_enabled'] = '0';
+    assert_url_rewrite_same(
+        'disabled',
+        url_rewrite_compatibility($observationServer, $unsupportedRoot)['status'],
+        'live disabled preference overrides a cached environment',
+    );
+    $GLOBALS['cms_app_settings_cache']['url_rewrite_enabled'] = '1';
+    foreach ($markerPaths as $markerPath) {
+        file_put_contents($markerPath, $validRules);
+    }
+    $primed = url_rewrite_compatibility($observationServer, $supportedRoot);
+    foreach ($markerPaths as $markerPath) {
+        unlink($markerPath);
+        clearstatcache(true, $markerPath);
+    }
+    assert_url_rewrite_same(
+        $primed,
+        url_rewrite_compatibility($observationServer, $supportedRoot),
+        'external marker deletion is observed at the next request boundary',
+    );
+    \Gallery\Services\app_settings_reset_request_cache();
+    $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => '1'];
+    assert_url_rewrite_same(
+        'unsupported',
+        url_rewrite_compatibility($observationServer, $supportedRoot)['status'],
+        'settings reset invalidates cached marker evidence',
+    );
+    foreach ($markerPaths as $markerPath) {
+        file_put_contents($markerPath, $validRules);
+    }
+    \Gallery\Services\url_rewrite_reset_request_observation();
+    url_rewrite_compatibility($observationServer, $supportedRoot);
+    assert_url_rewrite_same(
+        false,
+        \Gallery\Services\url_rewrite_writer_owner_loaded(),
+        'ordinary rewrite observations have no loaded policy writer owner',
+    );
+    require_once __DIR__
+        . '/fixtures/url_rewrite_observation/updates_filesystem.php';
+    assert_url_rewrite_same(
+        false,
+        \Gallery\Services\url_rewrite_writer_owner_loaded(),
+        'marked declaration-only owner permits observation reuse',
+    );
+    $markedSnapshot = url_rewrite_compatibility($observationServer, $supportedRoot);
+    foreach ($markerPaths as $markerPath) {
+        file_put_contents($markerPath, '# External invalid marker');
+    }
+    assert_url_rewrite_same(
+        $markedSnapshot,
+        url_rewrite_compatibility($observationServer, $supportedRoot),
+        'marked declaration retains a genuine same-context memo hit',
+    );
+    foreach ($markerPaths as $markerPath) {
+        \Gallery\Services\url_rewrite_fixture_marked_replace(
+            $markerPath,
+            '# Marked writer invalid marker',
+        );
+    }
+    assert_url_rewrite_same(
+        'unsupported',
+        url_rewrite_compatibility($observationServer, $supportedRoot)['status'],
+        'marked actual write invalidates the prior positive observation',
+    );
+    \Gallery\Services\app_settings_reset_request_cache();
+    $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => '1'];
+    assert_url_rewrite_same(
+        true,
+        $GLOBALS['cms_url_rewrite_writer_active'] ?? false,
+        'settings reset must never clear request writer activity',
+    );
+    foreach ($markerPaths as $markerPath) {
+        file_put_contents($markerPath, $validRules);
+    }
+    assert_url_rewrite_same(
+        'likely_supported',
+        url_rewrite_compatibility($observationServer, $supportedRoot)['status'],
+        'writer-active requests continue observing subsequent marker changes',
+    );
+    // The unmarked legacy owner must still latch independently of writer state.
+    require_once __DIR__
+        . '/fixtures/url_rewrite_observation/update_server_policy_reconciliation.php';
+    assert_url_rewrite_same(
+        true,
+        \Gallery\Services\url_rewrite_writer_owner_loaded(),
+        'late unmarked legacy owner permanently refuses observation reuse',
+    );
+    $invalidPolicySource = $unsupportedRoot . '/invalid-policy.txt';
+    file_put_contents($invalidPolicySource, '# Invalid rewrite marker');
+    foreach ($markerPaths as $markerPath) {
+        \Gallery\Services\application_update_server_policy_replace_file(
+            $invalidPolicySource,
+            $markerPath,
+        );
+    }
+    assert_url_rewrite_same(
+        'unsupported',
+        url_rewrite_compatibility($observationServer, $supportedRoot)['status'],
+        'loaded unmarked policy owner keeps observation reuse disabled',
+    );
+    foreach ($markerPaths as $markerPath) {
+        file_put_contents($markerPath, $validRules);
+    }
+    assert_url_rewrite_same(
+        'likely_supported',
+        url_rewrite_compatibility($observationServer, $supportedRoot)['status'],
+        'loaded updater writer keeps repeated observations fresh',
+    );
 } finally {
     remove_url_rewrite_test_root($supportedRoot);
     remove_url_rewrite_test_root($unsupportedRoot);
 }
 
 echo "URL rewrite settings tests passed.\n";
+}

@@ -28,9 +28,11 @@ use function GalleryWorkflow\databaseOptions;
 
 try {
     $arguments = array_slice($argv, 1);
-    check($arguments === [] || $arguments === ['--php-regression'],
-        'Select the existing full owner or the isolated PHP regression suite.');
-    $phpOnly = $arguments === ['--php-regression'];
+    check($arguments === [] || $arguments === ['--php-regression']
+        || $arguments === ['--gallery-request'],
+        'Select full, isolated PHP regression, or focused gallery request coverage.');
+    $galleryRequest = $arguments === ['--gallery-request'];
+    $phpOnly = $arguments === ['--php-regression'] || $galleryRequest;
     if ($phpOnly) {
         check(getenv('PHP_GALLERY_BROWSER') === 'disabled'
             && getenv('GALLERY_WORKFLOW_BROWSER') === 'disabled'
@@ -89,7 +91,7 @@ try {
     putenv('GALLERY_WORKFLOW_CI_ROOT_PASSWORD');
     $argv = [__FILE__, '--audit'];
     if ($phpOnly) {
-        $argv[1] = '--audit-php-regression';
+        $argv[1] = $galleryRequest ? '--audit-gallery-request' : '--audit-php-regression';
     }
     require __DIR__ . '/gallery_workflow_run.php';
 } catch (Throwable) {

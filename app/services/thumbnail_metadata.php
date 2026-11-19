@@ -54,7 +54,7 @@ use function Gallery\Models\thumbnail_metadata_model_upsert_variant;
 /**
  * Return true when durable thumbnail metadata storage is available.
  *
- * @return bool True when the condition matches.
+ * @return bool True only when the existing complete metadata schema is available.
  */
 function thumbnail_metadata_schema_ready(): bool
 {
@@ -1518,10 +1518,10 @@ function thumbnail_metadata_refresh_image(
 /**
  * Return rows for rendering and the sizes that still need deliberate repair.
  *
- * @param array<string,mixed> $image Image row or image data.
- * @param array<string,mixed> $gallery Gallery row or gallery data.
- * @param array<int,int> $sizes Sizes value.
- * @return array{variants:array<string,array<int,string>>,warmup_sizes:array<int,int>,known_from_db:bool} Structured result data for the caller.
+ * @param array{id:int|string,gallery_id?:int|string,filename?:string,relative_path?:string,thumbnail_source_identity_version?:int|string|null,url_slug?:string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null,...} $image Source identity and revision fields used to validate metadata and build URLs.
+ * @param array{folder_path:string,url_path?:string|null,slug?:string|null,title?:string|null,...} $gallery Owning gallery and public route fields.
+ * @param list<int> $sizes Requested derivative widths in pixels.
+ * @return array{variants:array<string,array<int,string>>,warmup_sizes:array<int,int>,known_from_db:bool} Verified variant URLs, missing widths and metadata presence.
  */
 function thumbnail_metadata_bundle_data(
     array $image,
@@ -1548,15 +1548,22 @@ function thumbnail_metadata_bundle_data(
     )
         ? thumbnail_policy_requested_formats()
         : ['webp'];
+    $sizesByFormat = [];
     foreach ($formats as $format) {
         foreach ($rows[$format] as $size => $row) {
-            $variants[$format][(int) $size] = thumbnail_serving_url(
-                $image,
-                $gallery,
-                (int) $size,
-                $format,
-            );
+            $sizesByFormat[$format][] = (int) $size;
         }
+    }
+    $variantUrls = public_render_profile_span(
+        'thumbnail_metadata_urls',
+        static fn(): array => thumbnail_serving_urls(
+            $image,
+            $gallery,
+            $sizesByFormat,
+        ),
+    );
+    foreach ($variantUrls as $format => $urls) {
+        $variants[$format] = $urls;
     }
 
     foreach ($sizes as $size) {

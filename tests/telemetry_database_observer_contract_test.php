@@ -43,24 +43,71 @@ namespace Gallery\Core {
     }
 }
 
-namespace Gallery\Models {
-    /**
-     * Capture aggregate writes instead of using a real database.
-     *
-     * @param list<string|int> $params Ordered SQL values for one aggregate row.
-     * @return void Records the write and exercises recursive suppression.
-     */
-    function telemetry_model_upsert_db_query_metric_aggregate(array $params): void
+namespace Gallery\Core {
+    /** Capture prepared telemetry statements without connecting to a database. */
+    class TelemetryObserverFixturePDO extends \PDO
     {
-        $GLOBALS['telemetry_db_observer_fixture_writes'][] = $params;
-        // A persistence query observed during flush must be suppressed completely.
-        \Gallery\Services\telemetry_observe_db_query(
-            'INSERT INTO images (filename) VALUES (?)',
-            3.0,
-            true,
-            1,
-            null,
-        );
+        /**
+         * Construct an isolated PDO boundary without opening a connection.
+         * @return void Initializes only the fixture object.
+         */
+        public function __construct()
+        {
+        }
+
+        /**
+         * Capture generated SQL and return an execution recorder.
+         * @param string $query Model-owned SQL statement.
+         * @param array<int|string,int|string|bool> $options Unused driver options.
+         * @return \PDOStatement|false Fixture execution recorder.
+         */
+        public function prepare(string $query, array $options = []): \PDOStatement|false
+        {
+            $GLOBALS['telemetry_db_observer_fixture_sql'][] = $query;
+            return new TelemetryObserverFixtureStatement();
+        }
+    }
+
+    /** Record real model execution parameters and exercise observer suppression. */
+    class TelemetryObserverFixtureStatement extends \PDOStatement
+    {
+        /**
+         * Construct a statement recorder without a native prepared statement.
+         * @return void Initializes only the fixture object.
+         */
+        public function __construct()
+        {
+        }
+
+        /**
+         * Capture a batch or inject an execution failure.
+         * @param list<string|int>|null $params Flattened aggregate parameters.
+         * @return bool True after recording; injected failures throw.
+         */
+        public function execute(?array $params = null): bool
+        {
+            if (!empty($GLOBALS['telemetry_db_observer_fixture_fail'])) {
+                throw new \RuntimeException('private driver error');
+            }
+            $GLOBALS['telemetry_db_observer_fixture_batches'][] = $params;
+            // Each row has thirteen schema columns, matching the model INSERT.
+            foreach (array_chunk($params ?? [], 13) as $row) {
+                $GLOBALS['telemetry_db_observer_fixture_writes'][] = $row;
+            }
+            \Gallery\Services\telemetry_observe_db_query(
+                'INSERT INTO images (filename) VALUES (?)', 3.0, true, 1, null,
+            );
+            return true;
+        }
+    }
+
+    /**
+     * Supply the isolated PDO boundary to the real telemetry model.
+     * @return \PDO Capturing fixture connection.
+     */
+    function db(): \PDO
+    {
+        return new TelemetryObserverFixturePDO();
     }
 }
 
@@ -127,6 +174,7 @@ namespace {
     }
 
     $root = dirname(__DIR__);
+    require_once $root . '/app/models/telemetry.php';
     require_once $root . '/app/services/database_observer.php';
 
     unset($GLOBALS['cms_telemetry_database_observer_state']);
@@ -250,6 +298,63 @@ namespace {
     telemetry_database_observer_contract_assert(
         $state['suppressed'] === false,
         'Observer suppression must be released after flush.',
+    );
+
+    telemetry_database_observer_contract_assert(
+        count($GLOBALS['telemetry_db_observer_fixture_batches']) === 1
+            && count($GLOBALS['telemetry_db_observer_fixture_batches'][0]) === 39,
+        'Three aggregates must share one statement with thirteen bound fields each.',
+    );
+    $selectWrite = $GLOBALS['telemetry_db_observer_fixture_writes'][0];
+    telemetry_database_observer_contract_assert(
+        array_slice($selectWrite, 5, 7) === [2, 0, 1, 310, 300, 0, 0],
+        'Batching must retain exact SELECT counts, rounded sums/max and portable row semantics.',
+    );
+    telemetry_database_observer_contract_assert(
+        array_slice($GLOBALS['telemetry_db_observer_fixture_writes'][1], 5, 7)
+            === [1, 1, 0, 21, 21, 0, 0]
+            && array_slice($GLOBALS['telemetry_db_observer_fixture_writes'][2], 5, 7)
+                === [1, 0, 0, 12, 12, 0, 3],
+        'Failure and affected-row counters must survive batch flattening exactly.',
+    );
+    telemetry_database_observer_contract_assert(
+        substr_count($GLOBALS['telemetry_db_observer_fixture_sql'][0], '?')
+            === count($GLOBALS['telemetry_db_observer_fixture_batches'][0]),
+        'Generated placeholders must match the complete flattened parameter list.',
+    );
+    $batchRow = $selectWrite;
+    $batchLimit = \Gallery\Models\TELEMETRY_MODEL_QUERY_METRIC_BATCH_ROWS;
+    $GLOBALS['telemetry_db_observer_fixture_batches'] = [];
+    // One row beyond the configured bound must require exactly two statements.
+    \Gallery\Models\telemetry_model_upsert_db_query_metric_aggregates(
+        array_fill(0, $batchLimit + 1, $batchRow),
+    );
+    telemetry_database_observer_contract_assert(
+        array_map('count', $GLOBALS['telemetry_db_observer_fixture_batches'])
+            === [$batchLimit * count($batchRow), count($batchRow)],
+        'A boundary overflow must preserve every row in two bounded executions.',
+    );
+    $beforeEmpty = count($GLOBALS['telemetry_db_observer_fixture_sql']);
+    \Gallery\Models\telemetry_model_upsert_db_query_metric_aggregates([]);
+    $rejected = false;
+    try {
+        \Gallery\Models\telemetry_model_upsert_db_query_metric_aggregates(
+            [$batchRow, []],
+        );
+    } catch (\InvalidArgumentException) {
+        $rejected = true;
+    }
+    telemetry_database_observer_contract_assert(
+        $rejected && count($GLOBALS['telemetry_db_observer_fixture_sql']) === $beforeEmpty,
+        'Empty batches perform no SQL and malformed later rows must reject before any write.',
+    );
+    telemetry_observe_db_query('SELECT id FROM images', 1.0, true);
+    $GLOBALS['telemetry_db_observer_fixture_fail'] = true;
+    telemetry_flush_db_query_buffer();
+    $GLOBALS['telemetry_db_observer_fixture_fail'] = false;
+    telemetry_database_observer_contract_assert(
+        $state['buffer'] === [] && $state['suppressed'] === false,
+        'Failed persistence must remain fail-open, discard the flushed buffer and release suppression.',
     );
 
     unset($GLOBALS['cms_telemetry_database_observer_state']);

@@ -73,7 +73,7 @@ function feature_capability_exists(string $key): bool
 {
     return array_key_exists(
         feature_flag_normalize_key($key),
-        feature_capability_definitions(),
+        feature_capability_definitions(false),
     );
 }
 
@@ -83,12 +83,17 @@ function feature_capability_exists(string $key): bool
  * Unknown keys fail closed and emit one bounded request-local diagnostic.
  *
  * @param string $key Lookup key.
- * @return ?array<string,mixed> Canonical definition or null for an unknown key.
+ * @param bool $localized Whether to resolve current human-facing labels;
+ *     false selects immutable structural metadata for policy evaluation.
+ * @return array{group:string,label:string,description:string,default_enabled?:bool,fresh_default_enabled?:bool,source:array{type:string,key?:string,adapter?:string},dependencies:list<string>,routes:list<string>,route_prefixes:list<string>,editable_on_features:bool,data_disable_policy:string,behavior_tags:list<string>,settings_route:string,settings_params:array<string,string|int|bool>,settings_fragment:string}|null Canonical definition or null for an unknown key.
  */
-function feature_capability_definition(string $key): ?array
+function feature_capability_definition(
+    string $key,
+    bool $localized = true,
+): ?array
 {
     $key = feature_flag_normalize_key($key);
-    $definition = feature_capability_definitions()[$key] ?? null;
+    $definition = feature_capability_definitions($localized)[$key] ?? null;
     if (!is_array($definition)) {
         feature_capability_report_unknown($key);
         return null;
@@ -107,7 +112,7 @@ function feature_capability_definition(string $key): ?array
  */
 function feature_capability_default_enabled(string $key): bool
 {
-    $definition = feature_capability_definition($key);
+    $definition = feature_capability_definition($key, false);
     if ($definition === null) {
         return false;
     }
@@ -129,7 +134,7 @@ function feature_capability_default_enabled(string $key): bool
 function feature_capability_configured_enabled(string $key): bool
 {
     $key = feature_flag_normalize_key($key);
-    $definition = feature_capability_definition($key);
+    $definition = feature_capability_definition($key, false);
     if ($definition === null) {
         return false;
     }
@@ -154,11 +159,11 @@ function feature_capability_effective_enabled(
     array $resolving = [],
 ): bool {
     $key = feature_flag_normalize_key($key);
-    $definition = feature_capability_definition($key);
+    $definition = feature_capability_definition($key, false);
     if ($definition === null || isset($resolving[$key])) {
         return false;
     }
-    if (!feature_capability_configured_enabled($key)) {
+    if (!feature_capability_source_read($key, $definition)) {
         return false;
     }
 

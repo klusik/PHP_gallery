@@ -1,5 +1,41 @@
 # Compatibility lifecycle and retirement register
 
+## Gallery request observation and report metadata
+
+Owners: rewrite compatibility in `app/services/app_settings.php` and finalized
+Admin Test-run storage. Current copy, activation/recovery/rollback and standalone
+server-policy owners advertise pre-mutation invalidation. They discard marker
+observations and latch request-wide bypass before actual mutation, including
+partial failure; settings resets never clear this activity. Their declarations
+alone can belong to ordinary public route closures and permit reuse. Loaded
+unmarked owners permanently retain the conservative fallback because older
+in-memory code cannot be replaced by loading new bytes. Their prevalence is
+unknown. Retirement requires proof that every supported writer advertises and
+honors invalidation, plus same-request replacement and failure regression
+evidence. The initial exclusion was observed to disable all Smart memo hits
+because the ordinary compiled closure included a writer declaration. URL syntax
+observation never grants media or account authority. See
+[rewrite observation](performance/rewrite-observation.md).
+
+Old retained reports have no compact sidecar. Missing, malformed, oversized,
+stale or unavailable summaries permanently retain the authoritative report read,
+including current administrator ownership and exact listing order. A summary
+publication failure preserves a successfully published full report. No read-time
+migration or silent omission is permitted. Retirement needs proof that every
+retained report was migrated or expired and explicit owner approval; a release
+number is insufficient. Production adoption and savings are unknown, and legacy
+histories retain their old decode cost. See
+[report metadata](performance/report-summary.md).
+
+Optional domain schema priming retains the original individual inspection path
+after metadata/driver failure or an unsupported test executor. Its owner is the
+schema inspection service. A single request-local failure flag suppresses only
+optional acceleration attempts; schema reset clears it, and no failure is an
+absence fact. This fallback is permanently supported until every supported
+environment guarantees bulk metadata access. Adoption and target-host support
+remain unknown; retirement needs direct environment and regression evidence.
+See [domain schema snapshots](performance/domain-schema-primer.md).
+
 ## Gallery opening progress
 
 Owners: the native gallery viewer, `GalleryViewOrder` and its compact

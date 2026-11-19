@@ -652,6 +652,113 @@ schema_assert_true(
     'plain storage never permits auto increment',
 );
 
+// Query provenance is explicitly opt-in and preserves all three result states.
+$provenanceExecutorCalls = 0;
+schema_inspection_set_query_executor_for_tests(
+    static function (string $kind, string $table, string $object) use (&$provenanceExecutorCalls): bool {
+        $provenanceExecutorCalls++;
+        if ($object === 'unknown_column') {
+            throw new RuntimeException('private driver detail must not be recorded');
+        }
+        return $object !== 'missing_column';
+    },
+);
+unset($GLOBALS['cms_schema_query_provenance']);
+schema_assert_same(
+    SCHEMA_INSPECTION_AVAILABLE,
+    schema_inspection_table('provenance_disabled')['state'],
+    'disabled provenance preserves query result',
+);
+schema_assert_true(
+    !isset($GLOBALS['cms_schema_query_provenance']),
+    'ordinary queries must not allocate diagnostic observations',
+);
+$GLOBALS['cms_schema_query_provenance'] = [
+    'scope' => 'fixture', 'entries' => [], 'dropped_attempts' => 0,
+];
+schema_assert_same(SCHEMA_INSPECTION_AVAILABLE, schema_inspection_table('provenance')['state'], 'observed table available');
+schema_assert_same(SCHEMA_INSPECTION_MISSING, schema_inspection_column('provenance', 'missing_column')['state'], 'observed missing column');
+schema_assert_same(SCHEMA_INSPECTION_UNKNOWN, schema_inspection_column('provenance', 'unknown_column')['state'], 'observed failed column unknown');
+$observed = $GLOBALS['cms_schema_query_provenance']['entries'];
+schema_assert_same(3, count($observed), 'only actual query attempts produce entries');
+schema_assert_same('', $observed['table:provenance:']['object'], 'table identity omits unused object field');
+schema_assert_same(1, $observed['column:provenance:missing_column']['succeeded'], 'missing is successful metadata read');
+schema_assert_same(1, $observed['column:provenance:unknown_column']['failed'], 'thrown execution records failure');
+schema_assert_true(
+    $observed['column:provenance:unknown_column']['elapsed_ms_sum'] >= 0.0,
+    'failed execution retains bounded nonnegative timing',
+);
+$beforeCached = $provenanceExecutorCalls;
+schema_inspection_column('provenance', 'missing_column');
+schema_assert_same($beforeCached, $provenanceExecutorCalls, 'cache hit remains query free');
+schema_assert_same($observed, $GLOBALS['cms_schema_query_provenance']['entries'], 'cache hits do not enter query provenance');
+schema_assert_invalid(
+    static fn(): array => schema_inspection_column('private.invalid', 'column'),
+    'invalid table remains rejected before inspection',
+);
+// The direct executor seam demonstrates recording revalidation cannot replace
+// an execution result, even if a future caller bypasses the public validator.
+schema_assert_same(
+    true,
+    \Gallery\Services\schema_inspection_execute_query('column', 'invalid.name', 'column'),
+    'diagnostic validation cannot change successful execution',
+);
+schema_assert_same(3, count($GLOBALS['cms_schema_query_provenance']['entries']), 'invalid identifiers never enter provenance');
+\Gallery\Services\schema_inspection_record_query_provenance('unsupported', 'provenance', 'column', true, 0.0);
+schema_assert_same(3, count($GLOBALS['cms_schema_query_provenance']['entries']), 'unsupported object types never enter provenance');
+$encodedProvenance = json_encode($GLOBALS['cms_schema_query_provenance']);
+schema_assert_true(
+    is_string($encodedProvenance)
+        && !str_contains($encodedProvenance, 'private driver detail')
+        && !str_contains($encodedProvenance, 'invalid.name'),
+    'diagnostics retain neither exception text nor unvalidated names',
+);
+$GLOBALS['cms_schema_query_provenance'] = [
+    'scope' => 'fixture', 'entries' => [], 'dropped_attempts' => 0,
+];
+$provenanceLimit = \Gallery\Services\SCHEMA_INSPECTION_QUERY_PROVENANCE_LIMIT;
+// One identity beyond the production bound must increment drops only.
+for ($identity = 0; $identity <= $provenanceLimit; $identity++) {
+    \Gallery\Services\schema_inspection_execute_query('column', 'bounded', 'column_' . $identity);
+}
+schema_assert_same($provenanceLimit, count($GLOBALS['cms_schema_query_provenance']['entries']), 'distinct identity bound');
+schema_assert_same(1, $GLOBALS['cms_schema_query_provenance']['dropped_attempts'], 'overflow attempt counted');
+\Gallery\Services\schema_inspection_execute_query('column', 'bounded', 'column_0');
+schema_assert_same(2, $GLOBALS['cms_schema_query_provenance']['entries']['column:bounded:column_0']['attempts'], 'existing identity still accumulates after bound');
+schema_assert_same(1, $GLOBALS['cms_schema_query_provenance']['dropped_attempts'], 'retained identity never consumes a drop');
+unset($GLOBALS['cms_schema_query_provenance']);
+
+// Optional priming is availability-only: the executor seam refuses bulk work,
+// then ordinary object inspection still supplies available/missing/unknown.
+schema_inspection_set_query_executor_for_tests(
+    static fn(string $kind, string $table, string $object): bool => $object !== 'absent',
+);
+schema_assert_same(false, \Gallery\Services\schema_inspection_prime_optional_table_snapshots(['optional_domain']), 'override declines optional bulk');
+schema_assert_same(true, $GLOBALS['cms_schema_optional_priming_failed'] ?? false, 'bulk failure latches optional acceleration only');
+schema_assert_same(SCHEMA_INSPECTION_AVAILABLE, schema_inspection_table('optional_domain')['state'], 'failed bulk retains normal available fallback');
+schema_assert_same(SCHEMA_INSPECTION_MISSING, schema_inspection_column('optional_domain', 'absent')['state'], 'failed bulk retains normal missing fallback');
+\Gallery\Services\schema_inspection_store_table_snapshots(['already_ready'], [
+    ['TABLE_NAME' => 'already_ready', 'COLUMN_NAME' => 'id'],
+]);
+schema_assert_same(false, \Gallery\Services\schema_inspection_prime_optional_table_snapshots(['already_ready']), 'latched optional owner does not retry even a ready group');
+schema_assert_same(true, \Gallery\Services\schema_inspection_prime_table_snapshots(['already_ready']), 'existing startup primer remains independent');
+schema_inspection_reset_request_cache();
+schema_assert_true(!isset($GLOBALS['cms_schema_optional_priming_failed']), 'schema reset clears failure latch');
+\Gallery\Services\schema_inspection_store_table_snapshots(['ready_domain', 'missing_domain'], [
+    ['TABLE_NAME' => 'ready_domain', 'COLUMN_NAME' => 'id'],
+]);
+schema_assert_same(true, \Gallery\Services\schema_inspection_prime_optional_table_snapshots(['ready_domain', 'missing_domain']), 'existing snapshots satisfy optional owner without bulk execution');
+schema_assert_same(SCHEMA_INSPECTION_AVAILABLE, schema_inspection_column('ready_domain', 'id')['state'], 'successful snapshot remains available');
+schema_assert_same(SCHEMA_INSPECTION_MISSING, schema_inspection_table('missing_domain')['state'], 'confirmed snapshot absence remains missing');
+schema_inspection_set_query_executor_for_tests(
+    static function (string $kind, string $table, string $object): bool {
+        throw new RuntimeException('fixture unavailable metadata');
+    },
+);
+schema_assert_true(!isset($GLOBALS['cms_schema_optional_priming_failed']), 'executor reset clears failure latch');
+schema_assert_same(false, \Gallery\Services\schema_inspection_prime_optional_table_snapshots(['unknown_domain']), 'failed optional bulk declines acceleration');
+schema_assert_same(SCHEMA_INSPECTION_UNKNOWN, schema_inspection_table('unknown_domain')['state'], 'failed normal fallback remains unknown');
+
 schema_inspection_set_query_executor_for_tests(null);
 
 echo "Schema inspection model tests passed.\n";

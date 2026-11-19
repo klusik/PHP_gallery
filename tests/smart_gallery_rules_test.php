@@ -524,5 +524,65 @@ namespace Gallery\Services {
         'Smart Gallery editor exposes a per-location removal action backed by the canonical placement service through the MVC view contract.',
     );
 
+    // Raw groups include a source whose localized context could be missing.
+    // Display filtering must never turn its seven matching photos into zero.
+    $countSemantic = [
+        'rules' => $simple,
+        'accessible_gallery_ids' => [11, 22],
+        'allow_nsfw' => false,
+        'sort_mode' => 'capture_date',
+        'sort_direction' => 'desc',
+    ];
+    $countProof = [
+        'scope' => smart_gallery_count_scope_key($countSemantic, true),
+        'rows' => [
+            ['gallery_id' => '11', 'image_count' => '3'],
+            ['gallery_id' => '22', 'image_count' => '7'],
+        ],
+    ];
+    smart_gallery_test_assert(
+        smart_gallery_count_from_source_proof($countSemantic, true, 0, $countProof) === 10
+            && smart_gallery_count_from_source_proof($countSemantic, true, 22, $countProof) === 7,
+        'Equal fresh scope reuses raw counts, including groups without localized context.',
+    );
+    smart_gallery_test_assert(
+        smart_gallery_count_from_source_proof($countSemantic, true, 33, $countProof) === null
+            && smart_gallery_count_from_source_proof($countSemantic, false, 0, $countProof) === null
+            && smart_gallery_count_from_source_proof($countSemantic, true, 0, null) === null,
+        'Unauthorized filters, changed audience and absent proof require normal count fallback.',
+    );
+    foreach (['allow_nsfw', 'accessible_gallery_ids', 'rules'] as $changedField) {
+        $changedSemantic = $countSemantic;
+        $changedSemantic[$changedField] = match ($changedField) {
+            'allow_nsfw' => true,
+            'accessible_gallery_ids' => [11],
+            'rules' => smart_gallery_empty_rules(),
+        };
+        smart_gallery_test_assert(
+            smart_gallery_count_from_source_proof($changedSemantic, true, 0, $countProof) === null,
+            'Changed ' . $changedField . ' must reject the old grouped count scope.',
+        );
+    }
+    $emptyGroupProof = $countProof;
+    $emptyGroupProof['rows'] = [];
+    smart_gallery_test_assert(
+        smart_gallery_count_from_source_proof($countSemantic, true, 22, $emptyGroupProof) === 0,
+        'An accessible source absent from an equal grouped result has exactly zero matches.',
+    );
+    $invalidEncodingSemantic = $countSemantic;
+    $invalidEncodingSemantic['rules']['invalid'] = "\xB1";
+    smart_gallery_test_assert(
+        smart_gallery_count_scope_key($invalidEncodingSemantic, true) === null
+            && smart_gallery_count_from_source_proof(
+                $invalidEncodingSemantic, true, 0, ['scope' => null, 'rows' => []],
+            ) === null,
+        'Failed JSON encoding must decline reuse even when both invalid scope keys are null.',
+    );
+    smart_gallery_test_assert(
+        php_source_contains((string) $serviceSource, '$groupedCount !== null')
+            && php_source_contains((string) $serviceSource, 'return \\Gallery\\Models\\smart_gallery_model_count_images('),
+        'Count owner must retain the canonical model count fallback when proof does not match.',
+    );
+
     fwrite(STDOUT, "Smart Gallery rule tests passed.\n");
 }

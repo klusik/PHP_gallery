@@ -76,6 +76,8 @@ namespace {
     use function Gallery\Core\image_public_media_url;
     use function Gallery\Core\image_public_thumbnail_url;
     use function Gallery\Core\image_public_url;
+    use function Gallery\Core\image_public_route_path;
+    use function Gallery\Core\slugify;
     use function Gallery\Services\public_gallery_media_manifest_image_base_url;
     use function Gallery\Services\public_gallery_media_manifest_media_url;
     use function Gallery\Services\public_gallery_media_manifest_variant_url;
@@ -601,6 +603,16 @@ namespace {
                         ),
                         'foreign configured origin keeps preview thumbnail on actual mount',
                     );
+                    $batchPreview = \Gallery\Core\image_public_thumbnail_urls(
+                        $image,
+                        $gallery,
+                        ['webp' => [300]],
+                    );
+                    assert_public_media_url_same(
+                        $expectedThumb,
+                        $batchPreview['webp'][300],
+                        'batch thumbnail preserves foreign-origin preview confinement',
+                    );
                     $previewBase = public_gallery_media_manifest_image_base_url(
                         $image,
                         $gallery,
@@ -646,6 +658,179 @@ namespace {
         image_public_asset_version($replacement) === $assetVersion,
         'thumbnail invalidation changes immutable media cache version',
     );
+
+    // These widths exercise distinct route suffixes rather than a policy bound.
+    $batchSizes = ['jpg' => [300, 600], 'webp' => [300, 1280]];
+    foreach (['0', '1'] as $rewrite) {
+        $GLOBALS['cms_app_settings_cache'] = ['url_rewrite_enabled' => $rewrite];
+        foreach ([[], ['preview' => 'visual'], [
+            'preview' => 'visual',
+            'view_as' => 'anonymous',
+        ]] as $preview) {
+            $_GET = $preview;
+            foreach ([$image, $replacement] as $batchImage) {
+                $batch = \Gallery\Core\image_public_thumbnail_urls(
+                    $batchImage,
+                    $gallery,
+                    $batchSizes,
+                );
+                foreach ($batchSizes as $format => $sizes) {
+                    foreach ($sizes as $size) {
+                        assert_public_media_url_same(
+                            image_public_thumbnail_url(
+                                $batchImage,
+                                $gallery,
+                                $size,
+                                $format,
+                            ),
+                            $batch[$format][$size],
+                            'batch URL matches scalar route, preview and revision bytes',
+                        );
+                    }
+                }
+            }
+        }
+    }
+    assert_public_media_url_same(
+        [],
+        \Gallery\Core\image_public_thumbnail_urls($image, $gallery, []),
+        'empty thumbnail batch emits no URLs',
+    );
+
+    // Same database IDs do not establish route identity: every raw fallback
+    // field can change within a request before another URL is rendered.
+    $routeImage = ['id' => 42, 'url_slug' => 'First Flight', 'filename' => 'first.jpg'];
+    $routeGallery = [
+        'id' => 7,
+        'url_path' => 'Trips/Prague',
+        'slug' => 'prague',
+        'folder_path' => 'physical/Old Folder',
+        'title' => 'Old Title',
+    ];
+    assert_public_media_url_same(
+        'Trips/Prague/first-flight', image_public_route_path($routeImage, $routeGallery),
+        'first route projection has explicit public path precedence',
+    );
+    assert_public_media_url_same(
+        'Trips/Prague/first-flight', image_public_route_path($routeImage, $routeGallery),
+        'immediately repeated input preserves exact route bytes',
+    );
+    $routeImage['url_slug'] = 'Second Flight';
+    assert_public_media_url_same(
+        'Trips/Prague/second-flight', image_public_route_path($routeImage, $routeGallery),
+        'same image ID with a changed public slug invalidates the preceding route',
+    );
+    $routeImage['url_slug'] = '';
+    assert_public_media_url_same(
+        'Trips/Prague/first', image_public_route_path($routeImage, $routeGallery),
+        'blank slug activates source filename fallback',
+    );
+    $routeImage['filename'] = 'Second Photo.JPG';
+    assert_public_media_url_same(
+        'Trips/Prague/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'same image ID with changed filename invalidates an active fallback',
+    );
+    $routeGallery['url_path'] = 'Trips/Vienna';
+    assert_public_media_url_same(
+        'Trips/Vienna/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'same gallery ID with changed public path changes the route',
+    );
+    $routeGallery['url_path'] = '';
+    assert_public_media_url_same(
+        'prague/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'stored gallery slug precedes title and physical folder fallback',
+    );
+    $routeGallery['slug'] = 'vienna';
+    assert_public_media_url_same(
+        'vienna/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'same gallery ID with changed stored slug invalidates its fallback',
+    );
+    $routeGallery['slug'] = '';
+    assert_public_media_url_same(
+        'old-title/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'authored gallery title precedes physical folder fallback',
+    );
+    $routeGallery['title'] = 'New Title';
+    assert_public_media_url_same(
+        'new-title/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'same gallery ID with changed title invalidates its fallback',
+    );
+    $routeGallery['title'] = '';
+    assert_public_media_url_same(
+        'old-folder/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'empty gallery title activates the physical basename fallback',
+    );
+    $routeGallery['folder_path'] = 'physical/New Folder';
+    assert_public_media_url_same(
+        'new-folder/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'same gallery ID with changed folder basename invalidates its fallback',
+    );
+    assert_public_media_url_same(
+        'new-folder/other',
+        image_public_route_path(['id' => 99, 'url_slug' => 'Other'], $routeGallery),
+        'intervening different image computes its own route',
+    );
+    assert_public_media_url_same(
+        'new-folder/second-photo', image_public_route_path($routeImage, $routeGallery),
+        'returning to an earlier image after replacement recomputes the correct route',
+    );
+    unset($routeImage['filename']);
+    assert_public_media_url_same(
+        'new-folder/image', image_public_route_path($routeImage, $routeGallery),
+        'missing filename retains the historical image stem fallback',
+    );
+    $routeImage['filename'] = null;
+    assert_public_media_url_same(
+        'new-folder/image', image_public_route_path($routeImage, $routeGallery),
+        'null filename retains the historical image stem fallback',
+    );
+    $routeImage['filename'] = '';
+    assert_public_media_url_same(
+        'new-folder/gallery', image_public_route_path($routeImage, $routeGallery),
+        'explicitly empty filename differs from missing or null filename',
+    );
+
+    // String '0' is PHP's portable locale-query mode, including PHP 8.5.
+    $originalLocale = setlocale(LC_CTYPE, '0');
+    try {
+        assert_public_media_url_same('C', setlocale(LC_CTYPE, 'C'), 'portable C locale is available');
+        $localeImage = ['id' => 42, 'url_slug' => "\u{0416} Flight"];
+        $localeGallery = ['id' => 7, 'url_path' => 'locale'];
+        // Compare against the independent existing normalization owner in each
+        // actual environment; transliteration outside its explicit map varies
+        // with the installed iconv implementation, so do not invent its output.
+        assert_public_media_url_same(
+            'locale/' . slugify($localeImage['url_slug']),
+            image_public_route_path($localeImage, $localeGallery),
+            'route agrees with current C-locale normalization',
+        );
+        $alternateLocale = false;
+        foreach (['C.UTF-8', '.UTF-8', 'en_US.UTF-8'] as $localeName) {
+            $selectedLocale = setlocale(LC_CTYPE, $localeName);
+            if (is_string($selectedLocale) && $selectedLocale !== 'C') {
+                $alternateLocale = $selectedLocale;
+                break;
+            }
+        }
+        if ($alternateLocale === false) {
+            // The central classifier retains a real SKIP; unavailable locale
+            // coverage cannot qualify a mandatory focused child as PASS.
+            echo "SKIP alternate LC_CTYPE route normalization locale is unavailable\n";
+        } else {
+            assert_public_media_url_same(
+                'locale/' . slugify($localeImage['url_slug']),
+                image_public_route_path($localeImage, $localeGallery),
+                'same raw row honors changed LC_CTYPE rather than reusing its old path',
+            );
+        }
+    } finally {
+        if (is_string($originalLocale)) {
+            assert_public_media_url_same(
+                $originalLocale, setlocale(LC_CTYPE, $originalLocale),
+                'LC_CTYPE is restored after route-context coverage',
+            );
+        }
+    }
 
     echo "Public media URL rewrite tests passed.\n";
 }

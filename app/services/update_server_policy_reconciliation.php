@@ -43,6 +43,16 @@ use RuntimeException;
 use function Gallery\Core\release_file_policy_server_paths;
 
 /**
+ * Promise that this owner invalidates rewrite observations before marker mutations.
+ * Type: boolean.
+ * Units: writer-contract support flag. Scope: this loaded implementation only.
+ * Consumers: request-local rewrite observation compatibility detection.
+ * Rationale: loading a compliant writer is read-only; invoking a potentially
+ *     mutating boundary permanently latches bypass before writes or failures.
+ */
+const UPDATE_SERVER_POLICY_INVALIDATES_REWRITE_OBSERVATIONS = true;
+
+/**
  * Return the exact Apache policy files owned by PHP Gallery releases.
  *
  * These files are intentionally updater-managed even inside otherwise protected
@@ -358,6 +368,11 @@ function application_update_server_policy_replace_file(
     string $source,
     string $destination,
 ): void {
+    // Never reuse marker observations after a writer starts, including partial
+    // failure or a live update that leaves an older settings owner in memory.
+    $GLOBALS['cms_url_rewrite_writer_active'] = true;
+    unset($GLOBALS['cms_url_rewrite_request_observation']);
+
     if (!is_file($source) || is_link($source)) {
         throw new RuntimeException(
             'Validated release server-policy file is missing or unsafe.',

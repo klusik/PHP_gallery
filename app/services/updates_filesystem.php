@@ -55,6 +55,16 @@ use function Gallery\Core\release_file_policy_resolves_to_expected_path;
 use function Gallery\Core\run_migrations;
 
 /**
+ * Promise that this owner invalidates rewrite observations before marker mutations.
+ * Type: boolean.
+ * Units: writer-contract support flag. Scope: this loaded implementation only.
+ * Consumers: request-local rewrite observation compatibility detection.
+ * Rationale: loading a compliant writer is read-only; invoking a potentially
+ *     mutating boundary permanently latches bypass before writes or failures.
+ */
+const UPDATES_FILESYSTEM_INVALIDATES_REWRITE_OBSERVATIONS = true;
+
+/**
  * Application update service model.
  *
  * This module owns GitHub version checks, cached update status, release ZIP download,
@@ -318,6 +328,11 @@ function application_update_copy_files(
     string $backupPath,
     bool $cleanUnexpectedFiles = false,
 ): array {
+    // Never reuse marker observations after a writer starts, including partial
+    // failure or a live update that leaves an older settings owner in memory.
+    $GLOBALS['cms_url_rewrite_writer_active'] = true;
+    unset($GLOBALS['cms_url_rewrite_request_observation']);
+
     application_update_assert_project_root($destinationRoot);
     application_update_assert_source_root($sourceRoot);
     application_update_assert_gallery_edit_enforcement($sourceRoot);
@@ -486,6 +501,11 @@ function application_update_remove_malformed_root_files(
     string $root,
     ZipArchive $backup,
 ): array {
+    // Never reuse marker observations after a writer starts, including partial
+    // failure or a live update that leaves an older settings owner in memory.
+    $GLOBALS['cms_url_rewrite_writer_active'] = true;
+    unset($GLOBALS['cms_url_rewrite_request_observation']);
+
     application_update_assert_project_root($root);
 
     // $removed stores literal malformed filenames removed from the project root.
@@ -1058,6 +1078,11 @@ function application_update_stage_path_for_prune(
     string $source,
     string $target,
 ): bool {
+    // Never reuse marker observations after a writer starts, including partial
+    // failure or a live update that leaves an older settings owner in memory.
+    $GLOBALS['cms_url_rewrite_writer_active'] = true;
+    unset($GLOBALS['cms_url_rewrite_request_observation']);
+
     if (file_exists($target) || is_link($target)) {
         // A source that still exists has not been staged yet. Do not report success
         // merely because an older same-name trash entry is awaiting deletion.
@@ -1104,6 +1129,11 @@ function application_update_delete_tree_slice(
     float $maxSeconds = 0.18,
     array $cursor = [],
 ): array {
+    // Never reuse marker observations after a writer starts, including partial
+    // failure or a live update that leaves an older settings owner in memory.
+    $GLOBALS['cms_url_rewrite_writer_active'] = true;
+    unset($GLOBALS['cms_url_rewrite_request_observation']);
+
     $startedAt = microtime(true);
     $deadline = $startedAt + max(0.01, min(0.50, $maxSeconds));
     $removed = 0;
@@ -1447,6 +1477,11 @@ function application_update_add_path_to_backup(
  */
 function application_update_remove_path(string $path): void
 {
+    // Never reuse marker observations after a writer starts, including partial
+    // failure or a live update that leaves an older settings owner in memory.
+    $GLOBALS['cms_url_rewrite_writer_active'] = true;
+    unset($GLOBALS['cms_url_rewrite_request_observation']);
+
     if (is_file($path) || is_link($path)) {
         if (!unlink($path)) {
             throw new RuntimeException('Could not remove misplaced updater artifact: '

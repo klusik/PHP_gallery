@@ -426,6 +426,26 @@ namespace {
         'Runtime Diagnostics copy report must include Phase 11 readiness.',
     );
 
+    foreach (['available', 'missing', 'unknown'] as $attachmentState) {
+        schema_inspection_set_query_executor_for_tests(
+            static function (string $kind, string $table, string $object) use ($attachmentState): bool {
+                if ($attachmentState === 'unknown') {
+                    throw new \RuntimeException('fixture metadata unavailable');
+                }
+                return $attachmentState !== 'missing';
+            },
+        );
+        $attachmentStatus = \Gallery\Services\presentation_gallery_attachment_usage_schema_status();
+        presentation_policy_assert(
+            $attachmentStatus['state'] === $attachmentState,
+            'Optional attachment priming must preserve ' . $attachmentState . ' readiness.',
+        );
+        presentation_policy_assert(
+            !empty($GLOBALS['cms_schema_optional_priming_failed']),
+            'Executor-only fixture must disable optional bulk retries independently of schema facts.',
+        );
+    }
+
     schema_inspection_set_query_executor_for_tests(null);
     echo "Presentation schema policy checks passed.\n";
 }
