@@ -42,6 +42,7 @@ use function Gallery\Core\base_url;
 use function Gallery\Core\image_public_asset_url_with_version;
 use function Gallery\Core\image_public_media_url;
 use function Gallery\Core\image_public_thumbnail_url;
+use function Gallery\Core\image_public_thumbnail_urls;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\url_for;
 use function Gallery\Models\image_model_thumbnail_identity_candidates;
@@ -1185,6 +1186,42 @@ function thumbnail_serving_url(
         'size' => $size,
         'format' => $format,
     ]), $image);
+}
+
+/**
+ * Build a verified image's variant URLs within one synchronous bundle.
+ *
+ * @param array{id:int|string,filename?:string,url_slug?:string|null,checksum_sha256?:string|null,modified_at?:string|null,file_size?:int|string|null,relative_path_hash?:string|null,thumbnail_derivative_version?:int|string|null,...} $image Source row whose ownership was already checked by the metadata owner.
+ * @param array{folder_path:string,url_path?:string|null,slug?:string|null,title?:string|null,...} $gallery Owning gallery and current public route fields.
+ * @param array<string,list<int>> $sizesByFormat Renderable widths grouped by permitted format.
+ * @return array<string,array<int,string>> Variant URLs using the current public or legacy route policy.
+ */
+function thumbnail_serving_urls(
+    array $image,
+    array $gallery,
+    array $sizesByFormat,
+): array {
+    if ($sizesByFormat === []) {
+        return [];
+    }
+    if (public_path_schema_ready()) {
+        return image_public_thumbnail_urls($image, $gallery, $sizesByFormat);
+    }
+    // Legacy/static eligibility remains with its existing per-variant owner;
+    // this optimization changes only public-path URL assembly.
+    $urls = [];
+    foreach ($sizesByFormat as $format => $sizes) {
+        $urls[$format] = [];
+        foreach ($sizes as $size) {
+            $urls[$format][$size] = thumbnail_serving_url(
+                $image,
+                $gallery,
+                $size,
+                $format,
+            );
+        }
+    }
+    return $urls;
 }
 
 /**

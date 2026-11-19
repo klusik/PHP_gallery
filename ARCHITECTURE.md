@@ -39,6 +39,62 @@ without compiling views that the response will never render. This keeps the
 denied-route memory allowance intact; route identities, roots and limits remain
 unchanged.
 
+## Gallery request read paths
+
+Capability policy reads reuse the canonical registry's immutable structural
+declarations without translating Admin labels. The localized/default registry
+API still resolves current labels on every call. Configured values, domain
+adapters, effective dependencies and authentication remain live; structural
+metadata is never an enabled-state or authorization cache. See
+[capability metadata](docs/performance/capability-registry.md).
+
+Public image route construction computes from the current row fields on every
+call. Host/mount/rewrite/preview and source/derivative revision handling remain
+live in their existing URL owners. The bounded route-path memo experiment was
+rejected after paired measurements; its negative evidence is retained in
+[route-path context](docs/performance/route-path-context.md).
+
+Smart HTML primes the existing bounded thumbnail ownership/metadata loader for
+the authorized page before card preparation. Verified metadata variants build
+their public URLs through one call-local image route/revision context; legacy
+static eligibility and serving authorization keep their existing owners.
+Rewrite marker compatibility is a bounded request observation keyed by its
+actual environment and live preference. Current marker writers advertise
+pre-mutation invalidation and latch bypass before actual copy, removal,
+activation or policy replacement, including failures. Their declaration-only
+presence in a public route closure permits reuse. Loaded unmarked legacy owners
+retain conservative bypass so older in-memory policy writes remain visible.
+
+The immediately preceding raw grouped Smart source result can supply the image
+count only after the count owner resolves an equal current rule/access/NSFW
+scope. This synchronous read proof is removed before presentation and must never
+cross mutations. It is separate from localized source-summary display filtering;
+other count callers retain the model COUNT. No persistent authorization or HTML
+cache is introduced.
+
+Music catalog/repository and attachment-usage readiness can prime snapshots for
+their own already-requested requirement maps. Normal three-state checks remain
+authoritative. One request-local optional-primer failure flag prevents repeated
+bulk failures; schema reset clears it, and the original startup primer remains
+independent. See [domain schema snapshots](docs/performance/domain-schema-primer.md).
+
+Database telemetry still groups numeric counters by privacy-safe fingerprint.
+Its model persists at most 64 aggregate rows per statement, preserving sums,
+counts and maximum latency under the existing fail-open observer suppression.
+Batching does not move response detach or release a PHP session. Admin Test-run
+storage publishes compact validated report metadata with atomic replacement and
+per-report locking. Missing/stale/corrupt or legacy summaries retain the full
+authoritative read; complete JSON/ZIP exports and ownership checks stay intact.
+
+See the [baseline](docs/performance/issue_404_baseline.md),
+[thumbnail URL context](docs/performance/thumbnail-context.md),
+[rewrite observation](docs/performance/rewrite-observation.md),
+[count scope](docs/performance/smart-count-scope.md),
+[telemetry batching](docs/performance/telemetry-batch.md), and
+[report metadata](docs/performance/report-summary.md) for ownership and evidence
+limits. Active Smart Admin Test runs retain selected nested profiler spans;
+their counters do not replace central SQL observations or establish worker exit.
+
 ## Native gallery presentation and single-field editing
 
 WinApp keeps per-gallery order and aspect choices in its existing verified

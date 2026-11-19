@@ -10194,6 +10194,36 @@ For~disposable MySQL diagnostics, \filepath{scripts/gallery_workflow_mysql.php}
 offers \codeword{--audit-php-regression} through the~central PHP regression
 suite. Isolate the~checkout separately to~isolate its~cache as~well.
 
+The~focused \codeword{gallery-request} suite selects existing PHP
+regressions from the~central registry: thumbnails, public URL rewriting,
+Smart Galleries, telemetry, Admin reports, sessions, access/NSFW policy
+and~runtime modules, plus central audit evidence and~feature-policy
+core/adapters. The~disposable CI selector \codeword{--gallery-request}
+delegates to~\codeword{--audit-gallery-request}; every selected child must PASS
+without hidden SKIPs. The~read-only workflow
+\filepath{.github/workflows/gallery-request-performance.yml} preserves feature
+history, pins PHP~8.1/MariaDB~10.11 and~PHP~8.5/MySQL~8.4 to~the~event SHA
+and~frozen main merge-base, and~prepares/checks all~three generated metadata
+files. Retain complete artifacts, exact-source identity, compact reports
+and~child logs. Persist outputs only on~the~authorized feature branch; its~new
+SHA needs fresh BASIC, hosted re-preparation and~byte equality with persisted
+outputs. BASIC, focused correctness and~FULL remain separate; protected
+integration, squash and~publication need separate authorization.
+The~optional \filepath{scripts/gallery_http_compare.py} compares exact clean
+ancestral baseline/candidate sources through pinned localhost: five alternating
+blocks, thirty waves per~arm, C1/C2/C4/C8, response timings and~markup hashes,
+without user cookies. Run~it~outside the~sandbox; it~preserves the~feature ref
+and~restores checkout without reset/force. Observations do~not~prove server/
+OPcache reload or~replace hosted qualification. See~\filepath{TESTING.md}
+and~\filepath{docs/performance/gallery-http-comparison.md}.
+For~any~\texttt{same} session case, supply
+\filepath{--session-cookie-name} with the~installation's explicitly configured
+PHP session cookie name, never its~value. Admit a~synthetic session through
+a~warmup request without cookies and~require a~matching \texttt{Set-Cookie}
+response before measured reuse. Do~not~import browser cookies or~retain cookie
+values in~evidence. Missing or~mismatched admission invalidates the~entire
+same-session cohort.
+
 Hosted qualification covers PHP/Node/WinApp tests, source contracts, required
 Chromium, real MySQL/MariaDB workflows, PHP compatibility and~required
 Linux/Windows package checks; macOS runs independently as~an~advisory check.

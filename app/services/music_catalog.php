@@ -176,11 +176,12 @@ function music_catalog_assert_album_move_safe(int $albumId, ?int $parentId): voi
 }
 
 /** Observe every catalog table and column required by catalog operations.
+ * Optional snapshots accelerate only this already-requested domain; all ordinary checks remain.
  * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state schema report.
  */
 function music_catalog_schema_status(): array
 {
-    return presentation_schema_tables_status('presentation.music_catalog', [
+    $tables = [
         'music_songs' => ['id', 'title', 'created_at', 'updated_at'],
         'music_track_instances' => ['gallery_id', 'track_id', 'song_id', 'filename', 'indexed_title', 'file_sha256', 'active', 'updated_at'],
         'music_albums' => ['id', 'parent_id', 'title', 'description', 'sort_order', 'revision'],
@@ -192,19 +193,24 @@ function music_catalog_schema_status(): array
         'app_settings' => ['setting_key', 'setting_value', 'updated_at'],
         'galleries' => ['id', 'folder_path', 'title'],
         'gallery_trash_entries' => ['status', 'original_folder_path'],
-    ]);
+    ];
+    schema_inspection_prime_optional_table_snapshots(array_keys($tables));
+    return presentation_schema_tables_status('presentation.music_catalog', $tables);
 }
 
 /** Inspect central repository schema separately from legacy catalog readiness.
+ * Optional snapshots use this same requirement map and never replace readiness checks.
  * @return array{state:string,feature:string,requirements:list<array{state:string,object_type:string,table:string,object:string,error_code:string,diagnostic:string}>} Three-state repository schema report.
  */
 function music_repository_schema_status(): array
 {
-    return presentation_schema_tables_status('presentation.music_repository', [
+    $tables = [
         'music_repository_assets' => ['id', 'song_id', 'filename', 'indexed_title', 'mime', 'byte_size', 'sha256', 'origin_gallery_id', 'origin_track_id', 'created_at', 'updated_at'],
         'music_track_instances' => ['gallery_id', 'track_id', 'asset_id'],
         'music_gallery_album_links' => ['gallery_id', 'assignment_id', 'album_id', 'updated_at'],
-    ]);
+    ];
+    schema_inspection_prime_optional_table_snapshots(array_keys($tables));
+    return presentation_schema_tables_status('presentation.music_repository', $tables);
 }
 
 /** Refuse repository writes unless every repository table is verified.

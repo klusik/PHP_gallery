@@ -33,10 +33,10 @@ declare(strict_types=1);
 
 namespace Gallery\Services {
     /**
-     * Return deterministic translated text for the isolated policy test.
+     * Count translation calls while returning deterministic fixture text.
      *
      * @param string $key Translation lookup key and fallback when no string is supplied.
-     * @param string|array|null $fallback String text to return; arrays and null use the key.
+     * @param string|array<string,scalar|null>|null $fallback String text to return; interpolation maps and null use the key.
      * @param array<string,scalar|null> $parameters Scalar replacements keyed by placeholder name.
      * @return string The translated fallback after placeholder replacement.
      */
@@ -45,6 +45,8 @@ namespace Gallery\Services {
         string|array|null $fallback = null,
         array $parameters = [],
     ): string {
+        $GLOBALS['feature_policy_adapter_translation_calls'] =
+            ($GLOBALS['feature_policy_adapter_translation_calls'] ?? 0) + 1;
         $text = is_string($fallback) ? $fallback : $key;
         foreach ($parameters as $name => $value) {
             $text = str_replace('{' . $name . '}', (string) $value, $text);
@@ -169,6 +171,7 @@ namespace Gallery\Services {
 }
 
 namespace {
+    use function Gallery\Services\feature_capability_configured_enabled;
     use function Gallery\Services\feature_capability_seed_fresh_install_defaults
     ;
     use function Gallery\Services\feature_capability_definitions;
@@ -538,6 +541,26 @@ namespace {
             ?? null
         ) === '1',
         'Fresh-install seeding must never overwrite explicit persisted state.',
+    );
+
+    feature_capability_definitions(false);
+    $translationCalls = $GLOBALS['feature_policy_adapter_translation_calls'] ?? 0;
+    foreach (['0', '1', '0'] as $enabled) {
+        $GLOBALS['feature_policy_adapter_settings']['gallery_trash_enabled'] = $enabled;
+        $GLOBALS['feature_policy_adapter_settings']['dev_mode_enabled'] = $enabled;
+        feature_policy_adapter_assert(
+            feature_capability_configured_enabled('gallery_trash')
+                === ($enabled === '1')
+                && \Gallery\Services\feature_capability_effective_enabled('gallery_trash')
+                    === ($enabled === '1')
+                && \Gallery\Services\feature_capability_effective_enabled('development_diagnostics')
+                    === ($enabled === '1'),
+            'Cached structural metadata must preserve immediate live domain-source changes.',
+        );
+    }
+    feature_policy_adapter_assert(
+        $translationCalls === $GLOBALS['feature_policy_adapter_translation_calls'],
+        'Live domain policy evaluation must not translate registry labels.',
     );
 
     echo "Feature policy adapter tests passed.\n";

@@ -46,6 +46,16 @@ use ZipArchive;
 use function Gallery\Core\run_migrations_bounded;
 
 /**
+ * Promise that this owner invalidates rewrite observations before marker mutations.
+ * Type: boolean.
+ * Units: writer-contract support flag. Scope: this loaded implementation only.
+ * Consumers: request-local rewrite observation compatibility detection.
+ * Rationale: loading a compliant writer is read-only; invoking a potentially
+ *     mutating boundary permanently latches bypass before writes or failures.
+ */
+const UPDATE_ACTIVATION_INVALIDATES_REWRITE_OBSERVATIONS = true;
+
+/**
  * Resolve the sole maintenance marker and import old installed-worker state.
  * @return string Absolute installation-root maintenance.lock path.
  */
@@ -213,11 +223,54 @@ function application_update_activation_priority(string $path): int
  * temporary file plus rename(), and replay treats a destination matching the
  * prepared release hash as already committed.
  *
- * @param array<string,mixed> $job Job state with an id and activation_files/obsolete_paths checkpoints, updated by reference as activation progress is saved.
+ * @param array{
+ *     id:string,
+ *     operation?:string,
+ *     trigger?:string,
+ *     admin_session_name?:string,
+ *     automatic_rollback?:bool,
+ *     recovery_schema?:int,
+ *     recovery_override?:bool,
+ *     parameters?:array{source_job_id?:string},
+ *     recovery?:array{source_job_id?:string},
+ *     checkpoints:array{
+ *         source_root?:string,
+ *         backup_complete?:bool,
+ *         activation_files?:list<string>,
+ *         obsolete_paths?:list<string>,
+ *         recovery_admission_closed?:bool,
+ *         runtime_lease_busy?:bool,
+ *         activation_started?:bool,
+ *         activation_complete?:bool,
+ *         activated_files?:int,
+ *         recovery_ready_verified?:bool,
+ *         recovery_backup_identity?:string,
+ *         publisher_integrity_disabled?:bool,
+ *         recovery_hashes?:array<string,string>,
+ *         recovery_manifest_identity?:string,
+ *         runtime_guard_open?:bool,
+ *         runtime_guard_protocol?:int,
+ *         database_before_activation?:array{
+ *             format:int,state:string,versions:list<string>,ledger:string,
+ *             hashes:array<string,string|null>,migration_manifest:string,
+ *             schema:string
+ *         }
+ *     },
+ *     progress?:array{
+ *         current:int,total:int,percent?:int|float,message:string,unit?:string
+ *     }
+ * } $job Durable fields consumed or updated by activation and its admission,
+ *     recovery-readiness and runtime-window delegates. Preserves other durable
+ *     job fields while saving checkpoints and file-count progress by reference.
  * @return bool True after activation; false yields while another runtime holds a shared lease.
  */
 function application_update_job_activate(array &$job): bool
 {
+    // Never reuse marker observations after a writer starts, including partial
+    // failure or a live update that leaves an older settings owner in memory.
+    $GLOBALS['cms_url_rewrite_writer_active'] = true;
+    unset($GLOBALS['cms_url_rewrite_request_observation']);
+
     if (($job['operation'] ?? '') !== 'rollback') {
         // Close admission before waiting for the exclusive lease: new visitors
         // must not continuously replace readers that have already finished.

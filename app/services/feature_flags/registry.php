@@ -35,12 +35,34 @@ declare(strict_types=1);
 namespace Gallery\Services;
 
 /**
+ * Select localized registry text or its fixed structural fallback.
+ *
+ * @param bool $localized Whether this call prepares human-facing metadata.
+ * @param string $key Translation key used only for localized metadata.
+ * @param string $fallback Fixed text retained by the locale-independent registry.
+ * @return string Current translated text, or the untouched structural fallback.
+ */
+function feature_capability_registry_text(
+    bool $localized,
+    string $key,
+    string $fallback,
+): string {
+    return $localized ? t($key, $fallback) : $fallback;
+}
+
+/**
  * Return the canonical optional-feature registry.
  *
  * Established features remain enabled when no explicit setting exists. Individual
  * definitions may opt into a disabled default when a staged subsystem must require
  * an explicit administrator decision before becoming reachable.
  *
+ * Structural policy metadata contains only literal declarations and normalized
+ * defaults. Reusing it never retains configured/effective state or identity.
+ * Localized callers rebuild labels so language and missing-key behavior stay live.
+ *
+ * @param bool $localized Whether to resolve translated labels and descriptions;
+ *     false returns request-local fixed policy metadata with fallback text.
  * @return array<string,array{group:string,label:string,description:string,
  *     default_enabled?:bool,fresh_default_enabled?:bool,
  *     source:array{type:string,key?:string,adapter?:string},
@@ -50,16 +72,20 @@ namespace Gallery\Services;
  *     settings_params:array<string,string|int|bool>,settings_fragment:string}>
  *     Canonical configured/effective policy and Admin discovery metadata.
  */
-function feature_capability_definitions(): array
+function feature_capability_definitions(bool $localized = true): array
 {
+    static $structuralDefinitions = null;
+    if (!$localized && $structuralDefinitions !== null) {
+        return $structuralDefinitions;
+    }
     $definitions = [
         'cooperative_galleries' => [
             'group' => 'ai_automation',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.cooperative_galleries.label',
                 'Cooperative galleries',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.cooperative_galleries.description',
                 'Explicitly approved server friendships with isolated system credentials and resumable pairing. Requires a configured canonical HTTPS base URL.',
             ),
@@ -86,11 +112,11 @@ function feature_capability_definitions(): array
         ],
         'public_search' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.public_search.label',
                 'Public live search',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.public_search.description',
                 'Thin live search bar on the public home page and inside galleries.',
             ),
@@ -98,11 +124,11 @@ function feature_capability_definitions(): array
         ],
         'lightbox_modes' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.lightbox_modes.label',
                 'Lightbox browsing modes',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.lightbox_modes.description',
                 'Public lightbox viewer, slideshow, fullscreen controls, picture strip, and 3D carousel mode controls.',
             ),
@@ -113,11 +139,11 @@ function feature_capability_definitions(): array
         ],
         'picture_manager' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.picture_manager.label',
                 'Public picture manager controls',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.picture_manager.description',
                 'Logged-in admin selection, move/copy, delete, and physical-gallery creation controls rendered on public gallery cards.',
             ),
@@ -131,11 +157,11 @@ function feature_capability_definitions(): array
         ],
         'inline_administration' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.inline_administration.label',
                 'Inline administration on public pages',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.inline_administration.description',
                 'Admin edit, add, delete, and reorder controls rendered directly on otherwise public gallery pages.',
             ),
@@ -148,8 +174,8 @@ function feature_capability_definitions(): array
         ],
         'image_voting' => [
             'group' => 'public_display',
-            'label' => t('admin.features.image_voting.label', 'Image voting'),
-            'description' => t(
+            'label' => feature_capability_registry_text($localized, 'admin.features.image_voting.label', 'Image voting'),
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.image_voting.description',
                 'Vote buttons, vote submissions, and vote indicators on gallery photos.',
             ),
@@ -157,8 +183,8 @@ function feature_capability_definitions(): array
         ],
         'picture_game' => [
             'group' => 'public_display',
-            'label' => t('admin.features.picture_game.label', 'Picture game'),
-            'description' => t(
+            'label' => feature_capability_registry_text($localized, 'admin.features.picture_game.label', 'Picture game'),
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.picture_game.description',
                 'Public picture-comparison game and its per-gallery enable controls.',
             ),
@@ -167,11 +193,11 @@ function feature_capability_definitions(): array
         ],
         'smart_galleries' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.smart_galleries.label',
                 'Smart Galleries',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.smart_galleries.description',
                 'Saved dynamic galleries, their public pages, physical-gallery attachments, and Smart Gallery-specific browsing workflows.',
             ),
@@ -179,11 +205,11 @@ function feature_capability_definitions(): array
         ],
         'gallery_pdf_documents' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.gallery_pdf_documents.label',
                 'Gallery PDF documents',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.gallery_pdf_documents.description',
                 'Upload, display and convert gallery PDFs, including SimBrief'
                     . ' originals. Disabling preserves existing files and settings.',
@@ -200,8 +226,8 @@ function feature_capability_definitions(): array
         ],
         'gallery_music' => [
             'group' => 'public_display',
-            'label' => t('admin.features.gallery_music.label', 'Gallery music'),
-            'description' => t(
+            'label' => feature_capability_registry_text($localized, 'admin.features.gallery_music.label', 'Gallery music'),
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.gallery_music.description',
                 'Upload and play gallery and Smart Gallery music. Disabling'
                     . ' preserves existing files, playlists and slideshow settings.',
@@ -216,11 +242,11 @@ function feature_capability_definitions(): array
         ],
         'thumbnail_batch' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.thumbnail_batch.label',
                 'Native thumbnail batching',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.thumbnail_batch.description',
                 'Allow linked native gallery clients to request bounded thumbnail batches. Disabling preserves existing media and uses the compatible single-thumbnail route.',
             ),
@@ -237,11 +263,11 @@ function feature_capability_definitions(): array
         ],
         'downloads' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.downloads.label',
                 'Gallery ZIP downloads',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.downloads.description',
                 'Download links and ZIP archive routes for one gallery or all galleries.',
             ),
@@ -258,11 +284,11 @@ function feature_capability_definitions(): array
         ],
         'thumbnail_warmup' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.thumbnail_warmup.label',
                 'Public thumbnail self-healing',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.thumbnail_warmup.description',
                 'Allow authorized public gallery requests to request guarded background repair of missing thumbnails.',
             ),
@@ -275,22 +301,22 @@ function feature_capability_definitions(): array
         ],
         'multilingual_content' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.multilingual_content.label',
                 'Multilingual authored content',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.multilingual_content.description',
                 'Translated gallery and photo titles/descriptions while keeping interface-language translation independent.',
             ),
         ],
         'public_tag_browsing' => [
             'group' => 'public_display',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.public_tag_browsing.label',
                 'Public tag browsing',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.public_tag_browsing.description',
                 'Public tag landing pages and clickable tag navigation while retaining tags as internal metadata.',
             ),
@@ -298,11 +324,11 @@ function feature_capability_definitions(): array
         ],
         'viewer_accounts' => [
             'group' => 'accounts',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.viewer_accounts.label',
                 'Viewer accounts and collections',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.viewer_accounts.description',
                 'Master switch for viewer login, invitations, favourites, private collections, unlisted collection sharing, and viewer-account administration. Disabled by default.',
             ),
@@ -312,33 +338,33 @@ function feature_capability_definitions(): array
         ],
         'gallery_maps' => [
             'group' => 'maps_flightsim',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.gallery_maps.label',
                 'EXIF GPS gallery maps',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.gallery_maps.description',
                 'Map buttons, photo GPS pins, and gallery maps based on image EXIF coordinates.',
             ),
         ],
         'flight_maps' => [
             'group' => 'maps_flightsim',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.flight_maps.label',
                 'Flight route maps',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.flight_maps.description',
                 'Stored simflying route maps, route text editor fields, and map payloads from resolved flight paths.',
             ),
         ],
         'navigation_data' => [
             'group' => 'maps_flightsim',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.navigation_data.label',
                 'Navigation data maintenance',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.navigation_data.description',
                 'Admin tools for local airport, navaid, and waypoint lookup data used by route maps.',
             ),
@@ -355,11 +381,11 @@ function feature_capability_definitions(): array
         ],
         'simbrief' => [
             'group' => 'maps_flightsim',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.simbrief.label',
                 'SimBrief integration',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.simbrief.description',
                 'Gallery description and route-map generation from the latest SimBrief OFP.',
             ),
@@ -367,11 +393,11 @@ function feature_capability_definitions(): array
         ],
         'openai_text_assist' => [
             'group' => 'ai_automation',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.openai_text_assist.label',
                 'OpenAI text assistance',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.openai_text_assist.description',
                 'Profile API settings and AI-assisted gallery/photo description generation or cleanup.',
             ),
@@ -379,19 +405,19 @@ function feature_capability_definitions(): array
         ],
         'ai_image_metadata' => [
             'group' => 'ai_automation',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.ai_image_metadata.label',
                 'Local AI image metadata',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.ai_image_metadata.description',
                 'Locally generated visual metadata used for internal search and admin diagnostics.',
             ),
         ],
         'upload_api' => [
             'group' => 'ai_automation',
-            'label' => t('admin.features.upload_api.label', 'API uploader'),
-            'description' => t(
+            'label' => feature_capability_registry_text($localized, 'admin.features.upload_api.label', 'API uploader'),
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.upload_api.description',
                 'Token-based upload API and the desktop companion upload workflow.',
             ),
@@ -405,11 +431,11 @@ function feature_capability_definitions(): array
         ],
         'mobile_webdav' => [
             'group' => 'ai_automation',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.mobile_webdav.label',
                 'Mobile WebDAV uploads',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.mobile_webdav.description',
                 'PhotoSync/WebDAV-compatible mobile upload endpoint and setup screen.',
             ),
@@ -417,11 +443,11 @@ function feature_capability_definitions(): array
         ],
         'gallery_migration' => [
             'group' => 'ai_automation',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.gallery_migration.label',
                 'Gallery migration transfer',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.gallery_migration.description',
                 'Manifest, asset receive, and status endpoints for gallery-to-gallery transfer workflows.',
             ),
@@ -439,8 +465,8 @@ function feature_capability_definitions(): array
         ],
         'gallery_trash' => [
             'group' => 'admin_tools',
-            'label' => t('admin.features.gallery_trash.label', 'Gallery Trash'),
-            'description' => t(
+            'label' => feature_capability_registry_text($localized, 'admin.features.gallery_trash.label', 'Gallery Trash'),
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.gallery_trash.description',
                 'Recoverable gallery deletion master. Disabling it preserves existing Trash contents and all purge preferences.',
             ),
@@ -451,11 +477,11 @@ function feature_capability_definitions(): array
         ],
         'duplicate_photo_detector' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.duplicate_photo_detector.label',
                 'Duplicate Photo Detector',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.duplicate_photo_detector.description',
                 'Admin duplicate scanning and review workflow while preserving the duplicate-review ledger when disabled.',
             ),
@@ -463,11 +489,11 @@ function feature_capability_definitions(): array
         ],
         'metadata_organizer' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.metadata_organizer.label',
                 'Metadata Organizer',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.metadata_organizer.description',
                 'Batch organization workflow driven by stored capture-date metadata without changing ordinary gallery/photo editing.',
             ),
@@ -478,11 +504,11 @@ function feature_capability_definitions(): array
         ],
         'exif_gallery_date_suggestions' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.exif_gallery_date_suggestions.label',
                 'EXIF Gallery Date Suggestions',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.exif_gallery_date_suggestions.description',
                 'Automated EXIF-derived gallery date suggestion and review workflow while retaining manual From/To date editing.',
             ),
@@ -493,11 +519,11 @@ function feature_capability_definitions(): array
         ],
         'complete_gallery_report' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.complete_gallery_report.label',
                 'Complete Gallery Report',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.complete_gallery_report.description',
                 'Standalone complete gallery report generation without affecting System Health, Logs, Integrity, or other diagnostics.',
             ),
@@ -508,11 +534,11 @@ function feature_capability_definitions(): array
         ],
         'development_diagnostics' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.development_diagnostics.label',
                 'Development Diagnostics',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.development_diagnostics.description',
                 'Admin/public render profiling, browser diagnostics, and Gallery benchmark instrumentation without disabling core logs, System Health, or Integrity.',
             ),
@@ -531,11 +557,11 @@ function feature_capability_definitions(): array
         ],
         'remote_favicon_discovery' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.remote_favicon_discovery.label',
                 'Remote Favicon Discovery',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.remote_favicon_discovery.description',
                 'Allow bounded outbound discovery of unknown-site favicons after Admin gallery saves. Built-in and already cached local icons remain available when disabled.',
             ),
@@ -547,9 +573,9 @@ function feature_capability_definitions(): array
         ],
         'release_email_notifications' => [
             'group' => 'admin_tools',
-            'label' => t('admin.features.release_email_notifications.label',
+            'label' => feature_capability_registry_text($localized, 'admin.features.release_email_notifications.label',
                 'Gallery update emails'),
-            'description' => t('admin.features.release_email_notifications.description',
+            'description' => feature_capability_registry_text($localized, 'admin.features.release_email_notifications.description',
                 'Send a short version announcement to saved administrator email addresses after a completed upgrade, in the administrator interface language. Uses Account mail settings.'),
             'default_enabled' => true,
             'fresh_default_enabled' => true,
@@ -562,30 +588,30 @@ function feature_capability_definitions(): array
         ],
         'built_in_update_installer' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.built_in_update_installer.label',
                 'Built-in Update Installer',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.built_in_update_installer.description',
                 'Allow PHP Gallery to install, reinstall, restore, or resume application update jobs. Read-only update status, checks, patch notes, and Integrity remain available.',
             ),
         ],
         'advanced_database_maintenance' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.advanced_database_maintenance.label',
                 'Advanced Database Maintenance',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.advanced_database_maintenance.description',
                 'Allow database cleanup, schema repair, ANALYZE, and OPTIMIZE mutations while retaining read-only database inspection and dry-run planning.',
             ),
         ],
         'media_renamer' => [
             'group' => 'admin_tools',
-            'label' => t('admin.features.media_renamer.label', 'Media renamer'),
-            'description' => t(
+            'label' => feature_capability_registry_text($localized, 'admin.features.media_renamer.label', 'Media renamer'),
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.media_renamer.description',
                 'Admin tool for planned media filename cleanup and generated derivative movement.',
             ),
@@ -593,11 +619,11 @@ function feature_capability_definitions(): array
         ],
         'telemetry' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.telemetry.label',
                 'Anonymous telemetry',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.telemetry.description',
                 'Anonymous usage collection script, ingestion endpoint, and admin telemetry reports.',
             ),
@@ -612,11 +638,11 @@ function feature_capability_definitions(): array
         ],
         'automatic_cache_cleanup' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.automatic_cache_cleanup.label',
                 'Automatic cache cleanup',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.automatic_cache_cleanup.description',
                 'Check cache at thirty-second intervals and reclaim verified expired data in server batches. A suitable visit starts the autonomous worker. Explicit OFF survives updates.',
             ),
@@ -634,11 +660,11 @@ function feature_capability_definitions(): array
         ],
         'admin_test_runs' => [
             'group' => 'admin_tools',
-            'label' => t(
+            'label' => feature_capability_registry_text($localized,
                 'admin.features.admin_test_runs.label',
                 'Enable test runs for admins',
             ),
-            'description' => t(
+            'description' => feature_capability_registry_text($localized,
                 'admin.features.admin_test_runs.description',
                 'Shows an Admin-only Test run control on gallery pages. A run performs bounded deep diagnostics, clears safe caches, traces PHP/database/process/cache/concurrency state, and stores a downloadable report. Disabled by default.',
             ),
@@ -814,6 +840,9 @@ function feature_capability_definitions(): array
         }
     }
 
+    if (!$localized) {
+        $structuralDefinitions = $definitions;
+    }
     return $definitions;
 }
 

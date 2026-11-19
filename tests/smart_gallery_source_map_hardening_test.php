@@ -88,7 +88,10 @@ smart_gallery_source_map_hardening_assert(
 smart_gallery_source_map_hardening_assert(
     php_source_contains(
         $controller,
-        '$imageHasPublicGps = gallery_allows_gps_maps($source) && image_has_gps($image);',
+        '$imageHasPublicGps = public_render_profile_span('
+        . "'smart_gallery_card_gps_policy',"
+        . 'static fn(): bool => gallery_allows_gps_maps($source),'
+        . ') && image_has_gps($image);',
     )
         && php_source_contains(
             $controller,

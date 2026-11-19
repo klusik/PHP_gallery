@@ -27,6 +27,47 @@ return [
     // Rationale: Four isolated owners preserve bounded per-run process pools while splitting the complete central test registry.
     'hosted_full_php_shard_count' => 4,
 
+    // Targeted request-path regressions remain ordinary FULL-discovered children.
+    // This list is the sole focused selector; workflows never duplicate its names.
+    'gallery_request_tests' => [
+        'audit_runner_test.php',
+        'gallery_http_compare_cookie_test.php',
+        'gallery_workflow_safety_test.php',
+        'feature_policy_core_test.php',
+        'feature_policy_adapters_test.php',
+        'feature_policy_admin_test.php',
+        'feature_policy_inventory_test.php',
+        'feature_policy_stage13_contract_test.php',
+        'thumbnail_source_identity_test.php',
+        'thumbnail_identity_lookup_budget_test.php',
+        'thumbnail_format_metadata_consistency_test.php',
+        'public_thumbnail_markup_test.php',
+        'public_thumbnail_rendering_model_test.php',
+        'public_media_url_rewrite_test.php',
+        'url_rewrite_settings_test.php',
+        'updater_safety_model_test.php',
+        'updater_recovery_test.php',
+        'updater_resumable_state_machine_test.php',
+        'smart_gallery_rules_test.php',
+        'smart_gallery_public_contract_test.php',
+        'smart_gallery_source_map_hardening_test.php',
+        'telemetry_database_observer_contract_test.php',
+        'telemetry_storage_compaction_database_test.php',
+        'admin_test_run_feature_test.php',
+        'admin_test_run_v11_test.php',
+        'request_session_helpers_test.php',
+        'session_context_test.php',
+        'gallery_access_schema_policy_test.php',
+        'schema_inspection_model_test.php',
+        'presentation_schema_policy_test.php',
+        'music_catalog_title_policy_test.php',
+        'music_catalog_database_test.php',
+        'nsfw_schema_policy_test.php',
+        'runtime_dependencies_test.php',
+        'runtime_module_plan_test.php',
+        'module_split_path_resolution_test.php',
+    ],
+
     // The feature profile owns these focused cases; FULL discovers them normally.
     'thumbnail_batch_tests' => [
         'app_linking_thumbnail_batch_test.php',

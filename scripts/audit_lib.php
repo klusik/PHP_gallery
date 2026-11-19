@@ -1024,7 +1024,7 @@ function task_result(
  * Required disposable-database coverage must instead have an individual PASS,
  * a zero child exit code, and no timeout in the structured report.
  *
- * @param array{id?:string,status?:string,counts?:array<string,int>,details?:array{tests?:list<array{name?:string,status?:string,exit_code?:int,timed_out?:bool}>}} $regression Structured PHP regression, fast-feedback or packaging evidence; incomplete/malformed evidence is rejected.
+ * @param array{id?:string,status?:string,counts?:array<string,int>,details?:array{tests?:list<array{name?:string,status?:string,exit_code?:int,timed_out?:bool}>}} $regression Structured PHP regression, fast-feedback, focused gallery-request or packaging evidence; incomplete/malformed evidence is rejected.
  * @param list<string> $requiredTests Mandatory standalone PHP test basenames.
  * @return list<string> Names without verified PASS, or all required names for malformed evidence.
  */
@@ -1037,7 +1037,7 @@ function missing_required_php_test_passes(
     if (
         !in_array(
             $regression['id'] ?? null,
-            ['php-fast', 'php-regression', 'packaging'],
+            ['php-fast', 'php-regression', 'packaging', 'gallery-request'],
             true,
         )
         || ($regression['status'] ?? null) !== STATUS_PASS

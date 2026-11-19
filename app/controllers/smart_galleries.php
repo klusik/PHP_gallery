@@ -117,6 +117,7 @@ use function Gallery\Services\gallery_allows_gps_maps;
 use function Gallery\Services\image_has_gps;
 use function Gallery\Services\image_map_point;
 use function Gallery\Services\public_render_profile_with_thumbnail_purpose;
+use function Gallery\Services\public_render_profile_span;
 use function Gallery\Services\translation_active_language;
 use function Gallery\Services\content_localize_entities;
 use function Gallery\Services\thumbnail_sizes;
@@ -1313,11 +1314,14 @@ function smart_gallery_capture_html(callable $renderer): string
 /**
  * Build real Smart Gallery image cards with one shared presentation contract.
  *
- * @param array<int,array<string,mixed>> $images Image rows.
- * @param array<int,array<string,mixed>> $sourceGalleries Source galleries keyed by id.
- * @param array<string,mixed> $presentation Effective presentation.
+ * Child profiling spans measure only reached policy/render calls; the existing
+ * interactive, capability and per-image conditions retain their evaluation order.
+ *
+ * @param array<int,array<string,scalar|null>> $images Persisted/localized image rows with identity, revision, dimensions, captions and optional GPS fields.
+ * @param array<int,array<string,scalar|null|array{id:int,title:string,breadcrumb:string,breadcrumb_compact:string,url:string}>> $sourceGalleries Source rows keyed by id, including optional prepared physical-source context.
+ * @param array<string,int|bool|string|null> $presentation Effective card columns, bounds, rendering mode and visibility/interaction preferences.
  * @param array<int,int> $votes Current vote state keyed by image id.
- * @param array<int,array<int,array<string,mixed>>> $tags Tags keyed by image id.
+ * @param array<int,list<array<string,scalar|null>>> $tags Direct tag IDs, names, slugs and scalar preview metadata keyed by image id.
  * @param int $offset Zero-based offset of the first displayed image.
  * @param bool $interactive Whether visitor actions are available for these cards.
  * @param array<int,list<array{id:int,name:string,slug:string}>> $quickTags Direct photo tags keyed by image ID.
@@ -1396,20 +1400,35 @@ function smart_gallery_image_cards_view_model(
         }
 
         $imageId = (int) $image['id'];
-        $url = image_public_url($image, $source);
-        $bundle = thumbnail_bundle($image);
-        $title = public_image_display_title($image, $source);
-        $candidateSizes = smart_gallery_thumbnail_sizes(
-            $presentation,
-            $image,
-            $source,
-            thumbnail_sizes(),
+        $url = public_render_profile_span(
+            'smart_gallery_card_detail_url',
+            static fn(): string => image_public_url($image, $source),
+        );
+        $bundle = public_render_profile_span(
+            'smart_gallery_card_bundle_lookup',
+            static fn(): array => thumbnail_bundle($image),
+        );
+        $title = public_render_profile_span(
+            'smart_gallery_card_title',
+            static fn(): string => public_image_display_title($image, $source),
+        );
+        $candidateSizes = public_render_profile_span(
+            'smart_gallery_card_sizes',
+            static fn(): array => smart_gallery_thumbnail_sizes(
+                $presentation,
+                $image,
+                $source,
+                thumbnail_sizes(),
+            ),
         );
         $fallbackSize = (int) ($candidateSizes[0] ?? 300);
         $voting =
             $interactive
             && !empty($presentation['voting_enabled'])
-            && gallery_voting_allowed($source);
+            && public_render_profile_span(
+                'smart_gallery_card_voting_policy',
+                static fn(): bool => gallery_voting_allowed($source),
+            );
         $lightbox = $interactive && !empty($presentation['lightbox_enabled']);
         $sourceGalleryVisible = !empty($presentation['source_gallery_visible']);
         $preparedSourceContext = is_array(
@@ -1428,10 +1447,16 @@ function smart_gallery_image_cards_view_model(
             : null;
         $attributesHtml = '';
         if ($lightbox) {
-            $mediaUrl = image_public_media_url($image, $source);
+            $mediaUrl = public_render_profile_span(
+                'smart_gallery_card_media_url',
+                static fn(): string => image_public_media_url($image, $source),
+            );
             $previewUrl = thumbnail_bundle_url($bundle, 1600);
             $imageHasPublicGps =
-                gallery_allows_gps_maps($source) && image_has_gps($image);
+                public_render_profile_span(
+                    'smart_gallery_card_gps_policy',
+                    static fn(): bool => gallery_allows_gps_maps($source),
+                ) && image_has_gps($image);
             $imageMapPoint = $imageHasPublicGps
                 ? public_render_profile_with_thumbnail_purpose(
                     'smart gallery image card map preview 300',
@@ -1444,23 +1469,26 @@ function smart_gallery_image_cards_view_model(
                 )
                 : null;
             $attributesHtml = ' '
-            . lightbox_image_data_attributes(
-                $image,
-                $source,
-                $mediaUrl,
-                $previewUrl,
-                $url,
-                $title,
-                (int) ($image['score'] ?? 0),
-                (int) ($votes[$imageId] ?? 0),
-                $imageMapPoint,
-                'data-lightbox-image',
-                $voting,
-                $offset + $index,
-                $bundle,
-                $sourceGalleryContext,
-                $quickTagEnabled,
-                $quickTags[$imageId] ?? [],
+            . public_render_profile_span(
+                'smart_gallery_card_lightbox_attributes',
+                static fn(): string => lightbox_image_data_attributes(
+                    $image,
+                    $source,
+                    $mediaUrl,
+                    $previewUrl,
+                    $url,
+                    $title,
+                    (int) ($image['score'] ?? 0),
+                    (int) ($votes[$imageId] ?? 0),
+                    $imageMapPoint,
+                    'data-lightbox-image',
+                    $voting,
+                    $offset + $index,
+                    $bundle,
+                    $sourceGalleryContext,
+                    $quickTagEnabled,
+                    $quickTags[$imageId] ?? [],
+                ),
             );
         }
 
@@ -1498,28 +1526,34 @@ function smart_gallery_image_cards_view_model(
 
         $voteHtml = '';
         if ($interactive && !empty($presentation['voting_enabled'])) {
-            $voteHtml = smart_gallery_capture_html(static function () use (
-                $imageId,
-                $image,
-                $votes,
-                $voting,
-            ): void {
-                render_vote_form(
+            $voteHtml = public_render_profile_span(
+                'smart_gallery_card_vote_markup',
+                static fn(): string => smart_gallery_capture_html(static function () use (
                     $imageId,
-                    (int) ($image['score'] ?? 0),
-                    (int) ($votes[$imageId] ?? 0),
+                    $image,
+                    $votes,
                     $voting,
-                );
-            });
+                ): void {
+                    render_vote_form(
+                        $imageId,
+                        (int) ($image['score'] ?? 0),
+                        (int) ($votes[$imageId] ?? 0),
+                        $voting,
+                    );
+                }),
+            );
         }
 
         $tagsHtml = '';
         if ($metadataVisible && $imageTags !== []) {
-            $tagsHtml = smart_gallery_capture_html(static function () use (
-                $imageTags,
-            ): void {
-                render_photo_card_tag_preview($imageTags);
-            });
+            $tagsHtml = public_render_profile_span(
+                'smart_gallery_card_tag_markup',
+                static fn(): string => smart_gallery_capture_html(static function () use (
+                    $imageTags,
+                ): void {
+                    render_photo_card_tag_preview($imageTags);
+                }),
+            );
         }
 
         $cards[] = [
@@ -1534,15 +1568,18 @@ function smart_gallery_image_cards_view_model(
                 . (!empty($viewerFavouriteStates[$imageId]) ? '1' : '0')
                 . '"'
                 : '',
-            'thumbnail_html' => public_thumbnail_render_picture_html(
-                $image,
-                $fallbackSize,
-                $candidateSizes,
-                $sizesAttribute,
-                image_alt_text($image, $source, $offset + $index + 1),
-                $index,
-                $bundle,
-                (string) $presentation['thumbnail_rendering_mode'],
+            'thumbnail_html' => public_render_profile_span(
+                'smart_gallery_card_thumbnail',
+                static fn(): string => public_thumbnail_render_picture_html(
+                    $image,
+                    $fallbackSize,
+                    $candidateSizes,
+                    $sizesAttribute,
+                    image_alt_text($image, $source, $offset + $index + 1),
+                    $index,
+                    $bundle,
+                    (string) $presentation['thumbnail_rendering_mode'],
+                ),
             ),
             'favourite_html' => $viewerFavouriteAvailableForImage
                 ? render_viewer_favourite_form_html(
@@ -1615,12 +1652,25 @@ function smart_gallery_render_image_cards(
 
 /**
  * Render a published Smart Gallery using authorized media and prepared presentation state.
+ * Prime request-local thumbnail ownership and metadata for the authorized page
+ * before building individual image cards.
+ * Active Admin Test runs retain the existing admin/dev render profiler snapshot;
+ * its selected counters are separate from the central SQL observer totals.
+ * Validated existence-query identities describe only the controller window.
  *
  * @return void Emits the public page response or not-found response.
  */
 function cms_smart_gallery(): void
 {
     $testRunActive = admin_test_run_active();
+    if ($testRunActive) {
+        $GLOBALS['cms_schema_query_provenance'] = [
+            'scope' => 'smart_controller_find_through_footer',
+            'entries' => [], 'dropped_attempts' => 0,
+        ];
+    }
+    if ($testRunActive)
+        \Gallery\Services\public_render_profile_start('smart_gallery');
     if ($testRunActive)
         admin_test_run_mark('smart_gallery_find_begin');
     $gallery = smart_gallery_find_public((string) ($_GET['slug'] ?? ''));
@@ -1632,6 +1682,9 @@ function cms_smart_gallery(): void
         cms_not_found();
         return;
     }
+
+    if ($testRunActive)
+        \Gallery\Services\public_render_profile_set_gallery((int) $gallery['id']);
 
     if (!public_presentation_restore('smart', $gallery)) return;
     $sourceGalleryId = max(0, (int) ($_GET['source_gallery_id'] ?? 0));
@@ -1660,7 +1713,10 @@ function cms_smart_gallery(): void
                 'smart_gallery_id' => (int) $gallery['id'],
                 'source_gallery_id' => $sourceGalleryId,
             ]);
-        $total = smart_gallery_count_images($gallery, true, $sourceGalleryId);
+        $total = smart_gallery_count_images(
+            $gallery, true, $sourceGalleryId, $sourceSummary['count_proof'],
+        );
+        unset($sourceSummary['count_proof']);
         if ($testRunActive)
             admin_test_run_mark('smart_gallery_count_end', ['total' => $total]);
         if ($testRunActive)
@@ -1998,16 +2054,26 @@ function cms_smart_gallery(): void
                 + \Gallery\Services\gallery_presentation_query($launch),
         );
     }
-    $cardsViewModel = smart_gallery_image_cards_view_model(
-        $images,
-        $sourceGalleries,
-        $presentation,
-        $votes,
-        $tags,
-        $offset,
-        true,
-        $quickTags,
-        (bool) $quickTagEnabled,
+    // Reuse the existing bounded thumbnail loader for this authorized page so
+    // ownership and metadata queries are batched before per-image card work.
+    if ($testRunActive)
+        admin_test_run_mark('smart_gallery_thumbnail_preload_begin');
+    thumbnail_bundles_preload($images);
+    if ($testRunActive)
+        admin_test_run_mark('smart_gallery_thumbnail_preload_end');
+    $cardsViewModel = \Gallery\Services\public_render_profile_span(
+        'smart_gallery_card_models',
+        static fn(): array => smart_gallery_image_cards_view_model(
+            $images,
+            $sourceGalleries,
+            $presentation,
+            $votes,
+            $tags,
+            $offset,
+            true,
+            $quickTags,
+            (bool) $quickTagEnabled,
+        ),
     );
     $sourceContextCardCount = 0;
     foreach ((array) ($cardsViewModel['cards'] ?? []) as $card) {
@@ -2122,8 +2188,18 @@ function cms_smart_gallery(): void
         ]);
     }
     render_footer();
-    if ($testRunActive)
+    if ($testRunActive) {
         admin_test_run_mark('smart_gallery_render_end');
+        admin_test_run_record_component(
+            'public_render_profile',
+            \Gallery\Services\public_render_profile_snapshot(),
+        );
+        admin_test_run_record_component(
+            'schema_query_provenance',
+            $GLOBALS['cms_schema_query_provenance'],
+        );
+        unset($GLOBALS['cms_schema_query_provenance']);
+    }
 }
 
 /**

@@ -53,6 +53,17 @@ use function Gallery\Core\db;
 const TELEMETRY_MODEL_DEFAULT_DELETE_BATCH = 2000;
 
 /**
+ * Bound database-query telemetry writes without approaching driver parameter limits.
+ * Type: integer.
+ * Units: aggregate rows per INSERT (thirteen placeholders per row).
+ * Scope: one database observer flush or compatibility writer call.
+ * Consumers: telemetry_model_upsert_db_query_metric_aggregates.
+ * Rationale: 64 rows amortize round trips with 832 parameters, below SQLite's
+ * historical 999-variable ceiling and MySQL/MariaDB prepared-statement limits.
+ */
+const TELEMETRY_MODEL_QUERY_METRIC_BATCH_ROWS = 64;
+
+/**
  * Return a constrained SQL predicate for telemetry traffic segmentation.
  *
  * Controllers/services pass only semantic segment names. SQL stays owned here
@@ -1838,17 +1849,43 @@ function telemetry_model_delete_older_than(
 /**
  * Upsert one privacy-safe hourly database query metric aggregate.
  *
- * The database observer buffers equivalent executions in memory and persists one
- * aggregate row per request. Counts therefore arrive pre-aggregated and must be
- * added as supplied instead of being converted back into one logical execution.
- * @param array<int,mixed> $params Ordered telemetry_db_query_metrics parameters.
+ * Counts arrive pre-aggregated; retain the historical ordered caller contract.
+ * @param array{0:string,1:string,2:string,3:string,4:string,5:int,6:int,7:int,8:int,9:int,10:int,11:int,12:string} $params Bucket, route, operation, table, fingerprint,
+ *   query/failed/slow counts, latency sum/max, returned/affected sums, update time.
+ * @return void Adds supplied counters and retains the greatest latency.
  */
 function telemetry_model_upsert_db_query_metric_aggregate(array $params): void
 {
-    $stmt = db()->prepare('INSERT INTO telemetry_db_query_metrics (
+    telemetry_model_upsert_db_query_metric_aggregates([$params]);
+}
+
+/**
+ * Persist bounded groups of privacy-safe hourly database query aggregates.
+ *
+ * Each statement adds every supplied count/sum and retains the greatest latency.
+ * No transaction or retry is introduced: an execution failure propagates to the
+ * existing fail-open observer; earlier completed batches remain persisted.
+ * @param list<array{0:string,1:string,2:string,3:string,4:string,5:int,6:int,7:int,8:int,9:int,10:int,11:int,12:string}> $rows Ordered aggregate rows: bucket, route,
+ *   operation, table, fingerprint, query/failed/slow counts, latency sum/max,
+ *   returned/affected sums and update time. An empty list performs no SQL.
+ * @return void Persists supplied aggregates or propagates a database failure.
+ */
+function telemetry_model_upsert_db_query_metric_aggregates(array $rows): void
+{
+    // Thirteen fields are structural schema columns, not a tunable row budget.
+    foreach ($rows as $row) {
+        if (count($row) !== 13) {
+            throw new InvalidArgumentException(
+                'Unexpected database telemetry aggregate parameter count.',
+            );
+        }
+    }
+    foreach (array_chunk($rows, TELEMETRY_MODEL_QUERY_METRIC_BATCH_ROWS) as $batch) {
+        $stmt = db()->prepare('INSERT INTO telemetry_db_query_metrics (
         bucket_start, route_name, operation, table_name, query_fingerprint, query_count, failed_count,
         slow_count, latency_ms_sum, latency_ms_max, rows_returned_sum, rows_affected_sum, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES ' . implode(', ', array_fill(0, count($batch),
+            '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')) . '
     ON DUPLICATE KEY UPDATE
         query_count = query_count + VALUES(query_count),
         failed_count = failed_count + VALUES(failed_count),
@@ -1858,7 +1895,12 @@ function telemetry_model_upsert_db_query_metric_aggregate(array $params): void
         rows_returned_sum = rows_returned_sum + VALUES(rows_returned_sum),
         rows_affected_sum = rows_affected_sum + VALUES(rows_affected_sum),
         updated_at = VALUES(updated_at)');
-    $stmt->execute($params);
+        $params = [];
+        foreach ($batch as $row) {
+            array_push($params, ...$row);
+        }
+        $stmt->execute($params);
+    }
 }
 
 /**

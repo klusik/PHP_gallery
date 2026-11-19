@@ -31,19 +31,22 @@ declare(strict_types=1);
 
 namespace Gallery\Services {
     /**
-     * Return translated fallback text for canonical registry definitions.
+     * Count translation lookups and resolve mutable fixture registry text.
      *
      * @param string $key Translation lookup key and fallback when no string is supplied.
-     * @param string|array|null $fallback String text to return; arrays and null use the key.
+     * @param string|array<string,scalar|null>|null $fallback String text to return; interpolation maps and null use the key.
      * @param array<string,scalar|null> $parameters Scalar replacements keyed by placeholder name.
-     * @return string The translated fallback after placeholder replacement.
+     * @return string Current fixture translation or fallback with placeholders replaced.
      */
     function t(
         string $key,
         string|array|null $fallback = null,
         array $parameters = [],
     ): string {
-        $text = is_string($fallback) ? $fallback : $key;
+        $GLOBALS['feature_policy_core_translation_calls'] =
+            ($GLOBALS['feature_policy_core_translation_calls'] ?? 0) + 1;
+        $text = $GLOBALS['feature_policy_core_translations'][$key]
+            ?? (is_string($fallback) ? $fallback : $key);
         foreach ($parameters as $name => $value) {
             $text = str_replace('{' . $name . '}', (string) $value, $text);
         }
@@ -124,6 +127,12 @@ namespace {
 
     $GLOBALS['feature_policy_core_settings'] = [];
     putenv('PHP_GALLERY_THUMBNAIL_BATCH_V1');
+    $translationCalls = $GLOBALS['feature_policy_core_translation_calls'] ?? 0;
+    feature_capability_definitions(false);
+    feature_policy_core_assert(
+        $translationCalls === ($GLOBALS['feature_policy_core_translation_calls'] ?? 0),
+        'The first structural registry build must not invoke the translator.',
+    );
     $definitions = feature_capability_definitions();
     $expectedKeys = [
         'cooperative_galleries',
@@ -859,6 +868,54 @@ namespace {
             && str_contains($adminFeaturesSource, "health['configured']")
             && str_contains($adminFeaturesSource, '$configuredEnabled'),
         'Admin > Features checkboxes must render configured state from the bounded health snapshot rather than dependency-aware effective state.',
+    );
+
+    $translationCalls = $GLOBALS['feature_policy_core_translation_calls'] ?? 0;
+    $structural = feature_capability_definitions(false);
+    $structural['public_search']['dependencies'] = ['unknown_mutated_copy'];
+    feature_policy_core_assert(
+        feature_capability_definitions(false)['public_search']['dependencies']
+            !== ['unknown_mutated_copy'],
+        'Returned structural arrays must not mutate the retained canonical registry.',
+    );
+    \Gallery\Services\feature_capability_exists('public_search');
+    \Gallery\Services\feature_capability_default_enabled('public_search');
+    feature_capability_configured_enabled('public_search');
+    feature_capability_effective_enabled('public_search');
+    feature_policy_core_assert(
+        $translationCalls === $GLOBALS['feature_policy_core_translation_calls'],
+        'Structural policy evaluation must not invoke the translator.',
+    );
+    $labelKey = 'admin.features.public_search.label';
+    $GLOBALS['feature_policy_core_translations'][$labelKey] = 'First language';
+    feature_policy_core_assert(
+        \Gallery\Services\feature_capability_definition('public_search')['label']
+            === 'First language',
+        'Default single-definition lookup must retain live localization.',
+    );
+    $GLOBALS['feature_policy_core_translations'][$labelKey] = 'Second language';
+    feature_policy_core_assert(
+        feature_capability_definitions()['public_search']['label']
+            === 'Second language'
+            && \Gallery\Services\feature_flag_definitions()['public_search']['label']
+                === 'Second language',
+        'Localized and legacy registry calls must observe changed translations.',
+    );
+    unset($GLOBALS['feature_policy_core_translations'][$labelKey]);
+    feature_policy_core_assert(
+        feature_capability_definitions(false) === feature_capability_definitions(),
+        'Structural metadata must match the canonical fallback registry exactly.',
+    );
+    $GLOBALS['feature_policy_core_settings']['feature_flag.image_voting.enabled'] = '0';
+    $GLOBALS['feature_policy_core_settings']['feature_flag.picture_game.enabled'] = '1';
+    feature_policy_core_assert(
+        !feature_capability_effective_enabled('picture_game'),
+        'Retained registry metadata must not retain dependency enabled state.',
+    );
+    $GLOBALS['feature_policy_core_settings']['feature_flag.image_voting.enabled'] = '1';
+    feature_policy_core_assert(
+        feature_capability_effective_enabled('picture_game'),
+        'Dependency source changes must become effective in the same request.',
     );
 
     echo "Feature policy core tests passed.\n";

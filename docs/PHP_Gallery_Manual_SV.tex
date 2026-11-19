@@ -10441,6 +10441,36 @@ För diagnostik med en tillfällig MySQL-databas erbjuder
 \codeword{--audit-php-regression} via den centrala PHP-regressionssviten.
 Även utcheckningen behöver en separat isolerad kopia för att isolera dess cache.
 
+Den~fokuserade sviten \codeword{gallery-request} väljer befintliga
+PHP-regressioner från det centrala registret: miniatyrer, publika URL:er,
+Smart-gallerier, telemetri, Admin-rapporter, sessioner, åtkomst-/NSFW-policy
+och~körningsmoduler samt centrala auditbevis och~Feature-Policy-Core/Adapter.
+Tillfälliga CI-läget \codeword{--gallery-request}
+delegerar till \codeword{--audit-gallery-request}; varje valt barntest måste
+ge~PASS utan dolda SKIP. Det~skrivskyddade arbetsflödet
+\filepath{.github/workflows/gallery-request-performance.yml} bevarar feature-
+historiken, binder PHP~8.1/MariaDB~10.11 och~PHP~8.5/MySQL~8.4 till händelsens
+SHA och~fryst main-merge-base samt förbereder/kontrollerar alla tre genererade
+metadatafiler. Behåll fullständiga artefakter, källidentitet, korta rapporter
+och~barnloggar. Spara utdata endast på~godkänd feature-gren; nytt SHA kräver
+nytt BASIC, värdbaserad förberedelse och~byte-likhet med sparade utdata.
+BASIC, fokuserad korrekthet och~FULL förblir separata; skyddad integration,
+squash och~publicering kräver separat godkännande. Valfria
+\filepath{scripts/gallery_http_compare.py} jämför exakta rena baseline-/kandidat-
+commits via låst localhost: fem växlande block, trettio vågor per~variant,
+C1/C2/C4/C8, svarstider och~markup-hashar utan användarcookies. Kör~utanför
+sandboxen; feature-ref och~utcheckning bevaras utan reset/force. Mätningen
+bevisar inte server-/OPcache-omladdning och~ersätter inte värdbaserad
+kvalificering. Se~\filepath{TESTING.md}
+och~\filepath{docs/performance/gallery-http-comparison.md}.
+För varje sessionsfall \texttt{same} måste
+\filepath{--session-cookie-name} ange installationens uttryckligen
+konfigurerade PHP-sessionscookienamn, aldrig dess värde. Starta den~syntetiska
+sessionen med~en uppvärmningsbegäran utan cookies och~kräv ett~matchande
+\texttt{Set-Cookie}-svar före uppmätt återanvändning. Importera inte
+webbläsarcookies eller spara cookievärden i~underlaget. Saknad eller felaktig
+sessionsbekräftelse ogiltigförklarar hela mätgruppen med~samma session.
+
 Värdbaserad kvalificering omfattar PHP/Node/WinApp-tester, källkodskontrakt,
 obligatorisk Chromium, verkliga MySQL/MariaDB-flöden, PHP-kompatibilitet
 och~obligatoriska paketkontroller på~Linux och~Windows; macOS körs separat

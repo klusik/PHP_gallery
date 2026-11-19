@@ -115,8 +115,8 @@ $mysqlSource = (string) file_get_contents(
 foreach ([
     [
         $runnerSource,
-        "['--development', '--audit-quick', '--audit-php-regression', '--audit', '--release',"
-            . " '--route-probes']",
+        "['--development', '--audit-quick', '--audit-php-regression',"
+            . " '--audit-gallery-request', '--audit', '--release', '--route-probes']",
     ],
     [
         $mysqlSource,
@@ -161,6 +161,17 @@ check(
         "[PHP_BINARY, __DIR__ . '/audit.php', '--suite=php-regression']",
     ) && php_source_contains($runnerSource, "putenv('GALLERY_WORKFLOW_REQUIRED=1')"),
     'The disposable PHP-only mode must require the fixture and use the central suite.',
+);
+check(
+    php_source_contains(
+        $runnerSource,
+        "elseif (\$mode === '--audit-gallery-request') {"
+            . " putenv('GALLERY_WORKFLOW_REQUIRED=1');"
+            . " \$stage = 'central gallery request-path suite';"
+            . " \$fixture->run([PHP_BINARY, __DIR__ . '/audit.php', '--suite=gallery-request'],"
+            . " GALLERY_WORKFLOW_CENTRAL_AUDIT_TIMEOUT_SECONDS, \$stage);",
+    ),
+    'The focused request mode must require the disposable fixture and use the central suite.',
 );
 check(
     php_source_contains($mysqlSource, "\$mode === '--development' ? 540 : 1320"),
