@@ -3144,6 +3144,103 @@ try {
     check(array_map('intval', $orderQuery->fetchAll(PDO::FETCH_COLUMN)) === $newestOrder,
         'Explicit newest sorting must restore the complete persisted order.');
     echo "PASS gallery workflow opt-in upload and explicit newest ordering\n";
+
+    $stage = 'numbered galleries with shared titles';
+    $createRoute = '/index.php?page=admin_new_gallery';
+    $flightQuery = 'SELECT title, folder_path, slug, url_slug, url_path '
+        . 'FROM galleries WHERE id = ?';
+    $numberedFields = array_replace($fields, ['title' => 'Repeated flight']);
+    $flightIds = [];
+    foreach (['repeated-flight', 'repeated-flight-2'] as $expectedLeaf) {
+        $numberedFields['operation_key'] = $admin->operationKey($createRoute . '&panel=1');
+        $receipt = envelope($admin->request($createRoute, $numberedFields, true),
+            'Create gallery with the same flight title');
+        $flightId = (int) $receipt['gallery_id'];
+        $flightIds[] = $flightId;
+        $flight = row($pdo, $flightQuery, [$flightId]);
+        check($flight['title'] === $numberedFields['title']
+            && basename($flight['folder_path']) === $expectedLeaf,
+            'Explicit creation must keep the display title and allocate a distinct folder.');
+    }
+    $replay = envelope($admin->request($createRoute, $numberedFields, true),
+        'Replay numbered create');
+    check((int) $replay['gallery_id'] === $flightId,
+        'A replay of the same creation operation cannot allocate another suffix.');
+
+    $child = envelope($admin->request($createRoute, array_replace($fields, [
+        'title' => 'Leg photos',
+        'parent_id' => $orderingId,
+        'operation_key' => $admin->operationKey($createRoute . '&panel=1'),
+    ]), true), 'Create descendant for rename');
+    $physicalParent = dirname($flight['folder_path']);
+    $parentRoot = $directory . '/galleries/' . $physicalParent;
+    $unmanagedPath = $parentRoot . '/repeated-flight-3';
+    $marker = 'owned fixture file in a candidate suffix slot';
+    check(file_put_contents($unmanagedPath, $marker) === strlen($marker),
+        'Failed to block one candidate with an unmanaged file.');
+    $firstFlight = row($pdo, $flightQuery, [$flightIds[0]]);
+    $beforeRename = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$orderingId]);
+    $renameFields = [
+        'id' => $orderingId,
+        'csrf_token' => $csrf,
+        'title' => $numberedFields['title'],
+        'edit_revision' => (string) $beforeRename['edit_revision'],
+    ];
+    envelope($admin->request($orderingRoute, $renameFields, true), 'Rename to an occupied title');
+    $renamed = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$orderingId]);
+    $childRow = row($pdo, 'SELECT * FROM galleries WHERE id = ?', [$child['gallery_id']]);
+    $renamedFolder = $parentRoot . '/repeated-flight-4';
+    $renamedPhoto = row($pdo, 'SELECT * FROM images WHERE id = ?', [$newestOrder[0]]);
+    clearstatcache();
+    $renamedSidecar = json_decode((string) file_get_contents(
+        $renamedFolder . '/gallery.json',
+    ), true, flags: JSON_THROW_ON_ERROR);
+    check($renamed['folder_path'] === $physicalParent . '/repeated-flight-4'
+        && $renamed['title'] === $numberedFields['title']
+        && $renamedSidecar['title'] === $numberedFields['title']
+        && $childRow['folder_path'] === $renamed['folder_path'] . '/leg-photos'
+        && (int) $childRow['parent_id'] === $orderingId
+        && (int) $renamedPhoto['gallery_id'] === $orderingId
+        && hash_file('sha256', $renamedFolder . '/' . $renamedPhoto['relative_path'])
+            === hash_file('sha256', $sample)
+        && !is_dir($directory . '/galleries/' . $beforeRename['folder_path'])
+        && file_get_contents($unmanagedPath) === $marker,
+        'Rename must skip occupied paths and carry the complete owned subtree.');
+    check($firstFlight === row($pdo, $flightQuery, [$flightIds[0]])
+        && $flight === row($pdo, $flightQuery, [$flightId])
+        && $renamed['url_path'] !== $firstFlight['url_path']
+        && $renamed['url_path'] !== $flight['url_path'],
+        'Existing gallery and URL ownership must survive a same-title rename.');
+
+    // Free an earlier slot and save the same title at the acknowledged revision.
+    check(unlink($unmanagedPath), 'Could not clear the owned suffix slot.');
+    $renameFields['edit_revision'] = (string) $renamed['edit_revision'];
+    envelope($admin->request($orderingRoute, $renameFields, true), 'Save an already numbered title');
+    check(row($pdo, 'SELECT folder_path FROM galleries WHERE id = ?', [$orderingId])
+        ['folder_path'] === $renamed['folder_path'],
+        'A subsequent save must retain the existing compatible numbered folder.');
+
+    // Import an unregistered numbered sibling whose sidecar supplies the shared title.
+    $numberedImport = $physicalParent . '/repeated-flight-5';
+    $numberedImportFolder = $directory . '/galleries/' . $numberedImport;
+    check(mkdir($numberedImportFolder)
+        && copy($sample, $numberedImportFolder . '/flight.jpg')
+        && file_put_contents($numberedImportFolder . '/gallery.json', json_encode([
+            'title' => $numberedFields['title'], 'visibility' => 'unpublished',
+        ], JSON_THROW_ON_ERROR)) !== false, 'Could not seed a numbered import.');
+    $numberedImportResponse = $admin->request('/index.php?page=admin_import', [
+        'csrf_token' => $csrf, 'folders' => [$numberedImport],
+        'discovery_action' => 'import_in_place', 'ajax' => '1',
+    ], true);
+    check($numberedImportResponse['status'] === 200
+        && ($numberedImportResponse['json']['ok'] ?? false) === true,
+        'Numbered gallery import did not complete.');
+    $numberedImportRow = row($pdo, 'SELECT title FROM galleries WHERE folder_path = ?', [
+        $numberedImport,
+    ]);
+    check($numberedImportRow['title'] === $numberedFields['title'],
+        'Discovery and import must retain a numbered folder and its readable title.');
+
     $beforeDelete = countRows($pdo, 'galleries');
 
     $stage = 'expired session';

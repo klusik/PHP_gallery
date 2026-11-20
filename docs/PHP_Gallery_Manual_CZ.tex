@@ -1352,9 +1352,10 @@ uložením upravit.\\
 Identita & Identifikátor v~URL & Řídí identitu veřejné adresy URL galerie. Pokud
 možno zachovejte zavedené identifikátory, protože na nich mohou záviset záložky
 a~externí odkazy.\\
-Identita & Název složky & Fyzický název pouze pro čtení, odvozený ze sanitized
-názvu galerie. Uložení změny názvu přejmenuje složku i~cesty potomků běžnou
-službou změn.\\
+Identita & Název složky & Fyzický název pouze pro čtení, odvozený
+z~upraveného názvu galerie. Galerie mohou mít stejný název. Pokud název složky
+už používá jiná galerie ve stejné úrovni, při vytvoření nebo přejmenování
+lze použít příponu jako \codeword{-2}. Přejmenování složky upraví cesty potomků.\\
 Identita & Nadřazená galerie a~pořadí & Mění hierarchii a~pořadí sourozenců.
 Přesun galerie fyzicky přemístí strom jejích složek, pokud to nakonfigurovaný
 kořen galerií dovoluje.\\
@@ -2982,9 +2983,11 @@ bez nového sestavení. Schéma, původ a~obnovu katalogu popisuje
 
 Watcher a~Import zobrazují \ui{Gallery:} a~aktuální zobrazovaný název
 z~autentizovaného inventarizačního API. Dlouhé názvy se zalamují podle šířky
-řádku. Název fyzické složky se vždy odvozuje ze sanitized zdrojového názvu
-galerie. Uložení změny názvu přejmenuje složku a~aktualizuje cesty potomků;
-kolize cílové složky operaci odmítne bez přepsání dat. Starší API bez údaje
+řádku. Server odvozuje název složky z~upraveného zdrojového názvu galerie.
+Pokud jej už používá jiná galerie, při vytvoření nebo přejmenování lze zvolit
+sesterskou složku s~číselnou příponou. Zobrazovaný název může být u~obou stejný.
+Přejmenování složky aktualizuje cesty potomků. Neevidovanou položku na cílové
+cestě nejprve vyřešte přes discovery. Starší API bez údaje
 o~názvu zobrazí koncový segment složky. Najetí myší na název zobrazí celou
 hierarchii složek na samostatných odsazených
 řádcích, od kořene po galerii. Změna připojení aktualizuje název i~tooltip;
@@ -5146,8 +5149,10 @@ podobnost nedokazuje totožnost fotografie. Nepodporované dekódování,
 nejednoznačné soubory a~chybějící originály se automaticky neopravují. Skrytá
 a~interní úložiště a~přílohy jiných typů mají samostatnou údržbu.
 
-Import se také řídí diskem. Název v~sidecaru zůstane pouze tehdy, když jeho
-sanitizovaná podoba odpovídá fyzické koncové složce. Jinak název určí disk.
+Import se také řídí diskem. Název v~sidecaru zůstane, když jeho upravená
+podoba odpovídá fyzické složce, včetně přípony jako \codeword{-2}.
+Jinak název určí disk.
+Kontrola konzistence takové číslování uznává a~opravy je zachovávají.
 Nově importované složky se normalizují od nejhlubších pomocí chráněného
 přesunu podstromu. Kolize cíle import odmítne; ostatní existující galerie se
 tiše nepřejmenovávají. Historické nesrovnalosti řeší výslovná oprava

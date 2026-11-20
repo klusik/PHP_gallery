@@ -168,6 +168,22 @@ assert_gallery_public_path_same(
     $assignments[3]['slug'],
     'duplicate child slug',
 );
+$numberedAssignments = gallery_public_path_assignments([
+    ['id' => 7, 'title' => 'Flight', 'folder_path' => 'flight'],
+    ['id' => 8, 'title' => 'Flight', 'folder_path' => 'flight-3',
+        'url_slug' => 'flight', 'url_path' => 'flight'],
+    ['id' => 9, 'title' => 'Flight', 'folder_path' => 'flight-4',
+        'url_slug' => 'flight-2', 'url_path' => 'flight-2'],
+]);
+assert_gallery_public_path_same(
+    [
+        7 => ['slug' => 'flight-3', 'path' => 'flight-3'],
+        8 => ['slug' => 'flight', 'path' => 'flight'],
+        9 => ['slug' => 'flight-2', 'path' => 'flight-2'],
+    ],
+    $numberedAssignments,
+    'a new earlier row must keep existing numbered URL owners',
+);
 assert_gallery_public_path_same(
     'testovaci-fotky/test-nahrani-2',
     $assignments[3]['path'],

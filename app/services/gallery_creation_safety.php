@@ -237,12 +237,12 @@ function gallery_creation_target_observation(
 /**
  * Refuse missing/ambiguous catalog reuse; never perform cleanup as a create side effect.
  *
- * Healthy occupied folders remain reserved; creation separately refuses their
- * reuse because a suffixed folder would disagree with the source title.
- * A missing descendant-only catalog is protected as well.
+ * Healthy occupied folders remain reserved. Explicit creation may choose a
+ * separate numbered folder. A missing descendant-only catalog is protected
+ * as well.
  *
  * @param string $relativePath Requested gallery folder path.
- * @return void
+ * @return void Returns after storage and catalog ownership are verified.
  * @throws GalleryCatalogConflict When existing catalog ownership needs reconciliation.
  * @throws RuntimeException When storage cannot be observed safely.
  */
@@ -266,4 +266,35 @@ function gallery_creation_assert_catalog_preserved(string $relativePath): void
             'Gallery storage could not be verified. No existing catalog was changed; check storage availability before retrying.',
         );
     }
+}
+
+/**
+ * Select a folder for a new gallery while its writer lease is held.
+ *
+ * @param array{folder_path:string}|null $parent Selected gallery parent, or null for storage root.
+ * @param string $title Source title kept in the new catalog row and sidecar.
+ * @param bool $numberTitleCollision True for a deliberate new gallery; exact-path
+ *     workflows require the base to be free.
+ * @return string Verified vacant relative path to create or reserve.
+ * @throws GalleryCatalogConflict When missing or unknown storage has a catalog owner.
+ * @throws RuntimeException When storage is unsafe or no eligible folder is free.
+ */
+function gallery_creation_folder_path(
+    ?array $parent,
+    string $title,
+    bool $numberTitleCollision,
+): string {
+    $path = gallery_child_folder_path($parent, $title);
+    gallery_creation_assert_catalog_preserved($path);
+    $target = gallery_target_abs_path($path);
+    if (!file_exists($target) && !is_link($target)) {
+        return $path;
+    }
+    if (!$numberTitleCollision || is_link($target)
+        || !find_gallery_by_folder_path($path, true)) {
+        throw new RuntimeException('Gallery folder already exists.');
+    }
+    $path = gallery_next_numbered_folder_path($path);
+    gallery_creation_assert_catalog_preserved($path);
+    return $path;
 }

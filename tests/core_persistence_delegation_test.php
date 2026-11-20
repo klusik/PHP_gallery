@@ -96,6 +96,7 @@ namespace Gallery\Services {
 
 namespace {
     require_once dirname(__DIR__) . '/app/helpers_runtime.php';
+    require_once dirname(__DIR__) . '/app/helpers_files.php';
     require_once dirname(__DIR__) . '/app/models/galleries.php';
     require_once dirname(__DIR__) . '/app/models/auth.php';
     require_once dirname(__DIR__) . '/app/services/auth_accounts.php';

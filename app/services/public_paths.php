@@ -39,6 +39,7 @@ namespace Gallery\Services;
 use PDO;
 use RuntimeException;
 use Throwable;
+use function Gallery\Core\append_numbered_slug_suffix;
 use function Gallery\Core\absolute_public_url;
 use function Gallery\Core\gallery_public_url;
 use function Gallery\Core\gallery_seo_title;
@@ -730,7 +731,7 @@ function regenerate_public_paths(): array
         );
     }
 
-    $galleryRows = public_path_model_gallery_regeneration_rows();
+    $galleryRows = public_path_model_gallery_regeneration_rows(includeStoredUrls: true);
     $parentAssignments =
         gallery_parent_id_assignments_from_folder_paths($galleryRows);
     if (function_exists(__NAMESPACE__
@@ -778,7 +779,7 @@ function refresh_gallery_public_paths(): int
         return 0;
     }
 
-    $galleryRows = public_path_model_gallery_regeneration_rows();
+    $galleryRows = public_path_model_gallery_regeneration_rows(includeStoredUrls: true);
     $parentAssignments =
         gallery_parent_id_assignments_from_folder_paths($galleryRows);
     if (function_exists(__NAMESPACE__
@@ -805,13 +806,14 @@ function refresh_gallery_public_paths(): int
  * Build deterministic clean URL assignments for gallery rows.
  *
  * The function is database-independent so hierarchy, transliteration, sibling
- * collisions, and legacy filesystem names can be tested directly. Returned
- * assignments are keyed by gallery id and contain the final local slug and
- * complete hierarchical public path.
+ * collisions, and legacy filesystem names can be tested directly. Retain
+ * compatible assignments in the same parent before numbering newcomers, so
+ * an existing URL keeps its gallery when a duplicate title is introduced.
  *
  * @param array<int,array{id:int|string,parent_id?:int|string|null,
- *     folder_path?:string,title?:string|null,slug?:string|null}> $galleries
- *     Gallery identities, physical hierarchy and display names for slug input.
+ *     folder_path?:string,title?:string|null,slug?:string|null,
+ *     url_slug?:?string,url_path?:?string}> $galleries
+ *     Identities, physical hierarchy, display titles and any current URLs.
  * @return array<int,array{slug:string,path:string}> Assignments keyed by gallery id.
  */
 function gallery_public_path_assignments(array $galleries): array
@@ -846,11 +848,10 @@ function gallery_public_path_assignments(array $galleries): array
         $childrenByParent[$siblingKey][] = $gallery;
     }
 
-    // Assign sibling slugs once in stable row order so duplicate titles receive
-    // deterministic numeric suffixes regardless of which branch is built first.
     $slugById = [];
     foreach ($childrenByParent as $siblings) {
         $usedSlugs = [];
+        $baseById = [];
         foreach ($siblings as $sibling) {
             $siblingId = (int) ($sibling['id'] ?? 0);
             $baseName = basename(str_replace(
@@ -863,10 +864,33 @@ function gallery_public_path_assignments(array $galleries): array
                 ?: $baseName
                 ?: $sibling['slug'] ?? '' ?: 'gallery'
             );
-            $slug = unique_public_slug_in_set(
-                gallery_url_slug_base($base),
-                $usedSlugs,
-            );
+            $baseById[$siblingId] = gallery_url_slug_base($base) ?: 'item';
+            $stored = (string) ($sibling['url_slug'] ?? '');
+            if (isset($usedSlugs[$stored])
+                || !gallery_name_matches_base($stored, $baseById[$siblingId])) {
+                continue;
+            }
+            // A moved gallery cannot claim an existing slot in its new parent
+            // using a URL it held under a different parent.
+            $parentId = (int) ($parentIdById[$siblingId] ?? 0);
+            $prefix = $parentId > 0
+                ? ($byId[$parentId]['url_path'] ?? null)
+                : gallery_public_path_from_folder_segments(
+                    gallery_folder_parent_path($folderPathById[$siblingId]),
+                );
+            if ($prefix === null || ($sibling['url_path'] ?? '') !==
+                ($prefix === '' ? $stored : $prefix . '/' . $stored)) {
+                continue;
+            }
+            $slugById[$siblingId] = $stored;
+            $usedSlugs[$stored] = true;
+        }
+        // Fill remaining slots in the existing stable catalog order.
+        foreach ($baseById as $siblingId => $base) {
+            if (isset($slugById[$siblingId])) {
+                continue;
+            }
+            $slug = unique_public_slug_in_set($base, $usedSlugs);
             $slugById[$siblingId] = $slug;
             $usedSlugs[$slug] = true;
         }
@@ -1058,7 +1082,7 @@ function repair_gallery_parent_ids_from_folder_paths(PDO $pdo): int
  */
 function regenerate_gallery_public_paths(PDO $pdo): int
 {
-    $galleries = public_path_model_gallery_regeneration_rows($pdo);
+    $galleries = public_path_model_gallery_regeneration_rows($pdo, includeStoredUrls: true);
     $parentAssignments =
         gallery_parent_id_assignments_from_folder_paths($galleries);
     if (function_exists(__NAMESPACE__
@@ -1165,9 +1189,9 @@ function image_public_slug_assignments(array $images): array
 /**
  * Generate a unique clean slug within a caller-provided used-slug set.
  *
- * @param string $value Value to process.
- * @param array $usedSlugs Used slugs value.
- * @return string Text result for the caller.
+ * @param string $value Requested slug or title.
+ * @param array<string|int,true> $usedSlugs Already assigned slug keys.
+ * @return string Normalized unused slug, numbered within the storage width if needed.
  */
 function unique_public_slug_in_set(string $value, array $usedSlugs): string
 {
@@ -1184,7 +1208,7 @@ function unique_public_slug_in_set(string $value, array $usedSlugs): string
     $counter = 2;
     while (isset($usedSlugs[$slug])) {
         // $slug stores an intermediate value used by the surrounding gallery workflow.
-        $slug = $base . '-' . $counter;
+        $slug = append_numbered_slug_suffix($base, (string) $counter);
         $counter++;
     }
 

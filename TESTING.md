@@ -3093,6 +3093,10 @@ preservation, owned-worker image-move interruption/recovery, independent-session
 edit revisions, portable duplicate-column migration replay, pre-activation
 enforcement refusal, replay-safe
 operation keys, raster decode admission and bounded destination search.
+The disposable HTTP journey also covers duplicate-title creation and replay,
+rename past occupied disk and catalog slots, descendant/photo preservation,
+stable sibling URLs and numbered sidecar import. The pure names-only report
+fixture checks that canonical numeric suffixes need no automatic repair.
 Full-profile browser fixtures cover panel load ownership, native keyboard focus,
 in-memory drafts and parent-picker integration. A passing Node seam test is not
 reported as real browser interaction.

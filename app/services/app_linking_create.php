@@ -760,16 +760,15 @@ function app_linking_create_gallery(
         if ($parentId > 0 && !is_array($parent)) {
             throw new RuntimeException('Selected parent gallery is unavailable.');
         }
-        $reservedFolder = gallery_child_folder_path(
-            $parent, gallery_folder_segment($input['title']),
-        );
+        // A new intent may reserve a numbered sibling. A replay above returns
+        // the original receipt before selecting any filesystem target.
+        $reservedFolder = gallery_creation_folder_path($parent, $input['title'], true);
         if ($reservedFolder === ''
             || strlen($reservedFolder) > LINKED_GALLERY_CREATE_PATH_MAX_BYTES) {
             throw new RuntimeException('Gallery folder name is unavailable.');
         }
         // Avoid a durable reservation for a target already known to be unsafe.
         // The owned create repeats these checks after the reservation commits.
-        gallery_creation_assert_catalog_preserved($reservedFolder);
         $reservationTarget = gallery_target_abs_path($reservedFolder);
         clearstatcache(true, $reservationTarget);
         if (file_exists($reservationTarget) || is_link($reservationTarget)) {

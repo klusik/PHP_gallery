@@ -1544,11 +1544,12 @@ both lazy public reads and complete Admin/background loading.
 The authenticated upload inventory response exposes additive `gallery_title`
 metadata independently of `gallery_folder`. WinApp keeps the physical identity
 for existing consumers and uses the title for presentation. CMS title saves
-derive the physical leaf with the existing slug sanitizer and move the subtree;
-the root title and path map commit together. Creation uses the same derivation
-and rejects collisions rather than allocating a different suffixed identity.
-The connection
-test and import preflight refresh both values. `GalleryIdentityLabel` retains
+derive the physical leaf with the existing slug sanitizer and move the subtree.
+The root title and path map commit together. A repeated title can use a
+numbered sibling on create or rename, and the existing display-title and path
+fields carry the two values. An existing compatible suffix remains valid during
+subsequent saves, imports and consistency checks. The connection test and
+import preflight refresh both values. `GalleryIdentityLabel` retains
 the folder leaf when older servers omit the title; installed server-version
 usage is unknown, so this compatibility fallback remains supported. A renamed
 human-readable title requires the updated inventory API. No schema or access

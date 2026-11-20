@@ -37,7 +37,9 @@ function gallery_consistency_check_catalog_gallery(
     $path = (string) $gallery['folder_path'];
     $title = (string) $gallery['title'];
     $leaf = gallery_folder_name_from_path($path);
-    if (gallery_folder_segment($title) !== $leaf) {
+    // A suffix assigned at creation or rename is a valid physical identity.
+    $proposedTitle = gallery_disk_source_title($path, $title);
+    if ($title !== $proposedTitle || gallery_folder_segment($leaf) !== $leaf) {
         gallery_consistency_add($job, $id, $path, 'name_mismatch', '', 0, 'gallery');
     }
     $parentPath = normalize_relative_path(dirname($path));
@@ -49,8 +51,6 @@ function gallery_consistency_check_catalog_gallery(
     if ((int) ($gallery['parent_id'] ?? 0) !== $parentId) {
         gallery_consistency_add($job, $id, $path, 'parent_mismatch', '', 0, 'gallery');
     }
-    // The same pure title policy is consumed by the actual guarded repair.
-    $proposedTitle = gallery_disk_source_title($path, $title);
     $segments = explode('/', $path);
     $prefix = [];
     $proposed = [];
@@ -70,7 +70,7 @@ function gallery_consistency_check_catalog_gallery(
     }
     if ($path !== $proposedPath) {
         $changes[] = ['field' => 'leaf_value',
-            'current' => $leaf, 'proposed' => gallery_folder_segment($proposedTitle)];
+            'current' => $leaf, 'proposed' => gallery_folder_name_from_path($proposedPath)];
         $changes[] = ['field' => 'folder_value',
             'current' => $path, 'proposed' => $proposedPath];
     }
@@ -106,9 +106,9 @@ function gallery_consistency_proposed_moves(array $job): array
         foreach ($group['issues'] as $issue) {
             if ($issue['repair'] !== 'gallery') continue;
             $moves[] = ['key' => $key, 'path' => $group['path'],
-                'leaf' => gallery_folder_segment(gallery_disk_source_title(
-                    $group['path'], $group['title'],
-                ))];
+                'leaf' => gallery_folder_segment(
+                    gallery_folder_name_from_path($group['path']),
+                )];
             break;
         }
     }

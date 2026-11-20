@@ -1867,11 +1867,17 @@ function create_empty_gallery_linked_owned(
     gallery_access_assert_public_policy_available();
     $hasAccess = gallery_access_schema_ready();
     $hasSchedule = gallery_publication_manual_storage_available();
-    $folder = gallery_child_folder_path($parent, gallery_folder_segment($title));
+    $base = gallery_child_folder_path($parent, $title);
+    $folder = $reservation['folder'];
     if ($folder === '' || strlen($folder) > LINKED_GALLERY_CREATE_PATH_MAX_BYTES) {
         throw new RuntimeException('Gallery folder name is unavailable.');
     }
-    if ($folder !== $reservation['folder']) {
+    if (normalize_relative_path($folder) !== $folder
+        || dirname($folder) !== dirname($base)
+        || !gallery_name_matches_base(
+            gallery_folder_name_from_path($folder),
+            gallery_folder_name_from_path($base),
+        )) {
         throw new RuntimeException('Linked gallery reservation target changed.');
     }
     gallery_model_linked_reservation_assert_pending(
@@ -2085,9 +2091,10 @@ function create_empty_gallery_linked_owned(
  *     translations?:array<string, array{title?:string, description?:string}>,
  *     gallery_date?:string|null, gallery_date_end?:string|null,
  *     count_badge_visibility?:string, lightbox_browsing_mode?:string,
+ *     number_title_collision?:bool,
  *     presentation?:array<string, int|string|bool|null>|null} $input Creation
  *     metadata; legacy folder_name is ignored because the sanitized title owns
- *     the directory name.
+ *     the directory name. Explicit interactive callers may request numbering.
  * @return array{id:int|string, title:string, folder_path:string,
  *     parent_id?:int|string|null, ...} Created physical gallery and its
  *     supported persisted metadata.
@@ -2204,23 +2211,16 @@ function create_empty_gallery_owned(array $input): array
         throw new RuntimeException('Selected parent gallery does not exist.');
     }
 
-    // $folderName stores an intermediate value used by the surrounding gallery workflow.
-    // The title owns the physical leaf; stale clients cannot create an
-    // independently named folder or silently acquire a suffixed identity.
-    $folderName = gallery_folder_segment($title);
-    // $requestedFolderPath stores the preferred folder path before suffix fallback is applied.
-    $requestedFolderPath = gallery_child_folder_path(
-        $parent,
-        $folderName,
-    );
+    // Verify outstanding linked reservations before selecting a physical leaf.
     gallery_linked_reservation_assert_admin_write();
-    gallery_creation_assert_catalog_preserved($requestedFolderPath);
-    // $folderPath stores an intermediate value used by the surrounding gallery workflow.
-    $folderPath = $requestedFolderPath;
-    // $target stores an intermediate value used by the surrounding gallery workflow.
+    $folderPath = gallery_creation_folder_path(
+        $parent,
+        $title,
+        ($input['number_title_collision'] ?? false) === true,
+    );
+    // Verify the parent and target before mkdir, including the selected suffix.
     $target = gallery_target_abs_path($folderPath);
-    gallery_creation_assert_catalog_preserved($folderPath);
-    if (file_exists($target)) {
+    if (file_exists($target) || is_link($target)) {
         throw new RuntimeException('Gallery folder already exists.');
     }
     // The verified parent must still exist; never recreate missing ancestors here.

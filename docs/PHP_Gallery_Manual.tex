@@ -1364,8 +1364,9 @@ Identity & Slug & Controls the~public gallery URL identity. Keep established
 slugs stable when possible because bookmarks and~external links can~depend
 on~them.\\
 Identity & Folder name & Read-only physical name derived from the~sanitized
-gallery title. Saving a~title change renames the~folder and~its~descendant paths
-through the~normal mutation service.\\
+gallery title. Galleries may share a~title. If~a~sibling already owns the~folder
+name, a~new gallery or~title change can use a~numbered folder such as~\codeword{-2}.
+A~folder rename updates the~paths of~its descendants.\\
 Identity & Parent and~sort order & Changes hierarchy and~sibling ordering.
 Moving a~gallery physically relocates its folder tree where the~configured
 gallery root permits it.\\
@@ -3002,9 +3003,11 @@ no~rebuild is~needed. The~schema, source and~refresh instructions are~in~
 
 Watcher and~Import show \ui{Gallery:} followed by~the~current display title from
 the~authenticated inventory API, wrapping long names within the~available row.
-The~physical folder name is~always derived from the~sanitized source title.
-Saving a~title change renames the~folder and~updates descendant paths;
-a~destination collision refuses the~rename without overwriting data.
+The~server derives the~folder name from the~sanitized source title. When
+another gallery already uses that folder name, the~server can use a~numbered
+sibling for~a~new gallery or~title change. Both retain the~same display title.
+A~folder rename updates descendant paths. An~untracked entry at~the~desired
+base path must~be~resolved through discovery before using that path.
 Older APIs without title metadata display the~final folder segment.
 Hover over the~name to~see the~full physical folder
 hierarchy on~separate indented lines, from root to~gallery. Connection changes
@@ -5168,9 +5171,11 @@ does not~prove image identity. Unsupported decoding, ambiguous files
 and~missing originals are~not~automatically repaired. Hidden/internal storage
 and~non-image attachments retain their separate maintenance tools.
 
-Disk names also govern import. A~sidecar title survives only when
-its~sanitized form agrees with the~physical leaf. Otherwise the~disk leaf
-supplies the~title. New imported folders are~canonicalized deepest first
+Disk names also govern import. A~sidecar title survives when its~sanitized
+form agrees with the~physical leaf, including a~numeric suffix such as~\codeword{-2}.
+Otherwise the~disk leaf supplies the~title. Consistency checks accept
+compatible numbering and~repairs preserve it. New imported folders
+are~canonicalized deepest first
 through the~guarded subtree mover. Conflicting destinations refuse import;
 unrelated existing galleries are~not~silently renamed. Explicit consistency
 repair handles historical discrepancies.
