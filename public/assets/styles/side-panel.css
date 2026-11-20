@@ -2891,6 +2891,10 @@ body.has-admin-side-panel {
     gap: 0.4rem;
 }
 .admin-gallery-editor-menu { position: relative; z-index: 4; }
+/* Open standalone menus sit above the sticky tabs (30) and Save bar (25). */
+.admin-gallery-editor-menu[open]:not(.admin-side-panel *) {
+    z-index: 31;
+}
 .admin-gallery-editor-menu > summary {
     display: inline-flex;
     align-items: center;

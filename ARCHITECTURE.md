@@ -1729,6 +1729,10 @@ controls; EXIF/GPS, card format, count badge, lightbox, Picture Game, responsive
 thumbnail bounds and route-map text are in Advanced. Field names and server
 validation remain the existing save contract.
 
+The standalone editor and the drawer share the Gallery actions and gallery
+summary disclosures. On the standalone page, `side-panel.css` stacks the open
+disclosures above the sticky tabs and gallery settings Save bar.
+
 Dynamic tab binding in `public/assets/gallery-modules/admin-tabs.js` resolves
 panels within the current injected drawer body, not by global ID across a public
 page that may contain another editor fragment. Its sticky offset follows the
