@@ -611,12 +611,16 @@ separate verification; see
 
 ## Gallery identity and rename ownership
 
-The source title owns the sanitized physical gallery leaf. Creation derives it
-through `gallery_folder_segment()` and rejects occupied destinations. Editor
-title saves use the existing gallery writer and subtree move; the root title
-and complete descendant path map commit together in the mutation model. The
-folder field is informational. Public slugs retain their independent URL role.
-Date-organized children derive their folder from the actual source title too.
+The source title owns the sanitized physical gallery leaf. Explicit creation
+and editor title saves may keep the same display title as another gallery.
+When a registered gallery occupies the desired sibling path, the shared path
+service looks for the first free numbered leaf, starting at `-2` and checking
+both disk entries and catalog subtrees. The existing gallery writer protects
+selection through mutation. Editor saves retain a compatible numbered leaf
+in the same parent. The root title and complete descendant path map commit
+together in the mutation model. The folder field is informational. Public URL
+assignments reserve compatible stored slug slots in the current parent before
+allocating new ones. Date-organized children keep their exact-path workflow.
 For an absent target, gallery path containment anchors the final leaf to its
 resolved existing parent, so a configured root reached through a filesystem
 alias remains usable. Existing unresolved entries are refused, and parents
@@ -648,9 +652,11 @@ browser worker pipeline. Source ZIP selection and uploaded publication are
 restricted by that ticket. The server holds the writer lease, validates source
 bytes and confirms persisted variants before advancing; it never generates
 pixels for consistency repair. Upload acknowledgements reconcile lost replies.
-Discovery and import resolve primary titles through `gallery_disk_source_title`:
-the physical leaf wins a conflicting sidecar. New import leaves are normalized
-deepest first by the existing subtree mover after destination preflight.
+Discovery and import resolve primary titles through `gallery_disk_source_title`.
+The physical leaf wins a conflicting sidecar and accepts a compatible numeric
+suffix. Consistency reports and repairs share that rule. New import leaves are
+normalized deepest first by the existing subtree mover after destination
+preflight.
 See [consistency scope and repair policy](docs/GALLERY_CONSISTENCY.md).
 Explicit jobs defer journal/cache calls to the existing dashboard maintenance
 owner, keeping discovery's direct file ownership unchanged apart from new

@@ -19,16 +19,12 @@ explicit catalog maintenance. If the old gallery really should be removed, use
 the existing explicit deletion/Trash workflow after restoring its storage where
 necessary; creation is not a substitute for that workflow.
 
-An existing, healthy directory still uses normal suffix selection for a
-deliberately
-new gallery. An ambiguous directory read refuses creation, even without a
-catalog
-match. A stable readable parent enumeration is required to call an entry
-missing;
-this is a bounded observation, not a guarantee of storage health. The final
-mkdir
-remains exclusive and does not recreate disappeared parents. Out-of-band storage
-changes can still interrupt creation, but cannot trigger catalog deletion.
+A deliberate Admin or linked WinApp create can use a numbered sibling when a
+registered gallery has a healthy directory at the base path. The new gallery
+keeps the requested title. Replaying the same operation key returns its
+original receipt. Creation refuses an unregistered entry at the base path.
+A stable readable parent enumeration is required to confirm absence. The
+final mkdir is exclusive and requires the parent to still exist.
 
 Coverage includes a disposable HTTP journey that displaces an uploaded gallery
 with a child, checks original identities/rows/hash after a refused create,

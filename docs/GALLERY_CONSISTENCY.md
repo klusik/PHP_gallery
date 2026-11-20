@@ -130,6 +130,9 @@ external catalog changes still require a fresh report before further writes.
 - Gallery repairs derive the primary title from disk, create missing ancestors,
   canonicalize the leaf with the existing sanitizer, synchronize the parent and
   rewrite the title sidecar. Existing compatible readable titles are retained.
+  Two galleries may share a display title. A normalized leaf such as
+  `repeated-flight-2` is a valid name for `Repeated Flight` and has no name
+  mismatch. Repairs of other fields preserve the numeric suffix.
 - Unindexed originals are registered individually. An unindexed photo directory
   is imported with its missing ancestors and canonicalized physical name.
 - Missing, stale, invalid or undecodable owned variants use the existing browser
@@ -159,8 +162,10 @@ keep separate jobs.
 ## Disk-authoritative imports
 
 Discovery and import use the physical directory as the name authority. A
-sidecar title survives only if its sanitized form identifies that same leaf.
-Otherwise the imported primary title is the disk leaf. Newly imported leaves
+sidecar title survives when its sanitized form identifies that same leaf,
+including a compatible decimal suffix from `-2` onward. A numbered folder
+with such a sidecar is eligible for import alongside its same-title sibling.
+An incompatible sidecar yields the disk leaf as the title. Newly imported leaves
 are canonicalized deepest first with the guarded subtree mover, preserving
 stable catalog IDs and descendant paths. Occupied or competing canonical names
 are refused before importing selected rows; numeric suffixes are not invented.

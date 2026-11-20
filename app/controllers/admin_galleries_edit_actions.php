@@ -141,7 +141,7 @@ use function Gallery\Services\gallery_filename_display_schema_ready;
 use function Gallery\Services\gallery_flight_map_row;
 use function Gallery\Services\gallery_flight_map_unresolved_from_row;
 use function Gallery\Services\gallery_folder_name_from_path;
-use function Gallery\Services\gallery_folder_segment;
+use function Gallery\Services\gallery_folder_name_for_title;
 use function Gallery\Services\gallery_gps_map_storage_value;
 use function Gallery\Services\gallery_grid_form_columns;
 use function Gallery\Services\gallery_grid_form_rows;
@@ -1241,7 +1241,7 @@ function admin_save_gallery_from_input(
  *
  * @param array{id:int|string,folder_path:string,title:string,description:string,slug:string,visibility:string,sort_order:int|string,cover_image_id?:int|string|null,cover_image_ids?:string|null,cover_image_path?:string|null,parent_id?:int|string|null,edit_revision?:int|string|null,...} $gallery Current row returned by the reservation.
  * @param array{edit_revision?:int|string,cover_image_id?:int|string,
- *     description?:string,scheduled_publish_at?:string,
+ *     title?:string,parent_id?:int|string,description?:string,scheduled_publish_at?:string,
  *     gallery_photo_card_ratio?:string,...} $input Validated editor fields,
  *     optional title-picture/photo format and UTC publication time (empty cancels).
  * @param array<string,array{name?:string,type?:string,tmp_name?:string,error?:int,size?:int}> $files PHP upload descriptors indexed by field name.
@@ -1612,7 +1612,10 @@ function admin_save_gallery_owned_input(
             (string) $gallery['folder_path'],
         );
         // $submittedFolderName stores an intermediate value used by the surrounding gallery workflow.
-        $submittedFolderName = gallery_folder_segment($title);
+        $submittedFolderName = gallery_folder_name_for_title(
+            (string) $gallery['folder_path'],
+            $title,
+        );
         if ($submittedFolderName === '') {
             throw new RuntimeException('Gallery title must produce a nonempty folder name.');
         }
@@ -1632,6 +1635,7 @@ function admin_save_gallery_owned_input(
                     $folderNameChanged ? $submittedFolderName : null,
                     false,
                     $title,
+                    numberTitleCollision: true,
                 );
                 if (!empty($moveResult['moved'])) {
                     admin_log_event(

@@ -1507,7 +1507,8 @@ function admin_gallery_discovery_has_existing_sibling_title(string $relativePath
  *
  * @param string $relativePath Candidate folder path relative to the gallery root.
  * @param string $title Candidate gallery title.
- * @return array<string, mixed>|null Matching existing gallery row summary.
+ * @return array{id:int,title:string,folder_path:string}|null Matching existing
+ *     gallery, or null when the title is new or the leaf is canonically numbered.
  */
 function admin_gallery_discovery_existing_sibling_title_conflict(
     string $relativePath,
@@ -1517,6 +1518,12 @@ function admin_gallery_discovery_existing_sibling_title_conflict(
     $parentPath = admin_gallery_discovery_parent_path($relativePath);
     $titleKey = admin_gallery_discovery_title_key($title);
     if ($relativePath === '' || $titleKey === '') {
+        return null;
+    }
+    $leaf = gallery_folder_segment(gallery_folder_name_from_path($relativePath));
+    $base = gallery_folder_segment($title);
+    if ($leaf !== $base && gallery_name_matches_base($leaf, $base)) {
+        // Restoring a numbered folder with its sidecar is a distinct gallery.
         return null;
     }
 

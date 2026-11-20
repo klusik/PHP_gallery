@@ -83,6 +83,7 @@ use PDO;
 use PDOException;
 use RuntimeException;
 use Throwable;
+use function Gallery\Core\append_numbered_slug_suffix;
 use function Gallery\Core\db;
 use function Gallery\Core\slugify;
 
@@ -2010,7 +2011,7 @@ function gallery_model_unique_slug(
         if ($maxAttempts !== null && $attempts >= $maxAttempts) {
             throw new RuntimeException('Gallery slug search limit was reached.');
         }
-        $slug = $base . '-' . $counter;
+        $slug = append_numbered_slug_suffix($base, (string) $counter);
         $counter++;
         $attempts++;
     }

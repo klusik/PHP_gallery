@@ -38,10 +38,12 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use Throwable;
+use function Gallery\Core\append_numbered_slug_suffix;
 use function Gallery\Core\cms_config;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\path_inside;
 use function Gallery\Core\slugify;
+use function Gallery\Models\gallery_model_catalog_path_owner;
 
 /**
  * Gallery path service helpers.
@@ -50,6 +52,23 @@ use function Gallery\Core\slugify;
  * It deliberately does not create, update, or delete galleries, which keeps the
  * extraction low-risk and preserves the original behavior of the legacy loader.
  */
+
+/**
+ * Number the first collision consistently with the existing public slug convention.
+ * Type: int. Units: numeric suffix. Scope: numbered physical gallery leaves.
+ * Consumers: gallery_next_numbered_folder_path().
+ * Rationale: 2 treats the unsuffixed folder as the first instance.
+ */
+const GALLERY_FOLDER_FIRST_NUMBERED_SUFFIX = 2;
+
+/**
+ * Bound storage and catalog probes during one explicit create or rename.
+ * Type: int. Units: numeric suffix. Scope: one occupied gallery folder base.
+ * Consumers: gallery_next_numbered_folder_path().
+ * Rationale: 128 matches the linked-create slug search limit and caps retries
+ * while the gallery writer lease is held.
+ */
+const GALLERY_FOLDER_LAST_NUMBERED_SUFFIX = 128;
 
 /**
  * Normalize a gallery URL slug outside the reserved presentation namespace.
@@ -416,11 +435,44 @@ function gallery_folder_name_from_path(string $folderPath): string
 }
 
 /**
+ * Identify the exact base or a canonically numbered variant of it.
+ *
+ * @param string $name Normalized leaf or stored slug to check.
+ * @param string $base Sanitized name derived from the source title.
+ * @return bool True for the base or a matching decimal suffix from -2 onward.
+ */
+function gallery_name_matches_base(string $name, string $base): bool
+{
+    if ($base === '') {
+        return false;
+    }
+    // The suffix grammar admits decimals starting at 2, without leading zeroes.
+    return $name === $base
+        || (preg_match('/-([2-9]|[1-9][0-9]+)\z/', $name, $match) === 1
+            && $name === append_numbered_slug_suffix($base, $match[1]));
+}
+
+/**
+ * Determine the canonical leaf for a title, retaining compatible numbering.
+ *
+ * @param string $folderPath Current gallery-root-relative directory.
+ * @param string $title Requested source title.
+ * @return string Current normalized leaf when compatible, otherwise the
+ *     sanitized base for the requested title (possibly empty).
+ */
+function gallery_folder_name_for_title(string $folderPath, string $title): string
+{
+    $base = gallery_folder_segment($title);
+    $leaf = gallery_folder_segment(gallery_folder_name_from_path($folderPath));
+    return gallery_name_matches_base($leaf, $base) ? $leaf : $base;
+}
+
+/**
  * Resolve a primary title from disk while retaining compatible readable prose.
  *
- * A sidecar may keep accents, spaces and capitalization only when its sanitized
- * title identifies the same physical leaf. A conflicting title cannot rename
- * an imported folder behind the administrator's back.
+ * A sidecar may keep readable prose when its sanitized title identifies the
+ * physical leaf, including an allocated numeric suffix. A conflicting title
+ * cannot rename an imported folder behind the administrator's back.
  * @param string $folderPath Gallery-root-relative physical directory.
  * @param string $candidate Existing catalog/sidecar primary title, or empty.
  * @return string Compatible primary title, otherwise the actual disk leaf.
@@ -431,8 +483,10 @@ function gallery_disk_source_title(
 ): string {
     $leaf = gallery_folder_name_from_path($folderPath);
     $candidate = trim($candidate);
-    return $candidate !== ''
-        && gallery_folder_segment($candidate) === gallery_folder_segment($leaf)
+    return gallery_name_matches_base(
+        gallery_folder_segment($leaf),
+        gallery_folder_segment($candidate),
+    )
         ? $candidate : $leaf;
 }
 
@@ -459,34 +513,33 @@ function gallery_child_folder_path(?array $parent, string $folderName): string
 }
 
 /**
- * Return an unused child folder path, appending a numeric suffix when needed.
+ * Find a free numbered sibling of an already occupied gallery folder.
  *
- * @param ?array $parent Parent value.
- * @param string $folderName Folder name value.
- * @return string Text result for the caller.
+ * The caller owns the gallery writer lease through the mutation. A catalog
+ * subtree with no physical folder still owns its slot. The caller retains
+ * the existing filesystem checks before acting on the selected path.
+ *
+ * @param string $occupiedPath Normalized relative path with a canonical leaf.
+ * @return string First unused numbered sibling path in the same parent.
+ * @throws RuntimeException When no safe numbered sibling can be selected.
  */
-function unique_gallery_child_folder_path(
-    ?array $parent,
-    string $folderName,
-): string {
-    // $segment stores an intermediate value used by the surrounding gallery workflow.
-    $segment = gallery_folder_segment($folderName);
-    // $candidate stores an intermediate value used by the surrounding gallery workflow.
-    $candidate = gallery_child_folder_path($parent, $segment);
-    // $counter stores an intermediate value used by the surrounding gallery workflow.
-    $counter = 2;
-    while (
-        is_dir(gallery_target_abs_path($candidate))
-        || find_gallery_by_folder_path($candidate, true)
+function gallery_next_numbered_folder_path(string $occupiedPath): string
+{
+    $leaf = gallery_folder_name_from_path($occupiedPath);
+    $parentPrefix = substr($occupiedPath, 0, strlen($occupiedPath) - strlen($leaf));
+    for (
+        $number = GALLERY_FOLDER_FIRST_NUMBERED_SUFFIX;
+        $number <= GALLERY_FOLDER_LAST_NUMBERED_SUFFIX;
+        $number++
     ) {
-        // $candidate stores an intermediate value used by the surrounding gallery workflow.
-        $candidate = gallery_child_folder_path(
-            $parent,
-            $segment . '-' . $counter,
-        );
-        $counter++;
+        $candidate = $parentPrefix . append_numbered_slug_suffix($leaf, (string) $number);
+        $absolute = gallery_target_abs_path($candidate);
+        if (@lstat($absolute) === false
+            && gallery_model_catalog_path_owner($candidate) === 0) {
+            return $candidate;
+        }
     }
-    return $candidate;
+    throw new RuntimeException('No numbered gallery folder is available.');
 }
 
 /**

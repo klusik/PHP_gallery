@@ -290,6 +290,12 @@ foreach ($inventory as $module => $names) {
                 $arguments[] = $token[1];
             }
         }
+        $forwardedArguments = $arguments;
+        if ($name === 'move_gallery_folder_to_parent') {
+            // The wrapper leaves the owned transaction-completion flag at its default.
+            $forwardedArguments[array_key_last($forwardedArguments)] =
+                'numberTitleCollision: $numberTitleCollision';
+        }
         $checksReservation = in_array($name, $reservationGuardedWriters, true);
         $expected =
             '{ $writerLock = gallery_edit_writer_begin(); try { '
@@ -299,7 +305,7 @@ foreach ($inventory as $module => $names) {
             . ($returnType === 'void' ? '' : 'return ')
             . $name
             . '_owned('
-            . implode(', ', $arguments)
+            . implode(', ', $forwardedArguments)
             . '); } finally { gallery_edit_writer_end($writerLock); } }';
         if ($name === 'store_uploaded_gallery_images') {
             $expected = <<<'PHP'
@@ -365,8 +371,7 @@ PHP;
                 'Upload writer or owned signature changed.',
             );
         } elseif ($name === 'move_gallery_folder_to_parent') {
-            // Pin both complete declarations: the public API stays unchanged;
-            // only the owned primitive accepts explicit deferred completion.
+            // Numbering is opt-in; deferred completion belongs to the owned primitive.
             $publicSignature = <<<'PHP'
 function move_gallery_folder_to_parent(
     int $galleryId,
@@ -374,6 +379,7 @@ function move_gallery_folder_to_parent(
     ?string $folderName = null,
     bool $smartGalleryGraphPrevalidated = false,
     ?string $title = null,
+    bool $numberTitleCollision = false,
 ): array
 PHP;
             $ownedSignature = <<<'PHP'
@@ -384,6 +390,7 @@ function move_gallery_folder_to_parent_owned(
     bool $smartGalleryGraphPrevalidated = false,
     ?string $title = null,
     bool $deferCompletion = false,
+    bool $numberTitleCollision = false,
 ): array
 PHP;
             gallery_writer_check(

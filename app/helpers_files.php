@@ -99,6 +99,28 @@ use function Gallery\Views\view_render_missing_admin_email_notice;
 use function Gallery\Views\view_render_public_seo_tags;
 
 /**
+ * Keep numbered slugs within the shared storage limit.
+ * Type: int. Units: ASCII bytes. Scope: one generated slug or directory leaf.
+ * Consumers: append_numbered_slug_suffix().
+ * Rationale: 255 fits the slug columns and supported filesystem leaf width.
+ */
+const NUMBERED_SLUG_MAX_BYTES = 255;
+
+/**
+ * Fit a numeric disambiguator into an ASCII slug or folder leaf.
+ *
+ * @param string $base Sanitized base name.
+ * @param string $number Canonical decimal suffix digits.
+ * @return string Name with its complete numeric suffix and a shortened stem if necessary.
+ */
+function append_numbered_slug_suffix(string $base, string $number): string
+{
+    $suffix = '-' . $number;
+    $stem = substr($base, 0, NUMBERED_SLUG_MAX_BYTES - strlen($suffix));
+    return rtrim($stem, '-') . $suffix;
+}
+
+/**
  * Image extensions accepted during filesystem scans.
  */
 function supported_image_extensions(): array
