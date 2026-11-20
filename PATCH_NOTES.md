@@ -1,5 +1,56 @@
 # Patch notes
 
+## Version 1.4.1
+
+PHP Gallery 1.4.1 reduced repeated work when visitors open Smart Galleries and
+deferred the browser probes for Admin Test runs until a run is active.
+
+### Highlights
+
+#### Smart Gallery performance
+
+- Allowed overlapping requests from a returning anonymous visitor to render
+  concurrently once the gallery has restored its presentation settings.
+- Checked for the first eligible GPS photo to decide whether the Map button
+  should appear. [#406](https://github.com/klusik/PHP_gallery/issues/406)
+
+#### Admin Test runs
+
+- Loaded browser diagnostics when the page displayed an active Test run.
+  [#406](https://github.com/klusik/PHP_gallery/issues/406)
+
+### Technical Details
+
+#### Backend
+
+- Released the anonymous PHP session on ordinary Smart Gallery revisits after
+  request state was ready to read. The first visit and requests that can update
+  language, presentation or sign-in state kept a writable session.
+- Used the existing Smart Gallery rules, source access, GPS and visibility
+  filters for the first-match query. Opening the map and running Admin
+  diagnostics still produced exact counts using the existing schema.
+
+#### Frontend and tests
+
+- Loaded `public/assets/gallery-modules/admin-test-run.js` from the shared
+  browser entry point when an active Admin Test run needed its probes.
+- Extended regression coverage for Smart Gallery sessions, CSRF, protected photo
+  access and Admin Test-run startup. Checked first-match map availability
+  against exact counts in disposable galleries with up to 10,000 photos.
+
+### User Impact
+
+#### For visitors
+
+- Reduced waiting when several tabs opened Smart Galleries with the same
+  anonymous session. Map availability continued to follow the visitor's access
+  to matching GPS photos.
+
+#### For administrators
+
+- Kept browser probes available during active Test runs. During routine
+  browsing, the gallery skipped the diagnostic script download.
+
 ## Version 1.4.0
 
 PHP Gallery 1.4.0 reduced the time spent preparing Smart Gallery pages and
