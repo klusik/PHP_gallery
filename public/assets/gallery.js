@@ -109,7 +109,6 @@ import { setupAdminCron } from './gallery-modules/admin-cron.js?v=20261023-cron-
 import { setupAdminMaintenanceCenter } from './gallery-modules/admin-maintenance-center.js?v=20261102-shared-switch-v1';
 import { setupAdminGalleryBenchmark } from './gallery-modules/admin-gallery-benchmark.js?v=20260820-benchmark-diagnostics-v4.2';
 import { setupAdminSearchDiagnostics } from './gallery-modules/admin-search-diagnostics.js?v=20260913-search-diagnostics-v1';
-import { setupAdminTestRun } from './gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3';
 import { setupPublicThumbnailRenderDiagnostics } from './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1';
 import { setupVoteForms } from './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6';
 import { setupViewerFavourites } from './gallery-modules/viewer-favourites.js?v=20260818-viewer-favourites-v1';
@@ -171,6 +170,23 @@ function setupProgressiveThumbnailRendererWhenPresent() {
 }
 
 /**
+ * Load the browser probe runner only on the server-rendered active Test run.
+ * The start form remains usable before the reload that introduces the panel.
+ *
+ * @returns {void} Starts optional probe setup after loading its module.
+ */
+function setupAdminTestRunWhenActive() {
+    if (!document.querySelector('[data-admin-test-run-panel][data-test-run-active="1"]')) {
+        return;
+    }
+    import('./gallery-modules/admin-test-run.js?v=20260821-admin-test-run-v1.1.3')
+        .then((module) => module.setupAdminTestRun())
+        .catch((error) => {
+            console.error('The active Admin Test run module could not start.', error);
+        });
+}
+
+/**
  * Boots all gallery browser features.
  *
  * Each setup function is null-safe. Pages that do not contain the corresponding
@@ -192,7 +208,7 @@ function bootGalleryBrowserFeatures() {
     setupAdminCron();
     setupAdminGalleryBenchmark();
     setupAdminSearchDiagnostics();
-    setupAdminTestRun();
+    setupAdminTestRunWhenActive();
     setupPublicThumbnailRenderDiagnostics();
     setupGalleryBulkDeleteConfirmation();
     setupImageBulkDeleteConfirmation();

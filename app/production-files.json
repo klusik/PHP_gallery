@@ -2885,6 +2885,7 @@
         "tests/site_url_reversible_test.php",
         "tests/smart_gallery_cycle_placement_test.php",
         "tests/smart_gallery_high_priority_hardening_test.php",
+        "tests/smart_gallery_map_scaling_test.php",
         "tests/smart_gallery_medium_hardening_test.php",
         "tests/smart_gallery_presentation_test.php",
         "tests/smart_gallery_public_contract_test.php",

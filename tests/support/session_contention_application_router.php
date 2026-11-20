@@ -4,7 +4,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/support/session_contention_application_router.php
  * Module Type: Test Fixture
- * Purpose: Exercise actual cms_run/login/suggestion lifecycle inside an owned application clone.
+ * Purpose: Exercise real session, login, suggestion and Smart Gallery routes in an owned clone.
  * Responsibilities:
  *   - Observe existing trace marks and session writes without replacing production handlers.
  *   - Keep the synthetic holder and private controls outside application routes.
@@ -124,6 +124,8 @@ namespace {
                         'admin_logout',
                         'admin_gallery_title_completion',
                         'admin_gallery_picker_search',
+                        'admin_smart_galleries',
+                        'smart_gallery',
                     ],
                     true,
                 ),

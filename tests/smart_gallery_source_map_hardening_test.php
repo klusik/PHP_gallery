@@ -132,7 +132,16 @@ smart_gallery_source_map_hardening_assert(
             'smart_gallery_model_query_map_images',
         )
         && !php_source_contains($diagnosticsSource, 'image_map_point('),
-    'Page-level map diagnostics must count canonical GPS rows without materializing marker DTOs.',
+    'Test-run map diagnostics must count canonical GPS rows without materializing marker DTOs.',
+);
+smart_gallery_source_map_hardening_assert(
+    php_source_contains(
+        $controller,
+        'else { $mapAvailable = smart_gallery_has_map_payload('
+        . '$gallery, true, $sourceGalleryId, ); }',
+    )
+        && php_source_contains($service, 'firstOnly: true'),
+    'Ordinary page rendering must check the same map scope with a first-match query.',
 );
 smart_gallery_source_map_hardening_assert(
     php_source_contains($controller, "'source_context' => [")

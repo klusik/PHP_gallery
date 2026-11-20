@@ -312,10 +312,13 @@ smart_gallery_public_contract_assert(
         '$mapDiagnostics = smart_gallery_map_diagnostics($gallery, true, $sourceGalleryId);',
     )
         && php_source_contains($controller,
-            '$mapAvailable = !empty($mapDiagnostics[\'available\']);',
+            '$mapAvailable = $mapDiagnostics[\'available\'];',
+        )
+        && php_source_contains($controller,
+            '$mapAvailable = smart_gallery_has_map_payload($gallery, true, $sourceGalleryId,);',
         )
         && php_source_contains($controller, '\'map_url\' => $mapUrl'),
-    'Public Smart Gallery page exposes a lazy aggregate-map action only when count-only authorized GPS diagnostics report points.',
+    'Public Smart Gallery page exposes the lazy map action only for an authorized GPS match.',
 );
 smart_gallery_public_contract_assert(
     php_source_contains($smartGalleryView, 'smart-gallery-map-button')

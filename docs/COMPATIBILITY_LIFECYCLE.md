@@ -2,6 +2,15 @@
 
 ## Gallery request observation and report metadata
 
+The public Smart Gallery controller owns the anonymous HTML session-release
+boundary. Only a returning anonymous navigation request with an existing CSRF
+token and public localization state may close early. First renders, explicit
+language and presentation handling, Admin/Viewer and other session state keep
+the writable lifecycle to preserve initialization, authority cleanup and late
+form or translation state. Both paths retain the PHP session and existing
+session handler contract. Keep the writable path for any unrecognized request
+or session state permanently. Target-host uptake and latency remain unknown.
+
 Owners: rewrite compatibility in `app/services/app_settings.php` and finalized
 Admin Test-run storage. Current copy, activation/recovery/rollback and standalone
 server-policy owners advertise pre-mutation invalidation. They discard marker

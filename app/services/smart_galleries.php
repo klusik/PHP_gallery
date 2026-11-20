@@ -2812,7 +2812,7 @@ function smart_gallery_map_query_context(
  * The diagnostic count uses the same canonical Smart Gallery predicate and inherited
  * source-gallery GPS policy as the real payload. It is therefore safe to expose to
  * the administrator test-run component as counts only, while avoiding thumbnail or
- * marker generation during the normal page render.
+ * marker generation while diagnosing the page render.
  *
  * @param array<string,scalar|null|array<array-key,scalar|null>> $gallery Smart Gallery definition used for rule evaluation and ordering.
  * @param bool $publicOnly Whether to apply public visibility and visitor-access filtering.
@@ -2871,11 +2871,18 @@ function smart_gallery_has_map_payload(
     bool $publicOnly,
     int $sourceGalleryId = 0,
 ): bool {
-    return !empty(smart_gallery_map_diagnostics(
+    $semantic = smart_gallery_map_query_context(
         $gallery,
         $publicOnly,
         $sourceGalleryId,
-    )['available']);
+    )['semantic'];
+    return $semantic !== null && \Gallery\Models\smart_gallery_model_count_map_images(
+        $semantic['rules'],
+        $semantic['accessible_gallery_ids'],
+        $publicOnly,
+        (bool) $semantic['allow_nsfw'],
+        firstOnly: true,
+    ) > 0;
 }
 
 /**

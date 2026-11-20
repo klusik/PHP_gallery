@@ -154,6 +154,16 @@ assert_admin_test_run_v11(
         ),
     'The PHP report, browser payload, and module cache-buster must identify Admin Test Run v1.1.3 consistently.',
 );
+assert_admin_test_run_v11(
+    str_contains(
+        $gallerySource,
+        'document.querySelector(\'[data-admin-test-run-panel][data-test-run-active="1"]\')',
+    )
+        && str_contains($gallerySource, "import('./gallery-modules/admin-test-run.js?")
+        && str_contains($gallerySource, 'module.setupAdminTestRun()')
+        && !str_contains($gallerySource, 'import { setupAdminTestRun }'),
+    'Gallery startup must load the diagnostic runner only for an active Test run.',
+);
 
 // Cache inventory must derive all family totals from one bounded traversal.
 $tempRoot =

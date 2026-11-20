@@ -1741,7 +1741,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.4.0. Release verification uses the
+This guide applies to PHP Gallery Version 1.4.1. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -10134,6 +10134,16 @@ FULL retains ordinary discovery and unchanged owners. The
 reused generic pool preserves serial barriers, extension requirements and child
 logs. Every selected child must have unambiguous PASS, zero exit and no timeout;
 SKIP, missing, duplicate or malformed child evidence cannot qualify the suite.
+The actual-route contention fixture exercises Smart HTML against its migrated
+clone. It checks that the first anonymous render persists its presentation CSRF
+token, preserves the token and source authorization after a lock-releasing
+revisit, and keeps explicit language and authenticated HTML sessions writable.
+The Smart map scaling child reuses the migrated fixture and inserts metadata
+in an isolated rollback-only transaction. It compares exact and first-match GPS
+reads and checks source counts, inherited tags, filename filtering and canonical
+pagination at 120, 500, 2,000 and 10,000 photos. Its five-execution medians are
+SQL-model observations with no test timing threshold. They exclude HTTP,
+full-page PHP rendering and physical thumbnails.
 
 `gallery_workflow_ci.php --gallery-request` reuses the existing disposable
 service hostname, restricted schema-local runner and root-password scrubbing,

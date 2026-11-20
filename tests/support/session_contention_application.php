@@ -20,7 +20,7 @@ require_once __DIR__ . '/session_contention_database.php';
 /**
  * Create an authenticated-loopback-capable handle without following redirects.
  * @param string $origin One owned literal-loopback worker.
- * @param string $path Allowlisted fixture or actual Admin route.
+ * @param string $path Allowlisted fixture, Admin or Smart Gallery route.
  * @param string $owner Private clone authority passed only in a header.
  * @param list<string> $cookies Private cURL cookie records.
  * @param ?array<string,string> $fields POST fields, or null for GET.
@@ -39,7 +39,10 @@ function application_handle(
     );
     check(
         preg_match(
-            '~^/(?:health|control|hold\?scenario=(?:held|released)-[0-2]|index\.php\?page=admin_(?:login|logout|gallery_title_completion|gallery_picker_search)(?:&[a-z_]+=[A-Za-z0-9_-]+)*)$~D',
+            '~^/(?:health|control|hold\?scenario=(?:held|released)-[0-2]'
+                . '|index\.php\?page=(?:smart_gallery|admin_(?:login|logout'
+                . '|gallery_title_completion|gallery_picker_search'
+                . '|smart_galleries))(?:&[a-z_]+=[A-Za-z0-9_-]+)*)$~D',
             $path,
         ) === 1,
         'Application request target refused.',
