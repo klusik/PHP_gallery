@@ -857,7 +857,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.4.1';
+const CMS_VERSION = '1.4.2';
 ```
 
 Update-related code uses:
@@ -1728,6 +1728,10 @@ and displays active-key rows only when present. Display starts with grid
 controls; EXIF/GPS, card format, count badge, lightbox, Picture Game, responsive
 thumbnail bounds and route-map text are in Advanced. Field names and server
 validation remain the existing save contract.
+
+The standalone editor and the drawer share the Gallery actions and gallery
+summary disclosures. On the standalone page, `side-panel.css` stacks the open
+disclosures above the sticky tabs and gallery settings Save bar.
 
 Dynamic tab binding in `public/assets/gallery-modules/admin-tabs.js` resolves
 panels within the current injected drawer body, not by global ID across a public

@@ -1,5 +1,31 @@
 # Patch notes
 
+## Version 1.4.2
+
+PHP Gallery 1.4.2 restored access to obscured controls in the standalone
+Admin gallery editor.
+
+### Highlights
+
+#### Gallery editor
+
+- Raised the **Gallery actions** menu and gallery summary popover above the
+  sticky tab strip and the gallery settings Save bar.
+
+### Technical Details
+
+#### Frontend
+
+- Applied the higher stacking order to open disclosures on the standalone
+  editor page in `public/assets/styles/side-panel.css`.
+
+### User Impact
+
+#### For administrators
+
+- Made actions such as **Upload files** and **View gallery** clickable where
+  the Save controls overlap the menu, and kept the gallery summary readable.
+
 ## Version 1.4.1
 
 PHP Gallery 1.4.1 reduced repeated work when visitors open Smart Galleries and
