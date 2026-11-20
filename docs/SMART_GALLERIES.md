@@ -269,9 +269,10 @@ GPS-image count, number of GPS-policy-eligible source galleries, point cap, and
 truncation state. These diagnostics contain counts and identifiers only; they do
 not persist GPS coordinates, filesystem paths, credentials, or marker payloads.
 
-The normal Smart Gallery page obtains map availability from the same count-only
-map diagnostic path. It does not materialize marker rows or popup thumbnails
-before the visitor opens the map. Admin Test Run's existing SQL fingerprint
+The normal Smart Gallery page checks for the first GPS match in the same
+authorized scope. Opening the map obtains the exact count and bounded markers.
+Admin Test Run also obtains the exact count for diagnostics while the map is
+closed. Its existing SQL fingerprint
 analysis remains the authoritative way to detect repeated-query/N+1 regressions.
 Expected source-gallery behavior is one request-cached physical-gallery
 inventory rather than a query per result image or map marker.

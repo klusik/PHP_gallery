@@ -41,6 +41,15 @@ unchanged.
 
 ## Gallery request read paths
 
+Smart Gallery HTML can release a previously established anonymous session
+after finding the published definition and restoring presentation state. The
+controller admits only ordinary GET navigation with a persisted CSRF token
+and recognized public localization keys. A different request mode, principal,
+remember credential, or session key keeps the writable lifecycle. The live
+source gallery and NSFW policies still run before content is selected. This
+boundary permits subsequent HTML requests to render concurrently without
+persisting any state from an unlocked session.
+
 Capability policy reads reuse the canonical registry's immutable structural
 declarations without translating Admin labels. The localized/default registry
 API still resolves current labels on every call. Configured values, domain
@@ -71,6 +80,12 @@ scope. This synchronous read proof is removed before presentation and must never
 cross mutations. It is separate from localized source-summary display filtering;
 other count callers retain the model COUNT. No persistent authorization or HTML
 cache is introduced.
+An ordinary Smart HTML render queries the first GPS match for its map action.
+The same rule, source, inherited GPS, visibility and NSFW scope still supplies
+exact counts for Admin Test runs and the actual map payload.
+The shared signed-in browser entrypoint loads Admin Test-run probes when the
+server renders the active diagnostic panel. The existing start form submits
+before the probe module is needed, so routine gallery renders omit that fetch.
 
 Music catalog/repository and attachment-usage readiness can prime snapshots for
 their own already-requested requirement maps. Normal three-state checks remain

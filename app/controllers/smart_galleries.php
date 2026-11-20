@@ -37,6 +37,8 @@ use function Gallery\Core\admin_mutation_public_gallery_context;
 use function Gallery\Core\admin_mutation_success_envelope;
 use function Gallery\Core\admin_wants_json;
 use function Gallery\Core\admin_anonymous_preview_active;
+use function Gallery\Core\admin_auth_remember_cookie_value;
+use function Gallery\Core\cms_request_trace_mark;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\csrf_token;
 use function Gallery\Core\current_user;
@@ -78,6 +80,7 @@ use function Gallery\Services\smart_gallery_lightbox_fetch_images;
 use function Gallery\Services\smart_gallery_image_position;
 use function Gallery\Services\smart_gallery_map_payload;
 use function Gallery\Services\smart_gallery_map_diagnostics;
+use function Gallery\Services\smart_gallery_has_map_payload;
 use function Gallery\Services\smart_gallery_source_summary;
 use function Gallery\Services\smart_gallery_source_galleries;
 use function Gallery\Services\smart_gallery_source_contexts;
@@ -128,6 +131,7 @@ use function Gallery\Services\viewer_favourites_for_image_ids;
 use function Gallery\Services\viewer_favourites_storage_available;
 use function Gallery\Services\viewer_collections_for_owner;
 use function Gallery\Services\viewer_collections_storage_available;
+use function Gallery\Services\viewer_remember_cookie_name;
 use function Gallery\Services\viewer_source_image_can_reference;
 use function Gallery\Services\admin_test_run_active;
 use function Gallery\Services\admin_test_run_mark;
@@ -1651,6 +1655,48 @@ function smart_gallery_render_image_cards(
 }
 
 /**
+ * Release the session for an ordinary anonymous Smart Gallery revisit.
+ *
+ * Request bootstrap has persisted localization and completed identity restoration.
+ * A previously persisted CSRF token can be read from the in-memory session by
+ * presentation sharing. New sessions, other request modes and unrecognized
+ * session state keep the writable lock for late updates and cleanups.
+ *
+ * @return void Leaves the session writable unless the revisit can only read it.
+ */
+function smart_gallery_release_anonymous_session(): void
+{
+    if (
+        request_method() !== 'GET'
+        || session_status() !== PHP_SESSION_ACTIVE
+        || !isset($_COOKIE[session_name()])
+        || !is_string($_SESSION['csrf_token'] ?? null)
+        || empty($_SESSION['csrf_token'])
+        || array_diff_key($_GET, [
+            'page' => true,
+            'slug' => true,
+            'photo_page' => true,
+            'source_gallery_id' => true,
+        ]) !== []
+        || array_diff_key($_SESSION, [
+            'csrf_token' => true,
+            'cms_translation_context' => true,
+            'cms_language' => true,
+            'cms_public_language_override' => true,
+        ]) !== []
+        || admin_auth_remember_cookie_value() !== ''
+        || isset($_COOKIE[viewer_remember_cookie_name()])
+        || current_user() !== null
+    ) {
+        return;
+    }
+
+    if (session_write_close()) {
+        cms_request_trace_mark('smart_gallery_anonymous_session_released');
+    }
+}
+
+/**
  * Render a published Smart Gallery using authorized media and prepared presentation state.
  * Prime request-local thumbnail ownership and metadata for the authorized page
  * before building individual image cards.
@@ -1687,6 +1733,7 @@ function cms_smart_gallery(): void
         \Gallery\Services\public_render_profile_set_gallery((int) $gallery['id']);
 
     if (!public_presentation_restore('smart', $gallery)) return;
+    smart_gallery_release_anonymous_session();
     $sourceGalleryId = max(0, (int) ($_GET['source_gallery_id'] ?? 0));
     try {
         if ($testRunActive)
@@ -1898,26 +1945,32 @@ function cms_smart_gallery(): void
         'point_limit' => SMART_GALLERY_MAP_MAX_POINTS,
         'truncated' => false,
     ];
+    $mapAvailable = false;
     if (!empty($presentation['map_enabled']) && $total > 0) {
-        if ($testRunActive)
+        if ($testRunActive) {
             admin_test_run_mark('smart_gallery_map_diagnostics_begin', [
                 'source_gallery_id' => $sourceGalleryId,
             ]);
-        $mapDiagnostics = smart_gallery_map_diagnostics(
-            $gallery,
-            true,
-            $sourceGalleryId,
-        );
-        if ($testRunActive) {
+            $mapDiagnostics = smart_gallery_map_diagnostics(
+                $gallery,
+                true,
+                $sourceGalleryId,
+            );
+            $mapAvailable = $mapDiagnostics['available'];
             admin_test_run_mark('smart_gallery_map_diagnostics_end', [
                 'gps_images' => (int) ($mapDiagnostics['gps_images'] ?? 0),
                 'map_source_galleries' => (int) (
                     $mapDiagnostics['map_source_gallery_count'] ?? 0
                 ),
             ]);
+        } else {
+            $mapAvailable = smart_gallery_has_map_payload(
+                $gallery,
+                true,
+                $sourceGalleryId,
+            );
         }
     }
-    $mapAvailable = !empty($mapDiagnostics['available']);
     $mapParams = ['id' => (int) $gallery['id']];
     if ($sourceGalleryId > 0)
         $mapParams['source_gallery_id'] = $sourceGalleryId;

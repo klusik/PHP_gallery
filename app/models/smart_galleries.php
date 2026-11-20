@@ -815,13 +815,15 @@ function smart_gallery_model_query_images(
  * @param list<int> $accessibleGalleryIds Allowed physical gallery identifiers.
  * @param bool $publicOnly Whether public image visibility is required.
  * @param bool $allowNsfw Whether NSFW rows may be included when publicOnly is true.
- * @return int Number of GPS-capable images in the canonical result scope.
+ * @param bool $firstOnly Stop after one match when the caller only needs availability.
+ * @return int Exact GPS row count by default, or zero/one for the first-match query.
  */
 function smart_gallery_model_count_map_images(
     array $rules,
     array $accessibleGalleryIds,
     bool $publicOnly,
     bool $allowNsfw,
+    bool $firstOnly = false,
 ): int {
     $query = smart_gallery_model_result_query(
         $rules,
@@ -831,10 +833,14 @@ function smart_gallery_model_count_map_images(
         'capture_date',
         'desc',
     );
+    $projection = $firstOnly ? '1' : 'COUNT(*)';
     $stmt = db()->prepare(
-        'SELECT COUNT(*) FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
+        'SELECT ' . $projection
+            . ' FROM images i INNER JOIN galleries g ON g.id=i.gallery_id WHERE '
             . $query['where']
-            . ' AND i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL',
+            . ' AND i.gps_lat IS NOT NULL AND i.gps_lng IS NOT NULL'
+            // One qualifying row is a complete existence proof for the action.
+            . ($firstOnly ? ' LIMIT 1' : ''),
     );
     $stmt->execute($query['params']);
     return (int) $stmt->fetchColumn();

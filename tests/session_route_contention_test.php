@@ -4,7 +4,7 @@
  * Repository: https://github.com/klusik/PHP_gallery
  * File: tests/session_route_contention_test.php
  * Module Type: Regression Test
- * Purpose: Measure real authenticated title-route session contention in a disposable application.
+ * Purpose: Measure real title-route contention and cover Smart Gallery sessions in a disposable application.
  * Responsibilities:
  *   - Exercise actual login/CSRF, cms_run, remember restoration, picker diagnostics and logout.
  *   - Separate worker queues and synthetic slow work from product-route evidence.
@@ -66,6 +66,28 @@ function session_route_cookie_filter(
         }
     }
     return $result;
+}
+
+/**
+ * Extract only observable gallery membership and the private CSRF form value.
+ * @param string $html Actual Smart Gallery response rendered by the fixture.
+ * @return array{image_count:int,csrf:string} Public photo count and in-memory token.
+ */
+function session_route_smart_document(string $html): array
+{
+    $document = new DOMDocument();
+    check(@$document->loadHTML($html), 'Smart Gallery HTML is unavailable.');
+    $xpath = new DOMXPath($document);
+    $photos = $xpath->query('//*[@data-lightbox-image and @data-image-id]');
+    $share = $xpath->query('//*[@data-presentation-csrf]')->item(0);
+    check(
+        $photos instanceof DOMNodeList && $share instanceof DOMElement,
+        'Smart Gallery photos or presentation CSRF affordance missing.',
+    );
+    return [
+        'image_count' => $photos->length,
+        'csrf' => $share->getAttribute('data-presentation-csrf'),
+    ];
 }
 
 $required =
@@ -279,6 +301,110 @@ try {
         ),
         'Control reader must use an independently authenticated session.',
     );
+    $stage = 'real Smart Gallery session and access boundaries';
+    $smartRules = [
+        'version' => 1,
+        'root' => [
+            'type' => 'group',
+            'operator' => 'OR',
+            'children' => array_map(
+                static fn(int $id): array => [
+                    'type' => 'condition',
+                    'field' => 'gallery',
+                    'operator' => 'equals',
+                    'value' => $id,
+                ],
+                [(int) $seed['root_id'], (int) $seed['protected_id']],
+            ),
+        ],
+    ];
+    $created = application_request(
+        $origin,
+        '/index.php?page=admin_smart_galleries&ajax=1',
+        $fixture->token,
+        $jars['shared'],
+        [
+            'action' => 'save',
+            'csrf_token' => $tokens['shared'],
+            'title' => 'Session regression',
+            'slug' => 'session-regression',
+            'enabled' => '1',
+            'visibility' => 'public',
+            'placement_mode' => 'unlisted',
+            'presentation_override_enabled' => '1',
+            'presentation_lightbox_enabled' => '1',
+            'presentation_slideshow_enabled' => '1',
+            'rules_json' => json_encode($smartRules, JSON_THROW_ON_ERROR),
+        ],
+    );
+    check(
+        $created['status'] === 200 && ($created['json']['ok'] ?? false),
+        'Disposable Smart Gallery creation failed.',
+    );
+    $smartRoute = '/index.php?page=smart_gallery&slug=session-regression';
+    // The earlier denied Admin route still persisted its Admin locale keys.
+    // Start the ordinary visitor case from a separate, cookieless client.
+    $smartAnonymous = [];
+    $fresh = application_request(
+        $origin, $smartRoute, $fixture->token, $smartAnonymous,
+    );
+    $freshDocument = session_route_smart_document($fresh['body']);
+    check(
+        $fresh['status'] === 200
+            && ($fresh['headers']['x-fixture-session-active'] ?? '') === '1'
+            && str_contains(
+                $fresh['headers']['x-fixture-late-session-keys'] ?? '',
+                'csrf_token',
+            )
+            && $freshDocument['csrf'] !== ''
+            // The disposable seed has two public photos and two locked photos.
+            && $freshDocument['image_count'] === 2,
+        'First anonymous Smart render must persist CSRF and exclude locked photos.',
+    );
+    $revisit = application_request(
+        $origin, $smartRoute, $fixture->token, $smartAnonymous,
+    );
+    check(
+        $revisit['status'] === 200
+            && ($revisit['headers']['x-fixture-session-active'] ?? '') === '0',
+        'An ordinary revisit must release its writable lock before render.',
+    );
+    check(
+        ($revisit['headers']['x-fixture-late-session-keys'] ?? '') === ''
+            && ($revisit['headers']['x-fixture-other-session-changes'] ?? '') === '0'
+            && session_route_smart_document($revisit['body']) === $freshDocument,
+        'Revisit must preserve existing CSRF and access without late writes.',
+    );
+    $languageRead = application_request(
+        $origin, $smartRoute . '&lang=cs', $fixture->token, $smartAnonymous,
+    );
+    check(
+        $languageRead['status'] === 200
+            && ($languageRead['headers']['x-fixture-session-active'] ?? '') === '1',
+        'Explicit language selection must keep the writable Smart session.',
+    );
+    application_request($origin, $smartRoute, $fixture->token, $anonymous);
+    $adminLocaleRevisit = application_request(
+        $origin, $smartRoute, $fixture->token, $anonymous,
+    );
+    check(
+        $adminLocaleRevisit['status'] === 200
+            && ($adminLocaleRevisit['headers']['x-fixture-session-active'] ?? '') === '1',
+        'Pre-existing Admin locale state must retain the writable Smart session.',
+    );
+    $adminSmart = application_request(
+        $origin, $smartRoute, $fixture->token, $jars['shared'],
+    );
+    check(
+        $adminSmart['status'] === 200
+            && ($adminSmart['headers']['x-fixture-session-active'] ?? '') === '1'
+            && hash_equals(
+                $tokens['shared'],
+                session_route_smart_document($adminSmart['body'])['csrf'],
+            ),
+        'Authenticated Smart HTML must preserve the writable admin session.',
+    );
+    echo "PASS real Smart Gallery session, CSRF and anonymous access boundaries\n";
     $stage = 'actual title route contention';
     $samples = [];
     for ($sample = 0; $sample < SAMPLE_COUNT; $sample++) {

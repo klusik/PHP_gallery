@@ -10134,6 +10134,16 @@ FULL retains ordinary discovery and unchanged owners. The
 reused generic pool preserves serial barriers, extension requirements and child
 logs. Every selected child must have unambiguous PASS, zero exit and no timeout;
 SKIP, missing, duplicate or malformed child evidence cannot qualify the suite.
+The actual-route contention fixture exercises Smart HTML against its migrated
+clone. It checks that the first anonymous render persists its presentation CSRF
+token, preserves the token and source authorization after a lock-releasing
+revisit, and keeps explicit language and authenticated HTML sessions writable.
+The Smart map scaling child reuses the migrated fixture and inserts metadata
+in an isolated rollback-only transaction. It compares exact and first-match GPS
+reads and checks source counts, inherited tags, filename filtering and canonical
+pagination at 120, 500, 2,000 and 10,000 photos. Its five-execution medians are
+SQL-model observations with no test timing threshold. They exclude HTTP,
+full-page PHP rendering and physical thumbnails.
 
 `gallery_workflow_ci.php --gallery-request` reuses the existing disposable
 service hostname, restricted schema-local runner and root-password scrubbing,
