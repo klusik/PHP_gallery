@@ -419,9 +419,10 @@ source provenance, account filtering, ambiguity and deliberate catalog updates.
 
 Watcher and Import show `Gallery: <title>` using the current display title from
 the authenticated inventory response, with long names wrapping inside their
-row. The gallery title owns its sanitized physical folder name: saving a title
-change also renames the folder and updates descendant paths. Inventory keeps
-the human-readable title and sanitized storage path distinct as values.
+row. The server derives a physical folder name from the title and may add a
+number such as `-2` when a sibling exists. Galleries keep their display title
+when created or renamed this way. A physical rename updates descendant paths.
+Inventory carries the display title and the stored folder path separately.
 Older APIs without `gallery_title` display the final folder segment.
 Hover over the name to see the complete physical folder
 hierarchy on separate indented lines, from the root to the selected gallery.

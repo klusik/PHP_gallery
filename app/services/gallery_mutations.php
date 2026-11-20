@@ -1924,6 +1924,8 @@ function gallery_image_belongs_to_gallery_branch(
  *     hierarchy maintenance.
  * @param ?string $title New source title to persist with the root's new path;
  *     null preserves the existing title.
+ * @param bool $numberTitleCollision Whether an explicit editor save may use
+ *     a numbered sibling when another catalog gallery owns the desired leaf.
  * @return array{moved:bool, from:string, to:string, galleries:int} Relative
  *     source/target paths and rewritten row count; moved=false is a no-op.
  */
@@ -1933,6 +1935,7 @@ function move_gallery_folder_to_parent(
     ?string $folderName = null,
     bool $smartGalleryGraphPrevalidated = false,
     ?string $title = null,
+    bool $numberTitleCollision = false,
 ): array {
     $writerLock = gallery_edit_writer_begin();
     try {
@@ -1942,6 +1945,7 @@ function move_gallery_folder_to_parent(
             $folderName,
             $smartGalleryGraphPrevalidated,
             $title,
+            numberTitleCollision: $numberTitleCollision,
         );
     } finally {
         gallery_edit_writer_end($writerLock);
@@ -1961,6 +1965,8 @@ function move_gallery_folder_to_parent(
  *     null retains it.
  * @param bool $deferCompletion Whether the caller owns an outer transaction
  *     and will run gallery_folder_move_complete() only after its commit.
+ * @param bool $numberTitleCollision Whether to allocate a numbered leaf on a
+ *     registered gallery collision. Exact-path operations keep this false.
  * @return array{moved:bool, from:string, to:string, galleries:int} Physical
  *     move result and affected hierarchy count.
  */
@@ -1971,6 +1977,7 @@ function move_gallery_folder_to_parent_owned(
     bool $smartGalleryGraphPrevalidated = false,
     ?string $title = null,
     bool $deferCompletion = false,
+    bool $numberTitleCollision = false,
 ): array {
     mutation_schema_assert_available(
         gallery_move_schema_status(),
@@ -2035,9 +2042,13 @@ function move_gallery_folder_to_parent_owned(
 
     // $currentFolderName stores an intermediate value used by the surrounding gallery workflow.
     $currentFolderName = gallery_folder_name_from_path($oldPath);
+    $parentFolder = $parent
+        ? normalize_relative_path((string) $parent['folder_path']) : '.';
     // $targetFolderName stores an intermediate value used by the surrounding gallery workflow.
     $targetFolderName = $title !== null
-        ? gallery_folder_segment($title)
+        ? ($numberTitleCollision && dirname($oldPath) !== $parentFolder
+            ? gallery_folder_segment($title)
+            : gallery_folder_name_for_title($oldPath, $title))
         : ($folderName !== null && trim($folderName) !== ''
             ? gallery_folder_segment($folderName)
             : $currentFolderName);
@@ -2058,19 +2069,13 @@ function move_gallery_folder_to_parent_owned(
             'galleries' => 0,
         ];
     }
-    if (find_gallery_by_folder_path($newPath)) {
-        throw new RuntimeException(
-            'Another gallery already uses the destination folder path.',
-        );
-    }
-    // $newAbs stores an intermediate value used by the surrounding gallery workflow.
-    $newAbs = gallery_target_abs_path($newPath);
-    if (file_exists($newAbs) && (
-        is_link($newAbs) || realpath($oldAbs) !== realpath($newAbs)
-    )) {
-        throw new RuntimeException(
-            'Destination folder already exists on disk.',
-        );
+    if (find_gallery_by_folder_path($newPath, true)) {
+        if (!$numberTitleCollision || $title === null) {
+            throw new RuntimeException(
+                'Another gallery already uses the destination folder path.',
+            );
+        }
+        $newPath = gallery_next_numbered_folder_path($newPath);
     }
 
     // $rows stores an intermediate value used by the surrounding gallery workflow.
@@ -2128,6 +2133,12 @@ function move_gallery_folder_to_parent_owned(
         }
     }
 
+    // Verify the selected path again just before the physical rename.
+    $newAbs = gallery_target_abs_path($newPath);
+    if (is_link($newAbs) || (file_exists($newAbs)
+        && realpath($oldAbs) !== realpath($newAbs))) {
+        throw new RuntimeException('Destination folder already exists on disk.');
+    }
     // $moved stores whether the filesystem rename must be rolled back after a persistence failure.
     $moved = false;
     try {
@@ -2442,9 +2453,8 @@ function gallery_normalize_imported_folders(array $galleryIds): array
         $title = gallery_disk_source_title(
             (string) $row['folder_path'], (string) $row['title'],
         );
-        if (gallery_folder_segment($title) !== gallery_folder_name_from_path(
-            (string) $row['folder_path'],
-        )) {
+        $path = (string) $row['folder_path'];
+        if (gallery_folder_name_for_title($path, $title) !== gallery_folder_name_from_path($path)) {
             $result = move_gallery_folder_to_parent(
                 (int) $row['id'],
                 isset($row['parent_id']) ? (int) $row['parent_id'] : null,
@@ -2462,7 +2472,7 @@ function gallery_normalize_imported_folders(array $galleryIds): array
  * Refuse canonical disk-name collisions before importing any selected row.
  * @param list<string> $folderPaths Expanded physical import scope.
  * @return void Throws for empty leaves, competing targets or occupied paths;
- *     never adds numeric suffixes that would break the disk/title invariant.
+ *     leaves existing numbered identities in place and does not allocate new ones.
  */
 function gallery_import_assert_canonical_targets(array $folderPaths): void
 {

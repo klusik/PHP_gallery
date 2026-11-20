@@ -830,13 +830,17 @@ function admin_new_gallery_input_from_post(): array
 /**
  * Create a gallery through the shared admin create implementation.
  *
- * @param array<string, mixed> $input Normalized create-gallery form values.
+ * @param array{title?:string,parent_id?:int|string,folder_name?:string,
+ *     description?:string,visibility?:string,...} $input Submitted create-gallery
+ *     form values prepared by the request owner.
  * @return array{id:int|string,folder_path:string} Persisted gallery data created from input.
  */
 function admin_create_gallery_from_input(array $input): array
 {
     // $gallery stores the persisted gallery returned by the service layer.
-    $gallery = create_empty_gallery(admin_new_gallery_input_from_array($input));
+    $gallery = create_empty_gallery(admin_new_gallery_input_from_array($input) + [
+        'number_title_collision' => true,
+    ]);
     admin_log_event(
         'info',
         'gallery.folder_created',

@@ -626,6 +626,17 @@ namespace {
             === $names['groups']['g1']['changes']
             && serialize($legacy) === $legacyBefore,
             'Older completed reports gain the same snapshot proposal without rerunning analysis.');
+        $GLOBALS['consistency_galleries'][0]['folder_path'] = 'disk-name-2';
+        $names = \Gallery\Services\gallery_consistency_start('names');
+        \Gallery\Services\gallery_consistency_step($names);
+        consistency_check(!isset($names['groups']['g1']),
+            'A canonical numbered leaf must not need an automatic name repair.');
+        consistency_check(\Gallery\Services\gallery_disk_source_title(
+            'disk-name-12', 'Disk Name',
+        ) === 'Disk Name' && \Gallery\Services\gallery_disk_source_title(
+            'disk-name-02', 'Disk Name',
+        ) === 'disk-name-02',
+            'Discovery must preserve canonical numbering and require decimal spelling.');
         $GLOBALS['consistency_galleries'][0]['title'] = 'Wrong title';
         $GLOBALS['consistency_galleries'][0]['folder_path'] = 'disk-name';
         $GLOBALS['consistency_language_reads'] = [];

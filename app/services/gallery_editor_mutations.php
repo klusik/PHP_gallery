@@ -39,6 +39,7 @@ namespace Gallery\Services;
 require_once __DIR__ . '/gallery_edit_concurrency.php';
 require_once __DIR__ . '/gallery_paths.php';
 
+use function Gallery\Core\append_numbered_slug_suffix;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\slugify;
 use function Gallery\Models\gallery_model_clear_background_sources;
@@ -67,7 +68,7 @@ function gallery_editor_unique_slug(
             ? $collision($candidate)
             : gallery_model_slug_exists($candidate, $excludeGalleryId)
     ) {
-        $candidate = $base . '-' . $counter;
+        $candidate = append_numbered_slug_suffix($base, (string) $counter);
         $counter++;
     }
     return $candidate;
