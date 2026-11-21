@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.4.3}
+\newcommand{\version}{1.5.0}
 \newcommand{\manualdate}{21~november~2026}
 
 \hypersetup{
@@ -4516,9 +4516,15 @@ Slutrapporten ersätter förslagen med antal per galleri. Öppna ett galleri fö
 att hämta ändrade namn i sidor med 50 poster. Rapporter tillhör administratörens
 aktuella inloggningssession och upphör efter 24 timmar. Ett detaljlagringsfel
 återställer inte bekräftade namnbyten.
+Resultatmeddelandet räknar matchande namn och filnamnskonflikter separat
+från övriga överhoppade rader.
+Förhandsvisningen räknar ett namn med ett kollisionssuffix som
+\codeword{\_2} som en matchning om det följer aktuellt mönster och ordning.
 
-Standardmönstret är \codeword{\{gallery_path\}_\{seq4\}}. Ett eget mönster kan
-använda \codeword{\{gallery_path\}}, \codeword{\{gallery_title\}},
+Standardmönstret är \codeword{\{gallery_context\}_\{seq4\}}. Gallerisammanhanget
+använder de överordnade mappnamnen och galleriets aktuella titel. Ett eget
+mönster kan använda \codeword{\{gallery_context\}}, \codeword{\{gallery_path\}},
+\codeword{\{gallery_title\}},
 \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}},
 \codeword{\{image_id\}} och sekvensplatshållare från \codeword{\{seq\}} till
 \codeword{\{seq5\}}. De numrerade sekvensvarianterna fyller ut till två, tre,
@@ -8407,170 +8413,36 @@ ersättningen och en migreringsstödd uppstartsväg kan reparera ett redan
 aktiverat äldre träd. Avstämningen är begränsad till kända policysökvägar och
 ändrar inte gallerimedier eller användarkonfiguration.
 
-Före aktivering kan administratören avbryta eller försöka igen med ett
-återställningsbart jobb. Efter aktivering kan administrationens
-återställningsåtgärd återställa hanterade programfiler från den sparade
-återställningsögonblicksbilden, men filåterställning gör inte databasmigreringar
-ogjorda. Återställning av stabil utgåva, ren ominstallation och
-beta-installation förblir återupptagningsbara jobb med egen paketvalidering. Den
-fristående nödvägen \filepath{reset.php} är ett separat återställningsverktyg
-för att återgå till den stabila grenen när den vanliga administrationsrutten
-inte kan användas; den kräver ändå samma omsorgsfulla säkerhetskopiering och
-integritetsgranskning.
+Ett förberett jobb kan avbrytas före det första filbytet. Filer byts därefter
+en i taget i den befintliga installationen. Uppdateraren verifierar hela den
+tillfälliga filen före bytet. Vanliga anrop fortsätter. Uppdateringsarbetare
+körs i turordning, och ett fortsatt jobb hoppar över filer med rätt innehåll.
 
-Under den korta kritiska aktiveringsfasen förhindrar en tidig beroendefri
-körningsspärr att nya vanliga begäranden läser in ett delvis ersatt program.
-Sådana begäranden får ett privat svar \codeword{503 Service Unavailable} som
-inte kan cachelagras tills aktiveringens slutförande har registrerats
-beständigt. Den autentiserade vägen för uppdateringsåterställning och status
-förblir tillgänglig, så att en avbruten aktivering kan fortsätta. Skadat eller
-ofullständigt spärrtillstånd nekar åtkomst av säkerhetsskäl i stället för att
-framställa installationen som välfungerande.
+Äldre \codeword{maintenance.lock} och privata aktiveringsmarkörer påverkar
+inte offentliga anrop. Efter ett lyckat svar tas den gamla filen bort om
+webbhotellet tillåter det. Om Gallery~1.4.3 har fastnat i underhållsläget, packa upp
+hela den verifierade \filepath{production.zip} för Gallery~1.5.0 över
+installationen. Bevara konfiguration, media, data, jobb och säkerhetskopior.
+Undvik att skriva samtidigt som en uppdateringsarbetare. Övergången innehåller
+inga nya databasmigreringar. Använd \ui{Återställ uppdateraren / slutför FTP}
+för väntande migreringar eller ett uttryckligt slutförande. Bevisen bevaras
+och gamla markörer kan tas bort. \ui{Installera stabil} kan ersätta ett
+stoppat jobb eller installera om samma version.
 
-Samma tidiga körningsgräns omvandlar ohanterade och fångstbara fatala PHP-fel
-till avgränsade \codeword{500}-svar när PHP fortfarande kan styra svaret.
-Produktionsmiljöer måste hålla \codeword{display\_errors} avstängt; annars kan
-PHP-miljön själv skriva ut varnings- eller fatalfeldetaljer innan programnivåns
-hantering kan formatera ett säkert svar.
+En paus gäller från nästa säkra kontrollpunkt. Fortsättning behåller samma
+paket. Tillfälliga fel kan provas igen efter 60, 120 och~240 sekunder. Ett jobb
+utan filändringar kan frigöras efter tio minuter. När en fil har ändrats,
+slutför uppdateringen med samma paket eller en verifierad kompatibel version.
+Originalfilerna finns kvar för samordnad reparation. Migreringar körs framåt
+och måste tåla en ny körning efter avbrott.
 
-\important{Gör en samordnad säkerhetskopia före en programuppdatering. Behåll
-säkerhetskopian tills körningskontroller, migreringar, offentliga gallerier,
-skyddad åtkomst, uppladdningar och administrationsåtgärder har verifierats.}
+\important{Behåll en konsekvent säkerhetskopia av databasen och filerna.
+Kontrollera gallerier, åtkomst, uppladdningar och Admin efter ett filbyte.
+Gammal och ny kod samt schemat måste vara kompatibla under uppdateringen.}
 
-Före aktivering kräver uppdaterarens arkivkontroll också hela den nya
-begärandekärnan och dess granskade modulplan. Ett ofullständigt arkiv avvisas
-medan förberedda filer ligger utanför den aktiva installationen. Behåll alla
-levererade körmiljöfiler tillsammans vid manuell distribution; att bara ersätta
-bootstrap skulle lämna programmet ofullständigt.
-
-Uppdateringsaktivering använder den granskade uppdaterardelmängden av
-produktionslistan. Inkommande listor anger WinApp-källor separat så att äldre
-installerade uppdaterare kan kontrollera utgåvan innan dess läskod installeras.
-CMS-uppdateraren installerar inte dessa källor. Äldre källarkiv utan lista
-behåller en begränsad kompatibilitetsväg utifrån sitt ägda manifest; en
-befintlig ogiltig lista nekas. Rensning av föråldrade filer kräver tidigare
-ägarbevis och bevarar okända lokala filer. Filåterställning använder det
-servergenererade säkerhetskopieindexet och nekar oindexerade filer samt sökvägar
-som omdirigeras via symboliska länkar eller Windows-junctions. Dessa filskydd
-återställer inte databasmigreringar.
-
-Misslyckade jobb från automatik, Admin/API och~Advanced-commit-installationer
-får tre återförsök vid tillfälliga fel efter 60, 120 och~240 sekunder.
-Odefinierade funktioner och~deterministiska integritetsfel upprepar inte
-samma trasiga paket. Nya jobb binder en verifierad oföränderlig GitHub-commit
-men manifestkontrollen är bevarad och avstängd tills den uttryckligen aktiveras.
-Det korta steget heter \ui{Preparing package}; kopiering och aktivering
-kontrollerar de överförda byten. Övriga resurser
-och~säkerhetskopior bevarar exakta byte med råa SHA-256-identiteter.
-Tidigast 600 sekunder
-efter första felet frigör ett orört jobb före aktivering sin aktiva plats.
-Ett säkert fel efter aktivering skapar ett separat återställningsjobb för
-faktiska tidigare programfiler och~kanalinställningar, även borttagna filer
-och~borttagning av nyskapade sökvägar. Båda identiteter, arkiv, säkerhetskopior
-och~diagnoser bevaras. Ett misslyckat återställningsjobb skapar inget nytt.
-
-Den enda offentliga underhållsbrytaren är \codeword{maintenance.lock}
-i installationens rot. Även en manuellt skapad tom fil aktiverar underhåll;
-när den tas bort slutar manuellt underhåll. Jobb och återställningsbevis ensamma
-stänger inte webbplatsen. Granska jobbet före borttagning av dess markör efter
-ett avbrutet skrivsteg. Äldre markörer importeras före åtkomst och deras exakta
-byte bevaras privat. Markören ingår inte i paket eller filåterställning.
-Bekräftad körmiljö avslutar det isolerade automatiska återställningsfönstret.
-Programfiler uppdateras fortfarande på sin vanliga plats.
-
-Filåterställning kräver verifierade säkerhetskopior, matchande faktiskt schema
-och~migreringshistorik samt bevis på att migreringar inte haft effekter.
-Delade körningslås avslutas före aktivering. Spärren behålls genom migreringar
-och nödvändigt slutförande. Därefter bekräftas en användbar körmiljö och
-webbplatsen öppnas före fysisk rensning, som kan vänta eller pausas under drift.
-Vanlig körning under observationsfönstret gör återställning
-osäker även med oförändrat schema. Påbörjade overifierade migreringar,
-okänd databas, saknade bevis och~äldre paket utan protokollet förblir
-misslyckade med reparationsanvisningar. Databasmigreringar och~programdata
-återställs aldrig. Avstängd automatik och~beta förhindrar nya automatiska
-installationer; avstängd capability stoppar installeraren. Efter säker
-återställning kan upptäckt hoppa över kända felversioner och~installera
-en nyare stabil version. Fel bakom stängd spärr behöver hostingens CLI-cron
-eller en autentiserad Admin-begäran; nekade besökare kör inte schemaläggaren.
-Ingen worker väntar passivt under återförsöksfördröjningen.
-
-Utförda migreringar förblir historik när deras filer avsiktligt har tagits bort
-ur det installerade manifestet. Databasbevis i format~2 bevarar hela historiken
-med tidsstämplar och det faktiska schemat; historisk frånvaro anges
-uttryckligen.
-Saknade deklarerade filer eller ändrade byte nekar fortfarande aktivering.
-Gamla sparade bevis behåller sina ursprungliga strikta jämförelser.
-En gammal kontrollpunkt \codeword{activate} bevisar inte ensam delvis
-aktivering: frigivning av pekaren kräver oförändrade original, verifierade
-säkerhetskopior och fortsatt frånvaro av nya sökvägar under start-, worker-
-och exklusivt körningslås. Admin-begäran släpper sitt eget läslås först efter
-autentisering och CSRF. Integritetsförloppet visar filverifieringens markör;
-varje nytt steg nollställer tidigare räknare. Kompakta förloppsytor förblir
-synkroniserade på dator och smal skärm.
-Den normala åtgärden är fortfarande Uppdatera med automatisk fortsättning.
-Bearbetningskörningar räknar korta anrop inklusive väntan; Försök fortsätta
-behåller samma jobb och räknare. Väntan på andra anrop visas uttryckligen och
-använder långsammare avfrågning. Ohanterade lokala PHP-filer bevaras.
-Privat worker-diagnostik anger steg, referens, undantagsklass, ägarfil och rad,
-säkerhetsbevis och vid behov validerad migreringsidentitet. Om Admin-loggen
-inte är tillgänglig används PHP:s fellogg utan att arbetet blockeras.
-
-En äldre fastnad uppdaterare får inte mekanismen genom enbart publicering.
-Stoppa workers i underhållsläge, bevara samordnade säkerhetskopior och~alla
-felbevis, fastställ faktisk databaskompatibilitet, installera hela den
-verifierade
-kompatibla korrigerade versionen och~kör framåtmigreringar. Först efter
-verifierad
-reparation får administratören arkivera den matchande gamla aktiva pekaren.
-Byt inte bara bootstrap, ändra jobbets mål/paket, ta bort en aktiv
-aktiveringsspärr eller återställ enbart programfiler. Se
-\filepath{docs/AUTOUPDATE.md} för fullständig procedur och~begränsningar.
-
-Förfarandet i \filepath{docs/AUTOUPDATE.md} omfattar den rapporterade
-installationen \codeword{c2e2bc77} med dess äldre låsta jobb: efter separat
-godkännande distribueras hela den kompatibla korrigerade utgåvan i underhåll,
-det gamla jobbet bevaras och dess ägare stäms av först efter verifierad
-framåtreparation. Försök igen ändrar aldrig jobbets mål.
-Vid överskrivande FTP-distribution laddas hela utgåvan upp utan att gamla filer,
-jobb eller säkerhetskopior raderas. Välj \ui{Återställ uppdateraren / slutför
-FTP}
-på jobbkortet eller i Advanced tools. Föregående jobb stoppas vid en säker
-kontrollpunkt; deras poster och spärrbevis bevaras och ett nytt framåtjobb
-börjar.
-\ui{Installera stable} är alltid tillgängligt, hämtar senaste stabila grenen och
-skriver över alla programfiler i paketet, även vid samma version. Det ersätter
-också fastnade eller pausade jobb utan FTP. Båda åtgärderna bevarar
-konfiguration,
-media, extra lokala filer och säkerhetskopior. Innehållsskillnader loggas som
-varningar med relativ filidentitet och förväntad/faktisk hash när den valfria
-kontrollen är på. Dess genomgångar är nu avstängda för alla installationsjobb.
-Säkra arkivsökvägar, nödvändiga filer
-och körningslås gäller fortfarande. När den valfria kontrollen är på ger även
-ett saknat, oläsbart eller inaktuellt
-manifest ger bara en varning och stoppar ingen av återställningsåtgärderna.
-Återställning stänger först tillträdet för nya besöksbegäranden, så fortsatt
-trafik inte hindrar starten. Aktivering och migreringar väntar sedan på redan
-pågående begäranden. Väntan på övertagande visas och fortsätter
-automatiskt. Även automatiska uppdateringar stänger tillträdet innan de väntar
-på befintliga läsare, så nya besökare inte fördröjer aktiveringen obegränsat.
-Med stängd spärr behåller privata arbetare en efterföljare medan gamla läsare
-avslutas; ett nytt besök behövs inte. Överlämningen väntar en sekund efter att
-låsen släppts. Administratörens konfigurerade sessionsnamn bevaras även efter
-sessionsstängning för bakgrundsarbete. Startloggen anger målversionen; en
-separat
-sluthändelse anger föregående och installerad version först efter beständigt
-slut.
-Under aktiveringen ser besökare en kompakt engelsk underhållssida i stället
-för ett enkelt servermeddelande. Den aktuella sidan laddas om var tredje sekund,
-även utan JavaScript, och erbjuder \ui{Try again}. Den fristående ljusa eller
-mörka utformningen behöver varken databas eller programfiler. HTTP 503 behålls;
-POST- och maskinsvar upprepas aldrig automatiskt.
-FTP-försök igen granskar installerade filer i stället för att hämta.
-Databasmigreringar körs framåt; databasändringar återställs aldrig.
-\ui{Pausa} gäller nästa säkra
-kontrollpunkt i varje steg; \ui{Fortsätt uppdateringen} återupptar samma jobb.
-Delvis aktivering förblir spärrad. Äldre stödda utgåve-commits kan också väljas;
-migreringar återställs aldrig och en kompatibel databasbackup kan behövas.
+Den tidiga körmiljön ger fortfarande ett säkert svar vid fatala PHP-fel.
+Håll \codeword{display\_errors} avstängt i produktion. Se
+\filepath{docs/AUTOUPDATE.md} för installation och återställning.
 
 \subsection{Integritetsmanifest}
 \index{k00144@kärnmanifest}

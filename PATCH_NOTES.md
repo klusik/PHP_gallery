@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 1.5.0
+
+PHP Gallery 1.5.0 keeps public pages available during updates and improves
+Admin filename planning for images that already match the current pattern.
+
+### Highlights
+
+#### Updates during normal browsing
+
+- Kept gallery pages, photos and API responses available while the updater
+  replaces files, applies migrations or waits to retry an interrupted job.
+- Restored normal public routing when the complete production ZIP is extracted
+  over a compatible older installation, even if its updater stopped during
+  migration. A successful request removes the obsolete `maintenance.lock`
+  when hosting permissions allow.
+
+#### Media Renamer
+
+- Kept filenames with valid numbered suffixes out of rename proposals when
+  they match the current pattern and sequence position.
+- Showed matching filenames and filename conflicts as separate counts.
+
+### Technical Details
+
+#### Backend
+
+- Published verified staged files individually using atomic replacement.
+  The worker kept its existing serialization and skipped destinations with
+  the expected bytes when replaying the same pinned package.
+- Kept original file backups and update history. Recovery after a file write
+  completes forward with the pinned package or a compatible replacement.
+- Retained existing migration replay and schema checks. This release adds no
+  database migrations.
+
+#### Tests
+
+- Checked HTTP responses during a real file replacement, after terminating
+  the installer, during a migration failure and after retrying the same job.
+- Covered ZIP extraction over a failed migration, cleanup of the old marker
+  and preservation of local files and private update records.
+- Checked numbered filename handling for indexed and physical rename plans.
+
+### User Impact
+
+#### For visitors
+
+- Continued serving regular gallery content while update and migration work
+  progressed in the background.
+
+#### For administrators
+
+- Allowed affected installations with compatible schema to recover by
+  extracting the complete `production.zip` into the installation directory.
+- Reduced unnecessary rename proposals and made remaining conflicts easier
+  to distinguish from files that already match.
+
 ## Version 1.4.3
 
 PHP Gallery 1.4.3 allowed separate galleries to share a display title, so

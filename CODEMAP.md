@@ -202,7 +202,7 @@ cross-layer leakage is immediately release-blocking.
 | Runtime dependency/performance ratchet | `scripts/runtime_plan_metrics.php`, `runtime_plan_baseline.json`, `audit_route_performance.php`; reviewed compositional closure and module counts plus disposable included-file/memory baselines. Timing is observational. |
 | Full procedural compatibility umbrella | `app/bootstrap_full.php`; use only for legacy CLI/test consumers that require the full models/services/views/controllers/migrations/integrity surface. |
 | Lightweight request updater policy | `app/services/updates_request.php` and `updates_job_lookup.php`; active-job lookup precedes eligibility gates, and only active/due work requests the compiled updater worker module. |
-| Pre-bootstrap fatal handling and updater activation gate | `app/early_runtime.php`, `public/index.php`, `install.php` |
+| Pre-bootstrap fatal handling and previous entry-point compatibility | `app/early_runtime.php`, `public/index.php`, `install.php` |
 | Configuration bootstrap | `app/bootstrap/configuration.php`, `app/configuration_defaults.php` for merged local config and centralized operational runtime-limit defaults |
 | Immutable runtime policy | `app/policy_constants.php`; documented protocol/security/format invariants, never administrator-editable defaults |
 | Gallery catalog preservation | `app/services/gallery_creation_safety.php` and `gallery_sidecars.php`; semantic ownership lookup in `app/models/galleries.php` |

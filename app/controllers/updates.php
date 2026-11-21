@@ -60,7 +60,6 @@ use function Gallery\Services\application_update_cancel_job;
 use function Gallery\Services\application_update_active_job;
 use function Gallery\Services\application_update_job_public_state;
 use function Gallery\Services\application_update_load_job;
-use function Gallery\Services\application_update_last_job;
 use function Gallery\Services\application_update_process_job;
 use function Gallery\Services\application_update_retry_job;
 use function Gallery\Services\application_update_safe_error;
@@ -464,7 +463,6 @@ function cms_admin_update(): void
             )
         ) {
             // Keep other tabs and public pages usable during GitHub I/O.
-            \Gallery\EarlyRuntime\updater_runtime_leave();
             session_write_close();
             $checked = (string) $_POST['update_action'] === 'check_due'
                 ? application_update_check_if_due()
@@ -497,12 +495,6 @@ function cms_admin_update(): void
                     'admin.features.built_in_update_installer.disabled_action',
                     'The built-in update installer is disabled in Admin > Features. Read-only update checks remain available.',
                 ));
-            }
-            if (in_array($action, $installerMutationActions, true)) {
-                // Admin and CSRF checks above establish updater-only work.
-                // The first start request bootstrapped before any active job
-                // existed and may still own a shared ordinary-runtime lease.
-                \Gallery\EarlyRuntime\updater_runtime_leave();
             }
             if ($action === 'autoupdate_settings') {
                 $submittedInterval =
@@ -602,24 +594,7 @@ function cms_admin_update(): void
                 $_SESSION['admin_update_notice'] = t('admin.updates.manual_deployment_hint');
             } elseif ($action === 'job_rollback') {
                 $jobId = trim((string) ($_POST['job_id'] ?? ''));
-                $job = application_update_start_rollback_job($jobId, 'admin');
-                $job = application_update_process_job((string) $job['id'], 7.0);
-                admin_log_event(
-                    'warning',
-                    'update.rollback_started',
-                    'Application rollback job started from a durable update snapshot.',
-                    [
-                        'job_id' => (string) $job['id'],
-                        'source_job_id' => $jobId,
-                        'stage' => (string) $job['stage'],
-                    ],
-                    ['category' => 'update', 'severity' => 'warning'],
-                );
-                if (cms_update_async_request()) {
-                    cms_update_json_job_response($job);
-                    return;
-                }
-                $_SESSION['admin_update_notice'] = 'Rollback job started from the saved pre-update snapshot.';
+                application_update_start_rollback_job($jobId, 'admin');
             } elseif ($action === 'job_continue' || $action === 'job_retry') {
                 $jobId = trim((string) ($_POST['job_id'] ?? ''));
                 $job = $action === 'job_retry'
@@ -777,20 +752,8 @@ function cms_admin_update(): void
     $githubApiStatus = application_update_github_api_status();
     // $activeUpdateJob stores the durable update state rendered for in-place continuation.
     $activeUpdateJobPrivate = application_update_active_job();
-    if ($activeUpdateJobPrivate !== null) {
-        $activeUpdateJob = application_update_job_public_state(
-            $activeUpdateJobPrivate,
-        );
-    } else {
-        $lastUpdateJobPrivate = application_update_last_job();
-        $lastUpdateJob = $lastUpdateJobPrivate !== null
-            ? application_update_job_public_state($lastUpdateJobPrivate)
-            : null;
-        $activeUpdateJob = $lastUpdateJob !== null
-        && !empty($lastUpdateJob['can_rollback'])
-            ? $lastUpdateJob
-            : null;
-    }
+    $activeUpdateJob = $activeUpdateJobPrivate === null
+        ? null : application_update_job_public_state($activeUpdateJobPrivate);
     // $patchNotesModel stores the selectable release-note data for full-page and AJAX rendering.
     $patchNotesModel = cms_update_patch_notes_model(
         $status,

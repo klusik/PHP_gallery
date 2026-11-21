@@ -68,7 +68,7 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.4.3}
+\newcommand{\version}{1.5.0}
 \newcommand{\manualdate}{21.~November~2026}
 
 \hypersetup{
@@ -4883,9 +4883,15 @@ Der fertige Bericht ersetzt die Vorschläge durch Galerie-Gesamtzahlen. Erst
 Aufklappen lädt geänderte Namen in Seiten mit 50 Einträgen. Berichte gehören
 zur aktuellen Administrator-Anmeldesitzung und verfallen nach 24 Stunden.
 Ein Detail-Speicherfehler macht bestätigte Umbenennungen nicht rückgängig.
+Die Ergebnismeldung zählt passende Namen und Namenskonflikte getrennt
+von den übrigen übersprungenen Zeilen.
+Ein Name mit einem Kollisionszusatz wie \codeword{\_2} zählt in der Vorschau
+als passend, wenn er dem aktuellen Muster und der Reihenfolge entspricht.
 
-Das Standardmuster ist \codeword{\{gallery_path\}_\{seq4\}}. Ein
-benutzerdefiniertes Muster darf \codeword{\{gallery_path\}},
+Das Standardmuster ist \codeword{\{gallery_context\}_\{seq4\}}. Der
+Galeriekontext verwendet die Namen der übergeordneten Ordner und den aktuellen
+Galerietitel. Ein benutzerdefiniertes Muster darf
+\codeword{\{gallery_context\}}, \codeword{\{gallery_path\}},
 \codeword{\{gallery_title\}}, \codeword{\{photo_title\}},
 \codeword{\{old_name\}}, \codeword{\{old_stem\}}, \codeword{\{image_id\}} sowie
 Sequenzplatzhalter von \codeword{\{seq\}} bis \codeword{\{seq5\}} verwenden.
@@ -9037,185 +9043,40 @@ und ein migrationsgestützter Initialisierungsweg kann einen bereits aktivierten
 älteren Baum reparieren. Der Abgleich ist auf bekannte Richtlinienpfade begrenzt
 und verändert weder Galeriemedien noch Benutzerkonfiguration.
 
-Vor Aktivierung kann ein Administrator einen wiederherstellbaren Auftrag
-abbrechen oder erneut versuchen. Danach kann die administrative
-Wiederherstellungsaktion verwaltete Anwendungsdateien aus der gespeicherten
-Rücknahmemomentaufnahme wiederherstellen; Dateirücknahme kehrt
-Datenbankmigrationen jedoch nicht um. Stable-Wiederherstellung, saubere
-Neuinstallation und Beta-Installation bleiben fortsetzbare Aufträge mit eigener
-Paketprüfung. Der eigenständige Notfallweg \filepath{reset.php} ist ein
-getrenntes Wiederherstellungswerkzeug zur Rückkehr auf den Stable-Zweig, wenn
-die normale Administrationsroute nicht nutzbar ist; er erfordert weiterhin
-dieselbe sorgfältige Sicherungs- und Integritätsprüfung.
+Ein vorbereiteter Auftrag lässt sich bis zum ersten Dateiaustausch abbrechen.
+Dateien werden einzeln im bestehenden Installationsverzeichnis ersetzt.
+Vor jedem Austausch prüft der Updater die vollständige temporäre Datei.
+Gewöhnliche Anfragen laufen weiter. Worker sind untereinander serialisiert.
+Bei einer Fortsetzung überspringt derselbe Auftrag bereits identische Dateien.
 
-Während des kurzen kritischen Aktivierungsabschnitts verhindert eine
-abhängigkeitsfreie frühe Laufzeitsperre, dass neue gewöhnliche Anfragen eine
-teilweise ersetzte Anwendung laden. Solche Anfragen erhalten eine private nicht
-zwischenspeicherbare \codeword{503 Service Unavailable}-Antwort, bis der
-Aktivierungsabschluss dauerhaft vermerkt ist. Der authentifizierte
-Aktualisierungs-Wiederherstellungs-/Statusweg bleibt verfügbar, sodass eine
-unterbrochene Aktivierung fortgesetzt werden kann. Beschädigter oder
-unvollständiger Sperrzustand verweigert sicher den Zugriff, statt die
-Installation als fehlerfrei darzustellen.
+Alte Dateien wie \codeword{maintenance.lock} und private Aktivierungsmarker
+haben keine Wirkung auf öffentliche Anfragen. Nach erfolgreicher Antwort
+wird die alte Datei entfernt, sofern das Hosting es erlaubt. Bei einer blockierten
+Gallery~1.4.3 entpacken Sie die vollständige geprüfte \filepath{production.zip}
+von Gallery~1.5.0 über der Installation. Konfiguration, Medien, Daten, Aufträge
+und Sicherungen bleiben erhalten. Vermeiden Sie gleichzeitige Schreibvorgänge
+eines Installers. Dieser Übergang enthält keine neuen Datenbankmigrationen.
+Für ausstehende Migrationen oder einen expliziten Abschluss verwenden Sie
+\ui{Updater zurücksetzen / FTP abschließen}. Dabei bleiben alte Belege
+erhalten, und frühere Marker können entfernt werden. \ui{Stable installieren}
+kann einen stehen gebliebenen Auftrag ersetzen oder dieselbe Version erneut
+installieren.
 
-Dieselbe frühe Laufzeitgrenze wandelt nicht abgefangene und abfangbare fatale
-PHP-Fehler in begrenzte \codeword{500}-Antworten um, wenn PHP die Antwort noch
-steuern kann. Produktivhosting muss \codeword{display\_errors} deaktiviert
-halten; andernfalls kann die PHP-Laufzeit selbst Warnungs- oder fatale
-Fehlerdetails ausgeben, bevor die Anwendung eine sichere Antwort formatieren
-kann.
+Eine Pause gilt ab dem nächsten sicheren Kontrollpunkt. Bei der Fortsetzung
+bleibt das ausgewählte Paket gleich. Vorübergehende Fehler erlauben
+Wiederholungen nach 60, 120 und~240 Sekunden. Ein Auftrag ohne Dateiveränderung
+kann nach zehn Minuten freigegeben werden. Nach einem Schreibvorgang wird das
+Update mit demselben Paket oder einer geprüften kompatiblen Version fortgesetzt.
+Originaldateien bleiben zur abgestimmten Reparatur in der Sicherung.
+Migrationen laufen vorwärts und müssen eine Wiederholung vertragen.
 
-\important{Erstellen Sie vor einer Anwendungsaktualisierung eine abgestimmte
-Sicherung. Halten Sie sie verfügbar, bis Laufzeitprüfungen, Migrationen,
-öffentliche Galerien, geschützter Zugriff, Uploads und administrative Vorgänge
-geprüft wurden.}
+\important{Bewahren Sie eine konsistente Sicherung von Datenbank und Dateien
+auf. Prüfen Sie Galerien, Zugriff, Uploads und Admin nach dem Update. Alter und
+neuer Code sowie das Schema müssen während des Dateiaustauschs kompatibel sein.}
 
-Vor der Aktivierung verlangt die Archivprüfung des Aktualisierers auch den
-vollständigen neuen Anfragekernel und seinen geprüften Modulplan. Ein
-unvollständiges Archiv wird abgelehnt, während vorbereitete Dateien außerhalb
-der aktiven Installation bleiben. Halten Sie bei manueller Bereitstellung alle
-ausgelieferten Laufzeitdateien zusammen; ein Austausch nur des Bootstrap würde
-eine unvollständige Anwendung hinterlassen.
-
-Die Update-Aktivierung verwendet die geprüfte Updater-Teilmenge des
-Produktionsinventars. Eingehende Inventare führen WinApp-Quellen getrennt auf,
-damit ältere installierte Updater das Release vor der Installation seines
-Lesecodes prüfen können. Der CMS-Updater installiert diese Quellen nicht. Ältere
-Quellarchive ohne Inventar behalten einen begrenzten Kompatibilitätspfad anhand
-ihres eigenen Manifests; ein vorhandenes ungültiges Inventar wird abgelehnt. Das
-Entfernen veralteter Dateien erfordert frühere Eigentumsnachweise und bewahrt
-unbekannte lokale Dateien. Die Dateiwiederherstellung nutzt den serverseitig
-geschriebenen Sicherungsindex und lehnt nicht indexierte Dateien sowie durch
-symbolische Links oder Windows-Junctions umgeleitete Pfade ab. Diese
-Dateisicherung macht Datenbankmigrationen nicht rückgängig.
-
-Fehlgeschlagene Aufträge aus Automatik, Admin/API
-und~Advanced-Commit-Installationen
-erhalten drei Wiederholungen vorübergehender Fehler nach 60, 120 und~240
-Sekunden. Undefinierte Funktionen und~deterministische Integritätsfehler
-wiederholen dasselbe defekte Paket nicht. Neue Aufträge binden einen geprüften
-unveränderlichen GitHub-Commit. Die Manifestprüfung bleibt implementiert, ist
-aber bis zur ausdrücklichen Aktivierung deaktiviert. Der kurze Schritt heißt
-\ui{Preparing package}; Bereitstellung und Aktivierung prüfen die kopierten
-Bytes.
-Nicht-Core-Ressourcen und~Sicherungen erhalten zusätzlich
-Raw-SHA-256-Identitäten ihrer exakten Bytes. Frühestens 600 Sekunden nach dem
-ersten Fehler gibt ein vor
-Aktivierung unveränderter Auftrag den aktiven Platz frei. Ein sicherer Fehler
-nach Aktivierung erzeugt einen getrennten Rücksetzauftrag für tatsächliche
-vorherige Programmdateien und~Kanaleinstellungen, einschließlich gelöschter
-Dateien und~Entfernung neu angelegter Pfade. Beide Identitäten, Archive,
-Sicherungen und~Diagnosen bleiben erhalten. Ein fehlgeschlagener Rücksetzauftrag
-erzeugt keinen weiteren.
-
-Der einzige öffentliche Wartungsschalter ist \codeword{maintenance.lock}
-im Installationsverzeichnis. Auch eine manuell angelegte leere Datei aktiviert
-Wartung; ihre Entfernung beendet manuelle Wartung. Aufträge und
-Rücksetzbelege allein sperren die Website nicht. Prüfen Sie nach unterbrochenen
-Schreibvorgängen den Auftrag vor dem Entfernen seines Markers. Alte Marker
-werden vor dem Zugriff übernommen; ihre exakten Bytes bleiben privat erhalten.
-Der Marker gehört weder zum Paket noch zum Dateirücksetzen. Die bestätigte
-Laufzeit beendet das isolierte automatische Rücksetzfenster. Programmdateien
-werden weiterhin an ihrem bisherigen Ort ersetzt.
-
-Dateiwiederherstellung verlangt geprüfte Sicherungen, tatsächliche
-Schema-/Historiengleichheit und~nachweislich wirkungslose Migrationen.
-Geteilte Laufzeitsperren müssen vor Aktivierung enden; unterstützte Zielpakete
-halten die Sperre durch Migrationen und notwendige Finalisierung. Danach wird
-die nutzbare Laufzeit bestätigt und die Website vor der physischen Bereinigung
-geöffnet. Die Bereinigung kann im laufenden Betrieb warten oder pausieren.
-Gewöhnlicher Betrieb im
-Beobachtungsfenster macht Rücksetzen auch bei gleichem Schema unsicher.
-Begonnene ungeprüfte Migrationen, unbekannter Datenbankzustand, fehlende Belege
-und~ältere Pakete ohne Protokoll bleiben mit Reparaturanleitung fehlgeschlagen.
-Datenbankmigrationen und~Anwendungsdaten werden nie zurückgesetzt.
-Ausgeschaltete Automatik und~Beta verhindern weiterhin neue automatische
-Installationen; ausgeschaltete Capability stoppt den Installer.
-Nach sicherer Rückkehr kann die Prüfung defekte Versionen überspringen
-und~eine neuere stabile Version installieren. Fehler hinter geschlossener
-Sperre benötigen Hosting-CLI-Cron oder einen authentifizierten Admin-Aufruf;
-abgewiesene Besucher starten keinen Scheduler. Kein Worker wartet untätig
-während der Verzögerung.
-
-Ausgeführte Migrationen bleiben Historie, wenn ihre Dateien absichtlich aus
-dem installierten Manifest entfernt wurden. Datenbankbelege im Format~2
-behalten die vollständige Historie mit Zeitstempeln und das tatsächliche Schema;
-historisches Fehlen wird ausdrücklich erfasst. Fehlende deklarierte Dateien
-oder geänderte Bytes verweigern weiterhin die Aktivierung. Alte Belege behalten
-ihre ursprünglichen strengen Vergleiche. Ein alter Kontrollpunkt
-\codeword{activate} beweist allein keine Teilaktivierung: Die Zeigerfreigabe
-verlangt unveränderte Originale, geprüfte Sicherungen und weiterhin fehlende
-neue Pfade unter Start-, Worker- und exklusiver Laufzeitsperre. Admin-Anfragen
-geben ihre eigene Lesesperre erst nach Authentifizierung und CSRF frei.
-Der Integritätsfortschritt zeigt den Dateiprüfzeiger; jeder neue Schritt setzt
-vorherige Zähler zurück. Kompakte Anzeigen bleiben auf Desktop und schmalen
-Bildschirmen synchron.
-Die normale Aktion bleibt Aktualisieren mit automatischer Fortsetzung.
-Verarbeitungsläufe zählt kurze Anfragen einschließlich Warten; Wiederholen
-behält denselben Auftrag und Zähler. Warten auf andere Anfragen wird
-ausdrücklich mit langsamerer Abfrage angezeigt. Nicht verwaltete lokale
-PHP-Dateien bleiben erhalten. Private Worker-Diagnosen nennen Schritt,
-Referenz, Ausnahmeklasse, Besitzerdatei und Zeile, Sicherheitsbelege und
-gegebenenfalls
-die validierte Migrationskennung. Ein nicht verfügbarer Admin-Log nutzt das
-PHP-Fehlerprotokoll, ohne die Arbeit zu blockieren.
-
-Ein älterer blockierter Updater erhält den Mechanismus nicht durch bloße
-Veröffentlichung. Im Wartungsmodus Worker stoppen, koordinierte Sicherungen
-und~Fehlerbelege behalten, tatsächliche Datenbankkompatibilität prüfen, eine
-vollständige verifizierte kompatible korrigierte Version bereitstellen und
-Vorwärtsmigrationen ausführen. Erst nach geprüfter Reparatur darf der
-Administrator den passenden alten aktiven Zeiger archivieren. Nicht nur
-Bootstrap
-ersetzen, Auftragsziel/Paket ändern, eine aktive Aktivierungssperre entfernen
-oder nur Dateien zurückspielen. Ablauf und~Grenzen stehen in
-\filepath{docs/AUTOUPDATE.md}.
-Der Ablauf umfasst die gemeldete Installation \codeword{c2e2bc77} mit ihrem
-älteren festgelegten Auftrag: Nach gesonderter Freigabe die vollständige
-kompatible korrigierte Version im Wartungsmodus bereitstellen, den alten
-Auftrag bewahren und seinen Besitzer erst nach geprüfter Vorwärtsreparatur
-abgleichen. Wiederholen ändert niemals das Auftragsziel.
-Bei überschreibender FTP-Bereitstellung die vollständige Version ohne Löschen
-alter Dateien, Aufträge oder Sicherungen hochladen. Am Auftrag oder in Advanced
-tools \ui{Updater zurücksetzen / FTP abschließen} wählen. Frühere Aufträge
-enden am sicheren Kontrollpunkt; ihre Daten und Sperrbelege bleiben erhalten,
-und ein neuer Vorwärtsabschluss beginnt. \ui{Stable installieren} ist immer
-verfügbar, lädt den neuesten stabilen Branch-Stand und überschreibt alle
-Anwendungsdateien des Pakets, auch bei gleicher Version. Es ersetzt auch
-blockierte oder pausierte Aufträge ohne FTP. Beide Aktionen erhalten
-Konfiguration, Medien, zusätzliche lokale Dateien und Sicherungen.
-Inhaltsunterschiede werden mit relativem Dateinamen und erwartetem/tatsächlichem
-Hash als Warnungen protokolliert, wenn die optionale Prüfung eingeschaltet ist.
-Ihre Durchläufe sind derzeit für alle Installationsaufträge deaktiviert.
-Sichere Archivpfade, Pflichtdateien und Laufzeitsperren gelten weiterhin.
-Bei eingeschalteter optionaler Prüfung ist auch ein fehlendes, unlesbares
-oder veraltetes Manifest nur eine Warnung
-und stoppt keine der beiden Wiederherstellungen. Reset schließt zunächst den
-Zugang neuer Besucheranfragen, damit laufender Verkehr den Start nicht
-verhindert.
-Erst Aktivierung und Migrationen warten auf bereits laufende Anfragen.
-Auch automatische Updates schließen den Zugang vor dem Warten auf alte Leser,
-damit neue Besucher die Aktivierung nicht unbegrenzt verzögern.
-Bei geschlossener Sperre behalten private Worker während des Wartens einen
-Folgeauftrag; ein weiterer Besucher ist nicht nötig. Die Übergabe wartet nach
-Freigabe der Schlösser eine Sekunde. Der konfigurierte Admin-Sitzungsname bleibt
-auch nach dem Sitzungsschluss für Hintergrundarbeit erhalten. Das Startprotokoll
-nennt die Zielversion; ein separates Abschlussereignis nennt vorherige und
-installierte Version erst nach dauerhaftem Abschluss.
-Während der Aktivierung sehen Besucher eine kompakte englische Wartungsseite
-statt einer schlichten Servermeldung. Sie lädt die aktuelle Seite alle drei
-Sekunden neu, auch ohne JavaScript, und bietet \ui{Try again}.
-Die eigenständige helle oder dunkle Darstellung benötigt weder Datenbank noch
-Anwendungsdateien. HTTP 503 bleibt erhalten; POST- und Maschinenantworten werden
-nicht automatisch wiederholt.
-Warten auf Übernahme wird angezeigt und automatisch fortgesetzt. FTP-Wiederholen
-prüft installierte Dateien statt herunterzuladen. Datenbankmigrationen laufen
-nur vorwärts; Datenbankänderungen werden nicht zurückgenommen.
-\ui{Pausieren} gilt am nächsten sicheren Kontrollpunkt jedes Schritts;
-\ui{Aktualisierung fortsetzen} führt denselben Auftrag weiter. Eine teilweise
-Aktivierung bleibt gesperrt. Auch ältere unterstützte Release-Commits sind
-wählbar; Migrationen werden nicht zurückgenommen und eine kompatible
-Datenbanksicherung kann erforderlich sein.
+Die frühe Laufzeit meldet fatale PHP-Fehler weiterhin mit einer sicheren
+Antwort. Auf Produktivsystemen bleibt \codeword{display\_errors} deaktiviert.
+Die Verfahren stehen in \filepath{docs/AUTOUPDATE.md}.
 
 \subsection{Integritätsmanifest}
 \index{k00156@Kernmanifest}

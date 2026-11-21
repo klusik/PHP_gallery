@@ -215,8 +215,6 @@ function request_scheduler_execute_owner(
     }
     if ($id === 'updates') {
         // Domain handling has finished before this post-response owner runs.
-        // Release our shared request lease before attempting exclusive activation.
-        \Gallery\EarlyRuntime\updater_runtime_leave();
         if ($loadDependencies !== null) {
             $loadDependencies('updater-work');
         }

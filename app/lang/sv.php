@@ -33,6 +33,8 @@
  */
 
 return [
+    'admin.media_renamer.gallery_result_notice' => 'Bytte namn på {renamed} fil(er). Filer som redan matchar mönstret ({matching}). Filnamnskonflikter ({collisions}). Bevarade {moved} miniatyrer, tog bort {cleaned} inaktuella derivatcachefil(er), såg {missing} saknade fil(er), hoppade över {skipped} rad(er), uppdaterade {titles} härledda titel/titlar och tog bort {archives} inaktuella ZIP-arkivrader.',
+    'admin.media_renamer.result_notice' => 'Bearbetade {galleries} galleri/gallerier. Bytte namn på {renamed} fil(er). Filer som redan matchar mönstret ({matching}). Filnamnskonflikter ({collisions}). Bevarade {moved} miniatyrer, tog bort {cleaned} inaktuella derivatcachefil(er), hoppade över {skipped} rad(er), såg {missing} saknade fil(er), uppdaterade {titles} härledda titel/titlar och tog bort {archives} inaktuella ZIP-arkivrader.',
     'app_linking.consent.gallery_edit_scope' => 'WinApp kan ändra gallerititlar, beskrivningar, NSFW Guard och listning på denna webbplats.',
     'app_linking.devices.gallery_edit_scope' => 'Redigera gallerimetadata',
     'admin.metadata_organizer.move_uncertain' => 'Resultatet av flytten är osäkert. Organiseraren behöll båda gallerierna; kontrollera deras innehåll innan du försöker igen.',
@@ -391,7 +393,7 @@ return [
     'admin.updates.pause_hint' => 'Jobbet pausas vid nästa säkra kontrollpunkt i valfritt steg. Filer, säkerhetskopior och aktiveringsspärren bevaras. Fortsätt återupptar samma jobb.',
     'admin.updates.version_commit_help' => 'Installera en vald Git-commit, även från en äldre utgåva. Ange dess commit-ID. Koden låses till detta val; databasmigreringar återställs inte och äldre kod kan kräva en kompatibel databassäkerhetskopia.',
     'admin.updates.manual_deployment_title' => 'Återställ uppdateraren / slutför FTP',
-    'admin.updates.manual_deployment_hint' => 'Stoppar föregående jobb och slutför filerna som laddats upp via FTP. Filskillnader loggas som varningar. Gamla jobb, säkerhetskopior, konfiguration och media bevaras; framåtmigreringar slutförs innan webbplatsen öppnas.',
+    'admin.updates.manual_deployment_hint' => 'Slutför installationen av filerna som laddades upp via FTP och kör väntande migreringar. Webbplatsen är tillgänglig under arbetet. Tidigare jobb, säkerhetskopior, konfiguration och media bevaras.',
     'admin.updates.job_runs_label' => 'Bearbetningskörningar',
     'admin.updates.job_runs_hint' => 'Korta bearbetningsanrop för detta jobb, inklusive väntan. Detta räknar varken fel eller klick på Försök fortsätta.',
     'admin.updates.job_stage_label' => 'Steg',
@@ -1999,12 +2001,12 @@ return [
     'admin.maintenance_center.runtime.lifecycle_deferred' => 'Cacherensningen har återstående eller otillgängligt arbete. Underhållet fortsätter; se Admin-loggen för detaljer.',
     'admin.maintenance_center.runtime.music_orphans_removed' => 'Tog bort {count} katalogposter utan original.',
     'admin.maintenance_center.runtime.lifecycle_progress' => 'Cacherensning, delsteg {slice}/{limit}: {files} borttagna, {bytes} byte frigjorda.',
-    'admin.updates.recovery_database_blocked' => 'Automatisk återställning är stoppad: migreringseffekter eller databaskompatibilitet är inte verifierade. Bevara jobbet och säkerhetskopiorna. En administratör måste kontrollera databasen och avbruten migrering, installera en verifierad kompatibel version i underhållsläge och fortsätta framåtmigreringar. Databasmigreringar återställs inte.',
+    'admin.updates.recovery_database_blocked' => 'Bevara jobbet och säkerhetskopiorna. Fortsätt med samma uppdatering om det går att försöka igen. Installera annars en verifierad kompatibel version och slutför återstående migreringar.',
     'admin.updates.recovery_limit' => 'Automatisk återställning kunde inte slutföras. Bevara båda jobben och säkerhetskopiorna. Korrigera säkerhetskopians integritet eller hostingens behörigheter. Använd Försök igen endast när det erbjuds; installera annars en verifierad kompatibel version i underhållsläge före nästa uppdatering.',
-    'admin.updates.recovery_waiting' => 'Uppdateringen står still. Återställning tillåter högst tre försök och återställer tidigare filer efter tio minuters felväntetid endast med verifierad databassäkerhet. Bevara jobb och säkerhetskopior. Bakom stängd spärr måste en autentiserad Updates-begäran eller konfigurerad CLI-worker ge nästa tillfälle.',
+    'admin.updates.recovery_waiting' => 'Uppdateringen har stannat. Besök och webbhotellets worker kan försöka med samma paket upp till tre gånger. Ett jobb kan frigöras efter tio minuter om filerna är orörda. Bevara jobbet och säkerhetskopiorna.',
     'admin.updates.recovery_restored' => 'Det misslyckade försöket har frigjorts och tidigare programfiler finns på plats. Felaktig version eller commit är utesluten från automatisk installation; aktiverade kontroller kan installera en nyare stabil version.',
     'admin.updates.recovery_backup_blocked' => 'Automatisk återställning är stoppad: säkerhetskopian saknas, är ofullständig eller skadad. Bevara jobbet och säkerhetskopian. En administratör måste återställa ett fullständigt verifierat tillstånd eller installera en kompatibel version i underhållsläge.',
-    'admin.updates.recovery_started' => 'Automatisk återställning har ett separat jobb: {job}. Öppna Uppdateringar igen för att följa det. Ursprungligt fel och dess bevis bevaras.',
+    'admin.updates.recovery_started' => 'Återställningen fortsatte i jobb {job}. Öppna Uppdateringar för att följa det. Det ursprungliga felet och dess underlag bevaras.',
     'admin.updates.log_autoupdate_started' => 'Den automatiska uppdateringen till {version} har startat; installationen pågår fortfarande.',
     'admin.updates.log_autoupdate_completed' => 'Den automatiska uppdateringen har slutförts: {version}.',
 

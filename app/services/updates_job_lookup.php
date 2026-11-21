@@ -292,6 +292,12 @@ function application_update_safe_error(mixed $error): array
     } elseif (str_contains($lower, 'newer manual deployment')) {
         $message = 'New application files were uploaded manually. Use Finish FTP update in Advanced tools to verify them and complete forward migrations. The older package will not be resumed.';
         $retryable = false;
+    } elseif (str_contains($lower, 'visitor maintenance gate')) {
+        $message = 'This package would restore visitor maintenance during updates. Select a compatible newer release.';
+        $retryable = false;
+    } elseif (str_contains($lower, 'file rollback is unavailable')) {
+        $message = 'Resume the original update or install a compatible stable release. The updater preserves the saved backup.';
+        $retryable = false;
     } elseif (str_contains($lower, 'recovery')) {
         $message = 'Automatic recovery could not verify the package, database or backup safety. Preserve the jobs and backups and ask the administrator to verify a compatible release in maintenance mode.';
         $retryable = false;

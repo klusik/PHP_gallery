@@ -167,11 +167,11 @@ try {
     );
     // No cookie, JavaScript, Admin page or follow-up visitor request participates.
     file_get_contents($base . '/visit', false, $context);
-    $gatedBody = file_get_contents($base . '/after-gate', false, $context);
+    $ordinaryBody = file_get_contents($base . '/during-update', false, $context);
     update_chain_http_assert(
-        str_contains($http_response_header[0] ?? '', '503')
-            && str_contains((string) $gatedBody, 'Service temporarily unavailable'),
-        'The ordinary follow-up did not encounter the real activation gate.',
+        str_contains($http_response_header[0] ?? '', ' 200 ')
+            && $ordinaryBody === 'ordinary anonymous gallery fixture',
+        'An unrelated visitor did not receive the ordinary response.',
     );
     do {
         $completed = \Gallery\Services\application_update_load_job($jobId);
@@ -187,7 +187,7 @@ try {
     update_chain_http_assert(
         $completed['status'] === 'completed'
             && $completed['attempts'] > 1,
-        'A closed-gate runtime wait lost its independent HTTP successors: '
+        'The update lost its independent HTTP successors: '
             . json_encode($completed)
             . '\nOwned server: '
             . file_get_contents($root . '/server.log'),

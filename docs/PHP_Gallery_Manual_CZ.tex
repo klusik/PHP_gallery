@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.4.3}
+\newcommand{\version}{1.5.0}
 \newcommand{\manualdate}{21.~listopadu~2026}
 
 \hypersetup{
@@ -4366,9 +4366,15 @@ Použití připraví pouze ID kandidátů a~zachová dávky nejvýše 15 fotek. 
 report nahradí návrhy a~nejprve zobrazí jen počty podle galerií. Rozbalení načte
 změněné názvy po 50 položkách. Report náleží aktuálnímu přihlášení správce
 a~vyprší po 24 hodinách. Chyba uložení detailů nevrací potvrzené přejmenování.
+Výsledková hláška uvádí shody se vzorem a~kolize názvů zvlášť od ostatních
+přeskočených řádků.
+Název s~příponou kvůli kolizi, například \codeword{\_2}, náhled započítá
+jako shodu, pokud odpovídá aktuálnímu vzoru a~pořadí.
 
-Výchozí vzor je \codeword{\{gallery_path\}_\{seq4\}}. Vlastní vzor může používat
-\codeword{\{gallery_path\}}, \codeword{\{gallery_title\}},
+Výchozí vzor je \codeword{\{gallery_context\}_\{seq4\}}. Kontext vychází
+z~nadřazených složek a~aktuálního názvu galerie. Vlastní vzor může používat
+\codeword{\{gallery_context\}}, \codeword{\{gallery_path\}},
+\codeword{\{gallery_title\}},
 \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}},
 \codeword{\{image_id\}} a~zástupné značky pořadového čísla \codeword{\{seq\}} až
 \codeword{\{seq5\}}. Číslované varianty doplňují číslo na dvě, tři, čtyři nebo
@@ -8110,159 +8116,36 @@ nahrazením a~počáteční postup podložený migrací může opravit již akti
 starší strom. Sladění je omezené na známé cesty pravidel a~nemění média galerií
 ani uživatelskou konfiguraci.
 
-Před aktivací může správce obnovitelnou úlohu zrušit nebo zopakovat. Po aktivaci
-může akce obnovy v~administraci obnovit spravované soubory aplikace z~uloženého
-snímku pro vrácení, ale vrácení souborů nevrací databázové migrace. Obnova
-stabilního vydání, čistá přeinstalace a~instalace beta zůstávají úlohami
-s~pokračováním a~vlastním ověřením balíčku. Samostatný nouzový postup
-\filepath{reset.php} je odděleným nástrojem obnovy pro návrat ke stabilní větvi,
-když nelze použít běžnou trasu administrace; stále vyžaduje stejně pečlivou
-zálohu a~kontrolu integrity.
+Připravenou úlohu lze před první výměnou souboru zrušit. Soubory se~poté
+nahrazují jeden po~druhém ve~stávající instalaci. Každý dočasný soubor
+se~nejprve celý ověří. Běžné požadavky pokračují. Updater mezi sebou řadí
+vlastní workery a~při obnovení stejné úlohy přeskočí soubory se~shodnými bajty.
 
-Během krátké kritické části aktivace časná běhová brána bez závislostí brání
-novým běžným požadavkům načítat částečně nahrazenou aplikaci. Tyto požadavky
-dostávají soukromou odpověď \codeword{503 Service Unavailable} bez ukládání do
-mezipaměti, dokud není dokončení aktivace trvale zaznamenáno. Ověřený postup
-obnovy a~stavu aktualizace zůstává dostupný, aby přerušená aktivace mohla
-pokračovat. Poškozený či neúplný stav brány bezpečně odmítá přístup místo
-prezentace instalace jako zdravé.
+Starý \codeword{maintenance.lock} a~soukromé aktivační markery nemají
+vliv na~veřejné požadavky. Po~úspěšné odpovědi se~starý soubor odstraní,
+pokud to~hosting umožňuje. Pokud Gallery~1.4.3 zůstala v~údržbě updateru,
+rozbalte celý ověřený \filepath{production.zip} pro~Gallery~1.5.0 přes stávající
+instalaci. Zachovejte konfiguraci, média, data, úlohy i~zálohy a~vyhněte se
+souběhu s~právě zapisujícím workerem. Tento přechod nepřidává databázové
+migrace. Pokud hosting vyžaduje zbývající migrace nebo výslovné vypořádání
+úlohy, zvolte \ui{Resetovat updater / dokončit FTP aktualizaci}. Akce zachová
+důkazy a~může odklidit staré markery. \ui{Nainstalovat stable} stáhne
+kompatibilní balík a~umožní nahradit zastavenou úlohu i~přeinstalovat verzi.
 
-Stejná časná běhová hranice převádí nezachycená a~zachytitelná fatální selhání
-PHP na omezené odpovědi \codeword{500}, pokud PHP ještě může řídit odpověď.
-Produkční hosting musí ponechat \codeword{display\_errors} vypnuté; jinak může
-samotné běhové prostředí PHP vypsat podrobnosti upozornění či fatálních chyb
-dříve, než obsluha aplikace naformátuje bezpečnou odpověď.
+\ui{Pozastavit} platí od~dalšího bezpečného bodu. Pokračování použije stejný
+připnutý balík. Přechodné chyby lze zkusit znovu po~60, 120 a~240 sekundách.
+Po~deseti minutách může nedotčená instalace uvolnit úlohu. Po~prvním zápisu
+dokončete stejný balík nebo použijte ověřenou kompatibilní náhradu. Původní
+soubory zůstávají v~záloze pro~koordinovanou opravu. Migrace běží dopředu
+a~musí snést opakování po~přerušení.
 
-\important{Před aktualizací aplikace proveďte souběžnou zálohu všech
-souvisejících částí. Ponechte ji dostupnou, dokud neověříte běhové kontroly,
-migrace, veřejné galerie, chráněný přístup, nahrávání a~operace administrace.}
+\important{Uchovejte konzistentní zálohu databáze a~souborů. Po~aktualizaci
+ověřte veřejné galerie, přístup, nahrávání i~Admin. Při výměně souborů musí
+vedle sebe fungovat starý a~nový kód i~schéma.}
 
-Před aktivací ověření archivu aktualizátoru vyžaduje také úplné nové jádro
-požadavků a~jeho revidovaný plán modulů. Neúplný archiv se odmítne a~připravené
-soubory zůstanou mimo aktivní instalaci. Při ručním nasazení zachovejte všechny
-dodávané soubory jádra pohromadě; výměna samotného bootstrapu by zanechala
-neúplnou aplikaci.
-
-Aktivace aktualizace používá schválenou aktualizační podmnožinu produkčního
-seznamu. Seznam příchozího vydání uvádí zdroje WinApp odděleně, aby jej starší
-nainstalovaný updater mohl ověřit před instalací nového čtecího kódu. Updater
-CMS tyto zdroje neinstaluje. Starší zdrojové archivy bez tohoto seznamu
-zachovávají omezenou kompatibilní cestu podle svého vlastněného manifestu;
-poškozený přítomný seznam se odmítne. Odstranění zastaralých souborů vyžaduje
-důkaz předchozího vlastnictví a~zachovává neznámé místní soubory. Návrat souborů
-používá serverem zapsaný index zálohy a~odmítá neindexované soubory i~cesty
-přesměrované symbolickými odkazy nebo junctions ve Windows. Tato ochrana souborů
-nevrací databázové migrace.
-
-Selhané úlohy z~automatiky, Admin/API i~Advanced commit ID mají tři pokusy
-po~přechodné chybě s~odstupem 60, 120 a~240 sekund. Nedefinovaná funkce
-a~deterministická chyba integrity neopakují stejný vadný balíček.
-Nové úlohy připnou neměnný ověřený GitHub commit. Kontrola integrity vydavatele
-zůstává v~kódu, ale je~vypnutá až~do~výslovného zapnutí. Krátká fáze má~popisek
-\ui{Preparing package}; při kopírování a~aktivaci se~ověří skutečně přenesené
-bajty.
-Prostředky mimo core manifest a~zálohy mají navíc
-identitu přesných bajtů pomocí raw SHA-256. Nejdříve 600 sekund od~prvního
-selhání nedotčená úloha
-před aktivací uvolní aktivní místo. Bezpečné selhání po~aktivaci vytvoří
-jednu samostatnou úlohu návratu skutečných předchozích spravovaných souborů
-a~nastavení kanálu: vrátí i~odstraněné soubory a~odstraní nově vytvořené cesty.
-Obě identity, archivy, zálohy a~diagnostika zůstávají zachované.
-Selhaný rollback nevytváří další rollback.
-
-Jediným veřejným přepínačem údržby je~\codeword{maintenance.lock} v~kořeni
-instalace. Údržbu zapne i~ručně vytvořený prázdný soubor; jeho odstranění
-ukončí ruční údržbu. Aktivní úlohy ani záznamy obnovy samy web nezavírají.
-Před odstraněním markeru aktualizátoru po~přerušeném zápisu prověřte stav
-úlohy. Starý aktivační marker se~převede před přijetím požadavku a~jeho
-přesné bajty zůstanou soukromě zachované. Marker není součástí balíčku
-ani návratu souborů. Potvrzení použitelného běhu ukončí izolované okno
-pro automatický rollback. Soubory se~nadále aktualizují na~místě.
-
-Obnova souborů vyžaduje ověřené zálohy, shodu skutečného schématu a~ledgeru
-a~důkaz nulových účinků migrací. Před aktivací doběhnou sdílené běhové zámky;
-podporovaný balíček drží bránu přes migrace a~nezbytnou finalizaci. Potom
-potvrdí použitelný běh a~otevře web před fyzickým úklidem. Úklid může
-pokračovat, čekat nebo být pozastavený za~běžného provozu.
-Běžný provoz v~pozorovacím okně zneplatní bezpečnost návratu i~při stejném
-schématu. Zahájené neověřené migrace, neznámá databáze, chybějící důkaz
-či~starší nepodporovaný balíček zůstávají selhané s~postupem opravy.
-Databázové migrace ani aplikační data se~nevracejí. Vypnutá automatika
-a~beta stále brání nové automatické instalaci; vypnutá capability zastaví
-instalátor. Po~bezpečném návratu lze přeskočit známé vadné vydání a~instalovat
-novější stabilní verzi. Selhání za~zavřenou bránou potřebuje hostingový CLI cron
-nebo ověřený požadavek správce; odmítnutý návštěvník nespustí plánovač.
-Žádný nečinný worker nečeká během backoffu.
-
-Záznamy provedených migrací zůstávají historií i~po~záměrném odstranění
-souboru z~manifestu instalované verze. Formát databázových důkazů~2 uchovává
-úplný ledger včetně časů a~skutečné schéma; historickou absenci označí
-výslovně. Chybějící deklarovaný soubor či~změněné bajty aktivaci odmítnou.
-Staré uložené důkazy zachovávají původní přísné porovnání.
-Samotný starý kontrolní bod \codeword{activate} nedokazuje částečnou aktivaci:
-uvolnění ukazatele vyžaduje shodu původních souborů a~ověřených záloh
-i~nepřítomnost nových cest pod startovacím, pracovním a~výlučným běhovým
-zámkem. Admin požadavek uvolní vlastní čtecí zámek až~po~ověření správce
-a~CSRF. Průběh integrity ukazuje kurzor ověřených souborů; nová fáze
-vynuluje předchozí čítače. Kompaktní průběh je~synchronizovaný na~desktopu
-i~úzkém zobrazení.
-Běžná akce zůstává Aktualizovat a~automaticky pokračovat. Podrobnosti čítač
-označují jako Spuštění zpracování: zahrnuje krátké požadavky i~čekání,
-opakování zachová stejnou úlohu a~počet. Čekání na~ostatní požadavky
-je~výslovné a~používá pomalejší dotazování. Nespravované místní PHP soubory
-zůstávají zachované. Soukromá diagnostika workeru obsahuje fázi, referenci,
-třídu chyby, vlastníka a~řádek, bezpečnostní důkazy a~případně ověřenou
-identitu migrace. Nedostupný Admin log využije PHP error log a~neblokuje práci.
-
-Starší zaseknutý updater nezíská mechanismus pouhým publikováním vydání.
-V~režimu údržby zastavte workery, zachovejte souběžné zálohy a~všechny důkazy
-selhané úlohy, ověřte skutečnou kompatibilitu databáze, nasaďte celé ověřené
-kompatibilní opravené vydání a~proveďte dopředné migrace. Teprve po~ověřené
-opravě smí správce archivovat odpovídající starý aktivní ukazatel. Neměňte
-pouze bootstrap ani cíl/balíček úlohy; neodstraňujte živou aktivační bránu
-ani neobnovujte pouze soubory. Úplný postup a~omezení uvádí
+Časný runtime nadále obsluhuje fatální PHP chyby bezpečnou odpovědí. Na~produkci
+ponechte vypnuté \codeword{display\_errors}. Postupy popisuje
 \filepath{docs/AUTOUPDATE.md}.
-Postup zahrnuje nahlášenou instalaci \codeword{c2e2bc77} se~starším
-připnutým jobem: po~samostatném schválení se~v~údržbě nasadí celé
-kompatibilní opravené vydání, zachová starý job a~jeho vlastnictví se~vypořádá
-až~po~ověřené dopředné opravě. Retry nikdy nezmění cíl úlohy.
-Při překryvném FTP nasazení nahrajte celé vydání bez mazání starých místních
-souborů, úloh či~záloh. U~úlohy nebo v~Advanced tools zvolte
-\ui{Resetovat updater / dokončit FTP aktualizaci}. Předchozí úlohy se~zastaví
-v~bezpečném bodě, zachovají se~jejich záznamy a~doklady brány a~začne nové
-dopředné dokončení. \ui{Nainstalovat stable} je~dostupné vždy: stáhne poslední
-stable a~přepíše všechny aplikační soubory balíku i~při stejné verzi. Převezme
-i~zaseklou či~pozastavenou úlohu bez potřeby FTP. Obě akce zachovají
-konfiguraci,
-média, místní soubory navíc a~zálohy. Rozdíly obsahu jsou upozornění s~relativní
-cestou a~očekávaným i~skutečným otiskem v~logu při zapnuté volitelné kontrole.
-Její průchody jsou nyní vypnuté pro~všechny instalační úlohy.
-Ochrana cest, povinné soubory a~vlastnictví běhu
-platí dál. Při zapnuté volitelné kontrole je~chybějící, nečitelný
-či~zastaralý manifest také pouze warning
-a~nezastaví ani jednu obnovu. Reset nejprve pozastaví příchod návštěvnických
-požadavků, aby provoz nebránil jeho zahájení. Samotná aktivace a~migrace počkají
-na~dokončení již rozpracovaných požadavků.
-Také běžný autoupdate uzavře příchod nových požadavků před čekáním
-na~rozpracované; návštěvy tak nemohou aktivaci donekonečna oddalovat.
-Při uzavřené bráně soukromé workery pokračují i~po~čekání na~staré požadavky;
-další návštěva není nutná. Předání se~po~uvolnění zámků zpomalí o~jednu sekundu.
-Název adminové relace se~zachová i~po~jejím uzavření před prací na~pozadí,
-takže ověřený správce dosáhne na~obnovu. Log zahájení uvádí cílovou verzi;
-samostatný záznam dokončení uvádí předchozí a~nainstalovanou verzi
-až~po~dokončení.
-Při aktivaci návštěvníci uvidí přehlednou anglickou stránku údržby místo
-strohé serverové hlášky. Aktuální stránka se~obnovuje každé tři sekundy
-i~bez~JavaScriptu a~nabízí \ui{Try again}. Samostatný světlý či~tmavý vzhled
-nepotřebuje databázi ani soubory aplikace. HTTP 503 zůstává; odpovědi
-na~POST a~strojové požadavky se~nikdy automaticky neopakují.
-Čekání na~převzetí se~zobrazuje a~pokračuje automaticky. FTP retry
-znovu zpracuje nahrané soubory místo stahování. Dokončí se~dopředné migrace;
-databázové změny se~nevracejí.
-\ui{Pozastavit} funguje na~nejbližším bezpečném bodě v~každé fázi;
-\ui{Pokračovat v~aktualizaci} obnoví stejnou úlohu. Částečná aktivace
-zůstává za~bránou. Instalace commitu podporuje i~starší podporovaná vydání;
-migrace se~nevracejí a~může být nutná kompatibilní záloha databáze.
 
 \subsection{Manifest integrity}
 \index{m00077@manifest jádra}

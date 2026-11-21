@@ -47,7 +47,6 @@ use function Gallery\Core\release_file_policy_archive_updater_paths;
 use function Gallery\Core\release_file_policy_is_updater_path;
 use function Gallery\Core\release_file_policy_path_comparison_key;
 use function Gallery\Core\release_file_policy_prior_updater_paths;
-use function Gallery\Core\release_file_policy_rollback_snapshot_paths;
 use function Gallery\Core\run_migrations_bounded;
 
 /**
@@ -464,74 +463,9 @@ function application_update_backup_items_for_plan(
  */
 function application_update_job_build_plan(array &$job): void
 {
-    $operation = (string) ($job['operation'] ?? '');
-    if ($operation === 'rollback') {
-        $sourceJobId = (string) ($job['parameters']['source_job_id'] ?? '');
-        $sourceJobDir = application_update_job_dir($sourceJobId);
-        $metadata = application_update_read_json($sourceJobDir
-            . '/rollback/metadata.json');
-        if ($metadata === [] || !is_dir($sourceJobDir . '/rollback/original')) {
-            throw new RuntimeException(
-                'Rollback source snapshot is incomplete.',
-            );
-        }
-        $sourceRoot = $sourceJobDir . '/rollback/original';
-        application_update_assert_gallery_edit_enforcement($sourceRoot);
-        $rollbackIndex = array_values(array_unique(array_merge(
-            (array) ($metadata['activation_files'] ?? []),
-            (array) ($metadata['obsolete_paths'] ?? []),
-        )));
-        $rollbackFiles = release_file_policy_rollback_snapshot_paths(
-            $sourceRoot,
-            $rollbackIndex,
-        );
-        $job['checkpoints']['source_root'] = $sourceRoot;
-        $files = application_update_changed_release_files(
-            $sourceRoot,
-            application_update_project_root(),
-            $rollbackFiles,
-        );
-        $obsolete = [];
-        foreach ((array) ($metadata['created_paths'] ?? []) as $relative) {
-            $relative = application_update_safe_zip_entry((string) $relative);
-            if (
-                $relative !== ''
-                && !application_update_path_is_protected($relative)
-            ) {
-                $obsolete[] = $relative;
-            }
-        }
-        $job['checkpoints']['activation_files'] = array_values(array_unique(
-            $files,
-        ));
-        $job['checkpoints']['obsolete_paths'] = array_values(array_unique(
-            $obsolete,
-        ));
-        $job['checkpoints']['stage_index'] = (int) (
-            $job['checkpoints']['stage_index'] ?? 0
-        );
-        $job['checkpoints']['backup_index'] = (int) (
-            $job['checkpoints']['backup_index'] ?? 0
-        );
-        $job['checkpoints']['backup_items'] = application_update_backup_items_for_plan(
-            application_update_project_root(),
-            $files,
-            $obsolete,
-        );
-        $job['checkpoints']['rollback_source_job_id'] = $sourceJobId;
-        $job['progress'] = [
-            'current' => 0,
-            'total' => count($files),
-            'message' => 'Rollback activation plan prepared.',
-            'unit' => 'files',
-        ];
-        application_update_assert_activation_schema_known(
-            'application_update.job_rollback_activation',
-        );
-        application_update_save_job($job);
-        return;
+    if (($job['operation'] ?? '') === 'rollback') {
+        throw new RuntimeException('File rollback is unavailable during online updates.');
     }
-
     $sourceRoot = (string) ($job['checkpoints']['source_root'] ?? '');
     if ($sourceRoot === '') {
         throw new RuntimeException('Validated update source is missing.');
@@ -541,7 +475,6 @@ function application_update_job_build_plan(array &$job): void
         'application_update.job_activation',
     );
     application_update_assert_gallery_edit_enforcement($sourceRoot);
-    application_update_recovery_assert_compatible($job, $sourceRoot);
     $releaseFiles = application_update_release_files($sourceRoot, !empty($job['recovery_override']));
     if ($releaseFiles === []) {
         throw new RuntimeException(

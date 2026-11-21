@@ -1,0 +1,9 @@
+{
+  "previous_stable_tag": "v_1.4.3",
+  "previous_tag_object_sha": "535097fb8e3eb00f4801aa9fd3106de40474ee0e",
+  "previous_tag_object_type": "commit",
+  "previous_stable_sha": "535097fb8e3eb00f4801aa9fd3106de40474ee0e",
+  "previous_release_candidate_sha": "4329aa537192d65a2e4041f651e27253dfbf0689",
+  "previous_tree_sha": "87b7200c5eeb9cd865ba36e5a9ece8fc7559d8a2",
+  "predecessor_kind": "protected-main"
+}

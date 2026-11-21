@@ -617,6 +617,8 @@ function admin_edit_gallery_handle_ai_reprocess(array $gallery): void
  *
  * Requires an explicit confirmation because the rename touches files on disk.
  * Failures are logged and reported without leaving the panel.
+ * Include verified name matches in batch progress and report name conflicts
+ * separately from other skipped rows.
  *
  * @param array{id:int|string, folder_path:string, title?:string} $gallery
  *     Authorized physical gallery owning the bounded batches and final
@@ -724,9 +726,13 @@ function admin_edit_gallery_handle_media_rename(
                 $batchContexts,
                 ['redirect_url' => $renamerReturnUrl],
             );
+            // Confirm handled rows, including matches omitted from report details.
+            $processed = $renameResult['renamed'] + $renameResult['already_matches']
+                + $renameResult['missing'] + $renameResult['skipped']
+                + $renameResult['collisions'];
             header('Content-Type: application/json');
             echo json_encode(array_merge($batchPayload, [
-                'processed' => count($renameResult['details']),
+                'processed' => $processed,
                 'result' => admin_media_renamer_attach_report($renameResult),
             ]));
             return;
@@ -763,13 +769,16 @@ function admin_edit_gallery_handle_media_rename(
         }
         $notice = t(
             'admin.media_renamer.gallery_result_notice',
-            'Renamed {renamed} file(s), preserved {moved} thumbnails, '
+            'Renamed {renamed} file(s). Already matching the pattern ({matching}). '
+                . 'Filename conflicts ({collisions}). Preserved {moved} thumbnails, '
                 . 'removed {cleaned} stale derivative cache file(s), '
                 . 'saw {missing} missing file(s), skipped {skipped} row(s), '
                 . 'updated {titles} derived title(s), and removed '
                 . '{archives} stale ZIP archive row(s).',
             [
                 'renamed' => (string) (int) ($renameResult['renamed'] ?? 0),
+                'matching' => (string) (int) ($renameResult['already_matches'] ?? 0),
+                'collisions' => (string) (int) ($renameResult['collisions'] ?? 0),
                 'moved' => (string) (int) (
                     $renameResult['derivatives_moved'] ?? 0
                 ),
@@ -777,10 +786,7 @@ function admin_edit_gallery_handle_media_rename(
                     $renameResult['derivatives_cleaned'] ?? 0
                 ),
                 'missing' => (string) (int) ($renameResult['missing'] ?? 0),
-                'skipped' => (string) (
-                    (int) ($renameResult['skipped'] ?? 0)
-                    + (int) ($renameResult['collisions'] ?? 0)
-                ),
+                'skipped' => (string) (int) ($renameResult['skipped'] ?? 0),
                 'archives' => (string) (int) (
                     $renameResult['zip_archives_deleted'] ?? 0
                 ),

@@ -316,8 +316,8 @@ function application_update_job_public_state(array $job): array
         'started_at' => (int) ($job['started_at'] ?? 0),
         'finished_at' => (int) ($job['finished_at'] ?? 0),
         'attempts' => (int) ($job['attempts'] ?? 0),
-        'runtime_waiting' => ($job['status'] ?? '') === 'running'
-            && !empty($job['checkpoints']['runtime_lease_busy']),
+        // These fields remain in the response for earlier open Admin pages.
+        'runtime_waiting' => false,
         'integrity_warnings' => array_keys((array) ($job['integrity_warnings'] ?? [])),
         'can_reset' => empty($job['result']['superseded_by'])
             && in_array($job['status'] ?? '', ['running', 'paused', 'failed'], true),
@@ -345,27 +345,7 @@ function application_update_job_public_state(array $job): array
                     !is_int($index)
                     || $index < (int) array_search('activate', $stages, true)
                 ),
-        'can_rollback' =>
-            empty($job['recovery_override']) && ($job['operation'] ?? '') !== 'manual_deploy' &&
-            empty($job['result']['superseded_by'])
-                && (($job['recovery_schema'] ?? 0) !== 1
-                    || ($job['status'] ?? '') === 'completed')
-                && (string) ($job['operation'] ?? '') !== 'rollback'
-                && !empty($job['checkpoints']['backup_complete'])
-                && (
-                    in_array(
-                        (string) ($job['stage'] ?? ''),
-                        [
-                            'activate',
-                            'migrate',
-                            'finalize',
-                            'cleanup',
-                            'completed',
-                        ],
-                        true,
-                    )
-                    || !empty($job['checkpoints']['activation_complete'])
-                ),
+        'can_rollback' => false,
         'background' => (string) ($job['trigger'] ?? '') === 'background',
         'runtime_limits' => (array) ($job['runtime_limits'] ?? []),
     ];

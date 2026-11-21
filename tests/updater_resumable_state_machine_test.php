@@ -602,7 +602,7 @@ assert_updater_resumable(
     'Public entrypoint must activate before root entrypoint.',
 );
 
-$rollbackable = application_update_job_public_state([
+$postActivation = application_update_job_public_state([
     'id' => '20260812000000-abcdef123456',
     'operation' => 'stable_update',
     'status' => 'failed',
@@ -610,8 +610,8 @@ $rollbackable = application_update_job_public_state([
     'checkpoints' => ['backup_complete' => true],
 ]);
 assert_updater_resumable(
-    !empty($rollbackable['can_rollback']),
-    'Post-activation failure lost its rollback capability.',
+    empty($postActivation['can_rollback']),
+    'A live post-activation failure must require forward recovery.',
 );
 $preActivation = application_update_job_public_state([
     'id' => '20260812000000-abcdef123456',
@@ -629,7 +629,7 @@ assert_updater_resumable(
     'Pre-activation running/failed job should remain cancellable.',
 );
 assert_updater_resumable(
-    empty($rollbackable['can_cancel']),
+    empty($postActivation['can_cancel']),
     'Post-activation job must not be cancellable.',
 );
 
@@ -736,14 +736,13 @@ $cliSource = (string) file_get_contents($root
 $adminUpdateBody = gallery_writer_functions($controllerSource)['cms_admin_update']['body'] ?? '';
 $adminPosition = strpos($adminUpdateBody, 'require_admin();');
 $csrfPosition = strpos($adminUpdateBody, 'verify_csrf();');
-$handoffPosition = strpos($adminUpdateBody, '\\Gallery\\EarlyRuntime\\updater_runtime_leave();');
 $workerPosition = strpos($adminUpdateBody, 'application_update_process_job(');
 assert_updater_resumable(
     is_int($adminPosition) && is_int($csrfPosition)
-        && is_int($handoffPosition) && is_int($workerPosition)
-        && $adminPosition < $csrfPosition && $csrfPosition < $handoffPosition
-        && $handoffPosition < $workerPosition,
-    'Admin updater must release its own lease only after authentication/CSRF and before processing.',
+        && is_int($workerPosition)
+        && $adminPosition < $csrfPosition && $csrfPosition < $workerPosition
+        && !str_contains($adminUpdateBody, 'updater_runtime_leave'),
+    'Admin updater requires authentication and CSRF before processing and owns no public lease.',
 );
 assert_updater_resumable(
     php_source_contains($jobsSource, "'download',")
@@ -809,16 +808,14 @@ assert_updater_resumable(
             'release_file_policy_archive_updater_paths($sourceRoot);'),
     'Archive and FTP validation must preserve required paths and the strict archive default.',
 );
+$workerSource = gallery_writer_functions($jobsSource)['application_update_process_job']['body'] ?? '';
+$rollbackRefusal = strpos($workerSource, 'File rollback is unavailable during online updates.');
+$migrationDispatch = strpos($workerSource, 'application_update_job_migrate_slice($job)');
 assert_updater_resumable(
-    php_source_contains(
-        $jobsSource,
-        "if ((string) (\$job['operation'] ?? '') === 'rollback')",
-    )
-        && php_source_contains(
-            $jobsSource,
-            'Rollback does not reverse database migrations.',
-        ),
-    'Rollback migration policy is no longer explicit.',
+    is_int($rollbackRefusal) && is_int($migrationDispatch)
+        && $rollbackRefusal < $migrationDispatch
+        && php_source_contains($jobsSource, 'run_migrations_bounded(1)'),
+    'Historical file rollback work must stop before the forward migration dispatcher.',
 );
 assert_updater_resumable(
     php_source_contains($migrationSource, 'function run_migrations_bounded')

@@ -9,7 +9,7 @@
  *
  * Purpose:
  *   Preserves bounded deferred discovery and authenticated private continuations
- *   without adding activation-drain delays to visitor requests.
+ *   without adding activation delays to visitor requests.
  *
  * Responsibilities:
  *   - Preserve the established automatic update lifecycle
@@ -112,21 +112,15 @@ assert_autoupdate_request_latency_safety(
     'Autonomous updater work must consume hashed single-use tickets after authentication and release its chain lock before handoff.',
 );
 
-// A closed gate refuses the visitors that formerly restarted a yielded drain.
-// Permit one paced private successor, after both locks have been released;
-// keep ordinary slices and all public discovery free of this delay.
 assert_autoupdate_request_latency_safety(
     preg_match_all(
         '/\b(?:u?sleep|time_nanosleep|time_sleep_until)\s*\(/',
         $backgroundSource,
-    ) === 1
+    ) === 0
         && php_source_contains(
             $backgroundSource,
             "} finally {
                 application_update_release_lock(\$lock);
-            }
-            if (\$nextTicket !== '' && \$runtimeDrain) {
-                usleep(APPLICATION_UPDATE_CHAIN_DRAIN_DELAY_US);
             }
             \$queued = \$nextTicket !== ''
                 && application_update_background_chain_deliver(
@@ -136,7 +130,7 @@ assert_autoupdate_request_latency_safety(
         )
         && !php_source_contains($serviceSource, 'sleep(')
         && !php_source_contains($bootstrapSource, 'sleep('),
-    'Only the private closed-gate drain handoff may pause, once and after releasing ownership; visitor discovery and normal slices must remain unpaced.',
+    'Private handoffs release ownership before delivery and add no public or worker delay.',
 );
 
 assert_autoupdate_request_latency_safety(

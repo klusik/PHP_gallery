@@ -887,6 +887,12 @@ The same fixture rejects an unchecked review even for a synthetic submit;
 production forms require that review without a duplicate blocking dialog.
 It also checks that progress uses the injected Admin language scope. Narrow
 manual review checks that the settings footer does not cover renamer controls.
+The database preview fixture confirms that a settled physical batch counts
+names already matching its pattern without emitting detail rows. It checks
+that the completion notice reports matches, conflicts and other skips separately.
+The same fixture creates a disk-only collision, persists the numbered result,
+and verifies that the preview, candidate page and availability scan are settled.
+It also checks a changed pattern and physical apply after the blocker is removed.
 
 The MySQL gallery edit concurrency fixture also checks that an accepted title
 save renames its sanitized folder and descendant path while preserving original
@@ -1741,7 +1747,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.4.3. Release verification uses the
+This guide applies to PHP Gallery Version 1.5.0. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -5965,92 +5971,35 @@ without changing the documented production recovery workflow.
 Browser coverage includes reset controls, enabled stable recovery during old
 work, pending ownership takeover and retained desktop/narrow drawer layout.
 
-`tests/updater_recovery_test.php` is discovered by the central FULL PHP
-registry.
-It also recreates the old producer's untouched `activate` boundary without a
-database witness, verifies original/created/obsolete paths and backup metadata,
-and refuses changed bytes, missing backups, activation or migration intent and
-held runtime ownership. Repeated release remains idempotent. Historical ledger
-rows without current files complete real rollback; declared missing/corrupt
-migrations, changed applied timestamps/versions/schema, unavailable installed
-inventory and unsupported witness formats refuse. Unversioned complete-hash
-witnesses remain accepted. Initial-request lease handoff is exercised with real
-kernel locks; controller ordering, post-response scheduler, private tickets and
-trusted CLI admission retain their respective transport coverage.
-The real browser drawer fixture holds integrity work at 37%, checks both
-synchronized cards and the production cascade at 1280/390 pixels, then releases
-completion. Package verification's expired/resumed cursor is checked through
-the real service and public-state projection. Live c2e2bc77 to 0.144.4
-deployment
-is not performed by these disposable tests; follow `docs/AUTOUPDATE.md`.
-The fixture also preserves an unmanaged local PHP extension through real
-rollback, checks private worker diagnostics and exact migration identity, and
-forces unavailable Admin logging to verify redacted PHP-log fallback. The
-browser explains a retained 631/632 processing counter, displays runtime
-contention as waiting and completes through serialized continuations.
-Explicit FTP reset also completes without a manifest, and stable replacement
-copies a malformed manifest as selected source bytes with the publisher sweep
-off.
-A real shared reader remains held while reset allocates a new owner and closes
-admission; only migration waits, then completes after that reader releases.
-The retained opt-in publisher verifier still rejects corrupt bytes when called
-directly. Job-driven publisher/FTP sweeps are disabled until explicitly enabled;
-fixtures assert absent sweep cursors and no diagnostic warning events.
-An ordinary background update with mismatched publisher hashes reaches
-activation
-from a real flat production ZIP with a mandatory raw archive digest, through
-actual extraction and package validation, under a held shared reader. Its real
-gate refuses an independent new reader with
-503 before another lease is taken. After the old reader releases, the actual
-activation/migration/finalization pipeline completes and removes the gate.
-Job creation additionally retains its configured session name with no active
-session. Durable background stable completion logs previous/installed versions
-once; terminal status reads do not repeat that event.
+The central FULL PHP registry discovers `tests/updater_recovery_test.php`.
+It checks the original-byte proof required to release an untouched job,
+preserved snapshots, finite retry budgets, failed-package exclusion, malformed
+legacy marker retirement and serialized explicit replacement. Ordinary
+background installation verifies the release ZIP digest and runs extraction,
+activation, migration replay and cleanup with a legacy runtime lock held.
+Private diagnostics record evidence and safe failure details. Redacted PHP
+logging survives unavailable Admin logging. Legacy rollback jobs cannot write
+the live tree. SQL tests preserve ledger and migration-byte checks, including
+historical absent files and missing or corrupt declared files.
 
-The real HTTP continuation fixture now crosses the actual early gate. It seeds
-the receipt of a yielded runtime drain before its real cleanup hops, refuses an
-ordinary follow-up with 503 and still completes private single-use successors
-without another admitted visit. Existing worker contention, replay, capability
-OFF and forbidden-maintenance negatives remain unchanged.
-The request-latency contract permits only the guarded private drain delay after
-lock release; visitor discovery and ordinary worker handoffs remain unpaced.
-The real handoff callback also acquires both kernel locks, proving that the
-predecessor released its chain and worker ownership before delivery.
+The real HTTP continuation fixture uses authenticated, single-use tickets.
+Only the successful kickoff starts the chain. A later request returns HTTP 200
+without a second kickoff. Worker contention, replay, capability OFF and
+forbidden maintenance calls retain negative coverage. Worker and chain locks
+are released before handoff.
 
-`activation_maintenance_response_test.php` starts the actual early-runtime probe
-on an ephemeral loopback port and a random private installation. It checks the
-browser HTML, three-second refresh, retry/no-store/noindex headers, empty HEAD,
-unchanged plain replies for JSON/media/POST and absence of reflected request or
-private job data. Refused requests must leave the runtime lease absent and job
-state untouched. Removing only the owned gate restores a normal response at the
-same URL. It also exercises an empty root `maintenance.lock`, active-job/window
-records
-without a marker, exact-byte legacy marker import and committed-runtime stale
-marker retirement while cleanup is still running. The real recovery fixture
-refuses commit before migrations/finalization, commits through the production
-owners, pauses cleanup, admits an independent public reader and refuses an
-isolated rollback claim after reopening. The fixture uses no installed
-configuration, database or external assets. Desktop and narrow rendering are
-reviewed separately from HTTP evidence.
+`activation_maintenance_response_test.php` extracts a ZIP with the actual public
+entry point and early runtime over a fixture with a failed `migrate` job.
+It verifies HTML, JSON, image bytes and HEAD with a held legacy runtime lock.
+A successful response removes the old marker even when it was empty or corrupt.
+The old job remains available and cannot restart over the newer installation. A separate PHP installer is terminated
+after its first actual rename. Requests succeed while it is held and after
+termination. A second worker cannot advance the occupied job. The original job
+then retries and completes through the normal worker API with its backup intact.
+The isolated HTTP process disables its separate CLI bytecode cache so each
+assertion observes the actual bytes published by the independent installer.
+The full Admin drawer fixtures retain desktop and narrow screen coverage.
 
-It executes real persistence, worker/kernel locks, discovery, manifest checks,
-staging, backups, atomic rollback activation, settings reconciliation and a
-copied actual migration runner in an owned temporary installation. Database
-owners use private opt-in MySQL/MariaDB databases; source owners use SQLite
-with syntax/metadata adaptation. All original launch modes, Advanced beta,
-OFF/beta preference preservation, new-version discovery, failed-commit
-exclusion,
-reservation replay, repeated recovery, finite retries, missing/corrupt backup,
-actual schema changes without ledger changes and unknown DB state are covered.
-Actual undefined callback migration and transient replay verify deterministic
-stop, no unnecessary rollback and exactly-once ledger completion. Runtime-use
-witnesses invalidate unchanged-schema proofs, live read leases block activation
-and legacy missing protocol is refused. Non-core binary resources remain
-admitted by canonical package policy, while a CRLF-to-LF binary corruption
-that collides under text normalization is rejected by actual staging.
-Independent subprocess contention
-checks the actual worker lock. Interrupted slice receipts enter bounded
-recovery.
 The central scheduler fixture verifies failed rather than pending state and
 honors OFF without hiding safety recovery or inventing blocked deadlines.
 The existing Admin drawer fixture renders stopped guidance at desktop/narrow

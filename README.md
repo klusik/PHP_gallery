@@ -68,7 +68,7 @@ release
 of maintained PHP 8.3 or newer; PHP 8.5 is preferred after staging verification.
 See [runtime support and upstream lifecycle dates](docs/RUNTIME_SUPPORT.md).
 
-**Current Version:** 1.4.3
+**Current Version:** 1.5.0
 
 **Key Benefit:** Deploy in minutes on shared hosting. No npm, no Composer, no
 framework overhead. Just PHP + MySQL.
@@ -1214,25 +1214,17 @@ settings.
 
 #### Updating the Application
 
-Failed automatic, manual and Advanced commit installs receive bounded transient
-retries. After a ten-minute failure timeout, an untouched job releases its slot
-or a verified separate rollback restores previous managed files and channel
-settings. Runtime isolation, unchanged actual DB evidence, zero migration effects
-and intact backups are mandatory. Unverified states remain failed with repair
-steps; migrations and application data are never reversed. Later discovery can
-skip failed versions and install a newer stable release. Existing stuck updaters
-do not acquire this mechanism by publication. See
-[safety, hosting cron and manual repair](docs/AUTOUPDATE.md).
+Updates replace managed files individually while ordinary requests remain
+admitted. A complete compatible `production.zip` can be extracted over an
+existing installation, retaining local configuration, galleries and data.
+Legacy updater markers have no public effect. The first successful request
+retires `maintenance.lock` when directory permissions allow.
+[See overlay deployment and recovery](docs/AUTOUPDATE.md#already-stuck-installations).
 
-Public entry points load a dependency-free early runtime guard before the normal
-bootstrap. During the updater's file-activation critical section, new requests
-receive a private, non-cacheable `503 Service Unavailable` response until
-the new job is durably complete (legacy jobs use activation completion);
-authenticated update recovery/status requests
-remain available. The guard also converts uncaught and catchable fatal PHP
-failures to bounded `500` responses where PHP can still control the response.
-Production hosting must keep `display_errors` disabled so the PHP runtime does
-not print warning or fatal details before the safe response handler runs.
+Transient failures can retry the same pinned package. After ten minutes an
+untouched attempt can release its slot. A job that has already changed files
+needs forward completion or a verified compatible replacement. Public PHP
+failures still go through the dependency-free emergency response handler.
 
 1. Go to **Updates** to check GitHub for new versions and read patch notes.
 2. Click **Update**. The Admin panel starts a durable job under
@@ -1283,10 +1275,9 @@ not print warning or fatal details before the safe response handler runs.
    `schema_migrations`. If PHP dies inside one migration file, that file may
    replay, so migration definitions and repair callbacks must remain safely
    rerunnable.
-9. After activation begins, the Admin job card can roll application files back
-   from the saved snapshot. File rollback does not reverse database migrations.
-   Stable restore and clean reinstall are separate resumable download/install
-   operations.
+9. After activation begins, retry the same package or use a verified compatible
+   stable replacement. Backups and job evidence remain available for coordinated
+   repair. Pending migrations complete forward.
 10. With JavaScript enabled the Admin side panel stays open and refreshes
     progress in place. Without JavaScript, **Continue update** and **Retry from
     checkpoint** submit ordinary authenticated POST requests and preserve the
