@@ -150,41 +150,46 @@ try {
                 === 'operation_payload_conflict',
         'Changed payload reused a completed key.',
     );
-    $duplicateTitle = $admin->request(
-        $createRoute,
-        array_replace($fields, [
-            'operation_key' => $admin->operationKey($createRoute . '&panel=1'),
-        ]),
-        true,
-    );
-    // A failed claimed create retains the existing conservative 503 contract;
-    // it must still refuse a title/folder alias and preserve the catalog.
-    check(
-        $duplicateTitle['status'] === 503
-            && ($duplicateTitle['json']['ok'] ?? true) === false
-            && ($duplicateTitle['json']['error_code'] ?? '')
-                === 'operation_outcome_unknown'
-            && countRows($pdo, 'galleries') === ($before + 1),
-        'A fresh key must refuse a title/folder collision without an alias.',
-    );
+    $original = row($pdo, 'SELECT title, folder_path, url_path FROM galleries WHERE id = ?', [$id]);
+    $secondIntent = array_replace($fields, [
+        'operation_key' => $admin->operationKey($createRoute . '&panel=1'),
+    ]);
     $another = envelope(
-        $admin->request(
-            $createRoute,
-            array_replace($fields, [
-                'operation_key' => $admin->operationKey($createRoute
-                    . '&panel=1'),
-                // A new intent needs a distinct canonical folder/title.
-                'title' => $intent . ' next',
-            ]),
-            true,
-        ),
-        'Fresh create',
+        $admin->request($createRoute, $secondIntent, true),
+        'Fresh create with the same title',
     );
+    $otherId = (int) $another['gallery_id'];
+    $other = row($pdo, 'SELECT title, folder_path, url_path FROM galleries WHERE id = ?', [$otherId]);
     check(
-        (int) $another['gallery_id'] !== $id
+        $otherId !== $id
+            && $other['title'] === $original['title']
+            && $other['folder_path'] === $original['folder_path'] . '-2'
+            && $other['url_path'] !== $original['url_path']
+            && envelope($admin->request($createRoute, $secondIntent, true), 'Numbered create replay')
+                === $another
             && countRows($pdo, 'galleries') === ($before + 2),
-        'Fresh key suppressed an intentional distinct gallery.',
+        'A fresh key must create a separate numbered gallery and replay its own receipt.',
     );
+
+    $unregistered = $directory . '/galleries/' . $original['folder_path'] . '-unregistered';
+    check(mkdir($unregistered), 'Could not seed an owned unmanaged folder.');
+    try {
+        $occupied = $admin->request($createRoute, array_replace($fields, [
+            'title' => $intent . ' unregistered',
+            'operation_key' => $admin->operationKey($createRoute . '&panel=1'),
+        ]), true);
+        check(
+            $occupied['status'] === 503
+                && ($occupied['json']['ok'] ?? true) === false
+                && ($occupied['json']['error_code'] ?? '') === 'operation_outcome_unknown'
+                && is_dir($unregistered)
+                && countRows($pdo, 'galleries') === ($before + 2),
+            'A claimed create on an unmanaged base must preserve the folder and catalog.',
+        );
+    } finally {
+        check(rmdir($unregistered), 'Could not remove the empty owned fixture directory.');
+    }
+
     $reauthenticated = new Http($origin);
     $newCsrf = $reauthenticated->login($seed);
     check(

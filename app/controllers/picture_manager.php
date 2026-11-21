@@ -511,6 +511,7 @@ function cms_picture_manager_create_gallery(): void
         // $createdGallery stores the physical destination root at the user-selected location.
         $createdGallery = create_empty_gallery([
             'title' => $title,
+            'number_title_collision' => true,
             'folder_name' => trim(
                 (string) ($_POST['new_gallery_folder_name'] ?? ''),
             ),

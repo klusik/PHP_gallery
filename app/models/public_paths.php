@@ -137,15 +137,23 @@ function public_path_model_gallery_images(int $galleryId): array
  * Return gallery rows required to rebuild hierarchy and public paths.
  *
  * @param ?PDO $pdo Optional migration-owned connection.
- * @return list<array{id:int|string,parent_id:int|string|null,title:string,folder_path:string,slug:string}> Gallery ids, parent links, names, and paths ordered parent-first.
+ * @param bool $includeStoredUrls True when the clean URL columns are present
+ *     and existing assignments should be considered.
+ * @return list<array{id:int|string,parent_id:int|string|null,title:string,
+ *     folder_path:string,slug:string,url_slug?:?string,url_path?:?string}>
+ *     Gallery identities and optional current URLs, ordered parent-first.
  */
-function public_path_model_gallery_regeneration_rows(?PDO $pdo = null): array
-{
+function public_path_model_gallery_regeneration_rows(
+    ?PDO $pdo = null,
+    bool $includeStoredUrls = false,
+): array {
     $connection = $pdo ?? db();
     return (
         $connection
             ->query(
-                'SELECT id, parent_id, title, folder_path, slug FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id',
+                'SELECT id, parent_id, title, folder_path, slug'
+                    . ($includeStoredUrls ? ', url_slug, url_path' : '')
+                    . ' FROM galleries ORDER BY CHAR_LENGTH(folder_path), folder_path, id',
             )
             ->fetchAll() ?: []
     );

@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.4.2}
-\newcommand{\manualdate}{20~november~2026}
+\newcommand{\version}{1.4.3}
+\newcommand{\manualdate}{21~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1405,7 +1405,9 @@ Identitet & URL-namn & Styr galleriets identitet i den offentliga URL:en. Behål
 etablerade URL-namn där det går eftersom bokmärken och externa länkar kan vara
 beroende av dem.\\
 Identitet & Mappnamn & Skrivskyddat fysiskt namn från den rensade gallerititeln.
-När titeln sparas byter mappen namn och alla underordnade sökvägar uppdateras.\\
+Gallerier kan ha samma titel. Om ett syskongalleri använder mappnamnet kan ett
+suffix som \codeword{-2} användas när en titel skapas eller ändras. När mappen
+byter namn uppdateras alla underordnade sökvägar.\\
 Identitet & Övergalleri och sorteringsordning & Ändrar hierarki och
 syskonordning. När ett galleri flyttas flyttas dess mappträd fysiskt där den
 konfigurerade galleriroten tillåter det.\\
@@ -3097,9 +3099,11 @@ utan nytt bygge. Schema, källa och uppdatering beskrivs i
 
 Watcher och Import visar \ui{Gallery:} och den aktuella visningstiteln från
 det autentiserade inventerings-API:et. Långa namn radbryts inom radens bredd.
-Det fysiska mappnamnet härleds alltid från den rensade källtiteln. När en
-titeländring sparas byter mappen namn och underordnade sökvägar uppdateras;
-målkonflikter avvisas utan att data skrivs över. Äldre API:er utan titelmetadata
+Servern härleder mappnamnet från den rensade källtiteln. Om ett annat galleri
+redan använder namnet kan servern välja en numrerad syskonmapp vid skapande
+eller titeländring. Båda gallerierna kan ha samma visningstitel. Ett
+mappnamnsbyte uppdaterar underordnade sökvägar. En oregistrerad post på den
+önskade sökvägen måste hanteras via mappsökningen. Äldre API:er utan titelmetadata
 visar det sista mappsegmentet. Håll pekaren över namnet för att visa hela
 mapphierarkin på separata indragna rader,
 från roten till galleriet. Anslutningsändringar uppdaterar båda vyerna;
@@ -5308,8 +5312,11 @@ manuell granskning; likhet bevisar inte bildidentitet. Avkodning som saknas,
 oklara filer och saknade original repareras inte automatiskt. Dold/intern
 lagring och andra bilagor har egna underhållsverktyg.
 
-Även import följer disken. En sidofilstitel behålls bara om dess rensade form
-motsvarar den fysiska mappens namn. Annars ger mappen titeln. Nya importerade
+Även import följer disken. En sidofilstitel behålls om dess rensade form
+motsvarar den fysiska mappens namn, inklusive suffix som \codeword{-2}.
+Annars ger mappen titeln.
+Konsekvenskontrollen godkänner kompatibel numrering och reparationer behåller
+den. Nya importerade
 mappar normaliseras djupast först med den skyddade underträdsflyttaren.
 Målkonflikter avvisar importen; andra befintliga gallerier döps inte om tyst.
 Historiska avvikelser kräver uttrycklig reparation.

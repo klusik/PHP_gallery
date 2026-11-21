@@ -1741,7 +1741,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.4.2. Release verification uses the
+This guide applies to PHP Gallery Version 1.4.3. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -3093,6 +3093,10 @@ preservation, owned-worker image-move interruption/recovery, independent-session
 edit revisions, portable duplicate-column migration replay, pre-activation
 enforcement refusal, replay-safe
 operation keys, raster decode admission and bounded destination search.
+The disposable HTTP journey also covers duplicate-title creation and replay,
+rename past occupied disk and catalog slots, descendant/photo preservation,
+stable sibling URLs and numbered sidecar import. The pure names-only report
+fixture checks that canonical numeric suffixes need no automatic repair.
 Full-profile browser fixtures cover panel load ownership, native keyboard focus,
 in-memory drafts and parent-picker integration. A passing Node seam test is not
 reported as real browser interaction.

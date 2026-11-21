@@ -151,7 +151,7 @@ function linked_create_fixture_snapshot(PDO $connection): array
  */
 function linked_create_fixture_remove(string $root, string $leaf, string $title): void
 {
-    check(preg_match('/\Alinked-create-[a-f0-9]{24}\z/D', $leaf) === 1,
+    check(preg_match('/\Alinked-create-[a-f0-9]{24}(?:-2)?\z/D', $leaf) === 1,
         'Unexpected fixture gallery identity.');
     $path = $root . DIRECTORY_SEPARATOR . $leaf;
     if (!file_exists($path) && !is_link($path)) {
@@ -1269,6 +1269,30 @@ try {
     }
     check($collision && !$filesystemStarted && linked_create_fixture_snapshot($connection) === $after,
         'A folder collision must preserve all existing gallery rows.');
+
+    $numberedLeaf = \Gallery\Services\gallery_creation_folder_path(null, $title, true);
+    check($numberedLeaf === $leaf . '-2', 'A second intentional create must reserve the first suffix.');
+    $ownedFolders[] = [$numberedLeaf, $title];
+    $connection->beginTransaction();
+    try {
+        $numberedReservation = linked_create_fixture_reserve($numberedLeaf, $actor);
+        $filesystemStarted = false;
+        $numbered = \Gallery\Services\create_empty_gallery_linked_owned([
+            'title' => $title, 'parent_id' => 0,
+        ], $numberedReservation, $filesystemStarted);
+        $numberedId = (int) $numbered['id'];
+        $numberedRows = linked_create_fixture_snapshot($connection);
+        $peers = array_values(array_filter($numberedRows,
+            static fn(array $row): bool => (int) $row['id'] !== $numberedId));
+        check($filesystemStarted && $numberedId > 0 && $numbered['title'] === $title
+            && $numbered['_linked_creation_fs']['folder']
+                === $root . DIRECTORY_SEPARATOR . $numberedLeaf
+            && $peers === $after,
+            'Reserved suffix must create a distinct gallery without changing existing URLs or rows.');
+    } finally {
+        $connection->rollBack();
+    }
+    linked_create_fixture_remove($root, $numberedLeaf, $title);
 
     // An already inconsistent stored URL is not silently repaired by creation.
     $blockedTitle = 'Linked Create ' . bin2hex(random_bytes(LINKED_CREATE_FIXTURE_RANDOM_BYTES));

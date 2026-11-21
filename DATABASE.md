@@ -43,11 +43,12 @@ Separately consented `gallery:edit` uses existing `galleries.title`,
 `description`, `nsfw_enabled`, `access_listing` and `edit_revision`; it creates
 no schema objects. The existing live-grant transaction and gallery writer
 lease protect one selected-field update. A stale revision changes no stored
-field. The service verifies that unrelated columns remain identical and
-advances the application-owned revision through `gallery_model_update_fields`.
-The display title does not move a folder or change its URL. Sidecar publication
-and content invalidation follow commit; failure there remains explicitly
-unconfirmed to WinApp. Local order/card-format preferences never enter SQL.
+field. A native title edit uses the shared physical subtree move, including
+numbered siblings for a duplicate title. It commits the title and relative
+paths together through the gallery mutations model. Other metadata edits use
+`gallery_model_update_fields`. Sidecar publication and content invalidation
+follow commit. Failure there remains explicitly unconfirmed to WinApp.
+Local order/card-format preferences never enter SQL.
 
 ## Explicit media consistency reports
 
@@ -140,7 +141,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 1.4.2. Version 0.97 adds the recoverable gallery-trash
+application version 1.4.3. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in
@@ -996,7 +997,7 @@ Important columns:
 | `url_slug` | Clean URL slug. |
 | `url_path` | Full clean URL path for nested galleries. |
 | `url_path_hash` | Hash for unique clean path lookup. |
-| `title` | Display title. |
+| `title` | Display title. Multiple galleries can share it and keep distinct physical and public paths. |
 | `description` | Public description. |
 | `gallery_date` | Optional manual gallery date or date range start. |
 | `gallery_date_end` | Optional manual gallery date range end. `NULL` means the gallery has a single date or no manual range end. |

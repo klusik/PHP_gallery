@@ -214,6 +214,7 @@ function app_linking_gallery_edit_save(
             $folderMove = move_gallery_folder_to_parent_owned(
                 $galleryId, empty($current['parent_id']) ? null : (int) $current['parent_id'],
                 null, false, (string) $stored, true,
+                 numberTitleCollision: true,
             );
         }
         if ($folderMove === null || !$folderMove['moved']) {

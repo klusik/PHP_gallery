@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.4.2}
-\newcommand{\manualdate}{20.~November~2026}
+\newcommand{\version}{1.4.3}
+\newcommand{\manualdate}{21.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -1502,8 +1502,10 @@ Identität & Slug & Bestimmt die öffentliche URL-Kennung der Galerie. Halten Si
 bestehende Slugs nach Möglichkeit stabil, weil Lesezeichen und externe Links
 davon abhängen können.\\
 Identität & Ordnername & Schreibgeschützter physischer Name aus dem bereinigten
-Galerietitel. Das Speichern eines neuen Titels benennt den Ordner um und
-aktualisiert alle untergeordneten Pfade.\\
+Galerietitel. Galerien dürfen denselben Titel haben. Ist der Ordnername auf
+derselben Ebene schon belegt, kann beim Anlegen oder Umbenennen ein Suffix
+wie \codeword{-2} verwendet werden. Ein Ordnerwechsel aktualisiert alle
+untergeordneten Pfade.\\
 Identität & Übergeordnete Galerie und Sortierreihenfolge & Ändert Hierarchie und
 Reihenfolge unter Geschwistergalerien. Beim Verschieben einer Galerie wird ihr
 Ordnerbaum physisch verlagert, soweit das konfigurierte Galeriestammverzeichnis
@@ -3352,12 +3354,13 @@ danach die App neu starten, ohne Neubau. Schema, Herkunft und Aktualisierung:
 
 Watcher und Import zeigen \ui{Gallery:} und den aktuellen Anzeigenamen aus
 der authentifizierten Inventar-API. Lange Namen werden innerhalb der
-Zeilenbreite umgebrochen. Der physische Ordnername wird immer aus dem
-bereinigten
-Quelltitel abgeleitet. Eine gespeicherte Titeländerung benennt den Ordner um und
-aktualisiert die Pfade seiner Nachfolger; Zielkonflikte werden ohne
-Überschreiben
-abgewiesen. Ältere APIs ohne Titelmetadaten zeigen das letzte Ordnersegment.
+Zeilenbreite umgebrochen. Der Server leitet den Ordnernamen aus dem bereinigten
+Quelltitel ab. Belegt eine andere Galerie diesen Namen, kann beim Anlegen oder
+Umbenennen ein nummerierter Schwesterordner verwendet werden. Beide behalten
+denselben Anzeigenamen. Beim Umbenennen werden auch untergeordnete Pfade
+aktualisiert. Ein nicht registrierter Eintrag am gewünschten Basispfad muss
+vorher über die Ordnersuche geklärt werden. Ältere APIs ohne Titelmetadaten
+zeigen das letzte Ordnersegment.
 Beim Überfahren zeigt der Tooltip die vollständige Ordnerhierarchie auf
 einzelnen eingerückten Zeilen, von der Wurzel bis zur Galerie. Änderungen der
 Verbindung aktualisieren beide Darstellungen; Flugaufzeichnungen und
@@ -5738,8 +5741,10 @@ werden nicht automatisch repariert. Versteckte/interne Speicher und andere
 Anlagen behalten ihre eigenen Wartungswerkzeuge.
 
 Auch beim Import bestimmt der Datenträger den Namen. Ein Sidecar-Titel bleibt
-nur erhalten, wenn seine bereinigte Form zum physischen Ordnernamen passt.
-Sonst liefert der Ordner den Titel. Neue Importordner werden mit dem
+erhalten, wenn seine bereinigte Form zum physischen Ordnernamen passt,
+einschließlich eines Suffixes wie \codeword{-2}. Sonst liefert der Ordner den
+Titel. Konsistenzprüfung und Reparatur erkennen diese Nummerierung an und
+behalten sie bei. Neue Importordner werden mit dem
 geschützten Teilbaumverschieber von unten nach oben normalisiert.
 Zielkonflikte verweigern den Import; andere bestehende Galerien werden nicht
 still umbenannt. Historische Abweichungen benötigen die explizite Reparatur.
