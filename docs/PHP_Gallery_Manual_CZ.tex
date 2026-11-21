@@ -4366,9 +4366,15 @@ Použití připraví pouze ID kandidátů a~zachová dávky nejvýše 15 fotek. 
 report nahradí návrhy a~nejprve zobrazí jen počty podle galerií. Rozbalení načte
 změněné názvy po 50 položkách. Report náleží aktuálnímu přihlášení správce
 a~vyprší po 24 hodinách. Chyba uložení detailů nevrací potvrzené přejmenování.
+Výsledková hláška uvádí shody se vzorem a~kolize názvů zvlášť od ostatních
+přeskočených řádků.
+Název s~příponou kvůli kolizi, například \codeword{\_2}, náhled započítá
+jako shodu, pokud odpovídá aktuálnímu vzoru a~pořadí.
 
-Výchozí vzor je \codeword{\{gallery_path\}_\{seq4\}}. Vlastní vzor může používat
-\codeword{\{gallery_path\}}, \codeword{\{gallery_title\}},
+Výchozí vzor je \codeword{\{gallery_context\}_\{seq4\}}. Kontext vychází
+z~nadřazených složek a~aktuálního názvu galerie. Vlastní vzor může používat
+\codeword{\{gallery_context\}}, \codeword{\{gallery_path\}},
+\codeword{\{gallery_title\}},
 \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}},
 \codeword{\{image_id\}} a~zástupné značky pořadového čísla \codeword{\{seq\}} až
 \codeword{\{seq5\}}. Číslované varianty doplňují číslo na dvě, tři, čtyři nebo

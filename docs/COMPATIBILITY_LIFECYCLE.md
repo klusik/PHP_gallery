@@ -3040,6 +3040,11 @@ attempt budget remains unchanged. Candidate pages additionally freeze each
 image's original sequence position so filename-based ordering cannot drift
 between physical batches. The DB/physical regression stages 922 owned originals,
 verifies bytes and IDs, and requires a second analysis to be an idempotent no-op.
+An existing filename with a compatible collision suffix also counts as a match.
+The preview uses the indexed filename and the shared deterministic builder to
+verify the current pattern and sequence. Execution applies the same rule after
+checking the source. This preserves numbered results from earlier automatic
+uploads, including when the original blocker has since been removed.
 Collisions or missing originals now produce a warning-level completion log.
 The supplied deployed report proves the old defect; deployed acceptance of the
 correction remains unknown until the new code is installed and exercised.

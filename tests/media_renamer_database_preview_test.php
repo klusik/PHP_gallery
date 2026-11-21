@@ -34,12 +34,23 @@ namespace Gallery\Services {
         return $query->fetch(\PDO::FETCH_ASSOC) ?: null;
     }
 
-    /** Preserve English fallback text at the localization boundary.
+    /** Render English fallback text and substitute its named values.
      * @param string $key Translation identity.
      * @param string $fallback Prepared English text.
-     * @return string English fixture text.
+     * @param array<string,string> $parameters Values for placeholders in the text.
+     * @return string Rendered English fixture text.
      */
-    function t(string $key, string $fallback = ''): string { return $fallback; }
+    function t(
+        string $key,
+        string $fallback = '',
+        array $parameters = [],
+    ): string {
+        $replacements = [];
+        foreach ($parameters as $name => $value) {
+            $replacements['{' . $name . '}'] = $value;
+        }
+        return strtr($fallback, $replacements);
+    }
 
     /** Refuse gallery IO during analysis; resolve only the owned execution phase.
      * @param string $path Requested gallery-relative path.
@@ -144,6 +155,15 @@ namespace {
     }
     $check(\Gallery\Controllers\admin_media_renamer_result_log_severity(['renamed' => 1]) === 'info',
         'A confirmed rename without unresolved outcomes was marked as a warning.');
+    $notice = \Gallery\Controllers\admin_media_renamer_result_notice([
+        'already_matches' => 1, 'collisions' => 2, 'skipped' => 3,
+    ]);
+    $check(
+        str_contains($notice, 'Already matching the pattern (1)')
+            && str_contains($notice, 'Filename conflicts (2)')
+            && str_contains($notice, 'skipped 3 row(s)'),
+        'Completion must explain name matches and count conflicts separately.',
+    );
     if (!extension_loaded('pdo_sqlite')) {
         throw new \RuntimeException('Required disposable SQLite driver is unavailable.');
     }
@@ -215,8 +235,8 @@ namespace {
         // Keep the title below the real 255-character limit; the parent path
         // supplies the remaining context which made the reported name too long.
         $longTitle = str_repeat('Distant worlds and long chapter names ', 6);
-        $galleryInsert = $pdo->prepare('INSERT INTO galleries VALUES (8,?,?,?,NULL,?,1)');
-        $galleryInsert->execute([$longTitle,
+        $galleryInsert = $pdo->prepare('INSERT INTO galleries VALUES (?,?,?,?,NULL,?,1)');
+        $galleryInsert->execute([8, $longTitle,
             'games/' . str_repeat('deep-space-route/', 8) . 'chapter', 'long', 'before']);
         $longGallery = \Gallery\Services\find_gallery(8);
         $context = \Gallery\Services\media_renamer_gallery_context_base($longGallery);
@@ -285,6 +305,80 @@ namespace {
         $check($settled['summary']['already_matches'] === RENAME_LONG_CONTEXT_IMAGE_COUNT
             && $settled['summary']['rename'] === 0 && $settled['summary']['collision'] === 0,
             'A repeated long-context run did not settle to an idempotent no-op.');
+        $settledBatch = \Gallery\Services\media_renamer_plan_for_gallery_selection(
+            8, array_keys($positions), '', $positions,
+        );
+        $check($settledBatch['summary']['total'] === count($positions)
+            && $settledBatch['summary']['already_matches'] === count($positions)
+            && $settledBatch['summary']['rename'] === 0
+            && $settledBatch['items'] === [],
+            'Confirmed matching names must count in a physical batch without detail rows.');
+
+        // Reproduce an upload whose preferred name is occupied on disk only.
+        $numberedGalleryId = 9;
+        $numberedImageId = 901;
+        $galleryInsert->execute([
+            $numberedGalleryId, 'Night Flight', 'collections/night-flight', 'night', 'before',
+        ]);
+        $originalName = 'camera-flight.png';
+        $preferredName = 'collections_night_flight_0001.png';
+        $numberedName = 'collections_night_flight_0001_2.png';
+        $createImage = $pdo->prepare('INSERT INTO images VALUES (?, ?, ?, ?, ?, ?)');
+        $createImage->execute([
+            $numberedImageId, $numberedGalleryId, $originalName, $originalName, 'Night', 1,
+        ]);
+        file_put_contents($physical . '/' . $originalName, 'uploaded original');
+        file_put_contents($physical . '/' . $preferredName, 'unindexed occupant');
+        $uploadPlan = \Gallery\Services\media_renamer_plan_for_gallery_selection(
+            $numberedGalleryId, [$numberedImageId],
+        );
+        $check($uploadPlan['summary']['rename'] === 1
+            && $uploadPlan['items'][0]['new_filename'] === $numberedName,
+            'An unindexed occupied target must allocate the first collision suffix.');
+        $check(rename($physical . '/' . $originalName, $physical . '/' . $numberedName),
+            'Could not complete the synthetic upload rename.');
+        $renameUpdate->execute([$numberedName, $numberedName, $numberedImageId]);
+
+        // The preview and availability check have no filesystem access.
+        unset($GLOBALS['rename_physical_root']);
+        $numberedPreview = \Gallery\Services\media_renamer_database_preview(
+            $numberedGalleryId, '', 0, 1,
+        );
+        $numberedCandidates = \Gallery\Services\media_renamer_database_preview(
+            $numberedGalleryId, '', 0, 1, true,
+        );
+        $check($numberedPreview['summary']['already_matches'] === 1
+            && $numberedPreview['summary']['rename'] === 0
+            && $numberedPreview['summary']['warnings'] === 0
+            && $numberedPreview['items'] === []
+            && $numberedCandidates['candidate_image_ids'] === []
+            && \Gallery\Services\media_renamer_db_availability_for_gallery($numberedGalleryId)
+                === ['rename_count' => 0, 'warning_count' => 0],
+            'The preview and apply list must recognize the server-generated suffix.');
+        $differentPattern = \Gallery\Services\media_renamer_database_preview(
+            $numberedGalleryId, '{gallery_title}_{seq4}',
+        );
+        $check($differentPattern['summary']['rename'] === 1,
+            'A new pattern must still offer a real name change.');
+
+        $GLOBALS['rename_physical_root'] = $physical;
+        $check(file_get_contents($physical . '/' . $preferredName) === 'unindexed occupant'
+            && unlink($physical . '/' . $preferredName),
+            'The synthetic upload rename touched a file it did not own.');
+        $numberedRepeat = \Gallery\Services\media_renamer_plan_for_gallery(
+            $numberedGalleryId,
+        );
+        $check($numberedRepeat['summary']['already_matches'] === 1
+            && $numberedRepeat['summary']['rename'] === 0
+            && $numberedRepeat['items'] === []
+            && file_get_contents($physical . '/' . $numberedName) === 'uploaded original',
+            'The numbered name must stay settled when the earlier blocker disappears.');
+        $differentPosition = \Gallery\Services\media_renamer_plan_for_gallery_selection(
+            $numberedGalleryId, [$numberedImageId], '', [$numberedImageId => 2],
+        );
+        $check($differentPosition['summary']['rename'] === 1
+            && $differentPosition['items'][0]['new_filename'] === 'collections_night_flight_0002.png',
+            'Filename matching must compare the original position as well as the suffix.');
         unset($GLOBALS['rename_physical_root']);
 
         $owner = hash('sha256', 'admin/session-A');

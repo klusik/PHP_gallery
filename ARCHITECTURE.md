@@ -681,6 +681,11 @@ Gallery and site-wide forms use one required inline review checkbox, checked
 again by the AJAX owner and server, without a duplicate native dialog.
 Completion notices distinguish preserved thumbnails from invalidated stale
 derivatives instead of combining their counters under an invalidation label.
+They also report names already matching the pattern and filename conflicts
+separately from other skipped rows. Physical apply counts verified matches
+toward batch progress. Matching names without warnings need only a count.
+Preview and execution recognize a numbered filename when rebuilding the current
+pattern and sequence produces that exact name with its collision suffix.
 The refreshed workspace owns the single live completion notice; the canonical
 success envelope leaves its global message empty to avoid duplicate banners.
 

@@ -33,6 +33,8 @@
  */
 
 return [
+    'admin.media_renamer.gallery_result_notice' => 'Bytte namn på {renamed} fil(er). Filer som redan matchar mönstret ({matching}). Filnamnskonflikter ({collisions}). Bevarade {moved} miniatyrer, tog bort {cleaned} inaktuella derivatcachefil(er), såg {missing} saknade fil(er), hoppade över {skipped} rad(er), uppdaterade {titles} härledda titel/titlar och tog bort {archives} inaktuella ZIP-arkivrader.',
+    'admin.media_renamer.result_notice' => 'Bearbetade {galleries} galleri/gallerier. Bytte namn på {renamed} fil(er). Filer som redan matchar mönstret ({matching}). Filnamnskonflikter ({collisions}). Bevarade {moved} miniatyrer, tog bort {cleaned} inaktuella derivatcachefil(er), hoppade över {skipped} rad(er), såg {missing} saknade fil(er), uppdaterade {titles} härledda titel/titlar och tog bort {archives} inaktuella ZIP-arkivrader.',
     'app_linking.consent.gallery_edit_scope' => 'WinApp kan ändra gallerititlar, beskrivningar, NSFW Guard och listning på denna webbplats.',
     'app_linking.devices.gallery_edit_scope' => 'Redigera gallerimetadata',
     'admin.metadata_organizer.move_uncertain' => 'Resultatet av flytten är osäkert. Organiseraren behöll båda gallerierna; kontrollera deras innehåll innan du försöker igen.',

@@ -1446,26 +1446,27 @@ function admin_media_renamer_loggable_result(array $result): array
  * Build a visible result notice after a physical rename run.
  *
  * @param array{galleries_requested?:int,galleries_processed?:int,renamed?:int,already_matches?:int,missing?:int,skipped?:int,collisions?:int,derivatives_moved?:int,derivatives_cleaned?:int,derivative_failures?:int,zip_archives_deleted?:int,titles_updated?:int,warnings?:list<string>,failures?:list<string>} $result Aggregate execution counters used to create the visible notice.
- * @return string Text result for the caller.
+ * @return string Visible notice with separate counts for matching names, name
+ *     conflicts and other skipped rows, followed by any warnings or failures.
  */
 function admin_media_renamer_result_notice(array $result): string
 {
     $message = t(
         'admin.media_renamer.result_notice',
-        'Processed {galleries} gallery/galleries. Renamed {renamed} file(s), '
-            . 'preserved {moved} thumbnails, removed {cleaned} stale derivative '
+        'Processed {galleries} gallery/galleries. Renamed {renamed} file(s). '
+            . 'Already matching the pattern ({matching}). Filename conflicts ({collisions}). '
+            . 'Preserved {moved} thumbnails, removed {cleaned} stale derivative '
             . 'cache file(s), skipped {skipped} row(s), saw {missing} missing '
             . 'file(s), updated {titles} derived title(s), and removed '
             . '{archives} stale ZIP archive row(s).',
         [
             'galleries' => (string) (int) ($result['galleries_processed'] ?? 0),
             'renamed' => (string) (int) ($result['renamed'] ?? 0),
+            'matching' => (string) (int) ($result['already_matches'] ?? 0),
+            'collisions' => (string) (int) ($result['collisions'] ?? 0),
             'moved' => (string) (int) ($result['derivatives_moved'] ?? 0),
             'cleaned' => (string) (int) ($result['derivatives_cleaned'] ?? 0),
-            'skipped' => (string) (
-                (int) ($result['skipped'] ?? 0)
-                + (int) ($result['collisions'] ?? 0)
-            ),
+            'skipped' => (string) (int) ($result['skipped'] ?? 0),
             'missing' => (string) (int) ($result['missing'] ?? 0),
             'archives' => (string) (int) ($result['zip_archives_deleted'] ?? 0),
             'titles' => (string) (int) ($result['titles_updated'] ?? 0),

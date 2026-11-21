@@ -33,6 +33,8 @@
  */
 
 return [
+    'admin.media_renamer.gallery_result_notice' => 'Renamed {renamed} file(s). Already matching the pattern ({matching}). Filename conflicts ({collisions}). Preserved {moved} thumbnails, removed {cleaned} stale derivative cache file(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).',
+    'admin.media_renamer.result_notice' => 'Processed {galleries} gallery/galleries. Renamed {renamed} file(s). Already matching the pattern ({matching}). Filename conflicts ({collisions}). Preserved {moved} thumbnails, removed {cleaned} stale derivative cache file(s), skipped {skipped} row(s), saw {missing} missing file(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).',
     'app_linking.consent.gallery_edit_scope' => 'WinApp can change gallery titles, descriptions, NSFW Guard and listing settings on this site.',
     'app_linking.devices.gallery_edit_scope' => 'Edit gallery metadata',
     'admin.metadata_organizer.move_uncertain' => 'The move result is uncertain. The organizer retained both galleries; inspect their contents before retrying.',

@@ -33,6 +33,8 @@
  */
 
 return [
+    'admin.media_renamer.gallery_result_notice' => '{renamed} Datei(en) umbenannt. Dateien mit passendem Namen ({matching}). Namenskonflikte ({collisions}). {moved} Vorschaubilder erhalten, {cleaned} veraltete Ableitungs-Cachedatei(en) entfernt, {missing} fehlende Datei(en) festgestellt, {skipped} Zeile(n) übersprungen, {titles} abgeleitete(r) Titel aktualisiert und {archives} veraltete ZIP-Archivzeile(n) entfernt.',
+    'admin.media_renamer.result_notice' => '{galleries} Galerie(n) verarbeitet. {renamed} Datei(en) umbenannt. Dateien mit passendem Namen ({matching}). Namenskonflikte ({collisions}). {moved} Vorschaubilder erhalten, {cleaned} veraltete Ableitungs-Cachedatei(en) entfernt, {skipped} Zeile(n) übersprungen, {missing} fehlende Datei(en) festgestellt, {titles} abgeleitete(r) Titel aktualisiert und {archives} veraltete ZIP-Archivzeile(n) entfernt.',
     'app_linking.consent.gallery_edit_scope' => 'WinApp darf auf dieser Website Galerietitel, Beschreibungen, NSFW Guard und die Auflistung ändern.',
     'app_linking.devices.gallery_edit_scope' => 'Galeriemetadaten bearbeiten',
     'admin.metadata_organizer.move_uncertain' => 'Das Ergebnis des Verschiebens ist ungewiss. Beide Galerien bleiben erhalten; prüfen Sie ihren Inhalt vor einem erneuten Versuch.',

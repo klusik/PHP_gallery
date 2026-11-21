@@ -67,6 +67,14 @@ use function Gallery\Models\media_renamer_model_indexed_paths;
 const MEDIA_RENAMER_STAGING_ATTEMPTS = 100;
 
 /**
+ * Bound the deterministic filenames generated for a source image.
+ * Type: int. Units: candidate filenames. Scope: one image and naming pattern.
+ * Consumers: indexed and physical filename selection, numbered name matching.
+ * Rationale: 100 retains the existing base name and suffixes _2 through _100.
+ */
+const MEDIA_RENAMER_FILENAME_ATTEMPTS = 100;
+
+/**
  * Reserve portable filename space for originals and derivative names.
  * Type: int. Units: ASCII bytes. Scope: one generated original filename.
  * Consumers: media_renamer_build_filename(). Rationale: 240 preserves the
@@ -313,17 +321,21 @@ function media_renamer_indexed_relative_path_image_ids(int $galleryId): array
 /**
  * Find a safe target filename by checking planned names and database-indexed paths only.
  *
- * @param array<string,mixed> $gallery Gallery row providing identity and naming context.
- * @param array<string,mixed> $image Image row providing identity, path, filename and title.
- * @param string $contextBase Context base value.
- * @param string $pattern Pattern value.
- * @param int $sequence Sequence value.
- * @param string $extension Extension value.
- * @param array<int,bool> $selectedImageIds Selected image ids value.
+ * An indexed name with an exact generated collision suffix is a valid result
+ * of the same pattern and sequence. It does not need a new preview proposal.
+ *
+ * @param array{id:int|string,title?:string,folder_path:string,...} $gallery Gallery identity and naming context.
+ * @param array{id:int|string,relative_path:string,filename?:string,title?:?string,...} $image Indexed image and naming fields.
+ * @param string $contextBase Expanded gallery text.
+ * @param string $pattern Requested filename pattern.
+ * @param int $sequence Image position in the gallery.
+ * @param string $extension Sanitized source extension.
+ * @param array<int,bool> $selectedImageIds IDs of images available for planning.
  * @param array<string,int> $indexedRelativePathImageIds Database-indexed image ids keyed by relative path.
  * @param array<string,int> $usedTargetPaths Planned target paths keyed by relative path.
- * @param array<int,string> $warnings Warnings value.
- * @return array{filename:string,relative_path:string}|null Structured result data for the caller.
+ * @param list<string> $warnings Receives an adjustment note when a new suffix is allocated.
+ * @return array{filename:string,relative_path:string}|null Matching or available
+ *     relative filename, or null when the allocation budget is exhausted.
  */
 function media_renamer_unique_target_from_database(
     array $gallery,
@@ -337,8 +349,21 @@ function media_renamer_unique_target_from_database(
     array &$usedTargetPaths,
     array &$warnings,
 ): ?array {
+    $imageId = (int) ($image['id'] ?? 0);
+    $existing = media_renamer_matching_numbered_filename(
+        $gallery, $image, $contextBase, $pattern, $sequence, $extension,
+    );
+    if ($existing !== null) {
+        $existingKey = media_renamer_path_key($existing);
+        if (($indexedRelativePathImageIds[$existingKey] ?? null) === $imageId
+            && !isset($usedTargetPaths[$existingKey])) {
+            $usedTargetPaths[$existingKey] = $imageId;
+            return ['filename' => $existing, 'relative_path' => $existing];
+        }
+    }
+
     $collisionCount = 0;
-    for ($suffix = 0; $suffix <= 99; $suffix++) {
+    for ($suffix = 0; $suffix < MEDIA_RENAMER_FILENAME_ATTEMPTS; $suffix++) {
         $filename = media_renamer_build_filename(
             $contextBase,
             $sequence,
@@ -361,14 +386,14 @@ function media_renamer_unique_target_from_database(
         );
         if (
             $conflictImageId > 0
-            && $conflictImageId !== (int) ($image['id'] ?? 0)
+            && $conflictImageId !== $imageId
             && !isset($selectedImageIds[$conflictImageId])
         ) {
             $collisionCount++;
             continue;
         }
 
-        $usedTargetPaths[$targetKey] = (int) ($image['id'] ?? 0);
+        $usedTargetPaths[$targetKey] = $imageId;
         if ($collisionCount > 0 || $suffix > 0) {
             $warnings[] = t(
                 'admin.media_renamer.warning_collision_adjusted',
@@ -492,6 +517,8 @@ function media_renamer_plan_for_gallery(
  * essential for upload-time auto-renaming: a batch containing only newly
  * uploaded rows must never plan as if every older gallery image will be staged
  * and moved in the same transaction.
+ * Files already named by the pattern count toward the result even when their
+ * unchanged paths are omitted from the detail rows.
  *
  * @param int $galleryId Gallery identifier.
  * @param array<int,int|string> $imageIds Selected image ids. Empty means all images.
@@ -558,6 +585,7 @@ function media_renamer_plan_for_gallery_selection(
     );
     $usedTargetPaths = [];
     $items = [];
+    $hiddenMatches = 0;
     $sequence = 1;
 
     foreach ($images as $image) {
@@ -574,17 +602,22 @@ function media_renamer_plan_for_gallery_selection(
                 $currentFileKeys,
                 $usedTargetPaths,
             );
-            if (!media_renamer_plan_item_is_hidden_noop($item)) {
+            if (media_renamer_plan_item_is_hidden_noop($item)) {
+                $hiddenMatches++;
+            } else {
                 $items[] = $item;
             }
         }
         $sequence++;
     }
 
+    $summary = media_renamer_summarize_items($items);
+    $summary['total'] += $hiddenMatches;
+    $summary['already_matches'] += $hiddenMatches;
     return [
         'gallery' => $gallery,
         'items' => $items,
-        'summary' => media_renamer_summarize_items($items),
+        'summary' => $summary,
         'context_base' => $contextBase,
         'pattern' => $pattern,
         // Capture the exact semantic selection, including hidden no-op images.
@@ -831,18 +864,22 @@ function media_renamer_item_result(
 /**
  * Find a safe target filename for one image and reserve it inside the plan.
  *
- * @param array<string,mixed> $gallery Gallery row providing identity and naming context.
- * @param string $galleryRoot Gallery root value.
- * @param array<string,mixed> $image Image row providing identity, path, filename and title.
- * @param string $contextBase Context base value.
- * @param string $pattern Pattern value.
- * @param int $sequence Sequence value.
- * @param string $extension Extension value.
- * @param array<int,bool> $selectedImageIds Selected image ids value.
- * @param array<string,bool> $currentFileKeys Current file keys value.
- * @param array<string,int> $usedTargetPaths Used target paths filesystem path.
- * @param array<int,string> $warnings Warnings value.
- * @return array{filename:string,relative_path:string}|null Structured result data for the caller.
+ * Retain a compatible numbered name only for a source already verified by
+ * the caller. New targets still require ownership and derivative checks.
+ *
+ * @param array{id:int|string,title?:string,folder_path:string,...} $gallery Gallery identity and naming context.
+ * @param string $galleryRoot Verified physical location of this gallery.
+ * @param array{id:int|string,relative_path:string,filename?:string,title?:?string,...} $image Indexed image with a verified direct source file.
+ * @param string $contextBase Expanded gallery text.
+ * @param string $pattern Requested filename pattern.
+ * @param int $sequence Current or frozen position for this image.
+ * @param string $extension Sanitized source extension.
+ * @param array<int,bool> $selectedImageIds Images admitted to the physical batch.
+ * @param array<string,bool> $currentFileKeys Selected source and derivative paths.
+ * @param array<string,int> $usedTargetPaths Reserved absolute target keys and owner IDs.
+ * @param list<string> $warnings Receives an adjustment note when a new suffix is allocated.
+ * @return array{filename:string,relative_path:string}|null Matching or available
+ *     relative filename, or null when every candidate is blocked.
  */
 function media_renamer_unique_target(
     array $gallery,
@@ -857,8 +894,23 @@ function media_renamer_unique_target(
     array &$usedTargetPaths,
     array &$warnings,
 ): ?array {
+    $imageId = (int) ($image['id'] ?? 0);
+    $existing = media_renamer_matching_numbered_filename(
+        $gallery, $image, $contextBase, $pattern, $sequence, $extension,
+    );
+    if ($existing !== null) {
+        $existingKey = media_renamer_path_key(
+            $galleryRoot . DIRECTORY_SEPARATOR . $existing,
+        );
+        if (isset($currentFileKeys[$existingKey])
+            && !isset($usedTargetPaths[$existingKey])) {
+            $usedTargetPaths[$existingKey] = $imageId;
+            return ['filename' => $existing, 'relative_path' => $existing];
+        }
+    }
+
     $collisionCount = 0;
-    for ($suffix = 0; $suffix <= 99; $suffix++) {
+    for ($suffix = 0; $suffix < MEDIA_RENAMER_FILENAME_ATTEMPTS; $suffix++) {
         $filename = media_renamer_build_filename(
             $contextBase,
             $sequence,
@@ -880,7 +932,7 @@ function media_renamer_unique_target(
         $conflict = find_image_by_path((int) $gallery['id'], $relativePath);
         if (
             $conflict
-            && (int) ($conflict['id'] ?? 0) !== (int) ($image['id'] ?? 0)
+            && (int) ($conflict['id'] ?? 0) !== $imageId
             && !isset($selectedImageIds[(int) $conflict['id']])
         ) {
             $collisionCount++;
@@ -905,7 +957,7 @@ function media_renamer_unique_target(
             continue;
         }
 
-        $usedTargetPaths[$targetKey] = (int) ($image['id'] ?? 0);
+        $usedTargetPaths[$targetKey] = $imageId;
         if ($collisionCount > 0 || $suffix > 0) {
             $warnings[] = t(
                 'admin.media_renamer.warning_collision_adjusted',
@@ -1279,6 +1331,47 @@ function media_renamer_build_filename(
             . str_pad((string) max(1, $sequence), 4, '0', STR_PAD_LEFT);
     }
     return $stem . $suffixPart . $extensionPart;
+}
+
+/**
+ * Recognize a filename generated with a collision suffix for this exact row.
+ *
+ * Rebuild the complete bounded filename so unrelated prefixes, old sequence
+ * positions and malformed suffixes cannot qualify as matches.
+ *
+ * @param array{id?:int|string,title?:string,folder_path?:string,...} $gallery Current gallery naming context.
+ * @param array{id?:int|string,title?:?string,filename?:string,relative_path?:string,...} $image Current image naming context and indexed path.
+ * @param string $contextBase Expanded gallery context.
+ * @param string $pattern Selected naming pattern.
+ * @param int $sequence Current or frozen sequence position for this row.
+ * @param string $extension Sanitized source extension.
+ * @return ?string Exact compatible numbered filename, or null if it differs
+ *     from the current naming policy.
+ */
+function media_renamer_matching_numbered_filename(
+    array $gallery,
+    array $image,
+    string $contextBase,
+    string $pattern,
+    int $sequence,
+    string $extension,
+): ?string {
+    $current = normalize_relative_path((string) ($image['relative_path'] ?? ''));
+    $stem = pathinfo($current, PATHINFO_FILENAME);
+    if (preg_match('/_([1-9][0-9]*)\z/', $stem, $match) !== 1) {
+        return null;
+    }
+
+    // The first collision is _2. The builder receives the zero-based index.
+    $number = (int) $match[1];
+    if ($number < 2 || $number > MEDIA_RENAMER_FILENAME_ATTEMPTS) {
+        return null;
+    }
+
+    $expected = media_renamer_build_filename(
+        $contextBase, $sequence, $extension, $number - 1, $pattern, $gallery, $image,
+    );
+    return $current === $expected ? $current : null;
 }
 
 /**

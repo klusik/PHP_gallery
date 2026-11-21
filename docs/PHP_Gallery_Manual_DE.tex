@@ -4883,9 +4883,15 @@ Der fertige Bericht ersetzt die Vorschläge durch Galerie-Gesamtzahlen. Erst
 Aufklappen lädt geänderte Namen in Seiten mit 50 Einträgen. Berichte gehören
 zur aktuellen Administrator-Anmeldesitzung und verfallen nach 24 Stunden.
 Ein Detail-Speicherfehler macht bestätigte Umbenennungen nicht rückgängig.
+Die Ergebnismeldung zählt passende Namen und Namenskonflikte getrennt
+von den übrigen übersprungenen Zeilen.
+Ein Name mit einem Kollisionszusatz wie \codeword{\_2} zählt in der Vorschau
+als passend, wenn er dem aktuellen Muster und der Reihenfolge entspricht.
 
-Das Standardmuster ist \codeword{\{gallery_path\}_\{seq4\}}. Ein
-benutzerdefiniertes Muster darf \codeword{\{gallery_path\}},
+Das Standardmuster ist \codeword{\{gallery_context\}_\{seq4\}}. Der
+Galeriekontext verwendet die Namen der übergeordneten Ordner und den aktuellen
+Galerietitel. Ein benutzerdefiniertes Muster darf
+\codeword{\{gallery_context\}}, \codeword{\{gallery_path\}},
 \codeword{\{gallery_title\}}, \codeword{\{photo_title\}},
 \codeword{\{old_name\}}, \codeword{\{old_stem\}}, \codeword{\{image_id\}} sowie
 Sequenzplatzhalter von \codeword{\{seq\}} bis \codeword{\{seq5\}} verwenden.

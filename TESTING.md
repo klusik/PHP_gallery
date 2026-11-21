@@ -887,6 +887,12 @@ The same fixture rejects an unchecked review even for a synthetic submit;
 production forms require that review without a duplicate blocking dialog.
 It also checks that progress uses the injected Admin language scope. Narrow
 manual review checks that the settings footer does not cover renamer controls.
+The database preview fixture confirms that a settled physical batch counts
+names already matching its pattern without emitting detail rows. It checks
+that the completion notice reports matches, conflicts and other skips separately.
+The same fixture creates a disk-only collision, persists the numbered result,
+and verifies that the preview, candidate page and availability scan are settled.
+It also checks a changed pattern and physical apply after the blocker is removed.
 
 The MySQL gallery edit concurrency fixture also checks that an accepted title
 save renames its sanitized folder and descendant path while preserving original

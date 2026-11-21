@@ -4516,9 +4516,15 @@ Slutrapporten ersätter förslagen med antal per galleri. Öppna ett galleri fö
 att hämta ändrade namn i sidor med 50 poster. Rapporter tillhör administratörens
 aktuella inloggningssession och upphör efter 24 timmar. Ett detaljlagringsfel
 återställer inte bekräftade namnbyten.
+Resultatmeddelandet räknar matchande namn och filnamnskonflikter separat
+från övriga överhoppade rader.
+Förhandsvisningen räknar ett namn med ett kollisionssuffix som
+\codeword{\_2} som en matchning om det följer aktuellt mönster och ordning.
 
-Standardmönstret är \codeword{\{gallery_path\}_\{seq4\}}. Ett eget mönster kan
-använda \codeword{\{gallery_path\}}, \codeword{\{gallery_title\}},
+Standardmönstret är \codeword{\{gallery_context\}_\{seq4\}}. Gallerisammanhanget
+använder de överordnade mappnamnen och galleriets aktuella titel. Ett eget
+mönster kan använda \codeword{\{gallery_context\}}, \codeword{\{gallery_path\}},
+\codeword{\{gallery_title\}},
 \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}},
 \codeword{\{image_id\}} och sekvensplatshållare från \codeword{\{seq\}} till
 \codeword{\{seq5\}}. De numrerade sekvensvarianterna fyller ut till två, tre,

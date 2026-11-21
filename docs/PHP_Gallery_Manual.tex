@@ -4404,9 +4404,15 @@ of~at~most 15 photos. The~completed report replaces the~proposals and~starts
 with per-gallery counts. Expand a~gallery to~fetch changed filenames in~pages
 of~50. Reports belong to~the~current administrator login session and~expire
 after 24~hours. A~detail-storage warning does~not~undo confirmed renames.
+The~completion notice counts matching names and~filename conflicts separately
+from other skipped rows.
+A~name with a~collision suffix such as~\codeword{\_2} already matches if~it
+follows the~current pattern and~sequence. The~preview counts it~as~a~match.
 
-The~default pattern is~\codeword{\{gallery_path\}_\{seq4\}}. A~custom pattern
-may~use \codeword{\{gallery_path\}}, \codeword{\{gallery_title\}},
+The~default pattern is~\codeword{\{gallery_context\}_\{seq4\}}. Gallery context
+uses the~parent folder names and~the~current gallery title. A~custom pattern
+may~use \codeword{\{gallery_context\}}, \codeword{\{gallery_path\}},
+\codeword{\{gallery_title\}},
 \codeword{\{photo_title\}}, \codeword{\{old_name\}}, \codeword{\{old_stem\}},
 \codeword{\{image_id\}}, and~sequence placeholders \codeword{\{seq\}} through
 \codeword{\{seq5\}}. The~numbered sequence variants pad to~two, three, four,

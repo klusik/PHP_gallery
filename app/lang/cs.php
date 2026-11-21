@@ -33,6 +33,8 @@
  */
 
 return [
+    'admin.media_renamer.gallery_result_notice' => 'Přejmenováno {renamed} souborů. Názvy už odpovídají vzoru ({matching}). Kolize názvů ({collisions}). Zachováno {moved} náhledů, odstraněno {cleaned} zastaralých souborů cache odvozenin, nalezeno {missing} chybějících souborů, přeskočeno {skipped} řádků, aktualizováno {titles} odvozených názvů a odstraněno {archives} zastaralých řádků ZIP archivů.',
+    'admin.media_renamer.result_notice' => 'Zpracováno {galleries} galerií. Přejmenováno {renamed} souborů. Názvy už odpovídají vzoru ({matching}). Kolize názvů ({collisions}). Zachováno {moved} náhledů, odstraněno {cleaned} zastaralých souborů cache odvozenin, přeskočeno {skipped} řádků, nalezeno {missing} chybějících souborů, aktualizováno {titles} odvozených názvů a odstraněno {archives} zastaralých řádků ZIP archivů.',
     'app_linking.consent.gallery_edit_scope' => 'WinApp může na tomto webu měnit názvy a popisy galerií, NSFW Guard a zařazení do výpisů.',
     'app_linking.devices.gallery_edit_scope' => 'Úprava metadat galerie',
     'admin.metadata_organizer.move_uncertain' => 'Výsledek přesunu není jistý. Organizátor zachoval obě galerie; před dalším pokusem zkontrolujte jejich obsah.',
