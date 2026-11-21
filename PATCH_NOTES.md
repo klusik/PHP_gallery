@@ -1,5 +1,54 @@
 # Patch notes
 
+## Version 1.4.3
+
+PHP Gallery 1.4.3 allowed separate galleries to share a display title, so
+administrators could reuse the same name for repeated flights or events.
+
+### Highlights
+
+#### Gallery creation and renaming
+
+- Allowed administrators to create or rename galleries with the same title
+  in Admin and from a connected WinApp session. When a registered gallery
+  occupied the preferred folder, the server chose an available numbered
+  sibling such as `-2` or `-3` and saved the requested display title.
+- Updated discovery, import and consistency checks to recognize compatible
+  numeric suffixes. Subsequent saves and consistency repairs preserved valid
+  numbered folders.
+
+### Technical Details
+
+#### Backend
+
+- Checked filesystem entries and catalog ownership while selecting a numbered
+  path under the gallery writer lease. Gallery moves carried descendant paths
+  and sidecars through the existing subtree mutation.
+- Reserved the selected path for linked creation and kept the original receipt
+  for replays of the same operation key.
+- Preserved compatible public URLs in the same parent before assigning a slug
+  to another gallery with a matching title.
+
+#### Tests and documentation
+
+- Extended the gallery workflow and focused regressions to verify numbered
+  creation, replay, occupied slots, descendant and original-file preservation,
+  stable sibling URLs and import of a numbered folder with its readable title.
+- Documented valid numbered folders in the consistency guide and all four
+  manual source editions.
+
+### User Impact
+
+#### For visitors
+
+- Retained compatible gallery links when another gallery received the same
+  display title.
+
+#### For administrators
+
+- Allowed repeated collections to use the same readable name and gave each
+  collection its own folder and public URL.
+
 ## Version 1.4.2
 
 PHP Gallery 1.4.2 restored access to obscured controls in the standalone
