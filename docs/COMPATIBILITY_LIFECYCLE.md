@@ -2042,75 +2042,27 @@ retain their manifest compatibility reader; it is never applied to new jobs.
 The English service fallback remains supported for direct CLI consumers without
 a translation owner; normal Admin uses all four maintained catalogs.
 
-Ordinary package activation closes admission before requesting the exclusive
-runtime lease, including jobs already waiting at `activate` after an FTP code
-replacement. Existing readers may finish; new ordinary requests receive 503
-before acquiring a shared lease. Rollback ownership/evidence rules are
-preserved.
-The live 0.144.6 to 0.144.7 job demonstrated repeated runtime waits; the fixture
-now covers an actual background job with an existing reader, independent new
-reader refusal, disabled sweep cursors and successful completion after release.
-The updated behavior has not yet been verified on production hosting.
+Gallery 1.5.0 removes updater admission checks from ordinary requests.
+Installer serialization still uses the active pointer, start lock and worker
+locks. Each replacement publishes intact bytes and can replay against the
+same immutable package. The live tree may already be in use after the first
+write, so updater recovery is forward only. Previous jobs, backups and
+migration evidence remain private.
 
-The live 0.144.8 to 0.144.9 test exposed a stopped private chain at an owned
-pre-activation drain, with no migration intent or activation writes and an empty
-Admin session name. The updater owner now preserves configured session names
-after session close and retains paced private successors for progressed,
-gate-closed runtime waits. This is permanent support for visitor-triggered
-post-response updates; public visits cannot restart work while gated.
-No-progress
-worker-lock contention and failed jobs still stop. The HTTP fixture covers the
-real early gate and successors. The live 0.144.10 to 0.144.11 update completed
-with the Admin Updates page open; its completion record reported the target
-version, five copied files and no migrations. This establishes that deployment
-path on production, without independently proving operation with no Admin page.
+The root `maintenance.lock` and older private marker names remain protected
+installation state outside release packages. Public admission ignores them.
+A successful ordinary response retires the root file when hosting permissions
+allow. Explicit FTP or stable recovery preserves and can retire any remaining
+accessible private marker bytes. A newer manual overlay takes precedence over an
+older pinned job. Temporary compatibility calls in early runtime support
+previous entry points and already-loaded workers during file replacement.
+Retirement requires evidence that no supported overlay can mix these callers.
+Installed usage outside the fixtures is unknown.
 
-The early-runtime owner permanently supports a self-contained English HTML
-maintenance fallback for browser GET/HEAD requests. Application locale and Theme
-storage are unavailable while files are replaced, so inline fallback tokens use
-the browser's light/dark preference. The existing three-second retry interval
-also refreshes GET documents; machine and POST replies remain plain and cannot
-replay a form. The gate, HTTP 503 and authenticated recovery admission remain
-unchanged. Actual HTTP fixtures cover headers, representation, HEAD, no lease
-admission and return to the same URL after gate removal. The maintainer reviewed
-the local demo; production verification of this presentation remains pending.
-
-Pre-activation failures release only the active pointer. Post-activation
-rollback
-uses one independent child and the verified original snapshot, preserving both
-identities, archives, hashes and diagnostics. It requires protocol-1 runtime
-isolation, no ordinary-runtime-use witness, fresh matching actual schema/ledger,
-proven zero migration effects and complete verified backups. Migration intent
-without a completed zero-work receipt is unverified. Missing legacy evidence or
-unsupported target protocol stops automatic file rollback. Database migrations
-are never reversed and ordinary application data is never restored from a dump.
-Failed rollback cannot spawn another rollback. Failed-source artifacts remain
-protected from pruning; completed child diagnostics also have a compact source
-receipt. A bounded 32-commit exclusion list and highest failed stable version
-prevent automatic reinstall of known bad sources.
-
-The early-runtime owner permanently imports old `cache/updates/activation.json`
-markers before admission, exclusively creates the canonical marker without
-overwriting another owner, and preserves exact legacy bytes in private receipts.
-This bridge supports older workers during an in-place upgrade. It can retire
-only after evidence proves no supported installed worker publishes the old name;
-that usage evidence is currently unknown. Empty manual markers remain supported.
-The marker is excluded from Git and all package/rollback ownership. Existing
-HTTP fixtures cover manual presence/removal, old marker import and active jobs
-without maintenance; real updater/SQL fixtures cover critical refusal and public
-admission during paused cleanup. Production transition acceptance is pending.
-
-The runtime lease is permanent cooperative protection for Gallery HTTP/CLI
-processes. The sole public gate is root `maintenance.lock`. New jobs persist
-`runtime_committed` after migrations and required finalization, close the
-rollback window and reopen before physical cleanup. A paused or failed cleanup
-does not recreate maintenance or claim an isolated rollback baseline. Existing
-legacy gates retain their original completion semantics. Authenticated
-Admin updater/private ticket admission retains all later authentication checks.
-Unknown storage and ordinary runtime use refuse unsafe restoration. External
-writers require operator coordination. Gated failed jobs need hosting CLI cron
-or an authenticated Admin opportunity, since denied visitors cannot run the
-scheduler; no idle backoff timer is promised.
+Regression coverage exercises legacy markers, an occupied runtime lock, a
+ZIP overlay and a worker interrupted between actual renames. The affected
+production deployments and their exact failed checkpoints remain unverified.
+Historical incidents remain evidence about the versions stated below.
 
 The reported 0.144.1 failure and manual file rollback demonstrate the deployment
 bootstrap limitation: publishing code cannot replace an updater that never

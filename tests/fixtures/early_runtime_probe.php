@@ -2,34 +2,42 @@
 
 /**
  * Project: PHP Gallery
- * Module Type: Test Fixture
- * Purpose: Probe the early-runtime response boundary in a disposable request.
- * Responsibilities:
- *   - Load the early guard without bootstrapping installation configuration.
  * Repository: https://github.com/klusik/PHP_gallery
- *
  * File: tests/fixtures/early_runtime_probe.php
- *
- * Author:
- *   Rudolf Klusal
- *
- * License:
- *   MIT License (see LICENSE file in repository)
- *
- * Notes:
- *   - Keep comments and docstrings intact when modifying this file.
+ * Module Type: Test Fixture
+ * Purpose: Provide a minimal public route behind the real front controller.
+ * Responsibilities: Read installed PHP and media bytes from an isolated site.
+ * Author: Rudolf Klusal
+ * License: MIT License (see LICENSE file in repository)
  */
+
 declare(strict_types=1);
 
-$projectRoot = (string) getenv('PHP_GALLERY_TEST_PROJECT_ROOT');
-if ($projectRoot === '') {
-    http_response_code(500);
-    exit('Missing test project root.');
+namespace Gallery\Core;
+
+// This fixture represents the new version already unpacked over an older job.
+const CMS_VERSION = '1.5.0';
+
+/**
+ * Serve the disposable gallery, JSON and media used by the online update test.
+ *
+ * @return void Sends the response for the fixture route.
+ */
+function cms_run(): void
+{
+    $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
+    if ($path === '/photo') {
+        header('Content-Type: image/gif');
+        readfile(dirname(__DIR__) . '/galleries/photo.gif');
+        return;
+    }
+    $title = require __DIR__ . '/gallery-label.php';
+    $description = require __DIR__ . '/gallery-summary.php';
+    if ($path === '/api') {
+        header('Content-Type: application/json');
+        echo json_encode(['title' => $title, 'description' => $description], JSON_THROW_ON_ERROR);
+        return;
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<main><h1>' . $title . '</h1><p>' . $description . '</p></main>';
 }
-
-require dirname(__DIR__, 2) . '/app/early_runtime.php';
-
-\Gallery\EarlyRuntime\register_emergency_handler();
-\Gallery\EarlyRuntime\enforce_activation_gate($projectRoot);
-header('Content-Type: text/plain; charset=utf-8');
-echo "OK\n";

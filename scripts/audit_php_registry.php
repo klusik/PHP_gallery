@@ -47,6 +47,7 @@ return [
         'url_rewrite_settings_test.php',
         'updater_safety_model_test.php',
         'updater_recovery_test.php',
+        'activation_maintenance_response_test.php',
         'updater_resumable_state_machine_test.php',
         'smart_gallery_rules_test.php',
         'smart_gallery_map_scaling_test.php',
@@ -131,6 +132,7 @@ return [
     ],
     // Exclusive means drain active jobs, run alone, then resume parallel dispatch.
     'serial_tests' => [
+        'activation_maintenance_response_test.php' => 'Starts an owned loopback server and interrupts a separate PHP activation worker under a file barrier.',
         'updater_recovery_test.php' => 'Starts an independent updater contention worker against an owned temporary root and private database; isolate nested-process admission.',
         'cli_http_boundary_test.php' => 'Starts bounded isolated PHP and Apache HTTP children; exclusive execution prevents nested server/process contention.',
         'simbrief_ofp_public_http_test.php' => 'Starts a disposable loopback PHP HTTP server; run alone to avoid nested HTTP-child contention.',

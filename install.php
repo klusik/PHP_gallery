@@ -36,7 +36,6 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/app/early_runtime.php';
 \Gallery\EarlyRuntime\register_emergency_handler();
-\Gallery\EarlyRuntime\enforce_activation_gate(__DIR__);
 
 require_once __DIR__ . '/app/migration_definitions.php';
 

@@ -507,13 +507,13 @@ namespace {
             );
         }
 
-        mkdir($root . '/flat/app', \Gallery\EarlyRuntime\UPDATER_RUNTIME_DIRECTORY_MODE, true);
+        \Gallery\Services\application_update_ensure_dir($root . '/flat/app');
         file_put_contents($root . '/flat/app/bootstrap.php', '<?php');
         download_assert(
             application_update_extracted_root($root . '/flat') === $root . '/flat',
             'Flat production ZIP root was lost.',
         );
-        mkdir($root . '/wrapped/repository/app', \Gallery\EarlyRuntime\UPDATER_RUNTIME_DIRECTORY_MODE, true);
+        \Gallery\Services\application_update_ensure_dir($root . '/wrapped/repository/app');
         download_assert(
             application_update_extracted_root($root . '/wrapped') === $root . '/wrapped/repository',
             'Historical source ZIP root was lost.',

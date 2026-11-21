@@ -23,7 +23,7 @@
  * Focused regression checks for version 0.94 audit hardening.
  *
  * This CLI test intentionally avoids database access and destructive application
- * operations. Real HTTP error/gate fixtures are exercised separately with the
+ * operations. Real HTTP error and online update fixtures are exercised separately with the
  * PHP built-in server or Apache by the release validation commands.
  */
 
@@ -212,11 +212,9 @@ $assert(
     'Public front controller must load the dependency-free early runtime before bootstrap.',
 );
 $assert(
-    str_contains(
-        $publicEntrypoint,
-        'enforce_activation_gate(dirname(__DIR__))',
-    ),
-    'Public front controller must enforce the activation gate before bootstrap.',
+    !str_contains($publicEntrypoint, 'enforce_activation_gate(')
+        && !str_contains($publicEntrypoint, 'updater_runtime_enter('),
+    'Public bootstrap must remain independent of updater admission.',
 );
 $earlyRuntimeSource = file_get_contents($root . '/app/early_runtime.php') ?: '';
 $assert(
@@ -231,90 +229,37 @@ $assert(
     'Early runtime shutdown handler must cover required fatal classes.',
 );
 $installerEntrypoint = file_get_contents($root . '/install.php') ?: '';
+$applicationBootstrap = file_get_contents($root . '/app/bootstrap.php') ?: '';
 $assert(
-    strpos($installerEntrypoint, 'enforce_activation_gate(__DIR__)') < strpos(
-        $installerEntrypoint,
-        "require_once __DIR__ . '/app/migration_definitions.php'",
-    ),
-    'Installer must enforce the activation gate before loading application migration code.',
+    !str_contains($installerEntrypoint, 'enforce_activation_gate(')
+        && !str_contains($applicationBootstrap, 'updater_runtime_enter(')
+        && !str_contains($earlyRuntimeSource, 'function emit_activation_unavailable(')
+        && !str_contains($earlyRuntimeSource, 'flock('),
+    'An entrypoint can still enforce updater maintenance or acquire a reader lock.',
 );
 
 // The updater job service is split into part files; assert against the whole module.
 $updaterSource = module_source($root . '/app/services/updates_jobs.php');
-$assert(
-    str_contains(
-        $updaterSource,
-        'application_update_activation_gate_begin($job);',
-    ),
-    'Updater must persist activation state before publishing managed files.',
-);
-$assert(
-    str_contains($updaterSource, "'app/early_runtime.php' => 35"),
-    'Early runtime must activate after ordinary dependencies but before HTTP front controllers.',
-);
-$assert(
-    str_contains($updaterSource, "'install.php', 'reset.php' => 45"),
-    'Direct HTTP utility entrypoints must activate after the early gate and public front controller.',
-);
-// Check ordering inside activation itself. Isolated jobs also clear the gate
-// after final completion in the separate lifecycle owner, before this part is
-// concatenated by module_source; module concatenation is not execution order.
 $activationSource = file_get_contents($root . '/app/services/updates_jobs/activation.php') ?: '';
 $assert(
-    strpos($activationSource, "\$job['checkpoints']['activation_complete'] = true;")
-        < strpos($activationSource, "application_update_activation_gate_clear((string) \$job['id']);"),
-    'Updater must durably checkpoint complete activation before clearing the gate.',
-);
-
-$tmp =
-    sys_get_temp_dir() . '/php-gallery-gate-test-' . bin2hex(random_bytes(5));
-@mkdir($tmp . '/cache/updates/jobs/20260830200000-abcdefabcdef', 0777, true);
-$marker = [
-    'schema' => 1,
-    'job_id' => '20260830200000-abcdefabcdef',
-    'started_at' => time(),
-    'updated_at' => time(),
-];
-file_put_contents(
-    $tmp . '/cache/updates/activation.json',
-    json_encode($marker),
+    !str_contains($updaterSource, "'/runtime-use.lock'")
+        && !str_contains($updaterSource, 'application_update_activation_gate_begin('),
+    'The updater still acquires public runtime ownership or creates a maintenance marker.',
 );
 $assert(
-    !\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
-    'Incomplete activation must not be reported as complete.',
+    str_contains($activationSource, "'app/early_runtime.php' => 35")
+        && str_contains($activationSource, "'app/runtime/modules.php' => 25")
+        && str_contains($activationSource, "'install.php', 'reset.php' => 45"),
+    'Publish dependencies and the module map before bootstraps and entry points.',
 );
-$job = [
-    'id' => $marker['job_id'],
-    'checkpoints' => ['activation_complete' => true],
-];
-file_put_contents(
-    $tmp . '/cache/updates/jobs/' . $marker['job_id'] . '/job.json',
-    json_encode($job),
-);
+$intent = strpos($activationSource, "\$job['checkpoints']['activation_started'] = true;");
+$rename = strpos($activationSource, 'rename($temporary, $destination)');
+$complete = strpos($activationSource, "\$job['checkpoints']['activation_complete'] = true;");
 $assert(
-    \Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
-    'Durable activation_complete checkpoint must be recognized.',
+    is_int($intent) && is_int($rename) && is_int($complete)
+        && $intent < $rename && $rename < $complete,
+    'The updater must persist intent before replacement and completion after replacement.',
 );
-$marker['recovery_isolation'] = true;
-$assert(!\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
-    'An isolated job must stay gated after file activation but before migrations complete.');
-$job['stage'] = 'cleanup';
-$job['checkpoints']['runtime_committed'] = true;
-file_put_contents($tmp . '/cache/updates/jobs/' . $marker['job_id'] . '/job.json', json_encode($job));
-$assert(\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
-    'A durably committed runtime must reopen before physical cleanup completes.');
-unset($job['checkpoints']['runtime_committed']);
-$job['status'] = 'completed';
-file_put_contents($tmp . '/cache/updates/jobs/' . $marker['job_id'] . '/job.json', json_encode($job));
-$assert(\Gallery\EarlyRuntime\activation_job_is_complete($tmp, $marker),
-    'Durable isolated job completion must permit ordinary runtime admission.');
-@unlink($tmp . '/cache/updates/jobs/' . $marker['job_id'] . '/job.json');
-@unlink($tmp . '/cache/updates/activation.json');
-@rmdir($tmp . '/cache/updates/jobs/' . $marker['job_id']);
-@rmdir($tmp . '/cache/updates/jobs');
-@rmdir($tmp . '/cache/updates');
-@rmdir($tmp . '/cache');
-@rmdir($tmp);
 
 if ($failures !== []) {
     foreach ($failures as $failure) {

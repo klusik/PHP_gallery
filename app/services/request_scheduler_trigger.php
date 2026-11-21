@@ -71,10 +71,8 @@ function request_scheduler_register_visit(
                 $loadDependencies('archive-request-trigger');
             }
             $detached = site_maintenance_finish_response_before_background_work();
-            // The authenticated updater page can traverse an isolation gate.
-            // It must not publish galleries or admit unrelated maintenance.
-            // Run its bounded due update directly after output, retaining the
-            // scheduler ticket/claim checks without a gated HTTP round trip.
+            // Run only bounded updater work after the authenticated Updates
+            // response, using the same scheduler ticket and claim checks.
             request_scheduler_tick($loadDependencies, '',
                 $detached || $updaterOnly, $updaterOnly ? 'updates' : '');
         } catch (\Throwable) {

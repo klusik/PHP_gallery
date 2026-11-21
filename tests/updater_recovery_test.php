@@ -63,7 +63,7 @@ namespace Gallery\Services {
     /** Observe explicit schema state without caching. @return array{state:string} Fixture readiness. */
     function application_update_activation_schema_status(): array
     { return ['state' => $GLOBALS['recovery_schema_state'] ?? 'available']; }
-    /** Assert known schema for the actual activation gate. @param array{state:string} $status Observation. @param string $operation Operation. @param string $message Safe refusal. @return void Throws for unknown evidence. */
+    /** Assert known schema before actual activation. @param array{state:string} $status Observation. @param string $operation Operation. @param string $message Safe refusal. @return void Throws for unknown evidence. */
     function mutation_schema_assert_known(array $status, string $operation, string $message): void
     { if ($status['state'] === 'unknown') { throw new \RuntimeException($message); } }
     /** Capture safe updater logs without external persistence. @param string $level Severity. @param string $event Name. @param string $message Safe message. @param array<string,scalar|list<string>|null> $context Context. @param array<string,string> $options Log options. @return void Retains isolated structured evidence. */
@@ -127,9 +127,9 @@ namespace {
     const RECOVERY_FIXTURE_POLL_US = 20000;
 
     /**
-     * Bound complete rollback execution in this disposable integration fixture.
+     * Bound complete update execution in this disposable integration fixture.
      * Type: int. Units: worker slices. Scope: recovery_drain watchdog.
-     * Consumers: actual rollback state-machine loop.
+     * Consumers: actual updater state-machine loop.
      * Rationale: 40 exceeds thirteen stages and the twenty-slice cleanup cap,
      * while detecting a deadlock without weakening production worker budgets.
      */
@@ -326,7 +326,7 @@ namespace {
      * @param string $root Owned installation root.
      * @param string $trigger Original API/Admin/background launch mode.
      * @param string $operation Original stable/beta/restore/reinstall operation.
-     * @param bool $partial Whether the original activation gate remains active.
+     * @param bool $partial Whether the simulated worker stopped mid-activation.
      * @return array<string,mixed> Mature source with complete production backup metadata.
      */
     function recovery_activated_source(string $root, string $trigger, string $operation, bool $partial = false): array
@@ -336,7 +336,7 @@ namespace {
         file_put_contents($root . '/app/old_only.php', 'previous obsolete file');
         $source = recovery_source('backup', $trigger, $operation);
         @unlink(\Gallery\Services\application_update_jobs_root() . '/rollback-window.json');
-        @unlink(\Gallery\Services\application_update_activation_gate_path());
+        @unlink($root . '/maintenance.lock');
         $source['checkpoints']['activation_files'] = [
             'app/bootstrap.php', 'app/core-manifest.json', 'app/payload.php',
             'app/production-files.json', 'app/new_only.php',
@@ -351,16 +351,9 @@ namespace {
             \Gallery\Services\application_update_time_budget()), 'Cannot prepare real source backup.');
         $candidate = $root . '/runtime-package';
         recovery_package($candidate, '1.1.0');
-        copy(dirname(__DIR__) . '/app/early_runtime.php', $candidate . '/app/early_runtime.php');
-        file_put_contents($candidate . '/app/bootstrap.php',
-            "\n// updater_runtime_enter( is the package protocol entry.\n", FILE_APPEND);
         $source['checkpoints']['source_root'] = $candidate;
         $source['checkpoints']['validated_version'] = '1.1.0';
-        $runtimeLock = \Gallery\Services\application_update_acquire_lock(
-            \Gallery\Services\application_update_jobs_root() . '/runtime-use.lock');
-        recovery_check($runtimeLock !== null, 'Cannot isolate fixture activation.');
-        try { \Gallery\Services\application_update_runtime_window_begin($source); }
-        finally { \Gallery\Services\application_update_release_lock($runtimeLock); }
+        $source['checkpoints']['activation_started'] = true;
         recovery_package($root, '1.1.0', 'bad active release');
         unlink($root . '/app/old_only.php');
         file_put_contents($root . '/app/new_only.php', 'new release file');
@@ -368,7 +361,6 @@ namespace {
         $source['checkpoints']['activation_complete'] = !$partial;
         $source['checkpoints']['archive_commit'] = str_repeat('b', 40);
         $source = recovery_mature($source);
-        if ($partial) { \Gallery\Services\application_update_activation_gate_begin($source); }
         return $source;
     }
 
@@ -378,7 +370,7 @@ namespace {
      */
     function recovery_pristine_source(string $root): array
     {
-        @unlink(\Gallery\Services\application_update_activation_gate_path());
+        @unlink($root . '/maintenance.lock');
         @unlink(\Gallery\Services\application_update_jobs_root() . '/rollback-window.json');
         recovery_package($root, '1.0.0', 'unchanged original');
         @unlink($root . '/app/not_created.php');
@@ -396,8 +388,8 @@ namespace {
         return recovery_mature($source);
     }
 
-    /** Run the actual bounded rollback engine to its terminal result.
-     * @param string $jobId Active rollback identity.
+    /** Run the actual bounded update engine to its terminal result.
+     * @param string $jobId Active update identity.
      * @return array<string,mixed> Actual public terminal result.
      */
     function recovery_drain(string $jobId): array
@@ -406,7 +398,7 @@ namespace {
             $job = \Gallery\Services\application_update_process_job($jobId);
             if (($job['status'] ?? '') !== 'running') { return $job; }
         }
-        throw new \RuntimeException('Rollback worker exceeded its bounded fixture watchdog.');
+        throw new \RuntimeException('Update worker exceeded its bounded fixture watchdog.');
     }
 
     // Twelve random bytes match the existing fixture helper's ownership format.
@@ -488,16 +480,10 @@ namespace {
                 'Pre-activation recovery changed files, erased evidence or retained ownership.');
         }
 
-        // Match the incident's old producer: activate, explicit no migrations,
-        // complete backup, no DB baseline/window/gate and no activation receipt.
+        // A retained legacy marker and runtime lock are independent of verified
+        // original bytes. Both can exist after a prior interrupted installer.
         $pristine = recovery_pristine_source($root);
-        $reader = \Gallery\Services\application_update_acquire_lock(
-            \Gallery\Services\application_update_jobs_root() . '/runtime-use.lock');
-        try {
-            recovery_check(\Gallery\Services\application_update_recover_failed_job($pristine['id'])['id'] === $pristine['id']
-                && \Gallery\Services\application_update_active_job() !== null,
-                'Unchanged activation ignored exclusive runtime contention.');
-        } finally { \Gallery\Services\application_update_release_lock($reader); }
+        file_put_contents($root . '/maintenance.lock', '{"historic":true}');
         $released = \Gallery\Services\application_update_recover_failed_job($pristine['id']);
         recovery_check(!empty($released['result']['activation_unchanged_verified'])
             && !empty($released['result']['recovery_released'])
@@ -506,7 +492,7 @@ namespace {
             'Untouched activate checkpoint was mistaken for partial activation.');
         recovery_check(\Gallery\Services\application_update_recover_failed_job($pristine['id'])['id'] === $pristine['id'],
             'Repeated unchanged recovery allocated another job.');
-        foreach (['changed', 'created', 'backup', 'metadata', 'gate', 'intent', 'migration'] as $kind) {
+        foreach (['changed', 'created', 'backup', 'metadata', 'intent', 'migration'] as $kind) {
             $pristine = recovery_pristine_source($root);
             if ($kind === 'changed') { file_put_contents($root . '/app/bootstrap.php', 'partial activation'); }
             elseif ($kind === 'created') { file_put_contents($root . '/app/not_created.php', 'partial activation'); }
@@ -514,7 +500,7 @@ namespace {
                 unlink(\Gallery\Services\application_update_job_dir($pristine['id']) . '/rollback/original/app/bootstrap.php');
             } elseif ($kind === 'metadata') {
                 file_put_contents(\Gallery\Services\application_update_job_dir($pristine['id']) . '/rollback/metadata.json', '{}');
-            } elseif ($kind === 'gate') { \Gallery\Services\application_update_activation_gate_begin($pristine); }
+            }
             elseif ($kind === 'intent') { $pristine['checkpoints']['activation_started'] = true; }
             else { $pristine['checkpoints']['migrations_started'] = true; }
             \Gallery\Services\application_update_save_job($pristine);
@@ -523,20 +509,7 @@ namespace {
                 && \Gallery\Services\application_update_active_job()['id'] === $pristine['id'],
                 'Unproven activate state was released: ' . $kind);
         }
-        @unlink(\Gallery\Services\application_update_activation_gate_path());
-
-        \Gallery\Services\application_update_set_active_job(null);
-        \Gallery\EarlyRuntime\updater_runtime_enter($root);
-        recovery_check(\Gallery\Services\application_update_acquire_lock(
-            \Gallery\Services\application_update_jobs_root() . '/runtime-use.lock') === null,
-            'Initial Admin-style bootstrap did not hold its ordinary read lease.');
-        // Match the authenticated controller boundary, before the first job.
-        \Gallery\EarlyRuntime\updater_runtime_leave();
-        \Gallery\EarlyRuntime\updater_runtime_leave();
-        $exclusive = \Gallery\Services\application_update_acquire_lock(
-            \Gallery\Services\application_update_jobs_root() . '/runtime-use.lock');
-        recovery_check($exclusive !== null, 'Updater retained its own request read lease.');
-        \Gallery\Services\application_update_release_lock($exclusive);
+        @unlink($root . '/maintenance.lock');
 
         $modes = [
             ['background', 'stable_update', false],
@@ -569,36 +542,19 @@ namespace {
             recovery_check(\Gallery\Services\application_update_recover_failed_job($source['id'])['id'] === $source['id'],
                 'Recovery ignored a source worker lease.');
             \Gallery\Services\application_update_release_lock($lock);
-            $rollback = \Gallery\Services\application_update_recover_failed_job($source['id']);
-            recovery_check($rollback['operation'] === 'rollback' && $rollback['id'] !== $source['id'],
-                'Mature failure did not create a separate automatic rollback.');
-            recovery_check(\Gallery\Services\application_update_recover_failed_job($source['id'])['id'] === $rollback['id'],
-                'Repeated recovery created another rollback.');
-            if ($trigger === 'background') {
-                // Simulate death after reserving the identity, before child state
-                // creation/link publication. The same reservation must be reused.
-                $journal = \Gallery\Services\application_update_load_job($source['id']);
-                unset($journal['result']['superseded_by']);
-                \Gallery\Services\application_update_save_job($journal);
-                unlink(\Gallery\Services\application_update_job_state_path($rollback['id']));
-                \Gallery\Services\application_update_set_active_job($source['id']);
-                recovery_check(\Gallery\Services\application_update_recover_failed_job($source['id'])['id'] === $rollback['id'],
-                    'Interrupted rollback creation allocated another identity.');
-            }
-            $complete = recovery_drain($rollback['id']);
-            recovery_check($complete['status'] === 'completed',
-                'Actual rollback pipeline did not complete: ' . (string) ($complete['error']['reference'] ?? ''));
-            recovery_check(file_get_contents($root . '/app/payload.php') === '<?php /* before update */'
-                && \Gallery\Services\application_update_version_from_local_bootstrap($root . '/app/bootstrap.php') === '1.0.0'
-                && file_get_contents($root . '/app/old_only.php') === 'previous obsolete file'
-                && !file_exists($root . '/app/new_only.php'),
-                'Rollback failed to restore overwritten/deleted files or remove newly created files.');
-            recovery_check(\Gallery\Services\application_update_active_job() === null
-                && is_file($artifact)
-                && \Gallery\Services\application_update_load_job($source['id'])['status'] === 'failed',
-                'Rollback erased failure history or kept the installation blocked.');
+            $blocked = \Gallery\Services\application_update_recover_failed_job($source['id']);
+            $saved = \Gallery\Services\application_update_load_job($source['id']);
+            recovery_check($blocked['id'] === $source['id'] && !$blocked['can_rollback']
+                && ($saved['recovery_blocked'] ?? '') === 'forward_repair_required'
+                && \Gallery\Services\application_update_active_job()['id'] === $source['id']
+                && is_file($artifact),
+                'A mature post-write failure lost evidence or created an automatic rollback.');
+            recovery_check(file_get_contents($root . '/app/payload.php') === '<?php /* bad active release */'
+                && !is_file($root . '/app/old_only.php')
+                && file_get_contents($root . '/app/new_only.php') === 'new release file',
+                'A stopped update rewound live files.');
             recovery_check(file_get_contents($localExtension) === '<?php /* unmanaged local extension */',
-                'An extra local PHP file blocked recovery or was overwritten.');
+                'Stopped recovery changed unrelated local files.');
             if ($operation === 'stable_restore') {
                 recovery_check(\Gallery\Services\application_update_beta_active(),
                     'Rollback lost the original beta channel and commit.');
@@ -611,65 +567,32 @@ namespace {
 
         $GLOBALS['recovery_settings'] = [];
         $observed = recovery_activated_source($root, 'admin', 'stable_update');
-        \Gallery\EarlyRuntime\updater_runtime_enter($root);
-        recovery_check(is_file(\Gallery\Services\application_update_job_dir($observed['id'])
-            . '/runtime-used.json'), 'Normal runtime admission did not leave a durable use witness.');
-        recovery_check(\Gallery\Services\application_update_acquire_lock(
-            \Gallery\Services\application_update_jobs_root() . '/runtime-use.lock') === null,
-            'Activation ignored a live shared runtime lease.');
-        $readerContended = $observed;
-        $readerContended['status'] = 'running';
-        $readerContended['stage'] = 'activate';
-        \Gallery\Services\application_update_save_job($readerContended);
-        recovery_check(recovery_worker_probe($root, $token, $observed['id'])['status'] === 'running',
-            'An independent activation worker ignored a live runtime reader.');
+        // Legacy saved isolation receipts cannot prove that today's public
+        // requests stayed out. Reject explicit and pre-existing rollback jobs.
+        $observed['checkpoints']['runtime_guard_protocol'] = 1;
+        $observed['checkpoints']['runtime_guard_open'] = true;
         \Gallery\Services\application_update_save_job($observed);
-        \Gallery\EarlyRuntime\updater_runtime_leave();
         recovery_refuses(static function () use ($observed): void {
-            \Gallery\Services\application_update_assert_rollback_database($observed);
-        }, 'Unchanged schema falsely proved safety after ordinary runtime use.');
-        $blockedUse = \Gallery\Services\application_update_recover_failed_job($observed['id']);
-        recovery_check($blockedUse['id'] === $observed['id']
-            && !empty(\Gallery\Services\application_update_load_job($observed['id'])['recovery_blocked']),
-            'Ordinary database writers did not block automatic file rollback.');
-        $legacy = recovery_activated_source($root, 'admin', 'stable_update');
-        unset($legacy['checkpoints']['runtime_guard_protocol']);
-        recovery_refuses(static function () use ($legacy): void {
-            \Gallery\Services\application_update_assert_rollback_database($legacy);
-        }, 'A package without the isolation protocol was treated as verified.');
+            \Gallery\Services\application_update_start_rollback_job($observed['id'], 'admin');
+        }, 'Admin could start a file rollback during live use.');
+        $oldRollback = \Gallery\Services\application_update_create_job(
+            'rollback', ['source_job_id' => $observed['id']], 'background',
+        );
+        $oldRollback['automatic_rollback'] = true;
+        \Gallery\Services\application_update_save_job($oldRollback);
+        \Gallery\Services\application_update_set_active_job($oldRollback['id']);
+        $rollbackState = \Gallery\Services\application_update_process_job($oldRollback['id']);
+        recovery_check($rollbackState['status'] === 'failed' && !$rollbackState['can_resume']
+            && file_get_contents($root . '/app/payload.php') === '<?php /* bad active release */',
+            'A historical rollback job could write live files or retry.');
 
-        $gated = recovery_activated_source($root, 'background', 'stable_update', true);
-        $gated['status'] = 'running';
-        $gated['checkpoints']['activation_complete'] = true;
-        \Gallery\Services\application_update_save_job($gated);
-        $marker = \Gallery\Services\application_update_read_json(
-            \Gallery\Services\application_update_activation_gate_path());
-        recovery_check(!\Gallery\EarlyRuntime\activation_job_is_complete($root, $marker),
-            'Protocol-1 gate reopened before migrations and job completion.');
-        $ticket = str_repeat('d', 64); // Fixed hexadecimal transport vector, never a real credential.
-        $chain = ['job_id' => $gated['id'], 'ticket_hash' => hash('sha256', $ticket),
-            'queued_until' => time() + \Gallery\Services\APPLICATION_UPDATE_CHAIN_LEASE_SECONDS];
-        \Gallery\Services\application_update_write_json_atomic(
-            \Gallery\Services\application_update_jobs_root() . '/background-chain.json', $chain);
-        $_GET = ['page' => 'site_maintenance_cron'];
-        $_POST = ['update_ticket' => $ticket];
-        $_SERVER['REQUEST_METHOD'] = 'POST';
-        recovery_check(\Gallery\EarlyRuntime\updater_worker_allowed($root, $marker),
-            'A valid job-bound private continuation could not traverse the gate.');
-        $_POST['update_ticket'] = str_repeat('e', 64);
-        recovery_check(!\Gallery\EarlyRuntime\updater_worker_allowed($root, $marker),
-            'A wrong private ticket traversed the gate.');
-        $_POST = ['update_ticket' => $ticket, 'mixed' => '1'];
-        recovery_check(!\Gallery\EarlyRuntime\updater_worker_allowed($root, $marker),
-            'A mixed worker envelope traversed the gate.');
-        $_GET = [];
-        $_POST = [];
-        $_SERVER['REQUEST_METHOD'] = 'CLI';
-
-        $GLOBALS['recovery_settings'] = [];
-        $source = recovery_activated_source($root, 'api', 'stable_update');
-        $rollback = \Gallery\Services\application_update_recover_failed_job($source['id']);
-        recovery_check(recovery_drain($rollback['id'])['status'] === 'completed', 'Cannot establish restored source.');
+        recovery_package($root, '1.0.0', 'previous release still installed');
+        $before = recovery_source('package_validate', 'api');
+        $before['checkpoints']['archive_commit'] = str_repeat('b', 40);
+        $before = recovery_mature($before);
+        $released = \Gallery\Services\application_update_recover_failed_job($before['id']);
+        recovery_check(!empty($released['result']['recovery_released']),
+            'Could not establish the pre-activation failure exclusion.');
         $GLOBALS['recovery_remote_version'] = '1.1.0';
         \Gallery\Services\application_autoupdate_run_installing_check(true);
         recovery_check(\Gallery\Services\application_update_active_job() === null,
@@ -696,18 +619,10 @@ namespace {
                 $metadata['created_paths'][] = 'app/payload.php';
                 \Gallery\Services\application_update_write_json_atomic($metadataPath, $metadata);
             } else { file_put_contents($path, 'corrupt'); }
-            $rollback = \Gallery\Services\application_update_recover_failed_job($source['id']);
-            if ($rollback['id'] !== $source['id']) {
-                $failedRollback = recovery_drain($rollback['id']);
-                recovery_check($failedRollback['status'] === 'failed', 'Bad backup unexpectedly completed rollback.');
-                $attempts = $failedRollback['attempts'];
-                \Gallery\Services\application_update_continue_background_job();
-                recovery_check(\Gallery\Services\application_update_load_job($rollback['id'])['attempts'] === $attempts,
-                    'Failed rollback created an automatic retry/recovery loop.');
-            } else {
-                recovery_check(!empty(\Gallery\Services\application_update_load_job($source['id'])['recovery_blocked']),
-                    'Missing backup was not explained.');
-            }
+            $blocked = \Gallery\Services\application_update_recover_failed_job($source['id']);
+            recovery_check($blocked['id'] === $source['id'] && !$blocked['can_rollback']
+                && !empty(\Gallery\Services\application_update_load_job($source['id'])['recovery_blocked']),
+                'Invalid backup was accepted for a live restore.');
             recovery_check(file_get_contents($root . '/app/payload.php') === '<?php /* bad active release */',
                 'An unverified backup modified the installation.');
         }
@@ -727,35 +642,19 @@ namespace {
         file_put_contents($priorFile, "<?php /* original applied migration */\r\n");
         $insert = $pdo->prepare('INSERT INTO schema_migrations (version,applied_at) VALUES (?,?)');
         $insert->execute([$priorVersion, gmdate('Y-m-d H:i:s')]);
-        $source = recovery_activated_source($root, 'api', 'stable_update');
-        $legacyWitness = $source;
-        $legacyWitness['checkpoints']['database_before_activation']['hashes'][$priorVersion] =
-            \Gallery\Services\application_update_manifest_hash($priorFile);
-        unset($legacyWitness['checkpoints']['database_before_activation']['format'],
-            $legacyWitness['checkpoints']['database_before_activation']['ledger'],
-            $legacyWitness['checkpoints']['database_before_activation']['migration_manifest']);
-        \Gallery\Services\application_update_assert_rollback_database($legacyWitness);
-        $futureWitness = $source;
-        $futureWitness['checkpoints']['database_before_activation']['format'] = 999;
-        recovery_refuses(static function () use ($futureWitness): void {
-            \Gallery\Services\application_update_assert_rollback_database($futureWitness);
-        }, 'Unknown evidence format bypassed rollback admission.');
+        $originalEvidence = \Gallery\Services\application_update_recovery_database_evidence($root);
         $originalAppliedAt = (string) $pdo->query('SELECT applied_at FROM schema_migrations')->fetchColumn();
         $pdo->prepare('UPDATE schema_migrations SET applied_at=? WHERE version=?')
             ->execute(['2000-01-01 00:00:00', $priorVersion]);
-        recovery_refuses(static function () use ($source): void {
-            \Gallery\Services\application_update_assert_rollback_database($source);
-        }, 'Changed ledger audit fields bypassed rollback admission.');
+        $changedEvidence = \Gallery\Services\application_update_recovery_database_evidence($root);
+        recovery_check($originalEvidence['ledger'] !== $changedEvidence['ledger'],
+            'Migration evidence lost the changed applied timestamp.');
         $pdo->prepare('UPDATE schema_migrations SET applied_at=? WHERE version=?')
             ->execute([$originalAppliedAt, $priorVersion]);
         file_put_contents($priorFile, "<?php /* original applied migration */\n");
-        recovery_refuses(static function () use ($source): void {
-            \Gallery\Services\application_update_assert_rollback_database($source);
-        }, 'Changed migration line-ending bytes bypassed exact-byte evidence.');
-        file_put_contents($priorFile, '<?php /* changed applied migration */');
-        recovery_refuses(static function () use ($source): void {
-            \Gallery\Services\application_update_assert_rollback_database($source);
-        }, 'Changed applied migration bytes bypassed rollback integrity.');
+        $lineEndingEvidence = \Gallery\Services\application_update_recovery_database_evidence($root);
+        recovery_check($originalEvidence['hashes'][$priorVersion] !== $lineEndingEvidence['hashes'][$priorVersion],
+            'Migration evidence ignored changed exact line-ending bytes.');
         $delete = $pdo->prepare('DELETE FROM schema_migrations WHERE version=?');
         $delete->execute([$priorVersion]);
         unlink($priorFile);
@@ -768,25 +667,6 @@ namespace {
             && array_key_exists($retired, $witness['hashes'])
             && $witness['hashes'][$retired] === null,
             'Historical absence lost the full ledger or invented file bytes.');
-        \Gallery\Services\application_update_assert_rollback_database($source);
-        $incompleteLegacy = $source;
-        unset($incompleteLegacy['checkpoints']['database_before_activation']['format'],
-            $incompleteLegacy['checkpoints']['database_before_activation']['ledger'],
-            $incompleteLegacy['checkpoints']['database_before_activation']['migration_manifest']);
-        recovery_refuses(static function () use ($incompleteLegacy): void {
-            \Gallery\Services\application_update_assert_rollback_database($incompleteLegacy);
-        }, 'Legacy evidence acquired invented historical-absence support.');
-        $pdo->prepare('UPDATE schema_migrations SET version=? WHERE version=?')
-            ->execute(['202606100002_other_retired', $retired]);
-        recovery_refuses(static function () use ($source): void {
-            \Gallery\Services\application_update_assert_rollback_database($source);
-        }, 'Changed historical ledger bypassed rollback admission.');
-        $pdo->prepare('UPDATE schema_migrations SET version=? WHERE version=?')
-            ->execute([$retired, '202606100002_other_retired']);
-        $rollback = \Gallery\Services\application_update_recover_failed_job($source['id']);
-        recovery_check($rollback['operation'] === 'rollback'
-            && recovery_drain($rollback['id'])['status'] === 'completed',
-            'Historical missing migration prevented real rollback completion.');
         $requiredPath = 'database/migrations/' . $retired . '.php';
         $manifestPath = $root . '/app/core-manifest.json';
         $originalManifest = file_get_contents($manifestPath);
@@ -989,11 +869,11 @@ namespace {
         $old['checkpoints']['validated_version'] = '1.1.0';
         $old['status'] = 'running';
         \Gallery\Services\application_update_save_job($old);
-        recovery_check(\Gallery\Services\application_update_process_job($old['id'])['status'] === 'failed',
+        recovery_check(\Gallery\Services\application_update_process_job($old['id'])['status'] === 'cancelled',
             'An old package resumed over an FTP replacement.');
         $old = \Gallery\Services\application_update_load_job($old['id']);
-        @unlink(\Gallery\Services\application_update_activation_gate_path());
-        \Gallery\Services\application_update_activation_gate_begin($old);
+        @unlink($root . '/maintenance.lock');
+        file_put_contents($root . '/maintenance.lock', json_encode(['job_id' => $old['id']], JSON_THROW_ON_ERROR));
         \Gallery\Services\application_update_write_json_atomic(
             \Gallery\Services\application_update_jobs_root() . '/rollback-window.json', ['job_id' => $old['id']]);
         $oldProof = \Gallery\Services\application_update_job_dir($old['id']) . '/rollback/original/preserved-proof.txt';
@@ -1011,34 +891,24 @@ namespace {
             && file_get_contents($localExtension) === '<?php /* unmanaged local extension */'
             && file_get_contents($oldProof) === 'preserved original backup'
             && $manualResult['integrity_warnings'] === []
-            && !is_file(\Gallery\Services\application_update_activation_gate_path()),
-            'FTP overlay completion deleted extras/backups, restored old code or retained the gate.');
+            && !is_file($root . '/maintenance.lock'),
+            'FTP overlay completion deleted extras/backups, restored old code or failed to retire the preserved legacy marker.');
 
-        // A real ordinary reader must not prevent Reset from closing admission.
-        // Only migration waits for that reader; missing publisher metadata is
-        // diagnostic and cannot strand the newly allocated forward recovery.
+        // A real legacy lock must not stall an explicit FTP completion.
         $reader = fopen(\Gallery\Services\application_update_jobs_root()
             . '/runtime-use.lock', 'c+');
         recovery_check(is_resource($reader) && flock($reader, LOCK_SH | LOCK_NB),
-            'Cannot establish the ordinary reader for reset takeover.');
+            'Cannot establish the legacy runtime lock for reset takeover.');
         $savedManifest = file_get_contents($root . '/app/core-manifest.json');
         unlink($root . '/app/core-manifest.json');
         try {
             $readerReset = \Gallery\Services\application_update_start_manual_deployment(true);
-            $readerState = \Gallery\Services\application_update_load_job($readerReset['id']);
-            $admission = \Gallery\Services\application_update_read_json(
-                \Gallery\Services\application_update_activation_gate_path());
-            recovery_check($readerReset['status'] === 'running'
-                && empty($readerReset['replacement_waiting'])
-                && empty($readerState['checkpoints']['runtime_guard_open'])
-                && $admission['job_id'] === $readerReset['id']
-                && !empty($admission['recovery_isolation']),
-                'An ordinary reader starved reset before admission could close.');
-            $readerWait = \Gallery\Services\application_update_process_job($readerReset['id']);
-            recovery_check($readerWait['status'] === 'running'
-                && $readerWait['runtime_waiting']
-                && $readerWait['integrity_warnings'] === [],
-                'FTP metadata stopped recovery or migration ignored an existing reader.');
+            $readerResult = recovery_drain($readerReset['id']);
+            recovery_check($readerResult['status'] === 'completed'
+                && !$readerResult['runtime_waiting']
+                && $readerResult['integrity_warnings'] === []
+                && !is_file($root . '/maintenance.lock'),
+                'FTP completion waited for a legacy runtime lock or created maintenance.');
             $warningEvents = array_values(array_filter($GLOBALS['recovery_log_events'],
                 static fn(array $event): bool => $event['event'] === 'update.recovery_validation_warning'
                     && $event['context']['job_id'] === $readerReset['id']));
@@ -1047,11 +917,8 @@ namespace {
                     ['checkpoints']['recovery_verify_index']),
                 'Disabled publisher verification still ran a diagnostic sweep.');
         } finally {
-            flock($reader, LOCK_UN);
             fclose($reader);
         }
-        recovery_check(recovery_drain($readerReset['id'])['status'] === 'completed',
-            'Missing manifest or drained runtime reader prevented FTP completion.');
         file_put_contents($root . '/app/core-manifest.json', $savedManifest);
 
         // A paused migration from an unknown/newer old target and a malformed
@@ -1063,12 +930,13 @@ namespace {
         $interrupted['checkpoints']['validated_version'] = '9.9.0';
         \Gallery\Services\application_update_save_job($interrupted);
         $brokenMarker = '{"job_id":"interrupted legacy marker';
-        file_put_contents(\Gallery\Services\application_update_activation_gate_path(), $brokenMarker);
+        file_put_contents($root . '/maintenance.lock', $brokenMarker);
         $reset = \Gallery\Services\application_update_start_manual_deployment(true);
         recovery_check($reset['id'] !== $interrupted['id'] && $reset['attempts'] === 0
             && \Gallery\Services\application_update_load_job($interrupted['id'])['status'] === 'cancelled'
             && file_get_contents(\Gallery\Services\application_update_job_dir($reset['id'])
-                . '/superseded-activation.json') === $brokenMarker,
+                . '/superseded-maintenance.lock') === $brokenMarker
+            && !is_file($root . '/maintenance.lock'),
             'Reset retained a stuck owner or discarded malformed historical evidence.');
 
         // Cover both takeover crash boundaries: an initial zero-slice child
@@ -1085,7 +953,7 @@ namespace {
                 $reserved['stage'] = 'package_validate';
                 \Gallery\Services\application_update_save_job($reserved);
                 $windowPath = \Gallery\Services\application_update_jobs_root() . '/rollback-window.json';
-                $preservedWindow = (string) file_get_contents($windowPath);
+                $preservedWindow = json_encode(['job_id' => $predecessor['id']], JSON_THROW_ON_ERROR);
                 file_put_contents(\Gallery\Services\application_update_job_dir($reserved['id'])
                     . '/superseded-rollback-window.json', $preservedWindow);
                 \Gallery\Services\application_update_write_json_atomic($windowPath,
@@ -1121,7 +989,7 @@ namespace {
             'FTP retry resumed a download or trusted old upload verification.');
 
         // Explicit replacement must wait for the real predecessor worker lock,
-        // then own both gates without resuming the old installer.
+        // then adopt active ownership without resuming the old installer.
         $worker = \Gallery\Services\application_update_acquire_lock(
             \Gallery\Services\application_update_job_dir($retry['id']) . '/worker.lock');
         $waiting = \Gallery\Services\application_update_start_recovery_replacement('stable_restore');
@@ -1212,15 +1080,14 @@ namespace {
                 === file_get_contents($stableRoot . '/public/assets/styles/utilities.css')
             && file_get_contents($oldProof) === 'preserved original backup'
             && is_file($localExtension)
-            && !is_file(\Gallery\Services\application_update_activation_gate_path())
+            && !is_file($root . '/maintenance.lock')
             && !is_file(\Gallery\Services\application_update_jobs_root() . '/rollback-window.json')
             && !$stableResult['can_rollback'],
             'Stable replacement failed, skipped same-version files, deleted evidence or left isolation open.');
 
         // Reproduce the actual ordinary background path, without recovery
-        // override. A pre-existing reader may finish, but new readers must
-        // receive 503 before taking another shared lease. The disabled sweep
-        // must not run even when publisher hashes differ from selected bytes.
+        // override. Both the installer and public requests are independent of
+        // a legacy runtime lock. Keep the disabled-sweep and digest assertions.
         file_put_contents($root . '/app/core-manifest.json', $savedManifest);
         $ordinary = \Gallery\Services\application_update_create_job('stable_update',
             ['branch' => 'main', 'target_version' => '1.2.1'], 'background');
@@ -1256,6 +1123,7 @@ namespace {
             'bytes' => filesize($ordinaryArchivePath),
             'sha256' => hash_file('sha256', $ordinaryArchivePath),
         ];
+        $expectedOrdinaryCss = file_get_contents($ordinaryRoot . '/public/assets/styles/utilities.css');
         \Gallery\Services\application_update_remove_path($ordinaryRoot);
         $ordinary['stage'] = 'archive_validate';
         recovery_check(session_status() !== PHP_SESSION_ACTIVE
@@ -1264,96 +1132,32 @@ namespace {
             'Post-response job creation lost the configured Admin session name.');
         \Gallery\Services\application_update_save_job($ordinary);
         \Gallery\Services\application_update_set_active_job($ordinary['id']);
-        $beforeActivation = file_get_contents($root . '/app/bootstrap.php');
         $ordinaryReader = fopen(\Gallery\Services\application_update_jobs_root()
             . '/runtime-use.lock', 'c+');
         recovery_check(is_resource($ordinaryReader) && flock($ordinaryReader, LOCK_SH | LOCK_NB),
-            'Cannot hold the ordinary request preceding automatic activation.');
+            'Cannot hold the historical runtime lock before automatic activation.');
         try {
-            for ($slice = 0; $slice < RECOVERY_FIXTURE_DRAIN_SLICES; $slice++) {
-                $ordinaryWait = \Gallery\Services\application_update_process_job($ordinary['id']);
-                recovery_check($ordinaryWait['status'] === 'running',
-                    'Ordinary background preparation stopped: ' . json_encode($ordinaryWait['error']));
-                if ($ordinaryWait['runtime_waiting']) { break; }
-            }
+            $ordinaryResult = recovery_drain($ordinary['id']);
             $ordinaryState = \Gallery\Services\application_update_load_job($ordinary['id']);
-            $admission = \Gallery\Services\application_update_read_json(
-                \Gallery\Services\application_update_activation_gate_path());
-            recovery_check($ordinaryWait['runtime_waiting']
-                && $ordinaryWait['stage'] === 'activate'
-                && $admission['job_id'] === $ordinary['id']
-                && $admission['admin_session_name'] === $ordinary['admin_session_name']
-                && !empty($admission['recovery_isolation'])
-                && empty($ordinaryState['checkpoints']['activation_started'])
+            recovery_check($ordinaryResult['status'] === 'completed'
+                && $ordinaryResult['result']['version'] === '1.2.1'
+                && !$ordinaryResult['runtime_waiting']
+                && !empty($ordinaryState['checkpoints']['runtime_committed'])
                 && !isset($ordinaryState['checkpoints']['recovery_verify_index'])
                 && !isset($ordinaryState['checkpoints']['recovery_ready_index'])
                 && !empty($ordinaryState['checkpoints']['archive_release_digest_verified'])
-                && $ordinaryState['checkpoints']['source_root'] === $ordinaryRoot
                 && !empty($ordinaryState['checkpoints']['publisher_integrity_disabled'])
-                && file_get_contents($root . '/app/bootstrap.php') === $beforeActivation,
-                'Ordinary activation failed to close admission before waiting or ran a disabled sweep.');
-            $blockedReader = recovery_worker_probe($root, $token, $ordinary['id'], true);
-            recovery_check($blockedReader['status'] === '503'
-                && !$blockedReader['runtime_lease_held']
-                && str_contains($blockedReader['body'], 'Service temporarily unavailable'),
-                'A new ordinary reader prolonged the activation drain.');
+                && file_get_contents($root . '/public/assets/styles/utilities.css') === $expectedOrdinaryCss
+                && !is_file($root . '/maintenance.lock')
+                && !is_file(\Gallery\Services\application_update_jobs_root() . '/rollback-window.json'),
+                'Ordinary activation failed or ran a disabled verification sweep: '
+                    . json_encode($ordinaryResult['error']));
+            $public = recovery_worker_probe($root, $token, $ordinary['id'], true);
+            recovery_check($public['body'] === 'Ordinary request admitted.'
+                && !$public['runtime_lease_held'], 'An independent request took an updater lease.');
         } finally {
-            flock($ordinaryReader, LOCK_UN);
             fclose($ordinaryReader);
         }
-        // Successful ordinary cleanup removes extract/. Capture the expected
-        // publisher bytes before draining instead of rereading deleted staging.
-        $expectedOrdinaryCss = file_get_contents(
-            $ordinaryRoot . '/public/assets/styles/utilities.css');
-        // Drive the actual critical owners to their durable commit, then pause
-        // cleanup. Another process must already be able to use the website.
-        $ordinaryState = \Gallery\Services\application_update_load_job($ordinary['id']);
-        recovery_check(\Gallery\Services\application_update_job_activate($ordinaryState),
-            'Prepared ordinary activation did not acquire the drained runtime.');
-        recovery_refuses(static function () use (&$ordinaryState): void {
-            \Gallery\Services\application_update_runtime_commit($ordinaryState);
-        }, 'Runtime reopened before migrations and finalization.');
-        recovery_check(is_file($root . '/maintenance.lock'),
-            'Critical activation stopped using the sole root maintenance marker.');
-        $migrated = false;
-        for ($slice = 0; $slice < RECOVERY_FIXTURE_DRAIN_SLICES; $slice++) {
-            if (\Gallery\Services\application_update_job_migrate_slice($ordinaryState)) {
-                $migrated = true;
-                break;
-            }
-        }
-        recovery_check($migrated && is_file($root . '/maintenance.lock'),
-            'Migration completion lost maintenance before finalization.');
-        \Gallery\Services\application_update_job_finalize($ordinaryState);
-        \Gallery\Services\application_update_runtime_commit($ordinaryState);
-        \Gallery\Services\application_update_runtime_commit($ordinaryState);
-        recovery_check($ordinaryState['stage'] === 'cleanup'
-            && !empty($ordinaryState['checkpoints']['runtime_committed'])
-            && !is_file($root . '/maintenance.lock')
-            && is_dir($ordinaryRoot)
-            && is_file(\Gallery\Services\application_update_job_dir($ordinary['id'])
-                . '/runtime-window-closed.json'),
-            'The usable runtime was not committed before physical cleanup.');
-        \Gallery\Services\application_update_control_pause($ordinary['id']);
-        $pausedCleanup = \Gallery\Services\application_update_process_job($ordinary['id']);
-        $publicCleanup = recovery_worker_probe($root, $token, $ordinary['id'], true);
-        recovery_check($pausedCleanup['status'] === 'paused'
-            && $pausedCleanup['stage'] === 'cleanup'
-            && $publicCleanup['body'] === 'Ordinary request admitted.'
-            && $publicCleanup['runtime_lease_held'],
-            'Paused background cleanup still closed ordinary website requests.');
-        recovery_refuses(static function () use ($ordinaryState): void {
-            \Gallery\Services\application_update_assert_rollback_database($ordinaryState);
-        }, 'Runtime commit retained an unverified isolated rollback claim.');
-        \Gallery\Services\application_update_control_pause($ordinary['id'], true);
-        $ordinaryResult = recovery_drain($ordinary['id']);
-        recovery_check($ordinaryResult['status'] === 'completed'
-            && $ordinaryResult['result']['version'] === '1.2.1'
-            && file_get_contents($root . '/public/assets/styles/utilities.css')
-                === $expectedOrdinaryCss
-            && !is_file(\Gallery\Services\application_update_activation_gate_path()),
-            'Ordinary background activation failed to finish after its reader drained: '
-                . json_encode($ordinaryResult['error']));
         \Gallery\Services\application_update_process_job($ordinary['id']);
         $completionEvents = array_values(array_filter($GLOBALS['recovery_log_events'],
             static fn(array $event): bool => $event['event'] === 'update.autoupdate_completed'

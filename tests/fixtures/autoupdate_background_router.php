@@ -108,10 +108,6 @@ namespace {
     // Rationale: the parent-authored environment and ownership marker select
     // the same disposable installation for every independent HTTP hop.
     define('CACHE_LIFECYCLE_TEST_ROOT', $root);
-    // Cross the real early gate before loading the mutable worker graph. Valid
-    // private successors must pass while an ordinary follow-up visit gets 503.
-    require_once __DIR__ . '/../../app/early_runtime.php';
-    \Gallery\EarlyRuntime\enforce_activation_gate($root);
     require_once __DIR__ . '/../../app/services/updates.php';
     require_once __DIR__ . '/../../app/services/site_maintenance.php';
     require_once __DIR__ . '/../../app/bootstrap/maintenance.php';
@@ -125,17 +121,12 @@ namespace {
             FILE_APPEND | LOCK_EX,
         );
         http_response_code($path === '/blocked' ? 503 : 200);
-        if ($path === '/visit') {
-            // Seed the durable receipt of an activation slice that just yielded
-            // for old readers. Real bounded cleanup hops below retain this
-            // receipt, reproducing the stopped-chain bug without fake workers.
-            $job = \Gallery\Services\application_update_active_job();
-            $job['checkpoints']['recovery_admission_closed'] = true;
-            $job['checkpoints']['runtime_lease_busy'] = true;
-            \Gallery\Services\application_update_save_job($job);
-            \Gallery\Services\application_update_activation_gate_begin($job);
-        }
         \Gallery\Core\cms_register_update_background_continuation();
+        echo 'ordinary anonymous gallery fixture';
+        return;
+    }
+    if ($path === '/during-update') {
+        // This observation never registers another background opportunity.
         echo 'ordinary anonymous gallery fixture';
         return;
     }

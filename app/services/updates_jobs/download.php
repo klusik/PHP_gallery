@@ -1000,7 +1000,7 @@ function application_update_manifest_hash(string $path): string
  * Independent runtime files and safe paths remain required.
  * Archive entry validation, source-root validation, updater-managed path
  * filtering, schema preflight, and
- * activation rollback remain enforced by their owning stages.
+ * backup controls remain enforced by their owning stages.
  *
  * @param array{id:string,stage:string,...<string,mixed>} $job Durable update job state, updated by reference.
  * @param array{deadline:float,seconds:float,...<string,int|float|string>} $budget Worker time budget.
@@ -1016,6 +1016,7 @@ function application_update_job_validate_package_slice(
         : application_update_extracted_root($jobDir . '/extract');
     $recovery = $manual || !empty($job['recovery_override']);
     application_update_assert_source_root($sourceRoot, $recovery, !$recovery);
+    application_update_assert_online_package($sourceRoot);
     $job['checkpoints']['source_root'] = $sourceRoot;
     $verifyPublisher = APPLICATION_UPDATE_PACKAGE_INTEGRITY_ENABLED;
     $job['checkpoints']['publisher_integrity_disabled'] = !$verifyPublisher;

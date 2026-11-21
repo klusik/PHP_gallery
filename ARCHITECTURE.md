@@ -3742,199 +3742,46 @@ Obsolete directories are not recursively copied as one potentially unbounded
 backup unit because their child files are already represented individually. Only
 after all three stages finish can `ready` pass.
 
-### Activation critical section
+### Live activation and forward recovery
 
-`activate` is intentionally the only non-yielding stage. Its frozen plan
-contains only files proven to differ during preflight. It performs no network
-access, ZIP extraction, package-wide verification, rollback construction, or
-database migration. Each prepared file is copied to a sibling temporary file,
-hash-checked, and committed with `rename()`. Dependencies are committed before
-bootstrap and public entry points. On replay, a destination whose SHA-256
-already equals the prepared file is treated as completed, so a killed activation
-can continue without rewriting work already committed. Obsolete managed paths
-are removed only after prepared replacements have been processed.
+The updater publishes prepared files into the existing directory. Each file is
+copied to a sibling temporary file, verified and replaced with `rename()`.
+Dependencies precede the generated module map, bootstrap and public entry
+points. The durable write intent precedes replacement. Replay skips destinations
+that already match the prepared bytes. Obsolete paths are cleaned after
+replacement according to ownership. Releases must keep old and new code and
+schema compatible while their files coexist.
 
-Before waiting for ordinary readers to finish, the prepared job atomically
-writes
-`maintenance.lock` in the installation root. The early runtime checks this
-marker before
-acquiring a shared lease or loading the mutable application graph and returns
-`503 Service Unavailable` with
-`Cache-Control: no-store` while activation is incomplete. Corrupt or incomplete
-marker state fails closed. New jobs retain the gate through forward migrations
-and required finalization.
-A durable `runtime_committed` checkpoint closes the rollback observation window
-and reopens the website before resumable physical cleanup. Pausing or retrying
-cleanup never recreates maintenance; legacy jobs retain their original receipts.
-The authenticated updater recovery/status path
-remains reachable so an interrupted activation can continue. Existing requests
-finish before the exclusive lease allows file publication. New visitors can no
-longer indefinitely replace the readers that have already finished.
+Public bootstrap has no updater admission gate or reader lock. It retires the
+old root marker after a successful response when the host allows removal.
+The active pointer, global start lock and per-job worker lock serialize writes.
+Kernel locks release when their owner dies. Authentication, CSRF and
+single-use maintenance tickets still guard installer entry points.
 
-The marker is installation-owned, excluded from deployment/rollback payloads,
-and covered by the existing Apache denial of direct `.lock` access. An empty
-operator-created marker also enables maintenance and has no automatic expiry.
-Active jobs and rollback records alone do not enable the maintenance response.
-The early runtime imports a legacy `cache/updates/activation.json` before
-admission, preserves its exact bytes privately, and retires that legacy name.
-This bridge supports an already-running old installed worker; it does not
-introduce a second public switch or a version-directory deployment model.
+Download and activation verify package, backup and migration evidence. The
+installed migration ledger retains timestamps, actual schema and exact
+applied-file identities. A retired file absent from the installed manifest has
+an explicit missing-file witness. A declared missing or corrupt file stops
+activation. The SQL model reads the ledger. The updater owns file proof.
 
-While that owned gate is closed, a worker that progressed into a runtime wait
-keeps its private continuation, paced by a one-second delay after lock release.
-Stopping on this wait would deadlock with public requests already refused by
-the gate. No-progress worker-lock contention still stops as before. Job creation
-captures the configured session name even after the visitor session is closed;
-actual authenticated Admin session verification remains mandatory at admission.
-Start and durable completion are separate automatic-update log events, including
-the target and actual installed versions.
+The bounded migration runner attempts one migration file per checkpoint. It
+persists intent first and records the ledger only when SQL and callbacks succeed.
+Migration definitions must support replay after interruption. Finalization and
+migrations complete before the job records `runtime_committed` and begins
+resumable physical cleanup.
 
-A portable PHP application on ordinary shared hosting cannot atomically exchange
-an entire non-symlink directory tree. Therefore a process termination inside
-activation can still expose a short mixed-version tree. The rollback snapshot is
-already complete before that critical section begins, and the same activation
-stage is retry-safe, but eliminating this final window would require a different
-deployment architecture such as versioned release directories plus an atomic
-symlink/document-root switch, which many shared hosts do not provide.
+An open-slice receipt detects worker death. Transient failures retry the same
+pinned package up to three times with 60/120/240-second backoffs. After 600
+seconds a failed job can release an untouched installation. An old job already
+at `activate` requires verified original and backup bytes and proof that new
+paths are still absent. Later discovery excludes matching failed identities.
 
-### Migrations, rollback, and recovery
-
-Explicit Admin FTP completion and Install stable share recovery replacement
-ownership in the existing updater engine. The start lock, predecessor/gate-owner
-worker locks serialize takeover. Admission closes before existing shared readers
-drain; the exclusive runtime lease protects actual activation and migrations.
-Ordinary visitor traffic therefore cannot starve allocation of a new reset.
-Old records,
-backups and raw marker receipts are preserved, predecessors become cancelled
-with a successor link, and a fresh isolated job starts. Busy workers receive a
-checkpoint pause request; the UI repeats the requested replacement action.
-FTP completion skips package activation; stable recovery downloads one pinned
-stable commit and overwrites every declared file, including same-version bytes.
-Both preserve unlisted files and skip obsolete-file pruning. All manifest
-diagnostics, when enabled, including absent/invalid metadata and content
-differences, become
-warning receipts only for explicit recoveries. Metadata cannot veto
-installation;
-actual source bytes are independently pinned through staging and activation.
-Safe paths and required runtime files remain mandatory. Ordinary update
-validation uses the same disabled publisher-sweep flag. Explicit recovery never
-claims automatic rollback
-without a historical DB witness.
-Newer manually installed code prevents old package continuation. Pause/resume
-preserves ordinary checkpoints, while Reset starts a new linked identity.
-
-Recovery DB witness format 2 retains the complete ordered ledger with applied
-timestamps and fresh actual schema, plus applied-file hashes and installed
-manifest identity. Applied versions intentionally absent from that manifest
-have an explicit null hash; declared missing/corrupt migration files still
-refuse. Unversioned witnesses keep their original all-hash/version/schema
-contract. The SQL model owns ledger reads; the updater service owns file proof.
-An old `activate` stage without gate/intent is only an unchanged candidate:
-start, worker and exclusive runtime locks plus complete original/backup byte
-and created-path absence proof are required before releasing its pointer.
-No DB rollback or application replacement occurs on that recovery path.
-Authenticated Admin mutations release their own bootstrap read lease only after
-Admin/CSRF/capability checks, including a first start with no active job.
-Package verification publishes its durable cursor as current-stage progress;
-every stage transition resets counters rather than inheriting completed work.
-
-The updater calls `run_migrations_bounded(1)`. `schema_migrations` is the
-durable migration-file checkpoint. The complete pending definition set is
-validated before the first pending migration is applied, and only one migration
-file is attempted per updater checkpoint. The version row is written only after
-that migration's SQL and optional repair callback complete. If a process dies
-after an individual statement or callback succeeds but before the version row is
-recorded, the migration file can replay. Migration authors must therefore use
-duplicate-safe DDL, predicates/uniqueness for DML, and idempotent repair
-callbacks. The current migration corpus follows that contract.
-
-File rollback is itself a resumable job. It uses the source job's durable
-pre-update snapshot as its prepared source, takes a new snapshot of the current
-files before restoring, and uses the same
-`plan -> stage_files -> backup -> ready -> activate -> migrate -> finalize -> cleanup`
-tail. The rollback migration stage is an explicit no-op because the application
-has no general reverse-migration framework. Administrators must treat migrations
-as forward-only and restore the database from an external backup when a release
-requires schema reversal.
-
-Failures before `activate` leave active application files untouched. Retry of
-download/archive/extraction/package-validation failures discards untrusted
-package artifacts, validators, and extraction checkpoints and restarts from
-the same immutable commit URL. Legacy moving-branch preparation failures remain
-stopped when that identity is unavailable. Failures after validation retain
-release and
-rollback data and retry the failed checkpoint. A failed or running
-pre-activation job may be cancelled, which removes transient artifacts and frees
-the active-job slot without changing application files. Cancellation is
-forbidden after activation starts; post-activation recovery is resume or
-rollback. A failed post-activation job can be rolled back. Worker execution uses
-non-blocking per-job `flock()` plus a global start lock around ownership
-changes. A worker refuses to mutate a non-active job, retry/cancel cannot steal
-ownership from another active job, and completion clears `active-job.json` only
-if the pointer still names that completing job. Lock-file JSON is diagnostic
-only, so a terminated PHP process releases the real kernel lock automatically
-and stale metadata does not require unsafe lock deletion.
-
-Existing `updates_jobs/download.php` and `activation.php` own package/backup
-verification; `errors.php` and `lifecycle.php` own timeout, quarantine and one
-automatic
-rollback child for every launch mode. Undefined functions and deterministic
-integrity failures stop same-package repetition. Transient failures allow three
-automatic attempts after 60/120/240 seconds. At least 600 seconds after first
-failure, pre-activation work releases the active pointer without changing files;
-safe post-activation work creates an independent rollback of the actual original
-snapshot. Failed identities, diagnostics, archive and backups remain intact.
-The child reservation precedes allocation and pointer publication under start
-and source-worker locks. A failed rollback cannot spawn another rollback.
-
-An open-slice receipt detects PHP termination even without a caught exception.
-A later exclusive worker converts it into bounded failure handling. Running
-manual jobs remain owned by their caller unless an open slice exceeds its
-durable recovery deadline. Failed manual jobs participate in safety recovery,
-including Advanced commit installs, without enabling discovery or changing
-saved beta/stable preferences. Capability OFF remains authoritative.
-
-Early runtime and bootstrap hold shared request leases; activation requires
-exclusive ownership, yields on contention and opens a durable observation window
-before file changes. New target packages preserve the gate through migrations
-and required finalization, then commit the runtime before physical cleanup.
-Older jobs retain their original completion boundary. Authenticated Admin update
-requests and
-unexpired hashed job-bound private tickets retain their later controller checks.
-The existing dependency-free early response owner presents a compact maintenance
-document for browser GET/HEAD requests accepting HTML. Its inline style uses
-light/dark fallback tokens because configured Theme/localization owners cannot
-load safely during file replacement. The English document refreshes the current
-GET URL after the existing three-second retry interval, with no scripts or
-external assets. HEAD has no body; POST and machine requests retain plain 503
-responses without automatic replay. Cache, noindex and restrictive HTML content
-policy headers keep this temporary response private and self-contained.
-Ordinary admission during an open window records a durable use witness. Any such
-use, a closed/missing window or an older unsupported package prevents automatic
-rollback. Actual fresh schema/ledger equality and explicit zero migration
-effects
-are additionally required; no-migration intent is committed before the runner.
-Database migrations and domain data are never reversed. Arbitrary external
-database writers require operator coordination.
-
-Rollback validates the complete original snapshot, stages its indexed files and
-uses the existing atomic activation engine. It restores prior channel settings,
-overwritten/deleted files and removes newly created paths. It keeps its own
-backup of the failed tree. Unverified DB/backup state stays visibly failed with
-localized maintenance repair steps. Due discovery may still cache newer stable
-availability independently. Once restored/released, automatic stable admission
-skips the highest failed version and a bounded 32-commit exclusion list.
-Autoupdate OFF/beta still prevent new automatic installation.
-
-Recovery adds no runtime part file or logical module: it reuses existing updater
-owners, adds two read-only queries to the existing schema model and cooperative
-lease handling to the existing early-runtime file. Generated-plan,
-duplicate/include
-and route ratchets must establish actual counts without raising baselines.
-The new gate remains closed after a failure, so autonomous recovery while gated
-requires hosting CLI cron or authenticated Admin work; public 503 requests
-cannot
-run the scheduler. See [deployment and legacy limits](docs/AUTOUPDATE.md).
+After a file write, recovery finishes forward with the same package or a
+compatible replacement. The live installer retains original snapshots and
+historical rollback records for coordinated repair. FTP completion and Install
+stable serialize with the predecessor worker, preserve old evidence and can
+retire captured legacy markers. A newer on-disk overlay stops older package work.
+Public routes keep serving throughout these installer states.
 
 ### Browser and background execution
 
@@ -3972,7 +3819,7 @@ failures discard untrusted partial artifacts before another worker attempt.
 sites. Unattended background runners refuse to advance Admin/manual jobs,
 including beta installs. A true long-lived background worker is not assumed on
 shared hosting.
-See [automatic update operation](docs/AUTOUPDATE.md) for lease recovery,
+See [automatic update operation](docs/AUTOUPDATE.md) for forward recovery,
 configured-origin TLS requirements and retained request/CLI fallbacks.
 
 **Automatic discovery cadence (issue #198).** Admin > Updates > Automatic

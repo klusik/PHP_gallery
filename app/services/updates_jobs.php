@@ -104,16 +104,6 @@ const APPLICATION_UPDATE_GC_CHECKPOINT_MAX_BYTES = 65536;
 const APPLICATION_UPDATE_CHAIN_SLICE_SECONDS = 3.0;
 
 /**
- * Purpose: pace private continuations while activation drains old readers.
- * Type: int. Units: microseconds. Scope: one gate-closed background handoff.
- * Consumers: application_update_background_chain_run().
- * Rationale: 1000000 microseconds limits waiting successors to about one per
- * second without depending on visitors that the activation gate now refuses.
- * The delay runs after both worker and chain locks have been released.
- */
-const APPLICATION_UPDATE_CHAIN_DRAIN_DELAY_US = 1_000_000;
-
-/**
  * Recover a handed-off ticket when no worker arrival was recorded.
  * Type: int. Units: seconds. Scope: one installation-wide queued handoff.
  * Consumers: background chain start/run ticket admission.
@@ -212,11 +202,10 @@ const APPLICATION_UPDATE_RECOVERY_VERIFY_FILES = 40;
 const APPLICATION_UPDATE_RECOVERY_MANIFEST_BYTES = 8 * 1024 * 1024;
 
 /**
- * Bound authored runtime protocol declarations inspected before activation.
- * Type: int. Units: bytes per file. Scope: early runtime and bootstrap readers.
- * Consumers: automatic recovery observation-window admission.
- * Rationale: 65536 bytes covers these small entry files; larger declarations
- * cannot establish rollback compatibility through an unbounded allocation.
+ * Bound the early runtime source inspected before online activation.
+ * Type: int. Units: bytes per file. Scope: verified updater packages.
+ * Consumers: application_update_assert_online_package().
+ * Rationale: 65536 bytes covers the small canonical entry file and bounds reads.
  */
 const APPLICATION_UPDATE_RECOVERY_PROTOCOL_BYTES = 65536;
 
@@ -235,7 +224,7 @@ require_once __DIR__ . '/updates_jobs/lifecycle.php';
 require_once __DIR__ . '/updates_jobs/download.php';
 // Replacement plan construction and backup staging.
 require_once __DIR__ . '/updates_jobs/plan.php';
-// Gated activation, migration, and finalization.
+// Online replacement, forward migrations, and finalization.
 require_once __DIR__ . '/updates_jobs/activation.php';
 // Bounded pruning of finished job artifacts.
 require_once __DIR__ . '/updates_jobs/cleanup.php';

@@ -35,13 +35,27 @@
 declare(strict_types=1);
 
 use function Gallery\Core\cms_run;
-use function Gallery\EarlyRuntime\enforce_activation_gate;
 use function Gallery\EarlyRuntime\handle_uncaught;
 use function Gallery\EarlyRuntime\register_emergency_handler;
 
 require_once __DIR__ . '/../app/early_runtime.php';
 register_emergency_handler();
-enforce_activation_gate(dirname(__DIR__));
+
+// Retire the old updater switch after a successful response. The application
+// neither reads its contents nor depends on the host allowing its removal.
+register_shutdown_function(static function (): void {
+    try {
+        $legacyMarker = dirname(__DIR__) . '/maintenance.lock';
+        $status = http_response_code();
+        // HTTP error responses start at 400. Retire the marker only after the
+        // installed code has served an ordinary navigation or redirect.
+        if (is_int($status) && $status < 400 && is_file($legacyMarker)) {
+            @unlink($legacyMarker);
+        }
+    } catch (\Throwable) {
+        // Some hosts disallow root-directory writes. Later requests stay live.
+    }
+});
 
 try {
     require_once __DIR__ . '/../app/diagnostics/admin_test_run_early.php';

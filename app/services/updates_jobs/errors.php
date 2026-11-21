@@ -160,6 +160,9 @@ function application_update_record_failure_diagnostic(
  */
 function application_update_job_error_retryable(array $job): bool
 {
+    if (($job['operation'] ?? '') === 'rollback') {
+        return false;
+    }
     if (($job['operation'] ?? '') === 'manual_deploy'
         && ($job['stage'] ?? '') === 'package_validate') {
         // An incomplete FTP overlay can be completed by its operator.
@@ -211,7 +214,7 @@ function application_update_job_error_retryable(array $job): bool
  * Decide whether an unattended retry is still useful and due.
  * @param array<string,mixed> $job Private durable job and failure counters.
  * @param int $now Unix time used for backoff admission.
- * @return bool True for an eligible failed update or automatic rollback after its backoff.
+ * @return bool True for an eligible failed update after its backoff.
  */
 function application_update_auto_retry_due(array $job, int $now): bool
 {
@@ -219,7 +222,6 @@ function application_update_auto_retry_due(array $job, int $now): bool
     return ($job['status'] ?? '') === 'failed'
         && empty($job['result']['recovery_released'])
         && empty($job['recovery_blocked'])
-        && (($job['operation'] ?? '') !== 'rollback' || !empty($job['automatic_rollback']))
         && application_update_job_error_retryable($job)
         && $retries < APPLICATION_UPDATE_AUTO_RETRY_LIMIT
         && $now >= (int) ($job['error']['at'] ?? $job['updated_at'] ?? 0)
@@ -269,24 +271,20 @@ function application_update_recovery_guidance(array $job): string
     } elseif (!empty($job['result']['recovery_released'])) {
         $key = 'admin.updates.recovery_restored';
         $message = 'The failed attempt has been released and the previous application files are in place. Its failed version or commit is excluded from automatic installation; enabled automatic checks can install a newer stable release.';
-    } elseif (!empty($job['automatic_rollback'])) {
-        $key = 'admin.updates.recovery_limit';
-        $message = 'Automatic rollback could not finish. Preserve both jobs and backups. Correct backup integrity or hosting permissions. Use Retry only when it is offered; otherwise deploy a verified compatible release in maintenance mode before another update.';
+    } elseif (($job['operation'] ?? '') === 'rollback') {
+        $key = 'admin.updates.recovery_manual_action';
+        $message = 'Install a compatible stable release or finish an FTP upload. Preserve the existing jobs and backups.';
     } elseif (!empty($job['result']['superseded_by'])) {
         $key = 'admin.updates.recovery_started';
         $message = 'Automatic rollback has a separate job: {job}. Reopen Updates to follow that job. The original failure and its evidence remain preserved.';
         $parameters = ['job' => (string) $job['result']['superseded_by']];
-    } elseif (($job['recovery_blocked'] ?? '') === 'backup_unverified') {
-        $key = 'admin.updates.recovery_backup_blocked';
-        $message = 'Automatic rollback stopped: the backup is missing, incomplete or corrupt. Preserve the job and backup. The administrator must recover a complete verified snapshot or deploy a compatible release in maintenance mode.';
-    } elseif (!empty($job['recovery_blocked']) || !in_array(
-        application_update_recovery_boundary($job), ['pre_activation', 'rollback_safe'], true,
-    )) {
+    } elseif (!empty($job['recovery_blocked'])
+        || application_update_recovery_boundary($job) === 'forward_repair_required') {
         $key = 'admin.updates.recovery_database_blocked';
-        $message = 'Automatic rollback stopped: database migration effects or compatibility are unverified. Preserve the job and backups. The administrator must inspect the database and interrupted migration, then deploy a verified compatible release in maintenance mode and continue forward migrations. Database migrations are not reversed.';
+        $message = 'Preserve the job and backups. Resume the same update when Retry is available, or deploy a verified compatible release and finish forward migrations.';
     } else {
         $key = 'admin.updates.recovery_waiting';
-        $message = 'Update stopped. Recovery allows up to three retries and, after a ten-minute failure timeout, restores previous files only with verified database safety. Keep the job and backups. An authenticated Updates request or configured hosting CLI worker must provide a later opportunity while the site is gated.';
+        $message = 'Update stopped. Visits and the hosting worker can retry the same package up to three times. An untouched installation can release the failed job after ten minutes. Keep the job and backups.';
     }
     // Direct CLI entry consumers permanently retain safe English fallback text.
     return function_exists(__NAMESPACE__ . '\\t') ? t($key, $message, $parameters)
