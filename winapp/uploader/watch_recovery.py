@@ -330,14 +330,43 @@ class WatchRecoveryCoordinator:
                 retained_stop = self.store.data.get('retained_stop') is True
                 if (head is None
                         or snapshot.retained_stop != retained_stop
-                        or head.state not in (
-                            'observed', 'stabilizing', 'preparing', 'inventory',
-                            'retry_wait')
-                        or head.state == 'retry_wait' and head.phase == 'source'
-                        or self._earlier_blocker(head)):
+                        or not self._can_resume_head(head)):
                     raise ValueError('Retained queue head still requires review.')
                 self.store.resume_retained()
             return self.snapshot()
+
+    def resume_pending_at_start(self) -> bool:
+        """Resume an explicitly continued queue before it starts processing.
+
+        Returns:
+            bool: True for an empty or safe queue under its current owner.
+                False leaves a head that requires review paused.
+        Raises:
+            ValueError: The queue or its current ownership is unavailable.
+            OSError: The retained-stop update could not be verified.
+        """
+        with self._decision_context(), self.store.lock:
+            self._validate_context()
+            if self.store.force_finished:
+                return False
+            head = self.store.head()
+            if head is not None and not self._can_resume_head(head):
+                return False
+            self.store.resume_retained()
+            return True
+
+    def _can_resume_head(self, head: WatchQueueItem) -> bool:
+        """Identify a pending head eligible for ordinary FIFO processing.
+
+        Args:
+            head (WatchQueueItem): Current head while holding the queue lock.
+        Returns:
+            bool: True for safe pending work with no earlier unresolved upload.
+        """
+        return (head.state in (
+            'observed', 'stabilizing', 'preparing', 'inventory', 'retry_wait',
+        ) and (head.state, head.phase) != ('retry_wait', 'source')
+            and not self._earlier_blocker(head))
 
     def repair_interrupted_decision(self) -> None:
         """Finish linked-history then queue publication for a durable intent.

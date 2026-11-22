@@ -519,6 +519,8 @@ class LinkingManager:
     _recent_links: tuple[str, ...] = ()
     _recent_link_path: Path | None = None
     _saved_upload_identity: Callable[[], tuple[str, str] | None] | None = None
+    _saved_api_address: Callable[[], str] | None = None
+    _browser_needs_launch = False
     _gallery_query = ''
     _gallery_browse_page: LinkedGalleryPage | None = None
     _gallery_catalog_limited = False
@@ -543,6 +545,7 @@ class LinkingManager:
         upload_workspace_ready: Callable[[], bool] | None = None,
         saved_upload_identity: Callable[[], tuple[str, str] | None] | None = None,
         diagnostic_callback: Callable[[str], None] | None = None,
+        saved_api_address: Callable[[], str] | None = None,
     ) -> None:
         """Create an idle manager bound to the application's Tk thread.
 
@@ -574,6 +577,8 @@ class LinkingManager:
                 without a live session, or None if no saved target is available.
             diagnostic_callback (Callable[[str], None] | None): Optional host
                 receiver for the latest fixed-field linking diagnostic summary.
+            saved_api_address (Callable[[], str] | None): Saved API endpoint
+                for the address prompt, or empty when no key is configured.
 
         Returns:
             None: Initializes one app-wide linking owner.
@@ -586,6 +591,7 @@ class LinkingManager:
         self._recovery_review = recovery_review
         self._upload_workspace_ready = upload_workspace_ready
         self._saved_upload_identity = saved_upload_identity
+        self._saved_api_address = saved_api_address
         self._diagnostic_callback = diagnostic_callback
         self._diagnostics_snapshot = ''
         self._latest_diagnostic = ''
@@ -956,12 +962,12 @@ class LinkingManager:
             self.resume_saved_link(issuer)
 
     def open_address_dialog(self, *, manage: bool = False, prefill: str = '') -> None:
-        """Choose a live or recent gallery, or paste a new address.
+        """Choose an installation and keep browser approval retryable in place.
 
         Args:
             manage (bool): Open access management after address selection.
             prefill (str): Exact issuer suggested by a recovery action, or
-                empty to use the current or most recent address.
+                empty to use the live link, saved API address or history.
 
         Returns:
             None: Shows the prompt, or leaves an active request or dialog open.
@@ -976,15 +982,23 @@ class LinkingManager:
 
         owner = self._window if self._window is not None and self._window.winfo_exists() else self._root
         dialog = EmbeddedWindow(owner)
-        title = 'Manage link' if manage else 'Link gallery'
+        title = 'Manage link' if manage else self._text('linking_connect_website')
         dialog.title(title)
         dialog.resizable(True, False)
         card = GlassCard(dialog, padding=(16, 12))
         card.pack(fill='both', expand=True)
-        ttk.Label(card, text='Gallery URL', style='Section.TLabel').pack(anchor='w')
+        ttk.Label(
+            card, text=self._text('linking_website_address'), style='Section.TLabel',
+        ).pack(anchor='w')
         recent = self._recent_links
+        saved_api_issuer = ''
+        if (not prefill and not self._session_issuer and not manage
+                and self._saved_api_address is not None
+                and not self.linked_upload_mode_selected()):
+            saved_api_issuer = linking_issuer(self._saved_api_address())
         address = tk.StringVar(
-            dialog, value=(prefill or self._session_issuer or self._current_issuer
+            dialog, value=(prefill or self._session_issuer or saved_api_issuer
+                           or self._current_issuer
                            or (recent[0] if recent else self.address())),
         )
         entry = ttk.Entry(card, textvariable=address)
@@ -995,7 +1009,7 @@ class LinkingManager:
         )
         # Reserve room for multiline feedback while keeping the actions still.
         hint = ttk.Label(
-            card, text='Paste the gallery address from your browser.\n\n',
+            card, text=self._text('linking_website_address_hint') + '\n\n',
             style='Muted.TLabel', wraplength=LINKING_ADDRESS_STATUS_WRAP,
             justify='left', anchor='w',
         )
@@ -1004,13 +1018,18 @@ class LinkingManager:
         min_width = LINKING_ADDRESS_STATUS_WRAP + LINKING_DIALOG_WRAP_INSET
 
         def submit() -> None:
-            """Default bare gallery hosts to HTTPS before strict validation.
+            """Start a validated request or retry a failed browser launch.
 
             Returns:
-                None: Shows a correction, starts linking, or opens management.
+                None: Shows a correction, starts linking, opens management or
+                    tries the browser for this prompt's unlaunched approval.
             """
             nonlocal link_worker
             if confirm.instate(['disabled']):
+                return
+            if link_worker is not None and self._handoff is not None:
+                self._open_browser()
+                refresh()
                 return
             value = address.get().strip()
             issuer = linking_issuer(value)
@@ -1034,7 +1053,7 @@ class LinkingManager:
                         address.set(issuer)
             if not issuer:
                 hint.configure(
-                    textvariable='', text='Enter a valid gallery address.',
+                    textvariable='', text=self._text('linking_website_address_invalid'),
                     style='Status.TLabel',
                 )
                 entry.focus_set()
@@ -1052,13 +1071,13 @@ class LinkingManager:
                 refresh()
 
         def cancel() -> None:
-            """Dismiss the prompt and cancel any attempt started from it.
+            """Dismiss the prompt and cancel its pending approval or renewal.
 
             Returns:
                 None: Discards the prompt and stops its pending local work.
             """
-            if (link_worker is not None and self._worker is link_worker
-                    and confirm.instate(['disabled'])):
+            if (link_worker is not None and self._worker is not None
+                    and (self._worker.is_alive() or not self._events.empty())):
                 self._close_window()
                 self._status.set('Gallery linking cancelled.')
             self._dismiss_address_prompt()
@@ -1094,7 +1113,8 @@ class LinkingManager:
             """Project live links, local history and the currently valid actions.
 
             Returns:
-                None: Fits changed groups and keeps busy controls synchronized.
+                None: Fits changed groups and projects the current browser action
+                    or the availability of a new request.
             """
             live = tuple(site.issuer for site in self._live_links())
             recent = tuple(issuer for issuer in self._recent_links if issuer not in live)
@@ -1108,13 +1128,18 @@ class LinkingManager:
             issuer = linking_issuer(address.get())
             busy = self._worker is not None and (
                 self._worker.is_alive()
-                or self._worker is link_worker and not self._events.empty()
+                or link_worker is not None and not self._events.empty()
             )
+            browser_ready = (link_worker is not None and self._handoff is not None
+                             and self._browser_needs_launch)
             entry.state(['disabled'] if busy else ['!disabled'])
             choices.results.state(['disabled'] if busy else ['!disabled'])
-            confirm.state(['disabled'] if busy else ['!disabled'])
-            confirm.configure(text=self._text('linking_open_saved_link')
-                              if not manage and issuer in live else title)
+            confirm.state(['disabled'] if busy and not browser_ready else ['!disabled'])
+            confirm.configure(text=(
+                self._text('linking_open_browser') if browser_ready else
+                self._text('linking_open_saved_link') if not manage and issuer in live
+                else title
+            ))
             disconnectable = (issuer in live or issuer in self._reconnect_issuers
                               or (self._offline_binding is not None
                                   and self._offline_binding.issuer == issuer))
@@ -1171,7 +1196,7 @@ class LinkingManager:
         """Select an available link or start browser approval for a new one.
 
         Args:
-            address (str): Entered or previously selected gallery address.
+            address (str): Entered or previously selected website address.
 
         Returns:
             None: Shows a live site, starts one approval or reports a refusal.
@@ -1181,7 +1206,7 @@ class LinkingManager:
             return
         issuer = linking_issuer(address)
         if not issuer:
-            self._status.set('Enter a valid address in Gallery URL.')
+            self._status.set(self._text('linking_website_address_invalid'))
             return
         self._refresh(self._current_issuer)
         if issuer in self._reconnect_issuers:
@@ -1202,7 +1227,6 @@ class LinkingManager:
                 self._status.set('Open Manage link to change the approved access.')
             return
         if self.resume_saved_link(issuer, approve_if_absent=True):
-            self._dismiss_address_prompt()
             return
         if self._session is None:
             self._current_issuer = issuer
@@ -1869,7 +1893,8 @@ class LinkingManager:
             command=self._open_browser, style='Compact.TButton',
         )
         self._revoke_button = Button(
-            self._link_actions, text='Unlink gallery', command=self.unlink,
+            self._link_actions, text=self._text('linking_disconnect_website'),
+            command=self.unlink,
             style='Compact.TButton',
         )
         gallery_label = ttk.Label(
@@ -2557,7 +2582,7 @@ class LinkingManager:
             else ['!disabled'],
         )
         self._browser_button.state(
-            ['!disabled'] if self._handoff is not None else ['disabled'],
+            ['!disabled'] if self._browser_needs_launch else ['disabled'],
         )
         self._revoke_button.state(
             ['!disabled'] if not busy and (self._session is not None
@@ -3215,6 +3240,7 @@ class LinkingManager:
                                      else self._text('linking_server_unavailable'))
             elif kind == 'handoff' and isinstance(payload, PushedAuthorization):
                 self._handoff = payload
+                self._browser_needs_launch = True
                 self._open_browser()
             elif kind == 'offline_saved' and isinstance(payload, tuple):
                 self._offline_binding, self._offline_store = payload
@@ -3265,6 +3291,7 @@ class LinkingManager:
                     failure=False,
                 )
                 self._show_link(_LinkedSite(issuer, session, identity.user_id))
+                self._dismiss_address_prompt()
                 self._clear_handoff()
             elif kind == 'resume_error':
                 self._status.set('Could not verify the saved link. Try again.')
@@ -3576,10 +3603,13 @@ class LinkingManager:
                         'response_kind=other; reason=transport_failure',
                         failure=True,
                     )
+                elif kind == 'callback_failed':
+                    self._record_diagnostic(
+                        'stage=callback; route=loopback; reason=approval_not_received',
+                        failure=True,
+                    )
                 messages = {
-                    'unavailable': (
-                        'Browser linking is unavailable at this gallery address.'
-                    ),
+                    'unavailable': self._text('linking_website_address_unavailable'),
                     'https_failed': (
                         'Could not establish secure HTTPS. '
                         'Check the address, port and certificate.'
@@ -3588,8 +3618,8 @@ class LinkingManager:
                         'Could not reach the linking service. '
                         'Check the gallery address and path.'
                     ),
-                    'callback_failed': 'Browser approval expired or could not return to the app. Try Link gallery again.',
-                    'exchange_failed': 'Could not verify the approved connection. Try Link gallery again.',
+                    'callback_failed': self._text('linking_browser_approval_failed'),
+                    'exchange_failed': 'Could not verify the approved connection. Try connecting again.',
                     'save_failed': (
                         'The browser approved the link, but secure storage failed.'
                     ),
@@ -4827,11 +4857,14 @@ class LinkingManager:
         return None
 
     def _open_browser(self) -> None:
-        """Open or retry the exact browser approval page for a live handle.
+        """Open the exact unlaunched browser approval page for a live handle.
 
         Returns:
-            None: Reports the approval step or permits retry after browser failure.
+            None: Reports approval progress or keeps the live prompt retryable
+                after an unsuccessful launch. Leaves an opened request alone.
         """
+        if not self._browser_needs_launch:
+            return
         handoff = self._handoff
         if handoff is None or time.monotonic() >= handoff.expires_at:
             self._clear_handoff()
@@ -4846,14 +4879,18 @@ class LinkingManager:
         except Exception:  # noqa: BLE001
             opened = False
         if not opened:
-            self._status.set('Could not open the browser. Try Link gallery again.')
-            if self._window is None:
+            if self._window is None and self._address_prompt is None:
+                self._status.set('Could not open the browser. Try connecting again.')
                 self._clear_handoff()
                 self._cancel.set()
                 self._owner = None
                 if self._attempt is not None:
                     self._attempt.close()
+            else:
+                self._status.set(self._text('linking_browser_retry'))
             return
+        # The browser claim is one-use. A second tab can invalidate consent.
+        self._browser_needs_launch = False
         self._status.set(self._text('linking_approve_browser'))
 
     def _open_devices(self) -> None:
@@ -5025,9 +5062,10 @@ class LinkingManager:
         """Forget the private request handle without claiming memory erasure.
 
         Returns:
-            None: Clears the manager's reference to the handoff correlation handle.
+            None: Clears the correlation handle and its pending browser launch.
         """
         self._handoff = None
+        self._browser_needs_launch = False
 
     def _close_window(self) -> None:
         """Cancel this dialog's work and leave the shared session live.

@@ -1833,7 +1833,7 @@ After submitting a~decision, \ui{Hide (saving decision)} only hides progress;
 the~already authorized durable publication finishes normally.
 In~a~short window, evidence scrolls while the~decision and~close controls
 remain visible below it.
-After a~worker restart, \ui{Resume pending uploads} also releases safe pending
+After a~worker restart, \ui{Continue} also releases safe pending
 work in~the~same session, preserving its~retry deadline.
 Explicit recovery after a~failed Stop save also restores reconciliation
 and~the~required final scan under the~original cutoff.
@@ -1844,23 +1844,17 @@ Review must distinguish the~older unknown from the~current unsent source;
 reviewing the~older operation cannot acknowledge the~new one.
 \ui{Inspect folder (read-only)} shows separate filesystem findings without
 changing the~queue, startup exclusions, cutoff or~live status.
-Progress always offers \ui{Hide}. \ui{Stop and keep pending} stops admission
+Close the~progress overlay to~return to~the~workspace. \ui{Interrupt} stops admission
 and~retains accepted work and~its~cutoff for~explicit recovery. It~does~not
 revoke access or~delete files. A~request still running keeps its~owner;
 the~UI reports that wait instead of~claiming successful completion.
 Ownership remains held until the~retained cutoff has~been saved and~read back;
 a~failed save keeps processing paused under the~same owner.
 
-Interrupted capture recovers automatically, with no~repair buttons in~progress.
-The~app first checks the~same already approved destination in~the~background.
-If~it~cannot restore it, the~app stops new admission and~dispatch and~saves
-a~terminal local-retention decision before leaving finalization. Pending originals,
-reports and~unknown-upload evidence remain on~disk; no~item is~declared
-uploaded or~skipped. Refresh, timeout and~restart cannot resume that session.
-An~already sent request retains its~physical owner until it~actually ends.
-After the~decision is~saved, normal Exit is~bounded; terminating remaining
-process work does~not~prove the~server outcome. Start Watcher creates a~new
-capture boundary. Normal Finish waits for~its~own queues and~required final
+Choose \ui{Continue} to~resume the~original queue, using the~saved API key
+or~the~approved website connection. If~access is~unavailable, the~queue remains
+paused with its~originals, reports and~upload history. Start Watcher creates
+a~new capture boundary. Normal Finish waits for~its~own queues and~required final
 scan, without waiting for~an~unrelated idle Watcher or~creating an~empty
 automatic Finish loop. Diagnostics identify the~capture and~worker separately.
 
@@ -1977,7 +1971,7 @@ invalidate it. Selecting a~Photos album does not~change the~upload title.
 Its~top API-key control opens
 a~compact key dialog with a~masked key and~\ui{Save \& Test}; this~control
 remains available in~the~header on~every screen. The~separate ordinary header
-\ui{Link gallery} flow remains the~upload/search path. Unsaved edits do~not~replace
+\ui{Connect website} flow remains the~upload/search path. Unsaved edits do~not~replace
 the~saved key. The~app header also has Settings,
 updates, and~help controls. The~Watcher screen keeps the~selected folder path,
 watcher status, and~source-delete warning visible.
@@ -1985,15 +1979,16 @@ If~the~configuration cannot be~read or~verified, startup stops before work
 begins. Preserve the~original file and~restore a~valid backup; a~missing file
 still starts with first-run defaults. Windows reparse points and~power-loss
 durability have not~yet been qualified.
-Click \ui{Link gallery} in~the~main window. Paste the~gallery address from
-your browser into the~dialog and~confirm with \ui{Link gallery}.
+Click \ui{Connect website} in~the~main window. Confirm the~suggested address
+from the~saved API connection or~enter the~PHP Gallery website address,
+including the~installation folder when present. Choose a~gallery after connecting.
 You can also enter a~host and~installation path without a~scheme.
 On~confirmation, WinApp adds \texttt{https://} and~shows the~normalized
 address before checking the~gallery.
 An~HTTP address on \texttt{localhost} can link to~a~gallery on~the~same
 computer. Remote installations use verified HTTPS.
-The~dialog shows progress while waiting for~approval. If~the~connection
-fails, it~displays the~error and~lets you try again.
+The~dialog shows progress while waiting for~approval. If~opening the~browser
+fails, choose \ui{Open browser} to~try again.
 Sign in~as an~administrator in~the~browser and~click \ui{Approve}.
 Return to~WinApp when the~browser shows \ui{Approval received}. WinApp
 shows the~linked site's address and~loads the~first gallery page
@@ -2008,7 +2003,7 @@ Use the~public website URL, including its~public subdirectory when needed.
 Internal hosting directories do~not~belong in~the~link address. Servers with
 internal path rewriting need PHP Gallery~1.0.1 for~public-mount verification.
 
-Use the~ellipsis beside \ui{Unlink gallery} to~open the~links chooser.
+Use the~ellipsis beside \ui{Disconnect website} to~open the~links chooser.
 Select an~entry under \ui{Linked now} to~switch using its current approval.
 The~profile keeps up~to~20 \ui{Recent addresses} across restarts. Select one
 to~start a~new approval. The~power icon unlinks the~selected site and~the
@@ -2026,7 +2021,7 @@ On~a~supported local profile,
 including a~source run on~macOS, WinApp uses the~approved upload access
 automatically. After verification,
 \ui{Upload gallery} shows the~destination in~Watcher and~Import. The~ellipsis
-reveals more gallery actions. \ui{Unlink gallery} ends the~current link.
+reveals more gallery actions. \ui{Disconnect website} ends the~current link.
 After restart, reconnect to~the~same account and~select the~gallery again.
 Use \ui{Manage link…} in~Settings for~advanced access. API-key uploads use
 their own \ui{Gallery URL} and~gallery-scoped key.
@@ -2571,7 +2566,7 @@ WinApp can resume an~approved saved link at~startup.
 \ui{Reconnect saved link} also starts this check. The~client rotates once
 and~checks the~server identity. If~the~same verified server explicitly rejects
 an~expired or~revoked rolling credential, WinApp discards that saved credential.
-Choose \ui{Link gallery} to~approve a~new link in~the~browser. Startup leaves
+Choose \ui{Connect website} to~approve a~new link in~the~browser. Startup leaves
 approval to~you. An~uncertain
 response or~storage failure blocks reuse of~the~old credential. Review server
 links and~use \ui{Forget saved link} before linking again if~needed. Local forget
@@ -2601,11 +2596,9 @@ can~consume resources before the~application checks the~request.
 
 An~idle Watcher starts after an~explicit \ui{Start Watcher} click; while active the~same
 contextual control is~\ui{Stop Watcher}. While accepted work finishes, it
-opens \ui{Show progress}. After an~interruption, \ui{Review pending uploads}
-opens the~original queue. Reconnect and~select the~same upload gallery before
-choosing \ui{Retry}. For a~linked session, \ui{Keep files locally} closes
-the~queue after workers stop and~preserves the~photos, reports and~upload
-history. Once the~session is~closed, \ui{Start Watcher} is~available again.
+opens \ui{Show progress}. \ui{Interrupt} pauses accepted uploads and~keeps
+the~queue. Choose \ui{Continue} to~resume uploads to~the~same gallery.
+WinApp opens website connection if~the~original linked access needs approval.
 \ui{Check folder only} performs
 a~folder
 dry run without uploads or~starting continuous watching. The~Watcher gear opens
@@ -2744,7 +2737,7 @@ accessibility qualification.
 
 Embedded panels inherit the~central dialog surface and~button library; stacking
 does not define another skin. Capture progress retains its nonmodal overlay,
-fixed footer and~automatic recovery without repair buttons.
+fixed footer with \ui{Continue} and~\ui{Interrupt} when applicable.
 
 \ui{Support diagnostics…} opens a~local preview with \ui{Refresh}, \ui{Copy}
 and~\ui{Save}. The~report includes allowlisted settings/runtime facts, the~current
@@ -2875,10 +2868,12 @@ the~helper starts. Unresolved work postpones installation after 120~seconds;
 the~game-presence observer does~not~block it. Finish a~manual import, AI task
 or~report finalization first. Helper failure keeps the~application open.
 After update, the~same session, folder, target and~original file boundary
-continue. Screenshots created during installation remain eligible. Telemetry
+continue automatically, including with an~older saved API-key profile.
+Windows may~request administrator approval for~the~installer.
+Screenshots created during installation remain eligible. Telemetry
 keeps its~original identity and~records a~gap. Explicit Stop or~Quit cancels
 continuation. Linked capture requires the~same account, gallery and~scope.
-Older versions without saved running intent can~offer \ui{Resume Watcher}
+Older versions without saved running intent can~offer \ui{Continue}
 for~verified unfinished work; they do~not~resume it~without that explicit
 choice. Abandon and~a~replacement key are~not~required for~continuation.
 Persisted settings and~credentials remain available; unsaved Settings fields

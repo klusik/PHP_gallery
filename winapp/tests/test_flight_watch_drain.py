@@ -131,6 +131,49 @@ class WatchDrainTests(unittest.TestCase):
         )
         return watcher
 
+    def test_watch_start_accepts_unmigrated_saved_api_mode(self) -> None:
+        """Start a fresh capture with the same API mode as an upgraded profile.
+
+        Returns:
+            None: Real leased startup reaches the initial scan and capture-ready
+                event without uploading files already in the folder.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            folder = root / "watch"
+            folder.mkdir()
+            historical = folder / "existing.png"
+            historical.write_bytes(b"already present at startup")
+            watcher = self.make_watcher(folder, root)
+            owner = mock.Mock()
+            owner.view.return_value.state = 'legacy_unmigrated'
+            config_port = mock.Mock()
+            watcher._gui_admission = (owner, config_port)
+            watcher.configure_drain(root, None)
+
+            def stop_after_ready(level: str, message: str) -> None:
+                """Stop this empty capture after production startup has finished.
+
+                Args:
+                    level (str): Watcher event severity.
+                    message (str): Current worker status.
+                Returns:
+                    None: Requests stop after the original exclusions are saved.
+                """
+                if level == 'info' and message.startswith('Watching '):
+                    watcher.stop_event.set()
+
+            watcher.emit = mock.Mock(side_effect=stop_after_ready)
+            watcher.run()
+
+            owner.acquire.assert_called_once_with('legacy', config_port)
+            owner.acquire.return_value.checkpoint.assert_called()
+            self.assertEqual('', watcher.drain_error)
+            self.assertTrue(watcher.initial_captured)
+            self.assertEqual({historical}, watcher.initial_paths)
+            self.assertEqual('watcher_start_ready', watcher.events.get_nowait()['kind'])
+            watcher.upload_watched_file.assert_not_called()
+
     def test_update_continuation_keeps_original_exclusions_without_stop_cutoff(self) -> None:
         """Scan only new downtime arrivals under the original unfrozen boundary.
 

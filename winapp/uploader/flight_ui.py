@@ -285,6 +285,20 @@ class FlightHost(Protocol):
         """
         ...
 
+    def resume_flight_photos(
+        self, directory: Path, *, continue_retained: bool = False,
+    ) -> threading.Thread | None:
+        """Restore the exact worker for an explicitly continued queue.
+
+        Args:
+            directory (Path): Owned flight session workspace.
+            continue_retained (bool): Release a saved interruption for safe work.
+        Returns:
+            threading.Thread | None: Original queue's new worker, or None when
+                it has no unfinished photograph work.
+        """
+        ...
+
     def forget_flight_connection(self, binding: str) -> None:
         """Durably remove only the explicitly abandoned saved connection's key.
 
@@ -1812,10 +1826,10 @@ class FlightUI:
         return supplied
 
     def show_recovery(self) -> None:
-        """Open recovery for the saved Watcher session, including after restart.
+        """Show pending Watcher progress and its explicit actions.
 
         Returns:
-            None: Starts automatic same-target recovery or durable local retention.
+            None: Opens the recovery view without changing the saved queue.
         """
         if not self.busy() and (
             self.independent_operation()
@@ -1838,6 +1852,7 @@ class FlightUI:
                 Independent PDF work and submitted revocation are untouched.
         """
         if (self.independent_operation() or self._force_finish_pending
+                or getattr(self, '_force_stop_pending', False)
                 or self._capture_recovery_worker is not None
                 or self._capture_recovery_restore_pending
                 or (self._capture_recovery_retry_at is not None
@@ -1851,7 +1866,7 @@ class FlightUI:
             return
         if (operation is not None and (
                 operation.server_request_sent or operation.wants_revoke
-                or operation.is_alive())):
+                or operation.cancel.is_set() or operation.is_alive())):
             return
         try:
             binding = self.binding()
@@ -1891,8 +1906,8 @@ class FlightUI:
         """Apply background recovery only to its original operation and binding.
 
         Returns:
-            None: Restores the same approved target once, or invokes the existing
-                durable queue/flight publisher with a captured logical operation.
+            None: Restores the same approved target once, or leaves the
+                original session paused for an explicit Continue.
         """
         try:
             generation, operation, binding, plans = self._capture_recovery_results.get_nowait()
@@ -1928,7 +1943,7 @@ class FlightUI:
                 Args:
                     available (bool): Same approved gallery was restored.
                 Returns:
-                    None: Retries normal completion once or retains files locally.
+                    None: Retries normal completion once or reports the pause.
                 """
                 if (generation != self._progress_generation
                         or self.operation is not operation):
@@ -1942,34 +1957,14 @@ class FlightUI:
                 if available:
                     self.begin(automatic=True, explicit_retry=True)
                 else:
-                    self._retain_capture(plans)
+                    self.detail_var.set(self.text('capture_recovery_paused'))
 
             try:
                 restore(binding, restored)
             except (OSError, ValueError, RuntimeError):
                 restored(False)
             return
-        self._retain_capture(plans)
-
-    def _retain_capture(self, plans: tuple[SessionPlan, ...]) -> None:
-        """Publish local retention even when no Finish worker was constructed.
-
-        Args:
-            plans (tuple[SessionPlan, ...]): Fresh exact-target pending plans.
-        Returns:
-            None: Uses the existing queue/transport leases and durable readback;
-                no network mutation, credential removal or file deletion occurs.
-        """
-        if self.operation is None:
-            self._progress_generation += 1
-            self.operation = FinalizationWorker(
-                list(plans), '', '', self.wait_for_workers, self.submit_revoke, False,
-            )
-            self.operation.flight_generation = self._progress_generation
-            self.operation.trigger_reason = 'automatic_capture_recovery'
-            self.automatic_operation = self.operation
-        self.detail_var.set(self.text('capture_retaining'))
-        self.force_finish()
+        self.detail_var.set(self.text('capture_recovery_paused'))
 
     def can_start(self) -> bool:
         """Refuse a new flight while existing accepted work needs completion.
@@ -2222,6 +2217,27 @@ class FlightUI:
         else:
             self.begin(self.pending_revoke_intent())
 
+    def continue_watch(self) -> None:
+        """Continue the original upload queue with its saved authority.
+
+        Returns:
+            None: Reviews a blocked live head, opens the exact linked
+                connection when needed, or starts same-target upload recovery.
+        """
+        watcher = self.host.worker
+        if watcher is not None and watcher.is_alive():
+            if getattr(watcher, '_recovery_review_only', False) is True:
+                self.force_continue_watch()
+            return
+        if self.busy() or getattr(self, '_force_stop_pending', False):
+            return
+        linking = self.host.linking_manager
+        if (linking.linked_upload_mode_selected()
+                and linking.selected_upload_target() is None):
+            self.host.reconnect_upload_gallery()
+            return
+        self.begin(automatic=True, explicit_retry=True, continue_pending=True)
+
     def is_alive(self) -> bool:
         """Include recorder work in ordinary shutdown/update worker ownership.
 
@@ -2275,6 +2291,7 @@ class FlightUI:
     def begin(
         self, revoke: bool = False, *, automatic: bool = False,
         photos_only: bool = False, explicit_retry: bool = False,
+        continue_pending: bool = False,
     ) -> None:
         """Start drained Stop or an explicitly authorized captured-key Finish.
 
@@ -2286,6 +2303,8 @@ class FlightUI:
                 game capture before draining, including later recovery.
             explicit_retry (bool): Preserve the existing captured Finish intent
                 when the user deliberately retries a terminal automatic attempt.
+            continue_pending (bool): Treat this as an explicit Continue of the
+                original Watcher queue, including a saved interruption.
 
         Returns:
             None: Starts admitted work and progress. Linked-mode revocation is
@@ -2371,9 +2390,9 @@ class FlightUI:
                 raise ValueError(self.text("linked_target_unavailable"))
             photo_worker = self.host.worker
             watching = photo_worker is not None and photo_worker.is_alive()
-            if linked and not watching:
-                # A linked destination owns one exclusive photo worker. Older
-                # profiles with multiple plans recover one session per Retry.
+            if (linked or continue_pending) and not watching:
+                # Continue restores one session under the shared pipeline.
+                # Older profiles can have more than one pending flight.
                 plans = plans[:1]
             if photos_only:
                 if not linked:
@@ -2414,9 +2433,16 @@ class FlightUI:
             self.resume_workers = []
             if not watching:
                 for plan in plans:
-                    resumed = self.resume_photos(plan.directory)
-                    if resumed is not None:
-                        self.resume_workers.append(resumed)
+                    if continue_pending:
+                        resumed = self.host.resume_flight_photos(
+                            plan.directory, continue_retained=True,
+                        )
+                        if resumed is not None:
+                            self.host.worker = resumed
+                    else:
+                        resumed = self.resume_photos(plan.directory)
+                        if resumed is not None:
+                            self.resume_workers.append(resumed)
             self._progress_generation += 1
             self.operation = FinalizationWorker(
                 plans, upload_url, api_key, self.wait_for_workers,
@@ -2446,7 +2472,10 @@ class FlightUI:
         except (OSError, ValueError, RuntimeError) as exc:
             self.host.api_key_revoke_running = False
             self._dismiss_progress_preparation()
-            if not revoke and not self.independent_operation():
+            if continue_pending:
+                self.host.status_var.set(self.text('capture_recovery_paused'))
+                self.show_recovery()
+            elif not revoke and not self.independent_operation():
                 self._recover_capture(requested=True)
             else:
                 messagebox.showerror(
@@ -2617,7 +2646,7 @@ class FlightUI:
                         or row.get('schema_version') == 2 and row.get('completed') is not True):
                     raise RuntimeError(
                         str(row.get("error") or "")
-                        or "Photographs still need review. Retry or keep files locally."
+                        or self.text('capture_recovery_paused')
                     )
         for job_id, binding in self.import_bindings.entries().items():
             if not wants_revoke or binding != self.binding():
@@ -2724,9 +2753,8 @@ class FlightUI:
         """Open or restore the one shared nonmodal progress view.
 
         Returns:
-            None: Interrupted captures recover automatically without repair
-                buttons. Independent PDF actions retain their separate controls;
-                opening this view never implies new revoke consent.
+            None: Shows pending or active uploads and independent PDF controls
+                without changing upload or revocation intent.
         """
         local_mode = self.independent_operation()
         saved_upload = bool(
@@ -2740,9 +2768,8 @@ class FlightUI:
         preparing = getattr(self, "_preparing_progress", False) is True
         if self.operation is None and not preparing:
             self.phase_var.set(self.text("review_pending_uploads"))
-            self.detail_var.set(self.text('capture_recovering'))
+            self.detail_var.set(self.text('capture_recovery_paused'))
             self.time_var.set("")
-            self._recover_capture()
         elif self.operation is not None and not preparing:
             progress = self.operation.snapshot()
             self.phase_var.set(self.text(
@@ -2824,7 +2851,10 @@ class FlightUI:
         actions.pack(fill="x", pady=(4, 0))
         self.progress_actions = actions
         actions.bind('<Configure>', lambda _event: self.refresh_progress_actions())
-        ordinary_actions: tuple[tuple[str, Callable[[], None]], ...] = ()
+        ordinary_actions = (
+            ("watch_recovery_resume_pending", self.continue_watch),
+            ("force_stop_watch", self.force_stop_watch),
+        )
         local_actions = (
             ("retry", self.retry_saved_upload if saved_upload else self.create_local_pdf),
             ("cancel_upload" if saved_upload else "cancel_pdf", self.cancel_local_pdf),
@@ -2840,7 +2870,7 @@ class FlightUI:
             label: Button(
                 actions, text=self.text(label), command=command,
                 style=("Accent.Compact.TButton"
-                       if label in {"retry", "force_finish"}
+                       if label in {"retry", "watch_recovery_resume_pending"}
                        else "Compact.TButton"),
             )
             for label, command in choices
@@ -2906,78 +2936,50 @@ class FlightUI:
         """Show only actions usable for the current progress or recovery state.
 
         Returns:
-            None: Updates the compact action rows without opening a window.
+            None: Shows Continue and Interrupt only when applicable to capture.
+                Independent report operations keep their own controls.
         """
         actions = self.progress_actions
         if actions is None or not actions.winfo_exists():
             return
-        if not self.independent_operation():
-            for button in self.progress_buttons.values():
-                button.grid_remove()
-            actions.pack_forget()
-            return
         operation = self.operation
         phase = operation.snapshot().phase if operation is not None else None
         running = phase not in {None, "completed", "error", "cancelled"}
-        linked = self.host.linking_manager.linked_upload_mode_selected()
         choices: list[str] = []
-        if getattr(self, "_preparing_progress", False) is True:
-            choices = ["hide"]
-        elif self.independent_operation():
-            if running:
-                choices.append("cancel_upload" if operation.saved_upload else "cancel_pdf")
-            elif phase != "completed":
-                choices.append("retry")
-            choices.append("open_reports")
-        elif operation is not None and operation.abandonment:
-            if not running and phase != "completed":
-                choices.append("retry")
-        elif running or self.session_state() == "pending":
-            if not running:
-                if linked and self.host.linking_manager.selected_upload_target() is None:
-                    choices.append("reconnect_upload_gallery")
-                choices.append("retry")
-                if not linked:
-                    choices.append("keep_local")
-            if self.pending_revoke_intent():
-                choices.append("cancel_revoke")
-            choices.append("keep_watched_files" if linked else "abandon")
-        elif phase == "completed":
-            choices.append("open_reports")
-        elif self.session_state() == "blocked":
-            choices.append("retry")
-        choices.append("hide")
-        if (not self.independent_operation()
-                and phase != "completed"
-                and callable(getattr(self.host, "force_finish_flight", None))):
-            choices = ["force_finish", "hide"] + [
-                choice for choice in choices
-                if choice not in {"hide", "force_finish"}
-            ]
-        capture_review = (
-            not self.independent_operation()
-            and (running or self.session_state() in {"pending", "blocked"})
-        )
-        if capture_review and callable(
-            getattr(self.host, "open_watch_recovery_review", None)
-        ):
-            choices.append("force_continue_watch")
-        if capture_review and callable(
-            getattr(self.host, "stop_and_keep_watch_pending", None)
-        ):
-            choices.append("force_stop_watch")
+        preparing = getattr(self, "_preparing_progress", False) is True
+        if self.independent_operation():
+            if not preparing:
+                if running:
+                    choices.append("cancel_upload" if operation.saved_upload else "cancel_pdf")
+                elif phase != "completed":
+                    choices.append("retry")
+                choices.append("open_reports")
+            choices.append("hide")
+        elif not preparing and (operation is None or not operation.abandonment):
+            watcher = self.host.worker
+            if watcher is not None and watcher.is_alive():
+                if getattr(watcher, '_recovery_review_only', False) is True:
+                    choices.append("watch_recovery_resume_pending")
+                if operation is None or not operation.server_request_sent:
+                    choices.append("force_stop_watch")
+            elif not running and self.session_state() in {"pending", "blocked"}:
+                choices.append("watch_recovery_resume_pending")
+        choices = [label for label in choices if label in self.progress_buttons]
         for label, button in self.progress_buttons.items():
             if label not in choices:
                 button.grid_remove()
-            elif label == "force_finish":
-                button.configure(
-                    state="disabled" if getattr(self, "_force_finish_pending", False)
-                    else "normal"
-                )
+        if not choices:
+            actions.pack_forget()
+            return
+        if actions.winfo_manager() != 'pack':
+            actions.pack(fill='x', pady=(4, 0))
         for label in choices:
             button = self.progress_buttons[label]
             button.configure(text=self.text(label))
-        layout_actions(actions, [self.progress_buttons[label] for label in choices], PROGRESS_ACTION_COLUMNS)
+        layout_actions(
+            actions, [self.progress_buttons[label] for label in choices],
+            PROGRESS_ACTION_COLUMNS,
+        )
 
     def force_continue_watch(self) -> None:
         """Open the host's exact-head review without retrying an upload.
@@ -3062,7 +3064,8 @@ class FlightUI:
         Returns:
             None: Leaves the waiter active until the app confirms retention.
         """
-        if getattr(self, "_force_stop_pending", False):
+        if (getattr(self, "_force_stop_pending", False)
+                or self.operation is not None and self.operation.server_request_sent):
             return
         stop = getattr(self.host, "stop_and_keep_watch_pending", None)
         if not callable(stop):

@@ -1,5 +1,38 @@
 # PHP Gallery Uploader Patch Notes
 
+## Version 1.5.2
+
+Restored Watcher startup for older API-key profiles and clarified website
+connection in WinApp.
+
+### Highlights
+
+#### Watcher and updates
+
+- Restored Watcher startup and verified update handoff with a saved API key
+  on profiles created before browser linking.
+- Added **Continue** for eligible pending work and **Interrupt** to pause the
+  Watcher with its photographs available for later.
+
+#### Website connection
+
+- Renamed the action to **Connect website** and used the saved API address
+  to suggest the installation URL when available. Album selection follows
+  website approval.
+- Kept the dialog available to retry launching the browser when it fails to
+  open.
+
+### Technical Details
+
+- Reused the original target and queue binding across Watcher startup,
+  interruption, and the verified updater checkpoint.
+
+### User Impact
+
+- An active Watcher with a verified checkpoint can resume the same folder,
+  album and queue after an in-app update. An upload already in progress
+  settles before the handoff.
+
 ## Version 1.5.1 (Unreleased source)
 
 Added truthful in-gallery loading progress for Photos metadata and visible

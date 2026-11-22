@@ -179,9 +179,10 @@ return a generic refusal and leave ordinary pagination available. A matching
 revision produces a small no-store unchanged envelope; it saves transfer and
 client updates, not the server's current authorization/catalogue read.
 
-WinApp's main **Link gallery** action accepts a pasted address in its own
-dialog. The linking workspace keeps that address in memory independently of
-the API-key upload endpoint. Remote addresses use verified HTTPS. The literal
+WinApp's main **Connect website** action accepts the PHP Gallery installation's
+address and can suggest it from the saved API endpoint. The chooser keeps
+its selection independent of the upload destination. Remote addresses use
+verified HTTPS. The literal
 public request path confirms the configured issuer and exact mount; internal
 `SCRIPT_NAME` rewrites do not define that public address. The linking controller
 generates its start/login/consent routes from the verified public issuer and

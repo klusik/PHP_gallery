@@ -473,7 +473,7 @@ class WatcherContinuationTests(unittest.TestCase):
             api_key='fixture-api-key',
         )
         startup.mode_owner = SimpleNamespace(view=mock.Mock(return_value=(
-            SimpleNamespace(state='legacy', record=None)
+            SimpleNamespace(state='legacy_unmigrated', record=None)
         )))
 
         with mock.patch.object(
@@ -487,6 +487,83 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertEqual('watcher_resume_available', offered['kind'])
         self.assertTrue(offered['payload']['ordinary_restart'])
         self.assertEqual(primary, offered['payload']['continuation'])
+
+    def test_running_unmigrated_api_watcher_checkpoints_and_resumes_for_update(self) -> None:
+        """Bind the active old-profile Watcher to a verified one-use update.
+
+        Returns:
+            None: The host keeps the original session, binding and journal on
+                both sides of the helper, without a second confirmation.
+        """
+        config = MAIN.WatcherConfig(
+            gallery_url='https://gallery.example.test',
+            api_key='fixture-api-key',
+            watched_folder=str(self.watch_folder),
+        )
+        binding = MAIN.connection_binding(
+            MAIN.normalize_upload_url(config.gallery_url), config.api_key,
+        )
+        plan = replace(self.plan, binding=binding)
+        plan.save()
+        worker = mock.Mock(linked_target=None, initial_captured=True, drain_error='')
+        worker.stop_event.is_set.return_value = False
+        worker.drain_event.is_set.return_value = False
+        worker.is_alive.side_effect = (True, False, False, False)
+        app = SimpleNamespace(
+            config=config,
+            exiting=False,
+            worker=worker,
+            manual_worker=None,
+            ai_worker=None,
+            preflight_worker=None,
+            flights=mock.Mock(plan=plan, lease=self.lease, directory=self.flight_root),
+            utc_sync=mock.Mock(),
+            api_key_revoke_running=False,
+            mode_owner=mock.Mock(),
+            _update_resume_generation=0,
+            _update_resume_preparing=False,
+            _set_watcher_recording=mock.Mock(),
+            status_var=mock.Mock(),
+            _prepare_update_resume=mock.Mock(),
+            _update_resume_failed=mock.Mock(),
+        )
+        app.flights.pending.return_value = [plan]
+        app.flights.busy.return_value = False
+        app.flights.is_alive.return_value = False
+        app.utc_sync.is_alive.return_value = False
+        app.mode_owner.view.return_value.state = 'legacy_unmigrated'
+        manifest = plan.directory / 'watch-drain.json'
+        before = manifest.read_bytes()
+        ticket_path = self.flight_root / 'update-ticket.json'
+        ticket = SimpleNamespace(
+            session_id=self.record.update_session, target_version=MAIN.APP_VERSION,
+        )
+        with (
+            mock.patch(
+                'uploader.update_helper.load_ticket', return_value=ticket,
+            ),
+            mock.patch('uploader.update_helper.bind_capture_resume') as bind,
+            mock.patch.object(MAIN.messagebox, 'askyesno') as confirm,
+        ):
+            with mock.patch.object(MAIN, 'APP_VERSION', self.record.source_version):
+                MAIN.WatcherApp.prepare_update_checkpoint(app, ticket.target_version)
+            worker.request_update_pause.assert_called_once_with()
+            MAIN.WatcherApp.wait_for_update_checkpoint(app)
+            MAIN.WatcherApp.bind_update_checkpoint(app, ticket_path)
+            bind.assert_called_once_with(ticket_path, True)
+            prepared = WatcherContinuation.load(self.lease)
+            self.assertEqual(plan.session_id, prepared.session_id)
+            self.assertEqual(binding, prepared.binding)
+            self.assertEqual(ticket.session_id, prepared.update_session)
+            self.assertEqual(self.record.source_version, prepared.source_version)
+            self.assertEqual(ticket.target_version, prepared.target_version)
+            self.assertEqual('prepared', prepared.phase)
+            app._resume_continuation = prepared
+            MAIN.WatcherApp._continue_update_resume(app)
+        confirm.assert_not_called()
+        app._prepare_update_resume.assert_called_once_with(None)
+        app._update_resume_failed.assert_not_called()
+        self.assertEqual(before, manifest.read_bytes())
 
     def test_partial_ordinary_consumption_restores_both_unadmitted_markers(self) -> None:
         """Keep safe retry usable after only the mirror consumption commits.

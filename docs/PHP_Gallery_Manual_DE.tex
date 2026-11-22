@@ -2013,16 +2013,10 @@ und ZIP verwenden denselben Dateinamen. Die PDF-Endung wird bei Bedarf ergänzt.
 Kollisionen und unsichere Namen werden abgewiesen; Inhalt und Dokumentidentität
 bleiben erhalten.
 
-Unterbrochene Aufnahmen erholen sich automatisch, ohne Reparaturschaltflächen
-im Fortschritt. Die Anwendung prüft zuerst dasselbe bereits genehmigte Ziel
-im Hintergrund. Ist es nicht wiederherstellbar, stoppt sie neue Aufnahme und
-Übertragung und speichert einen dauerhaften lokalen Abschluss mit Dateierhalt.
-Ausstehende Originale, Berichte und Belege ungewisser
-Uploads bleiben erhalten; kein Eintrag gilt dadurch als hochgeladen oder
-übersprungen. Aktualisierung, Zeitablauf und Neustart setzen diese Sitzung
-nicht fort. Eine bereits gesendete Anfrage behält ihren physischen Eigentümer
-bis zum tatsächlichen Ende. Nach Speicherung bleibt normales Beenden zeitlich
-begrenzt; das Beenden restlicher Prozessarbeit beweist kein Serverergebnis.
+Mit \ui{Fortsetzen} wird die ursprüngliche Warteschlange mit dem gespeicherten
+API-Schlüssel oder der genehmigten Website-Verbindung fortgesetzt. Ist der
+Zugriff nicht verfügbar, bleibt die Warteschlange samt Originalen, Berichten
+und Upload-Verlauf pausiert.
 Start Watcher erzeugt eine neue Aufnahmegrenze. Normales Finish wartet auf
 eigene Warteschlangen und den Abschluss-Scan, nicht auf einen fremden inaktiven
 Watcher, und wiederholt keinen leeren automatischen Abschluss. Die Diagnose
@@ -2030,8 +2024,7 @@ unterscheidet Aufnahmesitzung und Worker-Warteschlange.
 
 Ein ungewisser Kopf zeigt \ui{Aktion erforderlich}. \ui{Fortsetzen} im
 Watcher kann eine optionale Belegprüfung für die exakte gespeicherte Quelle
-und das Ziel öffnen. Aufnahmefortschritt und Neustartwiederherstellung lösen
-Unterbrechungen dagegen automatisch. Lokale Vorschau und
+und das Ziel öffnen. Lokale Vorschau und
 autorisierte entfernte Beobachtung sind getrennt; ein ähnliches Bild,
 Galerieposition oder Hash ist kein Upload-Beleg. \ui{Bereits hochgeladen
 bestätigen} verlangt die exakte dauerhafte Bestätigung. \ui{Foto überspringen}
@@ -2192,16 +2185,18 @@ Beginn der Arbeit. Bewahren Sie die Originaldatei auf und stellen Sie eine
 gültige Sicherung wieder her; eine fehlende Datei nutzt weiter die
 Erststartvorgaben. Windows-Reparse-Punkte und Ausfallsicherheit bei Stromverlust
 sind noch nicht qualifiziert.
-Klicken Sie im Hauptfenster auf \ui{Link gallery}. Fügen Sie die Galerieadresse
-aus dem Browser ein und bestätigen Sie mit \ui{Link gallery}.
+Klicken Sie im Hauptfenster auf \ui{Website verbinden}. Bestätigen Sie die
+Adresse der gespeicherten API-Verbindung oder geben Sie die Adresse Ihrer
+PHP-Gallery-Website mit ihrem Installationspfad ein. Wählen Sie danach eine
+Galerie aus.
 Host und Installationspfad können Sie auch ohne Protokoll eingeben.
 Beim Bestätigen ergänzt WinApp \texttt{https://} und zeigt die normalisierte
 Adresse vor der Prüfung der Galerie. Auf demselben
 Computer kann die Galerie eine HTTP-Adresse auf \texttt{localhost} verwenden.
 Entfernte Installationen verwenden geprüftes HTTPS.
 Der Dialog zeigt den Fortschritt bis zur Genehmigung.
-Schlägt die Verbindung fehl, zeigt er den Fehler an und ermöglicht einen
-neuen Versuch. Melden Sie sich im Browser als Administrator an und klicken
+Öffnet sich der Browser nicht, wählen Sie \ui{Browser öffnen}. Melden Sie
+sich im Browser als Administrator an und klicken
 Sie auf \ui{Genehmigen}. Kehren Sie bei \ui{Approval received} zu WinApp
 zurück. WinApp zeigt die Adresse der verbundenen Website und lädt die erste
 Galerieseite automatisch. Mit \ui{Abbrechen} lehnen Sie die Anfrage ab.
@@ -2217,7 +2212,7 @@ falls erforderlich. Interne Hosting-Verzeichnisse gehören nicht in die
 Verbindungsadresse. Bei internen Pfadumschreibungen prüft PHP Gallery~1.0.1
 den öffentlichen Installationspfad.
 
-Die drei Punkte neben \ui{Unlink gallery} öffnen die Verbindungsübersicht.
+Die drei Punkte neben \ui{Website trennen} öffnen die Verbindungsübersicht.
 Unter \ui{Aktiv verbunden} wechseln Sie mit der bestehenden Genehmigung.
 Das Profil behält bis zu 20~Einträge unter \ui{Letzte Adressen} über einen
 Neustart hinweg. Wählen Sie eine Adresse für eine neue Genehmigung.
@@ -2239,7 +2234,7 @@ In einem unterstützten lokalen Profil verwendet WinApp die genehmigte
 Upload-Berechtigung automatisch, auch beim Start aus dem Quellcode unter
 macOS. Nach der Prüfung zeigt \ui{Upload gallery} das
 Ziel in Watcher und Import. Die drei Punkte öffnen weitere Galerieaktionen.
-\ui{Unlink gallery} beendet die aktuelle Verbindung. Verbinden Sie nach einem
+\ui{Website trennen} beendet die aktuelle Verbindung. Verbinden Sie nach einem
 Neustart dasselbe Konto und wählen Sie die Galerie erneut. Erweiterte Rechte
 finden Sie in den Einstellungen unter \ui{Manage link…}. Uploads per
 API-Schlüssel verwenden eine eigene \ui{Gallery URL} und einen
@@ -2859,7 +2854,7 @@ Verknüpfung beim Start wiederherstellen.
 \ui{Reconnect saved link} startet dieselbe Prüfung. Der Client erneuert
 die Daten einmal und prüft die Serveridentität. Lehnt derselbe geprüfte
 Server abgelaufene oder widerrufene verlängerbare Zugangsdaten ausdrücklich ab,
-entfernt WinApp diese gespeicherten Daten. Wählen Sie \ui{Link gallery} für
+entfernt WinApp diese gespeicherten Daten. Wählen Sie \ui{Website verbinden} für
 eine neue Genehmigung im Browser. Beim Start bleibt die Genehmigung Ihnen
 überlassen. Eine unklare Antwort oder ein
 Speicherfehler sperrt die Wiederverwendung der alten Daten. Prüfen Sie die
@@ -2893,20 +2888,16 @@ kann vor der Anwendungskontrolle Ressourcen verbrauchen.
 
 Ein inaktiver Watcher startet nach ausdrücklichem Klick auf \ui{Start Watcher}; während des Betriebs
 heißt dieselbe kontextabhängige Schaltfläche \ui{Stop Watcher}.
-Beim Abschluss öffnet \ui{Show progress} den Fortschritt. Nach einer
-Unterbrechung öffnet \ui{Review pending uploads} die ursprüngliche
-Warteschlange. Verbinden Sie dieselbe Galerie erneut, wählen Sie sie aus
-und klicken Sie auf \ui{Retry}. \ui{Photo is OK — upload} bedeutet, dass Sie
+Beim Abschluss öffnet \ui{Show progress} den Fortschritt. \ui{Unterbrechen}
+pausiert die Uploads und behält die Warteschlange. \ui{Fortsetzen} lädt weiter
+in dieselbe Galerie hoch. WinApp öffnet bei Bedarf die Website-Verbindung.
+\ui{Photo is OK — upload} bedeutet, dass Sie
 die angezeigte Quelle geprüft haben und bestätigen, dass sie korrekt und kein
 Duplikat ist. Die Freigabe lässt nur denselben FIFO-Kopf den normalen Uploadweg
 nehmen; die vorhandenen Duplikatprüfungen des Servers bleiben aktiv.
 Der vorherige unklare Versuch bleibt im Verlauf. Die einmalige Freigabe wird
 vor dem Senden verbraucht; ein weiteres unklares Ergebnis erfordert eine neue
 Entscheidung. Der laufende Request muss enden, bevor dieser Kopf fortfährt.
-In einer verknüpften Sitzung schließt
-\ui{Keep files locally} die Warteschlange nach dem Stopp der Worker. Fotos,
-Berichte und Verlauf bleiben erhalten. Danach ist \ui{Start Watcher} wieder
-verfügbar.
 \ui{Check folder only} prüft den Ordner ohne Uploads und startet keine
 dauerhafte
 Überwachung. Das Watcher-Zahnrad öffnet ein Einstellungsblatt für Ordnerauswahl,
@@ -3045,8 +3036,8 @@ ein statistischer PASS noch eine allgemeine Barrierefreiheitsqualifikation.
 
 Eingebettete Panels erben Darstellung und~Schaltflächen aus der zentralen
 Dialogbibliothek; der Panelstapel definiert keinen eigenen Stil. Der
-Capture-Fortschritt behält sein nicht modales Overlay, die feste Fußzeile und
-die automatische Wiederherstellung ohne Reparaturschaltflächen.
+Capture-Fortschritt behält sein nicht modales Overlay und die feste Fußzeile
+mit \ui{Fortsetzen} und \ui{Unterbrechen} je nach Warteschlangenstatus.
 
 \ui{Support diagnostics…} öffnet eine lokale Vorschau mit \ui{Refresh},
 \ui{Copy} und~\ui{Save}. Der Bericht enthält freigegebene Einstellungen und
@@ -3193,9 +3184,12 @@ Sitzung, derselbe Ordner, dasselbe Ziel und die ursprüngliche Dateigrenze
 fortgesetzt. Während der Installation erstellte Bilder bleiben zulässig.
 Telemetrie behält ihre Identität und markiert die Unterbrechung. Stop oder
 Beenden verwirft die Fortsetzung. Verknüpfte Aufnahmen benötigen dasselbe
-Konto, dieselbe Galerie und denselben Berechtigungsumfang. Ältere Versionen
+Konto, dieselbe Galerie und denselben Berechtigungsumfang. Eine aktive Aufnahme
+läuft nach dem Update auch mit einem älteren API-Schlüsselprofil automatisch
+weiter. Windows kann eine Administratorfreigabe für die Installation verlangen.
+Ältere Versionen
 ohne gespeicherte Laufabsicht bieten für geprüfte offene Arbeit
-\ui{Resume Watcher}; diese Auswahl bleibt ausdrücklich. Abandon oder ein neuer
+\ui{Fortsetzen}; diese Auswahl bleibt ausdrücklich. Abandon oder ein neuer
 API-Schlüssel sind dafür nicht nötig. Gespeicherte Einstellungen und
 Zugangsdaten bleiben erhalten; ungespeicherte Felder werden nicht übernommen.
 Der Helfer prüft den

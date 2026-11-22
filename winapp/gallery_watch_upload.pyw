@@ -193,6 +193,7 @@ from uploader.config import (
 from uploader.config_snapshot import ConfigSnapshot, ConfigSnapshotError, ConfigSnapshotStore
 from uploader.credential_store import WindowsUploadModeStore
 from uploader.macos_mode import MacUploadModeStore, assert_local_macos_profile
+from uploader.mode_admission import LEGACY_UPLOAD_STATES
 from uploader.mode_coordinator import (
     CoordinatedWork, GuiModeOwner, ModeConfigPort, ModeCoordinator, ModeCoordinatorError,
     ModeView,
@@ -5289,6 +5290,7 @@ class WatcherThread(threading.Thread):
         self._expected_source_hashes: Dict[str, str] = {}
         self._queue_directory_override: Optional[Path] = None
         self._recovery_review_only = False
+        self._continue_retained = False
         self._force_stop_requested = threading.Event()
         self._force_finish_requested = threading.Event()
         self._force_finish_publishing = threading.Event()
@@ -5965,7 +5967,8 @@ class WatcherThread(threading.Thread):
             """Read the live GUI mode and reject unavailable/stale ownership.
 
             Returns:
-                str: Current linked/legacy mode, or unavailable on mismatch.
+                str: Current linked mode, either verified API-key mode as
+                    legacy, or unavailable on mismatch.
             """
             admission = getattr(self, '_gui_admission', None)
             if admission is None:
@@ -5974,7 +5977,7 @@ class WatcherThread(threading.Thread):
                 state = admission[0].view().state
             except (ModeCoordinatorError, RuntimeError):
                 return 'unavailable'
-            if state == 'legacy':
+            if state in LEGACY_UPLOAD_STATES:
                 return 'legacy'
             if state == 'linked_active':
                 return 'linked'
@@ -6168,7 +6171,11 @@ class WatcherThread(threading.Thread):
             if self.recovery_coordinator is not None:
                 self.recovery_coordinator.repair_interrupted_decision()
             if self._queue.data.get('retained_stop') is True:
-                self._recovery_review_only = True
+                self._recovery_review_only = not (
+                    self._continue_retained and not self._recovery_review_only
+                    and self.recovery_coordinator is not None
+                    and self.recovery_coordinator.resume_pending_at_start()
+                )
         self._diagnostic_phase = 'startup'
         recursive_override = getattr(self, '_watch_recursive_override', None)
         recursive = (self.config.watch_recursive if recursive_override is None
@@ -8495,6 +8502,9 @@ class WatcherApp:
             recovery_review=self.review_linked_uncertainty,
             upload_workspace_ready=self.linked_workspace_ready,
             saved_upload_identity=self.saved_linked_upload_identity,
+            saved_api_address=lambda: (
+                self.config.gallery_url if self.config.api_key.strip() else ''
+            ),
             diagnostic_callback=lambda message: self.events.put(
                 (
                     "info" if message.endswith("reason=connected") else "warning",
@@ -9284,10 +9294,13 @@ class WatcherApp:
                 *_trace_info (str): Tk variable name, index and write operation.
 
             Returns:
-                None: Shows gallery choice, unlinking and link management.
+                None: Shows website connection, site management and gallery choice.
             """
             issuer = linked_address.get()
-            link.configure(text="Unlink gallery" if issuer else "Link gallery")
+            link.configure(text=tr(
+                self.flights.ui_language.get(),
+                'linking_disconnect_website' if issuer else 'linking_connect_website',
+            ))
             notebook = getattr(self, "notebook", None)
             tab_indices = getattr(self, "tab_indices", {})
             photos_selected = bool(
@@ -9433,16 +9446,19 @@ class WatcherApp:
         """Dispatch the primary Watcher action for the current session state.
 
         Returns:
-            None: Starts, finishes or opens the pending queue for recovery.
+            None: Starts, finishes or continues the original pending queue.
         """
         if getattr(self, "_watch_start_pending", False) is True:
             return
         state = self.flights.session_state()
-        if state == "working":
+        if (self.worker is not None and self.worker.is_alive()
+                and getattr(self.worker, '_recovery_review_only', False) is True):
+            self.flights.continue_watch()
+        elif state == "working":
             self.flights.show_progress()
         elif state in ("pending", "blocked"):
             if not self._retry_update_continuation():
-                self.flights.show_recovery()
+                self.flights.continue_watch()
         elif state == "active":
             self.stop()
         else:
@@ -9455,14 +9471,18 @@ class WatcherApp:
         """Match the primary Watcher caption to capture, drain or recovery.
 
         Returns:
-            None: Updates the primary action even after a stopped worker.
+            None: Shows Continue for pending work and Interrupt while a worker
+                can safely stop with its queue retained.
         """
         if self.watcher_action_button is None:
             return
+        interrupt_button = getattr(self, 'watch_recovery_action_button', None)
         if getattr(self, "_watch_start_pending", False) is True:
             self.watcher_action_button.configure(
                 text="Starting Watcher…", state="disabled",
             )
+            if interrupt_button is not None:
+                interrupt_button.pack_forget()
             return
         self.watcher_action_button.configure(state="normal")
         state = self.flights.session_state()
@@ -9470,30 +9490,31 @@ class WatcherApp:
                 and isinstance(getattr(self, "_contextual_watch_target", None),
                                LinkedUploadTarget)):
             self.contextual_watcher_is_flight()
+        language = self.flights.ui_language.get()
+        continue_text = recovery_text(language, 'watch_recovery_resume_pending')
         labels = {
             "active": "■  Stop Watcher",
             "working": self.flights.text("show_upload_progress"),
-            "pending": self.flights.text("review_pending_uploads"),
-            "blocked": self.flights.text("review_pending_uploads"),
+            "pending": continue_text,
+            "blocked": continue_text,
             "idle": "▶  Start Watcher",
         }
-        if (state in ('pending', 'blocked')
-                and getattr(self, '_resume_retry_available', False)):
-            labels[state] = '▶  Resume Watcher'
+        worker = self.worker
+        capture_live = (
+            worker is not None and worker.is_alive()
+            and getattr(worker, '_queue', None) is not None
+        )
+        if capture_live and getattr(worker, '_recovery_review_only', False) is True:
+            labels[state] = continue_text
         self.watcher_action_button.configure(text=labels[state])
-        recovery_button = getattr(self, 'watch_recovery_action_button', None)
-        if recovery_button is not None:
-            worker = self.worker
-            should_resume = (
-                state in ('pending', 'blocked')
-                and (worker is None or not worker.is_alive())
-            )
-            recovery_button.configure(text=(
-                recovery_text(self.flights.ui_language.get(),
-                              'watch_recovery_resume_pending')
-                if should_resume else
-                tr(self.flights.ui_language.get(), 'review_pending_uploads')
-            ))
+        if interrupt_button is not None:
+            operation = self.flights.operation
+            if capture_live and (operation is None or not operation.server_request_sent):
+                interrupt_button.configure(text=recovery_text(language, 'force_stop_watch'))
+                if interrupt_button.winfo_manager() != 'pack':
+                    interrupt_button.pack(side='right')
+            else:
+                interrupt_button.pack_forget()
         indicator = getattr(self, "watcher_capture_label", None)
         if indicator is not None:
             if state == "active":
@@ -10721,10 +10742,9 @@ class WatcherApp:
             wraplength=WATCH_QUEUE_STATUS_WRAP_PIXELS, justify='left',
         ).grid(row=6, column=0, sticky='w', pady=(4, 0))
         self.watch_recovery_action_button = Button(
-            actions, text=tr(self.flights.ui_language.get(), 'review_pending_uploads'),
-            command=self.open_watch_recovery_review,
+            actions, text=recovery_text(self.flights.ui_language.get(), 'force_stop_watch'),
+            command=self.flights.force_stop_watch,
         )
-        self.watch_recovery_action_button.pack(side='right')
         utc = ttk.Frame(card, style="Card.TFrame")
         self.watcher_utc_row = utc
         utc.grid(row=5, column=0, sticky="w", pady=(6, 0))
@@ -12219,7 +12239,7 @@ class WatcherApp:
             return False
         try:
             view = self.mode_owner.select_legacy()
-            return view.state in ('legacy', 'legacy_unmigrated')
+            return view.state in LEGACY_UPLOAD_STATES
         except Exception:
             logging.warning('Saved API-key mode could not be restored safely.')
             return False
@@ -12261,7 +12281,7 @@ class WatcherApp:
             # token has expired or WinApp has just restarted.
             if (self.flights.pending(binding=current_binding)
                     and desired_binding != current_binding):
-                return 'Finish the pending flight before changing the upload target.'
+                return 'Continue the current uploads in Watcher before changing the upload gallery.'
             # An accepted import retains its binding across restarts. Do not
             # replace its destination, but allow reconnecting to that same
             # exact target to review and explicitly recover incomplete work.
@@ -12620,7 +12640,8 @@ class WatcherApp:
                         APP_VERSION, self.updates.previous_version,
                         WATCHER_CONTINUATION_LIFETIME_SECONDS,
                     )
-                    if ticket is None or self.mode_owner.view().state != 'legacy':
+                    if (ticket is None
+                            or self.mode_owner.view().state not in LEGACY_UPLOAD_STATES):
                         return
                     binding = connection_binding(
                         normalize_upload_url(self.config.gallery_url),
@@ -12677,7 +12698,8 @@ class WatcherApp:
                                 ) != saved.binding):
                             reject('restart_linked_identity_changed')
                             return
-                    elif (saved.mode != 'legacy' or mode_view.state != 'legacy'
+                    elif (saved.mode != 'legacy'
+                          or mode_view.state not in LEGACY_UPLOAD_STATES
                           or saved.binding != connection_binding(
                               normalize_upload_url(self.config.gallery_url),
                               self.config.api_key,
@@ -12759,10 +12781,11 @@ class WatcherApp:
             })
 
     def _continue_update_resume(self) -> None:
-        """Wait for owned writers and fresh linked authority without blocking Tk.
+        """Continue an admitted checkpoint without asking again on the Tk thread.
 
         Returns:
-            None: Prepares one exact capture or retains an actionable safe reason.
+            None: Prepares the same verified API-key or linked capture after
+                existing writers settle, or retains it with a safe diagnosis.
         """
         record = self._resume_continuation
         if record is None or self.exiting or self._update_resume_preparing:
@@ -12780,9 +12803,11 @@ class WatcherApp:
         try:
             view = self.mode_owner.view()
             if record.mode == 'legacy':
-                if (view.state != 'legacy' or record.binding != connection_binding(
-                    normalize_upload_url(self.config.gallery_url), self.config.api_key,
-                )):
+                if (view.state not in LEGACY_UPLOAD_STATES
+                        or record.binding != connection_binding(
+                            normalize_upload_url(self.config.gallery_url),
+                            self.config.api_key,
+                        )):
                     raise ValueError('The saved API target changed.')
                 self._prepare_update_resume(None)
                 return
@@ -14033,12 +14058,15 @@ class WatcherApp:
 
     def resume_flight_photos(
         self, directory: Path, *, review_only: bool = False,
+        continue_retained: bool = False,
     ) -> Optional[WatcherThread]:
         """Resume only unfinished photographs from the bound session queue.
 
         Args:
             directory (Path): Owned, connection-matching flight session folder.
             review_only (bool): Hold network admission until explicit review action.
+            continue_retained (bool): Release a retained stop for safe work
+                after the user's explicit Continue action.
 
         Returns:
             Optional[WatcherThread]: Started recoverable drain worker, or None
@@ -14089,6 +14117,7 @@ class WatcherApp:
         try:
             worker.configure_drain(directory, (), resume=True)
             worker._recovery_review_only = review_only
+            worker._continue_retained = continue_retained
             worker.request_drain()
             worker.start()
         except Exception:
@@ -14401,7 +14430,7 @@ class WatcherApp:
         else:
             action_label = self.flights.text({
                 "progress": "show_upload_progress",
-                "recover": "review_pending_uploads",
+                "recover": "watch_recovery_resume_pending",
                 "reconnect": "reconnect_upload_gallery",
             }.get(action, "show_upload_progress"))
         for attr in ("revoke_button",):
@@ -14548,15 +14577,15 @@ class WatcherApp:
     def restore_capture_upload_target(
         self, binding: str, on_result: Callable[[bool], None],
     ) -> None:
-        """Reverify the saved capture destination without browser prompts.
+        """Resolve the original saved API-key or linked capture destination.
 
         Args:
             binding (str): Exact original site/account/gallery fingerprint.
             on_result (Callable[[bool], None]): Tk callback receiving whether
                 that same approved upload target was restored.
         Returns:
-            None: Uses an existing authorized session; absent authority leaves
-                capture recovery free to retain originals locally instead.
+            None: Confirms the unchanged saved API-key binding or checks the
+                existing linked session. Unavailable authority leaves work paused.
         """
         selected = self.linking_manager.selected_upload_target()
         if selected is not None:
@@ -14564,6 +14593,11 @@ class WatcherApp:
             return
         try:
             view = self.mode_owner.view()
+            if view.state in LEGACY_UPLOAD_STATES:
+                url = normalize_upload_url(self.config.gallery_url)
+                key = self.config.api_key.strip()
+                on_result(bool(url and key and connection_binding(url, key) == binding))
+                return
             record = view.record
             if (view.state != 'linked_active' or record is None
                     or record.mode != 'linked'
@@ -14965,8 +14999,9 @@ class WatcherApp:
             target_version (str): Verified installer version selected for update.
 
         Returns:
-            None: Requests a pause after the current upload acknowledgement;
-                a stopped Watcher never acquires new continuation consent.
+            None: Requests a pause after the current upload acknowledgement.
+                An active verified API-key or linked capture keeps its running
+                intent. A stopped Watcher acquires no continuation.
 
         Raises:
             RuntimeError: Another accepted operation must finish first.
@@ -15001,7 +15036,7 @@ class WatcherApp:
                 raise ValueError('The current Watcher session could not be verified.')
             mode = self.mode_owner.view()
             kind = 'linked' if worker.linked_target is not None else 'legacy'
-            if ((kind == 'legacy' and mode.state != 'legacy')
+            if ((kind == 'legacy' and mode.state not in LEGACY_UPLOAD_STATES)
                     or (kind == 'linked' and mode.state != 'linked_active')):
                 raise ValueError('The current Watcher mode could not be verified.')
             contextual = bool(worker.linked_target is not None
@@ -15181,7 +15216,7 @@ class WatcherApp:
                         self.config.api_key,
                     )
                     matches_owner = (
-                        mode_view.state == 'legacy'
+                        mode_view.state in LEGACY_UPLOAD_STATES
                         and current.binding == expected_binding
                     )
                 elif current.mode == 'linked':
@@ -15260,14 +15295,16 @@ class WatcherApp:
                  for operation in self._force_finished_operations)
         if self.api_key_revoke_running:
             self.flights.show_progress()
-            force_available = not self.flights.independent_operation()
+            operation = self.flights.operation
+            can_interrupt = (
+                not self.flights.independent_operation()
+                and self.worker is not None and self.worker.is_alive()
+                and (operation is None or not operation.server_request_sent)
+            )
             messagebox.showwarning(
                 "Finishing current work",
-                "Finish is still active. Use Force Finish in the progress panel "
-                "to save pending originals and release the logical Finish guard."
-                if force_available else
-                "An independent report or upload is still active. Wait for its "
-                "current request to finish; its progress remains available.",
+                "Choose Interrupt in the progress panel to pause uploads."
+                if can_interrupt else "Wait for the current operation to finish.",
             )
             return
         if self.exiting:
@@ -15286,7 +15323,7 @@ class WatcherApp:
         if (not for_update and not ordinary_prepared
                 and active_capture
                 and (self.worker.linked_target is not None
-                     or self.mode_owner.view().state == 'legacy')):
+                     or self.mode_owner.view().state in LEGACY_UPLOAD_STATES)):
             if getattr(self, '_ordinary_restart_closing', False) is True:
                 return
             try:
@@ -15620,8 +15657,8 @@ class WatcherApp:
         """Recover durable screenshot Finish intent after verified startup binding.
 
         Returns:
-            None: Checks unfinished sessions once per binding without starting
-                a repeated automatic Finish after a failed attempt.
+            None: Checks unfinished Finish sessions once per binding, keeping
+                explicit interruptions paused until the user continues them.
         """
         if (self.exiting or self.updates.blocked() or self.flights.busy()
                 or self.worker is not None and self.worker.is_alive()
@@ -15629,7 +15666,8 @@ class WatcherApp:
             return
         try:
             mode = self.mode_owner.view()
-            if mode.state not in ('legacy', 'linked_active'):
+            if (mode.state not in LEGACY_UPLOAD_STATES
+                    and mode.state != 'linked_active'):
                 return
             if (mode.state == 'linked_active'
                     and self.linking_manager.selected_upload_target() is None):
@@ -15661,6 +15699,7 @@ class WatcherApp:
                     if (row.get('schema_version') == 2
                             and row.get('binding') == binding
                             and row.get('force_finished') is not True
+                            and row.get('retained_stop') is not True
                             and type(row.get('cutoff')) in (int, float)
                             and row['cutoff'] > 0 and row.get('completed') is not True):
                         eligible.append(plan.session_id)

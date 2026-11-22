@@ -2144,10 +2144,11 @@ requires its actual final scan and preserves any dispatched request owner.
 Force-finish fixtures cover durable terminal restore, pending/unknown originals,
 new-dispatch fencing, late responses and stale UI callbacks, failed publication,
 repeated clicks, refresh/startup suppression and bounded normal Exit. Native
-Windows desktop/narrow fixtures require zero capture repair buttons in error
-and waiting states. Automatic recovery covers no pre-existing Finish worker,
-same-target restoration, stale operation/binding callbacks, coalesced recovery
-and failed persistence retaining its guard. Target verification tests require
+Windows desktop/narrow fixtures check the Continue/Interrupt actions.
+Recovery covers a missing Finish worker, unavailable authority with unchanged
+pending state, stale operation/binding callbacks and coalesced recovery.
+Saved API-key fixtures cover Watcher startup and an admitted update continuation
+with an unmigrated profile. Target verification tests require
 standard admission off Tk and reject a concurrently changed mode, account or
 scope. No installed-client or production acceptance is inferred
 from these disposable hosted fixtures.
@@ -8703,15 +8704,16 @@ legacy `pgu_` path remains independent. The anonymous query guard admits only
 the new handle parameter; raw syntax, session ownership and consent still
 belong to the linking controller.
 
-For manual acceptance, click **Link gallery** in the main window. Verify that
+For manual acceptance, click **Connect website** in the main window. Verify that
 Cancel closes the address dialog without starting a request. Paste the direct
-localhost address and confirm **Link gallery**. For a remote HTTP address,
+localhost address and confirm **Connect website**. For a remote HTTP address,
 verify the first network request uses HTTPS at the expected mount. Check that
 the dialog shows progress while checking
 the server and waiting for browser approval. A failed HTTPS connection leaves
 an editable address and an error in the same dialog. Try with a fresh app
-profile and with a different address already saved for API-key uploads.
-Linking must use the address from its own dialog and leave the API-key
+profile and with a saved API-key endpoint. Verify that the saved installation
+address is suggested and that a failed browser launch can retry the same
+handoff. Linking must use the address confirmed in its own dialog and leave the API-key
 upload configuration intact. Exercise both a signed-in and a signed-out
 ordinary Admin. Verify that sign-in returns to consent, Approve returns to
 the app with the exact installation address and loaded gallery list, and
@@ -8724,8 +8726,8 @@ Import, including on fresh Windows and macOS profiles with no API key.
 Before linking, save a folder from **Watcher settings** and check that
 **Start Watcher** explains an empty folder. After linking, start Watcher on a
 disposable folder and verify the exact selected target. Reconnect and
-reselect the same destination after restarting. Verify **Unlink gallery**
-returns to **Link gallery** and disables access through that target while
+reselect the same destination after restarting. Verify **Disconnect website**
+returns to **Connect website** and disables access through that target while
 leaving saved API-key settings intact. Review consent at desktop and narrow
 widths. Verify Windows upload-target activation and saved credential storage
 separately from the portable linking flow.

@@ -1811,22 +1811,16 @@ včetně staršího OFP. Stejný název se používá při zobrazení, stažení
 Chybějící přípona PDF se doplní. Kolize a~nebezpečné názvy se odmítnou;
 původní obsah PDF a~identita dokumentu zůstávají zachovány.
 
-Přerušené snímání se~zotaví automaticky; průběh neobsahuje opravná tlačítka.
-Aplikace na~pozadí nejprve ověří stejný již schválený cíl. Nelze-li jej obnovit,
-zastaví nové přijímání a~odesílání a~po~trvalém uložení rozhodnutí o~místním
-ponechání souborů ukončí relaci. Neodeslané originály, reporty a~doklady
-nejistého uploadu zůstanou na~disku; nic se~neoznačí za~odeslané ani
-přeskočené. Refresh, timeout ani restart tuto relaci znovu nespustí.
-Již odeslaný request drží skutečného vlastníka až~do~konce. Po~uložení
-rozhodnutí lze aplikaci ukončit s~omezeným čekáním; ukončení práce procesu
-nepotvrzuje výsledek na~serveru. Start Watcher vytvoří novou hranici capture.
+Volba \ui{Pokračovat} obnoví původní frontu s~uloženým API klíčem nebo
+schváleným připojením k~webu. Pokud přístup není k~dispozici, fronta zůstane
+pozastavená s~originály, reporty a~historií uploadu. Start Watcher vytvoří
+novou hranici capture.
 Běžný Finish čeká na~vlastní fronty a~závěrečný scan, nikoli na~cizí idle
 Watcher, a~neopakuje prázdné automatické dokončování. Diagnostika rozlišuje
 relaci capture od~fronty pracovníka.
 
 Nejistá hlava ukazuje \ui{Vyžaduje pozornost}. \ui{Pokračovat} ve Watcheru
 může otevřít dobrovolnou kontrolu dokladů konkrétní zachované generace a~cíle.
-Průběh snímání i~zotavení po~restartu řeší přerušení automaticky.
 Místní náhled a~autorizované pozorování vzdálené fotky jsou odlišeny;
 shodný obrázek, pořadové číslo galerie ani hash nejsou upload receipt.
 \ui{Potvrdit již nahrané} vyžaduje přesný trvalý acknowledgement.
@@ -1838,7 +1832,7 @@ Po odeslání rozhodnutí volba \ui{Skrýt (ukládání rozhodnutí)} pouze skry
 průběh; již potvrzený trvalý zápis normálně doběhne.
 V~nízkém okně lze důkazy posouvat; rozhodovací a~zavírací ovládání zůstává
 viditelné dole.
-Po restartu workeru volba \ui{Pokračovat v~čekajících nahráváních} uvolní
+Po restartu workeru volba \ui{Pokračovat} uvolní
 i~bezpečně čekající práci ve stejné session; zachovává termín dalšího pokusu.
 Výslovná obnova po neúspěšném uložení Stop obnoví také reconciliation
 a~povinný závěrečný scan pod původním cutoff.
@@ -1849,7 +1843,7 @@ nevymaže. Kontrola rozlišuje starší nejistou operaci od aktuální
 neodeslané fotky; review starší operace nepotvrzuje upload nové.
 \ui{Prohlédnout složku (jen čtení)} ukazuje samostatná zjištění ze
 souborového systému, nemění frontu, startup exclusions, cutoff ani živý stav.
-Průběh vždy dovoluje \ui{Skrýt}. \ui{Zastavit a~ponechat čekající}
+Zavřením průběhu se~vrátíte k~pracovní ploše. \ui{Přerušit}
 zastaví příjem a~uchová přijatou práci s~cutoff pro výslovnou obnovu.
 Neodvolává přístup ani nemaže soubory. Běžící request si drží vlastníka;
 UI přizná čekání místo nepravdivého úspěšného dokončení.
@@ -1970,14 +1964,16 @@ Pokud konfiguraci nelze přečíst nebo ověřit, spuštění se zastaví před 
 práce. Původní soubor zachovejte a~obnovte platnou zálohu; chybějící soubor
 nadále spustí výchozí nastavení. Body reparse ve Windows a~trvanlivost při
 výpadku napájení zatím nejsou ověřeny.
-V~hlavním okně klikněte na \ui{Link gallery}. Do dialogu vložte adresu
-galerie z~prohlížeče a~potvrďte ji tlačítkem \ui{Link gallery}.
+V~hlavním okně klikněte na \ui{Připojit web}. Potvrďte adresu z~uloženého
+API připojení nebo zadejte adresu svého webu PHP Gallery včetně případné
+instalační složky. Konkrétní galerii vyberete po~připojení.
 Doménu a~cestu instalace lze zadat i~bez protokolu. Při potvrzení WinApp
 doplní \texttt{https://} a~před ověřením galerie zobrazí upravenou adresu.
 Na stejném počítači funguje i~HTTP adresa na \texttt{localhost}.
 Vzdálené instalace používají ověřené HTTPS. Dialog ukazuje
-průběh až do schválení. Pokud spojení selže, zobrazí chybu a~umožní další
-pokus. V~prohlížeči se přihlaste jako správce a~klikněte na \ui{Schválit}.
+průběh až do schválení. Pokud se prohlížeč neotevře, zvolte
+\ui{Otevřít prohlížeč}. V~prohlížeči se přihlaste jako správce a~klikněte
+na \ui{Schválit}.
 Po zobrazení \ui{Approval received} se vraťte do WinApp. Aplikace zobrazí
 adresu propojeného webu a~sama načte první stránku seznamu galerií.
 \ui{Zrušit} žádost odmítne.
@@ -1991,7 +1987,7 @@ Použijte veřejnou URL webu, případně s~jeho veřejným podadresářem.
 Interní složky hostingu do adresy propojení nepatří. Servery s~interním
 přepisem cest potřebují PHP Gallery~1.0.1 pro ověření veřejné cesty.
 
-Tři tečky vedle \ui{Unlink gallery} otevřou přehled propojení.
+Tři tečky vedle \ui{Odpojit web} otevřou přehled propojení.
 V~části \ui{Aktivní propojení} lze přepnout na jiný web s~platným
 schválením. Profil uchová až 20~položek v~části \ui{Nedávné adresy}
 i~po restartu. Výběrem adresy předvyplníte nové schválení.
@@ -2009,7 +2005,7 @@ Se schváleným přístupem k~uploadu vyberte galerii a~klikněte na
 \ui{Použít pro nahrávání}. Na
 podporovaném místním profilu WinApp použije schválený přístup automaticky,
 i~při spuštění ze zdrojů na macOS. Po ověření se cíl zobrazí pod \ui{Upload gallery}
-ve Watcher i~Importu. Tři tečky ukážou další možnosti. \ui{Unlink gallery}
+ve Watcher i~Importu. Tři tečky ukážou další možnosti. \ui{Odpojit web}
 ukončí aktuální propojení. Po restartu se připojte ke stejnému účtu
 a~galerii znovu vyberte. Rozšířená oprávnění najdete v~Nastavení pod
 \ui{Manage link…}. Upload přes API používá vlastní \ui{Gallery URL}
@@ -2541,7 +2537,7 @@ Ověření lze spustit i~volbou \ui{Reconnect saved link}.
 Klient údaj jednou obmění a~ověří identitu serveru. Pokud stejný ověřený
 server výslovně odmítne vypršelý nebo odvolaný obnovovací údaj, WinApp tento
 uložený údaj odstraní. Nové propojení schvalte v~prohlížeči po volbě
-\ui{Link gallery}. Při spuštění zůstává schválení na vás. Nejistá odpověď
+\ui{Připojit web}. Při spuštění zůstává schválení na vás. Nejistá odpověď
 nebo chyba úložiště zablokuje použití původního údaje. Zkontrolujte propojení
 na serveru a~případně použijte \ui{Forget saved link} před novým propojením.
 Místní zapomenutí neruší serverový grant a~současná relace může zůstat aktivní.
@@ -2570,17 +2566,16 @@ aplikace.
 
 Nečinný Watcher spustí výslovné kliknutí na \ui{Start Watcher}; při běhu stejné
 kontextové tlačítko nabízí \ui{Stop Watcher}. Během dokončování otevře
-\ui{Show progress}. Po~přerušení otevře \ui{Review pending uploads} původní
-frontu. Znovu připojte a~vyberte stejnou galerii, poté zvolte \ui{Retry}.
+\ui{Show progress}. \ui{Přerušit} pozastaví přijaté nahrávání a~uchová
+frontu. Volbou \ui{Pokračovat} obnovíte upload do stejné galerie.
+Pokud původní propojení vyžaduje schválení, WinApp otevře připojení k~webu.
 Akce \ui{Photo is OK — upload} znamená, že jste zobrazený zdroj zkontrolovali
 a~potvrdili, že je v~pořádku a~nejde o~duplikát. Uvolní pouze stejnou hlavu
 FIFO do běžného uploadu; server dál provádí své kontroly duplicit.
 Předchozí nejistý pokus zůstane v~historii. Jednorázové schválení se spotřebuje
 před odesláním; další nejasný výsledek vyžaduje nové rozhodnutí. Dosavadní
 probíhající request musí skončit, než tato hlava pokračuje.
-U~propojené relace volba \ui{Keep files locally} po~zastavení pracovníků
-uzavře frontu a~ponechá fotky, zprávy i~historii. Po~uzavření je~znovu
-k~dispozici \ui{Start Watcher}. \ui{Check folder only} provede
+\ui{Check folder only} provede
 kontrolu složky bez nahrávání a~bez spuštění trvalého sledování. Ozubené kolo
 Watcher otevře nastavení výběru složky, podsložek, intervalu kontroly, stability
 souborů, metadat simulátoru
@@ -2706,7 +2701,7 @@ PASS ani obecnou kvalifikaci přístupnosti.
 
 Integrované panely dědí vzhled z~centrální knihovny dialogů a~tlačítek;
 vrstvení panelů nevytváří další styl. Průběh capture zachovává nemodální
-overlay, pevné zápatí a~automatické zotavení bez opravných tlačítek.
+overlay a~pevné zápatí s~volbami \ui{Pokračovat} a~\ui{Přerušit} podle stavu fronty.
 
 \ui{Support diagnostics…} otevře místní náhled s~akcemi \ui{Refresh},
 \ui{Copy} a~\ui{Save}. Report obsahuje povolená nastavení a~údaje o~běhu,
@@ -2840,7 +2835,9 @@ stejná relace, složka, cíl a~původní hranice souborů; snímky vytvořené 
 instalace zůstávají způsobilé k~nahrání. Telemetrie zachová identitu a~označí
 mezeru. Výslovné Stop nebo ukončení aplikace pokračování zruší. Propojený
 Watcher vyžaduje stejný účet, galerii a~rozsah oprávnění.
-Starší verze bez uloženého záměru běhu mohou nabídnout \ui{Resume Watcher}
+Aktivní sledování se po~aktualizaci obnoví automaticky i~se starším profilem
+s~uloženým API klíčem. Windows může vyžádat schválení instalátoru správcem.
+Starší verze bez uloženého záměru běhu mohou nabídnout \ui{Pokračovat}
 pro ověřenou neukončenou práci; obnovení vyžaduje tento výslovný výběr.
 Pokračování nevyžaduje Abandon ani nový API klíč. Uložená nastavení a~přístupové
 údaje zůstávají; neuložená pole Nastavení se aktualizací neukládají.
