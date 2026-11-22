@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.5.1}
+\newcommand{\version}{1.5.2}
 \newcommand{\manualdate}{22~november~2026}
 
 \hypersetup{
@@ -1869,22 +1869,15 @@ nedladdning och ZIP använder samma filnamn. PDF-filändelsen läggs till om den
 saknas. Kollisioner och osäkra namn avvisas; innehåll och dokumentidentitet
 bevaras.
 
-Avbruten insamling återhämtas automatiskt utan reparationsknappar i förloppet.
-Appen kontrollerar först samma redan godkända mål i bakgrunden. Om det inte kan
-återställas stoppas ny insamling och sändning, och ett beständigt lokalt avslut
-med bevarade filer sparas. Väntande original,
-rapporter och underlag för osäkra uploads behålls; ingen post räknas som
-uppladdad eller överhoppad. Uppdatering, timeout och omstart återupptar inte
-sessionen. En redan skickad begäran behåller sin fysiska ägare tills den
-verkligen avslutats. Efter lagring är normal avslutning tidsbegränsad;
-avslutad process bevisar inget serverresultat. Start Watcher skapar en ny
+Med \ui{Fortsätt} återupptas den ursprungliga kön med den sparade API-nyckeln
+eller den godkända webbplatsanslutningen. Om åtkomsten saknas förblir kön
+pausad med original, rapporter och uppladdningshistorik. Start Watcher skapar en ny
 insamlingsgräns. Normalt Finish väntar på egna köer och slutskanningen,
 inte på en orelaterad inaktiv Watcher, och upprepar inget tomt automatiskt
 avslut. Diagnostiken skiljer insamlingssessionen från worker-kön.
 
 Ett osäkert huvud visar \ui{Åtgärd krävs}. \ui{Återuppta} i Watcher kan öppna
-en valfri bevisgranskning för exakt sparad källa och mål. Insamlingsförloppet
-och återhämtning efter omstart löser i stället avbrottet automatiskt.
+en valfri bevisgranskning för exakt sparad källa och mål.
 Lokal förhandsvisning och auktoriserad fjärrobservation skiljs åt; en liknande
 bild, galleriposition eller hash är inget upload-kvitto.
 \ui{Bekräfta redan uppladdad} kräver exakt beständig bekräftelse.
@@ -2031,15 +2024,16 @@ Om konfigurationen inte kan läsas eller verifieras stoppas starten före arbete
 Behåll originalfilen och återställ en giltig säkerhetskopia; en saknad fil ger
 fortfarande startvärden. Windows reparse-punkter och beständighet vid strömavbrott
 är ännu inte kvalificerade.
-Klicka på \ui{Link gallery} i huvudfönstret. Klistra in galleriets adress
-från webbläsaren och bekräfta med \ui{Link gallery}.
+Klicka på \ui{Anslut webbplats} i huvudfönstret. Bekräfta den sparade
+API-anslutningens adress eller ange adressen till din PHP Gallery-webbplats
+med eventuell installationssökväg. Välj galleri efter anslutningen.
 Värdnamn och installationssökväg kan också anges utan protokoll.
 Vid bekräftelse lägger WinApp till \texttt{https://} och visar den
 normaliserade adressen innan galleriet kontrolleras. På samma dator kan
 galleriet använda en HTTP-adress på \texttt{localhost}. Fjärrinstallationer
 använder verifierad HTTPS.
-Dialogrutan visar förloppet i väntan på godkännande. Om anslutningen
-misslyckas visas felet i dialogrutan och du kan försöka igen.
+Dialogrutan visar förloppet i väntan på godkännande. Om webbläsaren inte
+öppnas, välj \ui{Öppna webbläsaren}.
 Logga in som administratör i webbläsaren och klicka på \ui{Godkänn}.
 Återvänd till WinApp när webbläsaren visar \ui{Approval received}. Appen
 visar den länkade webbplatsens adress och läser in den första gallerisidan
@@ -2055,7 +2049,7 @@ Använd webbplatsens publika URL med dess publika underkatalog när det behövs.
 Interna hostingkataloger hör inte till länkadressen. Servrar med intern
 sökvägsomskrivning behöver PHP Gallery~1.0.1 för att verifiera den publika sökvägen.
 
-De tre punkterna bredvid \ui{Unlink gallery} öppnar länklistan.
+De tre punkterna bredvid \ui{Koppla från webbplats} öppnar länklistan.
 Under \ui{Länkade nu} byter du webbplats med det aktuella godkännandet.
 Profilen sparar upp till 20~poster under \ui{Senaste adresser} efter omstart.
 Välj en adress för ett nytt godkännande. Strömikonen kopplar från den
@@ -2074,7 +2068,7 @@ Med godkänd uppladdningsbehörighet väljer du ett galleri och klickar på
 uppladdningsbehörigheten automatiskt, även vid körning från källkod på macOS.
 Efter verifieringen visar \ui{Upload gallery}
 målet i Watcher och Import. De tre punkterna visar fler åtgärder.
-\ui{Unlink gallery} avslutar den aktuella länken. Anslut samma konto efter
+\ui{Koppla från webbplats} avslutar den aktuella länken. Anslut samma konto efter
 omstart och välj galleriet igen. Hantera avancerad åtkomst i
 \ui{Manage link…} i inställningarna. Uppladdning med API-nyckel använder en
 egen \ui{Gallery URL} och en galleribegränsad nyckel.
@@ -2638,7 +2632,7 @@ godkänd sparad koppling vid start.
 startar samma kontroll. Klienten roterar uppgiften en gång och kontrollerar
 serveridentiteten. Om samma verifierade server uttryckligen avvisar en
 utgången eller återkallad förnybar uppgift tar WinApp bort just den sparade
-uppgiften. Välj \ui{Link gallery} för att godkänna en ny koppling i
+uppgiften. Välj \ui{Anslut webbplats} för att godkänna en ny koppling i
 webbläsaren. Vid start väljer du själv om du vill godkänna den.
 Ett osäkert svar eller lagringsfel
 hindrar återanvändning av den gamla uppgiften. Granska serverns kopplingar och
@@ -2672,18 +2666,16 @@ Watcher-skärmen visar målgalleriet, den valda mappsökvägen, bevakningsstatus
 varningen om källborttagning. En inaktiv Watcher startar efter ett
 uttryckligt klick på \ui{Start Watcher};
 medan bevakningen pågår heter samma kontextknapp \ui{Stop Watcher}.
-Under slutförandet öppnar \ui{Show progress} förloppet. Efter ett avbrott
-öppnar \ui{Review pending uploads} den ursprungliga kön. Återanslut och
-välj samma galleri före \ui{Retry}. \ui{Photo is OK — upload} betyder att du
+Under slutförandet öppnar \ui{Show progress} förloppet. \ui{Avbryt} pausar
+uppladdningarna och behåller kön. \ui{Fortsätt} laddar vidare till samma
+galleri. WinApp öppnar vid behov webbplatsanslutningen.
+\ui{Photo is OK — upload} betyder att du
 har kontrollerat den visade källan och bekräftar att den är rätt och inte en
 dubblett. Åtgärden släpper endast samma FIFO-huvud till den vanliga
 uppladdningen; serverns befintliga dubblettkontroller gäller fortfarande.
 Det tidigare osäkra försöket finns kvar i historiken. Godkännandet används en
 gång före sändning; ett nytt oklart resultat kräver ett nytt beslut. Den
 pågående begäran måste avslutas innan huvudet fortsätter.
-I en länkad session avslutar
-\ui{Keep files locally} kön när arbetarna stannat och behåller foton,
-rapporter och historik. Därefter visas \ui{Start Watcher} igen.
 \ui{Check folder only} kontrollerar mappen utan att ladda upp eller starta
 kontinuerlig bevakning. Watcher-hjulet öppnar ett inställningsblad för mappval,
 undermappar, skanningsintervall, filstabilitet, simulatorns metadata och det
@@ -2811,8 +2803,8 @@ eller en allmän tillgänglighetskvalificering.
 
 Inbäddade paneler ärver utseende och knappar från det centrala dialogbiblioteket;
 panelstapeln definierar ingen separat stil. Capture-förloppet behåller sin
-icke-modala overlay, fasta sidfot och automatiska återhämtning utan
-reparationsknappar.
+icke-modala overlay och fasta sidfot. \ui{Fortsätt} och \ui{Avbryt} visas när
+de kan användas.
 
 \ui{Support diagnostics…} öppnar en lokal förhandsvisning med \ui{Refresh},
 \ui{Copy} och~\ui{Save}. Rapporten innehåller tillåtna inställningar och
@@ -2953,8 +2945,10 @@ Efter uppdateringen fortsätter samma session, mapp, mål och ursprungliga
 filgräns. Bilder som skapas under installationen förblir möjliga att ladda upp.
 Telemetrin behåller sin identitet och markerar avbrottet. Stop eller Avsluta
 avbryter fortsättningen. Länkad inspelning kräver samma konto, galleri och
-behörighetsomfattning. Äldre versioner utan sparad köravsikt erbjuder
-\ui{Resume Watcher} för verifierat öppet arbete; valet är uttryckligt.
+behörighetsomfattning. Aktiv bevakning återupptas automatiskt även med
+en äldre profil med API-nyckel. Windows kan begära administratörsgodkännande
+för installationen. Äldre versioner utan sparad köravsikt erbjuder
+\ui{Fortsätt} för verifierat öppet arbete; valet är uttryckligt.
 Abandon eller en ny API-nyckel behövs inte för fortsättning. Sparade
 inställningar och inloggningsuppgifter behålls; osparade fält sparas inte.
 Hjälparen kontrollerar installationsprogrammet igen, väntar

@@ -286,10 +286,22 @@ separate safe HTTP/transport and server-unavailable diagnostics. Discovery can
 still refuse linking when installation readiness is unavailable; a successful
 classic API upload does not establish browser-linking readiness.
 
-The Link gallery address prompt accepts a host and installation path without
-a scheme, defaulting only that user input to HTTPS before normal validation.
-Explicit direct localhost HTTP remains supported. Protocol and stored-issuer
-validators still require their existing explicit canonical URLs.
+Connect website accepts an installation's host and mount without a scheme,
+defaulting only that user input to HTTPS before normal validation. The saved
+API endpoint can suggest the installation address without passing its key to
+the browser. Installed 1.5.1 evidence shows an album permalink and its public
+route were mistaken for the installation mount. The picker now labels the
+website address and leaves gallery choice until after consent. Explicit direct
+localhost HTTP and exact canonical issuer checks remain supported.
+
+Unmigrated but verified API-key profiles remain valid for Watcher startup,
+ordinary restart and nonce-bound update continuation. The 1.5.1 startup report
+showed a fresh empty queue failing before its first scan, consistent with the
+mode admission and recovery checks disagreeing about this profile. Use the
+existing mode, workspace and exact-target checks throughout the handoff.
+Pre-nonce helpers still require an explicit continuation choice because they
+recorded no running intent. Installed prevalence and upgraded-client acceptance
+remain unknown.
 
 The configured linking issuer is confirmed against the raw public request
 path, rather than a hosting rewrite's internal `SCRIPT_NAME`. Exact origin,
@@ -4664,19 +4676,16 @@ package inventory for the removed file.
   unchanged complete baseline/revision, fencing a late original commit. Changed
   unknown state never authorizes replay. Text remains editable without manual
   reload and the native context worker serializes repeated editor openings.
-- **Capture policy:** `FlightUI` automatically inspects the exact pending binding
-  off Tk, tries the existing approved target once and otherwise reuses the host's
-  durable local-retention publisher. It supplies a logical owned operation after
-  restart when no Finish worker exists. Standard upload admission and mode
-  publication run off Tk; the event owner rechecks exact mode, account and scope.
-  Capture progress exposes zero repair buttons. Temporary local persistence
-  failure retries quietly and cannot release an unconfirmed guard. No original,
-  receipt, uncertain-result evidence, live transport lease or credential is
-  discarded. Independent PDF operations retain their own explicit workflow.
+- **Capture policy:** `FlightUI` can reverify the exact pending binding off Tk
+  after a Finish error. If access is unavailable, the original queue stays
+  resumable. Continue uses the existing authority and exact target. Interrupt
+  records a retained stop before releasing the Finish waiter. The live request
+  retains its lease until it ends. The retained cutoff, order, originals and
+  uncertain results remain intact. Independent PDF operations retain their
+  own workflow.
 - **Compatibility / retirement:** Existing durable terminal records and raw
-  once-only edit snapshots remain supported permanently. This automatic capture
-  coordinator replaces the old native Force-finish action described above; it
-  does not change dispatch safety or grant/revocation semantics. Hosted tests
+  once-only edit snapshots remain supported permanently. An interrupted queue
+  stays resumable and retains its dispatch safety and authority checks. Hosted tests
   cover repeated rename, conditional replay fences, workerless recovery and
   native desktop/narrow rendering. Installed upgrade, power loss, real server
   interruption and reproduction of the original AppHang remain separate coverage.
@@ -5560,8 +5569,8 @@ existing owner revalidation before any protected action.
 EmbeddedWindow inherits the central DialogSurface/GlassCard appearance and
 uses central Button controls, including notices and file selection. It adds
 panel-stack behavior without a separate style or corner implementation.
-Capture progress retains the existing nonmodal OverlayPanel, fixed footer and
-automatic recovery without repair buttons. These inherited paths permanently
+Capture progress retains the existing nonmodal OverlayPanel and fixed footer for
+Continue and Interrupt. These inherited paths permanently
 share the same native clipping and flat fallback owner; installed acceptance
 of this rebased combination remains unknown until exercised on Windows.
 The support report is built offline from allowlisted settings/runtime facts,

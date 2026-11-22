@@ -693,11 +693,11 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         root.destroy()
 
     def test_force_finish_progress_action_desktop_and_narrow(self) -> None:
-        """Render capture progress without recovery decisions at either width.
+        """Render matching capture actions at desktop and narrow widths.
 
         Returns:
-            None: Asserts zero repair actions across locales and phases while
-                retaining native desktop/narrow screenshots and backend fences.
+            None: Checks both applicable actions across locales, retires them
+                during reports, and preserves the backend Force Finish fences.
         """
         try:
             root = tk.Tk()
@@ -717,6 +717,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
             saved_upload=False,
             local_reports=False,
             abandonment=False,
+            server_request_sent=False,
             plans=[SimpleNamespace(
                 session_id='fixture-flight', reports_enabled=True,
                 languages=('en', 'cs', 'de', 'sv'), receipts={},
@@ -728,6 +729,9 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         host = SimpleNamespace(
             root=root,
             status_var=tk.StringVar(root, value="Working"),
+            worker=SimpleNamespace(
+                is_alive=lambda: True, _recovery_review_only=True,
+            ),
             linking_manager=SimpleNamespace(
                 linked_upload_mode_selected=lambda: False,
                 selected_upload_target=lambda: None,
@@ -783,7 +787,9 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         self.assertIsNotNone(window)
         window.winfo_toplevel().geometry("900x650+10+10")
         root.update()
-        self.assertEqual({}, ui.progress_buttons)
+        capture_actions = {"watch_recovery_resume_pending", "force_stop_watch"}
+        self.assertEqual(capture_actions, set(ui.progress_buttons))
+        self.assertTrue(all(button.winfo_ismapped() for button in ui.progress_buttons.values()))
         self.assertFalse(ui.task_frame.winfo_manager())
         self.assertEqual(tr("en", "phase_draining"), ui.phase_var.get())
         self.assert_progress_controls_inside(window, ui)
@@ -791,17 +797,21 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
 
         window.winfo_toplevel().geometry("390x560+10+10")
         root.update()
-        self.assertEqual({}, ui.progress_buttons)
+        self.assertEqual(capture_actions, set(ui.progress_buttons))
         for locale in ("en", "cs", "de", "sv"):
             language.set(locale)
             ui.refresh_progress_actions()
             root.update()
-            self.assertEqual({}, ui.progress_buttons)
+            self.assertEqual(
+                capture_actions,
+                {key for key, button in ui.progress_buttons.items() if button.winfo_ismapped()},
+            )
             self.assert_progress_controls_inside(window, ui)
         language.set("en")
         ui.refresh_progress_actions()
         root.update()
         self.capture_force_finish_window(window, ui, "automatic-capture-narrow.png")
+        host.worker = None
         self.assertFalse(any(isinstance(child, tk.Toplevel) for child in root.winfo_children()))
         progress.phase = 'generating'
         ui.phase_var.set(tr('en', 'phase_generating'))
@@ -810,9 +820,12 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ui.detail_var.set('EN, CS, DE, SV (2/10)')
         ui.time_var.set('Elapsed time: 27s · Time in this phase: 3s · Estimating…')
         ui.refresh_tasks()
+        # Tick refreshes both the report rows and the new phase's actions.
+        ui.refresh_progress_actions()
         root.update()
         self.assertEqual(4, len(ui.task_tree.get_children()))
         self.assertTrue(ui.task_tree.winfo_ismapped())
+        self.assertFalse(any(button.winfo_ismapped() for button in ui.progress_buttons.values()))
         self.assert_progress_controls_inside(window, ui)
         last_row = ui.task_tree.bbox(ui.task_tree.get_children()[-1])
         self.assertTrue(last_row, 'The last report edition must remain visible.')
@@ -840,11 +853,13 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         self.assertFalse(ui.autoclose_frame.winfo_manager())
         progress.phase = 'draining'
         ui.refresh_progress_actions()
-        # Retention remains fenced but has no user-facing repair button.
+        # The legacy Force finish publisher remains fenced outside recovery UI.
         ui.force_finish()
         self.assertEqual(1, len(force_callbacks))
         self.assertTrue(ui._force_finish_pending)
-        self.assertEqual({}, ui.progress_buttons)
+        self.assertFalse(any(
+            button.winfo_ismapped() for button in ui.progress_buttons.values()
+        ))
         callback = force_callbacks.pop(0)
         callback("pending_transport")
         del callback
@@ -918,10 +933,6 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         top = window.winfo_rooty()
         right = left + window.winfo_width()
         bottom = top + window.winfo_height()
-        self.assertEqual({}, ui.progress_buttons)
-        for frame in (ui.progress_actions, ui.autoclose_frame):
-            self.assertFalse(any(child.winfo_class() == 'TButton'
-                                 for child in frame.winfo_children()))
         for label, button in ui.progress_buttons.items():
             if not button.winfo_ismapped():
                 continue
@@ -938,7 +949,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
 
         Args:
             window (tk.Misc): Actual FlightUI progress to capture.
-            ui (FlightUI): Progress owner whose repair actions must be absent.
+            ui (FlightUI): Progress owner whose visible controls are measured.
             filename (str): PNG artifact name in the hosted QA directory.
         Returns:
             None: Saves the rendered window when screenshot evidence is enabled.
@@ -1013,7 +1024,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         adapter._progress_generation = 0
         adapter._force_finish_pending = False
         adapter.host = host
-        adapter.operation = SimpleNamespace(cancel=cancel)
+        adapter.operation = SimpleNamespace(cancel=cancel, server_request_sent=False)
         adapter.detail_var = SimpleNamespace(set=lambda _value: None)
         adapter.text = lambda key: key
         adapter.force_continue_watch()
@@ -1030,7 +1041,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
                 on_persisted(False), True
             )[-1],
         )
-        failed.operation = SimpleNamespace(cancel=failed_cancel)
+        failed.operation = SimpleNamespace(cancel=failed_cancel, server_request_sent=False)
         failed.detail_var = SimpleNamespace(set=failed_details.append)
         failed.text = lambda key: key
         failed.force_stop_watch()

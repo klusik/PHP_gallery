@@ -221,7 +221,7 @@ It does not imply cancellation or rollback of that decision.
 Preview evidence scrolls vertically in a short window; the decision and close
 controls remain visible below the viewport.
 
-After a worker restart, **Resume pending uploads** explicitly releases a safe
+After a worker restart, **Continue** explicitly releases a safe
 head for the same session even when no retained-stop flag was recorded. It
 preserves the retry deadline and never resumes an unresolved dispatched head.
 
@@ -246,7 +246,7 @@ cutoff, session, accepted items, hashes, receipts or status. Folder file counts
 are not pending-upload counts.
 
 Finish exposes known blocked states as **Needs attention** and keeps **Hide**
-available. **Stop and keep pending** records the first cutoff and an explicit
+available. **Interrupt** records the first cutoff and an explicit
 retention decision, stops admission and preserves accepted work for review.
 It does not revoke access, acknowledge an unknown upload or delete sources.
 A transport that has not actually ended retains its owner; UI cancellation

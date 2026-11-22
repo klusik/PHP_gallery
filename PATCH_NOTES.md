@@ -1,5 +1,55 @@
 # Patch notes
 
+## Version 1.5.2
+
+Updated WinApp to 1.5.2. This patch restores Watcher startup with an existing
+API key and makes website connection easier to set up.
+
+### Highlights
+
+#### Watcher uploads
+
+- Fixed Watcher startup for profiles that use an existing saved upload API key
+  before switching to browser linking.
+- Added **Continue** and **Interrupt** when applicable to pending captures. Interrupt
+  keeps the pending files in their original queue. A photo with an unconfirmed
+  upload still needs review before the queue advances.
+
+#### Website connection
+
+- Renamed **Link gallery** to **Connect website** and prefilled the installation
+  address from the saved API endpoint when available. The upload gallery is
+  selected after website approval.
+- Added an in-dialog retry when the default browser fails to open. The dialog
+  guides administrators through sign-in and approval in that browser.
+
+### Technical Details
+
+#### WinApp
+
+- Applied consistent saved API-key mode checks to Watcher startup, checkpoint
+  creation and verified resume in `winapp/gallery_watch_upload.pyw`.
+- Preserved the session, original destination, FIFO order and recording state
+  across a verified update handoff. The current upload settles before WinApp
+  closes, and the restored Watcher waits until its checkpoint is consumed.
+- Added regression coverage for the older API-key mode, continuation and
+  interruption of an existing queue, and retries of a failed browser launch.
+
+### User Impact
+
+#### For WinApp users
+
+- Existing API-key users can continue uploading while setting up browser
+  linking separately.
+- After you select **Update**, WinApp can resume the active Watcher from the
+  saved checkpoint after installation. Windows may still request installer
+  elevation.
+
+#### For administrators
+
+- Website connection uses the existing PHP Gallery administrator sign-in and
+  approval page.
+
 ## Version 1.5.1
 
 PHP Gallery 1.5.1 reuses one Media Renamer plan per gallery confirmation

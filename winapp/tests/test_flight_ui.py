@@ -1282,12 +1282,12 @@ class FlightUITests(unittest.TestCase):
         )
         host.api_key_request_blockers.assert_not_called()
 
-    def test_capture_without_finish_worker_automatically_uses_durable_retention(self) -> None:
-        """Recover the exact pending capture without a pre-existing Finish worker.
+    def test_unavailable_capture_target_keeps_the_original_queue_pending(self) -> None:
+        """Keep recoverable work when its original authority is unavailable.
 
         Returns:
-            None: Real plan discovery stays off Tk, no dialog is requested, and
-                the logical operation stays guarded until the host confirms save.
+            None: Off-Tk discovery leaves persisted bytes unchanged, without
+                prompting for local retention or creating a terminal operation.
         """
         with tempfile.TemporaryDirectory() as directory:
             host = self._host()
@@ -1298,8 +1298,8 @@ class FlightUITests(unittest.TestCase):
             folder.mkdir()
             plan = SessionPlan(directory=folder, binding=binding, languages=(), reports_enabled=False)
             plan.save()
-            callbacks: list[Callable[[str], None]] = []
-            host.force_finish_flight = Mock(side_effect=lambda on_result: callbacks.append(on_result) or True)
+            before = {path.name: path.read_bytes() for path in folder.iterdir()}
+            host.force_finish_flight = Mock()
             host.restore_capture_upload_target = Mock(side_effect=lambda _binding, callback: callback(False))
             with patch.object(flight_ui.messagebox, 'askyesno') as confirm:
                 ui._recover_capture()
@@ -1308,18 +1308,15 @@ class FlightUITests(unittest.TestCase):
                 self.assertFalse(worker.is_alive())
                 self.assertIsNone(ui.operation)
                 ui._accept_capture_recovery()
-                self.assertIsNotNone(ui.operation)
-                self.assertTrue(ui._force_finish_pending)
-                self.assertEqual([folder], [row.directory for row in ui.operation.plans])
-                self.assertEqual('', ui.operation.api_key)
-                self.assertFalse(ui.operation.server_request_sent)
-                self.assertFalse(SessionPlan.load(folder).completed)
-                callbacks.pop()('persisted')
                 self.assertIsNone(ui.operation)
                 self.assertFalse(ui._force_finish_pending)
+                ui.detail_var.set.assert_called_with('capture_recovery_paused')
             confirm.assert_not_called()
             host.restore_capture_upload_target.assert_called_once()
-            host.force_finish_flight.assert_called_once()
+            host.force_finish_flight.assert_not_called()
+            self.assertEqual(
+                before, {path.name: path.read_bytes() for path in folder.iterdir()},
+            )
 
     def test_same_target_restoration_retries_completion_without_prompting(self) -> None:
         """Prefer an existing approved upload target before retaining files.
@@ -1342,12 +1339,12 @@ class FlightUITests(unittest.TestCase):
         ui.begin.assert_called_once_with(automatic=True, explicit_retry=True)
         host.force_finish_flight.assert_not_called()
 
-    def test_capture_restoration_coalesces_and_failed_retention_retries_quietly(self) -> None:
-        """Keep one restore attempt and never release an unpersisted capture.
+    def test_capture_restoration_coalesces_and_leaves_failed_recovery_paused(self) -> None:
+        """Keep one restore attempt and leave the queue intact on failure.
 
         Returns:
-            None: Reopening progress cannot duplicate recovery. A failed durable
-                result retains its exact operation and schedules automatic retry.
+            None: Reopening progress cannot duplicate recovery. An unavailable
+                target leaves the queue paused until the user continues.
         """
         host = self._host()
         ui = self._ui(host)
@@ -1355,8 +1352,7 @@ class FlightUITests(unittest.TestCase):
         host.restore_capture_upload_target = Mock(
             side_effect=lambda _binding, callback: callbacks.append(callback),
         )
-        published: list[Callable[[str], None]] = []
-        host.force_finish_flight = Mock(side_effect=lambda on_result: published.append(on_result) or True)
+        host.force_finish_flight = Mock()
         plan = SessionPlan(ui.directory / 'pending', ui.binding(), (), False)
         ui._capture_recovery_results.put((ui._progress_generation, None, ui.binding(), (plan,)))
         ui._accept_capture_recovery()
@@ -1365,15 +1361,11 @@ class FlightUITests(unittest.TestCase):
         self.assertIsNone(ui._capture_recovery_worker)
         host.restore_capture_upload_target.assert_called_once()
         callbacks.pop()(False)
-        operation = ui.operation
-        published.pop()('failed')
-        self.assertIs(operation, ui.operation)
-        self.assertFalse(operation.cancel.is_set())
-        self.assertIsNotNone(ui._capture_recovery_retry_at)
+        self.assertIsNone(ui.operation)
+        self.assertIsNone(ui._capture_recovery_retry_at)
         self.assertFalse(ui._force_finish_pending)
-        ui._recover_capture()
-        self.assertIsNone(ui._capture_recovery_worker)
-        host.force_finish_flight.assert_called_once()
+        ui.detail_var.set.assert_called_with('capture_recovery_paused')
+        host.force_finish_flight.assert_not_called()
 
     def test_stale_capture_recovery_cannot_touch_a_new_operation_or_target(self) -> None:
         """Fence old local/network recovery results by operation and target.

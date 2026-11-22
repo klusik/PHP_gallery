@@ -8,11 +8,10 @@
 #   - Allow child drain work to share the parent's captured mode without waiting.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
-"""Unintegrated in-process coordination; it does not establish authorization.
+"""Coordinate locally verified in-process upload work.
 
-The future host must validate config, consent and current server identity,
-provide cross-process coordination, and keep admitted work alive through its
-final in-flight request. No current uploader path uses this owner.
+The mode coordinator and its callers verify the configuration, consent and
+server identity and retain their separate cross-process ownership.
 """
 
 from dataclasses import dataclass
@@ -28,6 +27,9 @@ ModeState = Literal[
     'linked_active', 'unknown',
 ]
 WorkKind = Literal['local', 'legacy', 'legacy_revoke', 'linked', 'reconnect']
+
+# Both locally verified API-key profiles admit the same unchanged credential.
+LEGACY_UPLOAD_STATES: tuple[ModeState, ...] = ('legacy', 'legacy_unmigrated')
 
 
 class ModeAdmissionError(RuntimeError):
@@ -341,7 +343,7 @@ class ModeAdmission:
             allowed = (
                 kind == 'local'
                 or (kind in ('legacy', 'legacy_revoke')
-                    and self._view.state in ('legacy', 'legacy_unmigrated'))
+                    and self._view.state in LEGACY_UPLOAD_STATES)
                 or (kind == 'linked' and self._view.state == 'linked_active')
                 or (kind == 'reconnect' and self._view.state == 'linked_disconnected')
             )

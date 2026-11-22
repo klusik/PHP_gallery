@@ -64,18 +64,18 @@ ordinary upload order. The server still applies its usual duplicate checks.
 The prior unknown attempt stays in the history, and the one-use approval is
 consumed before dispatch; another unclear result needs a new decision. The
 existing request must finish before the approved head proceeds. **Cancel / Keep
-pending** changes nothing. Reopen retained work after restart with **Review
-pending uploads…** and the same verified target.
+pending** leaves this review undecided. **Continue** opens a waiting queue with
+the same verified target after restart.
 Local preview validation enables photo approval without waiting for an optional
 comparison preview from the server.
 After submitting a decision, **Hide (saving decision…)** hides its progress
 while the authorized durable write finishes; it does not undo that decision.
 In a short window, scroll the evidence while the decision and close controls
 remain visible at the bottom.
-After a worker restart, **Resume pending uploads** also releases safe pending
+After a worker restart, **Continue** also releases safe pending
 work in that same session; an unresolved dispatched head still needs review.
 
-Finish always offers **Hide**. **Stop and keep pending** stops capture and new
+Close the progress overlay to see the workspace while it runs. **Interrupt** stops capture and new
 transfers, retaining the cutoff, accepted files and recovery evidence. A request
 still running keeps its ownership until it really ends; the app reports that
 wait instead of claiming the transfer was cancelled or successfully finished.
@@ -86,11 +86,9 @@ back. A failed save leaves processing paused under the same owner.
 Explicit recovery after that failure restarts reconciliation and the required
 final scan while preserving the session cutoff.
 
-**Force finish** is the escape action in Finish progress, including an error or
-timeout. It closes that capture locally without claiming its uploads succeeded.
-It stops admission and new dispatch, durably records the terminal decision and
-retains originals, pending items, reports and unknown-upload evidence. The old
-session cannot automatically resume Finish after refresh, timeout or restart.
+A previously force-finished session remains closed and retains originals,
+pending items, reports and unknown-upload evidence. Refresh and restart preserve
+that terminal state.
 Start Watcher creates a new capture boundary. A request already sent may still
 return; it keeps its physical ownership until it ends, and its result remains
 subject to exact receipt validation. Force finish does not revoke access or
@@ -405,8 +403,8 @@ a detected flight; changing context hides/restores them without unloading a
 plan.
 The legacy key action uses **Abandon flight…** or **Abandon game…** in
 Watcher, Import and progress. It clears the local key after its explicit
-confirmation and cleanup. Linked sessions offer **Keep files locally…** in
-Watcher progress.
+confirmation and cleanup. Watcher recovery offers **Continue** and **Interrupt**
+while keeping both saved connections and the pending queue available.
 
 The bundled offline catalog covers 10,405 games and 10,888 Windows executable
 rules from a dated Discord snapshot; it is broad rather than complete. Detection
@@ -449,15 +447,14 @@ Separate Finish/create-PDF controls retain the saved key.
 | Starting | Start verifies the gallery and reads the folder's existing files | The Watcher card shows the current preparation phase and activity. Wait for REC before creating a new screenshot. |
 | Watching | **Start Watcher** captures the current target and ignores files already in the folder | **Stop Watcher** or **Finish flight/game…** stops discovery and finishes the accepted queue. |
 | Finishing | Stop or Finish is draining work or producing reports | **Show progress…** reopens the progress view. Success returns to **Start Watcher**. |
-| Pending | WinApp restarted, the gallery became unavailable or completion failed | **Review pending uploads…**. Reconnect to the same site and choose the original gallery if prompted, then **Retry**. |
-| Closed locally | Confirm **Keep files locally…** for a linked session in progress or recovery | **Start Watcher** becomes available. Sources, reports and uncertain-upload evidence stay on disk. |
+| Pending | WinApp restarted, the gallery became unavailable or completion failed | **Continue** uses the original upload gallery and its saved connection. |
+| Interrupted | **Interrupt** stops capture and retains unfinished uploads | **Continue** resumes that queue, preserving its original gallery and order. |
 
-The reconnect dialog prefills the verified saved installation address. The
-session's queue retains its original gallery across restarts and target
-changes require resolving it first. When gallery access is gone, local
-closure still works. If a transfer result is uncertain, **Review retained
-upload…** remains the separate decision for continuing other files. Neither
-closing a session nor an inventory check retries the uncertain transfer.
+The reconnect dialog prefills the verified saved installation address. An
+unavailable gallery leaves its queue paused. You can connect to and browse a
+website while an upload queue waits. Continue the original queue before changing
+the upload destination. **Continue** opens a photo review when a transfer
+result is uncertain.
 
 **Abandon flight…** is available beside Finish in Watcher and Import and in
 ordinary flight progress. Use it when the gallery was deleted, its key was
@@ -868,10 +865,10 @@ allowed to run. This verifies consistency with the GitHub release metadata; it
 is not an independent publisher code-signing guarantee. Older release assets
 without digest metadata may therefore require a manual installer download.
 
-The nonmodal notice offers **Update** and **Later**. Update downloads with
+The nonmodal notice offers **Update** and **Later**. One click on Update downloads with
 actual byte progress and **Cancel download**, verifies the installer, and
 prepares a safe Watcher checkpoint before launching the external helper.
-The Watcher stops dispatching new files after the current upload response and
+An active Watcher stops dispatching new files after the current upload response and
 its acknowledgement/source handling finish. The recorder flushes the same
 session. A 120-second checkpoint budget postpones installation if accepted work
 cannot settle; the always-running game-presence observer is not a blocker.
@@ -881,7 +878,11 @@ Helper preparation failure leaves the app open and schedules safe continuation.
 The private `flights/watcher-continuation.json` contains the exact session,
 profile and target fingerprints, original linked scope, versions and one-use
 helper nonce, never credentials. After installation the same queue, initial
-file boundary, recording identity, preferences and telemetry are restored.
+file boundary, recording identity, preferences and telemetry resume
+automatically for verified API-key profiles, including older profiles, and
+linked profiles with their original access. Windows may show its installer
+elevation prompt. The installed version must be able to save that checkpoint
+before the update starts.
 Screenshots created during installation remain eligible. Telemetry appends to
 the original history with an explicit gap. The first resumed photo dispatch
 waits until Tk durably consumes the checkpoint; a rejected checkpoint cannot
@@ -1166,7 +1167,7 @@ capture. Credential or upload-mode changes invalidate that identity; merely
 selecting another album in Photos cannot replace the upload title.
 The persistent API-key connection
 control opens the compact key dialog from every view. The separate ordinary
-header **Link gallery** flow remains the upload/search path. The app header
+header **Connect website** flow remains the upload/search path. The app header
 also has Settings, updates, and help controls. Icon controls have
 hover tooltips and keyboard focus; help opens usage guidance.
 Long pages and dialogs scroll with the mouse wheel or scrollbar; text and table
@@ -1196,7 +1197,7 @@ embedded panel; directory listing runs in a worker and remains bounded.
 Embedded panels inherit `DialogSurface -> GlassCard`; their action controls
 use the same central `Button` as the workspace. Panel stacking adds behavior
 without defining another skin. Capture progress retains its nonmodal
-`OverlayPanel` with a fixed footer and automatic recovery without repair buttons.
+`OverlayPanel` with a fixed footer for Continue and Interrupt when applicable.
 
 **Support diagnostics…** opens a local report preview with **Refresh**,
 **Copy**, and **Save** actions. The report includes allowlisted settings and
@@ -1296,10 +1297,11 @@ authoritative and are not hidden by route fallback.
 
 ### Browser-approved gallery account
 
-Click **Link gallery** in the main window. Choose a recent address or paste
-the gallery address from your browser and confirm **Link gallery**. The
-dialog shows progress while the app checks the gallery and waits for browser
-approval.
+Click **Connect website** in the main window. Confirm the website address
+suggested from the saved API endpoint, choose a recent address, or enter
+the PHP Gallery website address including its installation folder if present.
+You choose an upload gallery after connecting. The dialog keeps browser
+approval in view and offers **Open browser** if the launch needs another try.
 You can also type a host and optional installation path without a scheme,
 such as `gallery.example/Galerie`. On confirmation, WinApp assumes `https://`
 and shows the normalized address in the field before checking the gallery.
@@ -1310,9 +1312,9 @@ one-use code using PKCE. On success it closes the dialog, shows the linked
 site's address and loads its first gallery page. If linking fails, the dialog
 shows the error and lets you retry.
 
-Use the **⋯** beside **Unlink gallery** to open the same chooser while
+Use the **⋯** beside **Disconnect website** to open the same chooser while
 connected. **Linked now** lists the installations with live access. Select
-one and click **Switch to gallery** to use its current approval. **Recent
+one and click **Switch to website** to use its current approval. **Recent
 addresses** keeps up to 20 previously used installation URLs across restarts.
 Choose one to resume a saved grant or start browser approval. The power icon
 unlinks the selected live
@@ -1356,7 +1358,7 @@ upload access for that gallery, including on a fresh profile without an API
 key. After verification the picker closes and **Upload gallery** shows the
 destination in Watcher and Import. Save a folder with **Choose folder…** in
 Watcher or add files in Import. The ellipsis reveals more gallery actions.
-**Unlink gallery**
+**Disconnect website**
 ends the current link; a destination using that link needs reconnecting.
 API-key uploads have their own **Gallery URL** and gallery-scoped `pgu_` key.
 The gallery installer and updater provision the linking key
@@ -1680,16 +1682,12 @@ and is reconciled through an authorized read before any further conditional
 write. The tree refreshes after confirmation. Repeated A/B/A/B title edits are
 serialized by the context worker without blocking the native event loop.
 
-Capture progress has no repair buttons. After interruption, WinApp checks its
-exact pending destination in the background and tries the already approved
-connection once. If that destination cannot be restored, it automatically ends
-the capture through the existing durable local-retention owner. Pending original
-files, reports, receipts and uncertain-upload evidence remain local. No upload
-is declared successful and no credential is revoked. This also works after a
-restart when no Finish worker exists. A live request keeps its transport lease
-until it actually ends. Temporary local persistence failures retry quietly;
-unconfirmed persistence keeps the original guard. Independent PDF operations
-retain their own explicit actions.
+Capture progress offers **Continue** and **Interrupt** as applicable. The app
+may reverify the original saved connection after a Finish error. If access is
+unavailable, the queue stays paused with its originals, reports, receipts and
+uncertain-upload evidence. Continue can use an existing API-key profile
+without browser linking. A live request keeps its transport lease until it
+ends. Independent PDF operations keep their own controls.
 
 Metadata edits require a server advertising **gallery:edit** and a new browser
 approval; an old read, visibility or deletion grant gains no new permission.
@@ -2069,7 +2067,7 @@ preserves the uncertainty marker, original and ZIP. The same source path or
 bytes stay blocked after restart, while other eligible sources can continue in
 that gallery. A pending import retains its original target binding.
 
-For a durable Watcher FIFO, use **Resume… / Review pending uploads…** instead:
+For a durable Watcher FIFO, use **Continue** in Watcher:
 the older history-only review does not advance `watch-drain.json`. Its explicit
 skip decision retains that uncertainty while resolving only the displayed
 queue generation. An inventory observation still cannot acknowledge it.
@@ -2110,7 +2108,7 @@ The client rotates the refresh credential once, checks the current server
 identity and scope, and saves the replacement before using the access token.
 A cross-process lock and pending marker protect rotation. If the same verified
 server explicitly rejects an expired or revoked rolling credential, WinApp
-discards that saved credential. Choose **Link gallery** to approve a new link
+discards that saved credential. Choose **Connect website** to approve a new link
 in the browser. Startup leaves browser approval to you. An uncertain response
 or storage failure blocks reuse of the old credential.
 Click **Connect** to remove the unusable local credential and continue with
@@ -2129,7 +2127,7 @@ link first. The legacy Windows HTTPS option keeps one shared binding. Local
 forgetting leaves the server grant available for separate revocation and
 does not affect the saved API key.
 
-Use **Unlink gallery** for the current session, or **Manage gallery links**
+Use **Disconnect website** for the current session, or **Manage gallery links**
 to open the gallery's owner list and revoke stored grants.
 The gallery lists grants associated with the same administrator, including
 their original issuers; it warns if its bounded list is incomplete. Approved

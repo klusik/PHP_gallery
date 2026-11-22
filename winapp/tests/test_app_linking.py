@@ -6723,30 +6723,31 @@ class LinkingDeliveryTests(unittest.TestCase):
         directory = TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         known = 'https://previous.example/galerie'
+        connect = tr('en', 'linking_connect_website')
         for action, value, issuer in (
             ('Cancel', 'https://gallery.example/Galerie/', ''),
-            ('Link gallery', 'http://gallery.example/Galerie/',
+            (connect, 'http://gallery.example/Galerie/',
              'https://gallery.example/Galerie'),
-            ('Link gallery', 'gallery.example/Galerie/',
+            (connect, 'gallery.example/Galerie/',
              'https://gallery.example/Galerie'),
-            ('Link gallery', 'gallery.example',
+            (connect, 'gallery.example',
              'https://gallery.example'),
-            ('Link gallery', '  gallery.example  ',
+            (connect, '  gallery.example  ',
              'https://gallery.example'),
-            ('Link gallery', 'localhost/Galerie',
+            (connect, 'localhost/Galerie',
              'https://localhost/Galerie'),
-            ('Link gallery', 'gallery.example:8443/Galerie/sub/',
+            (connect, 'gallery.example:8443/Galerie/sub/',
              'https://gallery.example:8443/Galerie/sub'),
-            ('Link gallery', 'https://gallery.example/Galerie/',
+            (connect, 'https://gallery.example/Galerie/',
              'https://gallery.example/Galerie'),
-            ('Link gallery', 'http://localhost:8888/galerie/',
+            (connect, 'http://localhost:8888/galerie/',
              'http://localhost:8888/galerie'),
-            ('Link gallery', 'relative/gallery', ''),
-            ('Link gallery', '//gallery.example/Galerie', ''),
-            ('Link gallery', 'gallery.example/Bad Gallery', ''),
-            ('Link gallery', 'ftp://gallery.example/Galerie', ''),
-            ('Link gallery', 'gallery.example:99999/Galerie', ''),
-            ('Link gallery', 'user@gallery.example/Galerie', ''),
+            (connect, 'relative/gallery', ''),
+            (connect, '//gallery.example/Galerie', ''),
+            (connect, 'gallery.example/Bad Gallery', ''),
+            (connect, 'ftp://gallery.example/Galerie', ''),
+            (connect, 'gallery.example:99999/Galerie', ''),
+            (connect, 'user@gallery.example/Galerie', ''),
         ):
             with self.subTest(action=action, value=value):
                 manager = _manager_without_widgets()
@@ -6793,7 +6794,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                         if call.kwargs['text'] == action
                     )
                     manager._start.assert_not_called()
-                    if action == 'Link gallery':
+                    if action == connect:
                         field.get.return_value = 'http://localhost@external.example/Galerie'
                         command()
                         dialog.destroy.assert_not_called()
@@ -6801,7 +6802,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                         self.assertEqual(known, manager.address())
                     field.get.return_value = value
                     command()
-                    if action == 'Link gallery':
+                    if action == connect:
                         dialog.destroy.assert_not_called()
                         if issuer:
                             hint.configure.assert_called_with(
@@ -6817,7 +6818,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                         else:
                             hint.configure.assert_called_with(
                                 textvariable='',
-                                text='Enter a valid gallery address.',
+                                text=tr('en', 'linking_website_address_invalid'),
                                 style='Status.TLabel',
                             )
                             manager._start.assert_not_called()
@@ -7526,12 +7527,87 @@ class LinkingDeliveryTests(unittest.TestCase):
                     manager._gallery_choice.set_rows.assert_called_with(('Gallery (#7)',))
                 session.close()
 
+    def test_saved_api_address_and_failed_browser_launch_in_address_prompt(self) -> None:
+        """Open approval for the saved installation and retry its browser launch.
+
+        Returns:
+            None: The real prompt submits its canonical address and keeps the
+                same handoff and listener after the first launch fails.
+        """
+        manager = _manager_without_widgets()
+        manager._root = mock.Mock()
+        manager._window = None
+        manager._worker = None
+        manager._handoff = None
+        manager._owner = manager._direct_owner = object()
+        manager._attempt = mock.Mock()
+        manager._cancel = threading.Event()
+        manager._events = queue.Queue()
+        manager._session_issuer = ''
+        manager._current_issuer = 'https://unavailable.example/Galerie'
+        manager._offline_binding = None
+        manager._saved_api_address = lambda: (
+            'https://gallery.example/Galerie/index.php?page=upload_automation_upload'
+        )
+        manager.linked_upload_mode_selected = mock.Mock(return_value=False)
+        manager._status = mock.Mock()
+        manager._schedule_poll = mock.Mock()
+        worker = mock.Mock()
+        worker.is_alive.return_value = True
+        manager.link = mock.Mock(
+            side_effect=lambda _issuer: setattr(manager, '_worker', worker),
+        )
+        issuer = 'https://gallery.example/Galerie'
+        handoff = linking.PushedAuthorization(
+            TEST_REQUEST_HANDLE,
+            issuer + '/index.php?page=app_linking_start&request_handle='
+            + TEST_REQUEST_HANDLE,
+            time.monotonic() + linking.HANDOFF_MAX_LIFETIME_SECONDS,
+        )
+        with (
+            mock.patch('uploader.app_linking_ui.tk') as tk,
+            mock.patch('uploader.app_linking_ui.EmbeddedWindow') as window,
+            mock.patch('uploader.app_linking_ui.ttk'),
+            mock.patch('uploader.app_linking_ui.GlassCard'),
+            mock.patch('uploader.app_linking_ui._LinkAddressChoices'),
+            mock.patch('uploader.app_linking_ui.icon_button'),
+            mock.patch('uploader.app_linking_ui.place_dialog'),
+            mock.patch('uploader.app_linking_ui.Button') as make_button,
+            mock.patch(
+                'uploader.app_linking_ui.webbrowser.open', side_effect=[False, True],
+            ) as open_browser,
+        ):
+            confirm = mock.Mock()
+            confirm.instate.return_value = False
+            make_button.side_effect = [confirm, mock.Mock()]
+            tk.StringVar.return_value.get.return_value = issuer
+            manager.open_address_dialog()
+            tk.StringVar.assert_called_once_with(window.return_value, value=issuer)
+            manager.link.assert_not_called()
+            submit = make_button.call_args_list[0].kwargs['command']
+            submit()
+            manager.link.assert_called_once_with(issuer)
+            manager._events.put((manager._owner, 'handoff', handoff))
+            manager._poll()
+            manager._status.set.assert_called_with(tr('en', 'linking_browser_retry'))
+            confirm.configure.assert_called_with(text=tr('en', 'linking_open_browser'))
+            self.assertIs(manager._handoff, handoff)
+            manager._attempt.close.assert_not_called()
+            window.return_value.destroy.assert_not_called()
+            submit()
+            self.assertEqual(
+                [mock.call(handoff.authorization_url)] * 2, open_browser.call_args_list,
+            )
+            manager.link.assert_called_once_with(issuer)
+            self.assertFalse(manager._cancel.is_set())
+            confirm.state.assert_called_with(['disabled'])
+
     def test_browser_handoff_opens_automatically_and_remains_retryable(self) -> None:
         """Open consent in the browser without displaying the correlation handle.
 
         Returns:
-            None: The queued handoff opens once automatically and again only
-                when the user retries the browser action.
+            None: The queued handoff opens automatically and is not repeated
+                after the browser accepts the launch.
         """
         manager = _manager_without_widgets()
         manager._polling = False
@@ -7564,7 +7640,7 @@ class LinkingDeliveryTests(unittest.TestCase):
                 tr('en', 'linking_approve_browser'),
             )
             manager._open_browser()
-        self.assertEqual(2, open_browser.call_count)
+        open_browser.assert_called_once_with(handoff.authorization_url)
         self.assertNotIn(TEST_REQUEST_HANDLE, manager._status.set.call_args.args[0])
 
     def test_linking_language_lookup_is_delayed(self) -> None:

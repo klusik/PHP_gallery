@@ -14,6 +14,7 @@
 import sys
 import tempfile
 import threading
+import time
 import os
 import unittest
 from unittest import mock
@@ -144,6 +145,36 @@ class WatchRecoveryTests(unittest.TestCase):
             self.store, self.lease, None, receipt_lookup, transport_active,
             target, mode, linked_review,
         )
+
+    def test_continue_preserves_an_interrupted_queue_and_refuses_unknown_heads(self) -> None:
+        """Clear interruption for safe work under its exact original binding.
+
+        Returns:
+            None: The original cutoff and FIFO remain intact. A wrong current
+                target or an uncertain head leaves the persisted pause unchanged.
+        """
+        self.add_items(2)
+        head = self.store.head()
+        assert head is not None
+        self.store.update(head, state='observed', reason='')
+        self.store.stop_and_retain(time.time())
+        cutoff = self.store.data['cutoff']
+        pending = list(self.store.data['pending'])
+        before = self.store.path.read_bytes()
+        with self.assertRaises(ValueError):
+            self.coordinator(target='b' * 64).resume_pending_at_start()
+        self.assertEqual(before, self.store.path.read_bytes())
+        self.assertTrue(self.coordinator().resume_pending_at_start())
+        self.assertFalse(self.store.data['retained_stop'])
+        self.assertEqual(cutoff, self.store.data['cutoff'])
+        self.assertEqual(pending, self.store.data['pending'])
+        head = self.store.head()
+        self.assertIsNotNone(head)
+        self.store.update(head, state='uncertain', reason='Outcome unknown.')
+        self.store.stop_and_retain(time.time())
+        before = self.store.path.read_bytes()
+        self.assertFalse(self.coordinator().resume_pending_at_start())
+        self.assertEqual(before, self.store.path.read_bytes())
 
     def add_items(self, count: int) -> list[Path]:
         """Admit an ordered set of concrete original files.
