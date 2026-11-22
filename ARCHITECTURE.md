@@ -868,7 +868,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.5.0';
+const CMS_VERSION = '1.5.1';
 ```
 
 Update-related code uses:
@@ -2562,14 +2562,20 @@ phase, so a control cannot be hidden in one tab and writable in another.
 Rules for split modules:
 
 The Media Renamer retains one domain service owner. Its `media_renamer/preview.php`
-part derives summaries and bounded filename/ID pages from the lightweight model
-projection without filesystem reads. `media_renamer/reports.php` owns temporary,
-session-bound completed-outcome journals. Controllers enforce Admin/CSRF, paging
-and canonical mutation envelopes; views render only prepared summaries/rows.
-Physical planning, source/derivative safety, staging and rollback remain with the
-existing executor. No schema or new runtime root is introduced. The two parts
-grow the existing module closure; hosted preparation owns measured inventory and
-complete-file hashes before integration qualification.
+part derives summaries and lazy filename pages from a lightweight model
+projection without reading the gallery filesystem. On explicit confirmation,
+`media_renamer/candidate_plan.php` stores ordered candidate IDs and their
+original sequence positions. Each continuation reads the same plan's bounded
+chunks. The existing gallery writer lease serializes revision checks and
+physical apply. One application-settings row and one gallery naming row provide
+indexed revision checks. Confirmed batches advance only their own plan, and
+each batch revalidates source identity, live paths and collisions. Staging and
+rollback stay with the physical executor.
+
+`media_renamer/reports.php` owns separate, session-bound completed outcomes.
+Controllers enforce Admin/CSRF, paging and canonical mutation envelopes. Views
+render prepared summaries and rows. The existing module closure includes all
+three parts. Hosted preparation owns its generated inventory and file hashes.
 The shared 15-image batch limit belongs to the passive Core policy owner so
 isolated controller declarations can load it without a full service bootstrap.
 
@@ -4569,6 +4575,11 @@ change only after the replacement is ready. Failed upgrades leave the small
 image untouched. No `fetch()`, Blob URL, byte-progress mechanism, page reload,
 or navigation is involved. Teardown aborts late DOM mutations and disconnects
 observers before reinitialization.
+
+When Admin replaces a public gallery fragment, the browser selects responsive
+candidates from the new HTML. The active progressive renderer's MutationObserver
+unregisters removed images, cancels their scheduled work and registers the new
+progressive images.
 
 The renderer setting currently applies only to selected-gallery photo cards.
 Subgallery covers, subgallery collage cells, home-page gallery cards,

@@ -568,14 +568,42 @@ try {
     ]);
     $renameImageId = (int) $pdo->lastInsertId();
     $renameRoute = '/index.php?page=admin_media_renamer';
+    $renamePattern = 'concurrency-{seq}';
+    $candidatePage = $adminB->request($renameRoute, [
+        'csrf_token' => $adminB->token($renameRoute),
+        'renamer_action' => 'candidate_page',
+        'confirm_media_rename' => '1',
+        'detail_gallery_id' => $id,
+        'detail_offset' => '0',
+        'renamer_pattern' => $renamePattern,
+    ], true);
+    $candidateToken = $candidatePage['json']['plan_token'] ?? '';
+    check($candidatePage['status'] === 200
+        && preg_match('/\A[a-f0-9]{32}\z/', $candidateToken) === 1
+        && $candidatePage['json']['candidate_ids'] === [$renameImageId]
+        && $candidatePage['json']['candidate_sequences'] === [1]
+        && $candidatePage['json']['next_offset'] === null,
+        'Confirmation did not return the owned single-gallery candidate snapshot.');
+    $batch = [
+        'renamer_action' => 'apply_batch',
+        'confirm_media_rename' => '1',
+        'batch_image_ids' => [$renameImageId],
+        'batch_offset' => '0',
+        'detail_gallery_id' => $id,
+        'plan_token' => $candidateToken,
+        'renamer_pattern' => $renamePattern,
+    ];
+    $wrongSession = $adminA->request($renameRoute, $batch + [
+        'csrf_token' => $adminA->token($renameRoute),
+    ], true);
+    check($wrongSession['status'] === 409
+        && ($wrongSession['json']['code'] ?? '') === 'rename_plan_unavailable'
+        && hash_file('sha256', $folder . '/original.jpg') === $hash,
+        'A different Admin session applied a token or changed the original.');
     $rename = $adminB->request(
         $renameRoute,
-        [
+        $batch + [
             'csrf_token' => $adminB->token($renameRoute),
-            'renamer_action' => 'apply_batch',
-            'confirm_media_rename' => '1',
-            'batch_image_ids' => (string) $renameImageId,
-            'renamer_pattern' => 'concurrency-{sequence}',
         ],
         true,
     );
@@ -602,6 +630,30 @@ try {
     );
     echo
         "PASS gallery edit fresh rename plan executes without losing selection or original contents\n";
+
+    $stage = 'direct POST rename preserves the PDF sibling';
+    $attachmentPath = $folder . '/fixture-attachment.pdf';
+    $attachmentBytes = "%PDF-1.4\n%%EOF\n";
+    check(file_put_contents($attachmentPath, $attachmentBytes) === strlen($attachmentBytes),
+        'Could not create the isolated PDF sidecar fixture.');
+    $classic = $adminB->request($renameRoute, [
+        'csrf_token' => $adminB->token($renameRoute),
+        'renamer_action' => 'apply',
+        'confirm_media_rename' => '1',
+        'renamer_scope' => 'selected',
+        'gallery_ids' => [$id],
+        'renamer_pattern' => 'classic-{seq}',
+    ]);
+    $renamedImage = row($pdo,
+        'SELECT gallery_id, relative_path FROM images WHERE id = ?', [$renameImageId]);
+    check($classic['status'] === 200
+        && str_contains($classic['body'], 'report_details')
+        && $renamedImage['relative_path'] === 'classic_1.jpg'
+        && hash_file('sha256', $folder . '/classic_1.jpg') === $hash
+        && file_get_contents($attachmentPath) === $attachmentBytes,
+        'Classic form submission lost its report, original bytes or PDF sibling.');
+    check(unlink($attachmentPath), 'Could not remove the fixture-owned PDF sidecar.');
+    echo "PASS direct POST rename and unchanged PDF sibling\n";
 
     $stage = 'real HTTP three-state cover cycle and authoritative reconciliation';
     $coverIds = [];

@@ -45,11 +45,6 @@
  *    this entrypoint runs in normal page loads.
  * 3. Features that are sensitive to late DOM availability still use
  *    `runWhenDomReady()` as a defensive guard.
- *
- * Example console usage during development:
- *
- * import('/assets/gallery-modules/responsive-thumbnails.js')
- *   .then((module) => module.setupResponsiveThumbnailSizes());
  */
 
 import {
@@ -59,7 +54,6 @@ import { setupThemeOverrideForm } from './gallery-modules/theme-form.js?v=202610
 import { setupAdminPublicWidgets } from './gallery-modules/admin-public-widgets.js?v=20261023-discovery-clearance-v1';
 import { setupPublicContentWidgets } from './gallery-modules/public-content-widgets.js?v=20261023-discovery-clearance-v1';
 import { setupHeroTagDisclosure } from './gallery-modules/hero-tags.js?v=20261005-hero-info-panel-v2';
-import { setupResponsiveThumbnailSizes } from './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { setupThumbnailWarmup } from './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1';
 import { setupFaviconCropper } from './gallery-modules/favicon-cropper.js';
 import { setupBackToTopButton } from './gallery-modules/back-to-top.js?v=20261023-compact-scroll-v2';
@@ -135,7 +129,7 @@ import {
     setupAdminMediaRenamer,
     setupAdminMetadataOrganizer,
     setupAdminTrashActions,
-} from './gallery-modules/admin-operations.js?v=20261116-stable-renamer-v2';
+} from './gallery-modules/admin-operations.js?v=20261122-native-responsive-thumbnails';
 
 /**
  * Runs a setup callback after the DOM is ready.
@@ -274,7 +268,6 @@ function bootGalleryBrowserFeatures() {
     runWhenDomReady(setupAdminNavdataUpdateFeedback);
     runWhenDomReady(setupAdminRouteNavdata);
     runWhenDomReady(setupAdminNavigationDataPanel);
-    runWhenDomReady(setupResponsiveThumbnailSizes);
     runWhenDomReady(setupProgressiveThumbnailRendererWhenPresent);
     runWhenDomReady(setupThumbnailWarmup);
     runWhenDomReady(setupAdminImageReordering);

@@ -2977,10 +2977,19 @@ Analysis and lazy preview details use lightweight indexed image naming columns
 through the model and the same deterministic naming policy. They perform no
 gallery filesystem inspection, source hashing or derivative enumeration. The
 initial response retains counters per gallery and no filename list or image-ID
-list. An explicit expansion fetches at most 50 names; explicit apply freezes
-candidate IDs through 500-ID pages, then keeps the existing 15-image physical
-batch flow. Only execution rebuilds the physical safety plan, so missing files
-and unindexed disk collisions are reported there instead of during analysis.
+list. An explicit expansion fetches at most 50 names. On confirmation, each
+gallery gets one candidate snapshot in `cache/media-renamer-candidates`.
+It belongs to the authenticated account and session, and is bound to the
+gallery, normalized pattern and catalogue revision. Its 500-entry pages keep
+original sequence positions, including gaps for matching names. The store
+retains up to 32 plans, each with at most 20,000 candidates and 1 MiB of encoded
+candidate data. Plans expire after 30 minutes, and subsequent confirmations
+reclaim expired or completed plans within a short housekeeping budget.
+Applications sharing a database see the same conservative writer generation.
+A missing cache entry, expired plan or changed generation requires a fresh
+preview. The classic non-JavaScript form still prepares a fresh physical
+execution directly. The physical executor verifies paths, source identity and
+live conflicts again for each batch of up to 15 images.
 
 The gallery-641 incident exposed long context truncation after substitution:
 the trailing sequence vanished and 922 indexed originals competed for the same
@@ -4436,6 +4445,18 @@ uses 6.1-terra. No new root menu item or storage migration is introduced.
 - **Lifecycle:** Both machine values and pipelines are permanent supported
   behavior. Keep semantic image markup, alt text, authorization, and no-JS
   behavior in both. No removal planned.
+
+#### Retired responsive sizing script
+
+The [#413 source audit](https://github.com/klusik/PHP_gallery/issues/413) found
+`data-responsive-thumbnail` only in JavaScript consumers. Supported installation
+customizations use Theme settings and CSS. Use of the marker in privately
+modified PHP templates is unknown. The script's imports, Admin fragment hooks
+and asset revision entry were removed together. Responsive
+selection uses the server-rendered `picture`, `srcset` and `sizes` attributes
+on initial navigation and after fragment replacement. The progressive renderer
+owns its observer lifecycle. Hosted candidate preparation refreshes updater and
+package inventory for the removed file.
 
 ### MEDIA-2 — JPEG compatibility derivatives alongside WebP
 

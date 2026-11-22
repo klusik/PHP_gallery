@@ -65,8 +65,8 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.5.0}
-\newcommand{\manualdate}{21.~listopadu~2026}
+\newcommand{\version}{1.5.1}
+\newcommand{\manualdate}{22.~listopadu~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -4362,8 +4362,12 @@ deterministická přípona, náhled tuto úpravu ukáže. Použití plánu vyža
 zaškrtnutí potvrzení přejmenování přímo u~náhledu. Jde o~jediné potvrzení pro jednu
 galerii i~výběr napříč webem, ověřované prohlížečem i~serverem; další blokující
 dialog nenásleduje.
-Použití připraví pouze ID kandidátů a~zachová dávky nejvýše 15 fotek. Výsledný
-report nahradí návrhy a~nejprve zobrazí jen počty podle galerií. Rozbalení načte
+Po potvrzení server připraví jeden plán kandidátů pro každou galerii. Plán
+uchovává ID a~původní pořadí pro dávky nejvýše 15~fotek a~vyprší po 30~minutách.
+Pokud plán vyprší nebo se změní data galerie, zobrazte náhled znovu. Při ztrátě
+odpovědi na fyzickou dávku znovu otevřete renamer a~před dalším pokusem ověřte
+názvy souborů. Výsledný report nahradí návrhy a~nejprve zobrazí jen počty podle
+galerií. Rozbalení načte
 změněné názvy po 50 položkách. Report náleží aktuálnímu přihlášení správce
 a~vyprší po 24 hodinách. Chyba uložení detailů nevrací potvrzené přejmenování.
 Výsledková hláška uvádí shody se vzorem a~kolize názvů zvlášť od ostatních

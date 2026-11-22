@@ -37,6 +37,7 @@ declare(strict_types=1);
 
 namespace Gallery\Controllers;
 
+use Gallery\Services\MediaRenamerCandidatePlanUnavailable;
 use Throwable;
 use function Gallery\Core\csrf_field;
 use function Gallery\Core\current_user;
@@ -49,10 +50,11 @@ use function Gallery\Core\url_for;
 use function Gallery\Core\verify_csrf;
 use function Gallery\Services\media_renamer_all_gallery_ids;
 use function Gallery\Services\media_renamer_availability_for_gallery_ids;
+use function Gallery\Services\media_renamer_confirmed_candidate_page;
 use function Gallery\Services\media_renamer_default_pattern;
 use function Gallery\Services\media_renamer_empty_execution_result;
+use function Gallery\Services\media_renamer_execute_candidate_batch;
 use function Gallery\Services\media_renamer_execute_galleries;
-use function Gallery\Services\media_renamer_execute_image_batch;
 use function Gallery\Services\media_renamer_existing_gallery_ids;
 use function Gallery\Services\media_renamer_gallery_ids_with_pending_renames;
 use function Gallery\Services\media_renamer_gallery_rows;
@@ -69,7 +71,6 @@ use function Gallery\Services\media_renamer_report_append;
 use function Gallery\Services\media_renamer_report_load;
 use function Gallery\Services\media_renamer_report_page;
 use const Gallery\Services\MEDIA_RENAMER_DETAIL_PAGE_SIZE;
-use const Gallery\Services\MEDIA_RENAMER_CANDIDATE_PAGE_SIZE;
 use const Gallery\Core\MEDIA_RENAMER_PHYSICAL_BATCH_SIZE;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
@@ -157,18 +158,11 @@ function cms_admin_media_renamer(): void
                     ),
                 ], 400);
             }
-            $batchImageIds = admin_media_renamer_image_ids_from_post(
-                'batch_image_ids',
-            );
-            $batchSequences = admin_media_renamer_sequence_map_from_post($batchImageIds);
-            if ($batchImageIds === [] || count($batchImageIds) > MEDIA_RENAMER_PHYSICAL_BATCH_SIZE
-                || $batchSequences === null) {
-                admin_media_renamer_json_response(['ok' => false, 'error' => t(
-                    'admin.media_renamer.progress_failed', 'Rename request failed.',
-                )], 400);
-            }
             try {
-                $result = media_renamer_execute_image_batch($batchImageIds, $pattern, $batchSequences);
+                $batch = admin_media_renamer_execute_posted_candidate_batch($pattern);
+                $result = $batch['result'];
+                $result['galleries_requested'] = 1;
+                $result['galleries_processed'] = 1;
                 $renamedIds = array_values(array_map(
                     static fn(array $row): int => (int) $row['image_id'],
                     array_filter($result['details'],
@@ -180,8 +174,10 @@ function cms_admin_media_renamer(): void
                             'image.media_rename', 'image', 'rename', $renamedIds,
                         ), null, [], ['redirect_url' => url_for('admin_media_renamer')]),
                     ['result' => admin_media_renamer_attach_report($result),
-                    'processed' => count($batchImageIds),
+                    'processed' => $batch['processed'],
                 ]));
+            } catch (MediaRenamerCandidatePlanUnavailable) {
+                admin_media_renamer_unavailable_plan();
             } catch (Throwable $exception) {
                 admin_media_renamer_log_exception(
                     'media_renamer.site_batch_failed',
@@ -190,7 +186,6 @@ function cms_admin_media_renamer(): void
                     [
                         'selected_scope' => $selectedScope,
                         'selected_gallery_ids' => $selectedGalleryIds,
-                        'batch_image_ids' => $batchImageIds,
                         'pattern' => $pattern,
                     ],
                 );
@@ -815,46 +810,46 @@ function admin_media_renamer_candidate_image_ids_from_plans(array $plans): array
 }
 
 /**
- * Read image ids from a posted array field.
+ * Admit the next plan-owned physical batch for an authorized Admin request.
  *
- * @param string $field Field value.
- * @return array<int> Structured result data for the caller.
+ * @param string $pattern Normalized pattern for this confirmation.
+ * @param int|null $expectedGalleryId Authorized gallery in the editor, or null
+ *     on the site-wide route where the plan binds the submitted gallery.
+ * @return array{processed:int,result:array{gallery_id:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>}} Confirmed processed count and executor evidence.
+ * @throws MediaRenamerCandidatePlanUnavailable When the plan cannot be used.
  */
-function admin_media_renamer_image_ids_from_post(string $field): array
-{
-    return array_values(array_unique(array_filter(
-        array_map('intval', (array) ($_POST[$field] ?? [])),
-        static fn(int $id): bool => $id > 0,
-    )));
-}
-
-/**
- * Bind bounded apply IDs to their original database preview positions.
- *
- * @param list<int> $imageIds Already validated bounded batch identities.
- * @return array<int,int>|null Positive original positions keyed by image ID;
- *     empty means a classic/older caller, null refuses malformed input.
- */
-function admin_media_renamer_sequence_map_from_post(array $imageIds): ?array
-{
-    if (!array_key_exists('batch_sequence_numbers', $_POST)) {
-        return [];
+function admin_media_renamer_execute_posted_candidate_batch(
+    string $pattern, ?int $expectedGalleryId = null,
+): array {
+    $token = $_POST['plan_token'] ?? '';
+    $galleryId = filter_var($_POST['detail_gallery_id'] ?? null, FILTER_VALIDATE_INT);
+    $offset = filter_var($_POST['batch_offset'] ?? null, FILTER_VALIDATE_INT);
+    if (!is_string($token) || $token === '' || !is_int($galleryId) || $galleryId <= 0
+        || !is_int($offset) || $offset < 0
+        || ($expectedGalleryId !== null && $expectedGalleryId !== $galleryId)) {
+        throw new MediaRenamerCandidatePlanUnavailable('Candidate batch is unavailable.');
     }
-    $positions = $_POST['batch_sequence_numbers'];
-    if (!is_array($positions) || !array_is_list($positions)
-        || count($positions) !== count($imageIds)) {
-        return null;
-    }
-    $result = [];
-    foreach ($positions as $index => $position) {
-        $sequence = is_string($position) || is_int($position)
-            ? filter_var($position, FILTER_VALIDATE_INT) : false;
-        if ($sequence === false || $sequence <= 0) {
-            return null;
+    $submitted = $_POST['batch_image_ids'] ?? [];
+    $ids = [];
+    if (is_array($submitted) && array_is_list($submitted)
+        && count($submitted) <= MEDIA_RENAMER_PHYSICAL_BATCH_SIZE) {
+        foreach ($submitted as $value) {
+            $id = filter_var($value, FILTER_VALIDATE_INT);
+            if ($id === false || $id <= 0) {
+                break;
+            }
+            $ids[] = $id;
         }
-        $result[$imageIds[$index]] = $sequence;
     }
-    return $result;
+    if ($ids === [] || count($ids) !== count($submitted)) {
+        admin_media_renamer_json_response(['ok' => false, 'error' => t(
+            'admin.media_renamer.progress_failed', 'Rename request failed.',
+        )], 400);
+    }
+
+    return ['processed' => count($ids), 'result' => media_renamer_execute_candidate_batch(
+        admin_media_renamer_report_owner(), $token, $galleryId, $pattern, $offset, $ids,
+    )];
 }
 
 /**
@@ -1238,7 +1233,18 @@ function admin_media_renamer_handle_client_error(): void
 /**
  * Emit a JSON response and stop the current media-renamer request.
  *
- * @param array{ok:bool,error?:string,processed?:int,availability?:array<int,array{rename_count:int,warning_count:int}>,result?:array{galleries_requested:int,galleries_processed:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>}} $payload Supported media-renamer JSON response fields.
+ * @param array{ok:bool,error?:string,code?:string,processed?:int,
+ *     plan_token?:string,gallery_id?:int,candidate_ids?:list<int>,
+ *     candidate_sequences?:list<int>,next_offset?:int|null,detail_html?:string,
+ *     availability?:array<int,array{rename_count:int,warning_count:int}>,
+ *     result?:array{galleries_requested?:int,galleries_processed?:int,renamed:int,
+ *     already_matches:int,missing:int,skipped:int,collisions:int,
+ *     derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,
+ *     zip_archives_deleted:int,titles_updated:int,report_token?:string,
+ *     details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,
+ *     new:string,status:string,notes:list<string>}>,warnings:list<string>,
+ *     failures:list<string>},...} $payload Supported media-renamer data plus
+ *     the existing canonical Admin mutation envelope on physical success.
  * @param int $statusCode HTTP response status code.
  * @return never Emits the JSON response and terminates the request.
  */
@@ -1538,10 +1544,24 @@ function admin_media_renamer_result_log_severity(array $result): string
 function admin_media_renamer_report_owner(): string
 {
     $user = current_user();
-    if (!is_array($user) || (int) ($user['id'] ?? 0) <= 0) {
+    if (!is_array($user) || (int) ($user['id'] ?? 0) <= 0 || session_id() === '') {
         throw new \RuntimeException('Rename report owner is unavailable.');
     }
     return hash('sha256', (string) $user['id'] . "\0" . session_id());
+}
+
+/**
+ * Refuse a lost or stale candidate plan before starting a physical write.
+ * @return never Emits a recoverable conflict requiring fresh analysis.
+ */
+function admin_media_renamer_unavailable_plan(): never
+{
+    admin_media_renamer_json_response([
+        'ok' => false,
+        'code' => 'rename_plan_unavailable',
+        'error' => t('admin.media_renamer.plan_unavailable',
+            'The rename plan is unavailable or the gallery changed. Preview the rename plan again before applying.'),
+    ], 409);
 }
 
 /**
@@ -1589,9 +1609,15 @@ function admin_media_renamer_handle_detail_read(string $action, string $pattern)
     }
     try {
         if ($action === 'candidate_page') {
-            $page = media_renamer_database_preview($galleryId, $pattern, $offset,
-                MEDIA_RENAMER_CANDIDATE_PAGE_SIZE, true);
+            $token = $input['plan_token'] ?? '';
+            if (empty($input['confirm_media_rename']) || !is_string($token)) {
+                admin_media_renamer_unavailable_plan();
+            }
+            $page = media_renamer_confirmed_candidate_page(
+                admin_media_renamer_report_owner(), $token, $galleryId, $pattern, $offset,
+            );
             admin_media_renamer_json_response(['ok' => true,
+                'plan_token' => $page['plan_token'], 'gallery_id' => $galleryId,
                 'candidate_ids' => $page['candidate_image_ids'],
                 'candidate_sequences' => $page['candidate_sequences'],
                 'next_offset' => $page['next_offset']]);
@@ -1640,6 +1666,8 @@ function admin_media_renamer_handle_detail_read(string $action, string $pattern)
         }
         admin_media_renamer_json_response(['ok' => true, 'detail_html' => $html,
             'next_offset' => $page['next_offset']]);
+    } catch (MediaRenamerCandidatePlanUnavailable) {
+        admin_media_renamer_unavailable_plan();
     } catch (Throwable) {
         admin_media_renamer_json_response(['ok' => false, 'error' => t(
             'admin.media_renamer.detail_failed', 'File details could not be loaded. Try again.',

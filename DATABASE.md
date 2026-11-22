@@ -1,5 +1,18 @@
 # PHP Gallery Database Documentation
 
+## Admin rename catalogue revision
+
+The Admin media renamer uses `app_settings.gallery_writer_catalogue_revision`
+as an opaque installation-wide write generation. The first confirmation
+creates the key under the existing gallery writer lease. Acquiring gallery
+write ownership replaces an initialized generation before the writer can change
+files or catalogue rows. This also covers the editor reservation and inline
+edits to image titles or ordering. A generation may advance for unrelated
+gallery work. The renamer compares it with the exact gallery title and folder
+path using indexed point queries. It only carries its own generation forward
+after a confirmed physical batch. The key uses the existing table and DML
+privileges. Catalogue writes made outside the application need a fresh preview.
+
 ## Request-local metadata acceleration
 
 The music catalog, music repository and public attachment-usage readiness owners
@@ -141,7 +154,7 @@ retain the resulting visibility and existing access settings, rather than
 silently importing an old pending deadline into a different installation.
 
 This document describes the database schema used by PHP Gallery as of
-application version 1.5.0. Version 0.97 adds the recoverable gallery-trash
+application version 1.5.1. Version 0.97 adds the recoverable gallery-trash
 state machine through migrations `202609070001_gallery_trash_bin.php` and
 `202609070002_gallery_trash_state_machine.php`; Versions 0.96.1 through 0.96.6
 introduced no schema changes. The source of truth remains the migration files in

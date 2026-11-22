@@ -36,7 +36,6 @@ import { setupBackToTopButton, teardownBackToTopButton } from './back-to-top.js?
 import { setupGalleryLightbox, setupTagSuggestions, teardownGalleryLightbox } from './lightbox-deferred.js?v=20261102-repeat-modes-v1';
 import { setupPictureManager, teardownPictureManager } from './picture-manager.js?v=20261023-picture-manager-context-v1';
 import { refreshPublicWidgetFloatingGeometry } from './public-content-widgets.js?v=20261023-discovery-clearance-v1';
-import { setupResponsiveThumbnailSizes, teardownResponsiveThumbnailSizes } from './responsive-thumbnails.js?v=20260510-lazy-map-v1';
 import { activateAdminTabInRoot, activeAdminTabId, setupAdminTabsInRoot } from './admin-tabs.js?v=20261027-appearance-state-v1';
 import { setupAdminNestedTabs } from './admin-nested-tabs.js?v=20261027-appearance-state-v1';
 import { setupAdminImageReordering } from './admin-image-reordering.js?v=20261102-newest-order-v1';
@@ -2962,11 +2961,10 @@ async function reflectCreatedGalleryInCurrentView(result) {
 
 /**
  * Releases browser-side public gallery bindings before server-rendered content is replaced.
- * @return {void} Releases public viewer, picture, sizing and scroll bindings before owned fragment replacement.
+ * @return {void} Releases public viewer, picture manager and scroll bindings before owned fragment replacement.
  */
 function teardownPublicGalleryLifecycleBeforeRefresh() {
     teardownPictureManager();
-    teardownResponsiveThumbnailSizes();
     teardownBackToTopButton();
     teardownGalleryLightbox();
 }
@@ -2977,7 +2975,6 @@ function teardownPublicGalleryLifecycleBeforeRefresh() {
  */
 function rebindPublicGalleryLifecycleAfterRefresh() {
     setupPictureManager();
-    setupResponsiveThumbnailSizes();
     setupBackToTopButton();
     setupGalleryLightbox();
     setupPublicGalleryPageReordering();

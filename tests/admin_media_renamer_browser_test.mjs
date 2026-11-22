@@ -71,9 +71,11 @@ ${css.map(name => `<link rel="stylesheet" href="/public/assets/styles/${name}.cs
 <output id="results" hidden></output><script type="module">
 import {setupAdminMediaRenamer} from '/public/assets/gallery-modules/admin-media-renamer.js';
 const fragments = ${encodedFragments};
-const requests = []; let failedOnce = false; let hold = false; let release = null;
+const requests = []; let failedOnce = false; let hold = false; let release = null; let failMode = ''; let planHold = false;
 let applied = []; let confirmed = null; let completion = null;
 const token = 'a'.repeat(32);
+const planTokens = new Map([[7,'b'.repeat(32)],[8,'c'.repeat(32)]]);
+const plans = new Map();
 const check = (ok, text) => { if (!ok) throw new Error(text); };
 const pause = () => new Promise(resolve => setTimeout(resolve, ${pollMs}));
 /** Wait for this phase's actual terminal state.
@@ -89,7 +91,7 @@ window.fetch = async (_url, options) => {
     const gallery = Number(body.get('detail_gallery_id'));
     const offset = Number(body.get('detail_offset') || 0);
     const ids = body.getAll('batch_image_ids[]').map(Number);
-    requests.push({action, gallery, offset, ids});
+    requests.push({action, gallery, offset, batchOffset:Number(body.get('batch_offset') || 0), ids});
     check(body.get('csrf_token') === 'fixture', 'Read/write dropped CSRF');
     let payload;
     if (action === 'preview_details' || action === 'report_details') {
@@ -104,22 +106,55 @@ window.fetch = async (_url, options) => {
             next_offset: gallery === 8 || offset ? null : 50};
     } else if (action === 'candidate_page') {
         check(!document.querySelector('[data-media-renamer-proposals]')?.textContent.trim(), 'Old proposals survived apply');
-        payload = {ok:true,
-            candidate_ids:gallery === 7 ? Array.from({length:61},(_,i)=>i+1) : [62,63],
-            candidate_sequences:gallery === 7 ? Array.from({length:61},(_,i)=>i+1) : [7,9],
-            next_offset:null};
+        const planToken = planTokens.get(gallery);
+        check(gallery === 7 || applied.filter(id => id <= 61).length === 61,
+            'Second gallery plan was requested before first gallery writes completed');
+        check(body.get('confirm_media_rename') === '1', 'Candidate reads require explicit confirmation');
+        if (planHold) {
+            await new Promise(resolve => { release = resolve; });
+            planHold = false;
+        }
+        check(body.get('plan_token') === (offset ? planToken : null), 'Candidate token/offset round-trip changed');
+        const allIds = gallery === 7 ? Array.from({length:61},(_,i)=>i+1) : [62,63];
+        const pageIds = allIds.slice(offset, offset + 40);
+        const pageSequences = pageIds.map(id => gallery === 8 ? (id === 62 ? 7 : 9) : id);
+        plans.set(gallery, {ids:allIds,sequences:allIds.map(id => gallery === 8 ? (id === 62 ? 7 : 9) : id)});
+        payload = {ok:true,plan_token:planToken,gallery_id:gallery,candidate_ids:pageIds,
+            candidate_sequences:pageSequences,next_offset:offset+pageIds.length<allIds.length?offset+pageIds.length:null};
     } else if (action === 'apply_batch') {
         check(ids.length > 0 && ids.length <= 15, 'Physical batch limit changed');
-        const positions = body.getAll('batch_sequence_numbers[]').map(Number);
-        check(positions.length === ids.length && positions.every((position,index) =>
-            position === (ids[index] === 62 ? 7 : ids[index] === 63 ? 9 : ids[index])),
-            'Physical batches lost the original positions or their gaps');
+        const galleryId = Number(body.get('detail_gallery_id'));
+        if (failMode === 'refusal') {
+            return new Response(JSON.stringify({ok:false,code:'rename_plan_unavailable',
+                error:'The rename plan is unavailable or the gallery changed. Run Analyze again before applying.'}),
+                {status:409,headers:{'Content-Type':'application/json'}});
+        }
+        if (failMode === 'lost' && applied.length >= 15) {
+            return new Response('<html>proxy failure</html>',{status:502,headers:{'Content-Type':'text/html'}});
+        }
+        const plan = plans.get(galleryId);
+        const batchOffset = Number(body.get('batch_offset'));
+        check(galleryId === 7 || applied.filter(id => id <= 61).length === 61,
+            'Second gallery writes started before first gallery finished');
+        check(body.get('plan_token') === planTokens.get(galleryId), 'Apply omitted its plan token');
+        check(batchOffset === applied.filter(id => plan.ids.includes(id)).length, 'Apply offset did not follow server plan');
+        check(ids.every((id,index) => id === plan.ids[batchOffset+index]), 'Apply batch changed server candidate ordering');
+        check(!body.has('batch_sequence_numbers[]'), 'Client sent sequence numbers');
+        check(galleryId === 8 || applied.every(id => id !== 62 && id !== 63), 'Cross-gallery apply began before current gallery finished');
         check(body.get('report_token') === (applied.length ? token : ''), 'Report continuation lost');
+        const sitePlan = plans.get(7);
+        if (batchOffset === 0 && galleryId === 7) {
+            check(plan.sequences[0] === 1 && sitePlan.sequences[60] === 61, 'Fixture lost original sequence evidence');
+        }
         applied.push(...ids);
+        const galleryIds = new Set(ids.map(id => id <= 61 ? 7 : 8));
+        check(galleryIds.size === 1, 'One physical batch crossed gallery plans');
         payload = {ok:true,processed:ids.length,result:{renamed:ids.length,details:[],warnings:[],failures:[],report_token:token},
             mutation:{source:'image.media_rename',entity:'image',operation:'rename',entity_ids:ids},
-            contexts:[{kind:'gallery',id:7,image_revision:'server-'+applied.length}]};
+            contexts:[{kind:'gallery',id:[...galleryIds][0],image_revision:'server-'+applied.length}]};
         confirmed = payload;
+    } else if (action === 'client_error') {
+        payload = {ok:true};
     } else if (action === 'apply_refresh') {
         const result = JSON.parse(body.get('batch_result_payload'));
         check(result.details.length === 0 && result.renamed === 63 && result.report_token === token,
@@ -162,9 +197,38 @@ window.renamePhase = async phase => {
         const first = details()[0]; hold = true; first.open = true;
         await wait(() => release !== null); first.open = false;
         await wait(() => !first.hasAttribute('aria-busy'));
-        release(); hold = false; await pause(); await pause();
+        release(); release = null; hold = false; await pause(); await pause();
         check(first.querySelectorAll('tbody tr').length === 0, 'Closed disclosure accepted stale rows');
+    } else if (phase === 'late-plan') {
+        workspace().outerHTML = fragments.preview;
+        const form = workspace().querySelector('[data-admin-media-renamer-form]');
+        const button = form.querySelector('[data-media-renamer-apply-button]');
+        form.querySelector('[name="confirm_media_rename"]').checked = true;
+        planHold = true;
+        form.requestSubmit(button);
+        await wait(() => release !== null);
+        const oldForm = form;
+        workspace().outerHTML = fragments.preview;
+        release(); release = null; planHold = false;
+        await pause();
+        check(!requests.some(request => request.action === 'apply_batch'), 'Detached candidate response started a write');
+        check(!oldForm.isConnected, 'Late response fixture detached the source form');
+        failMode = '';
+    } else if (phase === 'pattern-change') {
+        workspace().outerHTML = fragments.preview;
+        const form = workspace().querySelector('[data-admin-media-renamer-form]');
+        const button = form.querySelector('[data-media-renamer-apply-button]');
+        form.querySelector('[name="confirm_media_rename"]').checked = true;
+        planHold = true;
+        form.requestSubmit(button);
+        await wait(() => release !== null);
+        form.querySelector('[name="renamer_pattern"]').value = 'changed-after-request';
+        release(); release = null; planHold = false;
+        await pause();
+        check(!requests.some(request => request.action === 'apply_batch'), 'Changed pattern allowed stale candidate writes');
+        planHold = false;
     } else if (phase === 'apply') {
+        workspace().outerHTML = fragments.preview;
         const form = workspace().querySelector('[data-admin-media-renamer-form]');
         const button = form.querySelector('[data-media-renamer-apply-button]');
         const before = requests.length;
@@ -178,6 +242,38 @@ window.renamePhase = async phase => {
         check(!workspace().textContent.includes('camera_'), 'Report eagerly rendered filenames');
         check(JSON.stringify(completion.mutation) === JSON.stringify(confirmed.mutation)
             && JSON.stringify(completion.contexts) === JSON.stringify(confirmed.contexts), 'Completion invented public revisions');
+    } else if (phase === 'refusal' || phase === 'lost') {
+        workspace().outerHTML = fragments.preview;
+        const form = workspace().querySelector('[data-admin-media-renamer-form]');
+        const button = form.querySelector('[data-media-renamer-apply-button]');
+        form.querySelector('[name="confirm_media_rename"]').checked = true;
+        failMode = phase;
+        applied = [];
+        plans.clear();
+        const before = requests.length;
+        form.requestSubmit(button);
+        await wait(() => phase === 'refusal'
+            ? requests.some(request => request.action === 'apply_batch') && !form.querySelector('[name="confirm_media_rename"]').checked
+            : workspace().querySelector('[data-admin-media-renamer-progress]')?.textContent.includes('verify filenames'));
+        const batches = requests.filter(request => request.action === 'apply_batch').length;
+        await pause();
+        check(requests.filter(request => request.action === 'apply_batch').length === batches, 'Uncertain/refused batch was replayed');
+        check(phase === 'lost' ? applied.length === 15 : applied.length === 0,
+            'Lost result preserves only earlier confirmed mutations');
+        if (phase === 'lost') {
+            const progress = workspace().querySelector('[data-admin-media-renamer-progress-bar]');
+            check(progress.value === Math.round(15 * 100 / 61)
+                && completion.mutation.entity_ids.length === 15,
+                'Lost response changed the last confirmed progress or mutation');
+        }
+        const review = form.querySelector('[name="confirm_media_rename"]');
+        review.checked = true;
+        form.dispatchEvent(new SubmitEvent('submit',{bubbles:true,cancelable:true,submitter:button}));
+        review.checked = false;
+        await pause();
+        check(requests.filter(request => request.action === 'apply_batch').length === batches,
+            'A stopped confirmation was replayed from stale DOM');
+        failMode = '';
     } else if (phase === 'report') {
         const first = details()[0]; first.open = true;
         await wait(() => first.querySelectorAll('tbody tr').length === 50);
@@ -211,7 +307,7 @@ try {
                     assert.ok(Date.now() < deadline, 'Renamer module did not initialize');
                     await new Promise(resolve => setTimeout(resolve, pollMs));
                 }
-                for (const phase of ['overview','details','cancel','apply','report']) {
+                for (const phase of ['overview','details','cancel','late-plan','pattern-change','apply','report','refusal','lost']) {
                     assert.equal(await evaluate('window.renamePhase(' + JSON.stringify(phase) + ')'), phase + ' passed');
                     if (phase === 'cancel') continue;
                     for (const width of widths) {

@@ -33,6 +33,10 @@
  */
 
 return [
+    'admin.media_renamer.plan_unavailable' => 'Plán přejmenování není dostupný nebo se galerie změnila. Před přejmenováním znovu zobrazte náhled.',
+    'admin.media_renamer.apply_uncertain' => 'Výsledek přejmenování se nepodařilo potvrdit. Znovu otevřete nástroj a před dalším pokusem ověřte názvy souborů.',
+    'admin.media_renamer.gallery_progress' => 'Připravuji plán přejmenování pro galerii {gallery} z {galleries}…',
+    'admin.media_renamer.gallery_apply_progress' => 'Galerie {gallery}/{galleries} · Zpracováno {processed}/{total} fotek…',
     'admin.media_renamer.gallery_result_notice' => 'Přejmenováno {renamed} souborů. Názvy už odpovídají vzoru ({matching}). Kolize názvů ({collisions}). Zachováno {moved} náhledů, odstraněno {cleaned} zastaralých souborů cache odvozenin, nalezeno {missing} chybějících souborů, přeskočeno {skipped} řádků, aktualizováno {titles} odvozených názvů a odstraněno {archives} zastaralých řádků ZIP archivů.',
     'admin.media_renamer.result_notice' => 'Zpracováno {galleries} galerií. Přejmenováno {renamed} souborů. Názvy už odpovídají vzoru ({matching}). Kolize názvů ({collisions}). Zachováno {moved} náhledů, odstraněno {cleaned} zastaralých souborů cache odvozenin, přeskočeno {skipped} řádků, nalezeno {missing} chybějících souborů, aktualizováno {titles} odvozených názvů a odstraněno {archives} zastaralých řádků ZIP archivů.',
     'app_linking.consent.gallery_edit_scope' => 'WinApp může na tomto webu měnit názvy a popisy galerií, NSFW Guard a zařazení do výpisů.',

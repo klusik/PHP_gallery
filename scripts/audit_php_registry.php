@@ -69,6 +69,10 @@ return [
         'runtime_dependencies_test.php',
         'runtime_module_plan_test.php',
         'module_split_path_resolution_test.php',
+        'media_renamer_database_preview_test.php',
+        'media_renamer_staging_test.php',
+        'gallery_edit_concurrency_mysql_test.php',
+        'gallery_pdf_conversion_lifecycle_test.php',
     ],
 
     // The feature profile owns these focused cases; FULL discovers them normally.

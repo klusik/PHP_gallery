@@ -387,6 +387,8 @@ namespace {
     $GLOBALS['edit_writer_name'] = null;
     $lockDatabase = new \PDO('sqlite::memory:', null, null,
         [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+    $lockDatabase->exec('CREATE TABLE app_settings (setting_key TEXT PRIMARY KEY,
+        setting_value TEXT NOT NULL, updated_at TEXT NOT NULL)');
     $GLOBALS['edit_writer_database'] = $lockDatabase;
     // Execute the actual writer service/model, replacing only MySQL-specific
     // SQL primitives at the driver boundary. Arity 0/2/1 mirrors that protocol;

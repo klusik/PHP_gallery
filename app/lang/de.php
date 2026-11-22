@@ -33,6 +33,10 @@
  */
 
 return [
+    'admin.media_renamer.plan_unavailable' => 'Der Umbenennungsplan ist nicht verfügbar oder die Galerie wurde geändert. Erstellen Sie vor der Übernahme eine neue Vorschau.',
+    'admin.media_renamer.apply_uncertain' => 'Das Ergebnis konnte nicht bestätigt werden. Öffnen Sie den Umbenenner erneut und prüfen Sie vor einem weiteren Versuch die Dateinamen.',
+    'admin.media_renamer.gallery_progress' => 'Umbenennungsplan für Galerie {gallery} von {galleries} wird vorbereitet …',
+    'admin.media_renamer.gallery_apply_progress' => 'Galerie {gallery}/{galleries} · {processed}/{total} Fotos verarbeitet …',
     'admin.media_renamer.gallery_result_notice' => '{renamed} Datei(en) umbenannt. Dateien mit passendem Namen ({matching}). Namenskonflikte ({collisions}). {moved} Vorschaubilder erhalten, {cleaned} veraltete Ableitungs-Cachedatei(en) entfernt, {missing} fehlende Datei(en) festgestellt, {skipped} Zeile(n) übersprungen, {titles} abgeleitete(r) Titel aktualisiert und {archives} veraltete ZIP-Archivzeile(n) entfernt.',
     'admin.media_renamer.result_notice' => '{galleries} Galerie(n) verarbeitet. {renamed} Datei(en) umbenannt. Dateien mit passendem Namen ({matching}). Namenskonflikte ({collisions}). {moved} Vorschaubilder erhalten, {cleaned} veraltete Ableitungs-Cachedatei(en) entfernt, {skipped} Zeile(n) übersprungen, {missing} fehlende Datei(en) festgestellt, {titles} abgeleitete(r) Titel aktualisiert und {archives} veraltete ZIP-Archivzeile(n) entfernt.',
     'app_linking.consent.gallery_edit_scope' => 'WinApp darf auf dieser Website Galerietitel, Beschreibungen, NSFW Guard und die Auflistung ändern.',

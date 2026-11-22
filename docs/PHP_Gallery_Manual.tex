@@ -65,8 +65,8 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.5.0}
-\newcommand{\manualdate}{21 November 2026}
+\newcommand{\version}{1.5.1}
+\newcommand{\manualdate}{22 November 2026}
 
 \hypersetup{
   colorlinks=true,
@@ -4399,8 +4399,12 @@ can~resolve the~collision, the~preview shows that adjustment. Applying a~plan
 requires checking the~rename confirmation beside the~preview. This is~the~single
 confirmation for~gallery and~site-wide applies, enforced by~the~browser and
 the~server; no~additional blocking dialog follows.
-Apply prepares candidate IDs without filenames, then uses the~existing batches
-of~at~most 15 photos. The~completed report replaces the~proposals and~starts
+After confirmation, the~server prepares one~candidate plan per gallery. The~plan
+keeps candidate IDs and~their original sequence positions for~batches of~up~to
+15~photos and~expires after 30~minutes. If~the~plan expires or~gallery data changes,
+preview the~rename plan again. If~a~physical batch response is~lost, reopen
+the~renamer and~verify the~filenames before trying again. The~completed report
+replaces the~proposals and~starts
 with per-gallery counts. Expand a~gallery to~fetch changed filenames in~pages
 of~50. Reports belong to~the~current administrator login session and~expire
 after 24~hours. A~detail-storage warning does~not~undo confirmed renames.

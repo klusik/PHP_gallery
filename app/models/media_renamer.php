@@ -102,6 +102,20 @@ function media_renamer_model_indexed_paths(int $galleryId): array
 }
 
 /**
+ * Read the single storage row carrying the gallery's naming inputs.
+ *
+ * @param int $galleryId Exact physical gallery identity from the plan request.
+ * @return array{title:string,folder_path:string}|null Fixed projection, or null
+ *     if the gallery stopped existing. No image rows are read.
+ */
+function media_renamer_model_naming_scope(int $galleryId): ?array
+{
+    $stmt = db()->prepare('SELECT title, folder_path FROM galleries WHERE id = ?');
+    $stmt->execute([$galleryId]);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+
+/**
  * Read only naming/ownership facts, retaining the canonical gallery order.
  *
  * @param int $galleryId Physical gallery whose indexed names are analyzed.

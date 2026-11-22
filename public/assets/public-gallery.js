@@ -37,7 +37,6 @@ const optionalPublicModules = {
     votes: './gallery-modules/votes.js?v=20260512-lightbox-vote-clone-widget-v6',
     backToTop: './gallery-modules/back-to-top.js?v=20261023-compact-scroll-v2',
     publicHomeSearch: './gallery-modules/public-home-search.js?v=20261022-search-keyboard-v2',
-    responsiveThumbnails: './gallery-modules/responsive-thumbnails.js?v=20260510-lazy-map-v1',
     progressiveThumbnailRenderer: './gallery-modules/progressive-thumbnail-renderer.js?v=20260824-aspect-aware-thumbnail-selection',
     thumbnailRenderDiagnostics: './gallery-modules/public-thumbnail-render-diagnostics.js?v=20260809-thumbnail-render-diagnostics-v1',
     thumbnailWarmup: './gallery-modules/thumbnail-warmup.js?v=20260608-thumbnail-warmup-v1',
@@ -123,7 +122,6 @@ function bootPublicGalleryBrowserFeatures() {
         setupOptionalPublicFeature(optionalPublicModules.votes, 'setupVoteForms', '[data-vote-form]');
         setupOptionalPublicFeature(optionalPublicModules.backToTop, 'setupBackToTopButton', '[data-back-to-top-button]');
         setupOptionalPublicFeature(optionalPublicModules.publicHomeSearch, 'setupPublicHomeSearch', '[data-public-home-search]');
-        setupOptionalPublicFeature(optionalPublicModules.responsiveThumbnails, 'setupResponsiveThumbnailSizes', 'img[data-responsive-thumbnail]');
         setupOptionalPublicFeature(optionalPublicModules.progressiveThumbnailRenderer, 'setupProgressiveThumbnailRenderer', 'img[data-progressive-thumbnail]');
         setupOptionalPublicFeature(optionalPublicModules.thumbnailRenderDiagnostics, 'setupPublicThumbnailRenderDiagnostics', '[data-public-thumbnail-diagnostics]');
         setupOptionalPublicFeature(optionalPublicModules.thumbnailWarmup, 'setupThumbnailWarmup', 'img[data-thumbnail-warmup-id][data-thumbnail-warmup-token][data-thumbnail-warmup-endpoint]');

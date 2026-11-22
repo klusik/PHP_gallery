@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.5.0}
-\newcommand{\manualdate}{21~november~2026}
+\newcommand{\version}{1.5.1}
+\newcommand{\manualdate}{22~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -4511,7 +4511,12 @@ lösa kollisionen visar förhandsvisningen justeringen. Att tillämpa en plan
 kräver att namnbytesrutan vid förhandsvisningen markeras. Denna enda
 bekräftelse gäller både galleri- och webbplatsövergripande körningar och
 kontrolleras av webbläsaren och servern; ingen extra blockerande dialog följer.
-Tillämpningen hämtar bara kandidat-ID:n och behåller satser med högst 15 foton.
+Efter bekräftelsen skapar servern en kandidatplan per galleri. Planen sparar
+kandidat-ID:n och ursprungliga positioner för satser på högst 15~foton och
+upphör efter 30~minuter. Skapa en ny förhandsvisning om planen har upphört
+eller om galleriets data har ändrats. Öppna namnbytesverktyget igen och
+kontrollera filnamnen innan du gör ett nytt försök om svaret på en fysisk
+namnbytessats uteblir.
 Slutrapporten ersätter förslagen med antal per galleri. Öppna ett galleri för
 att hämta ändrade namn i sidor med 50 poster. Rapporter tillhör administratörens
 aktuella inloggningssession och upphör efter 24 timmar. Ett detaljlagringsfel

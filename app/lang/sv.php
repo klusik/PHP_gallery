@@ -33,6 +33,10 @@
  */
 
 return [
+    'admin.media_renamer.plan_unavailable' => 'Namnbytesplanen är inte tillgänglig eller så har galleriet ändrats. Förhandsvisa planen igen innan du tillämpar den.',
+    'admin.media_renamer.apply_uncertain' => 'Det gick inte att bekräfta namnbytet. Öppna verktyget igen och kontrollera filnamnen innan du försöker på nytt.',
+    'admin.media_renamer.gallery_progress' => 'Förbereder namnbytesplanen för galleri {gallery} av {galleries} …',
+    'admin.media_renamer.gallery_apply_progress' => 'Galleri {gallery}/{galleries} · {processed}/{total} foton bearbetade …',
     'admin.media_renamer.gallery_result_notice' => 'Bytte namn på {renamed} fil(er). Filer som redan matchar mönstret ({matching}). Filnamnskonflikter ({collisions}). Bevarade {moved} miniatyrer, tog bort {cleaned} inaktuella derivatcachefil(er), såg {missing} saknade fil(er), hoppade över {skipped} rad(er), uppdaterade {titles} härledda titel/titlar och tog bort {archives} inaktuella ZIP-arkivrader.',
     'admin.media_renamer.result_notice' => 'Bearbetade {galleries} galleri/gallerier. Bytte namn på {renamed} fil(er). Filer som redan matchar mönstret ({matching}). Filnamnskonflikter ({collisions}). Bevarade {moved} miniatyrer, tog bort {cleaned} inaktuella derivatcachefil(er), hoppade över {skipped} rad(er), såg {missing} saknade fil(er), uppdaterade {titles} härledda titel/titlar och tog bort {archives} inaktuella ZIP-arkivrader.',
     'app_linking.consent.gallery_edit_scope' => 'WinApp kan ändra gallerititlar, beskrivningar, NSFW Guard och listning på denna webbplats.',

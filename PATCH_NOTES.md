@@ -1,5 +1,70 @@
 # Patch notes
 
+## Version 1.5.1
+
+PHP Gallery 1.5.1 reuses one Media Renamer plan per gallery confirmation
+and retires the obsolete responsive thumbnail script.
+
+### Highlights
+
+#### Media Renamer
+
+- Prepared the candidate list once for each confirmed gallery. Each page
+  reused the candidate IDs and the original sequence positions, including
+  gaps for images whose filenames already matched. [#412](https://github.com/klusik/PHP_gallery/issues/412)
+
+#### Gallery thumbnails
+
+- Removed the legacy JavaScript sizing module and its Admin refresh hooks.
+  Responsive thumbnails used the browser's choice of image size from the
+  generated markup. The progressive renderer managed its own image upgrades
+  and recalculated which images to observe after Admin replaced the gallery
+  fragment. [#413](https://github.com/klusik/PHP_gallery/issues/413)
+
+### Technical Details
+
+#### Backend
+
+- Added `app/services/media_renamer/candidate_plan.php` to store short-lived
+  plans scoped to the signed-in Admin session, gallery, filename pattern
+  and catalogue revision. Candidate pages returned up to 500 entries.
+- Verified the plan and next candidate batch under the gallery writer lease
+  before applying up to 15 renames. The executor checked current source
+  identity, paths and target collisions for each batch. The classic form
+  submission prepared its own fresh execution plan.
+
+#### Database
+
+- Tracked the shared catalogue revision in the existing `app_settings`
+  table. The first confirmation initialized the setting. Gallery writers
+  advanced it before changing files or catalogue rows. Confirmed rename
+  batches could continue their own plan at the new revision.
+
+#### Tests
+
+- Measured candidate paging on SQLite fixtures from 100 to 10,000 entries.
+  The 5,000-entry fixture read 5,000 image rows in one planning pass across
+  ten candidate pages. Separate checks covered the initial overview and
+  physical writes.
+- Tested stale and cross-session plans, classic form submissions, PDFs,
+  collisions introduced after confirmation and lost batch responses. Checked
+  both thumbnail modes, navigation with JavaScript disabled, and observer
+  cleanup after Admin fragment replacement.
+
+### User Impact
+
+#### For visitors
+
+- Gallery thumbnails followed the site's Responsive or Progressive setting
+  and supplied a usable image and alt text with JavaScript disabled.
+
+#### For administrators
+
+- Large rename selections could continue through candidate pages without
+  repeated catalogue planning. Expired or stale plans prompted a fresh
+  preview. When a response was lost, progress stopped at the last confirmed
+  batch and the renamer asked admins to verify the filenames before retrying.
+
 ## Version 1.5.0
 
 PHP Gallery 1.5.0 keeps public pages available during updates and improves

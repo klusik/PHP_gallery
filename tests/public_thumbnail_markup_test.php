@@ -321,6 +321,11 @@ namespace {
         $responsive,
         'responsive markup is not JavaScript-dependent',
     );
+    assert_public_thumbnail_markup_not_contains(
+        'data-responsive-thumbnail',
+        $responsive,
+        'responsive markup uses browser-native candidate selection',
+    );
     assert_public_thumbnail_markup_contains(
         'src="/thumb/photo-300.jpg"',
         $responsive,
@@ -361,6 +366,11 @@ namespace {
         'data-progressive-thumbnail',
         $progressive,
         'progressive markup exposes permanent browser activation marker',
+    );
+    assert_public_thumbnail_markup_not_contains(
+        'data-responsive-thumbnail',
+        $progressive,
+        'progressive markup uses its own activation marker',
     );
     assert_public_thumbnail_markup_contains(
         'data-progressive-active-width="300"',

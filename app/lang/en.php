@@ -33,6 +33,10 @@
  */
 
 return [
+    'admin.media_renamer.plan_unavailable' => 'The rename plan is unavailable or the gallery changed. Preview the rename plan again before applying.',
+    'admin.media_renamer.apply_uncertain' => 'The rename result could not be confirmed. Reopen the renamer and verify filenames before trying again.',
+    'admin.media_renamer.gallery_progress' => 'Preparing the rename plan for gallery {gallery} of {galleries}...',
+    'admin.media_renamer.gallery_apply_progress' => 'Gallery {gallery}/{galleries} · {processed}/{total} photos processed...',
     'admin.media_renamer.gallery_result_notice' => 'Renamed {renamed} file(s). Already matching the pattern ({matching}). Filename conflicts ({collisions}). Preserved {moved} thumbnails, removed {cleaned} stale derivative cache file(s), saw {missing} missing file(s), skipped {skipped} row(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).',
     'admin.media_renamer.result_notice' => 'Processed {galleries} gallery/galleries. Renamed {renamed} file(s). Already matching the pattern ({matching}). Filename conflicts ({collisions}). Preserved {moved} thumbnails, removed {cleaned} stale derivative cache file(s), skipped {skipped} row(s), saw {missing} missing file(s), updated {titles} derived title(s), and removed {archives} stale ZIP archive row(s).',
     'app_linking.consent.gallery_edit_scope' => 'WinApp can change gallery titles, descriptions, NSFW Guard and listing settings on this site.',
