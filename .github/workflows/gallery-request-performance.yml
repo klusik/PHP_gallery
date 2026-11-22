@@ -6,6 +6,7 @@
 # Responsibilities:
 #   - Preserve feature history and source leases without publishing refs/statuses.
 #   - Retain exact-source generated artifacts and disposable database evidence.
+#   - Optionally exercise the central Chromium suite on the modern PHP runner.
 # Author: Rudolf Klusal
 # License: MIT License (see LICENSE file in repository)
 name: Focused gallery request qualification
@@ -14,6 +15,11 @@ on:
     branches:
       - feature/performance-audit-local-prototypes
   workflow_dispatch:
+    inputs:
+      chromium:
+        description: Run the required Chromium fixture suite on the modern PHP runner.
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -108,6 +114,7 @@ jobs:
           printf '{"source_sha":"%s","source_tree":"%s","source_base":"%s","main_sha":"%s","run_id":"%s","attempt":"%s"}\n' "${GITHUB_SHA}" "$(git rev-parse HEAD^{tree})" "${source_base}" "${main_sha}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" > cache/gallery-request-preparation/source.json
           printf '%s\n' "${GITHUB_REF_NAME}" > cache/gallery-request-preparation/source-branch.txt
       - name: Prepare and read-only verify canonical metadata
+        id: prepare
         shell: bash
         run: |
           set -euo pipefail
@@ -122,6 +129,26 @@ jobs:
           sha256sum app/runtime/modules.php app/production-files.json app/core-manifest.json > cache/gallery-request-preparation/generated-sha256.txt
       - name: Central focused suite using the existing disposable principal and Fixture
         run: php scripts/gallery_workflow_ci.php --gallery-request
+      - name: Central Chromium fixture suite
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && inputs.chromium && matrix.label == 'mysql-8.4' }}
+        shell: bash
+        env:
+          PHP_GALLERY_BROWSER_REQUIRED: '1'
+        run: |
+          set -euo pipefail
+          browser_path=''
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if browser_path="$(command -v "$candidate")"; then
+              break
+            fi
+          done
+          if [[ -z "$browser_path" || ! -x "$browser_path" ]]; then
+            echo 'BLOCKED required Chromium executable was not found on the runner.' >&2
+            exit 1
+          fi
+          "$browser_path" --version
+          PHP_GALLERY_BROWSER="$browser_path" php scripts/audit.php --suite=browser-map \
+            --report=cache/test-audit/chromium.md --json=cache/test-audit/chromium.json
       - name: Recheck exact source lease after execution
         if: always()
         shell: bash

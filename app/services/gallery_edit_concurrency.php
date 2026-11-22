@@ -17,6 +17,7 @@ namespace Gallery\Services;
 
 use RuntimeException;
 use Throwable;
+use function Gallery\Models\gallery_edit_model_invalidate_catalogue_revision;
 use function Gallery\Models\gallery_edit_model_release;
 use function Gallery\Models\gallery_edit_model_lock;
 use function Gallery\Models\gallery_edit_model_reserve;
@@ -403,21 +404,32 @@ function gallery_edit_end(array $lease): void
 }
 
 /**
- * Exclude concurrent editor work before a specialized writer changes files or sidecars.
+ * Exclude concurrent editor work before a catalogue read or specialized write.
  *
  * This is the integration boundary for folder moves, ingestion, trash, asset
  * replacement and other writers with filesystem work preceding their SQL. It
  * is reentrant for use cases called inside the main editor's existing lease.
- * Model writers explicitly advance the revision in their own SQL.
+ * Potential catalogue writers invalidate active rename proposals before any
+ * change. Model writers still advance individual editor row revisions in SQL.
  *
+ * @param bool $readOnly Hold the same fence without invalidating proposals;
+ *     reserved for candidate planning/admission before any writer is entered.
  * @return string Private lock name; pair with gallery_edit_writer_end() in finally.
  * @throws GalleryEditConflict If another connection owns the operation.
  * @throws GalleryEditUnavailable When the lock cannot be verified.
  */
-function gallery_edit_writer_begin(): string
+function gallery_edit_writer_begin(bool $readOnly = false): string
 {
     try {
         $name = gallery_edit_model_lock();
+        if ($name !== null && !$readOnly) {
+            try {
+                gallery_edit_model_invalidate_catalogue_revision();
+            } catch (Throwable $exception) {
+                gallery_edit_model_release($name);
+                throw $exception;
+            }
+        }
     } catch (Throwable) {
         throw new GalleryEditUnavailable(t(
             'admin.gallery_editor.edit_schema_unknown',

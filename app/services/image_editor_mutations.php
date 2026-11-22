@@ -39,6 +39,8 @@ namespace Gallery\Services;
 use function Gallery\Core\now_sql;
 use function Gallery\Models\image_model_update_fields;
 
+require_once __DIR__ . '/gallery_edit_concurrency.php';
+
 /**
  * Persist semantic image editor fields and update the row timestamp.
  *
@@ -48,10 +50,20 @@ use function Gallery\Models\image_model_update_fields;
  *     thumbnail_min_size?:int|null,thumbnail_max_size?:int|null} $fields
  *     Semantic fields admitted by the existing image model.
  * @return void Persists the fields and refreshes this source's membership only.
+ * @throws GalleryEditConflict If another writer owns a name/order change.
  */
 function image_editor_update_fields(int $imageId, array $fields): void
 {
-    image_model_update_fields($imageId, $fields, now_sql());
+    // Inline edits also own two inputs to rename planning: title and order.
+    $writer = array_key_exists('title', $fields) || array_key_exists('sort_order', $fields)
+        ? gallery_edit_writer_begin() : null;
+    try {
+        image_model_update_fields($imageId, $fields, now_sql());
+    } finally {
+        if ($writer !== null) {
+            gallery_edit_writer_end($writer);
+        }
+    }
     $image = find_image($imageId, true);
     if (is_array($image)) {
         gallery_visit_content_update([(int) $image['gallery_id']]);

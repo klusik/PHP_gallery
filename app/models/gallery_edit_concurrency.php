@@ -25,6 +25,74 @@ use const Gallery\Core\GALLERY_EDIT_LOCK_WAIT_SECONDS;
 require_once dirname(__DIR__) . '/policy_constants.php';
 
 /**
+ * Name the singleton revision of application-owned gallery catalogue writes.
+ * Type: string. Units: app-settings key. Scope: one installation database.
+ * Consumers: gallery writer leases and Admin media-renamer confirmations.
+ * Rationale: the keyed row provides a constant-size revision read even for
+ * galleries with thousands of images.
+ */
+const GALLERY_EDIT_CATALOGUE_REVISION_KEY = 'gallery_writer_catalogue_revision';
+
+/**
+ * Size the opaque revision used to invalidate transient rename proposals.
+ * Type: int. Units: random bytes. Scope: one gallery writer generation.
+ * Consumers: catalogue revision initialization and invalidation.
+ * Rationale: 16 bytes prevent reuse across independently initialized databases
+ * or ordinary concurrent writer operations without relying on timestamp precision.
+ */
+const GALLERY_EDIT_CATALOGUE_REVISION_BYTES = 16;
+
+/**
+ * Read the current catalogue generation while holding the gallery writer lock.
+ *
+ * @param bool $initialize Create the marker on first confirmed analysis only.
+ * @return string|null Current opaque revision, or null if never initialized.
+ * @throws RuntimeException When the stored revision cannot be trusted.
+ */
+function gallery_edit_model_catalogue_revision(bool $initialize = false): ?string
+{
+    $pdo = db();
+    $stmt = $pdo->prepare('SELECT setting_value FROM app_settings WHERE setting_key = ?');
+    $stmt->execute([GALLERY_EDIT_CATALOGUE_REVISION_KEY]);
+    $value = $stmt->fetchColumn();
+    if ($value === false) {
+        if (!$initialize) {
+            return null;
+        }
+        $revision = bin2hex(random_bytes(GALLERY_EDIT_CATALOGUE_REVISION_BYTES));
+        $pdo->prepare(
+            'INSERT INTO app_settings (setting_key, setting_value, updated_at) '
+            . 'VALUES (?, ?, CURRENT_TIMESTAMP)',
+        )->execute([GALLERY_EDIT_CATALOGUE_REVISION_KEY, $revision]);
+        return $revision;
+    }
+    if (!is_string($value) || preg_match('/\A[a-f0-9]{32}\z/', $value) !== 1) {
+        throw new RuntimeException('Gallery catalogue revision is unavailable.');
+    }
+    return $value;
+}
+
+/**
+ * Invalidate existing catalogue proposals before entering a gallery writer.
+ *
+ * @param PDO|null $pdo Explicit owning connection in an editor transaction,
+ *     or null for the currently configured writer connection.
+ * @return void Advances an initialized marker on that connection; a missing row
+ *     means this installation has never allocated a confirmation plan.
+ */
+function gallery_edit_model_invalidate_catalogue_revision(?PDO $pdo = null): void
+{
+    $pdo ??= db();
+    $pdo->prepare(
+        'UPDATE app_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP '
+        . 'WHERE setting_key = ?',
+    )->execute([
+        bin2hex(random_bytes(GALLERY_EDIT_CATALOGUE_REVISION_BYTES)),
+        GALLERY_EDIT_CATALOGUE_REVISION_KEY,
+    ]);
+}
+
+/**
  * Acquire a connection-owned operation lock and durably reserve an exact submitted revision.
  *
  * The named lock serializes supported application writers. Only this short
@@ -80,6 +148,7 @@ function gallery_edit_model_reserve(
                 'Gallery edit revision reservation failed.',
             );
         }
+        gallery_edit_model_invalidate_catalogue_revision($pdo);
         $pdo->commit();
         return ['state' => 'acquired', 'lock' => $name, 'gallery' => $gallery];
     } catch (Throwable $exception) {

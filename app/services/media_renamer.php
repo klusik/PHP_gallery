@@ -40,12 +40,14 @@ namespace Gallery\Services;
 require_once __DIR__ . '/gallery_edit_concurrency.php';
 require_once __DIR__ . '/media_renamer/preview.php';
 require_once __DIR__ . '/media_renamer/reports.php';
+require_once __DIR__ . '/media_renamer/candidate_plan.php';
 
 use RuntimeException;
 use Throwable;
 use function Gallery\Core\normalize_relative_path;
 use function Gallery\Core\now_sql;
 use function Gallery\Core\path_inside;
+use function Gallery\Models\gallery_edit_model_catalogue_revision;
 use function Gallery\Models\media_renamer_model_all_gallery_ids;
 use function Gallery\Models\media_renamer_model_apply_updates;
 use function Gallery\Models\media_renamer_model_delete_download_archives;
@@ -54,6 +56,8 @@ use function Gallery\Models\media_renamer_model_existing_gallery_ids;
 use function Gallery\Models\media_renamer_model_gallery_rows;
 use function Gallery\Models\media_renamer_model_image_gallery_rows;
 use function Gallery\Models\media_renamer_model_indexed_paths;
+use function Gallery\Models\media_renamer_model_naming_scope;
+use const Gallery\Core\MEDIA_RENAMER_PHYSICAL_BATCH_SIZE;
 
 /**
  * Bound collision retries while allocating a same-directory staging path.
@@ -525,6 +529,8 @@ function media_renamer_plan_for_gallery(
  * @param string $pattern Pattern value.
  * @param array<int,int> $sequenceByImageId Frozen positive positions from apply preparation; empty retains classic complete-gallery numbering.
  * @return array{gallery:array{id:int|string,folder_path:string,title?:string,...},items:list<array{gallery_id:int,image_id:int,old_relative_path:string,new_relative_path:string,status:string,warnings:list<string>,can_rename:bool,...}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>,requested_sequences:array<int,int>} Fresh physical safety plan and its exact original position map.
+ * @throws RuntimeException When the gallery is unavailable or the frozen
+ *     selection no longer matches its direct indexed originals.
  */
 function media_renamer_plan_for_gallery_selection(
     int $galleryId,
@@ -564,7 +570,8 @@ function media_renamer_plan_for_gallery_selection(
             ),
         ));
 
-    if ($sequenceByImageId !== [] && (count($sequenceByImageId) !== count($requestedIds)
+    if ($sequenceByImageId !== [] && (count($selectedImages) !== count($requestedIds)
+        || count($sequenceByImageId) !== count($requestedIds)
         || count(array_unique($sequenceByImageId)) !== count($sequenceByImageId))) {
         throw new RuntimeException('Frozen rename positions must cover the exact selection.');
     }
@@ -1444,6 +1451,119 @@ function media_renamer_execute_gallery_owned(
         $galleryId,
         $pattern,
     ));
+}
+
+/**
+ * Bind the current catalogue generation to the gallery's own naming context.
+ *
+ * @param int $galleryId Exact physical gallery identity from the confirmation.
+ * @param bool $initialize Initialize the generation on the first plan only.
+ * @return string SHA-256 of the generation, title and folder path read under
+ *     the existing gallery writer lease using two indexed point lookups.
+ * @throws MediaRenamerCandidatePlanUnavailable If the gallery or marker is lost.
+ */
+function media_renamer_candidate_revision(int $galleryId, bool $initialize = false): string
+{
+    $scope = media_renamer_model_naming_scope($galleryId);
+    if ($scope === null) {
+        throw new MediaRenamerCandidatePlanUnavailable('Candidate gallery is unavailable.');
+    }
+    $revision = gallery_edit_model_catalogue_revision($initialize);
+    if ($revision === null) {
+        throw new MediaRenamerCandidatePlanUnavailable('Candidate revision is unavailable.');
+    }
+
+    return hash('sha256', serialize([$revision, $scope['title'], $scope['folder_path']]));
+}
+
+/**
+ * Freeze a catalogue snapshot at confirmation or read its next candidate page.
+ *
+ * @param string $owner Authenticated account/session hash.
+ * @param string $token Exact plan token, or empty to start at offset zero.
+ * @param int $galleryId Gallery selected for this confirmation.
+ * @param string $pattern Filename pattern submitted for this confirmation.
+ * @param int $offset Displacement among rename candidates, beginning at zero.
+ * @return array{plan_token:string,candidate_image_ids:list<int>,candidate_sequences:list<int>,next_offset:?int,applied_offset:int} One immutable candidate slice and its identity.
+ * @throws MediaRenamerCandidatePlanUnavailable If the scope, storage or page is stale.
+ */
+function media_renamer_confirmed_candidate_page(
+    string $owner, string $token, int $galleryId, string $pattern, int $offset,
+): array {
+    if ($token === '' && $offset !== 0) {
+        throw new MediaRenamerCandidatePlanUnavailable('Candidate plan is required.');
+    }
+    $pattern = media_renamer_normalize_pattern($pattern);
+    $writer = gallery_edit_writer_begin(true);
+    try {
+        $revision = media_renamer_candidate_revision($galleryId, $token === '');
+        if ($token === '') {
+            $token = media_renamer_candidate_plan_create($owner, $galleryId, $pattern, $revision);
+        }
+        return ['plan_token' => $token] + media_renamer_candidate_plan_page(
+            $owner, $token, $galleryId, $pattern, $revision, $offset,
+        );
+    } finally {
+        gallery_edit_writer_end($writer);
+    }
+}
+
+/**
+ * Execute exactly the next confirmed slice under the gallery writer lease.
+ *
+ * @param string $owner Authenticated account/session hash.
+ * @param string $token Exact confirmation plan identity.
+ * @param int $galleryId Gallery selected for this confirmation.
+ * @param string $pattern Filename pattern submitted for this confirmation.
+ * @param int $offset Expected cursor among confirmed candidates.
+ * @param list<int> $imageIds Exact candidate IDs the browser is acknowledging.
+ * @return array{gallery_id:int,renamed:int,already_matches:int,missing:int,skipped:int,collisions:int,derivatives_moved:int,derivatives_cleaned:int,derivative_failures:int,zip_archives_deleted:int,titles_updated:int,details:list<array{gallery_id:int,gallery:string,image_id:int,old:string,new:string,status:string,notes:list<string>}>,warnings:list<string>,failures:list<string>} Confirmed physical outcomes and any continuation warning.
+ * @throws MediaRenamerCandidatePlanUnavailable If the next authorized batch cannot be established.
+ * @throws RuntimeException If the physical outcome cannot be verified.
+ */
+function media_renamer_execute_candidate_batch(
+    string $owner, string $token, int $galleryId, string $pattern, int $offset, array $imageIds,
+): array {
+    $pattern = media_renamer_normalize_pattern($pattern);
+    $writer = gallery_edit_writer_begin(true);
+    try {
+        $revision = media_renamer_candidate_revision($galleryId);
+        $page = media_renamer_candidate_plan_page(
+            $owner, $token, $galleryId, $pattern, $revision, $offset,
+            MEDIA_RENAMER_PHYSICAL_BATCH_SIZE,
+        );
+        if ($imageIds === [] || $offset !== $page['applied_offset']
+            || $imageIds !== $page['candidate_image_ids']) {
+            throw new MediaRenamerCandidatePlanUnavailable('Candidate batch is stale.');
+        }
+
+        $positions = array_combine($imageIds, $page['candidate_sequences']);
+        // Enter the normal writer, which invalidates the previous revision
+        // before inspecting originals, derivative ownership or live targets.
+        $result = media_renamer_execute_gallery_image_batch(
+            $galleryId, $imageIds, $pattern, $positions,
+        );
+        $processed = $result['renamed'] + $result['already_matches']
+            + $result['missing'] + $result['skipped'] + $result['collisions'];
+        if ($processed !== count($imageIds)) {
+            throw new RuntimeException('Rename batch outcome could not be verified.');
+        }
+
+        try {
+            // Only these confirmed writes may carry the old sequence map into
+            // the current generation. An interrupted write leaves it stale.
+            media_renamer_candidate_plan_advance(
+                $owner, $token, $galleryId, $pattern, $revision,
+                media_renamer_candidate_revision($galleryId), $offset, $processed,
+            );
+        } catch (Throwable) {
+            $result['warnings'][] = t('admin.media_renamer.plan_unavailable',
+                'The rename plan is unavailable or the gallery changed. Preview the rename plan again before applying.');
+        }
+        return $result;
+    } finally {
+        gallery_edit_writer_end($writer);
+    }
 }
 
 /**

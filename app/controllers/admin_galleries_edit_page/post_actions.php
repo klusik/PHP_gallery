@@ -40,6 +40,7 @@ namespace Gallery\Controllers;
 use Throwable;
 use Gallery\Services\GalleryEditConflict;
 use Gallery\Services\GalleryEditUnavailable;
+use Gallery\Services\MediaRenamerCandidatePlanUnavailable;
 use function Gallery\Core\admin_mutation_descriptor;
 use function Gallery\Core\admin_mutation_error_envelope;
 use function Gallery\Core\admin_mutation_panel_metadata;
@@ -56,22 +57,11 @@ use function Gallery\Services\feature_capability_effective_enabled;
 use function Gallery\Services\find_gallery;
 use function Gallery\Services\gallery_lightbox_state_summary;
 use function Gallery\Services\media_renamer_execute_gallery;
-use function Gallery\Services\media_renamer_execute_gallery_image_batch;
 use function Gallery\Services\media_renamer_normalize_pattern;
-use const Gallery\Core\MEDIA_RENAMER_PHYSICAL_BATCH_SIZE;
 use function Gallery\Services\smart_gallery_assign_children_to_gallery;
 use function Gallery\Services\smart_gallery_validate_children_assignment;
 use function Gallery\Services\t;
 use function Gallery\Services\admin_log_event;
-
-/**
- * Bound each gallery rename request to the browser runner's admitted slice.
- * Type: int. Units: image IDs per request. Scope: gallery renamer POST.
- * Consumers: gallery apply_batch admission.
- * Rationale: 15 keeps filesystem work short enough for visible progress and
- * matches the existing site-wide browser batch size without unbounded input.
- */
-const MEDIA_RENAMER_GALLERY_BATCH_LIMIT = MEDIA_RENAMER_PHYSICAL_BATCH_SIZE;
 
 /**
  * Handle one gallery editor POST request.
@@ -680,26 +670,10 @@ function admin_edit_gallery_handle_media_rename(
         : '';
     try {
         if ($batchAction === 'apply_batch') {
-            $batchImageIds = admin_media_renamer_image_ids_from_post('batch_image_ids');
-            $batchSequences = admin_media_renamer_sequence_map_from_post($batchImageIds);
-            if ($batchImageIds === [] || count($batchImageIds) > MEDIA_RENAMER_GALLERY_BATCH_LIMIT
-                || $batchSequences === null) {
-                header('Content-Type: application/json');
-                http_response_code(400);
-                echo json_encode(admin_mutation_error_envelope(
-                    t('admin.media_renamer.progress_failed', 'Rename request failed.'),
-                    'media_rename_invalid_batch',
-                    null,
-                    ['redirect_url' => $renamerReturnUrl],
-                ));
-                return;
-            }
-            $renameResult = media_renamer_execute_gallery_image_batch(
-                (int) $gallery['id'],
-                $batchImageIds,
-                $renamerPattern,
-                $batchSequences,
+            $batch = admin_media_renamer_execute_posted_candidate_batch(
+                $renamerPattern, (int) $gallery['id'],
             );
+            $renameResult = $batch['result'];
             $batchRenamedIds = array_values(array_map(
                 static fn(array $detail): int => (int) $detail['image_id'],
                 array_filter(
@@ -727,12 +701,9 @@ function admin_edit_gallery_handle_media_rename(
                 ['redirect_url' => $renamerReturnUrl],
             );
             // Confirm handled rows, including matches omitted from report details.
-            $processed = $renameResult['renamed'] + $renameResult['already_matches']
-                + $renameResult['missing'] + $renameResult['skipped']
-                + $renameResult['collisions'];
             header('Content-Type: application/json');
             echo json_encode(array_merge($batchPayload, [
-                'processed' => $processed,
+                'processed' => $batch['processed'],
                 'result' => admin_media_renamer_attach_report($renameResult),
             ]));
             return;
@@ -822,6 +793,8 @@ function admin_edit_gallery_handle_media_rename(
                 ],
             );
         }
+    } catch (MediaRenamerCandidatePlanUnavailable) {
+        admin_media_renamer_unavailable_plan();
     } catch (Throwable $exception) {
         $notice = $exception->getMessage();
         if (function_exists(

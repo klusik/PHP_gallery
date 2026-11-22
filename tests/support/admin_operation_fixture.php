@@ -32,6 +32,8 @@ final class AdminOperationFixtureDatabase
      * @var array<string,array{connection:int,count:int}> Simulated advisory lock owners.
      */
     public array $locks = [];
+    /** Optional catalogue revision, seeded by the writer ownership regression. */
+    public ?string $galleryCatalogueRevision = null;
     /**
      * Selected fixture connection, independently switchable from actor identity.
      *
@@ -144,7 +146,7 @@ final class AdminOperationFixtureStatement
 
     /**
      * Execute a supported statement without connecting to any database.
-     * @param array<int,mixed> $parameters Prepared model parameters.
+     * @param list<int|string|float|bool|null> $parameters Prepared model parameters in binding order.
      * @return bool True on fixture execution; injected faults throw.
      */
     public function execute(array $parameters = []): bool
@@ -208,6 +210,22 @@ final class AdminOperationFixtureStatement
                 unset($database->locks[$name]);
             }
             $this->result = 1;
+        } elseif ($this->sql === 'UPDATE app_settings SET setting_value = ?, '
+            . 'updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?') {
+            $writer = hash('sha256', 'disposable_operation_fixture'
+                . GALLERY_EDIT_LOCK_SUFFIX);
+            if (!array_is_list($parameters) || count($parameters) !== 2
+                || !is_string($parameters[0])
+                || preg_match('/\A[a-f0-9]{32}\z/', $parameters[0]) !== 1
+                || $parameters[1] !== \Gallery\Models\GALLERY_EDIT_CATALOGUE_REVISION_KEY
+                || ($database->locks[$writer]['connection'] ?? null) !== $database->connection) {
+                throw new \RuntimeException('Catalogue revision update lost its writer or key binding.');
+            }
+            // The production UPDATE affects no rows before the first rename plan.
+            if ($database->galleryCatalogueRevision !== null) {
+                $database->galleryCatalogueRevision = $parameters[0];
+                $this->affected = 1;
+            }
         } elseif (str_starts_with(
             $this->sql,
             'INSERT INTO admin_operation_keys',

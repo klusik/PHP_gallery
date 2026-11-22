@@ -894,6 +894,24 @@ The same fixture creates a disk-only collision, persists the numbered result,
 and verifies that the preview, candidate page and availability scan are settled.
 It also checks a changed pattern and physical apply after the blocker is removed.
 
+The database preview child compares the repeated-page planner and the persisted
+candidate plan on identical 100-, 2,000-, 5,000- and 10,000-row SQLite fixtures.
+The hosted `media-renamer-measurement-*.json` artifact records SQL planning
+passes, returned rows and elapsed time. Initial overview and physical batches
+have independent observations. Continuations return the original IDs and positions without
+another full query. The child also verifies catalogue, pattern, gallery and
+session binding, replay refusal, two physical batches and a disk collision
+introduced after confirmation. The disposable HTTP fixture verifies a second
+Admin session cannot apply the first session's plan, and covers the classic
+form POST and an adjacent PDF. The existing focused gallery request workflow
+runs these PHP owners on both engine/runtime pairs and can also run the central
+Chromium suite. The renamer browser journey retains desktop and narrow frames
+and checks stale plans, lost physical responses and confirmed progress.
+The shared operation SQL fixture models catalogue revision updates under the
+gallery writer lease. Upload ownership, image decode and WebDAV body children
+reuse that fixture. The ownership child checks that candidate reads and denied
+writers preserve the revision while an admitted writer invalidates it.
+
 The MySQL gallery edit concurrency fixture also checks that an accepted title
 save renames its sanitized folder and descendant path while preserving original
 bytes; the existing stale-request refusal then protects the renamed tree.

@@ -4878,7 +4878,12 @@ Anpassung. Die Übernahme erfordert die Bestätigung des physischen Umbenennens
 über das Kontrollkästchen direkt bei der Vorschau.
 Diese einzige Bestätigung gilt für Galerie- und websiteweite Vorgänge und wird
 von Browser und Server geprüft; ein weiterer blockierender Dialog entfällt.
-Die Übernahme lädt nur Kandidaten-IDs und behält Stapel mit höchstens 15 Fotos.
+Nach der Bestätigung erstellt der Server einen Kandidatenplan je Galerie.
+Er speichert die IDs und die ursprünglichen Positionen für Stapel mit höchstens
+15~Fotos und verfällt nach 30~Minuten. Erstellen Sie bei Ablauf oder bei
+geänderten Galeriedaten eine neue Vorschau. Fehlt die Antwort zu einem
+Umbenennungsstapel, öffnen Sie den Umbenenner erneut und prüfen Sie vor einem
+weiteren Versuch die Dateinamen.
 Der fertige Bericht ersetzt die Vorschläge durch Galerie-Gesamtzahlen. Erst
 Aufklappen lädt geänderte Namen in Seiten mit 50 Einträgen. Berichte gehören
 zur aktuellen Administrator-Anmeldesitzung und verfallen nach 24 Stunden.

@@ -11,7 +11,7 @@
 import {setupAdminTabsInRoot} from '/public/assets/gallery-modules/admin-tabs.js?v=20261021-upload-media-v1';
 import {beginAdminPanelOpen, deactivateAdminPanel} from '/public/assets/gallery-modules/admin-panel-lifecycle.js?v=20260920-panel-lifecycle-v1';
 import {prepareAdminPanelDrafts} from '/public/assets/gallery-modules/admin-panel-drafts.js?v=20261012-pdf-files-v1';
-import {setupAdminMediaRenamer} from '/public/assets/gallery-modules/admin-media-renamer.js?v=20261116-stable-renamer-v2';
+import {setupAdminMediaRenamer} from '/public/assets/gallery-modules/admin-media-renamer.js?v=20261122-plan-once-v1';
 
 // Pace lifecycle condition checks without starving browser resource tasks.
 // Type: number; Units: milliseconds; Scope: one synthetic wait iteration;
@@ -204,17 +204,18 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
             // page's language; absent catalog values use its English fallback.
             renameWorkspace.dataset.adminI18nScope = '';
             renameWorkspace.dataset.adminI18nLanguage = 'en';
-            renameWorkspace.innerHTML = '<form method="post" action="/__fixture_rename" data-admin-media-renamer-form data-media-renamer-apply="gallery" data-media-renamer-target="#fixture-renamer">'
+            renameWorkspace.innerHTML = '<form method="post" action="/__fixture_rename" data-admin-media-renamer-form data-media-renamer-apply="gallery" data-media-renamer-lazy-candidates="1" data-media-renamer-target="#fixture-renamer">'
                 + '<input name="action" value="rename_files"><input name="gallery_ids[]" value="42">'
                 + '<input name="csrf_token" value="fixture">'
                 + '<input type="checkbox" name="confirm_media_rename"'
                 + ' value="1" required>'
-                + Array.from({length: 35}, (_, index) => '<input name="rename_candidate_image_ids[]" value="' + (index + 1) + '">').join('')
-                + '<button type="submit">Apply</button></form>';
+                + '<button type="submit" data-media-renamer-apply-button>Apply</button></form>';
             widget.parentElement.append(renameWorkspace);
             const renameForm = renameWorkspace.querySelector('form');
             const renameFetch = window.fetch;
             const renameGates = [];
+            const planToken = 'd'.repeat(32);
+            let renameOffset = 0;
             let refreshCount = 0;
             const beforeRenameRefresh = imageBatchRequestCount;
             window.fetch = async (input, options) => {
@@ -228,9 +229,24 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
                         mutation: {type: 'image.media_rename', entity: 'image', action: 'rename', entity_ids: [1]}, contexts: []}),
                     {headers: {'Content-Type': 'application/json'}});
                 }
+                if (options.body.get('renamer_action') === 'candidate_page') {
+                    check(options.body.get('confirm_media_rename') === '1'
+                        && options.body.get('detail_gallery_id') === '42'
+                        && options.body.get('detail_offset') === '0',
+                    'Candidate read preserves explicit confirmation, gallery and start offset.');
+                    const offset = Number(options.body.get('detail_offset'));
+                    const pageIds = Array.from({length:35},(_,index)=>index+1).slice(offset,offset+500);
+                    return new Response(JSON.stringify({ok:true,plan_token:planToken,gallery_id:42,
+                        candidate_ids:pageIds,candidate_sequences:pageIds.map(id=>id),next_offset:null}),
+                    {headers:{'Content-Type':'application/json'}});
+                }
                 const ids = options.body.getAll('batch_image_ids[]');
-                check(ids.length > 0 && ids.length <= 15 && options.body.getAll('rename_candidate_image_ids[]').length === 0,
+                check(ids.length > 0 && ids.length <= 15 && options.body.getAll('rename_candidate_image_ids[]').length === 0
+                    && options.body.get('plan_token') === planToken
+                    && options.body.get('detail_gallery_id') === '42'
+                    && Number(options.body.get('batch_offset')) === renameOffset,
                     'Physical rename submits only its bounded current selection.');
+                renameOffset += ids.length;
                 return new Promise(resolve => renameGates.push({ids, release: valid => resolve(new Response(
                     JSON.stringify({ok: true, processed: valid ? ids.length : 0, result: {renamed: ids.length, details: [], warnings: [], failures: []}}),
                     {headers: {'Content-Type': 'application/json'}},
@@ -258,8 +274,9 @@ export async function runImagesPreloadScenarios(check, nativeFetch) {
                 check(renameBar.value === 43, 'First confirmed 15/35 batch advances real progress.');
                 renameGates.shift().release(!mismatch);
                 if (mismatch) {
-                    await waitFor(() => !renameForm.querySelector('button').disabled);
-                    check(renameBar.value === 43 && refreshCount === 0 && renameForm.isConnected,
+                    await waitFor(() => renameWorkspace.textContent.includes('verify filenames'));
+                    check(renameBar.value === 43 && refreshCount === 0 && renameForm.isConnected
+                        && renameForm.querySelector('button').disabled,
                         'Incomplete server evidence stops later batches and never paints false completion.');
                 } else {
                     await waitFor(() => renameGates.length === 1);

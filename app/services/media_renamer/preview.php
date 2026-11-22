@@ -36,6 +36,13 @@ const MEDIA_RENAMER_DETAIL_PAGE_SIZE = 50;
 const MEDIA_RENAMER_CANDIDATE_PAGE_SIZE = 500;
 
 /**
+ * Bound candidate retention before planner output can grow without limit.
+ * Type: int. Units: candidate rows. Scope: one plan. Consumers: snapshot collector.
+ * Rationale: 20000 covers large galleries with no more than 40 chunk references.
+ */
+const MEDIA_RENAMER_CANDIDATE_PLAN_MAX_CANDIDATES = 20000;
+
+/**
  * Analyze one gallery using indexed facts and retain only the requested page.
  *
  * No path containment/stat/hash/derivative scan belongs here. The physical
@@ -47,14 +54,17 @@ const MEDIA_RENAMER_CANDIDATE_PAGE_SIZE = 500;
  * @param int $offset Exclusive-page displacement among visible proposals/candidates.
  * @param int $limit Maximum retained rows; zero requests only the summary.
  * @param bool $candidatesOnly Return executable IDs and original sequence positions for apply preparation.
- * @return array{gallery:array{id:int|string,title?:string,folder_path:string,...},items:list<array{gallery_id:int,image_id:int,old_relative_path:string,new_relative_path:string,status:string,warnings:list<string>,can_rename:bool}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>,preview_only:bool,candidate_image_ids:list<int>,candidate_sequences:list<int>,next_offset:?int} Summary and bounded requested data; initial analysis retains no file list.
- * @throws RuntimeException When the gallery is unavailable or paging is invalid.
+ * @param bool $collectCandidates Retain the complete bounded candidate snapshot
+ *     for confirmation. Requires candidate mode with no requested page slice.
+ * @return array{gallery:array{id:int|string,title?:string,folder_path:string,...},items:list<array{gallery_id:int,image_id:int,old_relative_path:string,new_relative_path:string,status:string,warnings:list<string>,can_rename:bool}>,summary:array{total:int,rename:int,already_matches:int,missing:int,collision:int,skipped:int,warnings:int},context_base:string,pattern:string,selected_image_ids:list<int>,preview_only:bool,candidate_image_ids:list<int>,candidate_sequences:list<int>,next_offset:?int} Summary, requested page or complete candidate snapshot.
+ * @throws RuntimeException When the gallery, requested page or snapshot size is invalid.
  */
 function media_renamer_database_preview(
     int $galleryId, string $pattern = '', int $offset = 0, int $limit = 0,
-    bool $candidatesOnly = false,
+    bool $candidatesOnly = false, bool $collectCandidates = false,
 ): array {
-    if ($offset < 0 || $limit < 0 || $limit > MEDIA_RENAMER_CANDIDATE_PAGE_SIZE) {
+    if ($offset < 0 || $limit < 0 || $limit > MEDIA_RENAMER_CANDIDATE_PAGE_SIZE
+        || ($collectCandidates && (!$candidatesOnly || $offset !== 0 || $limit !== 0))) {
         throw new RuntimeException('Invalid rename preview page.');
     }
     $gallery = find_gallery($galleryId, true);
@@ -109,11 +119,16 @@ function media_renamer_database_preview(
         $summary[$status]++;
         $summary['warnings'] += count($warnings);
         $canRename = $status === 'rename';
+        if ($collectCandidates && $canRename
+            && count($candidateIds) >= MEDIA_RENAMER_CANDIDATE_PLAN_MAX_CANDIDATES) {
+            throw new RuntimeException('Candidate plan capacity is exhausted.');
+        }
         if (($candidatesOnly && !$canRename)
             || (!$candidatesOnly && $status === 'already_matches' && $warnings === [])) {
             continue;
         }
-        if ($limit > 0 && $visible >= $offset && $visible < $offset + $limit) {
+        if ($collectCandidates || ($limit > 0 && $visible >= $offset
+            && $visible < $offset + $limit)) {
             if ($candidatesOnly) {
                 $candidateIds[] = (int) $image['id'];
                 $candidateSequences[] = $sequence;

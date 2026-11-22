@@ -114,6 +114,16 @@ namespace {
     $GLOBALS['operation_fixture_db'] =
         $database = new \Gallery\Core\AdminOperationFixtureDatabase();
     $GLOBALS['upload_writer_domain_calls'] = 0;
+    // Each revision byte is represented by two hexadecimal digits.
+    $revision = str_repeat('a', \Gallery\Models\GALLERY_EDIT_CATALOGUE_REVISION_BYTES * 2);
+    $database->galleryCatalogueRevision = $revision;
+    $reader = \Gallery\Services\gallery_edit_writer_begin(true);
+    try {
+        upload_writer_expect($database->galleryCatalogueRevision === $revision,
+            'A candidate read invalidated the current catalogue revision.');
+    } finally {
+        \Gallery\Services\gallery_edit_writer_end($reader);
+    }
     $cases = [
         'Gallery\\Services\\store_uploaded_gallery_images' => [99, []],
         'Gallery\\Services\\store_uploaded_gallery_cover' => [99, []],
@@ -124,7 +134,10 @@ namespace {
         ],
     ];
     foreach ($cases as $function => $arguments) {
+        $beforeWrite = $database->galleryCatalogueRevision;
         upload_writer_refused($function, $arguments);
+        upload_writer_expect($database->galleryCatalogueRevision !== $beforeWrite,
+            'An acquired upload writer did not invalidate the active candidate revision.');
         upload_writer_expect(
             $database->locks === [],
             'Failed upload leaked a writer lease.',
@@ -138,6 +151,7 @@ namespace {
                 'Nested upload released the caller-owned lease.',
             );
             $before = $GLOBALS['upload_writer_domain_calls'];
+            $beforeContention = $database->galleryCatalogueRevision;
             $database->connection = 2;
             $conflict = false;
             try {
@@ -148,8 +162,9 @@ namespace {
                 $database->connection = 1;
             }
             upload_writer_expect(
-                $conflict && $GLOBALS['upload_writer_domain_calls'] === $before,
-                'Competing writer reached upload domain/file work.',
+                $conflict && $GLOBALS['upload_writer_domain_calls'] === $before
+                    && $database->galleryCatalogueRevision === $beforeContention,
+                'Competing writer changed the catalogue revision or reached upload work.',
             );
         } finally {
             \Gallery\Services\gallery_edit_writer_end($outer);
