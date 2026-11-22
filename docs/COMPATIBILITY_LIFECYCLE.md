@@ -4446,6 +4446,18 @@ uses 6.1-terra. No new root menu item or storage migration is introduced.
   behavior. Keep semantic image markup, alt text, authorization, and no-JS
   behavior in both. No removal planned.
 
+#### Retired responsive sizing script
+
+The [#413 source audit](https://github.com/klusik/PHP_gallery/issues/413) found
+`data-responsive-thumbnail` only in JavaScript consumers. Supported installation
+customizations use Theme settings and CSS. Use of the marker in privately
+modified PHP templates is unknown. The script's imports, Admin fragment hooks
+and asset revision entry were removed together. Responsive
+selection uses the server-rendered `picture`, `srcset` and `sizes` attributes
+on initial navigation and after fragment replacement. The progressive renderer
+owns its observer lifecycle. Hosted candidate preparation refreshes updater and
+package inventory for the removed file.
+
 ### MEDIA-2 — JPEG compatibility derivatives alongside WebP
 
 - **Reason / protected scenario:** Legacy JPEG derivatives remain available

@@ -4576,6 +4576,11 @@ image untouched. No `fetch()`, Blob URL, byte-progress mechanism, page reload,
 or navigation is involved. Teardown aborts late DOM mutations and disconnects
 observers before reinitialization.
 
+When Admin replaces a public gallery fragment, the browser selects responsive
+candidates from the new HTML. The active progressive renderer's MutationObserver
+unregisters removed images, cancels their scheduled work and registers the new
+progressive images.
+
 The renderer setting currently applies only to selected-gallery photo cards.
 Subgallery covers, subgallery collage cells, home-page gallery cards,
 search/card contexts that reuse gallery covers, and Admin/maintenance thumbnails

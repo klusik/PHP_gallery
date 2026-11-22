@@ -170,7 +170,6 @@ public/assets/gallery-modules/lightbox.js
 public/assets/gallery-modules/picture-manager.js
 public/assets/gallery-modules/public-home-search.js
 public/assets/gallery-modules/public-photo-drop-actions.js
-public/assets/gallery-modules/responsive-thumbnails.js
 public/assets/gallery-modules/searchable-gallery-picker.js
 public/assets/gallery-modules/tag-suggestions.js
 public/assets/gallery-modules/theme-form.js

@@ -1242,8 +1242,6 @@ function view_render_footer(string $page = 'home', array $model = []): void
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/back-to-top.js',
             dirname(__DIR__, 2)
-                . '/public/assets/gallery-modules/responsive-thumbnails.js',
-            dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/progressive-thumbnail-renderer.js',
             dirname(__DIR__, 2)
                 . '/public/assets/gallery-modules/progressive-thumbnail-upgrade.js',
