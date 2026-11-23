@@ -1,5 +1,61 @@
 # Patch notes
 
+## Version 1.5.3
+
+Updated WinApp to 1.5.3 with fresh browser approval on retry. Added website
+connection diagnostics to the gallery's Admin log.
+
+### Highlights
+
+#### Website connection
+
+- Added **Connect again** while WinApp waits for browser approval or shows
+  an error. It closes the previous request and opens a fresh approval.
+- Kept the current upload destination, saved API key and pending photographs
+  available while the website connection is being set up.
+
+#### Admin diagnostics
+
+- Added website connection events under **Admin → Logs → Security**. The
+  events report phases, HTTP status and reasons such as a missing browser
+  session, rejected origin or unavailable claim.
+- Added short references that connect request, sign-in and consent events.
+  A separate reference pairs the prepared callback with any code exchange
+  received by the server.
+
+### Technical Details
+
+#### WinApp
+
+- Bound browser approval results to the current request so a delayed result
+  from an earlier attempt is discarded.
+- Allowed verified fresh approval for the same website, administrator and
+  scope to replace an unusable saved sign-in.
+
+#### Backend
+
+- Recorded request, browser, claim, consent and code exchange outcomes from
+  `app/controllers/app_linking.php` in the existing Admin log. Kept
+  credentials, browser state and raw request bodies out of diagnostic context.
+- Applied a separate rate limit to diagnostic logging.
+
+#### Tests
+
+- Added native regression cases for retry, cancellation and delayed browser
+  results. Ran `tests/app_linking_security_test.php` in the focused PHP request
+  suite to verify claim-origin refusal and log context.
+
+### User Impact
+
+#### For WinApp users
+
+- Let Watcher operators keep capturing while retrying website approval.
+
+#### For administrators
+
+- Made it possible to trace whether the browser reached consent, whether the
+  server prepared the callback and whether WinApp exchanged the code.
+
 ## Version 1.5.2
 
 Updated WinApp to 1.5.2. This patch restores Watcher startup with an existing
