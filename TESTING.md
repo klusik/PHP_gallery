@@ -1208,6 +1208,22 @@ host. It checks exact account selection, the existing upload guard, unlinking
 one parked session, and address-only history round trips and removal in an
 owned profile. Installed Windows dialog acceptance remains separate.
 
+The address prompt fixture restarts an in-flight, expired or unlaunched
+approval. It checks that the old listener closes, replacement waits for worker
+exit, and only the latest handoff can open the browser. A late old identity is
+discarded, Cancel prevents a queued restart and unrelated gallery work keeps
+its owner. The rolling-credential fixture checks replacement after verified
+fresh consent for the same issuer, Admin and scope, with another Admin as a
+negative case. These fixtures do not establish deployed browser acceptance.
+
+The focused `gallery-request` suite includes the isolated linking security
+fixture, which exercises a real claim-origin refusal.
+It checks the generic public response, the classified Admin log outcome,
+redacted references, unknown fields, diagnostic rate exhaustion and a failing
+log sink. The existing database and linking owners still cover proof and
+session boundaries. Delivery of the browser callback on an installed client
+is separate from a server log recording that the callback was prepared.
+
 `app_linking_gallery_create_owner_test.php` exercises the disposable linked
 owner's exclusive sidecar create, refusal of an existing file or final symlink,
 and filesystem identity recheck after a substituted directory. Receipt status
@@ -1765,7 +1781,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.5.2. Release verification uses the
+This guide applies to PHP Gallery Version 1.5.3. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

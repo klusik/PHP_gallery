@@ -263,7 +263,7 @@ function ensure_admin_log_status_schema(): bool
  * @param string $eventKey Stable owner-qualified event key.
  * @param string $message Human-readable safe event explanation.
  * @param array<string,mixed> $context Event-owned JSON fields, such as run_id:string, stage:string and removed:int; nested shapes remain the emitting owner's contract.
- * @param array{severity?:string,category?:string,subject_type?:string,subject_id?:int,request_id?:string,route_name?:string} $options Optional log presentation and correlation metadata.
+ * @param array{severity?:string,category?:string,subject_type?:string,subject_id?:int,request_id?:string,route_name?:string,actor_user_id?:?int} $options Presentation and correlation metadata. An explicit actor ID or null uses the caller's resolved identity without consulting the browser session.
  * @return void Attempts persistence without making a caller's operation depend on logging.
  */
 function admin_log_event(
@@ -282,7 +282,7 @@ function admin_log_event(
  * @param string $eventKey Stable owner-qualified event key.
  * @param string $message Safe human-readable event explanation.
  * @param array<string,mixed> $context Owner-defined JSON fields; cache events document run_id, stage, counters and failure enums at their emitting owner.
- * @param array{severity?:string,category?:string,subject_type?:string,subject_id?:int,request_id?:string,route_name?:string} $options Optional log presentation and correlation metadata.
+ * @param array{severity?:string,category?:string,subject_type?:string,subject_id?:int,request_id?:string,route_name?:string,actor_user_id?:?int} $options Presentation and correlation metadata. An explicit actor ID or null uses the caller's resolved identity without consulting the browser session.
  * @return array{ok:bool,failure_code?:string,exception_class?:string,sqlstate?:string,driver_code?:int,field?:string} Confirmed insertion or safe failure; field is an approved log-column identifier, never raw SQL/PDO text.
  */
 function admin_log_event_result(
@@ -311,7 +311,8 @@ function admin_log_event_result(
     $severity = in_array($severity, $severities, true) ? $severity : $level;
 
     try {
-        $user = current_user();
+        $resolvedActor = array_key_exists('actor_user_id', $options);
+        $user = $resolvedActor ? null : current_user();
         if (is_array($user) && !empty($user['support_access'])) {
             // Stored user_id is the grant owner, not the delegated actor.
             $context['support_actor'] = [
@@ -321,7 +322,9 @@ function admin_log_event_result(
             ];
         }
         $values = [
-            'user_id' => $user ? (int) $user['id'] : null,
+            'user_id' => $resolvedActor
+                ? $options['actor_user_id']
+                : ($user ? (int) $user['id'] : null),
             'level' => $level,
             'category' => $category,
             'severity' => $severity,

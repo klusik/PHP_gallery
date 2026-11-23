@@ -294,6 +294,24 @@ route were mistaken for the installation mount. The picker now labels the
 website address and leaves gallery choice until after consent. Explicit direct
 localhost HTTP and exact canonical issuer checks remain supported.
 
+**Connect again** replaces the pending WinApp website request. The linking
+manager cancels the earlier listener, drops events owned by that request and
+waits for its worker to exit before requesting fresh browser approval. The
+saved API key and original upload target remain available. Fresh approval may
+replace a saved rolling credential only after verifying the same issuer,
+Admin and scope. The installed 1.5.2 support report reached the callback
+deadline after initiating a browser request. The result inside that browser
+and installed retry acceptance remain unknown.
+
+When diagnostic admission and Admin log storage are available, website
+linking emits independently bounded Security events for the request,
+browser session, claim, consent and initial code exchange. The log includes
+the fixed reason and HTTP status. An attempt reference joins the browser
+phases, and an exchange reference relates the callback response to the token
+request. Refresh traffic uses its existing reporting. Diagnostics depend on
+the existing log and linking-rate storage. Their failure leaves the protocol
+response available.
+
 Unmigrated but verified API-key profiles remain valid for Watcher startup,
 ordinary restart and nonce-bound update continuation. The 1.5.1 startup report
 showed a fresh empty queue failing before its first scan, consistent with the

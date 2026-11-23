@@ -68,8 +68,8 @@
 
 % Ausgabenmetadaten stehen hier, damit eine Versionsaktualisierung nur eine
 % Versionsänderung benötigt.
-\newcommand{\version}{1.5.2}
-\newcommand{\manualdate}{22.~November~2026}
+\newcommand{\version}{1.5.3}
+\newcommand{\manualdate}{23.~November~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2194,9 +2194,11 @@ Beim Bestätigen ergänzt WinApp \texttt{https://} und zeigt die normalisierte
 Adresse vor der Prüfung der Galerie. Auf demselben
 Computer kann die Galerie eine HTTP-Adresse auf \texttt{localhost} verwenden.
 Entfernte Installationen verwenden geprüftes HTTPS.
-Der Dialog zeigt den Fortschritt bis zur Genehmigung.
-Öffnet sich der Browser nicht, wählen Sie \ui{Browser öffnen}. Melden Sie
-sich im Browser als Administrator an und klicken
+Der Dialog zeigt den Fortschritt bis zur Genehmigung. Wählen Sie
+\ui{Erneut verbinden}, um während der Wartezeit oder nach einem Fehler
+eine neue Anfrage zu starten. Genehmigen Sie die neueste Browserseite.
+Ein laufender Upload verwendet weiterhin seine ursprüngliche Verbindung.
+Melden Sie sich im Browser als Administrator an und klicken
 Sie auf \ui{Genehmigen}. Kehren Sie bei \ui{Approval received} zu WinApp
 zurück. WinApp zeigt die Adresse der verbundenen Website und lädt die erste
 Galerieseite automatisch. Mit \ui{Abbrechen} lehnen Sie die Anfrage ab.
@@ -2207,6 +2209,10 @@ Anfragephase, den HTTP-Status und den Antworttyp einschließlich erkannter
 Hosting-Prüfseiten. Er unterscheidet eine blockierte Anfrage von einer
 Galerie, die die Verbindung als nicht verfügbar meldet. Zugangsdaten und
 unverarbeitete Antwortinhalte werden nicht übernommen.
+Filtern Sie im Admin-Protokoll der Website nach der Kategorie Sicherheit.
+Die Vorgangsreferenz verbindet Anfrage, Anmeldung, Übernahme und Genehmigung.
+Die Austauschreferenz verbindet die vorbereitete Rückleitung mit der
+Tokenanfrage. Zu jedem erfassten Ergebnis stehen HTTP-Status und Grund.
 Verwenden Sie die öffentliche Website-URL mit ihrem öffentlichen Unterpfad,
 falls erforderlich. Interne Hosting-Verzeichnisse gehören nicht in die
 Verbindungsadresse. Bei internen Pfadumschreibungen prüft PHP Gallery~1.0.1

@@ -46,12 +46,15 @@ use function Gallery\Services\app_linking_gallery_page;
 use function Gallery\Services\app_linking_gallery_tree;
 use function Gallery\Services\app_linking_gallery_search_page;
 use function Gallery\Services\app_linking_issue_code;
+use function Gallery\Services\app_linking_log_attempt;
+use function Gallery\Services\app_linking_log_reference;
 use function Gallery\Services\app_link_push_claim_request;
 use function Gallery\Services\app_link_push_create;
 use function Gallery\Services\app_link_push_session_request;
 use function Gallery\Services\app_linking_issuer_valid;
 use function Gallery\Services\app_linking_list_owner;
 use function Gallery\Services\app_linking_pkce_s256_challenge_valid;
+use function Gallery\Services\app_linking_pkce_s256_from_verifier;
 use function Gallery\Services\app_linking_public_client;
 use function Gallery\Services\app_linking_scope_allowed;
 use function Gallery\Services\app_linking_scope_allows_admin_media;
@@ -580,17 +583,28 @@ function app_link_push_csrf_valid(string $token): bool
  * @param string $code Canonical uppercase Base32 claim code.
  * @param string $issuer Trusted exact installation issuer.
  * @param string $csrf Submitted current session CSRF token.
+ * @param string|null $failure Receives a fixed refusal reason or null on success.
  * @return bool True when the live Admin successfully claimed the request.
  */
-function app_link_push_claim(string $code, string $issuer, string $csrf): bool
+function app_link_push_claim(
+    string $code,
+    string $issuer,
+    string $csrf,
+    ?string &$failure = null,
+): bool
 {
     $userId = app_link_push_session_user();
-    if ($userId === null || !app_link_push_csrf_valid($csrf)) {
+    if ($userId === null) {
+        $failure = 'session_required';
+        return false;
+    }
+    if (!app_link_push_csrf_valid($csrf)) {
+        $failure = 'csrf_rejected';
         return false;
     }
     // A failed replacement cannot redisplay an earlier session request.
     unset($_SESSION['app_link_push_request']);
-    $id = app_link_push_claim_request($code, $issuer, $userId, session_id());
+    $id = app_link_push_claim_request($code, $issuer, $userId, session_id(), $failure);
     if ($id === null) {
         return false;
     }
@@ -676,16 +690,23 @@ function app_linking_theme_model(): array
  * Check that a browser POST originated from this configured authority.
  *
  * @param string $issuer Trusted exact gallery issuer including its mount.
+ * @param string|null $failure Receives a fixed header-policy reason or null on success.
  * @return bool True only for an exact Origin and compatible Fetch Metadata.
  */
-function app_linking_browser_origin_valid(string $issuer): bool
+function app_linking_browser_origin_valid(string $issuer, ?string &$failure = null): bool
 {
     $mount = (string) (parse_url($issuer, PHP_URL_PATH) ?? '');
     $origin = $mount === '' ? $issuer : substr($issuer, 0, -strlen($mount));
     $header = $_SERVER['HTTP_ORIGIN'] ?? null;
     $site = $_SERVER['HTTP_SEC_FETCH_SITE'] ?? null;
-    return is_string($header) && hash_equals($origin, $header)
-        && ($site === null || $site === 'same-origin');
+    $failure = match (true) {
+        !is_string($header) || $header === '' => 'origin_missing',
+        $header === 'null' => 'origin_null',
+        !hash_equals($origin, $header) => 'origin_mismatch',
+        $site !== null && $site !== 'same-origin' => 'fetch_site_mismatch',
+        default => null,
+    };
+    return $failure === null;
 }
 
 /**
@@ -717,19 +738,25 @@ function app_linking_owner_origin_valid(): bool
  */
 function cms_app_linking_push(): void
 {
+    $outcome = 'server_error';
+    $reference = null;
+    $scope = null;
     try {
         app_linking_security_headers();
         $issuer = app_linking_configured_issuer();
         if ($issuer === null || !app_linking_fixed_query('app_linking_push')) {
+            $outcome = $issuer === null ? 'issuer_unavailable' : 'route_rejected';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         if (request_method() !== 'POST') {
+            $outcome = 'method_rejected';
             header('Allow: POST');
             app_linking_json_error(405, 'invalid_request');
             return;
         }
         if (!app_linking_admit_public('app_link_start_ip', 'app_link_start_global')) {
+            $outcome = 'rate_limited';
             app_linking_json_error(429, 'temporarily_unavailable');
             return;
         }
@@ -739,14 +766,16 @@ function cms_app_linking_push(): void
         ]);
         if ($form === null || $form['response_type'] !== 'code'
             || $form['code_challenge_method'] !== 'S256') {
+            $outcome = 'form_rejected';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         $result = app_link_push_create(
             $form['client_id'], $issuer, $form['scope'], $form['redirect_uri'],
-            $form['code_challenge'], $form['state'],
+            $form['code_challenge'], $form['state'], $failure,
         );
         if ($result === null) {
+            $outcome = $failure ?? 'server_error';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
@@ -760,8 +789,16 @@ function cms_app_linking_push(): void
                 . $result['claim_code'],
             'expires_in' => $result['expires_in'],
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        $reference = app_linking_log_reference('request', $result['claim_code']);
+        $scope = $form['scope'];
+        $outcome = 'created';
     } catch (Throwable) {
         app_linking_json_error(503, 'temporarily_unavailable');
+    } finally {
+        app_linking_log_attempt(
+            'request', $outcome, http_response_code() ?: 200, $reference,
+            details: ['scope' => $scope],
+        );
     }
 }
 
@@ -772,6 +809,11 @@ function cms_app_linking_push(): void
  */
 function cms_app_linking_start(): void
 {
+    $stage = 'browser';
+    $outcome = 'server_error';
+    $reference = null;
+    $adminId = null;
+    $scope = null;
     try {
         app_linking_security_headers();
         $issuer = app_linking_configured_issuer();
@@ -779,11 +821,14 @@ function cms_app_linking_start(): void
             (string) ($_SERVER['QUERY_STRING'] ?? ''),
         );
         if ($issuer === null || $handle === null) {
+            $outcome = $issuer === null ? 'issuer_unavailable' : 'route_rejected';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         $method = request_method();
+        $stage = $method === 'POST' ? 'claim' : 'browser';
         if ($method !== 'GET' && $method !== 'POST') {
+            $outcome = 'method_rejected';
             header('Allow: GET, POST');
             app_linking_json_error(405, 'invalid_request');
             return;
@@ -794,23 +839,33 @@ function cms_app_linking_start(): void
             // or PKCE material in the browser URL, and claim only after login
             // using the current session's CSRF-protected POST.
             $_SESSION['app_link_browser_handle'] = $handle;
+            $reference = app_linking_log_reference('request', $handle);
             header('Location: ' . app_linking_public_route_path(
                 'app_linking_start', $issuer,
             ), true, 303);
+            $outcome = session_status() === PHP_SESSION_ACTIVE
+                ? 'handle_received' : 'session_required';
             return;
         }
         if ($method === 'POST' && $handle !== '') {
+            $outcome = 'route_rejected';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         $existingUser = current_user();
         $admin = app_linking_ordinary_admin();
+        $savedHandle = $_SESSION['app_link_browser_handle'] ?? null;
+        if (is_string($savedHandle)) {
+            $reference = app_linking_log_reference('request', $savedHandle);
+        }
         if ($admin === null) {
             if (is_array($existingUser)) {
+                $outcome = 'admin_required';
                 app_linking_json_error(403, 'access_denied');
                 return;
             }
             if ($method !== 'GET') {
+                $outcome = 'session_required';
                 app_linking_json_error(401, 'access_denied');
                 return;
             }
@@ -819,10 +874,12 @@ function cms_app_linking_start(): void
                 . http_build_query(['return' => $return], '', '&', PHP_QUERY_RFC3986);
             app_linking_security_headers();
             header('Location: ' . $login, true, 303);
+            $outcome = 'login_required';
             return;
         }
+        $adminId = $admin['id'];
         if ($method === 'GET') {
-            $savedHandle = $_SESSION['app_link_browser_handle'] ?? '';
+            $savedHandle ??= '';
             $pending = app_link_push_pending($issuer);
             $attempt = $_SESSION['app_link_ui_attempt'] ?? null;
             $pendingConsent = $savedHandle === '' && $pending !== null
@@ -843,32 +900,49 @@ function cms_app_linking_start(): void
                     'access_lifetime' => APP_LINKING_ACCESS_TTL_SECONDS,
                 ],
             );
+            if ($pendingConsent !== null) {
+                $storedReference = $_SESSION['app_link_ui_reference'] ?? null;
+                $reference = is_string($storedReference) ? $storedReference : null;
+                $scope = $pendingConsent['scope'];
+                $outcome = 'consent_page_restored';
+            } else {
+                $outcome = $reference === null
+                    ? 'browser_request_missing' : 'claim_page_rendered';
+            }
             return;
         }
-        if (!app_linking_browser_origin_valid($issuer)) {
+        if (!app_linking_browser_origin_valid($issuer, $failure)) {
+            $outcome = $failure ?? 'server_error';
             app_linking_json_error(403, 'access_denied');
             return;
         }
         $form = app_linking_form_fields(['csrf_token', 'request_handle']);
-        $savedHandle = $_SESSION['app_link_browser_handle'] ?? null;
         if ($form === null || !is_string($savedHandle)
             || !hash_equals($savedHandle, $form['request_handle'])) {
+            $outcome = $form === null ? 'form_rejected'
+                : ($reference === null ? 'browser_request_missing' : 'browser_request_changed');
             app_linking_json_error(400, 'invalid_request');
             return;
+        }
+        if (!app_link_push_csrf_valid($form['csrf_token'])) {
+            // verify_csrf() exits on a rejection, before the finally block.
+            app_linking_log_attempt('claim', 'csrf_rejected', 400, $reference, $adminId);
         }
         verify_csrf();
         if (!app_linking_admit_public('app_link_claim_ip', 'app_link_claim_global')
             || !app_linking_rate_limit_consume(
                 'app_link_claim_account', (string) $admin['id'],
             )['allowed']) {
+            $outcome = 'rate_limited';
             app_linking_json_error(429, 'temporarily_unavailable');
             return;
         }
         // Invalidate earlier tabs before the service can replace the session claim.
-        unset($_SESSION['app_link_ui_attempt']);
+        unset($_SESSION['app_link_ui_attempt'], $_SESSION['app_link_ui_reference']);
         if (!app_link_push_claim(
-            $form['request_handle'], $issuer, $form['csrf_token'],
+            $form['request_handle'], $issuer, $form['csrf_token'], $failure,
         )) {
+            $outcome = $failure ?? 'claim_unavailable';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
@@ -876,12 +950,14 @@ function cms_app_linking_start(): void
         $pending = app_link_push_pending($issuer);
         if ($pending === null
             || !app_linking_scope_allowed($pending['client_id'], $pending['scope'])) {
+            $outcome = $pending === null ? 'claim_unavailable' : 'scope_unavailable';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         // A second tab replacing the session claim invalidates the first tab's UI.
         $attempt = app_linking_security_nonce();
         $_SESSION['app_link_ui_attempt'] = $attempt;
+        $_SESSION['app_link_ui_reference'] = $reference;
         app_linking_security_headers();
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -889,8 +965,15 @@ function cms_app_linking_start(): void
             'attempt' => $attempt,
             'scope' => $pending['scope'],
         ], JSON_THROW_ON_ERROR);
+        $outcome = 'claim_accepted';
+        $scope = $pending['scope'];
     } catch (Throwable) {
         app_linking_json_error(503, 'temporarily_unavailable');
+    } finally {
+        app_linking_log_attempt(
+            $stage, $outcome, http_response_code() ?: 200, $reference, $adminId,
+            ['scope' => $scope],
+        );
     }
 }
 
@@ -901,30 +984,54 @@ function cms_app_linking_start(): void
  */
 function cms_app_linking_consent(): void
 {
+    $outcome = 'server_error';
+    $storedReference = $_SESSION['app_link_ui_reference'] ?? null;
+    $reference = is_string($storedReference) ? $storedReference : null;
+    $adminId = null;
+    $details = [];
     try {
         app_linking_security_headers();
         $issuer = app_linking_configured_issuer();
         if ($issuer === null || !app_linking_fixed_query('app_linking_consent')) {
+            $outcome = $issuer === null ? 'issuer_unavailable' : 'route_rejected';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         if (request_method() !== 'POST') {
+            $outcome = 'method_rejected';
             header('Allow: POST');
             app_linking_json_error(405, 'invalid_request');
             return;
         }
         $admin = app_linking_ordinary_admin();
-        if ($admin === null || !app_linking_browser_origin_valid($issuer)) {
+        if ($admin === null) {
+            $outcome = 'admin_required';
+            app_linking_json_error(403, 'access_denied');
+            return;
+        }
+        $adminId = $admin['id'];
+        if (!app_linking_browser_origin_valid($issuer, $failure)) {
+            $outcome = $failure ?? 'server_error';
             app_linking_json_error(403, 'access_denied');
             return;
         }
         $form = app_linking_form_fields(['csrf_token', 'attempt', 'decision']);
         $attempt = $_SESSION['app_link_ui_attempt'] ?? null;
-        if ($form === null || !is_string($attempt) || $attempt === ''
-            || !hash_equals($attempt, $form['attempt'])
-            || !in_array($form['decision'], ['approve', 'deny'], true)) {
+        $validationFailure = match (true) {
+            $form === null => 'form_rejected',
+            !is_string($attempt) || $attempt === ''
+                || !hash_equals($attempt, $form['attempt']) => 'attempt_changed',
+            !in_array($form['decision'], ['approve', 'deny'], true) => 'decision_rejected',
+            default => null,
+        };
+        if ($validationFailure !== null) {
+            $outcome = $validationFailure;
             app_linking_json_error(400, 'invalid_request');
             return;
+        }
+        if (!app_link_push_csrf_valid($form['csrf_token'])) {
+            // Keep the existing CSRF response and record its exit separately.
+            app_linking_log_attempt('consent', 'csrf_rejected', 400, $reference, $adminId);
         }
         verify_csrf();
         $pending = app_link_push_pending($issuer);
@@ -933,6 +1040,7 @@ function cms_app_linking_consent(): void
             || app_linking_public_client($pending['client_id']) === null
             || !app_linking_redirect_uri_valid($pending['client_id'], $pending['redirect_uri'])
             || !app_linking_pkce_s256_challenge_valid($pending['pkce_s256'])) {
+            $outcome = $pending === null ? 'claim_unavailable' : 'scope_unavailable';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
@@ -941,11 +1049,12 @@ function cms_app_linking_consent(): void
                 'app_link_approve_account', (string) $admin['id'],
             );
             if (!$admission['allowed']) {
+                $outcome = 'rate_limited';
                 app_linking_json_error(429, 'temporarily_unavailable');
                 return;
             }
         }
-        unset($_SESSION['app_link_ui_attempt']);
+        unset($_SESSION['app_link_ui_attempt'], $_SESSION['app_link_ui_reference']);
         $consumed = app_link_push_consume($issuer, $form['csrf_token']);
         if ($consumed === null || $consumed['issuer'] !== $issuer
             || $consumed['client_id'] !== $pending['client_id']
@@ -953,11 +1062,17 @@ function cms_app_linking_consent(): void
             || $consumed['redirect_uri'] !== $pending['redirect_uri']
             || $consumed['pkce_s256'] !== $pending['pkce_s256']
             || !app_linking_canonical_256bit_value_valid($consumed['state'])) {
+            $outcome = 'claim_consumption_rejected';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         app_linking_security_headers();
         header('Content-Type: application/json; charset=utf-8');
+        $details = [
+            'scope' => $consumed['scope'],
+            'callback_family' => str_starts_with($consumed['redirect_uri'], 'http://[::1]:')
+                ? 'ipv6' : 'ipv4',
+        ];
         if ($form['decision'] === 'deny') {
             $callbackResult = ['error' => 'access_denied'];
         } else {
@@ -966,18 +1081,26 @@ function cms_app_linking_consent(): void
                 $consumed['redirect_uri'], $consumed['pkce_s256'], 'S256', true,
             );
             if ($result === null) {
+                $outcome = 'code_issue_rejected';
                 app_linking_json_error(400, 'invalid_request');
                 return;
             }
             $callbackResult = ['code' => $result['code']];
+            $details['exchange_ref'] = app_linking_log_reference('exchange', $consumed['pkce_s256']);
         }
         $callback = $consumed['redirect_uri'] . '?' . http_build_query(
             $callbackResult + ['state' => $consumed['state'], 'iss' => $issuer],
             '', '&', PHP_QUERY_RFC3986,
         );
         echo json_encode(['ok' => true, 'callback' => $callback], JSON_THROW_ON_ERROR);
+        $outcome = $form['decision'] === 'deny' ? 'declined' : 'callback_prepared';
     } catch (Throwable) {
         app_linking_json_error(503, 'temporarily_unavailable');
+    } finally {
+        app_linking_log_attempt(
+            'consent', $outcome, http_response_code() ?: 200, $reference,
+            $adminId, $details,
+        );
     }
 }
 
@@ -1095,18 +1218,25 @@ function cms_app_linking_galleries(): void
  */
 function cms_app_linking_token(): void
 {
+    $logExchange = ($_POST['grant_type'] ?? null) === 'authorization_code';
+    $outcome = 'server_error';
+    $exchangeReference = null;
+    $scope = null;
     try {
         $issuer = app_linking_configured_issuer();
         if ($issuer === null || !app_linking_fixed_query('app_linking_token')) {
+            $outcome = $issuer === null ? 'issuer_unavailable' : 'route_rejected';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         if (request_method() !== 'POST') {
+            $outcome = 'method_rejected';
             header('Allow: POST');
             app_linking_json_error(405, 'invalid_request');
             return;
         }
         if (!app_linking_admit_public('app_link_exchange_ip', 'app_link_exchange_global')) {
+            $outcome = 'rate_limited';
             app_linking_json_error(429, 'temporarily_unavailable');
             return;
         }
@@ -1115,12 +1245,19 @@ function cms_app_linking_token(): void
             ? ['grant_type', 'refresh_token', 'client_id']
             : ['grant_type', 'code', 'client_id', 'redirect_uri', 'code_verifier']);
         if ($form === null) {
+            $outcome = 'form_rejected';
             app_linking_json_error(400, 'invalid_request');
             return;
         }
         if (!in_array($form['grant_type'], ['authorization_code', 'refresh_token'], true)) {
             app_linking_json_error(400, 'unsupported_grant_type');
             return;
+        }
+        if ($logExchange) {
+            $proof = app_linking_pkce_s256_from_verifier($form['code_verifier']);
+            if ($proof !== null) {
+                $exchangeReference = app_linking_log_reference('exchange', $proof);
+            }
         }
         $result = $form['grant_type'] === 'refresh_token'
             ? app_link_refresh_rotate(
@@ -1131,6 +1268,8 @@ function cms_app_linking_token(): void
                 $form['code_verifier'],
             );
         if ($result === null) {
+            $outcome = $exchangeReference === null
+                ? 'exchange_proof_invalid' : 'code_exchange_rejected';
             app_linking_json_error(400, 'invalid_grant');
             return;
         }
@@ -1147,8 +1286,17 @@ function cms_app_linking_token(): void
             $response['refresh_expires_in'] = $result['refresh_expires_in'];
         }
         echo json_encode($response, JSON_THROW_ON_ERROR);
+        $outcome = 'code_exchanged';
+        $scope = $result['scope'];
     } catch (Throwable) {
         app_linking_json_error(503, 'temporarily_unavailable');
+    } finally {
+        if ($logExchange) {
+            app_linking_log_attempt(
+                'exchange', $outcome, http_response_code() ?: 200,
+                details: ['exchange_ref' => $exchangeReference, 'scope' => $scope],
+            );
+        }
     }
 }
 

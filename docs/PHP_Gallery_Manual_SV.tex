@@ -66,8 +66,8 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.5.2}
-\newcommand{\manualdate}{22~november~2026}
+\newcommand{\version}{1.5.3}
+\newcommand{\manualdate}{23~november~2026}
 
 \hypersetup{
   colorlinks=true,
@@ -2032,8 +2032,10 @@ Vid bekräftelse lägger WinApp till \texttt{https://} och visar den
 normaliserade adressen innan galleriet kontrolleras. På samma dator kan
 galleriet använda en HTTP-adress på \texttt{localhost}. Fjärrinstallationer
 använder verifierad HTTPS.
-Dialogrutan visar förloppet i väntan på godkännande. Om webbläsaren inte
-öppnas, välj \ui{Öppna webbläsaren}.
+Dialogrutan visar förloppet i väntan på godkännande. Välj \ui{Anslut igen}
+för att starta en ny begäran under väntetiden eller efter ett fel. Godkänn
+den senaste sidan i webbläsaren. En pågående uppladdning behåller sin
+ursprungliga anslutning.
 Logga in som administratör i webbläsaren och klicka på \ui{Godkänn}.
 Återvänd till WinApp när webbläsaren visar \ui{Approval received}. Appen
 visar den länkade webbplatsens adress och läser in den första gallerisidan
@@ -2045,6 +2047,10 @@ webbläsarlänkningen behåller det senaste felet, begärans fas, HTTP-status
 och svarstyp, inklusive identifierade verifieringssidor från webbhotellet.
 Den skiljer en blockerad begäran från ett galleri som anger att länkningen
 inte är tillgänglig. Inloggningsuppgifter och råa svarsinnehåll tas inte med.
+Filtrera webbplatsens administratörslogg på kategorin säkerhet.
+Försöksreferensen kopplar samman begäran, inloggning och godkännande.
+Utbytesreferensen kopplar den förberedda återgången till tokenbegäran.
+Loggen visar HTTP-status och orsak för varje registrerat resultat.
 Använd webbplatsens publika URL med dess publika underkatalog när det behövs.
 Interna hostingkataloger hör inte till länkadressen. Servrar med intern
 sökvägsomskrivning behöver PHP Gallery~1.0.1 för att verifiera den publika sökvägen.

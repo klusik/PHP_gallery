@@ -52,6 +52,9 @@ const APP_LINKING_RATE_STALE_SECONDS = 86400;
  * Rationale: Five-minute windows cap public request volume, with tighter
  *     per-IP and per-Admin limits than the shared global circuit breakers.
  *     Identity reads permit a higher count because they are non-mutating.
+ *     Browser diagnostics retain up to 300 entries per five minutes across
+ *     stages. Their independent limit bounds Admin log growth without
+ *     consuming admission for linking itself.
  *     Photo bytes have a separate 600 per IP and 3600 global allowance for
  *     five-minute bursts so thumbnails do not lock gallery navigation. The
  *     batch also charges 600 per authenticated account in the same window
@@ -94,6 +97,10 @@ const APP_LINKING_RATE_POLICIES = [
         'window_seconds' => 300, 'lock_seconds' => 300,
     ],
     'app_link_exchange_global' => [
+        'kind' => 'global', 'max_attempts' => 300,
+        'window_seconds' => 300, 'lock_seconds' => 300,
+    ],
+    'app_link_diagnostic_global' => [
         'kind' => 'global', 'max_attempts' => 300,
         'window_seconds' => 300, 'lock_seconds' => 300,
     ],

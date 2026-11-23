@@ -1,5 +1,23 @@
 # PHP Gallery Uploader Patch Notes
 
+## Version 1.5.3
+
+Restart a stalled website connection directly from the WinApp dialog.
+
+### Highlights
+
+- Use **Connect again** while waiting for browser approval or after an error.
+  WinApp closes the old request and opens a fresh approval in the browser.
+- The Watcher can continue using its saved upload API key and existing queue
+  while the website connection is being set up.
+
+### Technical Details
+
+- Associate responses with the current approval attempt. A response from an
+  earlier attempt cannot attach a session to the new request.
+- After verified fresh approval, replace a stalled saved sign-in for the
+  matching website, administrator and permission scope.
+
 ## Version 1.5.2
 
 Restored Watcher startup for older API-key profiles and clarified website

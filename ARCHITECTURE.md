@@ -217,6 +217,16 @@ loopback exchange. Duplicate, mismatched, expired and replayed handles fail.
 The handle alone grants neither authorization nor credentials. The original
 gallery-scoped `pgu_` workflow remains independent.
 
+Browser linking records request, browser, claim, consent and initial exchange
+outcomes through the existing Security category in Admin Logs. An independent
+diagnostic budget bounds log growth and never admits or refuses linking.
+Controllers classify the response and provide the resolved Admin ID when
+available. The linking service filters fixed reasons, registered scopes and
+loopback IP families before using the existing log service. Short references
+correlate the handle through consent and the PKCE proof through initial
+exchange. The server can report that it prepared the callback URL. Receipt
+of that callback happens in WinApp.
+
 The experimental native-linking owner also accepts the explicitly consented
 `link:identity galleries:list` bundle. The bounded gallery endpoint returns
 only server-owned ID, parent ID and title; it includes private and unpublished
@@ -869,7 +879,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.5.2';
+const CMS_VERSION = '1.5.3';
 ```
 
 Update-related code uses:

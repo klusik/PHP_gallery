@@ -6361,6 +6361,7 @@ def _manager_without_widgets() -> 'LinkingManager':
             state used by its exercised operation.
     """
     manager = object.__new__(LinkingManager)
+    manager._events = queue.Queue()
     manager._reconnect_issuers = set()
     manager._keepalive_worker = None
     manager._keepalive_next = 0.0
@@ -7527,80 +7528,189 @@ class LinkingDeliveryTests(unittest.TestCase):
                     manager._gallery_choice.set_rows.assert_called_with(('Gallery (#7)',))
                 session.close()
 
-    def test_saved_api_address_and_failed_browser_launch_in_address_prompt(self) -> None:
-        """Open approval for the saved installation and retry its browser launch.
+    def test_address_prompt_restarts_the_original_website_request(self) -> None:
+        """Replace a stalled or failed approval through the real address prompt.
 
         Returns:
-            None: The real prompt submits its canonical address and keeps the
-                same handoff and listener after the first launch fails.
+            None: A new listener starts after the old worker exits. Late old
+                browser and identity results cannot replace the new attempt,
+                and cancelling a queued restart prevents another browser launch.
+        """
+        issuer = 'https://gallery.example/Galerie'
+        start_url = issuer + '/index.php?page=app_linking_start&request_handle='
+        other_handle = base64.b32encode(
+            b'q' * linking.REQUEST_HANDLE_RANDOM_BYTES,
+        ).rstrip(b'=').decode('ascii')
+        for outcome in ('waiting', 'launch_failed', 'expired', 'cancel_restart'):
+            with self.subTest(outcome=outcome):
+                manager = _manager_without_widgets()
+                manager._root = mock.Mock()
+                manager._window = None
+                manager._worker = None
+                manager._session_issuer = ''
+                manager._current_issuer = 'https://unavailable.example/Galerie'
+                manager._offline_binding = manager._offline_store = None
+                manager._upload_workspace_ready = None
+                manager._saved_api_address = lambda: (
+                    'https://gallery.example/Galerie/index.php?page=upload_automation_upload'
+                )
+                manager.linked_upload_mode_selected = mock.Mock(return_value=False)
+                manager.resume_saved_link = mock.Mock(return_value=False)
+                manager._status = mock.Mock()
+                manager._refresh = mock.Mock()
+                manager._schedule_poll = mock.Mock()
+                old, new = mock.Mock(), mock.Mock()
+                old_worker, new_worker = mock.Mock(), mock.Mock()
+                old_worker.is_alive.return_value = True
+                new_worker.is_alive.return_value = True
+                deadline = time.monotonic() + linking.HANDOFF_MAX_LIFETIME_SECONDS
+                original = linking.PushedAuthorization(
+                    TEST_REQUEST_HANDLE, start_url + TEST_REQUEST_HANDLE, deadline,
+                )
+                replacement = linking.PushedAuthorization(
+                    other_handle, start_url + other_handle, deadline,
+                )
+                with (
+                    mock.patch('uploader.app_linking_ui.tk') as tk,
+                    mock.patch('uploader.app_linking_ui.EmbeddedWindow') as window,
+                    mock.patch('uploader.app_linking_ui.ttk'),
+                    mock.patch('uploader.app_linking_ui.GlassCard'),
+                    mock.patch('uploader.app_linking_ui._LinkAddressChoices'),
+                    mock.patch('uploader.app_linking_ui.icon_button'),
+                    mock.patch('uploader.app_linking_ui.place_dialog'),
+                    mock.patch('uploader.app_linking_ui.Button') as make_button,
+                    mock.patch('uploader.app_linking_ui.LinkingAttempt',
+                               side_effect=[old, new]) as attempts,
+                    mock.patch('uploader.app_linking_ui.threading.Thread',
+                               side_effect=[old_worker, new_worker]),
+                    mock.patch('uploader.app_linking_ui.webbrowser.open',
+                               side_effect=[outcome != 'launch_failed', True]) as browser,
+                ):
+                    confirm = mock.Mock()
+                    confirm.instate.return_value = False
+                    make_button.side_effect = [confirm, mock.Mock()]
+                    tk.StringVar.return_value.get.return_value = issuer
+                    manager.open_address_dialog()
+                    tk.StringVar.assert_called_once_with(window.return_value, value=issuer)
+                    submit, cancel = (call.kwargs['command'] for call in make_button.call_args_list)
+                    submit()
+                    old_owner, old_cancel = manager._owner, manager._cancel
+                    manager._events.put((old_owner, 'handoff', original))
+                    manager._poll()
+                    confirm.state.assert_called_with(['!disabled'])
+                    confirm.configure.assert_called_with(text=tr('en', 'linking_connect_again'))
+                    if outcome == 'launch_failed':
+                        manager._status.set.assert_called_with(
+                            tr('en', 'linking_address_browser_retry'),
+                        )
+                    if outcome == 'expired':
+                        old_worker.is_alive.return_value = False
+                        manager._events.put((old_owner, 'callback_failed', None))
+                        manager._record_diagnostic = mock.Mock()
+                        manager._poll()
+
+                    submit()
+                    self.assertTrue(old_cancel.is_set())
+                    old.close.assert_called_once_with()
+                    self.assertIsNone(manager._handoff)
+                    if outcome != 'expired':
+                        manager._poll()
+                        attempts.assert_called_once_with(issuer, scope=linking.GALLERIES_SCOPE)
+                    old_worker.is_alive.return_value = False
+                    stale = mock.Mock()
+                    manager._events.put((old_owner, 'handoff', original))
+                    manager._events.put((old_owner, 'connected',
+                                         (stale, linking.LinkedIdentity(7, 'admin'), issuer)))
+                    if outcome == 'cancel_restart':
+                        cancel()
+                    manager._poll()
+                    stale.close.assert_called_once_with()
+                    manager.resume_saved_link.assert_called_once_with(issuer, approve_if_absent=True)
+                    if outcome == 'cancel_restart':
+                        attempts.assert_called_once_with(issuer, scope=linking.GALLERIES_SCOPE)
+                        browser.assert_called_once_with(original.authorization_url)
+                        window.return_value.destroy.assert_called_once_with()
+                        continue
+                    self.assertIsNot(old_owner, manager._owner)
+                    self.assertIs(manager._attempt, new)
+                    self.assertFalse(manager._cancel.is_set())
+                    manager._events.put((manager._owner, 'handoff', replacement))
+                    manager._poll()
+                    self.assertEqual([mock.call(original.authorization_url),
+                                      mock.call(replacement.authorization_url)], browser.call_args_list)
+                    window.return_value.destroy.assert_not_called()
+
+    def test_website_restart_preserves_an_unrelated_worker(self) -> None:
+        """Keep gallery operations outside the website retry lifecycle.
+
+        Returns:
+            None: A queued gallery result stays owned by its original worker.
         """
         manager = _manager_without_widgets()
-        manager._root = mock.Mock()
-        manager._window = None
-        manager._worker = None
-        manager._handoff = None
-        manager._owner = manager._direct_owner = object()
-        manager._attempt = mock.Mock()
-        manager._cancel = threading.Event()
-        manager._events = queue.Queue()
-        manager._session_issuer = ''
-        manager._current_issuer = 'https://unavailable.example/Galerie'
-        manager._offline_binding = None
-        manager._saved_api_address = lambda: (
-            'https://gallery.example/Galerie/index.php?page=upload_automation_upload'
-        )
-        manager.linked_upload_mode_selected = mock.Mock(return_value=False)
+        manager._worker = mock.Mock()
+        manager._worker.is_alive.return_value = False
+        manager._owner = owner = object()
+        manager._website_request_owner = object()
         manager._status = mock.Mock()
-        manager._schedule_poll = mock.Mock()
-        worker = mock.Mock()
-        worker.is_alive.return_value = True
-        manager.link = mock.Mock(
-            side_effect=lambda _issuer: setattr(manager, '_worker', worker),
-        )
+        manager._attempt = mock.Mock()
+        manager._events.put((owner, 'galleries_error', None))
+
+        manager.link('https://gallery.example', restart=True)
+
+        self.assertIs(manager._owner, owner)
+        manager._attempt.close.assert_not_called()
+        self.assertEqual((owner, 'galleries_error', None), manager._events.get_nowait())
+        self.assertTrue(manager._events.empty())
+
+    def test_restarted_approval_can_replace_only_the_exact_saved_credential(self) -> None:
+        """Allow verified fresh consent to recover an uncertain saved sign-in.
+
+        Returns:
+            None: The current Admin can replace their credential. Consent for
+                another Admin cannot discard or replace the original binding.
+        """
         issuer = 'https://gallery.example/Galerie'
-        handoff = linking.PushedAuthorization(
-            TEST_REQUEST_HANDLE,
-            issuer + '/index.php?page=app_linking_start&request_handle='
-            + TEST_REQUEST_HANDLE,
-            time.monotonic() + linking.HANDOFF_MAX_LIFETIME_SECONDS,
-        )
-        with (
-            mock.patch('uploader.app_linking_ui.tk') as tk,
-            mock.patch('uploader.app_linking_ui.EmbeddedWindow') as window,
-            mock.patch('uploader.app_linking_ui.ttk'),
-            mock.patch('uploader.app_linking_ui.GlassCard'),
-            mock.patch('uploader.app_linking_ui._LinkAddressChoices'),
-            mock.patch('uploader.app_linking_ui.icon_button'),
-            mock.patch('uploader.app_linking_ui.place_dialog'),
-            mock.patch('uploader.app_linking_ui.Button') as make_button,
-            mock.patch(
-                'uploader.app_linking_ui.webbrowser.open', side_effect=[False, True],
-            ) as open_browser,
-        ):
-            confirm = mock.Mock()
-            confirm.instate.return_value = False
-            make_button.side_effect = [confirm, mock.Mock()]
-            tk.StringVar.return_value.get.return_value = issuer
-            manager.open_address_dialog()
-            tk.StringVar.assert_called_once_with(window.return_value, value=issuer)
-            manager.link.assert_not_called()
-            submit = make_button.call_args_list[0].kwargs['command']
-            submit()
-            manager.link.assert_called_once_with(issuer)
-            manager._events.put((manager._owner, 'handoff', handoff))
-            manager._poll()
-            manager._status.set.assert_called_with(tr('en', 'linking_browser_retry'))
-            confirm.configure.assert_called_with(text=tr('en', 'linking_open_browser'))
-            self.assertIs(manager._handoff, handoff)
-            manager._attempt.close.assert_not_called()
-            window.return_value.destroy.assert_not_called()
-            submit()
-            self.assertEqual(
-                [mock.call(handoff.authorization_url)] * 2, open_browser.call_args_list,
-            )
-            manager.link.assert_called_once_with(issuer)
-            self.assertFalse(manager._cancel.is_set())
-            confirm.state.assert_called_with(['disabled'])
+        binding = offline_linking.OfflineBinding(issuer, 7, linking.ROLLING_GALLERIES_SCOPE)
+        for account in (binding.account_id, 9):
+            with (
+                self.subTest(account=account),
+                TemporaryDirectory() as directory,
+                mock.patch('uploader.app_linking_ui.tk.StringVar'),
+                mock.patch('uploader.app_linking_ui.load_recent_gallery_addresses',
+                           return_value=()),
+                mock.patch('uploader.app_linking_ui.threading.Thread') as worker,
+                mock.patch('uploader.app_linking_ui.LinkingAttempt') as attempts,
+                mock.patch('uploader.app_linking_ui.discard_uncertain_refresh') as discard,
+                mock.patch('uploader.app_linking_ui.store_approved_refresh') as persist,
+                mock.patch('uploader.app_linking_ui.enable_rolling_renewal'),
+            ):
+                manager = LinkingManager(mock.Mock())
+                manager._offline_path = Path(directory) / 'offline-link.json'
+                manager._queue_initial_gallery_page = mock.Mock()
+                store = mock.MagicMock()
+                manager._native_offline_store = mock.Mock(return_value=store)
+                path = manager._offline_binding_path(binding)
+                offline_linking.save_offline_binding(path, binding)
+                session = mock.Mock(spec=linking.LinkingSession)
+                session.identity.return_value = linking.LinkedIdentity(account, 'admin')
+                session.approved_scope.return_value = binding.scope
+                attempt = attempts.return_value
+                attempt.wait_for_callback.return_value = 'approved'
+                attempt.requests_offline_access.return_value = True
+                attempt.exchange_offline_once.return_value = (
+                    session, 'synthetic refresh', offline_linking.OFFLINE_REFRESH_MAX_SECONDS,
+                )
+                manager._start(issuer, direct=True, restart=True)
+                worker.call_args.kwargs['target']()
+
+                self.assertEqual(binding, offline_linking.load_offline_binding(path, issuer))
+                if account == binding.account_id:
+                    discard.assert_called_once_with(store, issuer, account)
+                    persist.assert_called_once()
+                else:
+                    discard.assert_not_called()
+                    persist.assert_not_called()
+                    session.close.assert_called_once_with()
 
     def test_browser_handoff_opens_automatically_and_remains_retryable(self) -> None:
         """Open consent in the browser without displaying the correlation handle.

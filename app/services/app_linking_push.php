@@ -26,6 +26,117 @@ use function Gallery\Models\app_link_push_model_consume;
 use function Gallery\Models\app_link_push_model_installation_key;
 
 /**
+ * Limit the display fingerprint needed to join events for one request.
+ * Type: int. Units: hexadecimal characters. Scope: one Admin log reference.
+ * Consumers: app_linking_log_reference, app_linking_log_attempt.
+ * Rationale: Twelve characters separate the bounded diagnostic events while
+ *     keeping the underlying random handle and full digest out of the log.
+ */
+const APP_LINKING_LOG_REFERENCE_LENGTH = 12;
+
+/**
+ * Derive a short log-only reference from a canonical handle or public proof.
+ *
+ * @param string $kind Either request for the handle or exchange for the PKCE challenge.
+ * @param string $value Canonical Base32 handle or unpadded S256 challenge.
+ * @return string|null Short digest for Admin Logs or null for unrecognized input.
+ */
+function app_linking_log_reference(string $kind, string $value): ?string
+{
+    $valid = match ($kind) {
+        'request' => preg_match('/\A[A-Z2-7]{25}[AEIMQUY4]\z/D', $value) === 1,
+        'exchange' => app_linking_pkce_s256_challenge_valid($value),
+        default => false,
+    };
+    return $valid ? substr(
+        hash('sha256', "app-linking-log\0" . $kind . "\0" . $value),
+        0,
+        APP_LINKING_LOG_REFERENCE_LENGTH,
+    ) : null;
+}
+
+/**
+ * Record one bounded outcome of a browser-approved WinApp connection.
+ *
+ * @param string $stage Fixed request, browser, claim, consent or exchange phase.
+ * @param string $outcome Fixed policy result listed below, never input or exception text.
+ * @param int $status HTTP response status prepared by the route.
+ * @param string|null $reference Log-only fingerprint of the browser request.
+ * @param int|null $adminId Ordinary Admin already resolved by the controller.
+ * @param array{exchange_ref?:?string,scope?:?string,callback_family?:?string} $details
+ *     Optional diagnostic proof reference, registered scope and loopback IP family.
+ * @return void Attempts to persist safe evidence without affecting the linking response.
+ */
+function app_linking_log_attempt(
+    string $stage,
+    string $outcome,
+    int $status,
+    ?string $reference = null,
+    ?int $adminId = null,
+    array $details = [],
+): void {
+    $route = match ($stage) {
+        'request' => 'app_linking_push',
+        'browser', 'claim' => 'app_linking_start',
+        'consent' => 'app_linking_consent',
+        'exchange' => 'app_linking_token',
+        default => null,
+    };
+    $level = match ($outcome) {
+        'created', 'handle_received', 'login_required', 'claim_page_rendered',
+        'consent_page_restored', 'claim_accepted', 'callback_prepared',
+        'declined', 'code_exchanged' => 'info',
+        'issuer_unavailable', 'route_rejected', 'method_rejected', 'rate_limited',
+        'form_rejected', 'push_parameters_rejected', 'state_invalid',
+        'scope_unavailable', 'request_capacity_reached', 'admin_required',
+        'session_required', 'browser_request_missing', 'origin_missing',
+        'origin_null', 'origin_mismatch', 'fetch_site_mismatch', 'csrf_rejected',
+        'browser_request_changed', 'claim_parameters_rejected',
+        'request_not_claimable', 'claim_unavailable', 'attempt_changed',
+        'decision_rejected', 'claim_consumption_rejected', 'code_issue_rejected',
+        'exchange_proof_invalid', 'code_exchange_rejected' => 'warning',
+        'request_schema_unavailable', 'state_protection_failed',
+        'request_storage_failed', 'claim_storage_failed', 'server_error' => 'error',
+        default => null,
+    };
+    if ($route === null || $level === null) {
+        return;
+    }
+    try {
+        if (!app_linking_rate_limit_consume('app_link_diagnostic_global', 'global')['allowed']) {
+            return;
+        }
+        $context = ['stage' => $stage, 'outcome' => $outcome, 'http_status' => $status];
+        $pattern = '/\A[0-9a-f]{' . APP_LINKING_LOG_REFERENCE_LENGTH . '}\z/D';
+        if ($reference !== null && preg_match($pattern, $reference) === 1) {
+            $context['attempt_ref'] = $reference;
+        }
+        $exchangeReference = $details['exchange_ref'] ?? null;
+        if ($exchangeReference !== null && preg_match($pattern, $exchangeReference) === 1) {
+            $context['exchange_ref'] = $exchangeReference;
+        }
+        $scope = $details['scope'] ?? null;
+        if ($scope !== null && in_array(
+            $scope, app_linking_public_client(APP_LINKING_WINAPP_CLIENT_ID)['scopes'] ?? [], true,
+        )) {
+            $context['scope'] = $scope;
+        }
+        $family = $details['callback_family'] ?? null;
+        if ($family === 'ipv4' || $family === 'ipv6') {
+            $context['callback_family'] = $family;
+        }
+        admin_log_event(
+            $level, 'app_linking.' . $stage . '.' . $outcome,
+            'WinApp linking ' . $stage . ': ' . str_replace('_', ' ', $outcome) . '.',
+            $context,
+            ['category' => 'security', 'route_name' => $route, 'actor_user_id' => $adminId],
+        );
+    } catch (Throwable) {
+        // Logging is optional and must leave the original authentication response intact.
+    }
+}
+
+/**
  * Bound time available for claiming and consenting to a request.
  * Type: int. Units: seconds. Scope: a pushed request.
  * Consumers: app_link_push_create. Rationale: 300 permits copy/paste with limited exposure.
@@ -180,6 +291,7 @@ function app_link_push_fields_valid(array $fields): bool
  * @param string $redirectUri Registered loopback redirect URI.
  * @param string $challenge Canonical S256 PKCE challenge.
  * @param string $state Opaque client state for the later loopback callback.
+ * @param string|null $failure Receives a fixed diagnostic on refusal, or null on success.
  * @return array{claim_code:string,expires_in:int}|null Code and lifetime or refusal.
  */
 function app_link_push_create(
@@ -189,20 +301,27 @@ function app_link_push_create(
     string $redirectUri,
     string $challenge,
     string $state,
+    ?string &$failure = null,
 ): ?array {
+    $failure = 'push_parameters_rejected';
     try {
         $fields = [
             'client_id' => $clientId, 'issuer' => $issuer, 'scope' => $scope,
             'redirect_uri' => $redirectUri, 'pkce_s256' => $challenge,
         ];
-        if (!app_link_push_fields_valid($fields)
-            || !app_linking_canonical_256bit_value_valid($state)) {
+        if (!app_link_push_fields_valid($fields)) {
             return null;
         }
+        if (!app_linking_canonical_256bit_value_valid($state)) {
+            $failure = 'state_invalid';
+            return null;
+        }
+        $failure = 'request_schema_unavailable';
         app_linking_require_schema(app_linking_push_schema_status());
         if (app_linking_scope_requests_refresh($scope)) {
             app_linking_require_schema(app_link_refresh_schema_status());
         }
+        $failure = 'state_protection_failed';
         $code = app_link_push_code_generate();
         $fields['claim_hash'] = hash('sha256', $code);
         $fields['state_nonce'] = random_bytes(APP_LINK_PUSH_NONCE_BYTES);
@@ -217,13 +336,17 @@ function app_link_push_create(
         }
         $fields['state_cipher'] = $cipher;
         $fields['state_tag'] = $tag;
+        $failure = 'scope_unavailable';
         app_linking_recheck_wide_scope($clientId, $scope);
+        $failure = 'request_storage_failed';
         if (!app_link_push_model_create(
             $fields, APP_LINK_PUSH_TTL_SECONDS, APP_LINK_PUSH_CAP,
             APP_LINK_PUSH_CLEANUP_BATCH,
         )) {
+            $failure = 'request_capacity_reached';
             return null;
         }
+        $failure = null;
         return ['claim_code' => $code, 'expires_in' => APP_LINK_PUSH_TTL_SECONDS];
     } catch (Throwable) {
         return null;
@@ -256,6 +379,7 @@ function app_link_push_session_hash(
  * @param string $issuer Trusted exact installation issuer.
  * @param int $userId Authenticated ordinary Admin identifier.
  * @param string $sessionId Identifier from the exclusively held browser session.
+ * @param string|null $failure Receives a fixed diagnostic on refusal, or null on success.
  * @return int|null Claimed request ID, or null on refusal.
  */
 function app_link_push_claim_request(
@@ -263,18 +387,24 @@ function app_link_push_claim_request(
     string $issuer,
     int $userId,
     string $sessionId,
+    ?string &$failure = null,
 ): ?int
 {
+    $failure = 'claim_parameters_rejected';
     try {
         if ($userId <= 0 || $sessionId === '' || !app_linking_issuer_valid($issuer)
             || preg_match('/\A[A-Z2-7]{25}[AEIMQUY4]\z/D', $code) !== 1) {
             return null;
         }
+        $failure = 'request_schema_unavailable';
         app_linking_require_schema(app_linking_push_schema_status());
-        return app_link_push_model_claim(
+        $failure = 'claim_storage_failed';
+        $id = app_link_push_model_claim(
             hash('sha256', $code), $issuer, $userId,
             app_link_push_session_hash($issuer, $userId, $sessionId),
         );
+        $failure = $id === null ? 'request_not_claimable' : null;
+        return $id;
     } catch (Throwable) {
         return null;
     }

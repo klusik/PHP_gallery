@@ -29,7 +29,7 @@ namespace Gallery\Core {
     /**
      * Supply the current account identity without an application database.
      *
-     * @return array{id:int,role:string}|null Fixture account, or null when signed out.
+     * @return array{id:int,role:string,username?:string}|null Fixture account or null when signed out.
      */
     function current_user(): ?array
     {
@@ -46,6 +46,53 @@ namespace Gallery\Core {
         return $GLOBALS['app_link_test_https'];
     }
 
+    /**
+     * Provide the HTTP verb for the isolated controller call.
+     *
+     * @return string Exact fixture verb.
+     */
+    function request_method(): string
+    {
+        return $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    }
+}
+
+namespace Gallery\Services {
+    /**
+     * Substitute storage for the independent diagnostic admission budget.
+     *
+     * @param string $bucket Fixed bucket requested by the browser diagnostic owner.
+     * @param string $subject Global diagnostic subject.
+     * @return array{allowed:bool} Admits only the configured diagnostic requests.
+     */
+    function app_linking_rate_limit_consume(string $bucket, string $subject): array
+    {
+        return ['allowed' => $bucket === 'app_link_diagnostic_global'
+            && $subject === 'global' && !empty($GLOBALS['app_link_test_log_allowed'])];
+    }
+
+    /**
+     * Capture the Admin log boundary or simulate its failure.
+     *
+     * @param string $level Fixed log severity.
+     * @param string $event Fixed linking event key.
+     * @param string $message Display string prepared for Admin Logs.
+     * @param array{stage:string,outcome:string,http_status:int,attempt_ref?:string,exchange_ref?:string,scope?:string,callback_family?:string} $context Redacted event details.
+     * @param array{category:string,route_name:string,actor_user_id:?int} $options Selected log route and previously resolved actor.
+     * @return void Captures one event when fixture storage is available.
+     */
+    function admin_log_event(
+        string $level,
+        string $event,
+        string $message,
+        array $context,
+        array $options,
+    ): void {
+        if (!empty($GLOBALS['app_link_test_log_unavailable'])) {
+            throw new \RuntimeException('Fixture log sink unavailable.');
+        }
+        $GLOBALS['app_link_test_log_entries'][] = [$level, $event, $message, $context, $options];
+    }
 }
 
 namespace {
@@ -58,6 +105,9 @@ namespace {
     use function Gallery\Services\app_linking_code_generate;
     use function Gallery\Services\app_linking_code_hash;
     use function Gallery\Services\app_linking_issuer_valid;
+    use function Gallery\Services\app_linking_log_attempt;
+    use function Gallery\Services\app_linking_log_reference;
+    use function Gallery\Services\app_linking_pkce_s256_from_verifier;
     use function Gallery\Services\app_linking_pkce_s256_verify;
     use function Gallery\Services\app_linking_redirect_uri_valid;
     use function Gallery\Services\app_linking_scope_allowed;
@@ -927,6 +977,87 @@ namespace {
         'Transfer encoding combined with a declared length must be refused.',
     );
     unset($_SERVER['CONTENT_LENGTH'], $_SERVER['HTTP_TRANSFER_ENCODING']);
+
+    $diagnosticHandle = app_link_push_code_generate();
+    $logReference = app_linking_log_reference('request', $diagnosticHandle);
+    $diagnosticVerifier = str_repeat('V', \Gallery\Services\APP_LINKING_PKCE_VERIFIER_MIN_LENGTH);
+    $proof = app_linking_pkce_s256_from_verifier($diagnosticVerifier);
+    app_link_test_check(is_string($proof), 'The valid fixture verifier must yield a proof.');
+    $exchangeReference = app_linking_log_reference('exchange', $proof);
+    app_link_test_check(
+        $logReference !== null && $exchangeReference !== null
+            && $logReference !== $exchangeReference
+            && app_linking_log_reference('exchange', $diagnosticHandle) === null
+            && app_linking_pkce_s256_from_verifier('invalid') === null,
+        'Only valid handle and proof inputs can yield independent log references.',
+    );
+
+    $GLOBALS['app_link_test_log_entries'] = [];
+    $GLOBALS['app_link_test_log_allowed'] = true;
+    $GLOBALS['app_link_test_config'] = ['base_url' => 'https://gallery.example.test/Galerie'];
+    $GLOBALS['app_link_test_https'] = true;
+    $GLOBALS['app_link_test_user'] = ['id' => 7, 'role' => 'admin', 'username' => 'fixture admin'];
+    $_SESSION = ['app_link_browser_handle' => $diagnosticHandle];
+    $_SERVER = [
+        'HTTP_HOST' => 'gallery.example.test',
+        'REQUEST_URI' => '/Galerie/index.php?page=app_linking_start',
+        'QUERY_STRING' => 'page=app_linking_start',
+        'REQUEST_METHOD' => 'POST',
+        'HTTP_ORIGIN' => 'null',
+    ];
+    ob_start();
+    \Gallery\Controllers\cms_app_linking_start();
+    $publicBody = ob_get_clean();
+    app_link_test_check(
+        http_response_code() === 403 && $publicBody === '{"error":"access_denied"}',
+        'Origin refusal keeps the public response generic.',
+    );
+    $entries = $GLOBALS['app_link_test_log_entries'];
+    app_link_test_check(
+        count($entries) === 1
+        && $entries[0][0] === 'warning'
+        && $entries[0][1] === 'app_linking.claim.origin_null'
+        && $entries[0][3] === [
+            'stage' => 'claim', 'outcome' => 'origin_null',
+            'http_status' => 403, 'attempt_ref' => $logReference,
+        ]
+        && $entries[0][4] === [
+            'category' => 'security', 'route_name' => 'app_linking_start', 'actor_user_id' => 7,
+        ],
+        'Admin Logs must identify the reason and authorized account without storing the handle.',
+    );
+    app_linking_log_attempt('exchange', 'code_exchanged', 200, $diagnosticHandle,
+        details: [
+            'exchange_ref' => $exchangeReference,
+            'scope' => 'link:identity galleries:list',
+            'callback_family' => $diagnosticVerifier,
+        ]);
+    app_linking_log_attempt('claim', $diagnosticHandle, 403, $logReference);
+    $entries = $GLOBALS['app_link_test_log_entries'];
+    app_link_test_check(
+        count($entries) === 2
+        && $entries[1][3]['exchange_ref'] === $exchangeReference
+        && $entries[1][3]['scope'] === 'link:identity galleries:list'
+        && !isset($entries[1][3]['attempt_ref'])
+        && !isset($entries[1][3]['callback_family'])
+        && $entries[1][4]['actor_user_id'] === null,
+        'Public exchange logs accept only a fingerprint and do not resolve ambient credentials.',
+    );
+    $GLOBALS['app_link_test_log_allowed'] = false;
+    app_linking_log_attempt('request', 'created', 201, $logReference);
+    app_link_test_check(
+        $GLOBALS['app_link_test_log_entries'] === $entries,
+        'A saturated diagnostic budget must refuse additional records.',
+    );
+    $GLOBALS['app_link_test_log_allowed'] = true;
+    $GLOBALS['app_link_test_log_unavailable'] = true;
+    ob_start();
+    \Gallery\Controllers\cms_app_linking_start();
+    $publicBody = ob_get_clean();
+    app_link_test_check(
+        http_response_code() === 403 && $publicBody === '{"error":"access_denied"}',
+        'A broken log sink must preserve the original refusal.',
+    );
 
     // The legacy API key remains an independent authentication format.
     $legacy = upload_automation_generate_token_value();

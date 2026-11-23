@@ -38,6 +38,7 @@ return [
         'feature_policy_admin_test.php',
         'feature_policy_inventory_test.php',
         'feature_policy_stage13_contract_test.php',
+        'app_linking_security_test.php',
         'thumbnail_source_identity_test.php',
         'thumbnail_identity_lookup_budget_test.php',
         'thumbnail_format_metadata_consistency_test.php',
