@@ -1,5 +1,50 @@
 # Patch notes
 
+## Version 1.5.4
+
+Restored WinApp website approval in Firefox and refreshed the repository
+overview. This release is paired with WinApp 1.5.4.
+
+### Highlights
+
+#### Website connection
+
+- Fixed Firefox pairing when the website rejected the claim before showing
+  the approval page. The same correction applies when revoking a device.
+
+#### Project overview
+
+- Made the main README a short project guide with a gallery screenshot,
+  installation steps, WinApp downloads and links to the four manuals.
+
+### Technical Details
+
+#### Browser transport
+
+- Updated `app/views/app_linking.php` to use the website root as the referrer
+  on same-origin claim, consent and revocation POSTs. This gives Firefox a
+  usable Origin without sending the linking page path or query.
+- Kept the site-origin, authenticated-session and CSRF checks in force. The
+  loopback navigation continues to omit its referrer.
+
+#### Tests
+
+- Added a browser fixture for the original Firefox Origin result and
+  exercised the repaired claim, approval, loopback return and revocation
+  in Firefox and Chromium.
+
+### User Impact
+
+#### For administrators
+
+- Restored browser approval from the same Firefox session after updating
+  the gallery website.
+
+#### For new users
+
+- Put shared-hosting requirements, download links and guides together on
+  the repository's front page.
+
 ## Version 1.5.3
 
 Updated WinApp to 1.5.3 with fresh browser approval on retry. Added website
