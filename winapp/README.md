@@ -939,12 +939,8 @@ at `winapp/dist/0.3.2/winapp-update.json`.
 ## Windows installer
 
 The companion app has its own version in `winapp/VERSION`, independent of the
-PHP
-Gallery CMS release. The current source targets **1.5.1**; this source version
-change does not build or publish an installer. A separately requested build
-will place the installer and generated `winapp-update.json` in
-`winapp/dist/1.5.1/`. Existing version outputs and other version folders remain
-preserved.
+PHP Gallery CMS release. The installer build writes the installer and generated
+`winapp-update.json` to `winapp/dist/<version>/` for that companion version.
 
 The update notice fits its wrapped status text and full button row as background
 checks change the message. Text and action-row backgrounds match the window;
@@ -1300,8 +1296,9 @@ authoritative and are not hidden by route fallback.
 Click **Connect website** in the main window. Confirm the website address
 suggested from the saved API endpoint, choose a recent address, or enter
 the PHP Gallery website address including its installation folder if present.
-You choose an upload gallery after connecting. The dialog keeps browser
-approval in view and offers **Open browser** if the launch needs another try.
+You choose an upload gallery after connecting. While approval is pending or
+if it fails, choose **Connect again** to start a new request. Approve the
+newest browser page. Any running upload keeps its original connection.
 You can also type a host and optional installation path without a scheme,
 such as `gallery.example/Galerie`. On confirmation, WinApp assumes `https://`
 and shows the normalized address in the field before checking the gallery.
@@ -1311,6 +1308,11 @@ The app verifies the loopback response and exchanges the
 one-use code using PKCE. On success it closes the dialog, shows the linked
 site's address and loads its first gallery page. If linking fails, the dialog
 shows the error and lets you retry.
+
+For connection problems, compare the WinApp browser-linking diagnostics with
+**Admin → Logs → Security** on the website. Follow the attempt reference to
+see the request, sign-in, claim and consent results. The exchange reference
+pairs a prepared callback with any token request the server received.
 
 Use the **⋯** beside **Disconnect website** to open the same chooser while
 connected. **Linked now** lists the installations with live access. Select

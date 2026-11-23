@@ -585,7 +585,7 @@ const APP_LINKING_256BIT_ENCODED_LENGTH = 43;
 /**
  * Enforce the lower length boundary defined for a PKCE verifier.
  * Type: int. Units: ASCII characters. Scope: one verifier.
- * Consumers: app_linking_pkce_s256_verify.
+ * Consumers: app_linking_pkce_s256_from_verifier.
  * Rationale: RFC 7636 requires at least 43 unreserved characters.
  */
 const APP_LINKING_PKCE_VERIFIER_MIN_LENGTH = 43;
@@ -593,7 +593,7 @@ const APP_LINKING_PKCE_VERIFIER_MIN_LENGTH = 43;
 /**
  * Enforce the upper length boundary defined for a PKCE verifier.
  * Type: int. Units: ASCII characters. Scope: one verifier.
- * Consumers: app_linking_pkce_s256_verify.
+ * Consumers: app_linking_pkce_s256_from_verifier.
  * Rationale: RFC 7636 permits at most 128 unreserved characters.
  */
 const APP_LINKING_PKCE_VERIFIER_MAX_LENGTH = 128;
@@ -1083,6 +1083,25 @@ function app_linking_pkce_s256_challenge_valid(string $challenge): bool
 }
 
 /**
+ * Derive the S256 challenge from one valid RFC 7636 verifier.
+ *
+ * @param string $verifier Client-provided ASCII PKCE verifier.
+ * @return string|null Canonical proof digest or null for an invalid verifier.
+ */
+function app_linking_pkce_s256_from_verifier(string $verifier): ?string
+{
+    $length = strlen($verifier);
+    if (
+        $length < APP_LINKING_PKCE_VERIFIER_MIN_LENGTH
+        || $length > APP_LINKING_PKCE_VERIFIER_MAX_LENGTH
+        || preg_match('/\A[A-Za-z0-9._~-]+\z/D', $verifier) !== 1
+    ) {
+        return null;
+    }
+    return rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+}
+
+/**
  * Verify the RFC 7636 verifier against the stored S256 challenge.
  *
  * @param string $challenge Canonical stored unpadded base64url challenge.
@@ -1093,18 +1112,11 @@ function app_linking_pkce_s256_verify(
     string $challenge,
     string $verifier,
 ): bool {
-    $length = strlen($verifier);
-    if (
-        !app_linking_pkce_s256_challenge_valid($challenge)
-        || $length < APP_LINKING_PKCE_VERIFIER_MIN_LENGTH
-        || $length > APP_LINKING_PKCE_VERIFIER_MAX_LENGTH
-        || preg_match('/\A[A-Za-z0-9._~-]+\z/D', $verifier) !== 1
-    ) {
+    if (!app_linking_pkce_s256_challenge_valid($challenge)) {
         return false;
     }
-    $digest = hash('sha256', $verifier, true);
-    $computed = rtrim(strtr(base64_encode($digest), '+/', '-_'), '=');
-    return hash_equals($challenge, $computed);
+    $computed = app_linking_pkce_s256_from_verifier($verifier);
+    return $computed !== null && hash_equals($challenge, $computed);
 }
 
 /**

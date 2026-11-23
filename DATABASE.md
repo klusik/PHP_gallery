@@ -1900,6 +1900,13 @@ Important columns:
 | `resolved_at`, `resolution_note` | Resolution workflow fields. |
 | `created_at` | Log timestamp. |
 
+Browser-linking events in the Security category use the existing table.
+Their JSON context stores the stage, classified outcome, HTTP status, and
+when available the registered scope, loopback IP family and short attempt
+or exchange reference. Authentication codes, tokens, handles, session IDs,
+CSRF values, verifier text and request bodies are excluded. The log service
+can use an already-resolved Admin ID or explicitly record an anonymous event.
+
 Admin logs remain the live operational history and are not removed by generic
 database cleanup. Version 0.87 adds indexed age and grouping access paths so
 Admin browsing, grouped summaries, and bounded retention work do not require an

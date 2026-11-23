@@ -1987,8 +1987,9 @@ On~confirmation, WinApp adds \texttt{https://} and~shows the~normalized
 address before checking the~gallery.
 An~HTTP address on \texttt{localhost} can link to~a~gallery on~the~same
 computer. Remote installations use verified HTTPS.
-The~dialog shows progress while waiting for~approval. If~opening the~browser
-fails, choose \ui{Open browser} to~try again.
+The~dialog shows progress while waiting for~approval. Choose \ui{Connect again}
+to~start a~new request during the~wait or~after a~failure. Approve the~newest
+browser page. A~running upload keeps its original connection.
 Sign in~as an~administrator in~the~browser and~click \ui{Approve}.
 Return to~WinApp when the~browser shows \ui{Approval received}. WinApp
 shows the~linked site's address and~loads the~first gallery page
@@ -1999,6 +2000,10 @@ entry retains the~last failure, request phase, HTTP status and~response type,
 including recognized hosting verification pages. It~distinguishes a~blocked
 request from a~gallery reporting linking unavailable. Credentials and~raw
 response bodies are~excluded.
+On~the~website, open \ui{Admin > Logs} and~filter the~Security category.
+The~attempt reference ties together the~request, login, claim and~consent.
+The~exchange reference ties the~prepared callback to~the~token request.
+The~log shows the~HTTP status and~a~specific reason for~each recorded outcome.
 Use the~public website URL, including its~public subdirectory when needed.
 Internal hosting directories do~not~belong in~the~link address. Servers with
 internal path rewriting need PHP Gallery~1.0.1 for~public-mount verification.

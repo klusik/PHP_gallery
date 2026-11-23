@@ -57,7 +57,7 @@ from .credential_store import (
 )
 from .flight_report_translations import tr
 from .offline_linking import (
-    OfflineBinding, enable_rolling_renewal,
+    OfflineBinding, discard_uncertain_refresh, enable_rolling_renewal,
     load_offline_binding, offline_binding_path,
     remove_offline_binding, remove_saved_offline_link, revoke_saved_refresh,
     rotate_saved_offline_access,
@@ -515,6 +515,7 @@ class LinkingManager:
     # The prompt is created on demand and its widgets belong to one instance.
     _address_prompt: tuple[EmbeddedWindow, ttk.Entry, ttk.Button] | None = None
     _refresh_address_prompt: Callable[[], None] | None = None
+    _website_request_owner: object | None = None
     _parked_links: tuple[_LinkedSite, ...] = ()
     _recent_links: tuple[str, ...] = ()
     _recent_link_path: Path | None = None
@@ -633,7 +634,7 @@ class LinkingManager:
                   | LinkedGalleryPage | LinkedGalleryDetail | LinkedGallery | CreateIntent
                   | BoundCreateReceipt | OfflineBinding | _PhotosUploadUpgrade
                   | _PhotosWatchStart | _LinkedSite | LinkingResponseError | LinkingUnavailable
-                  | Callable[[str], None] | None]
+                  | Callable[[str], None] | str | None]
         ] = queue.Queue()
         self._handoff: PushedAuthorization | None = None
         self._current_issuer = ''
@@ -851,6 +852,7 @@ class LinkingManager:
         owner = object()
         cancel = threading.Event()
         self._owner = self._direct_owner = owner
+        self._website_request_owner = owner
         self._cancel = cancel
         self._status.set('Checking the saved gallery connection…')
 
@@ -962,7 +964,7 @@ class LinkingManager:
             self.resume_saved_link(issuer)
 
     def open_address_dialog(self, *, manage: bool = False, prefill: str = '') -> None:
-        """Choose an installation and keep browser approval retryable in place.
+        """Choose an installation and offer a fresh request for a stalled link.
 
         Args:
             manage (bool): Open access management after address selection.
@@ -975,7 +977,8 @@ class LinkingManager:
         if self._address_prompt is not None:
             self._address_prompt[0].lift()
             return
-        if self._worker is not None and self._worker.is_alive():
+        if (self._worker is not None and self._worker.is_alive()
+                and (manage or not self._owns_website_request())):
             if self._handoff is None:
                 self._status.set('A gallery request is already in progress.')
             return
@@ -1014,22 +1017,18 @@ class LinkingManager:
             justify='left', anchor='w',
         )
         hint.pack(fill='x', pady=(4, 0))
-        link_worker: threading.Thread | None = None
+        submitted = False
         min_width = LINKING_ADDRESS_STATUS_WRAP + LINKING_DIALOG_WRAP_INSET
 
         def submit() -> None:
-            """Start a validated request or retry a failed browser launch.
+            """Start or replace the website approval for the validated address.
 
             Returns:
-                None: Shows a correction, starts linking, opens management or
-                    tries the browser for this prompt's unlaunched approval.
+                None: Shows a correction, opens management or requests a fresh
+                    approval when this prompt or an earlier attempt is waiting.
             """
-            nonlocal link_worker
+            nonlocal submitted
             if confirm.instate(['disabled']):
-                return
-            if link_worker is not None and self._handoff is not None:
-                self._open_browser()
-                refresh()
                 return
             value = address.get().strip()
             issuer = linking_issuer(value)
@@ -1063,10 +1062,8 @@ class LinkingManager:
                 self.open(self._root, issuer, manage=True)
                 return
             hint.configure(textvariable=self._status, style='Status.TLabel')
-            previous_worker = self._worker
-            self.link(issuer)
-            if self._worker is not None and self._worker is not previous_worker:
-                link_worker = self._worker
+            self.link(issuer, restart=submitted or self._owns_website_request())
+            submitted = True
             if self._address_prompt is not None:
                 refresh()
 
@@ -1076,9 +1073,8 @@ class LinkingManager:
             Returns:
                 None: Discards the prompt and stops its pending local work.
             """
-            if (link_worker is not None and self._worker is not None
-                    and (self._worker.is_alive() or not self._events.empty())):
-                self._close_window()
+            if submitted and self._owns_website_request():
+                self._abandon_link_attempt()
                 self._status.set('Gallery linking cancelled.')
             self._dismiss_address_prompt()
 
@@ -1126,20 +1122,21 @@ class LinkingManager:
                 dialog.update_idletasks()
                 dialog.minsize(min_width, dialog.winfo_reqheight())
             issuer = linking_issuer(address.get())
-            busy = self._worker is not None and (
-                self._worker.is_alive()
-                or link_worker is not None and not self._events.empty()
-            )
-            browser_ready = (link_worker is not None and self._handoff is not None
-                             and self._browser_needs_launch)
+            own_request = self._owns_website_request()
+            if own_request and not manage and not submitted:
+                hint.configure(textvariable=self._status, style='Status.TLabel')
+            busy = ((self._worker is not None and self._worker.is_alive())
+                    or ((own_request or submitted) and not self._events.empty()))
             entry.state(['disabled'] if busy else ['!disabled'])
             choices.results.state(['disabled'] if busy else ['!disabled'])
-            confirm.state(['disabled'] if busy and not browser_ready else ['!disabled'])
-            confirm.configure(text=(
-                self._text('linking_open_browser') if browser_ready else
-                self._text('linking_open_saved_link') if not manage and issuer in live
-                else title
-            ))
+            confirm.state(['disabled'] if busy and (manage or not own_request)
+                          else ['!disabled'])
+            label = title
+            if not manage and issuer in live and not busy:
+                label = self._text('linking_open_saved_link')
+            elif not manage and (own_request or submitted):
+                label = self._text('linking_connect_again')
+            confirm.configure(text=label)
             disconnectable = (issuer in live or issuer in self._reconnect_issuers
                               or (self._offline_binding is not None
                                   and self._offline_binding.issuer == issuer))
@@ -1192,16 +1189,30 @@ class LinkingManager:
             self._refresh_address_prompt = None
             prompt[0].destroy()
 
-    def link(self, address: str) -> None:
-        """Select an available link or start browser approval for a new one.
+    def _owns_website_request(self) -> bool:
+        """Identify requests that the address chooser is allowed to replace.
+
+        Returns:
+            bool: True for the current website approval or saved sign-in check.
+                Gallery operations and permission upgrades have different owners.
+        """
+        return (self._website_request_owner is not None
+                and self._website_request_owner is self._owner)
+
+    def link(self, address: str, *, restart: bool = False) -> None:
+        """Select a live site, connect to it or replace its unfinished approval.
 
         Args:
             address (str): Entered or previously selected website address.
+            restart (bool): Discard the previous request and make a new browser
+                approval without retrying the saved sign-in first.
 
         Returns:
-            None: Shows a live site, starts one approval or reports a refusal.
+            None: Shows a live site, starts or queues approval, or reports refusal.
         """
-        if self._worker is not None and self._worker.is_alive():
+        running = self._worker is not None and self._worker.is_alive()
+        may_replace = restart and self._owns_website_request()
+        if not may_replace and (running or (restart and not self._events.empty())):
             self._status.set('A gallery request is already in progress.')
             return
         issuer = linking_issuer(address)
@@ -1209,11 +1220,14 @@ class LinkingManager:
             self._status.set(self._text('linking_website_address_invalid'))
             return
         self._refresh(self._current_issuer)
-        if issuer in self._reconnect_issuers:
+        if not restart and issuer in self._reconnect_issuers:
             self._remove_saved_link(issuer, reconnect=True)
             return
         site = self._live_link(issuer)
         if site is not None:
+            if running:
+                self._status.set('A gallery request is already in progress.')
+                return
             if self._session is not site.session:
                 self._show_link(site)
             else:
@@ -1225,6 +1239,16 @@ class LinkingManager:
                     self._load_galleries(None)
             else:
                 self._status.set('Open Manage link to change the approved access.')
+            return
+        if restart:
+            # Fence old events before replacing the listener. The worker may
+            # still be returning from HTTP or finishing an approved vault write.
+            self._abandon_link_attempt()
+            owner = object()
+            self._owner = self._direct_owner = self._website_request_owner = owner
+            self._events.put((owner, 'restart_website_link', issuer))
+            self._status.set(self._text('linking_restarting'))
+            self._schedule_poll()
             return
         if self.resume_saved_link(issuer, approve_if_absent=True):
             return
@@ -2592,6 +2616,7 @@ class LinkingManager:
 
     def _start(
         self, issuer: str, *, direct: bool = False, replace_photos: bool = False,
+        restart: bool = False,
     ) -> None:
         """Start one browser request while retaining any other live site.
 
@@ -2601,6 +2626,8 @@ class LinkingManager:
                 upload and presentation when both ends support those capabilities.
             replace_photos (bool): Request a new Admin Photos grant for the
                 current site without closing its existing approved session.
+            restart (bool): Allow fresh approval to replace a saved credential
+                for the exact verified issuer, Admin and scope.
 
         Returns:
             None: Starts the worker or shows a generic local failure.
@@ -2649,7 +2676,9 @@ class LinkingManager:
         offline_store = None if direct else self._offline_store
         self._owner, self._attempt, self._cancel = owner, attempt, cancel
         self._direct_owner = owner if direct else None
-        self._handoff = None
+        if direct and not replace_photos:
+            self._website_request_owner = owner
+        self._clear_handoff()
         self._status.set(self._text('linking_requesting'))
 
         def worker() -> None:
@@ -2781,8 +2810,14 @@ class LinkingManager:
                         self._events.put((owner, 'offline_saved', (binding, store)))
                     else:
                         with store.binding_transaction(issuer, identity.user_id):
-                            # A new hint survives interrupted vault persistence.
-                            save_offline_binding(path, binding)
+                            if (restart
+                                    and load_offline_binding(path, issuer) == binding):
+                                # Fresh consent for this exact binding can replace
+                                # a refresh whose previous outcome was uncertain.
+                                discard_uncertain_refresh(store, issuer, identity.user_id)
+                            else:
+                                # A new hint survives interrupted vault persistence.
+                                save_offline_binding(path, binding)
                             self._events.put((owner, 'offline_saved', (binding, store)))
                             store_approved_refresh(
                                 store, issuer, identity.user_id, approved_scope,
@@ -3200,7 +3235,8 @@ class LinkingManager:
         """Deliver worker events without exposing their contents to logs.
 
         Returns:
-            None: Closes stale sessions and updates the selected site and address list.
+            None: Closes stale sessions, runs queued approvals and updates the
+                selected site and address list.
         """
         self._polling = False
         while True:
@@ -3230,7 +3266,15 @@ class LinkingManager:
                 elif isinstance(payload, _PhotosWatchStart):
                     self._discard_photos_watch_key(payload.target)
                 continue
-            if kind == 'capabilities' and isinstance(payload, tuple):
+            if kind == 'restart_website_link' and isinstance(payload, str):
+                if self._worker is not None and self._worker.is_alive():
+                    self._events.put((owner, kind, payload))
+                    break
+                if self._session is None:
+                    self._current_issuer = payload
+                    self._capabilities = frozenset()
+                self._start(payload, direct=True, restart=True)
+            elif kind == 'capabilities' and isinstance(payload, tuple):
                 issuer, capabilities = payload
                 if issuer == self._current_issuer and isinstance(capabilities, frozenset):
                     self._capabilities = capabilities
@@ -3280,6 +3324,7 @@ class LinkingManager:
                 )
                 self._show_link(_LinkedSite(issuer, session, identity.user_id))
                 self._dismiss_address_prompt()
+                self._website_request_owner = None
                 if self._window is None:
                     self._root.lift()
                 self._clear_handoff()
@@ -3292,6 +3337,7 @@ class LinkingManager:
                 )
                 self._show_link(_LinkedSite(issuer, session, identity.user_id))
                 self._dismiss_address_prompt()
+                self._website_request_owner = None
                 self._clear_handoff()
             elif kind == 'resume_error':
                 self._status.set('Could not verify the saved link. Try again.')
@@ -3729,6 +3775,8 @@ class LinkingManager:
             self._notify_target_changed()
         owner = object()
         self._owner = self._direct_owner = owner
+        if reconnect:
+            self._website_request_owner = owner
         self._current_issuer = issuer
         self._status.set(self._text('linking_reconnecting' if reconnect
                                    else 'linking_disconnecting'))
@@ -3809,6 +3857,8 @@ class LinkingManager:
         self._owner, self._cancel = owner, cancel
         if self._window is None:
             self._direct_owner = owner
+        if silent:
+            self._website_request_owner = owner
         self._status.set('Checking the securely saved connection…')
 
         def worker() -> None:
@@ -4887,7 +4937,10 @@ class LinkingManager:
                 if self._attempt is not None:
                     self._attempt.close()
             else:
-                self._status.set(self._text('linking_browser_retry'))
+                self._status.set(self._text(
+                    'linking_address_browser_retry' if self._address_prompt is not None
+                    else 'linking_browser_retry',
+                ))
             return
         # The browser claim is one-use. A second tab can invalidate consent.
         self._browser_needs_launch = False
@@ -5067,25 +5120,35 @@ class LinkingManager:
         self._handoff = None
         self._browser_needs_launch = False
 
-    def _close_window(self) -> None:
-        """Cancel this dialog's work and leave the shared session live.
+    def _abandon_link_attempt(self) -> None:
+        """Close the current approval and reject its queued worker results.
 
         Returns:
-            None: Closes the dialog while leaving a confirmed identity in memory.
+            None: Discards in-flight approval state and leaves verified links
+                and upload selection available.
         """
         self._cancel.set()
-        self._cancel_gallery_search()
-        self._detail_snapshot = None
-        if self._create_dispatch is not None:
-            self._create_dispatch.cancel()
-        if self._gallery_cancel is not None:
-            self._gallery_cancel.set()
         if self._attempt is not None:
             self._attempt.close()
             self._attempt = None
         self._clear_handoff()
         self._owner = None
         self._direct_owner = None
+        self._website_request_owner = None
+
+    def _close_window(self) -> None:
+        """Cancel this dialog's work and leave the shared session live.
+
+        Returns:
+            None: Closes the dialog while leaving a confirmed identity in memory.
+        """
+        self._abandon_link_attempt()
+        self._cancel_gallery_search()
+        self._detail_snapshot = None
+        if self._create_dispatch is not None:
+            self._create_dispatch.cancel()
+        if self._gallery_cancel is not None:
+            self._gallery_cancel.set()
         if self._window is not None:
             parent = self._window.master
             self._window.destroy()
