@@ -217,6 +217,13 @@ loopback exchange. Duplicate, mismatched, expired and replayed handles fail.
 The handle alone grants neither authorization nor credentials. The original
 gallery-scoped `pgu_` workflow remains independent.
 
+Claim, consent and grant revocation send the installation's origin with
+same-origin cookies and refuse redirects. Each POST uses only the site's
+root as its referrer. Firefox interprets an empty Fetch referrer as
+`no-referrer` and can send `Origin: null`. The root URL preserves exact
+origin validation without exposing the current page path or query.
+The document's `no-referrer` policy applies to the loopback navigation.
+
 Browser linking records request, browser, claim, consent and initial exchange
 outcomes through the existing Security category in Admin Logs. An independent
 diagnostic budget bounds log growth and never admits or refuses linking.
@@ -879,7 +886,7 @@ every time.
 The runtime version is defined in `app/bootstrap.php`:
 
 ```php
-const CMS_VERSION = '1.5.3';
+const CMS_VERSION = '1.5.4';
 ```
 
 Update-related code uses:

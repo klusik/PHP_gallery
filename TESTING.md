@@ -1224,6 +1224,17 @@ log sink. The existing database and linking owners still cover proof and
 session boundaries. Delivery of the browser callback on an installed client
 is separate from a server log recording that the callback was prepared.
 
+The `browser-map` linking fixture uses the real PHP views on an owned
+loopback server. It records the Origin produced by the 1.5.3 Fetch options
+and checks current claim, approval and revocation POSTs for exact Origin,
+site-root Referer, same-origin fetch metadata, session cookie and CSRF
+payload. It also checks approval layout at desktop and narrow widths and
+the absence of Referer on the loopback navigation. Hosted Linux runs with
+the runner's Firefox installation exercise the same markup in Firefox.
+The fixture endpoints stand in for storage and token exchange.
+No TeX manual impact. This transport correction preserves the documented
+approval and revocation procedures.
+
 `app_linking_gallery_create_owner_test.php` exercises the disposable linked
 owner's exclusive sidecar create, refusal of an existing file or final symlink,
 and filesystem identity recheck after a substituted directory. Receipt status
@@ -1781,7 +1792,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.5.3. Release verification uses the
+This guide applies to PHP Gallery Version 1.5.4. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable

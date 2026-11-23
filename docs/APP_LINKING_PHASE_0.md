@@ -619,9 +619,11 @@ The system browser receives a short-lived handle, which the start endpoint
 stores in the session before redirecting to a clean URL. After ordinary Admin
 login the browser binds the handle automatically and shows the requested access
 for explicit approval or denial. Browser
-claim and consent use CSRF-protected same-origin `fetch` with redirect refusal.
-The request sends the exact browser Origin with an empty referrer. This keeps
-the page URL out of Referer while the server can validate the origin.
+claim, consent and revocation use CSRF-protected same-origin `fetch` with
+redirect refusal. They explicitly use the site root as the referrer, so
+Firefox sends the exact Origin and omits the page path and query from Referer.
+The linking document keeps `Referrer-Policy: no-referrer` for navigation,
+including the loopback return.
 The server consumes the attempt once, binds
 it to the session and Admin. The controller owns the active session, CSRF check
 and pending claim ID; the service receives the verified identity explicitly and

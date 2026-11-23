@@ -510,6 +510,14 @@ transition fixture covers expiry, renewal and replay. Installed Windows and
 mixed-version deployment coverage are pending. Keep transient approval for
 older servers until deployed usage supports retirement.
 
+The 1.5.3 linking view supplied an empty Fetch referrer. Firefox maps that
+value to a no-referrer policy and may serialize the Origin as `null`, which
+the server rejects. The browser POSTs now use an explicit site-root referrer
+within the same-origin and no-redirect constraints. This preserves origin
+validation and keeps the linking page path and query out of Referer.
+The hosted browser fixture exercises the old options and current view.
+Installed-browser prevalence and live acceptance remain unverified.
+
 MAMP's Apache `mod_fastcgi` can drop the bearer header on the PHP request
 after approval. The gallery's `.htaccess` preserves WinApp linking bearers in
 the CGI environment using `mod_setenvif`. The linking controller's existing
