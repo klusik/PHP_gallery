@@ -31,7 +31,7 @@ function source_provenance_exclusions(): array
     ];
     foreach (['cz', 'de', 'gb', 'se'] as $country) {
         $assets['public/assets/flags/' . $country . '.svg'] = [
-            'origin' => 'lipis/flag-icons v7.2.3; pinned origin documented in README.md',
+            'origin' => 'lipis/flag-icons v7.2.3, documented in docs/SOURCE_CONTRACT_INVENTORY.md',
             'license' => 'public/assets/flags/LICENSE.flag-icons.md',
         ];
     }

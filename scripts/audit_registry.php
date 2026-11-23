@@ -302,6 +302,13 @@ $registry = [
     ],
     'node_tests' => [
         'gallery_visit_progress_test.mjs' => [],
+        // Bound the claim, consent and revocation transport fixture.
+        // Type: int. Units: seconds. Scope: the browser-map linking case.
+        // Consumers: central browser suite. Rationale: 90 covers two Chromium
+        // profiles, hosted Firefox, PHP rendering and loopback teardown.
+        'app_linking_origin_browser_test.mjs' => [
+            'browser' => true, 'php_argument' => true, 'timeout' => 90,
+        ],
         // Bound the real notification panel's two responsive journeys.
         // Type: int. Units: seconds. Scope: two disposable responsive journeys.
         // Consumers: required browser owner. Rationale: 90 includes two browser

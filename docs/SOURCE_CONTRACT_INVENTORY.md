@@ -113,7 +113,7 @@ The exact upstream SVG exclusions are not a first-party header allowlist:
 
 | Paths | Existing provenance evidence |
 | --- | --- |
-| public/assets/flags/cz.svg, de.svg, gb.svg, se.svg | lipis/flag-icons v7.2.3 pinned in README.md; public/assets/flags/LICENSE.flag-icons.md retains upstream attribution. |
+| public/assets/flags/cz.svg, de.svg, gb.svg, se.svg | [lipis/flag-icons v7.2.3](https://github.com/lipis/flag-icons/tree/v7.2.3), served locally. [MIT license](../public/assets/flags/LICENSE.flag-icons.md) retains upstream attribution. |
 | public/assets/link-icons/brands.svg | Bootstrap Icons derivation in public/assets/link-icons/README.md; LICENSE.bootstrap-icons.md retains upstream attribution. |
 
 No vendor SVG, license or legal notice was rewritten. First-party SVGs outside

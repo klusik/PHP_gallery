@@ -246,11 +246,12 @@ function view_render_app_linking_start(
         const target = new URL(url, location.href);
         if (target.origin !== location.origin) throw new Error('origin');
         const body = new URLSearchParams({csrf_token: root.dataset.csrf, ...fields});
-        // Send Origin for the server check while omitting the Referer URL.
+        // Firefox turns an empty referrer into no-referrer and sends Origin: null.
+        // Use the site root so the POST never carries the page path or query.
         const response = await fetch(target.href, {
             method: 'POST', mode: 'same-origin', credentials: 'same-origin',
             redirect: 'error', cache: 'no-store',
-            referrer: '', referrerPolicy: 'same-origin',
+            referrer: location.origin + '/', referrerPolicy: 'same-origin',
             headers: {'Accept': 'application/json'}, body
         });
         if (!response.ok || !response.headers.get('content-type')
@@ -456,11 +457,11 @@ function view_render_app_linking_devices(
         try {
             const target = new URL(root.dataset.action, location.href);
             if (target.origin !== location.origin) throw new Error('origin');
-            // Keep the exact Origin available for the revocation check.
+            // Use the site root to preserve Origin without the device page URL.
             const response = await fetch(target.href, {
                 method: 'POST', mode: 'same-origin', credentials: 'same-origin',
                 redirect: 'error', cache: 'no-store',
-                referrer: '', referrerPolicy: 'same-origin',
+                referrer: location.origin + '/', referrerPolicy: 'same-origin',
                 headers: {'Accept': 'application/json'},
                 body: new URLSearchParams({csrf_token: root.dataset.csrf,
                     grant_id: button.dataset.grantId})
