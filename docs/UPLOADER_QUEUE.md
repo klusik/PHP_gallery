@@ -183,6 +183,19 @@ leaves that plan in recovery and local closure can be retried. An empty v2
 journal interrupted before its initial scan is eligible for closure only.
 Unverifiable ownership or an unreadable plan remains visible for diagnostics.
 
+**Watcher factory reset…** records a Watcher-only pending fence before stopping
+the capture and disabling new dispatch and late source deletion. In-flight
+requests retain their actual worker ownership until they settle. After the
+writers stop, the reset retires capture completion plans, clears Watcher and
+one-scan FIFO journals and deletes both restart records. An unreadable local
+completion plan is kept outside normal queue discovery for support. The
+dedicated profile retains the default settings and requires explicit
+destination selection. Shared upload outcomes, Import queues, Activity logs,
+source files and saved reports remain available. If the app exits or a write
+fails before readback, the pending fence blocks new Watcher work and lets the
+reset resume. The log gives the waiting phase, failure reason or verified
+defaults and removal counts.
+
 Version-one recovery preserves the recorded cutoff; zero remains open rather
 than becoming the last checkpoint time. Multiple pending paths in the old set
 format have no provable FIFO order and block for review. A frozen old queue

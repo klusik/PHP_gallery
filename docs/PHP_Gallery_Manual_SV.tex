@@ -66,7 +66,7 @@
 
 % Utgåvemetadata finns här så att en utgåveuppdatering kräver en enda
 % versionsändring.
-\newcommand{\version}{1.5.6}
+\newcommand{\version}{1.5.7}
 \newcommand{\manualdate}{24~november~2026}
 
 \hypersetup{
@@ -2772,6 +2772,14 @@ Skärmbilder, rapporter och uppladdningshistorik bevaras. Använd
 \ui{Help > Support diagnostics…} om det lokala tillståndet inte kan verifieras.
 Rapporten visar det senaste återställningssteget och det senaste felet med
 tillgänglig HTTP-status.
+
+På fliken Watcher stoppar \ui{Watcher factory reset…} inspelningen och
+återställer standardinställningarna efter bekräftelse. Uppladdningsmål,
+bevakad mapp, köer och planerad fortsättning glöms bort. En uppladdning
+som redan skickats kan fortfarande nå servern. Skärmbilder, rapporter,
+loggar och inställningar på andra flikar bevaras. Välj
+\ui{Connect Watcher…} och en mapp för att börja om. Loggen visar resultatet
+och de återställda inställningarna.
 
 En ny programstart öppnar det befintliga fönstret och bevarar pågående arbete.
 En Windows-process äger den gemensamma app-profilen, även mellan programkopior;

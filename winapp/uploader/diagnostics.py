@@ -65,6 +65,7 @@ def format_watch_recovery_diagnostic(
             if (source in {
                     'gallery_watch_upload.pyw', 'flight_jobs.py', 'flight_ui.py',
                     'watch_queue.py', 'linked_upload.py', 'app_linking.py',
+                    'watcher_profile.py',
                 } and frame.name.isascii() and frame.name.isidentifier()):
                 parts.append(f'source={source}:{frame.name}:{frame.lineno}')
                 break

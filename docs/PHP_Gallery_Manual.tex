@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.5.6}
+\newcommand{\version}{1.5.7}
 \newcommand{\manualdate}{24 November 2026}
 
 \hypersetup{
@@ -2705,6 +2705,13 @@ the~inactive, verified session locally after confirmation. It~preserves
 screenshots, reports and~upload history. For~unverifiable local state, use
 \ui{Help > Support diagnostics…}. The~report includes the~latest recovery phase
 and~most recent failure, including available HTTP status.
+
+In~the~Watcher tab, \ui{Watcher factory reset…} stops capture and~restores
+its default settings after confirmation. It~forgets the~upload destination,
+watched folder, queues and~restart intent. An~upload already sent may~still
+reach the~server. Screenshots, reports, logs and~other tabs' settings are~kept.
+Use \ui{Connect Watcher…} and~choose a~folder to~start again. The~log records
+the~reset result and~the~restored settings.
 
 Opening the~app again restores the~existing window and~keeps current work.
 One Windows process owns the~shared app profile, including executable copies;

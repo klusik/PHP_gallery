@@ -1792,7 +1792,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.5.6. Release verification uses the
+This guide applies to PHP Gallery Version 1.5.7. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -2097,6 +2097,13 @@ Local review is available while a comparison preview request remains pending.
 The Windows job requires the existing recovery screenshot capture and retains
 its English/Czech desktop/narrow PNGs under `cache/test-audit/watch-recovery/`.
 These fixtures do not upload files to a live gallery.
+
+Factory-reset regressions in `winapp/tests/test_watcher_continuation.py` exercise
+confirmation cancellation, a held Watcher transport, queue cleanup across
+destinations, corrupt completion data and retry after a failed write. They
+verify persisted defaults and explicit reconnection, preserve original media,
+reports, Import state and logs, and assert safe waiting and terminal diagnostics.
+`winapp/tests/test_redesign.py` checks the icon and Watcher-tab action wiring.
 
 `app_linking_gallery_edit_test.php` exercises the real metadata service with
 isolated persistence boundaries: one-field saves, unchanged peer columns,

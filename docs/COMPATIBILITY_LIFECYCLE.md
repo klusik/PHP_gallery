@@ -403,6 +403,15 @@ Recovery diagnostics record the failed phase independently from a successful
 web sign-in and retain its most recent failure in the support snapshot.
 Process markers distinguish controlled shutdown stages from a log that ends
 before teardown.
+Profiles without `flights/watcher-profile.json` continue using the existing
+Watcher preferences and shared destination selection. Confirmed factory reset
+creates the isolated Watcher record so an old shared Import or Photos connection
+cannot be applied silently to a new Watcher capture. WinApp 1.5.7 and later read
+its pending fence before starting capture or a one-scan queue. New Watcher
+settings persist in that record after reset. Older installed builds do not
+read it. The legacy read path remains supported for profiles that have never
+been reset, whose installed usage is unknown. Real installed reset acceptance
+remains to be established.
 Inspection admits no capture before mode readiness. Temporary checkpoint reads
 and original-gallery verification failures retain the same intent for bounded
 retry, while malformed state, changed identity/scope and revoked authorization
