@@ -1,5 +1,66 @@
 # Patch notes
 
+## Version 1.6.0
+
+PHP Gallery 1.6.0 introduces a four-language WinApp interface and packages the
+localized desktop companion as WinApp 1.6.0. It also applies the Python import
+policy to the complete reviewed source tree.
+
+### Highlights
+
+#### WinApp language and restart
+
+- Added Czech, German, and Swedish alongside English in WinApp.
+  The desktop language covers menus, settings, dialogs, and progress through
+  the Watcher, import, Photos, Activity, and flight workflows. Czech calls Watcher **Sledovátko**.
+  [#438](https://github.com/klusik/PHP_gallery/issues/438)
+- Saved the language immediately in the desktop profile and added a choice to
+  restart now or later. Settings offers another restart while a change is
+  pending. Selecting the active language clears it. The restart follows the
+  existing Watcher checkpoint and waits for incompatible upload, import, and
+  flight operations.
+- Included the three gettext catalogs in the installer and the production source
+  package. The Gallery website and flight PDF editions keep their own language
+  settings.
+
+### Technical Details
+
+#### WinApp
+
+- Added the desktop locale owner in `winapp/uploader/localization.py` and UTF-8
+  GNU gettext catalogs. The separate `ui-language.json` preference can inherit
+  an existing flight-interface preference when first used.
+- Localized the Activity captions while retaining source messages, redacted
+  fields, and stable diagnostic identifiers for logs and support reports.
+- Put the exact catalog paths in the optional `companion_locale_files` inventory
+  list. The production builder verifies the original bytes in both the folder
+  and ZIP. The additive field preserves the font and license contract used by
+  installed 1.5.7 updaters. The catalogs are desktop distribution resources.
+
+#### Tooling and tests
+
+- Removed 179 function-local imports and made `python.function_local_import`
+  absolute alongside `python.future_annotations`. The existing AST check
+  covers the complete admitted `.py` and `.pyw` tree, including tests and
+  tooling. Optional and platform-specific imports use module-level guards.
+- Added regressions for catalog coverage and formatting fields, the four
+  language choices in Tk, independent preferences, restart admission,
+  and stable diagnostics. Added package tests for catalog bytes and refusal
+  when catalog paths are placed in an older inventory field.
+
+### User Impact
+
+#### WinApp users
+
+- Choose a language in Settings and restart when current work permits it. The
+  choice follows the local profile across launches. API, URL, PDF, UTC, and
+  SimConnect retain their established names.
+
+#### Gallery visitors and maintainers
+
+- The Gallery website's language selection operates independently of the desktop
+  profile. The production source package includes the matching WinApp catalogs.
+
 ## Version 1.5.7
 
 PHP Gallery 1.5.7 includes WinApp 1.5.7 with a factory reset for Watcher.
