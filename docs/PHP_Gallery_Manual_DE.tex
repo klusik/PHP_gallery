@@ -3306,9 +3306,11 @@ ohne weitere SimConnect-Verbindung. Bei Pause, Stopp, fehlenden oder mehr als
 drei Sekunden alten Daten erscheinen Striche. Daneben öffnet \ui{PDF}
 die gespeicherten Flüge.
 
-\ui{Gespeicherte Flüge und PDFs} zeigt Beginn, Flugzeug, Messpunktzahl des
-Checkpoints, lokale PDFs, Status und erhaltene Fehler. Aktualisieren liest nur
-Checkpoints; App-Protokoll öffnen verwendet das bestehende Protokoll.
+\ui{Gespeicherte Flüge und PDFs} zeigt Beginn, Flugzeug oder gespeicherte
+Galerie, Messpunkte, lokale PDFs, Status und Fehler. \ui{Nur Flüge anzeigen}
+ist anfangs aus. Der Filter behält Sitzungen mit Flugdaten oder PDFs.
+Ein Doppelklick oder die Eingabetaste öffnet eine PDF. \ui{Ordner} öffnet
+die Dateien. Aktualisieren und das App-Protokoll stehen im Menü.
 \ui{Flug beenden und PDFs erstellen} erzeugt ohne Bestätigung vier
 Sprachfassungen,
 erledigt angenommene Arbeit und erforderliche Übertragung und behält die
@@ -3326,6 +3328,10 @@ Sinkflüge in größerer Höhe nach fünf Sekunden anhaltender Vertikalgeschwind
 Wenn ein Element auf einer leeren Seite weder Platz findet noch geteilt werden
 kann, erscheint an seiner Stelle ein Hinweis. Der restliche Bericht wird
 erzeugt. Lokale PDFs lassen sich aus gespeicherten Aufzeichnungen neu erstellen.
+Die Berichtszeit beginnt mit dem ersten Messpunkt anhaltender Bewegung.
+Unplausible Nullkoordinaten entfallen und die Route wird an der Lücke
+unterbrochen. Die Rohaufzeichnung behält alle ursprünglichen Messpunkte,
+einschließlich der Zeit vor dem Rollen und aller erfassten Positionen.
 
 Bei einer Version zeigt ein aufgeklappter Flug direkt die~Dateien. Mehrere
 Versionen erscheinen als aufklappbare Gruppen, immer numerisch absteigend
@@ -3333,8 +3339,7 @@ Versionen erscheinen als aufklappbare Gruppen, immer numerisch absteigend
 aufgeklappte Flüge/Versionen und die~Dateiauswahl. Diese Anzeige verschiebt
 oder benennt keine Dateien auf dem Datenträger um.
 
-Für einen gestoppten Flug erzeugt \ui{Lokale PDF erstellen} oder
-\ui{Lokale PDF neu erstellen} eine neue Revision in
+Für einen gestoppten Flug erzeugt \ui{Lokale PDF erstellen} eine neue Revision in
 \filepath{reports/}. Frühere PDFs, Rohdaten und Uploadbestätigungen
 bleiben erhalten. Kein Schlüssel, Upload oder Widerruf ist beteiligt; ein
 anderer laufender Flug bleibt aktiv. Teilberichte bleiben unvollständig;
@@ -3415,13 +3420,14 @@ Flüge; die Hauptaktion wechselt zum Beginn. Einen weiterhin gültigen
 Serverschlüssel separat in Admin widerrufen. Ein gesendeter Widerruf muss zuerst
 enden; Stopp- oder Speicherfehler behalten Schlüssel und Wiederholung bei.
 
-Für spätere Uploads einen gültigen Galerieschlüssel speichern und testen,
-auch einen neuen Schlüssel derselben Galerie. Im Berichtbrowser gestoppten
-Flug aufklappen und PDF-Dateien mit Strg/Umschalt auswählen, dann
-\ui{Gespeicherte PDFs hochladen} wählen.
-Galerie und Sprachen bestätigen; das Serverinventar prüft das genaue Ziel.
-Vorhandene PDFs werden ohne Neurendern, Stoppen eines anderen Flugs oder
-Widerruf gesendet. \filepath{upload-receipts.json} speichert getrennte
+Die Überwachung für die Zielgalerie per Kontoverknüpfung oder API-Schlüssel
+starten. \ui{Erstellen und hochladen} speichert eine neue Revision und sendet
+sie an die neben der Aktion angezeigte Galerie. Bei einem Uploadfehler kann
+dieselbe Revision erneut gesendet werden. Für einen gestoppten Flug zeigt
+\ui{Gespeicherte PDFs hochladen} im Menü Versionen, Datum und Sprachen.
+Strg/Umschalt wählt mehrere Versionen oder einzelne PDFs desselben Flugs.
+Die gespeicherten Dateien werden gesendet, während ein anderer Flug läuft.
+\filepath{upload-receipts.json} speichert getrennte
 bestätigte Prüfsummen; Wiederholen gleicht den Serverstatus ab. Alte Pläne,
 Schlüsselbindungen und Rohdaten bleiben erhalten. Abbruch behält fertige
 Fassungen. Protokollfehler nennen bereinigte Aktion, HTTP-Status, Inhaltstyp

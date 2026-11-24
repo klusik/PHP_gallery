@@ -967,6 +967,71 @@ class FlightWorkflowTests(unittest.TestCase):
             delivery.check_report_capability.assert_not_called()
             delivery.deliver_report.assert_not_called()
 
+    def test_watched_linked_upload_retries_a_durable_new_revision(self) -> None:
+        """Keep a freshly rendered revision after a linked delivery outage.
+
+        Returns:
+            None: Retry sends identical files to the captured linked transport
+                without starting Finish or touching the original completion.
+        """
+        with tempfile.TemporaryDirectory() as temporary:
+            plan = self._plan(Path(temporary) / "archived", ("en", "cs"))
+            plan.save()
+            (plan.directory / "session.json").write_text(
+                json.dumps({"recording_ended": True}), encoding="utf-8",
+            )
+            original = (plan.directory / "completion.json").read_bytes()
+            linked = SimpleNamespace(
+                binding=lambda: "b" * 64, report_request=Mock(),
+            )
+            self.assertNotEqual(plan.binding, linked.binding())
+            watched = workflow.WatchedReportTarget("Evening flights", linked_target=linked)
+            transport, report = self._report_modules()
+            transport.deliver_report.side_effect = OSError("Offline after local render")
+            drain, revoke = Mock(), Mock()
+            worker = workflow.FinalizationWorker(
+                [plan], "", "", drain, revoke, False,
+                local_reports=True, watched_target=watched,
+            )
+            with (
+                patch.object(workflow, "analyze_session", return_value=self._analysis(True, False)),
+                patch.multiple(workflow, flight_delivery=transport, flight_report=report),
+            ):
+                worker.run()
+            self.assertEqual("error", worker.snapshot().phase)
+            revision = worker.saved_revision
+            self.assertIsNotNone(revision)
+            self.assertEqual(set(plan.languages), set(revision.files))
+            contents = {file: file.read_bytes() for file in revision.files.values()}
+            result = json.loads((plan.directory / "manual-report.json").read_text(encoding="utf-8"))
+            self.assertEqual("completed", result["phase"])
+
+            transport.deliver_report.reset_mock()
+            transport.deliver_report.side_effect = lambda *args, **options: {
+                "id": "a" * 32, "sha256": options["expected_sha256"],
+            }
+            retry = workflow.FinalizationWorker(
+                [plan], "", "", drain, revoke, False,
+                saved_revisions=(revision,), watched_target=watched,
+            )
+            with (
+                patch.multiple(workflow, flight_delivery=transport, flight_report=report),
+                patch.object(workflow, "analyze_session") as analyze,
+            ):
+                retry.run()
+            self.assertEqual("completed", retry.snapshot().phase)
+            self.assertEqual(retry.snapshot().total, retry.snapshot().done)
+            self.assertEqual(contents, {file: file.read_bytes() for file in contents})
+            self.assertEqual(2, transport.deliver_report.call_count)
+            for call in transport.deliver_report.call_args_list:
+                self.assertEqual(("", ""), call.args[:2])
+                self.assertEqual(revision.report_id, call.args[5])
+                self.assertIs(linked.report_request, call.kwargs["request"])
+            analyze.assert_not_called()
+            drain.assert_not_called()
+            revoke.assert_not_called()
+            self.assertEqual(original, (plan.directory / "completion.json").read_bytes())
+
     def test_local_generation_refuses_active_or_empty_session(self) -> None:
         """Preserve live data and reject an empty stopped report explicitly.
 

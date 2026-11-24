@@ -9716,6 +9716,12 @@ Portable coverage tests legacy server negotiation and the real host bridge's
 local per-gallery divider save across host reconstruction and identity changes.
 These checks do not launch or qualify the user's installed app/server.
 
+The native saved-flight fixture captures the direct PDF actions with Watcher
+active, the narrow filtered catalog with Watcher off, and the multi-revision
+picker under `cache/test-audit/saved-flight-reports/`. The portable recorder
+and delivery fixtures replay missing zero-coordinate positions, stationary
+preflight, explicit revision selection and retry of already retained PDFs.
+
 The shared UI library has portable architectural coverage in
 `winapp/tests/test_ui_library.py`: complete runtime consumers must use central
 button/dialog/range bases and cannot mutate ttk styles. Negative controls cover

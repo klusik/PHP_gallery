@@ -3056,9 +3056,11 @@ fot per minut. Den läser befintlig registrerarcache utan en ny
 SimConnect-anslutning. Pausade, stoppade, saknade eller mer än tre sekunder
 gamla värden ersätts med streck. Genvägen \ui{PDF} öppnar sparade flygningar.
 
-\ui{Sparade flygningar och PDF} visar start, flygplan, checkpointens mätpunkter,
-lokala PDF-filer, status och bevarade fel. Uppdatera läser bara checkpoints;
-Öppna applogg använder befintlig logg. \ui{Avsluta flygning och skapa PDF}
+\ui{Sparade flygningar och PDF} visar start, flygplan eller sparat galleri,
+mätpunkter, lokala PDF-filer, status och fel. \ui{Visa bara flygningar} är
+av från början. Filtret behåller sessioner med flygdata eller PDF-filer.
+Dubbelklick eller Retur öppnar en PDF. \ui{Mapp} öppnar filerna.
+Uppdatering och applogg finns i menyn. \ui{Avsluta flygning och skapa PDF}
 skapar fyra språkversioner utan bekräftelse, slutför accepterat arbete och
 obligatorisk leverans och behåller anslutningen. Detta gäller
 även när automatisk PDF-skapning är av.
@@ -3074,6 +3076,10 @@ Analysen bekräftar vanlig stigning och sjunkning på högre höjd efter fem
 sekunders ihållande vertikalhastighet. När ett rapportelement varken ryms
 eller kan delas på en tom sida visas en varning på dess plats och resten av
 rapporten skapas. Lokala PDF-filer kan skapas om från sparade inspelningar.
+Rapporttiden börjar med den första mätpunkten i en ihållande rörelse.
+Orimliga nollkoordinater utelämnas och rutten bryts vid avbrottet.
+Råinspelningen behåller alla ursprungliga mätpunkter, även förberedelsetiden
+och samtliga sparade positioner.
 
 Med en version visar en expanderad flygning filerna direkt. Flera versioner
 visas som expanderbara grupper, alltid numeriskt fallande (v5, v4, v3),
@@ -3081,8 +3087,8 @@ oberoende av kolumnsortering. Uppdatering behåller expanderade flygningar och
 versioner samt filvalet. Denna vy flyttar eller byter inte namn på filer på
 disk.
 
-För en stoppad flygning skapar \ui{Skapa lokal PDF} eller \ui{Skapa lokal PDF
-igen} en ny numrerad version i \filepath{reports/}. Tidigare PDF-filer,
+För en stoppad flygning skapar \ui{Skapa lokal PDF} en ny numrerad version i
+\filepath{reports/}. Tidigare PDF-filer,
 rådata och uppladdningskvittenser behålls. Ingen nyckel, uppladdning eller
 återkallelse behövs; en annan pågående flygning fortsätter. Delrapporter
 förblir ofullständiga; aktiva, inte avslutade och tomma registreringar avvisas.
@@ -3155,12 +3161,13 @@ startåtgärden. Återkalla en fortfarande giltig servernyckel separat
 i Admin. En skickad återkallelse måste först avslutas; stopp- eller sparfel
 behåller nyckeln och möjligheten att försöka igen.
 
-För senare uppladdning, spara och testa en giltig gallerinyckel, även en ny
-nyckel för samma galleri. Expandera stoppad flygning och välj PDF-filer med
-Ctrl/Skift,
-sedan \ui{Ladda upp sparade PDF-filer}. Bekräfta galleri och språk; serverns
-inventering verifierar exakt mål före överföring. Befintliga PDF-filer skickas
-utan ny rendering, stopp av annan flygning eller återkallelse. Separata
+Starta bevakaren för målgalleriet med ett länkat konto eller en API-nyckel.
+\ui{Skapa och ladda upp} sparar en ny version och skickar den till galleriet
+bredvid knappen. Vid uppladdningsfel kan samma version skickas igen.
+Välj en stoppad flygning och \ui{Ladda upp sparade PDF-filer} i menyn
+för att se versioner, datum och språk. Ctrl/Skift väljer flera versioner
+eller enskilda PDF-filer från samma flygning. Sparade filer skickas medan
+en annan flygning fortsätter. Separata
 \filepath{upload-receipts.json} sparar bekräftade kontrollsummor; nya försök
 stämmer av serverstatus. Gamla planer, nyckelkopplingar och rådata behålls.
 Avbrott behåller färdiga versioner. Protokollfel visar maskerad åtgärd,

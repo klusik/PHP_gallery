@@ -298,7 +298,9 @@ from uploader.gallery_view_preferences import (
     load_gallery_photo_order, save_gallery_photo_order,
     load_gallery_folder_split, save_gallery_folder_split,
 )
-from uploader.flight_workflow import FINALIZATION_DRAIN_SECONDS, FinalizationWorker
+from uploader.flight_workflow import (
+    FINALIZATION_DRAIN_SECONDS, FinalizationWorker, WatchedReportTarget,
+)
 from uploader.flight_recorder import FlightRecorder
 from uploader.windows_file_identity import assert_local_windows_profile
 from uploader.windows_display import prepare_windows_display
@@ -14812,6 +14814,43 @@ class WatcherApp:
         port = self.config_store.mode_port(captured)
         return (self.mode_owner, port, normalize_upload_url(captured.gallery_url),
                 captured.api_key)
+
+    def watched_report_target(self) -> WatchedReportTarget | None:
+        """Read the exact running Watcher's target without changing its state.
+
+        Returns:
+            WatchedReportTarget | None: Capture-owned authority for an
+                independent archive upload, or None before active observation,
+                during drain/review, or after upload scope becomes unavailable.
+        """
+        worker = self.worker
+        if (worker is None or not worker.is_alive() or not worker.initial_captured
+                or self._watch_start_pending or worker.drain_only
+                or worker.drain_event.is_set() or worker.stop_event.is_set()
+                or worker.update_pause_event.is_set() or worker._recovery_review_only
+                or worker._force_finish_requested.is_set()):
+            return None
+        target = worker.linked_target
+        if target is not None:
+            if not target.session.can_upload():
+                return None
+            return WatchedReportTarget(
+                target.title or f"{target.issuer} #{target.gallery_id}",
+                linked_target=target,
+            )
+        url = normalize_upload_url(worker.config.gallery_url)
+        key = worker.config.api_key.strip()
+        if not (url and key and worker._gui_admission is not None):
+            return None
+        verified = self._verified_legacy_gallery
+        if verified is not None and verified[1] == connection_binding(url, key):
+            folder, title = verified[2], verified[3]
+        else:
+            folder, title = None, ""
+        return WatchedReportTarget(
+            title or folder or url, upload_url=url, api_key=key,
+            gallery_folder=folder, gui_admission=worker._gui_admission,
+        )
 
     def connection_change_allowed(self, config: WatcherConfig) -> bool:
         """Preserve captured connection ownership while accepted work is pending.

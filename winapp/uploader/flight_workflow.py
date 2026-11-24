@@ -67,6 +67,32 @@ class FlightProgress:
     rendered_languages: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, repr=False)
+class WatchedReportTarget:
+    """Capture the active Watcher's gallery, display name and request authority.
+
+    The legacy folder may be unknown until inventory validates the captured key.
+    Exactly one transport is supplied by the GUI host for an active Watcher.
+    """
+
+    label: str
+    upload_url: str = ""
+    api_key: str = ""
+    gallery_folder: str | None = None
+    gui_admission: tuple[GuiModeOwner, ModeConfigPort] | None = None
+    linked_target: LinkedUploadTarget | None = None
+
+    def binding(self) -> str:
+        """Identify one exact destination for retaining and retrying delivery.
+
+        Returns:
+            str: Non-secret fingerprint of the linked gallery or legacy key.
+        """
+        if self.linked_target is not None:
+            return self.linked_target.binding()
+        return connection_binding(self.upload_url, self.api_key)
+
+
 class FinalizationWorker(threading.Thread):
     """Render/upload PDFs, finalize delivery or retain an abandoned flight."""
 
@@ -89,6 +115,7 @@ class FinalizationWorker(threading.Thread):
         abandon_local: bool = False,
         config_generation: object | None = None,
         linked_target: LinkedUploadTarget | None = None,
+        watched_target: WatchedReportTarget | None = None,
     ) -> None:
         """Capture connection-bound finalization or one independent local source.
 
@@ -130,6 +157,9 @@ class FinalizationWorker(threading.Thread):
             linked_target (LinkedUploadTarget | None): Captured upload-scoped
                 account/gallery target for linked PDF delivery; None uses the
                 established legacy or explicitly local workflow.
+            watched_target (WatchedReportTarget | None): Active Watcher
+                destination for explicit archive delivery, after generating a
+                local revision or using selected retained editions.
 
         Returns:
             None: Initializes an idle, cancellable finalization thread.
@@ -140,6 +170,21 @@ class FinalizationWorker(threading.Thread):
                 Abandonment cannot be combined with another completion mode.
         """
         super().__init__(name="FlightFinalization", daemon=True)
+        self.watched_target = watched_target
+        if watched_target is not None:
+            if (wants_revoke or abandon_local or forget is not None
+                    or upload_url or api_key or gui_admission is not None
+                    or linked_target is not None or target_gallery
+                    or not (local_reports or saved_revision or saved_revisions)):
+                raise ValueError("Watched report delivery requires an independent PDF task.")
+            upload_url = watched_target.upload_url
+            api_key = watched_target.api_key
+            gui_admission = watched_target.gui_admission
+            linked_target = watched_target.linked_target
+            target_gallery = watched_target.label
+            require_gui_admission = linked_target is None
+            if linked_target is None and not (upload_url and api_key and gui_admission):
+                raise ValueError("Watched legacy report delivery requires a captured key.")
         self.plans = plans
         self.upload_url = upload_url
         self.api_key = api_key
@@ -152,7 +197,8 @@ class FinalizationWorker(threading.Thread):
         self.linked_target = linked_target
         if linked_target is not None and (
             upload_url or api_key or gui_admission is not None or wants_revoke
-            or any(plan.binding != linked_target.binding() for plan in plans)
+            or (watched_target is None
+                and any(plan.binding != linked_target.binding() for plan in plans))
         ):
             raise ValueError('Linked reports require the original captured gallery.')
         self.wait_for_workers = wait_for_workers
@@ -188,6 +234,8 @@ class FinalizationWorker(threading.Thread):
         ) + int(wants_revoke)
         if local_reports:
             tasks = 1 + len(plans[0].languages)
+            if watched_target is not None:
+                tasks += 1 + len(plans[0].languages)
         if self.saved_upload:
             tasks = 1 + sum(len(item.files) for item in self.saved_revisions)
         if self.abandonment:
@@ -323,6 +371,15 @@ class FinalizationWorker(threading.Thread):
                 only when legacy key cleanup was requested.
         """
         try:
+            if self.local_reports:
+                revision = self.generate_local_reports()
+                if self.watched_target is None:
+                    self.update("completed", str(self.plans[0].directory / "reports"))
+                    return
+                # Only a durable rendered revision becomes eligible for
+                # delivery. A later failure leaves those same files retryable.
+                self.saved_revision = revision
+                self.saved_revisions = (revision,)
             if self.gui_admission is not None:
                 owner, port = self.gui_admission
                 self._gui_work = owner.acquire(
@@ -355,10 +412,7 @@ class FinalizationWorker(threading.Thread):
                 self.update("saving_key")
                 self.forget()
                 return
-            if self.local_reports:
-                self.generate_local_reports()
-                return
-            if self.saved_upload:
+            if self.saved_upload or self.local_reports:
                 self.upload_saved_reports()
                 return
             self.update("draining")
@@ -412,7 +466,8 @@ class FinalizationWorker(threading.Thread):
         except InterruptedError as exc:
             if not self.server_revocation_confirmed:
                 self._revocation_cleanup_pending = False
-            self.save_local_result("cancelled", str(exc))
+            if self.saved_revision is None:
+                self.save_local_result("cancelled", str(exc))
             self.update("cancelled", str(exc))
         except Exception as exc:
             if not self.server_revocation_confirmed:
@@ -425,7 +480,8 @@ class FinalizationWorker(threading.Thread):
                 # installer. Keep recovery tied to that executable and retain
                 # recorded data instead of treating missing packages as damage.
                 detail = "pdf_dependency_missing:" + str(exc.name)
-            self.save_local_result("error", f"{type(exc).__name__}: {detail}")
+            if self.saved_revision is None:
+                self.save_local_result("error", f"{type(exc).__name__}: {detail}")
             with self._lock:
                 self.update("error", detail)
                 self._progress.error = detail
@@ -595,11 +651,11 @@ class FinalizationWorker(threading.Thread):
             render=flight_report.render_report,
         )
 
-    def generate_local_reports(self) -> None:
+    def generate_local_reports(self) -> ReportRevision:
         """Render a fresh local revision from a stopped immutable raw session.
 
         Returns:
-            None: Creates selected PDFs as a fresh readable flat revision,
+            ReportRevision: Fresh readable flat revision with selected PDFs,
                 preserving raw data, earlier PDFs and every delivery receipt.
 
         Raises:
@@ -626,7 +682,6 @@ class FinalizationWorker(threading.Thread):
         ):
             raise ValueError("Select at least one supported PDF language.")
         revision = "manual-" + uuid.uuid4().hex
-        output = directory / "reports"
         self.local_result = {
             "schema_version": 1,  # First independent local-render result format.
             "started_utc": datetime.now(timezone.utc).isoformat(),
@@ -649,10 +704,10 @@ class FinalizationWorker(threading.Thread):
         self.render_editions(plan, analysis, edition)
         self.check_cancelled()
         self.save_local_result("completed")
-        self.update("completed", str(output))
+        return edition
 
     def upload_saved_reports(self) -> None:
-        """Upload an explicitly selected retained revision using the current key.
+        """Upload selected retained editions to the explicitly captured gallery.
 
         Returns:
             None: Saves separate checksum receipts after server reconciliation;
@@ -680,10 +735,15 @@ class FinalizationWorker(threading.Thread):
             ):
                 raise ValueError("Saved PDF selection changed; refresh the report list.")
         self.update("uploading", self.target_gallery)
-        flight_delivery.saved_report_destination(
-            self.upload_url, self.api_key, self.target_gallery,
-            **self._request_options(),
-        )
+        gallery_folder = self.target_gallery
+        if self.linked_target is None:
+            expected = (self.watched_target.gallery_folder if self.watched_target
+                        else self.target_gallery)
+            verified_folder = flight_delivery.saved_report_destination(
+                self.upload_url, self.api_key, expected, **self._request_options(),
+            )
+            if self.watched_target is not None:
+                gallery_folder = verified_folder
         self.update("uploading", self.target_gallery, advance=True)
         receipt_path = plan.directory / "upload-receipts.json"
         temporary_receipt = receipt_path.with_name(receipt_path.name + ".tmp")
@@ -693,7 +753,9 @@ class FinalizationWorker(threading.Thread):
         receipts = state.get("receipts", {})
         if not isinstance(receipts, dict):
             raise ValueError("Saved PDF upload receipts need recovery.")
-        binding = connection_binding(self.upload_url, self.api_key)
+        binding = (self.watched_target.binding() if self.watched_target
+                   else connection_binding(self.upload_url, self.api_key))
+        request = self.linked_target.report_request if self.linked_target else None
         editions = [
             (revision, language, pdf) for revision in self.saved_revisions
             for language, pdf in revision.files.items()
@@ -705,13 +767,14 @@ class FinalizationWorker(threading.Thread):
             receipt = flight_delivery.deliver_report(
                 self.upload_url, self.api_key, pdf, plan.session_id, language,
                 revision.report_id, self.transfer_progress, expected_sha256=checksum,
+                **({"request": request} if request is not None else {}),
                 **self._request_options(),
             )
             if (receipt.get("sha256") != checksum
                     or flight_delivery.flight_report_digest(pdf) != (checksum, size)):
                 raise RuntimeError("The selected report changed; delivery remains unconfirmed.")
             receipts[binding + ":" + revision.report_id + ":" + language] = {
-                "gallery_folder": self.target_gallery,
+                "gallery_folder": gallery_folder,
                 "report_id": revision.report_id,
                 "language": language,
                 "sha256": receipt["sha256"],

@@ -29,6 +29,7 @@ from uploader.flight_data import (
     PHASE_APPROACH_AGL_METRES,
     PHASE_CLIMB_MINIMUM_MPS,
     PHASE_DESCENT_MAXIMUM_MPS,
+    TELEPORT_DISTANCE_LIMIT_NM,
     FlightAnalysis,
     FlightSample,
     _sample,
@@ -67,11 +68,6 @@ FLIGHT_GAP_LIMIT_SECONDS = 5.0
 # Type: int. Units: samples. Scope: one active session.
 # Consumers: FlightRecorder._write_sample. Rationale: bound crash recovery loss.
 CHECKPOINT_SAMPLE_INTERVAL = 100
-# Break track after implausible movement between adjacent positions.
-# Type: float. Units: nautical miles. Scope: consecutive samples.
-# Consumers: FlightRecorder._discontinuity.
-# Rationale: detect teleport or aircraft-position reloads.
-TELEPORT_DISTANCE_LIMIT_NM = 10.0
 # Keep five seconds of raw frames before approach trigger for touchdown evidence.
 # Type: int. Units: samples. Scope: one recorder process.
 # Consumers: FlightRecorder.run. Rationale: recover short pre-contact windows.

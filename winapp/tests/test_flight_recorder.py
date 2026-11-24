@@ -70,6 +70,7 @@ def make_sample(
     vertical_speed_mps: float | None,
     altitude_m: float,
     latitude_deg: float = 49.0,
+    longitude_deg: float = 14.0,
     simulator_elapsed: float | None = None,
     discontinuity: str | None = None,
     ground_speed_mps: float = 60.0,
@@ -83,6 +84,7 @@ def make_sample(
         vertical_speed_mps (float | None): Vertical speed in SI units.
         altitude_m (float): Aircraft altitude in metres.
         latitude_deg (float): Synthetic route latitude.
+        longitude_deg (float): Synthetic route longitude.
         simulator_elapsed (float | None): Simulator elapsed clock.
         discontinuity (str | None): Optional track-split reason.
         ground_speed_mps (float): Synthetic groundspeed in metres per second.
@@ -97,7 +99,7 @@ def make_sample(
             "recorded_utc": f"2026-01-01T00:00:{int(elapsed) % 60:02d}+00:00",
             "simulator_elapsed_seconds": simulator_elapsed,
             "latitude_deg": latitude_deg,
-            "longitude_deg": 14.0,
+            "longitude_deg": longitude_deg,
             "altitude_m": altitude_m,
             "agl_m": agl_m,
             "vertical_speed_mps": vertical_speed_mps,
@@ -1029,8 +1031,9 @@ class FlightAnalysisReplayTests(unittest.TestCase):
             write_session(directory, rows, recording_ended=True)
             result = analyze_session(directory)
         phases = [event.phase for event in result.events]
+        self.assertNotIn("preflight", phases)
         for phase in (
-            "preflight", "taxiout", "takeoff", "climb", "cruise",
+            "taxiout", "takeoff", "climb", "cruise",
             "descent", "approach", "flare", "touchdown", "rollout",
             "taxiin", "ended",
         ):
@@ -1042,6 +1045,85 @@ class FlightAnalysisReplayTests(unittest.TestCase):
             phases,
             [event["phase"] for event in result.to_payload()["events"]],
         )
+
+    def test_report_trims_parked_prefix_before_first_confirmed_pushback(self) -> None:
+        """Keep parked samples on disk while dating the report at motion onset.
+
+        Returns:
+            None: A spurious groundspeed frame is ignored and the chart,
+                duration and distance exclude the half-hour stationary prefix.
+        """
+        # Half an hour before pushback and six seconds of sustained ground motion.
+        parked_seconds, moving_seconds = 30 * 60, 6
+        rows = [
+            make_sample(
+                float(index), on_ground=True, agl_m=0.0,
+                vertical_speed_mps=0.0, altitude_m=500.0,
+                latitude_deg=49.0 + (index % 2) * 0.000001,
+                ground_speed_mps=8.0 if index == 12 else 0.0,
+            )
+            for index in range(parked_seconds)
+        ]
+        rows.extend(
+            make_sample(
+                float(parked_seconds + index), on_ground=True, agl_m=0.0,
+                vertical_speed_mps=0.0, altitude_m=500.0,
+                latitude_deg=49.0 + index * 0.000018,
+                ground_speed_mps=2.0,
+            )
+            for index in range(moving_seconds + 1)
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            write_session(directory, rows, recording_ended=True)
+            raw_path = directory / "samples.jsonl"
+            raw = raw_path.read_bytes()
+            result = analyze_session(directory)
+            self.assertEqual(raw, raw_path.read_bytes())
+        self.assertEqual(float(moving_seconds), result.duration_seconds)
+        self.assertEqual(0.0, result.samples[0].session_elapsed_seconds)
+        self.assertEqual(moving_seconds + 1, len(result.samples))
+        self.assertNotIn("preflight", [event.phase for event in result.events])
+        # Six two-metre observations account for about 0.0065 NM.
+        self.assertAlmostEqual(0.0065, result.distance_nm, places=4)
+
+    def test_zero_origin_outage_is_missing_but_continuous_crossing_is_valid(self) -> None:
+        """Treat a distant zero pair as unavailable and preserve real zeroes.
+
+        Returns:
+            None: The resumed trace is split, other signals remain, and a
+                plausible crossing of the equator and prime meridian survives.
+        """
+        for positions, outage in (
+            ([(49.0, 14.0), (0.0, 0.0), (0.0, 0.0), (49.0001, 14.0)], True),
+            ([(-0.0001, 0.0), (0.0, 0.0), (0.0001, 0.0), (0.0002, 0.0)], False),
+        ):
+            with self.subTest(outage=outage):
+                rows = [
+                    make_sample(
+                        float(index), on_ground=False, agl_m=500.0,
+                        vertical_speed_mps=0.0, altitude_m=1500.0,
+                        latitude_deg=lat, longitude_deg=lon,
+                    )
+                    for index, (lat, lon) in enumerate(positions)
+                ]
+                with tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    write_session(directory, rows)
+                    result = analyze_session(directory)
+                if outage:
+                    self.assertIsNone(result.samples[1].latitude_deg)
+                    self.assertIsNone(result.samples[2].longitude_deg)
+                    self.assertEqual(1500.0, result.samples[1].altitude_m)
+                    self.assertEqual("simulator position resumed", result.samples[3].discontinuity_before)
+                    self.assertIsNone(result.distance_nm)
+                    self.assertTrue(any("unavailable simulator position" in warning
+                                        for warning in result.warnings))
+                else:
+                    self.assertEqual((0.0, 0.0), (
+                        result.samples[1].latitude_deg, result.samples[1].longitude_deg,
+                    ))
+                    self.assertIsNotNone(result.distance_nm)
 
     def test_short_vertical_excursions_do_not_split_cruise(self) -> None:
         """Replay the same level-flight disturbances at both recorder cadences.
