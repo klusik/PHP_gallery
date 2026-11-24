@@ -1244,7 +1244,11 @@ and checks current claim, approval and revocation POSTs for exact Origin,
 site-root Referer, same-origin fetch metadata, session cookie and CSRF
 payload. It also checks approval layout at desktop and narrow widths and
 the absence of Referer on the loopback navigation. Hosted Linux runs with
-the runner's Firefox installation exercise the same markup in Firefox.
+the runner's Firefox installation exercise the same markup through GeckoDriver.
+The fixture opens the loopback page explicitly in a fresh browser session
+under the existing journey deadline. The private profile root is removed after
+the driver exits. The central audit runs this cross-browser fixture behind its
+serial barrier to give browser startup exclusive resources on the runner.
 The fixture endpoints stand in for storage and token exchange.
 No TeX manual impact. This transport correction preserves the documented
 approval and revocation procedures.
@@ -1806,7 +1810,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.6.0. Release verification uses the
+This guide applies to PHP Gallery Version 1.6.1. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -3017,6 +3021,13 @@ normalization separately. These deterministic cases do not establish live
 MSFS/add-on fuel compatibility, real OFP field availability, printed layout or
 stand detection. Hosted BASIC only checks source syntax/declarations; functional
 execution belongs to the hosted central WinApp owner during qualification.
+
+`test_flight_report.py` renders the maximum phase timeline and extracts the PDF
+text to verify repeated headings and every milestone in order. Its oversized
+element fixture checks the localized omission warning, content on both sides
+and the private omission record. `test_flight_recorder.py` replays short
+vertical excursions, a capture gap and sustained phase changes at both 1 Hz
+and 20 Hz, checking the phase sequence and confirmed onset times.
 
 `test_flight_render.py` uses a real spawn pool and a shared marker barrier to
 prove all four language jobs overlap in distinct child processes. It verifies
@@ -6072,8 +6083,10 @@ The old job remains available and cannot restart over the newer installation. A 
 after its first actual rename. Requests succeed while it is held and after
 termination. A second worker cannot advance the occupied job. The original job
 then retries and completes through the normal worker API with its backup intact.
-The isolated HTTP process disables its separate CLI bytecode cache so each
-assertion observes the actual bytes published by the independent installer.
+The isolated `php -S` process uses `opcache.enable=0` so each HTTP assertion
+observes the actual bytes published by the independent installer. Its
+`cli-server` SAPI uses the web OPcache setting. The fixture still checks every
+partial and final state through the real entry point.
 The full Admin drawer fixtures retain desktop and narrow screen coverage.
 
 The central scheduler fixture verifies failed rather than pending state and

@@ -1,5 +1,47 @@
 # Patch notes
 
+## Version 1.6.1
+
+PHP Gallery 1.6.1 includes WinApp 1.6.1 with more reliable flight PDF
+generation and fewer phase changes during short vertical-speed excursions.
+
+### Highlights
+
+#### Flight reports in WinApp
+
+- Fixed generation for long flight phase timelines. The PDF carries the
+  timeline over to additional pages and repeats the localized heading.
+- Added a localized warning for an element that cannot fit or split on an
+  empty page. The PDF includes the warning and the surrounding report content.
+- Required five seconds of sustained vertical speed to confirm an ordinary
+  climb or a high-altitude descent. Capture gaps reset the pending confirmation.
+
+### Technical Details
+
+#### WinApp and documentation
+
+- Updated `winapp/uploader/flight_report.py` to lay out the timeline as
+  separately paginated vector rows and record omitted element types in the
+  private PDF manifest.
+- Updated the WinApp guide and all four manual editions with pagination,
+  omission warnings, phase confirmation and saved-flight regeneration.
+
+#### Tests
+
+- Covered a 200-event timeline, recovery around an oversized report element,
+  and phase replay at 1 Hz and 20 Hz in the WinApp regression suite.
+- Ran the hosted Firefox linking fixture through GeckoDriver in an exclusive
+  test slot and corrected the activation fixture's isolated PHP opcode-cache
+  setting so its HTTP assertions observe the files published by the installer.
+
+### User Impact
+
+#### WinApp users
+
+- Restored the ability to create a new local PDF for an affected stopped flight
+  from its saved recording. Select the flight in **Saved flights and PDFs** to
+  create a new revision, including while another flight is being recorded.
+
 ## Version 1.6.0
 
 PHP Gallery 1.6.0 introduces a four-language WinApp interface and packages the

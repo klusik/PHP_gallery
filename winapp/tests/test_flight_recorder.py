@@ -19,7 +19,9 @@ from pathlib import Path
 from uploader.flight_data import (
     ANALYSIS_SAMPLE_WINDOW,
     ANALYSIS_VERSION,
+    PHASE_AIRBORNE_CONFIRM_SAMPLES,
     PHASE_GOAROUND_SUSTAIN_SECONDS,
+    PHASE_VERTICAL_CONFIRM_SECONDS,
     ROLLOUT_TAXI_CONFIRM_SECONDS,
     FlightSample,
     _sample,
@@ -1006,12 +1008,15 @@ class FlightAnalysisReplayTests(unittest.TestCase):
             add(True, 0.0, 0.0, 100.0, 0.0)
         for _index in range(5):
             add(True, 0.0, 0.0, 100.0, 8.0)
-        for index in range(5):
+        # Establish airborne evidence, then hold climb through confirmation.
+        confirm_ticks = int(PHASE_VERTICAL_CONFIRM_SECONDS / TEST_SAMPLE_INTERVAL_SECONDS)
+        for index in range(PHASE_AIRBORNE_CONFIRM_SAMPLES + confirm_ticks):
             add(False, 10.0 + index, 3.0, 110.0 + index, 60.0)
         for _index in range(12):
             add(False, 2000.0, 0.0, 2100.0, 60.0)
-        for index in range(5):
-            add(False, 1500.0 - index * 100.0, -3.0, 1600.0 - index * 100.0, 60.0)
+        # Include both ends of the confirmation interval before entering approach.
+        for index in range(confirm_ticks + 1):
+            add(False, 1600.0 - index * 100.0, -3.0, 1700.0 - index * 100.0, 60.0)
         for index in range(3):
             add(False, 500.0 - index * 100.0, -3.0, 600.0 - index * 100.0, 60.0)
         for index in range(3):
@@ -1037,6 +1042,51 @@ class FlightAnalysisReplayTests(unittest.TestCase):
             phases,
             [event["phase"] for event in result.to_payload()["events"]],
         )
+
+    def test_short_vertical_excursions_do_not_split_cruise(self) -> None:
+        """Replay the same level-flight disturbances at both recorder cadences.
+
+        Returns:
+            None: Verifies contiguous evidence and the onset of sustained phases.
+        """
+        # Type: tuple[tuple[float, float | None], ...]; Units: seconds and m/s.
+        # Scope: this replay. Consumers: the synthetic saved-session builder.
+        # Rationale: 12 seconds settles cruise, a three-second dip or gap
+        # interrupts evidence, and eight seconds confirms vertical motion.
+        segments = (
+            (12.0, 0.0), (3.0, 2.0), (3.0, None), (3.0, 2.0), (3.0, -3.0),
+            (12.0, 0.0), (8.0, 3.0), (12.0, 0.0), (8.0, -3.0),
+        )
+        for cadence in (TEST_SAMPLE_INTERVAL_SECONDS, RECORDER_FRAME_INTERVAL_SECONDS):
+            with self.subTest(cadence=cadence):
+                rows: list[dict[str, object]] = []
+                frame = 0
+                agl = 2000.0  # Stay above the approach boundary in this replay.
+                for duration, vertical in segments:
+                    frames = round(duration / cadence)
+                    if vertical is None:
+                        frame += frames
+                        continue
+                    for _index in range(frames):
+                        elapsed = frame * cadence
+                        rows.append(make_sample(
+                            elapsed, on_ground=False, agl_m=agl,
+                            vertical_speed_mps=vertical, altitude_m=agl,
+                            simulator_elapsed=elapsed,
+                        ))
+                        frame += 1
+                        agl += vertical * cadence
+                with tempfile.TemporaryDirectory() as temporary:
+                    directory = Path(temporary)
+                    write_session(directory, rows, recording_ended=True)
+                    result = analyze_session(directory)
+                events = [event for event in result.events
+                          if event.phase in {"cruise", "climb", "descent"}]
+                self.assertEqual(["cruise", "climb", "cruise", "descent"],
+                                 [event.phase for event in events])
+                # Seconds 36 and 56 are the starts of the two eight-second legs.
+                self.assertEqual((36.0, 56.0),
+                                 (events[1].elapsed_seconds, events[3].elapsed_seconds))
 
     def test_midflight_stop_is_partial_and_touch_and_go_is_explicit(self) -> None:
         """Keep a stopped airborne session partial and label a later liftoff.

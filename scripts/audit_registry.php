@@ -306,8 +306,10 @@ $registry = [
         // Type: int. Units: seconds. Scope: the browser-map linking case.
         // Consumers: central browser suite. Rationale: 90 covers two Chromium
         // profiles, hosted Firefox, PHP rendering and loopback teardown.
+        // Use the existing serial barrier for the cross-browser launch so fresh
+        // Gecko sessions do not compete with other browser fixtures for startup.
         'app_linking_origin_browser_test.mjs' => [
-            'browser' => true, 'php_argument' => true, 'timeout' => 90,
+            'browser' => true, 'php_argument' => true, 'timeout' => 90, 'serial' => true,
         ],
         // Bound the real notification panel's two responsive journeys.
         // Type: int. Units: seconds. Scope: two disposable responsive journeys.

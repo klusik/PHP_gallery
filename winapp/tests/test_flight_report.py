@@ -20,6 +20,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -29,7 +30,8 @@ from typing import Optional
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from reportlab.graphics.shapes import Image as MapShape, PolyLine, String
+from pypdf import PdfReader
+from reportlab.graphics.shapes import Drawing, Image as MapShape, PolyLine, String
 from reportlab.platypus import PageBreak, Paragraph
 from uploader.flight_report import _build_story, _dispatch_series, _recorded_positions
 from uploader.flight_simbrief import DispatchPlan, DispatchPoint
@@ -39,6 +41,7 @@ from uploader.flight_report import _dispatch_position_series
 from reportlab.pdfbase.ttfonts import TTFont
 
 from uploader.flight_data import (
+    PHASE_EVENT_LIMIT,
     FlightAnalysis,
     FlightPhaseEvent,
     FlightSample,
@@ -50,6 +53,7 @@ from uploader.flight_report import (
     _FONT_NAME,
     _REQUIRED_GLYPHS,
     KNOTS_PER_MPS,
+    REPORT_PAGE_SIZE,
     _number,
     _manifest_path,
     _axis_limits,
@@ -946,6 +950,60 @@ class FlightReportTests(unittest.TestCase):
             self.assertFalse(any(isinstance(item, Paragraph)
                 and item.getPlainText() == tr(language, "capture_scope")
                 for item in story))
+
+    def test_long_phase_timeline_keeps_every_event_across_pages(self) -> None:
+        """Render even the maximum-length timeline with a heading on each page.
+
+        Returns:
+            None: Verifies heading repetition, exact event order and no omissions.
+        """
+        analysis = self._analysis("MSFS 2020")
+        analysis.events = [
+            FlightPhaseEvent("cruise", float(index), "low", ["fixture milestone"])
+            for index in range(PHASE_EVENT_LIMIT)
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            target = render_report(analysis, "en", Path(temporary) / "phases.pdf")
+            pages = [page.extract_text() for page in PdfReader(target).pages]
+            manifest = json.loads(_manifest_path(target).read_text(encoding="utf-8"))
+        heading = tr("en", "phase_timeline")
+        timeline = [page for page in pages if heading in page]
+        self.assertGreater(len(timeline), 1, "The long timeline must continue")
+        phase_label = re.escape(tr("en", "strip_cruise"))
+        elapsed_labels = re.findall(phase_label + r"\s+(\d+:\d\d)", "\n".join(timeline))
+        self.assertEqual(
+            [f"{index // 60}:{index % 60:02d}" for index in range(PHASE_EVENT_LIMIT)],
+            elapsed_labels,
+        )
+        self.assertEqual([], manifest["layout_omissions"])
+
+    def test_oversized_element_is_replaced_and_later_content_survives(self) -> None:
+        """Finalize a localized PDF when a drawing is taller than the frame.
+
+        Returns:
+            None: Verifies the warning, surrounding content and omission record.
+        """
+        style = _styles()["body"]
+        story = [
+            Paragraph("Evidence before the drawing", style),
+            Drawing(1, REPORT_PAGE_SIZE[1]),
+            Paragraph("Evidence after the drawing", style),
+        ]
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "uploader.flight_report._build_story", return_value=story,
+        ):
+            target = render_report(
+                self._analysis("MSFS 2020"), "cs", Path(temporary) / "layout.pdf",
+            )
+            content = "\n".join(page.extract_text() for page in PdfReader(target).pages)
+            manifest = json.loads(_manifest_path(target).read_text(encoding="utf-8"))
+        warning = tr("cs", "layout_omission")
+        self.assertEqual(1, content.count(warning))
+        self.assertLess(content.index("Evidence before the drawing"),
+                        content.index(warning))
+        self.assertLess(content.index(warning),
+                        content.index("Evidence after the drawing"))
+        self.assertEqual(["Drawing"], manifest["layout_omissions"])
 
     def test_pdf_map_embeds_native_print_pixels_and_vector_routes(self) -> None:
         """Keep first-page backgrounds printable rather than stretching a preview.
