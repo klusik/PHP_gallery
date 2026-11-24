@@ -13,9 +13,9 @@ import {execFileSync, spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
-import {tmpdir} from 'node:os';
+import {homedir} from 'node:os';
 import path from 'node:path';
-import {setTimeout as delay} from 'node:timers/promises';
+import {createInterface} from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {runHeadlessBrowserFixture} from './support/headless_browser_fixture.mjs';
 
@@ -168,24 +168,93 @@ await once(server, 'listening');
 const origin = 'http://127.0.0.1:' + server.address().port;
 
 /**
- * Run the same interactive pages in the hosted runner's Firefox.
+ * Read the ephemeral loopback address selected by GeckoDriver.
+ * @param {import('node:stream').Readable} output GeckoDriver's stdout.
+ * @param {AbortSignal} deadline Signal bounding the browser journey.
+ * @return {Promise<string>} HTTP origin of the driver, or a rejected startup error.
+ */
+async function firefoxDriverOrigin(output, deadline) {
+    deadline.throwIfAborted();
+    const lines = createInterface({input: output, signal: deadline});
+    try {
+        return await new Promise((resolve, reject) => {
+            lines.on('line', line => {
+                const address = /Listening on (127\.0\.0\.1:\d+)\s*$/.exec(line);
+                if (address) resolve('http://' + address[1]);
+            });
+            lines.once('close', () => {
+                reject(deadline.reason ?? new Error('GeckoDriver did not open a loopback listener.'));
+            });
+        });
+    } finally {
+        lines.close();
+        output.resume();
+    }
+}
+
+/**
+ * Send a local WebDriver command with the shared journey deadline.
+ * @param {string} url Absolute session or navigation endpoint on loopback.
+ * @param {string} payload Encoded JSON for session capabilities or target URL.
+ * @param {AbortSignal} deadline Signal bounding the browser journey.
+ * @return {Promise<Response>} Successful driver response, or a rejected command error.
+ */
+async function firefoxCommand(url, payload, deadline) {
+    const response = await fetch(url, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: payload, signal: deadline,
+    });
+    if (!response.ok) {
+        throw new Error('GeckoDriver command failed: ' + await response.text());
+    }
+    return response;
+}
+
+/**
+ * Open the same interactive pages in a fresh automated Firefox session.
+ * @param {string} driverDirectory Hosted directory containing GeckoDriver.
  * @param {Promise<string>} result Terminal result emitted by the fixture.
  * @return {Promise<string>} Browser evidence, or an error if the browser exits or stalls.
  */
-async function runFirefox(result) {
-    const profile = await mkdtemp(path.join(tmpdir(), 'linking-firefox-'));
-    const browser = spawn('firefox', [
-        '--headless', '--no-remote', '--profile', profile, origin + legacy,
-    ], {stdio: 'ignore'});
-    const closed = once(browser, 'close');
+async function runFirefox(driverDirectory, result) {
+    // A non-hidden profile root is visible to both GeckoDriver and Firefox.
+    const profile = await mkdtemp(path.join(homedir(), 'linking-firefox-'));
+    const deadline = AbortSignal.timeout(DEADLINE_MS);
+    const driver = spawn(path.join(driverDirectory, 'geckodriver'), [
+        '--host', '127.0.0.1', '--port', '0', '--profile-root', profile,
+    ], {stdio: ['ignore', 'pipe', 'inherit']});
+    const closed = once(driver, 'close');
+    const stopped = closed.then(([code]) => {
+        throw new Error('GeckoDriver exited with code ' + code);
+    });
+    let session = '';
     try {
+        const driverOrigin = await Promise.race([
+            firefoxDriverOrigin(driver.stdout, deadline), stopped,
+        ]);
+        const created = await firefoxCommand(driverOrigin + '/session', JSON.stringify({
+            capabilities: {alwaysMatch: {
+                browserName: 'firefox',
+                pageLoadStrategy: 'none',
+                'moz:firefoxOptions': {args: ['-headless']},
+            }},
+        }), deadline);
+        const {value} = await created.json();
+        assert.ok(typeof value?.sessionId === 'string' && value.sessionId,
+            'GeckoDriver did not create a Firefox session.');
+        session = driverOrigin + '/session/' + encodeURIComponent(value.sessionId);
+        await firefoxCommand(session + '/url', JSON.stringify({url: origin + legacy}), deadline);
+        deadline.throwIfAborted();
         return await Promise.race([
             result,
-            delay(DEADLINE_MS, 'BROWSER FAIL Firefox result deadline expired', {ref: false}),
-            closed.then(([code]) => 'BROWSER FAIL Firefox exited with code ' + code),
+            once(deadline, 'abort').then(() => 'BROWSER FAIL Firefox result deadline expired'),
+            stopped,
         ]);
     } finally {
-        browser.kill();
+        if (session) {
+            await fetch(session, {method: 'DELETE', signal: deadline}).catch(() => {});
+        }
+        driver.kill();
         await closed.catch(() => {});
         await rm(profile, {recursive: true, force: true});
     }
@@ -228,7 +297,7 @@ try {
         }).trim();
         const {promise, resolve} = Promise.withResolvers();
         active = {steps: [], baseline: '', returned: false, result: '', finish: resolve};
-        verifyResult(version, await runFirefox(promise));
+        verifyResult(version, await runFirefox(process.env.GECKOWEBDRIVER, promise));
     } else {
         console.log('Firefox not exercised in this environment.');
     }

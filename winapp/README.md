@@ -664,10 +664,18 @@ Git blob `1f22f07c99bd4d4b8fba9e00094df4e58e69def1`, SHA-256
 The existing `uploader/resources/LICENSE_DEJAVU` accompanies both faces; the
 installer's existing resource-folder inclusion bundles them together.
 
-Reports use vector metric cards, aircraft-state symbols and observed phase
-icons in a normally single-row phase strip. Date/simulator build appears in
-small header text; technical versions
-and full hashes remain private metadata. Altitude is feet AMSL, approach height
+Reports use vector metric cards, aircraft-state symbols and phase icons. Long
+phase timelines split between rows and repeat their localized heading on each
+continuation page. The analysis confirms ordinary climbs and high-altitude
+descents after five seconds of sustained vertical speed, dated from the
+start of that evidence. Capture gaps restart confirmation. Approach, flare and
+go-around retain their dedicated detection rules and raw samples stay available
+for re-creating PDFs. A report element that cannot fit or split in an empty page
+frame is replaced by a localized warning. The private PDF manifest records the
+omitted element type and the remaining pages are rendered normally.
+
+Date and simulator build appear in small header text. Technical versions and
+full hashes remain private metadata. Altitude is feet AMSL, approach height
 feet AGL, and speed IAS knots. Rounded enclosing axes use subtle minor/major
 grids: V/S normally uses 200/1,000 fpm, long flights ten-minute/hourly
 references.

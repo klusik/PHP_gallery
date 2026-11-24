@@ -43,15 +43,18 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
+    BaseDocTemplate,
     Flowable,
+    Frame,
     KeepTogether,
+    PageTemplate,
     Paragraph,
     PageBreak,
-    SimpleDocTemplate,
     Spacer,
     Table,
     TableStyle,
 )
+from reportlab.platypus.doctemplate import LayoutError
 from reportlab.graphics.shapes import (
     Circle, Drawing, Group, Image as MapShape, Line, Path as ShapePath,
     PolyLine, Polygon, Rect, String,
@@ -81,7 +84,7 @@ from .flight_jobs import readable_pdf_name, read_document
 
 # Template identity is included in every manifest and output filename so a
 # future layout revision does not silently reuse a prior rendering.
-REPORT_TEMPLATE_VERSION = "11"
+REPORT_TEMPLATE_VERSION = "12"
 
 # Purpose: Share map geometry between batch preparation and the overview page.
 # Type: float; Units: page-width fraction; Scope: report overview layout.
@@ -131,6 +134,11 @@ REPORT_SIDE_MARGIN = 14 * mm
 # Type: tuple[float, float]; Units: PDF points; Scope: page frame.
 # Consumers: render_report. Rationale: 22/16 mm separates content from chrome.
 REPORT_VERTICAL_MARGINS = (22 * mm, 16 * mm)
+# Preserve ReportLab's original inset and share it with the fit-sensitive timeline.
+# Type: int; Units: PDF points per edge; Scope: report page frame.
+# Consumers: _FlightReportFrame and _phase_infographic.
+# Rationale: six points per edge preserve the previous printable content area.
+REPORT_FRAME_PADDING = 6
 
 # Type: float; Units: PDF points; Scope: landscape chart geometry.
 # Consumers: _profile_chart, _route_chart and panel layout owners.
@@ -2439,14 +2447,14 @@ def _quality_notes(
 
 
 def _draw_page(
-    canvas: Canvas, document: SimpleDocTemplate,
+    canvas: Canvas, document: BaseDocTemplate,
     language: str, analysis_sha256: str,
 ) -> None:
     """Draw landscape page furniture in navy, teal and a pale reading surface.
 
     Args:
         canvas (Canvas): ReportLab canvas supplied by the document owner.
-        document (SimpleDocTemplate): Owner with current page number.
+        document (BaseDocTemplate): Owner with current page number.
         language (str): Supported header/footer language.
         analysis_sha256 (str): Private source identity retained in PDF metadata.
 
@@ -2599,43 +2607,66 @@ def _panel_row(
     return table
 
 
-def _phase_infographic(analysis: FlightAnalysis, language: str) -> Drawing:
-    """Present observed phase milestones as a compact, normally single-row strip.
+def _phase_infographic(
+    analysis: FlightAnalysis, language: str, heading_style: ParagraphStyle,
+) -> Table:
+    """Lay out the timeline in rows that can continue onto later pages.
 
     Args:
         analysis (FlightAnalysis): Original phase changes; repeated phases remain.
         language (str): Supported localized labels and elapsed times.
+        heading_style (ParagraphStyle): Style for the repeated section heading.
 
     Returns:
-        Drawing: Up to fourteen milestones per fifty-four-point row; exceptional
-            longer timelines wrap without dropping changes or inventing phases.
+        Table: Localized heading and separate vector rows with up to fourteen
+            milestones each, or an explicit empty row when no phases are known.
     """
     events = [event for event in analysis.events
               if event.phase not in {"unknown", "discontinuity", "ended"}]
     columns = min(PHASE_COLUMNS, max(1, len(events)))
-    rows = max(1, math.ceil(len(events) / columns))
-    drawing = Drawing(CHART_WIDTH, rows * PHASE_ROW_HEIGHT)
-    width = CHART_WIDTH / columns
-    for index, event in enumerate(events):
-        x = index % columns * width
-        y = (rows - 1 - index // columns) * PHASE_ROW_HEIGHT
-        _plane_icon(drawing, x + width / 2, y + 40, event.phase, _COLOR_BLUE, size=0.6)
-        key = "strip_" + event.phase
-        label = tr(language, key)
-        if label == key:
-            label = _translate_phase_event(event.phase, language)
-        label_size = min(8.5, (width - 2) / max(pdfmetrics.stringWidth(label, _FONT_NAME, 1), 1))
-        drawing.add(String(x + width / 2, y + 21, label, textAnchor="middle",
-                           fontName=_FONT_NAME, fontSize=label_size, fillColor=_COLOR_INK))
-        drawing.add(String(x + width / 2, y + 6, _format_duration(event.elapsed_seconds, language),
-                           textAnchor="middle", fontName=_FONT_NAME, fontSize=8, fillColor=_COLOR_MUTED))
-        if index % columns < columns - 1 and index < len(events) - 1:
-            drawing.add(Line(x + width / 2 + 9, y + 40, x + width * 1.5 - 9, y + 40,
-                             strokeColor=_COLOR_GRID, strokeWidth=0.5))
-    if not events:
-        drawing.add(String(0, 15, tr(language, "no_phase_events"), fontName=_FONT_NAME,
-                           fontSize=8, fillColor=_COLOR_MUTED))
-    return drawing
+    timeline_width = CHART_WIDTH - 2 * REPORT_FRAME_PADDING
+    width = timeline_width / columns
+    rows: list[list[Flowable]] = [
+        [_paragraph(tr(language, "phase_timeline"), heading_style)],
+    ]
+    for start in range(0, max(1, len(events)), columns):
+        row_events = events[start:start + columns]
+        drawing = Drawing(timeline_width, PHASE_ROW_HEIGHT)
+        for index, event in enumerate(row_events):
+            x = (index + 0.5) * width
+            _plane_icon(drawing, x, 40, event.phase, _COLOR_BLUE, size=0.6)
+            key = "strip_" + event.phase
+            label = tr(language, key)
+            if label == key:
+                label = _translate_phase_event(event.phase, language)
+            label_size = min(8.5, (width - 2) / max(
+                pdfmetrics.stringWidth(label, _FONT_NAME, 1), 1,
+            ))
+            drawing.add(String(x, 21, label, textAnchor="middle",
+                               fontName=_FONT_NAME, fontSize=label_size,
+                               fillColor=_COLOR_INK))
+            drawing.add(String(x, 6, _format_duration(event.elapsed_seconds, language),
+                               textAnchor="middle", fontName=_FONT_NAME,
+                               fontSize=8, fillColor=_COLOR_MUTED))
+            if index < len(row_events) - 1:
+                drawing.add(Line(x + 9, 40, x + width - 9, 40,
+                                 strokeColor=_COLOR_GRID, strokeWidth=0.5))
+        if not row_events:
+            drawing.add(String(0, 15, tr(language, "no_phase_events"),
+                               fontName=_FONT_NAME, fontSize=8,
+                               fillColor=_COLOR_MUTED))
+        rows.append([drawing])
+    # Repeat the single heading row and leave each drawing row indivisible.
+    table = Table(rows, colWidths=[timeline_width], repeatRows=1, hAlign="LEFT",
+                  spaceBefore=heading_style.spaceBefore)
+    table.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (0, 0), heading_style.spaceAfter),
+    ]))
+    return table
 
 
 def _fuel_profile(analysis: FlightAnalysis) -> Tuple[FlightAnalysis, str, float, str, bool]:
@@ -2939,8 +2970,7 @@ def _build_story(
             _route_chart(analysis, language, CHART_WIDTH - metric_width - 8,
                 240, map_cache, map_image=map_images[0] if map_images else None),
         ], [metric_width, CHART_WIDTH - metric_width]),
-        _paragraph(tr(language, "phase_timeline"), styles["heading"]),
-        _phase_infographic(analysis, language),
+        _phase_infographic(analysis, language, styles["heading"]),
         PageBreak(), _paragraph(tr(language, "charts"), styles["title"]),
     ])
     for attribute, label, scale, unit, color in (
@@ -3887,13 +3917,62 @@ def _flightplan_pages(analysis: FlightAnalysis, language: str) -> List[Flowable]
     return story
 
 
+class _FlightReportFrame(Frame):
+    """Let the renderer retain the report when an element cannot be laid out."""
+
+    def __init__(self, document: BaseDocTemplate, language: str) -> None:
+        """Keep the original printable frame and prepare its omission notice.
+
+        Args:
+            document (BaseDocTemplate): Owner of page geometry and margins.
+            language (str): Language of the warning inserted into the PDF.
+
+        Returns:
+            None: Frame is ready and has an empty layout omission list.
+        """
+        super().__init__(
+            document.leftMargin, document.bottomMargin,
+            document.width, document.height, id="normal",
+            leftPadding=REPORT_FRAME_PADDING, rightPadding=REPORT_FRAME_PADDING,
+            topPadding=REPORT_FRAME_PADDING, bottomPadding=REPORT_FRAME_PADDING,
+        )
+        self.layout_omissions: list[str] = []
+        self._omission_message = tr(language, "layout_omission")
+        self._omission_style = ParagraphStyle(
+            "FlightLayoutWarning", parent=_styles()["small"], textColor=_COLOR_RED,
+        )
+
+    def split(self, flowable: Flowable, canv: Canvas) -> list[Flowable]:
+        """Replace an element that cannot fit or split in the empty frame.
+
+        Args:
+            flowable (Flowable): The current element or remaining split portion
+                that ReportLab could not fit into the available space.
+            canv (Canvas): ReportLab canvas used to measure the element.
+
+        Returns:
+            list[Flowable]: ReportLab split parts, an empty list to move the
+                element to a fresh page, or one localized omission warning.
+        """
+        try:
+            parts = super().split(flowable, canv)
+        except LayoutError:
+            parts = []
+        # ReportLab clears this flag only after the first content is placed.
+        # A crowded page still gets the ordinary retry on a fresh page.
+        if parts or not self._atTop:
+            return parts
+        self.layout_omissions.append(type(flowable).__name__)
+        return [_paragraph(self._omission_message, self._omission_style)]
+
+
 def render_report(
     analysis: FlightAnalysis,
     language: str,
     destination: Path,
     map_images: tuple[bytes, bytes] | None = None,
 ) -> Path:
-    """Render one language-specific PDF with atomic, retry-safe output.
+    """Render an atomic language-specific PDF with notices for layout omissions.
 
     Args:
         analysis (FlightAnalysis): Shared immutable normalized flight model
@@ -3904,7 +3983,7 @@ def render_report(
             None prepares maps during this standalone render.
 
     Returns:
-        Path: The exact destination path of the completed PDF.
+        Path: Exact path of the completed PDF, including any layout notices.
 
     Raises:
         ValueError: Raised for unsupported languages or a non-PDF destination.
@@ -3938,7 +4017,7 @@ def render_report(
         )
         temporary_path = Path(handle.name)
         handle.close()
-        document = SimpleDocTemplate(
+        document = BaseDocTemplate(
             str(temporary_path),
             pagesize=REPORT_PAGE_SIZE,
             rightMargin=REPORT_SIDE_MARGIN,
@@ -3946,12 +4025,12 @@ def render_report(
             topMargin=REPORT_VERTICAL_MARGINS[0],
             bottomMargin=REPORT_VERTICAL_MARGINS[1],
             # Type: int; Units: none (boolean-compatible flag).
-            # Scope: generated PDF; Consumers: SimpleDocTemplate._makeCanvas.
+            # Scope: generated PDF; Consumers: BaseDocTemplate._makeCanvas.
             # Rationale: keep identifiers and timestamps stable across retries.
             # Value: 1; enables deterministic document output.
             invariant=1,
             # Type: str; Units: BCP 47 tag; Scope: PDF catalog.
-            # Consumers: SimpleDocTemplate._makeCanvas; Rationale: identify
+            # Consumers: BaseDocTemplate._makeCanvas; Rationale: identify
             # the document language for readers and accessibility tools.
             lang=language,
             title=tr(language, "title"),
@@ -3976,6 +4055,11 @@ def render_report(
             language=language,
             analysis_sha256=analysis_sha256,
         )
+        frame = _FlightReportFrame(document, language)
+        document.addPageTemplates(PageTemplate(
+            id="FlightReport", frames=[frame], onPage=page_callback,
+            pagesize=REPORT_PAGE_SIZE,
+        ))
         document.build(
             _build_story(analysis, language, analysis_sha256,
                 target.parent / ".metadata" / "map-tiles", map_images)
@@ -3983,8 +4067,6 @@ def render_report(
                 target.parent / ".metadata" / "map-tiles", map_images)
             + _comparison_pages(analysis, language)
             + _flightplan_pages(analysis, language),
-            onFirstPage=page_callback,
-            onLaterPages=page_callback,
         )
         os.replace(temporary_path, target)
         temporary_path = None
@@ -4001,6 +4083,7 @@ def render_report(
         "template_version": REPORT_TEMPLATE_VERSION,
         "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "page_count": document.page,
+        "layout_omissions": frame.layout_omissions,
     }
     _atomic_write(
         _manifest_path(target),

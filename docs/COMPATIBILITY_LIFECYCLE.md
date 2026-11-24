@@ -170,6 +170,14 @@ name. Named records require the current server readers; older-server downgrade
 and power-loss interruption remain unqualified. Normal source tests do not
 establish installed adoption or production acceptance.
 
+The WinApp flight report frame owns recovery for an individual element that
+cannot fit or split on an empty page. It retains the rendered document with a
+localized in-place warning and records the element type in the private PDF
+manifest. This permanent guard protects saved and newly recorded flights as
+report content grows. The saved recording remains the source for a fresh PDF
+revision under the new template. Report usage and reproduction on the affected
+installed client remain unverified.
+
 ## Native gallery metadata consent and local order
 
 Owners: linked-client scope registration, native media authorization and the

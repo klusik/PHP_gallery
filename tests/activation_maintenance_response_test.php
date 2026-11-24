@@ -266,9 +266,9 @@ namespace {
         $address = stream_socket_get_name($reservation, false);
         fclose($reservation);
         $base = 'http://' . $address;
-        // The CLI installation worker and HTTP probe have separate bytecode
-        // caches on Linux. Observe each physical rename without that cache.
-        $server = proc_open([PHP_BINARY, '-d', 'opcache.enable_cli=0', '-S', $address, $root . '/index.php'], [
+        // Observe physical renames directly in the HTTP process. php -S uses
+        // cli-server, where the CLI-only OPcache setting does not apply.
+        $server = proc_open([PHP_BINARY, '-d', 'opcache.enable=0', '-S', $address, $root . '/index.php'], [
             0 => ['pipe', 'r'],
             1 => ['file', $root . '/server.log', 'a'],
             2 => ['file', $root . '/server.log', 'a'],

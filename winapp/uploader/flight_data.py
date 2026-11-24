@@ -115,6 +115,16 @@ PHASE_CLIMB_MINIMUM_MPS = 1.0
 # Type: float. Units: metres per second. Scope: phase classification.
 # Consumers: _FlightPhaseTracker.push. Rationale: ignore small sensor noise.
 PHASE_DESCENT_MAXIMUM_MPS = -1.5
+# Confirm a high-altitude descent or a climb before displaying a phase change.
+# Type: float; Units: monotonic seconds; Scope: one vertical phase candidate.
+# Consumers: _FlightPhaseTracker._confirm_vertical_change.
+# Rationale: five seconds rejects short excursions at either capture cadence.
+PHASE_VERTICAL_CONFIRM_SECONDS = 5.0
+# Discard pending phase evidence if successive samples are too far apart.
+# Type: float; Units: monotonic seconds; Scope: vertical phase continuity.
+# Consumers: _FlightPhaseTracker.push.
+# Rationale: 2.5 seconds allows one missed 1 Hz sample without bridging a gap.
+PHASE_VERTICAL_MAX_GAP_SECONDS = 2.5
 # Maximum vertical speed magnitude for near-level cruise evidence.
 # Type: float. Units: metres per second. Scope: phase classification.
 # Consumers: _FlightPhaseTracker.push. Rationale: require near-level motion.
@@ -928,7 +938,7 @@ class _FlightPhaseTracker:
         """Initialize bounded phase state and evidence counters.
 
         Returns:
-            None: Ready to process chronological samples.
+            None: Ready to process chronological samples and phase candidates.
         """
         self.events: list[FlightPhaseEvent] = []
         self.phase: str | None = None
@@ -939,6 +949,7 @@ class _FlightPhaseTracker:
         self.high_speed_seen = False
         self.preflight_confirmed = False
         self.cruise_count = 0
+        self.vertical_candidate: tuple[str, FlightSample] | None = None
         self.goaround_count = 0
         self.goaround_start_agl: float | None = None
         self.goaround_start_elapsed: float | None = None
@@ -946,7 +957,7 @@ class _FlightPhaseTracker:
         self.last_landing_elapsed: float | None = None
         self.airborne_since_landing = False
         self.final_ground_count = 0
-        self.latest_elapsed = 0.0
+        self.previous_elapsed: float | None = None
         self.truncated = False
 
     def _append(
@@ -1000,21 +1011,51 @@ class _FlightPhaseTracker:
         self.phase = phase
         self._append(phase, sample, confidence, evidence)
 
+    def _confirm_vertical_change(
+        self, phase: str | None, sample: FlightSample,
+    ) -> None:
+        """Require continuous motion and date a confirmed change at its onset.
+
+        Args:
+            phase (str | None): Pending climb or descent, or None to clear it.
+            sample (FlightSample): Latest eligible sample with monotonic time.
+
+        Returns:
+            None: Updates the pending evidence and records a sustained change.
+        """
+        if phase is None or phase == self.phase:
+            self.vertical_candidate = None
+            return
+        candidate = self.vertical_candidate
+        if candidate is None or candidate[0] != phase:
+            self.vertical_candidate = (phase, sample)
+            return
+        started = candidate[1]
+        if (sample.session_elapsed_seconds - started.session_elapsed_seconds
+                >= PHASE_VERTICAL_CONFIRM_SECONDS):
+            self._transition(phase, started, "moderate",
+                             ["vertical speed persisted beyond the phase threshold"])
+            self.vertical_candidate = None
+
     def push(
         self,
         sample: FlightSample,
         new_landing: Landing | None,
     ) -> None:
-        """Advance phase inference with one sample and optional new contact.
+        """Advance phase inference using continuous samples and contact evidence.
 
         Args:
             sample (FlightSample): Current normalized telemetry.
             new_landing (Landing | None): Newly confirmed contact, if any.
 
         Returns:
-            None: Updates bounded events and completion evidence.
+            None: Updates bounded events, phase candidates and completion evidence.
         """
-        self.latest_elapsed = sample.session_elapsed_seconds
+        elapsed = sample.session_elapsed_seconds
+        if (self.previous_elapsed is not None
+                and elapsed - self.previous_elapsed > PHASE_VERTICAL_MAX_GAP_SECONDS):
+            self.vertical_candidate = None
+        self.previous_elapsed = elapsed
         if not self.events:
             self._transition(
                 "unknown", sample, "low",
@@ -1026,6 +1067,7 @@ class _FlightPhaseTracker:
             self.goaround_start_agl = None
             self.goaround_start_elapsed = None
             self.cruise_count = 0
+            self.vertical_candidate = None
             self.ground_count = 0
             self.slow_ground_count = 0
             self.taxi_motion_count = 0
@@ -1038,6 +1080,7 @@ class _FlightPhaseTracker:
         if ground:
             self.ground_count += 1
             self.airborne_count = 0
+            self.vertical_candidate = None
         elif sample.on_ground is False:
             self.ground_count = 0
             self.airborne_count += 1
@@ -1135,6 +1178,7 @@ class _FlightPhaseTracker:
             and sample.ground_speed_mps > AIRBORNE_GROUND_SPEED_MINIMUM_MPS
         )
         if not airborne:
+            self.vertical_candidate = None
             self.previous_agl = sample.agl_m
             return
         if not self.airborne_since_landing:
@@ -1184,6 +1228,7 @@ class _FlightPhaseTracker:
             sample.session_elapsed_seconds - self.goaround_start_elapsed
             if self.goaround_start_elapsed is not None else 0.0
         )
+        vertical_phase: str | None = None
         if (
             self.goaround_count >= PHASE_AIRBORNE_CONFIRM_SAMPLES
             and accumulated_gain >= PHASE_GOAROUND_GAIN_METRES
@@ -1201,22 +1246,17 @@ class _FlightPhaseTracker:
         elif vertical is not None and vertical < PHASE_DESCENT_MAXIMUM_MPS:
             self.cruise_count = 0
             if agl is not None and agl <= PHASE_FLARE_AGL_METRES:
-                phase = "flare"
-                evidence = ["descending with low AGL"]
+                self._transition("flare", sample, "moderate",
+                                 ["descending with low AGL"])
             elif agl is not None and agl <= PHASE_APPROACH_AGL_METRES:
-                phase = "approach"
-                evidence = ["descending within approach AGL boundary"]
+                self._transition("approach", sample, "moderate",
+                                 ["descending within approach AGL boundary"])
             else:
-                phase = "descent"
-                evidence = ["negative vertical speed persisted in flight"]
-            self._transition(phase, sample, "moderate", evidence)
+                vertical_phase = "descent"
         elif vertical is not None and vertical > PHASE_CLIMB_MINIMUM_MPS:
             self.cruise_count = 0
             if self.phase not in ("descent", "approach", "flare"):
-                self._transition(
-                    "climb", sample, "moderate",
-                    ["positive vertical speed persisted in flight"],
-                )
+                vertical_phase = "climb"
         elif vertical is not None and abs(vertical) <= PHASE_LEVEL_LIMIT_MPS:
             self.cruise_count += 1
             if self.cruise_count >= PHASE_CRUISE_CONFIRM_SAMPLES:
@@ -1224,6 +1264,9 @@ class _FlightPhaseTracker:
                     "cruise", sample, "low",
                     ["near-level vertical speed persisted"],
                 )
+        else:
+            self.cruise_count = 0
+        self._confirm_vertical_change(vertical_phase, sample)
         self.previous_agl = agl
 
     def finish(self, sample: FlightSample | None) -> None:
