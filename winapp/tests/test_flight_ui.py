@@ -54,6 +54,8 @@ class FlightUITests(unittest.TestCase):
             after=Mock(), focus_get=Mock(return_value=None), _embedded_panels=[],
         )
         root.winfo_toplevel = Mock(return_value=root)
+        owner, port = Mock(), Mock()
+        endpoint, key = "https://gallery.test/api", "test-key"
         return SimpleNamespace(
             root=root,
             config=SimpleNamespace(
@@ -87,7 +89,11 @@ class FlightUITests(unittest.TestCase):
             reconnect_upload_gallery=Mock(),
             forget_flight_connection=Mock(),
             capture_flight_admission=Mock(return_value=(
-                Mock(), Mock(), 'https://gallery.test/api', 'test-key',
+                owner, port, endpoint, key,
+            )),
+            watched_report_target=Mock(return_value=flight_ui.WatchedReportTarget(
+                "Test gallery", upload_url=endpoint, api_key=key,
+                gallery_folder="Flights/Test gallery", gui_admission=(owner, port),
             )),
             open_local_path=Mock(),
             open_log_file=Mock(),
@@ -152,6 +158,11 @@ class FlightUITests(unittest.TestCase):
         ui.report_group_files = {}
         ui.report_file_sort_keys = {}
         ui.report_button = None
+        ui.report_upload_button = None
+        ui.report_menu = None
+        ui.report_flights_only = Mock(get=Mock(return_value=False))
+        ui.report_target_var = Mock()
+        ui.report_target_hint = Mock()
         ui.progress_actions = None
         ui.progress_buttons = {}
         ui.progress_detail_label = None
@@ -472,9 +483,10 @@ class FlightUITests(unittest.TestCase):
                 patch.object(flight_ui.SessionPlan, 'load', return_value=plan), \
                 patch.object(flight_ui, 'FinalizationWorker') as factory:
             ui.start_saved_upload(row, revision)
-        self.assertEqual((endpoint, key), factory.call_args.args[1:3])
-        self.assertEqual((owner, port), factory.call_args.kwargs['gui_admission'])
-        self.assertTrue(factory.call_args.kwargs['require_gui_admission'])
+        captured = factory.call_args.kwargs["watched_target"]
+        self.assertEqual((endpoint, key), (captured.upload_url, captured.api_key))
+        self.assertEqual((owner, port), captured.gui_admission)
+        host.capture_flight_admission.assert_not_called()
         factory.return_value.start.assert_called_once()
 
     def test_local_stop_does_not_require_remote_admission(self) -> None:
@@ -627,9 +639,10 @@ class FlightUITests(unittest.TestCase):
                 patch.object(flight_ui, "FinalizationWorker") as factory,
             ):
                 ui.upload_saved_pdf()
-            self.assertEqual("test-key", factory.call_args.args[2])
+            target = factory.call_args.kwargs["watched_target"]
+            self.assertEqual("test-key", target.api_key)
             self.assertEqual(revision.files, factory.call_args.kwargs["saved_revision"].files)
-            self.assertEqual("Test gallery", factory.call_args.kwargs["target_gallery"])
+            self.assertEqual("Test gallery", target.label)
             self.assertFalse(factory.call_args.args[-1])
             ui.stop.assert_not_called()
             ui.host.utc_sync.stop.assert_not_called()
@@ -657,6 +670,29 @@ class FlightUITests(unittest.TestCase):
         self.assertIs(row, selected_row)
         self.assertEqual({"en": Path("one-en.pdf")}, selected.files)
         self.assertEqual({"en": Path("two-en.pdf")}, extra[0].files)
+
+    def test_upload_selects_entire_versions_without_adding_unselected_editions(self) -> None:
+        """Combine a full version with a language-specific edition selection.
+
+        Returns:
+            None: A selected revision contributes its full language set. A
+                selected file contributes only that edition of its revision.
+        """
+        ui = self._ui(self._host())
+        row = SavedFlight(Path("flight"), recording_ended=True)
+        first = flight_ui.ReportRevision("first", {"en": Path("one-en.pdf"), "cs": Path("one-cs.pdf")})
+        second = flight_ui.ReportRevision("second", {"en": Path("two-en.pdf"), "de": Path("two-de.pdf")})
+        ui.report_rows = {"flight": row}
+        ui.report_versions = {"version": ("flight", first)}
+        ui.report_files = {"file": ("flight", second, "de")}
+        ui.report_tree = Mock()
+        ui.report_tree.selection.return_value = ("version", "file")
+        ui.start_saved_upload = Mock()
+        ui.upload_saved_pdf()
+        selected_row, selected, extra = ui.start_saved_upload.call_args.args
+        self.assertIs(row, selected_row)
+        self.assertEqual(first.files, selected.files)
+        self.assertEqual({"de": Path("two-de.pdf")}, extra[0].files)
 
     def test_selected_pdf_opens_in_default_viewer(self) -> None:
         """Open the selected PDF itself rather than a log or another session.
@@ -690,10 +726,16 @@ class FlightUITests(unittest.TestCase):
         revision = flight_ui.ReportRevision("original-revision", {"en": Path("original.pdf")})
         ui.report_rows = {"original": row}
         ui.selected_saved_flight = Mock(return_value=SavedFlight(Path("another-flight")))
-        ui.operation = SimpleNamespace(saved_upload=True, saved_revision=revision, saved_revisions=(revision,), plans=[plan])
+        target = ui.host.watched_report_target()
+        ui.operation = SimpleNamespace(
+            saved_upload=False, saved_revision=revision, saved_revisions=(revision,),
+            plans=[plan], watched_target=target,
+        )
         ui.start_saved_upload = Mock()
         ui.retry_saved_upload()
-        ui.start_saved_upload.assert_called_once_with(row, revision, ())
+        ui.start_saved_upload.assert_called_once_with(
+            row, revision, (), target=target, confirmed=True,
+        )
         ui.selected_saved_flight.assert_not_called()
 
     def test_report_progress_discards_rows_from_previous_revision(self) -> None:
@@ -987,16 +1029,18 @@ class FlightUITests(unittest.TestCase):
         self.assertTrue(factory.call_args.args[0][0].local_only)
         host.forget_flight_connection.assert_not_called()
 
-    def test_linked_mode_blocks_legacy_report_and_key_actions(self) -> None:
-        """Require explicit mode switching before touching legacy authority.
+    def test_idle_linked_mode_refuses_upload_and_legacy_revoke(self) -> None:
+        """Require a running Watcher or explicit legacy revoke authority.
 
         Returns:
-            None: Saved-PDF upload and legacy key revocation cannot start.
+            None: Selecting a linked gallery alone enables neither action.
         """
         host = self._host()
         ui = self._ui(host)
+        ui.lease = Mock()
         ui.dialog_owner = Mock(return_value=None)
         host.linking_manager.linked_upload_mode_selected.return_value = True
+        host.watched_report_target.return_value = None
         with patch.object(flight_ui.messagebox, 'showinfo') as info, patch.object(
             flight_ui, 'FinalizationWorker',
         ) as factory:
@@ -2390,7 +2434,7 @@ class FlightUITests(unittest.TestCase):
                 }, number=number))
             ui.refresh_reports()
             groups = ui.report_tree.get_children("flight")
-            self.assertEqual(["v10", "v2", "v1"],
+            self.assertEqual(["v10 · EN", "v2 · EN", "v1 · EN"],
                              [ui.report_tree.item(group, "text") for group in groups])
             self.assertEqual((leaf,), ui.report_tree.selection())
             self.assertEqual((leaf,), ui.report_tree.get_children(groups[-1]))
@@ -2405,10 +2449,12 @@ class FlightUITests(unittest.TestCase):
             ui.report_tree.selection_set((groups[0],))
             self.assertIs(row, ui.selected_saved_flight())
             ui.start_saved_upload = Mock()
-            with patch.object(flight_ui.messagebox, "showinfo") as info:
-                ui.upload_saved_pdf()
-            ui.start_saved_upload.assert_not_called()
-            self.assertEqual("select_pdf_files", info.call_args.args[1])
+            ui.upload_saved_pdf()
+            selected_row, version, extra = ui.start_saved_upload.call_args.args
+            self.assertIs(row, selected_row)
+            self.assertEqual("edition-10", version.report_id)
+            self.assertEqual(revisions[-1].files, version.files)
+            self.assertEqual((), extra)
             ui.report_sort_column = "pages"
             self.assertEqual(9, ui.report_sort_key("flight")[0])
 

@@ -49,7 +49,7 @@ from uploader.flight_recorder import FlightRecorder
 from uploader.game_presence import GamePresence
 from uploader.flight_report_translations import tr
 from uploader.localization import DEFAULT_LANGUAGE, current_language, gettext
-from uploader.flight_workflow import FinalizationWorker
+from uploader.flight_workflow import FinalizationWorker, WatchedReportTarget
 from uploader.models import ImportJob, JsonValue
 from uploader.mode_coordinator import GuiModeOwner, ModeConfigPort
 from uploader.state_store import JobStateStore
@@ -86,8 +86,19 @@ DRAIN_POLL_SECONDS = 0.1
 # Keep the saved-flight browser narrow while leaving identity details below.
 # Type: tuple[int, ...]. Units: pixels. Scope: report catalog columns.
 # Consumers: FlightUI.show_reports. Rationale: six compact metadata columns
-# retain creation seconds and page count beside a shrinking filename column.
-REPORT_COLUMN_WIDTHS = (145, 60, 45, 145, 45, 110)
+# retain report dates, counts and states alongside the filename column.
+REPORT_COLUMN_WIDTHS = (148, 64, 46, 150, 59, 112)
+# Purpose: Keep the flight name, start and report count visible together.
+# Type: tuple[int, int]. Units: pixels. Scope: catalog flight-name column.
+# Consumers: FlightUI.show_reports, FlightUI.layout_report_columns.
+# Rationale: 128 px keeps the name identifiable on a narrow viewport, and
+# 192 px leaves room for all six secondary columns at desktop width.
+REPORT_NAME_WIDTHS = (128, 192)
+# Purpose: Reserve space for the followed gallery beside the report actions.
+# Type: int. Units: pixels. Scope: the saved-report footer.
+# Consumers: FlightUI.layout_report_footer. Rationale: 180 px accommodates
+# common gallery names before stacking the actions or wrapping the label.
+REPORT_TARGET_WIDTH = 180
 # Show a short history while the Treeview retains ordinary wheel scrolling.
 # Type: int. Units: visible rows. Scope: report catalog window.
 # Consumers: FlightUI.show_reports. Rationale: seven flights fit a small dialog.
@@ -251,6 +262,15 @@ class FlightHost(Protocol):
         Returns:
             tuple[GuiModeOwner, ModeConfigPort, str, str]: Shared owner, sealed
                 config port, canonical endpoint and associated API key.
+        """
+        ...
+
+    def watched_report_target(self) -> WatchedReportTarget | None:
+        """Capture the active Watcher's exact report destination.
+
+        Returns:
+            WatchedReportTarget | None: Active gallery authority, or None
+                while the Watcher is stopped, preparing or draining.
         """
         ...
 
@@ -440,6 +460,11 @@ class FlightUI:
         self.report_group_files: dict[str, list[str]] = {}
         self.report_file_sort_keys: dict[str, ReportFileDetails] = {}
         self.report_button: ttk.Button | None = None
+        self.report_upload_button: ttk.Button | None = None
+        self.report_menu: tk.Menu | None = None
+        self.report_flights_only = tk.BooleanVar(host.root, value=False)
+        self.report_target_var = tk.StringVar(host.root, value="")
+        self.report_target_hint = tk.StringVar(host.root, value="")
         self.record_button: ttk.Checkbutton | None = None
         self._contextual_record_caption: tuple[ttk.Checkbutton, str] | None = None
         self.progress_actions: ttk.Frame | None = None
@@ -1102,7 +1127,7 @@ class FlightUI:
             plan.save(directory)
 
     def show_reports(self) -> None:
-        """Show saved flights, local PDFs and explicit independent report actions.
+        """Show saved flights and direct local and watched-gallery PDF actions.
 
         Returns:
             None: Opens a passive local catalog; no recording or upload starts.
@@ -1121,13 +1146,35 @@ class FlightUI:
         panel.pack(fill="both", expand=True, padx=10, pady=10)
         panel.columnconfigure(0, weight=1)
         panel.rowconfigure(1, weight=1)
-        report_footer = ttk.Frame(panel, style="Card.TFrame")
-        report_footer.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-        hint = ttk.Label(
-            panel, text=self.text("report_actions_hint"), wraplength=620,
-            style="Muted.TLabel",
+        tools = ttk.Frame(panel, style="Card.TFrame")
+        tools.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        tools.columnconfigure(0, weight=1)
+        ttk.Checkbutton(
+            tools, text=self.text("report_flights_only"),
+            variable=self.report_flights_only, command=self.refresh_reports,
+            style="Card.TCheckbutton",
+        ).grid(row=0, column=0, sticky="w")
+        Button(
+            tools, text=self.text("report_folder"),
+            command=self.open_selected_reports, style="Compact.TButton",
+        ).grid(row=0, column=1, padx=(6, 4))
+        menu = tk.Menu(tools, tearoff=False)
+        self.report_menu = menu
+        for label, command in (
+            ("upload_saved_pdf", self.upload_saved_pdf),
+            ("simbrief_load", lambda: self.load_simbrief(saved=True)),
+            ("simbrief_file", self.attach_ofp_file),
+            ("refresh_reports", self.refresh_reports),
+            ("open_app_log", self.host.open_log_file),
+        ):
+            menu.add_command(label=self.text(label), command=command)
+        menu.add_separator()
+        menu.add_command(label=self.text("finish_pdf"), command=self.finish_report)
+        more = icon_button(
+            tools, "…", lambda: self.show_report_menu(menu, more),
+            self.text("report_more_actions"),
         )
-        hint.grid(row=0, column=0, sticky='ew', pady=(0, 10))
+        more.grid(row=0, column=2)
         viewport = ttk.Frame(panel)
         viewport.grid(row=1, column=0, sticky='nsew')
         viewport.columnconfigure(0, weight=1)
@@ -1137,71 +1184,142 @@ class FlightUI:
             viewport, columns=columns, show="tree headings", height=REPORT_VISIBLE_ROWS,
             selectmode="extended",
         )
-        self.report_tree.heading("#0", text=self.text("saved_reports"))
         self.report_tree.heading("#0", command=lambda: self.sort_reports("#0"))
-        self.report_tree.column("#0", width=300, minwidth=170)
+        name_minimum, name_preferred = REPORT_NAME_WIDTHS
+        self.report_tree.column(
+            "#0", width=name_preferred, minwidth=name_minimum, stretch=False,
+        )
+        self.report_tree.configure(
+            displaycolumns=("started", "pdfs", "state", "created", "pages", "samples"),
+        )
         for name, width in zip(columns, REPORT_COLUMN_WIDTHS, strict=True):
             self.report_tree.heading(name, text=self.text("column_" + name),
                                      command=lambda column=name: self.sort_reports(column))
-            self.report_tree.column(name, width=width, minwidth=40)
+            self.report_tree.column(name, width=width, minwidth=40, stretch=False)
         self.report_tree.grid(row=0, column=0, sticky='nsew')
         vertical = ttk.Scrollbar(viewport, command=self.report_tree.yview)
         vertical.grid(row=0, column=1, sticky='ns')
         horizontal = ttk.Scrollbar(viewport, orient='horizontal', command=self.report_tree.xview)
         horizontal.grid(row=1, column=0, sticky='ew')
         self.report_tree.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        self.report_tree.bind("<Configure>", lambda event: self.layout_report_columns(event.width))
         self.report_tree.bind("<<TreeviewSelect>>", lambda _event: self.select_report())
         self.report_tree.bind("<Double-1>", lambda _event: self.open_selected_pdf())
+        self.report_tree.bind("<Return>", lambda _event: self.open_selected_pdf())
         detail_label = ttk.Label(
             panel, textvariable=self.report_detail_var, wraplength=620,
             style="Muted.TLabel",
         )
         detail_label.grid(row=2, column=0, sticky='ew', pady=(8, 4))
-        panel.bind('<Configure>', lambda event: (
-            hint.configure(wraplength=max(1, event.width - 16)),
-            detail_label.configure(wraplength=max(1, event.width - 16)),
+        panel.bind("<Configure>", lambda event: detail_label.configure(
+            wraplength=max(1, event.width - 32),
         ))
-        actions = ttk.Frame(report_footer, style="Card.TFrame")
-        actions.pack(fill="x", pady=(8, 0))
-        actions.columnconfigure(0, weight=1)
-        actions.columnconfigure(1, weight=1)
-        actions.bind('<Configure>', lambda _event: layout_actions(
-            actions, [button for button in actions.winfo_children() if isinstance(button, ttk.Button)],
-        ))
-        Button(
-            actions, text=self.text("finish_pdf"), command=self.finish_report,
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 6), pady=(0, 4))
-        self.report_button = Button(
-            actions, text=self.text("create_local_pdf"), command=self.create_local_pdf,
+        footer = ttk.Frame(panel, style="Card.TFrame")
+        footer.grid(row=3, column=0, sticky="ew", pady=(7, 0))
+        footer.columnconfigure(0, weight=1)
+        ttk.Separator(footer).grid(row=0, column=0, columnspan=2, sticky="ew")
+        target = ttk.Frame(footer, style="Card.TFrame")
+        target.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        target_label = ttk.Label(
+            target, textvariable=self.report_target_var, style="Section.TLabel",
         )
-        self.report_button.grid(row=0, column=1, sticky="ew", pady=(0, 4))
-        Button(actions, text=self.text("simbrief_load"),
-            command=lambda: self.load_simbrief(saved=True),
-        ).grid(row=2, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
-        Button(actions, text=self.text("simbrief_file"), command=self.attach_ofp_file,
-        ).grid(row=2, column=1, sticky="ew", pady=(6, 0))
-        Button(
-            actions, text=self.text("open_reports"), command=self.open_selected_reports,
-        ).grid(row=1, column=0, sticky="ew", padx=(0, 6))
-        Button(
-            actions, text=self.text("open_pdf"), command=self.open_selected_pdf,
-        ).grid(row=1, column=1, sticky="ew")
-        tools = ttk.Frame(report_footer, style="Card.TFrame")
-        tools.pack(fill="x", pady=(8, 0))
-        tools.bind('<Configure>', lambda _event: layout_actions(
-            tools, [button for button in tools.winfo_children() if isinstance(button, ttk.Button)],
+        target_label.pack(anchor="w")
+        target_hint = ttk.Label(
+            target, textvariable=self.report_target_hint, style="Muted.TLabel",
+        )
+        target_hint.pack(anchor="w")
+        actions = ttk.Frame(footer, style="Card.TFrame")
+        self.report_button = Button(
+            actions, text=self.text("create_local_pdf"),
+            command=self.create_local_pdf,
+        )
+        self.report_upload_button = Button(
+            actions, text=self.text("report_create_upload"),
+            command=self.create_and_upload_pdf, style="Primary.TButton",
+        )
+        buttons = [self.report_button, self.report_upload_button]
+        for column, button in enumerate(buttons):
+            button.grid(row=0, column=column, padx=4, pady=2, sticky="ew")
+        footer.bind("<Configure>", lambda _event: self.layout_report_footer(
+            footer, actions, target_label, target_hint, buttons,
         ))
-        Button(
-            tools, text=self.text("refresh_reports"), command=self.refresh_reports,
-        ).grid(row=0, column=0, sticky='ew')
-        Button(
-            tools, text=self.text("open_app_log"), command=self.host.open_log_file,
-        ).grid(row=0, column=1, sticky='ew')
-        Button(
-            tools, text=self.text("upload_saved_pdf"), command=self.upload_saved_pdf,
-        ).grid(row=1, column=0, sticky='ew')
+        actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         self.refresh_reports()
         self.report_dialog.deiconify()
+
+    def layout_report_columns(self, width: int) -> None:
+        """Keep identifying columns together and let details scroll if needed.
+
+        Args:
+            width (int): Allocated Treeview width in Tk pixels.
+        Returns:
+            None: Sizes the flight-name column around the fixed metadata widths.
+        """
+        minimum, preferred = REPORT_NAME_WIDTHS
+        started, _samples, pdfs, *_details = REPORT_COLUMN_WIDTHS
+        # Two pixels per edge leave room for the native Treeview border.
+        available = max(0, width - 4)
+        metadata = sum(REPORT_COLUMN_WIDTHS)
+        if available >= preferred + metadata:
+            name_width = available - metadata
+        else:
+            name_width = max(minimum, min(preferred, available - started - pdfs))
+        if self.report_tree.column("#0", "width") != name_width:
+            self.report_tree.column("#0", width=name_width)
+
+    def layout_report_footer(
+        self, footer: ttk.Frame, actions: ttk.Frame, target_label: ttk.Label,
+        target_hint: ttk.Label, buttons: list[ttk.Button],
+    ) -> None:
+        """Keep the watched gallery and both direct actions readable at any width.
+
+        Args:
+            footer (ttk.Frame): Full catalog footer with the target and actions.
+            actions (ttk.Frame): Grid container for the two direct buttons.
+            target_label (ttk.Label): Active gallery name, which may wrap.
+            target_hint (ttk.Label): Short explanation of the destination state.
+            buttons (list[ttk.Button]): Local create and online create buttons
+                in display order.
+        Returns:
+            None: Places the actions beside the target or on a row below it.
+        """
+        width = footer.winfo_width()
+        # Each button has four pixels of side padding on both edges.
+        action_width = sum(button.winfo_reqwidth() + 8 for button in buttons)
+        inline = width >= REPORT_TARGET_WIDTH + action_width
+        stack = width < action_width
+        actions.grid(
+            row=1 if inline else 2, column=1 if inline else 0,
+            columnspan=1 if inline else 2, sticky="ew" if stack else "e",
+            pady=(8, 0),
+        )
+        actions.columnconfigure(0, weight=int(stack))
+        for index, button in enumerate(buttons):
+            button.grid(
+                row=index if stack else 0, column=0 if stack else index,
+                sticky="ew", padx=4, pady=2,
+            )
+        wrap = max(1, width - action_width if inline else width)
+        target_label.configure(wraplength=wrap)
+        target_hint.configure(wraplength=wrap)
+
+    def show_report_menu(self, menu: tk.Menu, trigger: ttk.Button) -> None:
+        """Open secondary report actions immediately below their anchor.
+
+        Args:
+            menu (tk.Menu): Catalog-owned action menu with upload first.
+            trigger (ttk.Button): Ellipsis button opening the menu.
+        Returns:
+            None: Updates current upload eligibility and posts the menu.
+        """
+        self.refresh_report_actions()
+        try:
+            menu.tk_popup(
+                trigger.winfo_rootx(),
+                trigger.winfo_rooty() + trigger.winfo_height(),
+            )
+        finally:
+            menu.grab_release()
 
     def sort_reports(self, column: str) -> None:
         """Toggle a column's direction and reorder existing catalog rows.
@@ -1255,7 +1373,9 @@ class FlightUI:
             if column == "created":
                 stamp = max((self.report_file_sort_keys[child].created_utc
                     for child in children if child in self.report_file_sort_keys), default="")
-            text = "v" + str(version[1].number) if version else row.aircraft
+            text = "v" + str(version[1].number) if version else (
+                row.aircraft or row.gallery_identity
+            )
         if column in {"started", "created"}:
             try:
                 parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
@@ -1292,7 +1412,7 @@ class FlightUI:
             for position, identity in enumerate(ordered):
                 tree.move(identity, parent, position)
         for column in ("#0", "started", "samples", "pdfs", "created", "pages", "state"):
-            title = self.text("saved_reports" if column == "#0" else "column_" + column)
+            title = self.text("report_catalog_entry" if column == "#0" else "column_" + column)
             if column == self.report_sort_column:
                 title += " ↓" if self.report_sort_descending else " ↑"
             tree.heading(column, text=title)
@@ -1342,6 +1462,8 @@ class FlightUI:
                 self.recorder.diagnostics_snapshot()["sample_count"]
                 if live else row.sample_count
             )
+            if self.report_flights_only.get() and not (count or row.report_count):
+                continue
             try:
                 stamp = datetime.fromisoformat(row.started_utc.replace("Z", "+00:00"))
                 if stamp.tzinfo is None:
@@ -1349,7 +1471,8 @@ class FlightUI:
                 started = stamp.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
                 started = row.started_utc
-            tree.insert("", "end", iid=identity, text=row.aircraft or "—", open=identity in expanded, values=(
+            label = row.aircraft or row.gallery_identity or self.text("report_gallery_session")
+            tree.insert("", "end", iid=identity, text=label, open=identity in expanded, values=(
                 started, count,
                 row.report_count, "", "", self.text("report_state_" + state),
             ))
@@ -1365,7 +1488,8 @@ class FlightUI:
                         self.report_versions[parent] = (identity, revision)
                         self.report_group_files[parent] = []
                         tree.insert(identity, "end", iid=parent,
-                            text="v" + str(revision.number),
+                            text="v" + str(revision.number) + " · "
+                                + ", ".join(code.upper() for code in revision.files),
                             open=parent in expanded or (
                                 parent not in previous_versions and any(
                                     "pdf:" + identity + ":" + revision.report_id + ":" + code
@@ -1422,6 +1546,8 @@ class FlightUI:
         selection = tuple(identity for identity in selected if tree.exists(identity))
         if not selection:
             selection = tuple(tree.get_children())[:1]
+            if selection:
+                tree.item(selection[0], open=True)
         if selection:
             tree.selection_set(selection)
         self.select_report()
@@ -1443,6 +1569,7 @@ class FlightUI:
                 elif identity in self.report_versions:
                     identity = self.report_versions[identity][0]
                 return self.report_rows.get(identity)
+            return None
         if (
             self.independent_operation()
             and self.operation.plans
@@ -1454,36 +1581,82 @@ class FlightUI:
         """Show the selected session identity and retained recovery explanation.
 
         Returns:
-            None: Updates the local create/re-create label without starting work.
+            None: Updates the selected-record detail and action availability.
         """
         row = self.selected_saved_flight()
-        detail = row.directory.name + (": " + row.error if row.error else "") if row else self.text("select_saved_flight")
+        detail = self.text("report_empty") if row is None else (
+            row.error or self.text("report_open_hint")
+        )
         if row is not None:
             dispatch = load_dispatch(row.directory)
             if dispatch is not None:
                 detail += (
-                    "\n" + self.text("simbrief_ready") + ": "
+                    "  ·  " + self.text("simbrief_ready") + ": "
                     + dispatch.origin + " → " + dispatch.destination
                 )
-            else:
-                detail += "\n" + self.text("simbrief_not_attached")
             if self.dispatch is not None and dispatch != self.dispatch:
                 detail += (
                     "\n" + self.text("simbrief_available_for_report") + ": "
                     + self.dispatch.origin + " → " + self.dispatch.destination
                 )
         self.report_detail_var.set(detail)
-        if self.report_button is not None and self.report_button.winfo_exists():
-            self.report_button.configure(
-                text=self.text(
-                    "regenerate_pdf" if row and row.report_count else "create_local_pdf"
-                ),
-                state="normal" if row is not None and not self.busy() else "disabled",
-            )
+        self.refresh_report_actions()
 
-    def create_local_pdf(self) -> None:
-        """Create or re-create selected local PDFs without changing delivery state.
+    def refresh_report_actions(self) -> None:
+        """Reflect the Watcher's live target and the selected row's admission.
 
+        Returns:
+            None: Updates visible controls without reading files or contacting
+                either the selected flight's original gallery or the Watcher.
+        """
+        upload = self.report_upload_button
+        if upload is None or not upload.winfo_exists():
+            return
+        target = self.host.watched_report_target()
+        label = target.label if target is not None else self.text("report_watcher_off")
+        hint = self.text(
+            "report_watched_gallery" if target is not None else "report_start_watcher",
+        )
+        if self.report_target_var.get() != label:
+            self.report_target_var.set(label)
+        if self.report_target_hint.get() != hint:
+            self.report_target_hint.set(hint)
+        row = self.selected_saved_flight()
+        ready = bool(
+            row is not None and row.recording_ended and not self.busy()
+            and self.lease is not None and not self.load_error
+        )
+        for button, enabled in ((self.report_button, ready), (upload, ready and target is not None)):
+            state = "normal" if enabled else "disabled"
+            if str(button.cget("state")) != state:
+                button.configure(state=state)
+        menu_state = "normal" if ready and target is not None and row.report_count else "disabled"
+        if str(self.report_menu.entrycget(0, "state")) != menu_state:
+            self.report_menu.entryconfigure(0, state=menu_state)
+
+    def create_and_upload_pdf(self) -> None:
+        """Generate a fresh revision and send it to the active Watcher's gallery.
+
+        Returns:
+            None: Captures the currently watched target before local rendering.
+        """
+        target = self.host.watched_report_target()
+        if target is None:
+            self.refresh_report_actions()
+            return
+        self.create_local_pdf(target=target)
+
+    def create_local_pdf(
+        self, *, target: WatchedReportTarget | None = None,
+        row: SavedFlight | None = None,
+    ) -> None:
+        """Generate a fresh local revision with optional independent delivery.
+
+        Args:
+            target (WatchedReportTarget | None): Captured Watcher destination
+                for a subsequent upload, or None for local-only creation.
+            row (SavedFlight | None): Original stopped flight for a retry, or
+                None to use the current catalog selection.
         Returns:
             None: Starts a worker for one stopped session and all four editions;
                 an active recorder must first use Finish flight and create PDF.
@@ -1495,7 +1668,7 @@ class FlightUI:
         if self.busy():
             self.show_progress()
             return
-        row = self.selected_saved_flight()
+        row = row if row is not None else self.selected_saved_flight()
         if row is None:
             messagebox.showinfo(
                 self.text("saved_reports"),
@@ -1531,6 +1704,7 @@ class FlightUI:
             self.operation = FinalizationWorker(
                 [plan], "", "", lambda _cancel, _deadline: None,
                 lambda: None, False, local_reports=True,
+                watched_target=target,
                 emit=lambda level, message: self.host.events.put((level, message)),
             )
             self.operation.flight_generation = self._progress_generation
@@ -1544,11 +1718,11 @@ class FlightUI:
             messagebox.showerror(self.text("saved_reports"), str(exc), parent=self.dialog_owner())
 
     def upload_saved_pdf(self) -> None:
-        """Confirm and upload a retained revision with the current saved key.
+        """Offer retained revisions or confirm explicitly selected PDF editions.
 
         Returns:
-            None: Starts independent delivery after showing session, editions
-                and destination; requires a tested saved gallery connection.
+            None: Opens revision selection or starts confirmed delivery to
+                the captured Watcher's gallery without regenerating files.
         """
         if self.busy():
             self.show_progress()
@@ -1561,29 +1735,135 @@ class FlightUI:
                 parent=self.dialog_owner(),
             )
             return
-        selected = self.report_tree.selection() if self.report_tree is not None else ()
-        files = [self.report_files[identity] for identity in selected if identity in self.report_files]
-        if not files:
-            messagebox.showinfo(
-                self.text("saved_reports"),
-                self.text("select_pdf_files"),
-                parent=self.dialog_owner(),
-            )
+        target = self.host.watched_report_target()
+        if target is None:
+            self.refresh_report_actions()
             return
-        if len({identity for identity, _revision, _language in files}) != 1:
+        selected = self.report_tree.selection() if self.report_tree is not None else ()
+        groups: dict[str, ReportRevision] = {}
+        sessions: set[str] = set()
+        for identity in selected:
+            if identity in self.report_versions:
+                session, revision = self.report_versions[identity]
+                files = revision.files
+            elif identity in self.report_files:
+                session, revision, language = self.report_files[identity]
+                files = {language: revision.files[language]}
+            else:
+                continue
+            sessions.add(session)
+            group = groups.setdefault(revision.report_id, replace(revision, files={}))
+            group.files.update(files)
+        if len(sessions) > 1:
             messagebox.showinfo(
                 self.text("saved_reports"),
                 self.text("single_flight_selection"),
                 parent=self.dialog_owner(),
             )
             return
-        row = self.report_rows[files[0][0]]
-        groups: dict[str, ReportRevision] = {}
-        for _identity, revision, language in files:
-            group = groups.setdefault(revision.report_id, ReportRevision(revision.report_id, {}, revision.modified_utc))
-            group.files[language] = revision.files[language]
-        revisions = tuple(groups.values())
-        self.start_saved_upload(row, revisions[0], revisions[1:])
+        if groups:
+            revisions = tuple(groups.values())
+            self.start_saved_upload(
+                self.report_rows[next(iter(sessions))],
+                revisions[0], revisions[1:], target=target,
+            )
+            return
+        self.choose_report_revisions(row, target)
+
+    def choose_report_revisions(
+        self, row: SavedFlight, target: WatchedReportTarget,
+    ) -> None:
+        """Select one or more revisions of one stopped flight for direct upload.
+
+        Args:
+            row (SavedFlight): Catalog session whose retained PDFs are offered.
+            target (WatchedReportTarget): Active Watcher and destination shown
+                in this picker and revalidated on submission.
+        Returns:
+            None: Opens an embedded picker, or explains unavailable revisions.
+        """
+        owner = self.dialog_owner()
+        try:
+            revisions = sorted(
+                report_revisions(row.directory),
+                key=lambda item: item.number or 0, reverse=True,
+            )
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(self.text("saved_reports"), str(exc), parent=owner)
+            return
+        if not revisions:
+            messagebox.showinfo(
+                self.text("saved_reports"), self.text("no_saved_pdf"), parent=owner,
+            )
+            return
+        dialog = EmbeddedWindow(owner)
+        dialog.title(self.text("upload_saved_pdf"))
+        panel = GlassCard(dialog, padding=(16, 12))
+        panel.pack(fill="both", expand=True, padx=10, pady=10)
+        ttk.Label(panel, text=target.label, style="Section.TLabel").pack(anchor="w")
+        hint = ttk.Label(
+            panel, text=self.text("report_choose_revisions"), style="Muted.TLabel",
+        )
+        hint.pack(fill="x", pady=(4, 8))
+        panel.bind("<Configure>", lambda event: hint.configure(
+            wraplength=max(1, event.width - 32),
+        ))
+        viewport = ttk.Frame(panel)
+        viewport.pack(fill="both", expand=True)
+        viewport.columnconfigure(0, weight=1)
+        viewport.rowconfigure(0, weight=1)
+        tree = ttk.Treeview(
+            viewport, columns=("created", "languages"),
+            show="tree headings", selectmode="extended", height=REPORT_VISIBLE_ROWS,
+        )
+        tree.heading("#0", text=self.text("report_version"))
+        tree.heading("created", text=self.text("column_created"))
+        tree.heading("languages", text=self.text("report_languages"))
+        for column, width in zip(("#0", "created", "languages"), (97, 140, 137), strict=True):
+            tree.column(column, width=width, minwidth=40)
+        tree.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(viewport, orient="vertical", command=tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=scroll.set)
+        by_id = {revision.report_id: revision for revision in revisions}
+        for revision in revisions:
+            details = [
+                self.report_file_sort_keys.get(
+                    f"pdf:{row.directory.name}:{revision.report_id}:{language}",
+                ) or report_file_details(pdf)
+                for language, pdf in revision.files.items()
+            ]
+            latest = max(details, key=lambda item: item.created_utc)
+            created = datetime.fromisoformat(latest.created_utc).astimezone()
+            stamp = created.strftime("%Y-%m-%d %H:%M:%S")
+            tree.insert(
+                "", "end", iid=revision.report_id, text="v" + str(revision.number),
+                values=(stamp + (" *" if latest.estimated_time else ""),
+                        ", ".join(code.upper() for code in revision.files)),
+            )
+        tree.selection_set(revisions[0].report_id)
+
+        def submit() -> None:
+            """Start the exact edition groups selected in this picker.
+
+            Returns:
+                None: Closes the picker and admits the selected revisions.
+            """
+            picked = tuple(by_id[identity] for identity in tree.selection())
+            if picked:
+                dialog.destroy()
+                self.start_saved_upload(
+                    row, picked[0], picked[1:], target=target, confirmed=True,
+                )
+
+        action = Button(
+            panel, text=self.text("report_upload_selected"),
+            command=submit, style="Primary.TButton",
+        )
+        action.pack(anchor="e", pady=(8, 0))
+        tree.bind("<<TreeviewSelect>>", lambda _event: action.configure(
+            state="normal" if tree.selection() else "disabled",
+        ))
 
     def retry_saved_upload(self) -> None:
         """Retry the captured PDF revision independently of catalog selection.
@@ -1593,17 +1873,27 @@ class FlightUI:
                 and key; an unavailable catalog row requires refreshing history.
         """
         operation = self.operation
-        if operation is None or not operation.saved_upload or operation.saved_revision is None:
+        if operation is None or not self.report_upload_operation():
             return
         row = self.report_rows.get(operation.plans[0].session_id)
         if row is None:
             self.show_reports()
             return
-        self.start_saved_upload(row, operation.saved_revision, operation.saved_revisions[1:])
+        target = getattr(operation, "watched_target", None)
+        if operation.saved_revision is not None:
+            self.start_saved_upload(
+                row, operation.saved_revision, operation.saved_revisions[1:],
+                target=target, confirmed=target is not None,
+            )
+        elif target is not None:
+            current = self.confirm_watched_report_target(target)
+            if current is not None:
+                self.create_local_pdf(target=current, row=row)
 
     def start_saved_upload(
         self, row: SavedFlight, revision: ReportRevision,
-        additional: tuple[ReportRevision, ...] = (),
+        additional: tuple[ReportRevision, ...] = (), *,
+        target: WatchedReportTarget | None = None, confirmed: bool = False,
     ) -> None:
         """Confirm a concrete retained revision before independent delivery.
 
@@ -1613,20 +1903,17 @@ class FlightUI:
                 chosen for the initial action or retained from a failed upload.
             additional (tuple[ReportRevision, ...]): Further explicitly selected
                 revision/edition subsets from the same saved flight.
+            target (WatchedReportTarget | None): Destination shown before
+                submission, or None to capture the current Watcher.
+            confirmed (bool): The destination and selection were acknowledged in
+                the picker or the retry of this same captured upload.
 
         Returns:
-            None: Starts delivery with current saved credentials after explicit
+            None: Starts delivery with the running Watcher's authority after
                 target confirmation; another flight remains active.
         """
         if self.busy():
             self.show_progress()
-            return
-        if self.host.linking_manager.linked_upload_mode_selected():
-            messagebox.showinfo(
-                self.text("saved_reports"),
-                self.text("linked_legacy_action_unavailable"),
-                parent=self.dialog_owner(),
-            )
             return
         if self.load_error or self.lease is None:
             messagebox.showerror(
@@ -1635,13 +1922,8 @@ class FlightUI:
                 parent=self.dialog_owner(),
             )
             return
-        gallery = self.host.gallery_label_var.get().removeprefix("Target gallery: ")
-        if not self.host.config.api_key or not gallery or gallery == "unknown":
-            messagebox.showinfo(
-                self.text("saved_reports"),
-                self.text("test_saved_connection"),
-                parent=self.dialog_owner(),
-            )
+        captured = self.confirm_watched_report_target(target)
+        if captured is None:
             return
         if not row.recording_ended or (
             self.recorder and self.recorder.is_alive() and self.recorder.directory == row.directory
@@ -1653,11 +1935,10 @@ class FlightUI:
             )
             return
         detail = (
-            self.text("confirm_saved_upload") + "\n\n" + gallery + "\n"
-            + row.directory.name + "\n" + revision.modified_utc + "\n"
+            self.text("confirm_saved_upload") + "\n\n" + captured.label + "\n"
             + "\n".join(pdf.name for item in (revision,) + additional for pdf in item.files.values())
         )
-        if not messagebox.askyesno(
+        if not confirmed and not messagebox.askyesno(
             self.text("upload_saved_pdf"),
             detail,
             parent=self.dialog_owner(),
@@ -1666,24 +1947,45 @@ class FlightUI:
         try:
             languages = tuple(dict.fromkeys(code for item in (revision,) + additional for code in item.files))
             plan = replace(SessionPlan.load(row.directory), languages=languages)
-            owner, port, upload_url, api_key = self.host.capture_flight_admission()
             self._progress_generation += 1
             self.operation = FinalizationWorker(
-                [plan], upload_url, api_key, lambda _cancel, _deadline: None,
+                [plan], "", "", lambda _cancel, _deadline: None,
                 lambda: None, False, saved_revision=revision,
                 saved_revisions=(revision,) + additional,
-                target_gallery=gallery,
+                watched_target=captured,
                 emit=lambda level, message: self.host.events.put((level, message)),
-                gui_admission=(owner, port), require_gui_admission=True,
             )
             self.operation.flight_generation = self._progress_generation
             self._consume_trigger_reason("saved_report_upload")
             self.operation.trigger_reason = "saved_report_upload"
             self._last_terminal = ""
             self.operation.start()
+            self.refresh_report_actions()
             self.show_progress()
         except (OSError, ValueError, RuntimeError) as exc:
             messagebox.showerror(self.text("saved_reports"), str(exc), parent=self.dialog_owner())
+
+    def confirm_watched_report_target(
+        self, expected: WatchedReportTarget | None,
+    ) -> WatchedReportTarget | None:
+        """Validate that an acknowledged upload still names the watched gallery.
+
+        Args:
+            expected (WatchedReportTarget | None): Previously shown target,
+                or None when capturing an initial destination.
+        Returns:
+            WatchedReportTarget | None: Current authority for the same gallery,
+                or None after explaining why the transfer cannot start.
+        """
+        target = self.host.watched_report_target()
+        if target is not None and (expected is None or expected.binding() == target.binding()):
+            return target
+        messagebox.showinfo(
+            self.text("saved_reports"),
+            self.text("report_target_changed" if expected else "report_start_watcher"),
+            parent=self.dialog_owner(),
+        )
+        return None
 
     def open_selected_pdf(self) -> None:
         """Open explicitly selected retained PDFs in the system's default viewer.
@@ -2514,6 +2816,18 @@ class FlightUI:
             or operation.saved_upload is True
         )
 
+    def report_upload_operation(self) -> bool:
+        """Identify an independent operation with an explicit upload step.
+
+        Returns:
+            bool: True for saved revision delivery or create-and-upload.
+        """
+        operation = self.operation
+        return operation is not None and (
+            operation.saved_upload is True
+            or getattr(operation, "watched_target", None) is not None
+        )
+
     def pending_revoke_intent(self) -> bool:
         """Retain only this process's confirmed, unsubmitted revoke decision.
 
@@ -3215,10 +3529,7 @@ class FlightUI:
                 without changing upload or revocation intent.
         """
         local_mode = self.independent_operation()
-        saved_upload = bool(
-            self.operation is not None
-            and self.operation.saved_upload is True
-        )
+        saved_upload = self.report_upload_operation()
         abandoning = bool(
             self.operation is not None and self.operation.abandonment is True
         )
@@ -3321,7 +3632,8 @@ class FlightUI:
         )
         local_actions = (
             ("retry", self.retry_saved_upload if saved_upload else self.create_local_pdf),
-            ("cancel_upload" if saved_upload else "cancel_pdf", self.cancel_local_pdf),
+            ("cancel_pdf", self.cancel_local_pdf),
+            ("cancel_upload", self.cancel_local_pdf),
             ("open_reports", self.open_reports),
             ("hide", self.dialog.withdraw),
         )
@@ -3414,7 +3726,11 @@ class FlightUI:
         if self.independent_operation():
             if not preparing:
                 if running:
-                    choices.append("cancel_upload" if operation.saved_upload else "cancel_pdf")
+                    choices.append(
+                        "cancel_upload" if operation.saved_upload or (
+                            self.report_upload_operation() and operation.saved_revision is not None
+                        ) else "cancel_pdf"
+                    )
                 elif phase != "completed":
                     choices.append("retry")
                 choices.append("open_reports")
@@ -3611,13 +3927,17 @@ class FlightUI:
         self.task_frame.grid()
         progress = operation.snapshot()
         rows: list[tuple[str, str, str]] = []
-        if operation.saved_upload is True:
+        if self.report_upload_operation() and operation.saved_revisions:
+            # Create-and-upload completes analysis and its initial render set
+            # before the independent destination/edition delivery counters.
+            offset = 1 + len(operation.plans[0].languages) if operation.local_reports else 0
+            delivered = progress.done - offset
             editions = [(revision, language, pdf)
                         for revision in operation.saved_revisions
                         for language, pdf in revision.files.items()]
             for index, (revision, language, pdf) in enumerate(editions):
-                state = self.text("phase_completed" if progress.done >= index + 2 else "phase_idle")
-                if progress.done == index + 1 and progress.phase == "uploading":
+                state = self.text("phase_completed" if delivered >= index + 2 else "report_state_local")
+                if delivered == index + 1 and progress.phase == "uploading":
                     state = self.text("phase_uploading")
                 rows.append((revision.report_id + "-" + language, pdf.name, state))
         else:
@@ -3875,6 +4195,7 @@ class FlightUI:
         resume_finish = getattr(self.host, 'resume_pending_finish', None)
         if callable(resume_finish):
             resume_finish()
+        self.refresh_report_actions()
         if operation is not None:
             progress = operation.snapshot()
             terminal = progress.phase in {"completed", "error", "cancelled"}
@@ -3889,6 +4210,9 @@ class FlightUI:
                 and progress.phase == "cancelled" else "phase_" + progress.phase
             ))
             detail = progress.detail or progress.error
+            if (progress.phase == "error" and operation.local_reports is True
+                    and self.report_upload_operation() and operation.saved_revision is not None):
+                detail = self.text("report_upload_local_recovery").format(detail=detail)
             if getattr(self, "_force_finish_pending", False):
                 detail = self.text("force_finish_saving")
             if detail.startswith("pdf_dependency_missing:"):

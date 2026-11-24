@@ -1810,7 +1810,7 @@ migration ledger, administrator password verification, fresh layout defaults,
 lock release, and HTTP 403 after completion. The disposable workflow wrapper
 requires its PASS; an ordinary audit without that fixture reports explicit SKIP.
 
-This guide applies to PHP Gallery Version 1.6.1. Release verification uses the
+This guide applies to PHP Gallery Version 1.7.0. Release verification uses the
 central audit runner's `release` profile as the single authoritative automated
 qualification pass, plus any material environment-dependent/manual coverage
 reported by that profile and the retained Version 0.97 coverage: recoverable
@@ -9715,6 +9715,12 @@ pixel rectangle must retain every selected ratio inside the folder frame.
 Portable coverage tests legacy server negotiation and the real host bridge's
 local per-gallery divider save across host reconstruction and identity changes.
 These checks do not launch or qualify the user's installed app/server.
+
+The native saved-flight fixture captures the direct PDF actions with Watcher
+active, the narrow filtered catalog with Watcher off, and the multi-revision
+picker under `cache/test-audit/saved-flight-reports/`. The portable recorder
+and delivery fixtures replay missing zero-coordinate positions, stationary
+preflight, explicit revision selection and retry of already retained PDFs.
 
 The shared UI library has portable architectural coverage in
 `winapp/tests/test_ui_library.py`: complete runtime consumers must use central

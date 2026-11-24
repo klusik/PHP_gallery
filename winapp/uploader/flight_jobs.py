@@ -718,6 +718,7 @@ class SavedFlight:
     completed: bool = False
     report_count: int = 0
     error: str = ""
+    gallery_identity: str = ""
 
 
 def saved_flights(root: Path) -> list[SavedFlight]:
@@ -728,7 +729,8 @@ def saved_flights(root: Path) -> list[SavedFlight]:
 
     Returns:
         list[SavedFlight]: Newest checkpoints first, with aircraft, stored sample
-            count, ended/completed flags, local PDF count and recovery error.
+            count, ended/completed flags, local PDF count, recorded gallery
+            identity and recovery error.
             Corrupt or redirected sessions remain visible as error rows.
     """
     result: list[SavedFlight] = []
@@ -747,6 +749,9 @@ def saved_flights(root: Path) -> list[SavedFlight]:
             plan = SessionPlan.load(directory)
             row.started_utc = str(meta.get("started_utc", ""))
             row.aircraft = str(meta.get("aircraft") or "")
+            gallery_identity = meta.get("gallery_identity")
+            if isinstance(gallery_identity, str):
+                row.gallery_identity = gallery_identity
             count = meta.get("sample_count", 0)
             row.sample_count = count if type(count) is int and count >= 0 else 0
             row.recording_ended = meta.get("recording_ended") is True

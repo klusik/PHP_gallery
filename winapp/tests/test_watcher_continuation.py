@@ -437,10 +437,14 @@ class WatcherContinuationTests(unittest.TestCase):
             api_key_revoke_running=False,
         )
 
-        def variable(value: str | bool = '') -> SimpleNamespace:
+        def variable(
+            master: object | None = None, value: str | bool = '',
+        ) -> SimpleNamespace:
             """Create the minimal Tk variable contract for FlightUI startup.
 
             Args:
+                master (object{} | None): Fake Tk parent with no inspected
+                    properties, or None for the standard default root.
                 value (str | bool): Initial value loaded from the temporary
                     flight preferences.
 
@@ -2702,4 +2706,52 @@ class WatcherFactoryResetTests(unittest.TestCase):
         self.app._begin_watcher_reset()
         self.assertIn('reason=completed', self.settle_reset())
         self.assertFalse(MAIN.WatcherProfile.load(self.lease.root).pending)
+
+    def test_report_destination_comes_from_ready_watcher_in_both_modes(self) -> None:
+        """Require active observation and retain the exact worker destination.
+
+        Returns:
+            None: Selected-but-idle, preparing, draining and expired states
+                are refused while both live transports retain their authority.
+        """
+        app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app.worker = None
+        app._watch_start_pending = False
+        app._verified_legacy_gallery = None
+        self.assertIsNone(app.watched_report_target())
+        owner, port = object(), object()
+        worker = SimpleNamespace(
+            is_alive=lambda: True, initial_captured=False, drain_only=False,
+            drain_event=threading.Event(), stop_event=threading.Event(),
+            update_pause_event=threading.Event(), _recovery_review_only=False,
+            _force_finish_requested=threading.Event(), linked_target=None,
+            _gui_admission=(owner, port),
+            config=MAIN.WatcherConfig(
+                gallery_url="https://gallery.test", api_key="worker-key",
+            ),
+        )
+        app.worker = worker
+        self.assertIsNone(app.watched_report_target())
+        worker.initial_captured = True
+        url = MAIN.normalize_upload_url(worker.config.gallery_url)
+        app._verified_legacy_gallery = (
+            object(), MAIN.connection_binding(url, "worker-key"),
+            "Flights/Current", "Current flights",
+        )
+        legacy = app.watched_report_target()
+        self.assertEqual((url, "worker-key"), (legacy.upload_url, legacy.api_key))
+        self.assertEqual((owner, port), legacy.gui_admission)
+        self.assertEqual("Flights/Current", legacy.gallery_folder)
+        self.assertEqual("Current flights", legacy.label)
+        worker.drain_event.set()
+        self.assertIsNone(app.watched_report_target())
+        worker.drain_event.clear()
+        session = SimpleNamespace(can_upload=mock.Mock(return_value=True))
+        linked = SimpleNamespace(session=session, title="Linked flights")
+        worker.linked_target = linked
+        captured = app.watched_report_target()
+        self.assertIs(linked, captured.linked_target)
+        self.assertEqual(("", ""), (captured.upload_url, captured.api_key))
+        session.can_upload.return_value = False
+        self.assertIsNone(app.watched_report_target())
 

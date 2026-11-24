@@ -84,10 +84,15 @@ else:
     native_gallery_viewer = None
 
 if sys.platform == 'win32' and tk is not None and Image is not None:
+    from pypdf import PdfWriter
     from uploader import gallery_lightbox, photos_workspace, ui_theme
     from test_redesign import MAIN
     from uploader import app_linking as linking
     from uploader.app_header import HEADER_WORKSPACE_GAP
+    from uploader.flight_jobs import SessionPlan, allocate_report_revision
+    from uploader.flight_ui import FlightUI
+    from uploader.flight_workflow import WatchedReportTarget
+    from uploader.ui_shell import active_panel
     from uploader.gallery_folders import GalleryFolderShelf
     from uploader.gallery_view_preferences import (
             load_gallery_card_format, save_gallery_card_format,
@@ -465,6 +470,120 @@ class NativeGalleryViewerTests(unittest.TestCase):
         self.root.geometry('840x620+0+0')
         self.root.update()
         self.addCleanup(self._destroy_root)
+
+    def test_saved_flight_direct_actions_filter_and_revision_picker(self) -> None:
+        """Capture the real saved-flight UI in three native Windows states.
+
+        Returns:
+            None: Shows the watched destination, verifies offline action
+                gating and filters a photo-only session, then selects two
+                retained revisions. Saves the resulting CI screenshots.
+        """
+        configure_theme(self.root)
+        evidence = WINAPP_DIR.parent / "cache" / "test-audit" / "saved-flight-reports"
+        evidence.mkdir(parents=True, exist_ok=True)
+
+        def capture(filename: str) -> None:
+            """Save the mapped native app area after processing placement.
+
+            Args:
+                filename (str): PNG basename within the CI evidence directory.
+            Returns:
+                None: Captures the actual window content at current dimensions.
+            """
+            self.root.update()
+            x, y = self.root.winfo_rootx(), self.root.winfo_rooty()
+            bounds = (x, y, x + self.root.winfo_width(), y + self.root.winfo_height())
+            with ImageGrab.grab(bbox=bounds) as image:
+                image.save(evidence / filename)
+
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            for name, aircraft, count, day in (
+                ("saved-flight", "Carenado C337 Skymaster", 1800, 24),
+                ("photos-only", "", 0, 23),
+            ):
+                session = directory / name
+                session.mkdir()
+                plan = SessionPlan(session, "a" * 64, ("en", "cs"), False)
+                plan.save()
+                (session / "session.json").write_text(json.dumps({
+                    "started_utc": f"2026-11-{day}T12:33:40+00:00",
+                    "aircraft": aircraft, "sample_count": count,
+                    "recording_ended": True, "gallery_identity": "Fotky z létání",
+                }), encoding="utf-8")
+                if aircraft:
+                    # Two prior revisions enable true multiselection. One page
+                    # per language is sufficient for the file-creation column.
+                    for revision in ("first", "second"):
+                        edition = allocate_report_revision(session, revision, plan.languages)
+                        for path in edition.files.values():
+                            writer = PdfWriter()
+                            # Letter dimensions in PDF points match a real page.
+                            writer.add_blank_page(width=612, height=792)
+                            writer.write(path)
+
+            target = WatchedReportTarget("Praha / Večerní lety")
+            host = types.SimpleNamespace(
+                root=self.root, events=queue.Queue(), worker=None,
+                watched_report_target=mock.Mock(return_value=target),
+                simulator_presence=types.SimpleNamespace(
+                    text=lambda key, locale: tr(locale, key),
+                ),
+                open_log_file=mock.Mock(),
+            )
+            with mock.patch.object(self.root, "after", return_value="fixture-no-tick"):
+                ui = FlightUI(host, directory, str, mock.Mock(), mock.Mock())
+            self.assertIsNotNone(ui.lease, ui.load_error)
+            try:
+                ui.ui_language.set("cs")
+                ui.show_reports()
+                self.root.update()
+                self.assertFalse(ui.report_flights_only.get())
+                self.assertEqual(("saved-flight", "photos-only"), ui.report_tree.get_children())
+                self.assertEqual(str(ui.report_upload_button.cget("state")), "normal")
+                self.assertEqual(target.label, ui.report_target_var.get())
+                self.assertEqual(ui.report_button.winfo_rooty(), ui.report_upload_button.winfo_rooty())
+                samples_x, _, samples_width, _ = ui.report_tree.bbox("saved-flight", "samples")
+                self.assertLessEqual(samples_x + samples_width, ui.report_tree.winfo_width())
+                capture("direct-actions-desktop.png")
+
+                self.root.geometry("460x540+0+0")
+                host.watched_report_target.return_value = None
+                ui.report_flights_only.set(True)
+                ui.refresh_reports()
+                self.root.update()
+                self.assertEqual(("saved-flight",), ui.report_tree.get_children())
+                self.assertEqual(str(ui.report_button.cget("state")), "normal")
+                self.assertEqual(str(ui.report_upload_button.cget("state")), "disabled")
+                pdfs_x, _, pdfs_width, _ = ui.report_tree.bbox("saved-flight", "pdfs")
+                self.assertLessEqual(pdfs_x + pdfs_width, ui.report_tree.winfo_width())
+                for button in (ui.report_button, ui.report_upload_button):
+                    self.assertGreaterEqual(button.winfo_width(), button.winfo_reqwidth())
+                    self.assertLessEqual(
+                        button.winfo_rootx() + button.winfo_width(),
+                        self.root.winfo_rootx() + self.root.winfo_width(),
+                    )
+                capture("flight-filter-watcher-off-narrow.png")
+
+                host.watched_report_target.return_value = target
+                ui.upload_saved_pdf()
+                picker = active_panel(self.root)
+                self.assertIsNot(picker, ui.report_dialog)
+                card = picker.winfo_children()[0]
+                viewport = next(child for child in card.winfo_children() if child.winfo_class() == "TFrame")
+                revisions = next(widget for widget in viewport.winfo_children()
+                                 if isinstance(widget, ttk.Treeview))
+                self.assertEqual(("second", "first"), revisions.get_children())
+                self.assertEqual(("second",), revisions.selection())
+                revisions.selection_set(revisions.get_children())
+                self.assertEqual(("second", "first"), revisions.selection())
+                capture("select-revisions-narrow.png")
+                picker.destroy()
+            finally:
+                if ui.report_dialog is not None and ui.report_dialog.winfo_exists():
+                    ui.report_dialog.destroy()
+                ui.lease.release()
 
     def _destroy_root(self) -> None:
         """Destroy the test root and collect Tk-owned cycles on its thread.

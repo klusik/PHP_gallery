@@ -14,7 +14,7 @@ import math
 from collections import deque
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from uploader.models import JsonValue
 from uploader.flight_simbrief import DispatchPlan, load_dispatch
@@ -141,6 +141,27 @@ MAX_ROLLOUT_SAMPLE_GAP_SECONDS = 0.25
 # Type: float. Units: nautical miles. Scope: rollout distance accumulation.
 # Consumers: _LandingTracker._advance_rollout. Rationale: reject position jumps.
 MAX_ROLLOUT_SEGMENT_NM = 50.0
+# Purpose: Allow a real passage through zero coordinates when adjacent
+# positions and speeds support it.
+# Type: float. Units: metres per second. Scope: one zero-position transition.
+# Consumers: _zero_position_unavailable. Rationale: 10 m/s allows low-speed
+# positioning noise when the recorded groundspeed is absent or slightly stale.
+ZERO_POSITION_SPEED_MARGIN_MPS = 10.0
+# Purpose: Detect departure from a stationary prefix, including slow pushback.
+# Type: float. Units: metres per second. Scope: report timing onset.
+# Consumers: analyze_session. Rationale: 0.8 m/s is about 1.6 kt and keeps
+# ordinary parked jitter out of the measured report.
+REPORT_MOTION_SPEED_MPS = 0.8
+# Purpose: Require sustained motion before dating the start of the report.
+# Type: float. Units: seconds. Scope: consecutive report motion observations.
+# Consumers: analyze_session. Rationale: two seconds rejects a one-frame spike
+# at both cruise and detail recording rates.
+REPORT_MOTION_CONFIRM_SECONDS = 2.0
+# Purpose: Break legacy traces at the recorder's existing relocation threshold.
+# Type: float. Units: nautical miles. Scope: consecutive recorded positions.
+# Consumers: _telemetry_samples and FlightRecorder._discontinuity.
+# Rationale: a 10 NM jump is outside normal motion at the capture cadence.
+TELEPORT_DISTANCE_LIMIT_NM = 10.0
 # Speed threshold below which sustained ground motion indicates taxiing.
 # Type: float. Units: metres per second. Scope: rollout endpoint detection.
 # Consumers: _LandingTracker._advance_rollout. Rationale: omit prolonged taxi.
@@ -186,6 +207,7 @@ AIRBORNE_AGL_MINIMUM_METRES = 3.0
 # Consumers: _LandingTracker._strong_airborne. Rationale: reject static loads.
 AIRBORNE_GROUND_SPEED_MINIMUM_MPS = 20.0
 EARTH_RADIUS_NM = 3440.065
+METRES_PER_NAUTICAL_MILE = 1852.0  # International nautical-mile definition.
 FEET_PER_MINUTE_PER_METRES_PER_SECOND = 196.8503937008
 
 
@@ -506,6 +528,90 @@ def _distance_nm(first: FlightSample, second: FlightSample) -> float | None:
     return 2 * EARTH_RADIUS_NM * math.asin(
         min(1.0, math.sqrt(half_chord))
     )
+
+
+def _zero_position_unavailable(
+    sample: FlightSample, previous: FlightSample | None,
+) -> bool:
+    """Recognize the SDK's zero pair without rejecting a continuous crossing.
+
+    Args:
+        sample (FlightSample): Latest sample with finite or missing coordinates.
+        previous (FlightSample | None): Immediately preceding normalized sample.
+    Returns:
+        bool: True for the zero pair without plausible adjacent motion evidence.
+    """
+    if sample.latitude_deg != 0.0 or sample.longitude_deg != 0.0:
+        return False
+    if previous is None or sample.discontinuity_before:
+        return True
+    gap = sample.session_elapsed_seconds - previous.session_elapsed_seconds
+    distance = _distance_nm(previous, sample)
+    if distance is None or not 0 < gap <= PHASE_VERTICAL_MAX_GAP_SECONDS:
+        return True
+    speed = max(sample.ground_speed_mps or 0.0, previous.ground_speed_mps or 0.0)
+    plausible = (speed + ZERO_POSITION_SPEED_MARGIN_MPS) * gap
+    return distance * METRES_PER_NAUTICAL_MILE > plausible
+
+
+def _telemetry_samples(
+    directory: Path, warn: Callable[[str], None] | None = None,
+) -> Iterator[FlightSample | None]:
+    """Stream valid positions and explicit gaps from old and new recordings.
+
+    Args:
+        directory (Path): Existing raw flight session.
+        warn (Callable[[str], None] | None): Optional bounded diagnostic sink.
+    Returns:
+        Iterator[FlightSample | None]: Normalized samples and corrupt row
+            markers for both the report and its full-sample OFP comparison.
+    """
+    previous: FlightSample | None = None
+    missing_position = False
+    for row in _rows(directory):
+        sample = _sample(row) if row is not None else None
+        if sample is None:
+            if warn is not None:
+                warn("Malformed or incomplete telemetry record was skipped."
+                     if row is None else "Telemetry record with invalid timing was skipped.")
+            yield None
+            continue
+        if (previous is not None
+                and sample.session_elapsed_seconds <= previous.session_elapsed_seconds):
+            sample.discontinuity_before = (
+                sample.discontinuity_before or "out-of-order host sample"
+            )
+            if warn is not None:
+                warn("Out-of-order sample split the trajectory.")
+        lat, lon = sample.latitude_deg, sample.longitude_deg
+        invalid = (
+            # Geodetic latitude and longitude have closed degree ranges.
+            (lat is not None and abs(lat) > 90)
+            or (lon is not None and abs(lon) > 180)
+            or _zero_position_unavailable(sample, previous)
+        )
+        if invalid:
+            sample.latitude_deg = sample.longitude_deg = None
+            if not missing_position:
+                sample.discontinuity_before = (
+                    sample.discontinuity_before or "simulator position unavailable"
+                )
+                if warn is not None:
+                    warn("An unavailable simulator position was excluded from the route.")
+            missing_position = True
+        elif missing_position and lat is not None and lon is not None:
+            sample.discontinuity_before = (
+                sample.discontinuity_before or "simulator position resumed"
+            )
+            missing_position = False
+        elif previous is not None and not sample.discontinuity_before:
+            distance = _distance_nm(previous, sample)
+            if distance is not None and distance > TELEPORT_DISTANCE_LIMIT_NM:
+                sample.discontinuity_before = "aircraft position discontinuity"
+                if warn is not None:
+                    warn("Implausible position jump excluded from distance.")
+        previous = sample
+        yield sample
 
 
 def _descent_rate_fpm(
@@ -1316,6 +1422,54 @@ def _reduce_chart_samples(
     return reduced
 
 
+def _rebase_report(analysis: FlightAnalysis, start: FlightSample) -> None:
+    """Make first sustained movement the report's time origin.
+
+    Args:
+        analysis (FlightAnalysis): Report after full-sample comparison and
+            original contact/phase inference.
+        start (FlightSample): First observed frame of sustained motion.
+    Returns:
+        None: Updates report-relative time, leaving UTC/simulator clocks intact.
+    """
+    origin = start.session_elapsed_seconds
+    if origin <= 0.0:
+        return
+
+    def shifted(sample: FlightSample) -> FlightSample:
+        """Copy a report sample with the measured elapsed-time origin.
+
+        Args:
+            sample (FlightSample): Position or detail frame in capture time.
+        Returns:
+            FlightSample: Frame in report time with original absolute clocks.
+        """
+        return replace(sample, session_elapsed_seconds=sample.session_elapsed_seconds - origin)
+
+    analysis.duration_seconds = max(0.0, analysis.duration_seconds - origin)
+    chart = [sample for sample in analysis.samples if sample.session_elapsed_seconds >= origin]
+    if not chart or chart[0].session_elapsed_seconds != origin:
+        chart.insert(0, start)
+    analysis.samples = [shifted(sample) for sample in chart]
+    analysis.events = [
+        replace(event, elapsed_seconds=event.elapsed_seconds - origin)
+        for event in analysis.events if event.elapsed_seconds >= origin
+    ]
+    analysis.landings = [
+        replace(
+            landing,
+            first_contact_elapsed_seconds=landing.first_contact_elapsed_seconds - origin,
+            last_contact_elapsed_seconds=landing.last_contact_elapsed_seconds - origin,
+            contact_samples=[shifted(sample) for sample in landing.contact_samples],
+            profile_samples=[
+                shifted(sample) for sample in landing.profile_samples
+                if sample.session_elapsed_seconds >= origin
+            ],
+        )
+        for landing in analysis.landings
+    ]
+
+
 def analyze_session(directory: Path) -> FlightAnalysis:
     """Stream full-resolution contact evidence and retain bounded chart data.
 
@@ -1357,23 +1511,20 @@ def analyze_session(directory: Path) -> FlightAnalysis:
     previous: FlightSample | None = None
     latest: FlightSample | None = None
     distance = 0.0
-    distance_known = False
+    distance_segments = 0
+    prefix_distance = 0.0
+    prefix_segments = 0
+    motion_candidate: FlightSample | None = None
+    motion_start: FlightSample | None = None
     sample_count = 0
     last_elapsed = -1.0
-    for row in _rows(directory):
-        if row is None:
-            warn("Malformed or incomplete telemetry record was skipped.")
-            continue
-        sample = _sample(row)
+    for sample in _telemetry_samples(directory, warn):
         if sample is None:
-            warn("Telemetry record with invalid timing was skipped.")
+            if motion_start is None:
+                motion_candidate = None
             continue
         sample_count += 1
-        if sample.session_elapsed_seconds <= last_elapsed:
-            sample.discontinuity_before = (
-                sample.discontinuity_before or "out-of-order host sample"
-            )
-            warn("Out-of-order sample split the trajectory.")
+        gap = sample.session_elapsed_seconds - last_elapsed
         last_elapsed = sample.session_elapsed_seconds
         latest = sample
         previous_landing_count = len(tracker.landings)
@@ -1397,13 +1548,25 @@ def analyze_session(directory: Path) -> FlightAnalysis:
         phases.push(sample, new_contact)
         if sample.discontinuity_before:
             previous = None
-        if previous is not None:
-            segment = _distance_nm(previous, sample)
-            if segment is not None and segment < 50:
-                distance += segment
-                distance_known = True
-            elif segment is not None:
-                warn("Implausible position jump excluded from distance.")
+        segment = _distance_nm(previous, sample) if previous is not None else None
+        if motion_start is None:
+            continuous = 0 < gap <= PHASE_VERTICAL_MAX_GAP_SECONDS
+            if sample.discontinuity_before or not continuous:
+                motion_candidate = None
+            speed = sample.ground_speed_mps
+            if speed is None and segment is not None and continuous:
+                speed = segment * METRES_PER_NAUTICAL_MILE / gap
+            if speed is None or speed < REPORT_MOTION_SPEED_MPS:
+                motion_candidate = None
+            elif motion_candidate is None:
+                motion_candidate = sample
+                prefix_distance = distance + (segment or 0.0)
+                prefix_segments = distance_segments + int(segment is not None)
+            elif last_elapsed - motion_candidate.session_elapsed_seconds >= REPORT_MOTION_CONFIRM_SECONDS:
+                motion_start = motion_candidate
+        if segment is not None:
+            distance += segment
+            distance_segments += 1
         previous = sample
         chart.append(sample)
         if len(chart) > ANALYSIS_SAMPLE_WINDOW:
@@ -1453,7 +1616,7 @@ def analyze_session(directory: Path) -> FlightAnalysis:
             and phases.final_ground_count >= FINAL_GROUND_CONFIRM_SAMPLES
         ),
         duration_seconds=max(0.0, duration),
-        distance_nm=distance if distance_known else None,
+        distance_nm=distance if distance_segments else None,
         samples=chart[:CHART_SAMPLE_LIMIT],
         landings=tracker.landings,
         warnings=warnings,
@@ -1465,9 +1628,17 @@ def analyze_session(directory: Path) -> FlightAnalysis:
         # the bounded overview points above are exclusively presentation data.
         analysis.comparison = compare_flight(
             analysis.dispatch,
-            (_sample(row) if row is not None else None for row in _rows(directory)),
+            _telemetry_samples(directory),
             analysis.events,
             analysis.landings,
             analysis.completed,
         )
+    # A confirmed contact can precede sustained motion in a partial recording.
+    # Preserve original timing when rebasing would put that evidence before zero.
+    if (motion_start is not None and motion_start.session_elapsed_seconds > 0.0
+            and (not tracker.landings or motion_start.session_elapsed_seconds
+                 <= tracker.landings[0].first_contact_elapsed_seconds)):
+        analysis.distance_nm = (max(0.0, distance - prefix_distance)
+                                if distance_segments > prefix_segments else None)
+        _rebase_report(analysis, motion_start)
     return analysis

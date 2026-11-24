@@ -757,6 +757,7 @@ class WatchRecoveryNativeUiTests(unittest.TestCase):
         ui._preparing_progress = False
         ui._progress_local_mode = False
         ui._animation_running = False
+        ui.report_upload_button = None
         ui.independent_operation = lambda: False
         ui.session_state = lambda: "working"
         ui.pending_revoke_intent = lambda: False

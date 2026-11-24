@@ -547,11 +547,13 @@ page count (pypdf) and creation date/time including seconds in local time.
 New renders retain creation UTC in their private manifest. Older PDFs use a
 star-marked file modification timestamp; deterministic embedded PDF dates are
 not mistaken for creation time. Unknown page counts remain visible as `?`.
-Double-click or **Open selected PDF** uses the system's default PDF viewer.
-Ctrl/Shift selects files across versions of one flight for upload. **Refresh**
-reloads
-checkpoints without analyzing samples; **Open app log** opens the existing
-rotating log. Report work logs its session, phase, edition and failure details.
+Double-click or press Enter on a PDF to use the system's default PDF viewer.
+The **Folder** action opens retained files. **Show only flights** starts off
+and hides photo-only sessions when selected, keeping sessions with recorded
+samples or retained PDFs. The **…** menu contains saved-PDF upload, SimBrief,
+OFP attachment, refresh, the app log and the existing Finish action.
+Refresh reloads checkpoints without analyzing samples. Report work logs its
+session, phase, edition and failure details.
 
 Click a column heading to sort flights and their retained PDFs; click again to
 reverse the direction. The initial order is newest flight first. Names sort
@@ -573,8 +575,8 @@ current flight, or the sole pending flight if none is current. It is never
 copied across several unrelated pending flights. Partial recordings also render
 with their incomplete/unknown evidence; no takeoff or landing is fabricated.
 
-Select a stopped session and choose **Create local PDF** or **Re-create local
-PDF**. This reads saved raw data without requiring its former gallery key. It
+Select a stopped session and choose **Create local PDF**. This reads saved
+raw data independently of its former gallery connection. It
 does not stop another active flight or upload/revoke anything. Each action
 automatically uses an already loaded OFP and creates four fresh numbered
 editions
@@ -584,6 +586,15 @@ checksums and delivery receipts. A stopped partial flight may render, but
 remains
 explicitly incomplete; empty recordings create no blank PDF. Active or
 interrupted-unclosed recordings must first finish recording.
+
+Report duration, distance and chart timing start at the first sustained
+aircraft movement. Groundspeed or plausible displacement confirms motion
+for two seconds and dates the start at the first moving sample. If motion
+cannot be confirmed or later evidence would exclude a confirmed landing, the
+report retains the observed interval. Original telemetry and simulator/UTC
+clocks remain available. A SimConnect zero-coordinate pair without plausible
+adjacent motion is excluded from the route. Position loss and resumption split
+the route, while valid crossings of the equator and prime meridian remain.
 
 Every selected language renders concurrently in a separate spawned process
 (one per language, currently at most four). Analysis and both map backgrounds
@@ -602,15 +613,20 @@ Shutdown/update cancels and joins local rendering through existing worker
 ownership. Windows layout, installed-app recovery and live simulator acceptance
 remain pending when this work is prepared without launching the local app.
 
-To send previously generated PDFs, save a valid gallery key (a new key for the
-same gallery is supported), test the connection and open **Saved flights and
-PDFs**. Expand the stopped flight and select specific PDF files, including
-edition subsets from several versions. Choose **Upload saved PDFs…** and confirm
-the displayed gallery and exact file list. Server inventory must confirm that
-gallery and
-`flight_reports_v1` before transfer. The selected revision is uploaded as saved;
-it is not rendered again. A different ongoing flight continues, and the key
-stays configured. Old plans and key bindings are preserved; separate
+Start Watcher on the destination gallery using an account link or API key.
+The catalog shows that gallery beside **Create and upload**, which first
+saves a fresh revision and then sends its PDFs to that captured destination.
+Legacy inventory verifies the captured key and the server's
+`flight_reports_v1` capability. An upload failure leaves the local files
+available. Retry sends that same revision to the captured gallery.
+
+To send existing reports, select a stopped flight and choose **… → Upload saved
+PDFs…**. The picker shows each revision, its date and available languages.
+Select one revision or use Ctrl/Shift to select several. In the catalog, Ctrl/Shift
+also selects complete revision groups or individual PDF files of one flight.
+The displayed destination is captured when the action is admitted. Existing
+files are sent as saved, while a different flight continues and the connection
+stays configured. Old plans and keys are preserved. The separate
 `upload-receipts.json` records acknowledged identities/checksums. Retry checks
 server status before sending any missing edition, including after a lost reply.
 Retry retains the original revision even after another history row is selected.

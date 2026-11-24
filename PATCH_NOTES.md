@@ -1,5 +1,58 @@
 # Patch notes
 
+## Version 1.7.0
+
+PHP Gallery 1.7.0 includes WinApp 1.7.0 with independent creation and
+delivery of saved flight PDFs, revision selection, and more accurate
+route and timing summaries.
+
+### Highlights
+
+#### Saved flight PDFs in WinApp
+
+- Added separate **Create local PDF** and **Create and upload** actions.
+  Online delivery uses the gallery the Watcher is watching at the time of
+  the action, with either a linked account or an API key.
+- Added an **Upload saved PDFs** action for one or more revisions of a
+  stopped flight. The revision picker shows dates and available languages.
+  Individual language editions can also be selected from the catalog.
+- Added an optional **Show only flights** filter for sessions with flight
+  samples or retained PDFs. The filter starts off.
+
+#### Flight report timing and routes
+
+- Started report timing at the first sample of sustained aircraft movement
+  when the saved evidence supports it. The route, distance, and charts
+  exclude the stationary lead-in.
+- Excluded implausible zero-coordinate positions from report routes and
+  marked the break where reliable positions resume. The recorded source
+  samples and original clocks are retained for later analysis.
+
+### Technical Details
+
+#### WinApp
+
+- Updated `winapp/uploader/flight_workflow.py` to save the new revision
+  locally before delivery. Retry reuses its retained files and verifies
+  the captured destination. A failed upload leaves the PDF files available.
+- Updated the WinApp guide and all four manual editions with the direct
+  actions, revision picker, and report calculations.
+
+#### Tests
+
+- Covered Watcher target admission, retained revision selection and retry,
+  zero-coordinate dropouts, and stationary preflight replay. Native Windows
+  tests captured the catalog with and without Watcher and the revision picker.
+
+### User Impact
+
+#### WinApp users
+
+- Made it possible to generate and review PDFs offline, then send the chosen
+  revisions after starting the Watcher on the intended gallery.
+- Made the updated report calculations available when recreating PDFs from
+  existing recordings, including while another flight is being recorded.
+
 ## Version 1.6.1
 
 PHP Gallery 1.6.1 includes WinApp 1.6.1 with more reliable flight PDF

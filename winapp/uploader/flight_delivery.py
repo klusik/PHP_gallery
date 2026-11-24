@@ -566,20 +566,21 @@ def check_report_capability(
 
 
 def saved_report_destination(
-    upload_url: str, api_key: str, expected_gallery: str,
+    upload_url: str, api_key: str, expected_gallery: str | None,
     before_request: Optional[Callable[[], None]] = None,
-) -> None:
+) -> str:
     """Verify the current key's gallery against the explicit saved-upload choice.
 
     Args:
         upload_url (str): Saved canonical upload endpoint.
         api_key (str): Current gallery-scoped key, including a replacement key.
-        expected_gallery (str): Gallery folder displayed in the confirmation.
+        expected_gallery (str | None): Confirmed gallery folder, or None when
+            the active Watcher's captured key has no cached inventory yet.
         before_request (Optional[Callable[[], None]]): Host-owned request
             checkpoint, or None when no host guard is integrated.
 
     Returns:
-        None: Inventory confirms the destination and flight_reports_v1 support.
+        str: Inventory-confirmed gallery folder with flight_reports_v1 support.
 
     Raises:
         ValueError: The key belongs to a different or unknown gallery.
@@ -594,11 +595,14 @@ def saved_report_destination(
         upload_url, api_key, {"action": "inventory", "candidates": []},
         **request_options,
     )
-    if not expected_gallery or response.get("gallery_folder") != expected_gallery:
+    folder = response.get("gallery_folder")
+    if (not isinstance(folder, str) or not folder
+            or (expected_gallery is not None and folder != expected_gallery)):
         raise ValueError("Gallery changed; test the saved connection and confirm its destination again.")
     capabilities = response.get("capabilities")
     if not isinstance(capabilities, dict) or capabilities.get("flight_reports_v1") is not True:
         raise FlightDeliveryError("The gallery does not support flight_reports_v1.")
+    return folder
 
 
 def deliver_report(

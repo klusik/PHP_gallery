@@ -65,7 +65,7 @@
 
 % Metadata vydání jsou zde, takže aktualizace vydání vyžaduje jedinou úpravu
 % verze.
-\newcommand{\version}{1.6.1}
+\newcommand{\version}{1.7.0}
 \newcommand{\manualdate}{24.~listopadu~2026}
 
 \hypersetup{
@@ -2941,9 +2941,12 @@ stopách a~stopách za~minutu. Čte existující cache recorderu bez dalšího s
 SimConnect. Při pauze, zastavení, nedostupnosti nebo stáří nad tři sekundy
 zobrazí pomlčky. Sousední zkratka \ui{PDF} otevře uložené lety.
 
-\ui{Uložené lety a~PDF} ukazují začátek, letadlo, počet vzorků z~checkpointu,
-počet místních PDF, stav a~uchované chyby. Obnovit čte pouze checkpointy;
-Otevřít log aplikace používá existující log. \ui{Dokončit let a~vytvořit PDF}
+\ui{Uložené lety a~PDF} ukazují začátek, letadlo nebo zaznamenanou galerii,
+počet vzorků, místní PDF, stav a~uchované chyby. \ui{Zobrazit jen lety}
+je~výchozí vypnuté. Po~zapnutí zůstávají relace s~letovými vzorky nebo PDF.
+PDF otevřete dvojklikem nebo klávesou Enter. \ui{Složka} otevře soubory.
+Obnovení a~log aplikace jsou v~nabídce pod třemi tečkami.
+\ui{Dokončit let a~vytvořit PDF}
 bez potvrzování vytvoří čtyři jazykové verze, dokončí přijatou práci a~povinné
 doručení a~ponechá připojení připravené. Funguje i~při vypnuté automatické
 tvorbě.
@@ -2959,14 +2962,18 @@ nadpisem. Běžné stoupání a~klesání ve~větší výšce se~potvrdí po~pě
 trvající vertikální rychlosti. Pokud se~prvek nevejde ani nedá
 rozdělit na~prázdné straně, zobrazí se~na~jeho místě upozornění a~zbytek
 zprávy se~vykreslí. Místní PDF lze znovu vytvořit z~uloženého záznamu.
+Čas reportu začíná prvním vzorkem souvislého pohybu letadla. Nevěrohodná
+nulová poloha se~z~trasy vynechá a~na~místě výpadku zůstane předěl.
+Surový záznam vždy obsahuje původní vzorky včetně předletové přípravy
+a~všech zaznamenaných souřadnic.
 
 Při jediné verzi ukáže rozbalený let přímo soubory. Více verzí tvoří
 rozbalovací skupiny, vždy číselně sestupně (v5, v4, v3) bez ohledu na~řazení
 sloupců. Obnovení zachová rozbalené lety i~verze a~výběr souborů. Toto
 zobrazení nepřesouvá ani nepřejmenovává soubory na~disku.
 
-Pro zastavený let vytvoří \ui{Vytvořit místní PDF} nebo \ui{Znovu vytvořit
-místní PDF} novou číslovanou verzi v~\filepath{reports/}. Starší PDF, surové
+Pro zastavený let vytvoří \ui{Vytvořit místní PDF}
+novou číslovanou verzi v~\filepath{reports/}. Starší PDF, surové
 vzorky i~potvrzení uploadu zůstanou zachované. Klíč není potřeba, nedojde
 k~uploadu ani zrušení klíče a~jiný běžící let pokračuje. Částečné zprávy
 zůstanou neúplné; aktivní, neuzavřené a~prázdné záznamy jsou odmítnuty.
@@ -3038,12 +3045,13 @@ Stále platný klíč zrušte samostatně v~Adminu. Již odeslaná revokace mus�
 nejprve skončit; chyba zastavení nebo uložení konfigurace ponechá klíč
 a~možnost opakování.
 
-Pro dodatečný upload uložte a~otestujte platný klíč galerie, případně nový klíč
-ke~stejné galerii. V~přehledu rozbalte zastavený let a~vyberte PDF pomocí
-Ctrl/Shift, poté
-\ui{Nahrát uložená PDF}. Potvrďte galerii a~jazyky; server před přenosem ověří
-přesný cíl. Odešlou se existující PDF bez opětovného generování, zastavení
-jiného letu či~revokace. Samostatný \filepath{upload-receipts.json} zachová
+Spusťte Sledovátko na~cílové galerii s~propojeným účtem nebo API klíčem.
+\ui{Vytvořit a~nahrát} uloží novou revizi a~odešle ji~do~galerie uvedené
+vedle tlačítka. Po~selhání nahrávání se~opakuje odeslání téže revize.
+U~zastaveného letu zvolte pod třemi tečkami \ui{Nahrát uložená PDF}.
+Výběr ukáže revize, datum a~jazyky. Pomocí Ctrl/Shift vyberete více revizí
+nebo jednotlivá PDF jednoho letu. Odešlou se~uložené soubory a~jiný let
+může pokračovat. Samostatný \filepath{upload-receipts.json} zachová
 potvrzené kontrolní součty; opakování ověřuje stav na~serveru. Staré plány,
 vazby klíčů a~surová data zůstanou zachované. Zrušení ponechá dokončené verze.
 Chyby protokolu uvádějí anonymizovanou akci, HTTP stav, typ obsahu a~krátký

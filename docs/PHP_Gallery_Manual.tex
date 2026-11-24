@@ -65,7 +65,7 @@
 \definecolor{GalleryRed}{HTML}{8A2F2F}
 
 % Edition metadata lives here so a release update requires one version edit.
-\newcommand{\version}{1.6.1}
+\newcommand{\version}{1.7.0}
 \newcommand{\manualdate}{24 November 2026}
 
 \hypersetup{
@@ -2960,9 +2960,11 @@ SimConnect connection. Paused, stopped, unavailable, or
 more-than-three-second-old
 values become dashes. The~adjacent \ui{PDF} shortcut opens saved flights.
 
-\ui{Saved flights and PDFs} lists start time, aircraft, checkpoint sample count,
-local PDF count, state, and retained errors. Refresh reads checkpoints only;
-Open app log uses the~existing log. \ui{Finish flight and create PDFs} creates
+\ui{Saved flights and PDFs} lists start time, aircraft or recorded gallery,
+sample count, local PDFs, state and retained errors. \ui{Show only flights}
+starts off. Turning it~on keeps sessions with recorded samples or PDFs.
+Double-click or press Enter on a~PDF to~open it. \ui{Folder} opens the~files.
+Refresh and the~app log are~under the~ellipsis. \ui{Finish flight and create PDFs} creates
 all four editions and~finishes accepted work and~required delivery. It~keeps
 the~upload connection and~works with automatic creation off.
 
@@ -2978,13 +2980,17 @@ The~analysis confirms ordinary climbs and~high-altitude descents
 after five seconds of~sustained vertical speed. If~a~report element cannot fit
 or~split on~an~empty page, its place shows a~warning and~the~remaining content
 is~rendered. Saved recordings can~be~used to~re-create local PDFs.
+The~report clock begins at~the~first sample of~sustained aircraft movement.
+Unreliable zero-coordinate positions are~excluded and~the~route is~split
+across the~gap. The~raw recording retains the~original samples, including
+the~parked interval and~all recorded positions.
 
 With one version, expanding a~flight shows its files directly. Multiple versions
 appear as expandable groups, always numerically descending (v5, v4, v3),
 regardless of column sorting. Refresh retains expanded flights/versions and
 selected files. This display does not move or rename files on disk.
 
-For a~stopped flight, \ui{Create local PDF} or \ui{Re-create local PDF} creates
+For a~stopped flight, \ui{Create local PDF} creates
 a~numbered version under \filepath{reports/}. Earlier PDFs, raw samples,
 and upload receipts remain intact. No key is~required, no upload/revoke occurs,
 and another running flight continues. Partial reports remain incomplete; active,
@@ -3056,12 +3062,13 @@ the~Begin action. A~still-valid server key needs separate revocation in~Admin.
 Submitted revocation must settle first; shutdown or~configuration-save failure
 keeps the~key and~recovery available for~retry.
 
-To~upload retained PDFs, save and test a~valid gallery key, including a~new key
-for~the~same gallery. In~the~report browser select a~stopped flight and~PDF
-files with Ctrl/Shift, then choose \ui{Upload saved PDFs}. Confirm the~gallery
-and~files;
-server inventory verifies the~exact target before transfer. Existing PDFs are
-sent without rendering, stopping another flight, or~revoking the~key. Separate
+Start Watcher on~the~destination gallery with a~linked account or an~API key.
+\ui{Create and upload} saves a~new revision locally and~sends it~to~the~gallery
+shown beside the~action. After a~failed upload, retry sends the~same revision.
+For retained PDFs, select a~stopped flight and~choose \ui{Upload saved PDFs}
+from the~ellipsis. The~picker shows each revision, date and~languages.
+Ctrl/Shift selects several revisions or~individual files from one flight.
+Existing PDFs are~sent as~saved and~another flight can~continue. Separate
 \filepath{upload-receipts.json} retains acknowledged checksums; retries
 reconcile
 server status. Old plans, bindings, and~raw data remain intact. Cancellation
