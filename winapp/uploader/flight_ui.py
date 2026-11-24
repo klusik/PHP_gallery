@@ -301,6 +301,14 @@ class FlightHost(Protocol):
         """
         ...
 
+    def watcher_reset_blocked(self) -> bool:
+        """Report whether Watcher-only actions are fenced by a factory reset.
+
+        Returns:
+            bool: True while the local reset is pending or unverified.
+        """
+        ...
+
     def close_retained_watch(
         self, plan: SessionPlan, on_result: Callable[[bool], None],
     ) -> None:
@@ -1773,6 +1781,9 @@ class FlightUI:
             bool: True after saving and pausing/resuming the recorder; False
                 after rejected changes restore the previously saved controls.
         """
+        if FlightUI._watcher_reset_blocked(self):
+            self.restore_preferences()
+            return False
         if self.busy() and not self.independent_operation():
             self.restore_preferences()
             self.show_progress()
@@ -1926,6 +1937,15 @@ class FlightUI:
         self.host._next_finish_trigger_reason = ""
         return supplied
 
+    def _watcher_reset_blocked(self) -> bool:
+        """Project the host's Watcher admission fence into capture-only actions.
+
+        Returns:
+            bool: True when the running host owns a pending factory reset.
+        """
+        blocked = getattr(self.host, 'watcher_reset_blocked', None)
+        return callable(blocked) and blocked() is True
+
     def show_recovery(self) -> None:
         """Show pending Watcher progress and its explicit actions.
 
@@ -1933,6 +1953,8 @@ class FlightUI:
             None: Opens the recovery view and inspects retained work without
                 modifying its journal or starting a transfer.
         """
+        if FlightUI._watcher_reset_blocked(self):
+            return
         operation = self.operation
         if (not self.busy() and operation is not None and (
                 self.independent_operation()
@@ -2092,7 +2114,7 @@ class FlightUI:
                 keeping original sources, upload evidence and local reports.
         """
         capture = self._retained_capture
-        if (capture is None or self.busy()
+        if (FlightUI._watcher_reset_blocked(self) or capture is None or self.busy()
                 or self._capture_recovery_restore_pending):
             return
         if not messagebox.askyesno(
@@ -2143,7 +2165,8 @@ class FlightUI:
                 attempts same-target restoration, then durable local retention.
                 Independent PDF work and submitted revocation are untouched.
         """
-        if (self.independent_operation() or self._force_finish_pending
+        if (FlightUI._watcher_reset_blocked(self)
+                or self.independent_operation() or self._force_finish_pending
                 or getattr(self, '_retained_capture_closing', False)
                 or getattr(self, '_force_stop_pending', False)
                 or self._capture_recovery_worker is not None
@@ -2207,7 +2230,8 @@ class FlightUI:
         except queue.Empty:
             return
         self._capture_recovery_worker = None
-        if (generation != self._progress_generation or self.operation is not operation
+        if (FlightUI._watcher_reset_blocked(self)
+                or generation != self._progress_generation or self.operation is not operation
                 or getattr(self, '_retained_capture_closing', False)
                 or self._capture_recovery_restore_pending):
             return
@@ -2556,6 +2580,8 @@ class FlightUI:
                 gallery, or starts same-target upload recovery when ready.
                 A retained owner or unverified binding is reported in Activity.
         """
+        if FlightUI._watcher_reset_blocked(self):
+            return
         watcher = self.host.worker
         if watcher is not None and watcher.is_alive():
             if getattr(watcher, '_recovery_review_only', False) is True:
@@ -2620,6 +2646,69 @@ class FlightUI:
         if self.independent_operation():
             self.operation.cancel.set()
 
+    def stop_for_watcher_reset(self) -> None:
+        """Stop capture-specific work without canceling independent report tasks.
+
+        Returns:
+            None: Declines new continuation and stops the active capture workers.
+        """
+        self._capture_recovery_restore_pending = None
+        self._capture_recovery_retry_at = None
+        if self.recorder is not None and self.recorder.is_alive():
+            self.recorder.stop()
+            self.dispatch_cancelled = True
+        if self.operation is not None and not self.independent_operation():
+            self.operation.cancel.set()
+            if self.dialog is not None and self.dialog.winfo_exists():
+                self.dialog.withdraw()
+
+    def watcher_reset_writers_active(self) -> bool:
+        """Check for outstanding Watcher-owned plan writers before reset.
+
+        Returns:
+            bool: True until capture publishers, recorder and finalization end.
+        """
+        operation = None if self.independent_operation() else self.operation
+        return (
+            self._retained_capture_closing
+            or self._force_finish_pending
+            or getattr(self, '_force_stop_pending', False)
+            or any(worker is not None and worker.is_alive() for worker in (
+                operation, self.recorder, self.abandon_previous,
+                self.dispatch_worker if self.dispatch_cancelled else None,
+            ))
+        )
+
+    def complete_watcher_reset(self) -> None:
+        """Clear active capture controls after local reset is verified.
+
+        Returns:
+            None: A new capture starts with fresh progress and recording defaults.
+        """
+        self.plan = None
+        self.recorder = None
+        self.active_dispatch = None
+        self.active_dispatch_directory = None
+        self.resume_workers = []
+        self._recovery_state = None
+        self._inspecting_retained_capture = None
+        self._retained_capture = None
+        self._last_terminal = ''
+        if not self.independent_operation() and (
+            self.operation is None or not self.operation.local_cleanup_pending
+        ):
+            self.operation = None
+            self.automatic_operation = None
+            self._preparing_progress = False
+            self._progress_generation += 1
+            if self.dialog is not None and self.dialog.winfo_exists():
+                self.dialog.withdraw()
+        self.preferences = replace(
+            self.preferences, recording=FlightPreferences().recording,
+        )
+        self.record_var.set(self.preferences.recording)
+        self.refresh_dispatch_status()
+
     def join(self, timeout: float | None = None) -> None:
         """Join sensor and independent PDF shutdown through the existing drain.
 
@@ -2668,6 +2757,8 @@ class FlightUI:
                 separate; an active ordinary Stop cannot gain revoke authority.
                 Explicit Continue records the phase of stopped or admitted work.
         """
+        if FlightUI._watcher_reset_blocked(self):
+            return
         trigger_reason = self._consume_trigger_reason(
             "watch_recovery_continue" if continue_pending else
             "explicit_retry" if explicit_retry else
@@ -3389,7 +3480,8 @@ class FlightUI:
                 durable publication resolves logical Finish without claiming
                 that a live HTTP request was canceled.
         """
-        if getattr(self, "_force_finish_pending", False):
+        if (FlightUI._watcher_reset_blocked(self)
+                or getattr(self, "_force_finish_pending", False)):
             return
         publish = getattr(self.host, "force_finish_flight", None)
         if not callable(publish):
@@ -3454,7 +3546,8 @@ class FlightUI:
         Returns:
             None: Leaves the waiter active until the app confirms retention.
         """
-        if (getattr(self, "_force_stop_pending", False)
+        if (FlightUI._watcher_reset_blocked(self)
+                or getattr(self, "_force_stop_pending", False)
                 or self.operation is not None and self.operation.server_request_sent):
             return
         stop = getattr(self.host, "stop_and_keep_watch_pending", None)
@@ -3629,6 +3722,8 @@ class FlightUI:
                 original files. Only the legacy action clears a saved API key.
                 Submitted revocation and independent PDF work must settle first.
         """
+        if FlightUI._watcher_reset_blocked(self):
+            return
         linked = self.host.linking_manager.linked_upload_mode_selected()
         if self.busy() and (
             self.independent_operation()

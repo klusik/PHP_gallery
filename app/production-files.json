@@ -1285,6 +1285,7 @@
         "winapp/uploader/watch_queue.py",
         "winapp/uploader/watch_recovery.py",
         "winapp/uploader/watch_recovery_ui.py",
+        "winapp/uploader/watcher_profile.py",
         "winapp/uploader/windows_display.py",
         "winapp/uploader/windows_file_identity.py",
         "winapp/uploader/windows_game_processes.py",

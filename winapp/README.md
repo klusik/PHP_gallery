@@ -45,6 +45,18 @@ locally and preserves its screenshots, local reports, upload outcomes and queue
 history. The next capture starts from a fresh boundary. Unverifiable local
 evidence stays pending and the panel directs you to **Help → Support diagnostics…**.
 
+Use **Watcher factory reset…** in the Watcher tab to stop capture and clear all
+Watcher queues, restart intent, the watched folder and the saved Watcher
+destination. The confirmation explains that an upload already sent can still
+reach the server. Reset restores the default Watcher preferences and preserves
+screenshots, flight recordings, local reports, logs and Activity history.
+Photos, manual Import and AI retain their shared connections and settings.
+Choose **Connect Watcher…** and a folder to start again. **Use for Watcher** in
+Photos can also explicitly select a gallery. A reset interrupted after its local
+checkpoint continues on next launch. A filesystem failure leaves a visible
+retry and a reason in **Support diagnostics…** and `watcher.log`. The completed
+log entry includes the resulting settings and how many journals were removed.
+
 `[watcher-recovery]` records the outcome of saved-plan inspection, exact
 target verification, queue admission and local closure. Entries include fixed
 phase and reason codes, safe error locations, retained counts and available

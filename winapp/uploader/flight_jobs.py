@@ -236,11 +236,13 @@ class SessionPlan:
             raise OSError('Abandoned flight marker did not read back.')
 
     @classmethod
-    def load(cls, directory: Path) -> "SessionPlan":
+    def load(cls, directory: Path, *, check_queue: bool = True) -> "SessionPlan":
         """Restore one task plan without restoring irreversible revoke consent.
 
         Args:
             directory (Path): Owned session directory containing completion.json.
+            check_queue (bool): Verify completed photograph evidence. Factory
+                reset disables this check while discarding the queue itself.
 
         Returns:
             SessionPlan: Connection-bound recoverable task plan.
@@ -278,7 +280,8 @@ class SessionPlan:
         ):
             raise ValueError("Completed reports are missing delivery receipts.")
         queue_path = directory / "watch-drain.json"
-        if row["completed"] and not row["abandoned"] and queue_path.exists():
+        if (check_queue and row["completed"] and not row["abandoned"]
+                and queue_path.exists()):
             queue = read_document(queue_path)
             if (queue.get("pending")
                     or queue.get('schema_version') == 2 and queue.get('completed') is not True):

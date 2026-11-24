@@ -4964,6 +4964,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         widgets.Button.side_effect = lambda *_args, **_kwargs: mock.Mock()
         widgets.Label.side_effect = lambda *_args, **_kwargs: mock.Mock()
         title_widget = mock.Mock()
+        reset_icon = mock.Mock()
         with (
             mock.patch.object(MAIN, "ttk", widgets),
             mock.patch.object(MAIN, "Button", widgets.Button),
@@ -4973,6 +4974,7 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
             mock.patch.object(MAIN, "GlassCard", side_effect=lambda *_args, **_kwargs: mock.Mock()),
             mock.patch.object(MAIN, "icon_button"),
             mock.patch.object(MAIN, "help_button"),
+            mock.patch.object(MAIN, "create_smooth_icon", return_value=reset_icon),
         ):
             MAIN.WatcherApp.build_watch_tab(app, mock.Mock())
         buttons = {call.kwargs.get("command"): call
@@ -4981,8 +4983,14 @@ class FlightDeliveryCoordinationTests(unittest.TestCase):
         self.assertEqual("Finish flight…", finish.kwargs["text"])
         self.assertEqual(app.flight_action, finish.kwargs["command"])
         title = title_factory.call_args
-        self.assertIs(app.gallery_label_var, title.args[1])
-        self.assertIs(app.gallery_title_var, title.args[2])
+        self.assertIs(app.watcher_gallery_label_var, title.args[1])
+        self.assertIs(app.watcher_gallery_title_var, title.args[2])
+        reset = buttons[app.request_watcher_reset]
+        self.assertEqual("Watcher factory reset…", reset.kwargs["text"])
+        self.assertIs(reset_icon, reset.kwargs["image"])
+        app.watcher_reset_button.grid.assert_called_once_with(
+            row=0, column=5, sticky="e", padx=(8, 0),
+        )
         self.assertNotIn(app.choose_linked_gallery, buttons)
         title_widget.grid.assert_called_once_with(
             row=0, column=0, sticky="ew",

@@ -2098,6 +2098,13 @@ The Windows job requires the existing recovery screenshot capture and retains
 its English/Czech desktop/narrow PNGs under `cache/test-audit/watch-recovery/`.
 These fixtures do not upload files to a live gallery.
 
+Factory-reset regressions in `winapp/tests/test_watcher_continuation.py` exercise
+confirmation cancellation, a held Watcher transport, queue cleanup across
+destinations, corrupt completion data and retry after a failed write. They
+verify persisted defaults and explicit reconnection, preserve original media,
+reports, Import state and logs, and assert safe waiting and terminal diagnostics.
+`winapp/tests/test_redesign.py` checks the icon and Watcher-tab action wiring.
+
 `app_linking_gallery_edit_test.php` exercises the real metadata service with
 isolated persistence boundaries: one-field saves, unchanged peer columns,
 pre-commit rollback, revocation and post-commit sidecar uncertainty. Existing

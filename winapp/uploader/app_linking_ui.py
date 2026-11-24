@@ -502,11 +502,14 @@ class _PhotosWatchStart(NamedTuple):
         target (LinkedUploadTarget): Verified gallery and repr-hidden Watcher key.
         start (Callable[[LinkedUploadTarget], bool]): Start the admitted Watcher.
         failure (Callable[[str], None]): Report a refusal on the Watcher screen.
+        still_requested (Callable[[], bool] | None): Tk-side request validity
+            check before publishing the selected gallery.
     """
 
     target: LinkedUploadTarget
     start: Callable[[LinkedUploadTarget], bool]
     failure: Callable[[str], None]
+    still_requested: Callable[[], bool] | None = None
 
 
 class LinkingManager:
@@ -1272,6 +1275,7 @@ class LinkingManager:
         self, session: LinkingSession, gallery: LinkedGallery,
         start: Callable[[LinkedUploadTarget], bool],
         failure: Callable[[str], None],
+        *, still_requested: Callable[[], bool] | None = None,
     ) -> None:
         """Verify the selected Photos gallery and request temporary authority.
 
@@ -1282,6 +1286,8 @@ class LinkingManager:
                 admitted Watcher with its in-memory credential.
             failure (Callable[[str], None]): Show an actionable refusal on
                 the Watcher screen.
+            still_requested (Callable[[], bool] | None): Recheck on Tk that
+                capture intent remains current before committing its target.
 
         Returns:
             None: Starts one worker or leaves existing capture state unchanged.
@@ -1321,7 +1327,9 @@ class LinkingManager:
                 key = session.open_watch_key(target.gallery_id, cancelled=cancel)
                 target = replace(target, watch_key=key)
                 if not cancel.is_set():
-                    self._events.put((owner, 'photos_watch_start', _PhotosWatchStart(target, start, failure)))
+                    self._events.put((owner, 'photos_watch_start', _PhotosWatchStart(
+                        target, start, failure, still_requested,
+                    )))
                     key = None
             except Exception:  # noqa: BLE001
                 if not cancel.is_set():
@@ -1357,7 +1365,9 @@ class LinkingManager:
         """
         target = request.target
         commit = self._commit_linked_target
-        if (self._cancel.is_set() or target.session is not self.photos_session()
+        if (self._cancel.is_set()
+                or (request.still_requested is not None and not request.still_requested())
+                or target.session is not self.photos_session()
                 or self._session_issuer != target.issuer
                 or self._session_user_id != target.user_id or commit is None):
             return False
@@ -1408,6 +1418,17 @@ class LinkingManager:
                 self._notify_target_changed()
             except Exception:  # noqa: BLE001
                 pass
+
+    def discard_photos_watcher_target(self, target: LinkedUploadTarget) -> None:
+        """Forget an ephemeral Watcher connection and retire its server key.
+
+        Args:
+            target (LinkedUploadTarget): Exact old Watcher authority.
+        Returns:
+            None: Detaches locally and schedules remote cleanup if reachable.
+        """
+        self.detach_photos_watcher_target(target)
+        self._discard_photos_watch_key(target)
 
     @staticmethod
     def _discard_photos_watch_key(target: LinkedUploadTarget) -> None:

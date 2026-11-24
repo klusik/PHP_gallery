@@ -263,9 +263,14 @@ from uploader.simconnect_time import UtcSyncManager
 from uploader.game_presence import GamePresence
 from uploader.windows_game_processes import msfs_running
 from uploader.flight_jobs import (
-    SessionPlan, WatcherContinuation, WatcherContinuationError,
+    FlightPreferences, SessionPlan, WatcherContinuation, WatcherContinuationError,
+    WorkspaceLease,
     WATCHER_CONTINUATION_LIFETIME_SECONDS,
     connection_binding, read_document,
+)
+from uploader.watcher_profile import (
+    WATCHER_ONCE_LOCK, WATCHER_PREFERENCE_TYPES, WatcherProfile,
+    discard_capture_queues, discard_once_queues,
 )
 from uploader.flight_report_translations import recovery_text, tr
 from uploader.photos_workspace import (
@@ -5334,6 +5339,20 @@ class WatcherThread(threading.Thread):
         with self._admission_lock:
             self.stop_event.set()
 
+    def request_factory_reset_stop(self) -> None:
+        """Stop capture and prevent new dispatch or late source deletion.
+
+        Returns:
+            None: Wakes both loops while an already admitted transport keeps
+                its owner until the actual request ends.
+        """
+        self._keep_sources_after_stop = True
+        self._force_stop_requested.set()
+        self.stop_event.set()
+        self._producer_stop.set()
+        self._producer_wake.set()
+        self._consumer_wake.set()
+
     def request_update_pause(self) -> None:
         """Finish the current photo operation and pause before another path.
 
@@ -8706,6 +8725,17 @@ class WatcherApp:
 
         self.config_store = config_store or ConfigStore()
         self.config = self.config_store.load()
+        self._watcher_profile: WatcherProfile | None = None
+        self._watcher_profile_invalid = False
+        self._watcher_reset_running = False
+        self._watcher_reset_waiting = ''
+        self._watcher_reset_latest = ''
+        self._watcher_reset_thread: threading.Thread | None = None
+        try:
+            self._watcher_profile = WatcherProfile.load(CONFIG_DIR / 'flights')
+        except OSError:
+            self._watcher_profile_invalid = True
+        watcher_config = WatcherApp._saved_watcher_config(self)
         # Freeze the effective renderer choice for this process. Settings edits
         # are persisted immediately but take effect only after application restart.
         self._canvas_grid_enabled_at_startup = (
@@ -8846,9 +8876,9 @@ class WatcherApp:
         self.activity_events: List[ActivityEvent] = self.job_store.list_events()
         self.media_capabilities = detect_suffix_capabilities(SUPPORTED_SUFFIXES, Image)
 
-        self.watched_folder_var = tk.StringVar(value=self.config.watched_folder)
+        self.watched_folder_var = tk.StringVar(value=watcher_config.watched_folder)
         self.watch_folder_display_var = tk.StringVar(
-            value=self.config.watched_folder or "No folder selected",
+            value=watcher_config.watched_folder or "No folder selected",
         )
         self.watched_folder_var.trace_add("write", self.update_watch_folder_display)
         self.gallery_url_var = tk.StringVar(value=self.config.gallery_url)
@@ -8862,17 +8892,17 @@ class WatcherApp:
         self.api_key_visible_var = tk.BooleanVar(value=False)
         self.api_key_status_var = tk.StringVar(value="API key configured" if self.config.api_key.strip() else "API key not configured")
         self.revoke_blocker_var = tk.StringVar(value="")
-        self.interval_var = tk.StringVar(value=str(self.config.scan_interval_seconds))
-        self.stable_var = tk.StringVar(value=str(self.config.stable_seconds))
+        self.interval_var = tk.StringVar(value=str(watcher_config.scan_interval_seconds))
+        self.stable_var = tk.StringVar(value=str(watcher_config.stable_seconds))
         self.create_thumbnails_var = tk.BooleanVar(value=self.config.create_thumbnails)
-        self.attach_sim_camera_metadata_var = tk.BooleanVar(value=self.config.attach_sim_camera_metadata)
+        self.attach_sim_camera_metadata_var = tk.BooleanVar(value=watcher_config.attach_sim_camera_metadata)
         self.simconnect_dll_path_var = tk.StringVar(
             value=self.config.simconnect_dll_path
         )
-        self.sync_utc_time_var = tk.BooleanVar(value=self.config.sync_utc_time)
+        self.sync_utc_time_var = tk.BooleanVar(value=watcher_config.sync_utc_time)
         self.utc_sync_status_var = tk.StringVar(value="UTC sync stopped")
-        self.delete_uploaded_files_var = tk.BooleanVar(value=self.config.delete_uploaded_files)
-        self.watch_recursive_var = tk.BooleanVar(value=self.config.watch_recursive)
+        self.delete_uploaded_files_var = tk.BooleanVar(value=watcher_config.delete_uploaded_files)
+        self.watch_recursive_var = tk.BooleanVar(value=watcher_config.watch_recursive)
         self.manual_folder_recursive_var = tk.BooleanVar(value=False)
         self.delete_source_zip_var = tk.BooleanVar(value=False)
         self.manual_local_thumbnails_var = tk.BooleanVar(value=self.config.manual_thumbnail_mode == "local")
@@ -8926,6 +8956,9 @@ class WatcherApp:
         )
         self.connection_detail_var = tk.StringVar(value="Save or test the gallery connection in Settings.")
         self.gallery_label_var = tk.StringVar(value="Target gallery: unknown")
+        self.watcher_gallery_label_var = tk.StringVar(value=self.gallery_label_var.get())
+        self.watcher_gallery_title_var = tk.StringVar()
+        self.watcher_connection_status_var = tk.StringVar()
         self.gallery_title_var = tk.StringVar(value="")
         self.watcher_activity_var = tk.StringVar(value="Watch: stopped")
         self.watch_queue_status_var = tk.StringVar(value='')
@@ -8975,6 +9008,8 @@ class WatcherApp:
             revoke_upload_key, self.resume_flight_photos,
         )
         self.build_ui()
+        if self._watcher_profile is not None and self._watcher_profile.pending:
+            self.root.after_idle(self._begin_watcher_reset)
         self.simulator_presence.start()
         self.configure_window_icon()
         self.start_tray_icon()
@@ -9670,7 +9705,11 @@ class WatcherApp:
         Returns:
             None: Starts, finishes or continues the original pending queue.
         """
-        if getattr(self, "_watch_start_pending", False) is True:
+        if (WatcherApp.watcher_reset_blocked(self)
+                or getattr(self, "_watch_start_pending", False) is True):
+            return
+        if not WatcherApp._watcher_connection_selected(self):
+            self.connect_watcher()
             return
         state = self.flights.session_state()
         if (self.worker is not None and self.worker.is_alive()
@@ -9700,6 +9739,36 @@ class WatcherApp:
         if action_button is None:
             return
         interrupt_button = getattr(self, 'watch_recovery_action_button', None)
+        reset_button = getattr(self, 'watcher_reset_button', None)
+        resetting = getattr(self, '_watcher_reset_running', False) is True
+        blocked = WatcherApp.watcher_reset_blocked(self)
+        selected = WatcherApp._watcher_connection_selected(self)
+        if reset_button is not None:
+            _publish_watcher_value(
+                self, 'watch_reset_busy', reset_button, resetting,
+                lambda: reset_button.configure(state='disabled' if resetting else 'normal'),
+            )
+        if 'watcher_gallery_label_var' in self.__dict__:
+            _publish_watcher_text(self, 'watcher_gallery_label_var',
+                self.gallery_label_var.get() if selected else 'Upload gallery: not set')
+            _publish_watcher_text(self, 'watcher_gallery_title_var',
+                self.gallery_title_var.get() if selected else '')
+            _publish_watcher_text(self, 'watcher_connection_status_var',
+                self.connection_status_var.get() if selected else '')
+        if blocked or not selected:
+            label = ('Resetting Watcher…' if resetting else 'Watcher reset required'
+                     if blocked else 'Connect Watcher…')
+            state = 'disabled' if blocked else 'normal'
+            _publish_watcher_value(
+                self, 'watch_action', action_button, (label, state),
+                lambda: action_button.configure(text=label, state=state),
+            )
+            if interrupt_button is not None:
+                _publish_watcher_value(
+                    self, 'watch_interrupt_visible', interrupt_button, False,
+                    interrupt_button.pack_forget,
+                )
+            return
         if getattr(self, "_watch_start_pending", False) is True:
             pending_label = "Starting Watcher…"
             _publish_watcher_value(
@@ -10869,7 +10938,7 @@ class WatcherApp:
         target.grid(row=0, column=0, sticky="ew")
         target.columnconfigure(0, weight=1)
         GalleryIdentityLabel(
-            target, self.gallery_label_var, self.gallery_title_var,
+            target, self.watcher_gallery_label_var, self.watcher_gallery_title_var,
         ).grid(
             row=0, column=0, sticky="ew"
         )
@@ -10880,7 +10949,8 @@ class WatcherApp:
         connection = ttk.Frame(hero, style="Card.TFrame")
         connection.grid(row=0, column=1, sticky="e", padx=(16, 0))
         ttk.Label(
-            connection, textvariable=self.connection_status_var, style="Muted.TLabel",
+            connection, textvariable=self.watcher_connection_status_var,
+            style="Muted.TLabel",
         ).grid(row=0, column=0)
         self.watcher_capture_label = ttk.Label(
             connection, text="● REC", style="Watcher.Active.TLabel",
@@ -10923,6 +10993,7 @@ class WatcherApp:
         card.columnconfigure(0, weight=1)
         heading = ttk.Frame(card, style="Card.TFrame")
         heading.grid(row=0, column=0, sticky="ew")
+        heading.columnconfigure(4, weight=1)
         ttk.Label(heading, text="WATCH FOLDER", style="Eyebrow.TLabel").grid(
             row=0, column=0, sticky="w"
         )
@@ -11016,6 +11087,14 @@ class WatcherApp:
             wraplength=760,
         )
         self.watch_delete_warning.grid(row=8, column=0, sticky="ew", pady=(14, 0))
+        reset_icon = create_smooth_icon(heading, 'refresh', METRIC_ICON_SIZE)
+        self.watcher_reset_button = Button(
+            heading, text='Watcher factory reset…', image=reset_icon or '',
+            compound='left', style='Compact.TButton', takefocus=True,
+            command=self.request_watcher_reset,
+        )
+        self.watcher_reset_button.reset_icon = reset_icon
+        self.watcher_reset_button.grid(row=0, column=5, sticky='e', padx=(8, 0))
         self.refresh_watch_delete_warning()
         self.flights.controls(card)
 
@@ -11026,7 +11105,8 @@ class WatcherApp:
             None: Shows folder, scan interval, stability and upload policy
             controls without leaving the primary Watcher workflow.
         """
-        if getattr(self, "updates", None) is not None and self.updates.blocked():
+        if (WatcherApp.watcher_reset_blocked(self)
+                or getattr(self, "updates", None) is not None and self.updates.blocked()):
             return
         if self.worker is not None and self.worker.is_alive():
             messagebox.showinfo(
@@ -11139,9 +11219,7 @@ class WatcherApp:
                 None: Closes the sheet only when the configuration is saved.
             """
             try:
-                self.config = self._save_owned_config(
-                    self.current_watcher_config(), first_setup=True,
-                )
+                WatcherApp._save_watcher_preferences(self, self.current_watcher_config())
             except (OSError, ValueError, ModeCoordinatorError) as exc:
                 messagebox.showerror("Watcher settings", str(exc), parent=dialog)
             else:
@@ -11843,6 +11921,377 @@ class WatcherApp:
             messagebox.showerror("Dependency repair failed", output[-1200:] if output else "pip failed without output")
         self.refresh_thumbnail_controls()
 
+    def watcher_reset_blocked(self) -> bool:
+        """Report a Watcher-only admission fence from confirmed or invalid state.
+
+        Returns:
+            bool: True until the pending reset finishes and its result verifies.
+        """
+        profile = getattr(self, '_watcher_profile', None)
+        return (
+            getattr(self, '_watcher_reset_running', False) is True
+            or getattr(self, '_watcher_profile_invalid', False) is True
+            or isinstance(profile, WatcherProfile) and profile.pending
+        )
+
+    def _saved_watcher_config(self) -> WatcherConfig:
+        """Read effective Watcher preferences over the shared uploader config.
+
+        Returns:
+            WatcherConfig: Dedicated Watcher fields after a reset, or the
+                existing shared configuration before a reset.
+        """
+        profile = getattr(self, '_watcher_profile', None)
+        if isinstance(profile, WatcherProfile):
+            return replace(self.config, **profile.preferences)
+        return self.config
+
+    def _save_watcher_preferences(
+        self, config: WatcherConfig, *, first_setup: bool = True,
+    ) -> None:
+        """Write Watcher settings to their current persistence owner.
+
+        Args:
+            config (WatcherConfig): Current form values or one changed preference.
+            first_setup (bool): Permit creating a missing legacy settings file
+                for an explicit folder or settings commit.
+        Returns:
+            None: Saves and verifies only the selected configuration owner.
+        Raises:
+            OSError: The reset, shared settings owner or profile prevents a save.
+        """
+        if WatcherApp.watcher_reset_blocked(self):
+            raise OSError('Complete the Watcher factory reset first.')
+        profile = getattr(self, '_watcher_profile', None)
+        if not isinstance(profile, WatcherProfile):
+            self.config = self._save_owned_config(config, first_setup=first_setup)
+            return
+        lease = self.flights.lease
+        if lease is None:
+            raise OSError('Watcher profile is unavailable.')
+        values = config.to_dict()
+        proposed = replace(profile, preferences={
+            key: values[key] for key in WATCHER_PREFERENCE_TYPES
+        })
+        if proposed != profile:
+            proposed.save(lease)
+            self._watcher_profile = proposed
+
+    def _watcher_connection_selected(self) -> bool:
+        """Check whether the current shared destination was selected for Watcher.
+
+        Returns:
+            bool: True for older profiles or an exact post-reset binding.
+        """
+        if WatcherApp.watcher_reset_blocked(self):
+            return False
+        profile = getattr(self, '_watcher_profile', None)
+        if not isinstance(profile, WatcherProfile):
+            return True
+        try:
+            return bool(profile.binding and self.flights.binding() == profile.binding)
+        except (ValueError, ModeCoordinatorError):
+            return False
+
+    def _remember_watcher_connection(self, binding: str) -> None:
+        """Save an explicit choice of already verified upload authority.
+
+        Args:
+            binding (str): Exact non-secret fingerprint of the selected gallery.
+        Returns:
+            None: Records the choice for the post-reset Watcher profile.
+        Raises:
+            OSError: The reset or lost profile ownership prevents selection.
+        """
+        if WatcherApp.watcher_reset_blocked(self):
+            raise OSError('Complete the Watcher factory reset first.')
+        profile = getattr(self, '_watcher_profile', None)
+        if not isinstance(profile, WatcherProfile) or profile.binding == binding:
+            return
+        lease = self.flights.lease
+        if lease is None:
+            raise OSError('Watcher profile is unavailable.')
+        proposed = replace(profile, binding=binding)
+        proposed.save(lease)
+        self._watcher_profile = proposed
+
+    def connect_watcher(self) -> None:
+        """Ask to use the current upload connection for the reset Watcher.
+
+        Returns:
+            None: Opens connection setup or explicitly remembers its exact binding.
+        """
+        if WatcherApp.watcher_reset_blocked(self) or self.updates.blocked():
+            return
+        if self.linking_manager.linked_upload_mode_selected():
+            target = self.linking_manager.selected_upload_target()
+            if target is None:
+                self.reconnect_upload_gallery()
+                return
+            binding = target.binding()
+            question = 'Use this upload gallery for Watcher?\n\n' + target.title
+        else:
+            if not normalize_upload_url(self.config.gallery_url) or not self.config.api_key.strip():
+                self.open_connection_dialog()
+                return
+            binding = self.flights.binding()
+            question = 'Use the saved gallery API key for Watcher?'
+        if not messagebox.askyesno('Connect Watcher', question, parent=self.root):
+            return
+        try:
+            if binding != self.flights.binding():
+                raise OSError('The upload gallery changed.')
+            WatcherApp._remember_watcher_connection(self, binding)
+        except (OSError, ValueError, ModeCoordinatorError):
+            self.write_log(format_watch_recovery_diagnostic(
+                'factory_reset', 'new_connection_unconfirmed',
+            ), 'warning')
+            messagebox.showwarning(
+                'Connect Watcher', 'The Watcher connection could not be saved. Try again.',
+                parent=self.root,
+            )
+            return
+        self.status_var.set('Watcher gallery selected.')
+        self.refresh_watcher_action()
+
+    def request_watcher_reset(self) -> None:
+        """Require explicit confirmation before forgetting any Watcher state.
+
+        Returns:
+            None: Cancel leaves the current capture and settings untouched.
+        """
+        if self._watcher_reset_running or self.exiting:
+            return
+        if not messagebox.askyesno(
+            'Watcher factory reset',
+            'Stop Watcher and permanently forget its upload gallery, watched '
+            'folder, queued work, and restart history? Watcher preferences '
+            'will return to their defaults.\n\n'
+            'You will keep your screenshots, local reports, logs, and other '
+            'tabs\' settings. An upload already sent may still reach the gallery.',
+            default='no', parent=self.watcher_reset_button,
+        ):
+            return
+        self._begin_watcher_reset()
+
+    def _begin_watcher_reset(self) -> None:
+        """Persist confirmed local reset intent before stopping capture.
+
+        Returns:
+            None: Starts release of Watcher writers or logs why intent failed.
+        """
+        if self._watcher_reset_running or self.exiting:
+            return
+        if self.updates.blocked():
+            self.write_log(format_watch_recovery_diagnostic(
+                'factory_reset', 'update_in_progress',
+            ), 'warning')
+            self.status_var.set('Complete the app update before resetting Watcher.')
+            return
+        worker = self.worker
+        self.write_log(
+            format_watch_recovery_diagnostic('factory_reset', 'confirmed')
+            + f'; worker_running={str(bool(worker and worker.is_alive())).lower()}',
+        )
+        lease = self.flights.lease
+        values = WatcherConfig().to_dict()
+        profile = WatcherProfile(True, '', {
+            key: values[key] for key in WATCHER_PREFERENCE_TYPES
+        })
+        try:
+            if lease is None:
+                raise OSError('Watcher workspace lease is unavailable.')
+            profile.save(lease)
+        except (OSError, ValueError, RuntimeError) as exc:
+            # A failed readback is not proof that the pending write rolled back.
+            self._watcher_profile_invalid = True
+            self.write_log(format_watch_recovery_diagnostic(
+                'factory_reset', 'reset_intent_write_unconfirmed', error=exc,
+            ), 'error')
+            self.status_var.set('Watcher reset could not be saved. Retry factory reset.')
+            self.refresh_watcher_action()
+            return
+        self._watcher_profile = profile
+        self._watcher_profile_invalid = False
+        self._watcher_reset_running = True
+        self._watcher_reset_waiting = ''
+        self._update_resume_cancelled = True
+        self._update_resume_generation += 1
+        self._resume_continuation = None
+        self._resume_retry_available = False
+        self._finish_resume_generation += 1
+        self._queue_recovery_finish_requested = False
+        self._set_watch_start_activity(False)
+        self._set_watcher_recording(False)
+        self.utc_sync.stop()
+        self.flights.stop_for_watcher_reset()
+        self.watch_queue_status_var.set('Stopping Watcher for factory reset…')
+        self.refresh_watcher_action()
+        self._continue_watcher_reset()
+
+    def _continue_watcher_reset(self) -> None:
+        """Wait for Watcher-owned writers before removing any durable queue.
+
+        Returns:
+            None: Polls without blocking Tk, then schedules the offline reset.
+        """
+        if not self._watcher_reset_running or self.exiting:
+            return
+        flights = self.flights
+        live = []
+        for worker in (self.worker, *flights.resume_workers, *self._force_finished_workers):
+            if isinstance(worker, WatcherThread) and worker.is_alive():
+                worker.request_factory_reset_stop()
+                live.append(worker)
+        if live:
+            has_transport = any(
+                worker._transport_active.is_set()
+                or worker._pending_transport is not None
+                and not worker._pending_transport.is_set() for worker in live
+            )
+            waiting = (
+                'waiting_for_dispatched_upload' if has_transport
+                else 'waiting_for_watcher_worker'
+            )
+        elif flights.watcher_reset_writers_active() or any(
+            operation.is_alive() for operation in self._force_finished_operations
+        ):
+            waiting = 'capture_finalization_or_recorder'
+        elif self._queue_recovery_pending or self._force_finish_callbacks:
+            waiting = 'queue_recovery_publication'
+        elif (self._ordinary_restart_thread is not None
+              and self._ordinary_restart_thread.is_alive()):
+            waiting = 'restart_checkpoint'
+        else:
+            waiting = ''
+        if waiting:
+            if waiting != self._watcher_reset_waiting:
+                self._watcher_reset_waiting = waiting
+                self.write_log(format_watch_recovery_diagnostic('factory_reset', waiting))
+                self.watch_queue_status_var.set(
+                    'Reset pending. Waiting for Watcher work to stop. '
+                    'You can exit and reopen WinApp to retry an interrupted reset.',
+                )
+            self.root.after(WATCHER_EVENT_IDLE_POLL_MS, self._continue_watcher_reset)
+            return
+        profile = self._watcher_profile
+        lease = flights.lease
+        self.watch_queue_status_var.set('Restoring Watcher defaults…')
+        if profile is None or lease is None:
+            self._complete_watcher_reset(None, format_watch_recovery_diagnostic(
+                'factory_reset', 'workspace_unavailable',
+            ))
+            return
+
+        def publish() -> None:
+            """Remove only Watcher journals and verify the default profile.
+
+            Returns:
+                None: Delivers the verified result or a bounded failure to Tk.
+            """
+            completed = None
+            step = 'once_queue_lease'
+            try:
+                once = WorkspaceLease(CONFIG_DIR, lock_name=WATCHER_ONCE_LOCK)
+                try:
+                    step = 'once_queue_cleanup'
+                    once_count = discard_once_queues(CONFIG_DIR)
+                finally:
+                    once.release()
+                step = 'capture_queue_cleanup'
+                closed, removed = discard_capture_queues(lease)
+                step = 'default_profile_readback'
+                candidate = replace(profile, pending=False)
+                candidate.save(lease)
+                completed = candidate
+                settings = candidate.preferences
+                diagnostic = format_watch_recovery_diagnostic(
+                    'factory_reset', 'completed', sessions=closed, pending=0,
+                ) + (
+                    '; watcher=stopped; connection=unset; folder=unset'
+                    f'; journals_removed={removed}; once_journals_removed={once_count}'
+                    f'; scan_interval_seconds={settings["scan_interval_seconds"]}'
+                    f'; stable_seconds={settings["stable_seconds"]}'
+                    f'; recursive={str(settings["watch_recursive"]).lower()}'
+                    f'; simulator_location={str(settings["attach_sim_camera_metadata"]).lower()}'
+                    f'; delete_after_upload={str(settings["delete_uploaded_files"]).lower()}'
+                    f'; utc_sync={str(settings["sync_utc_time"]).lower()}'
+                    f'; record_activity={str(FlightPreferences().recording).lower()}'
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                diagnostic = format_watch_recovery_diagnostic(
+                    'factory_reset', f'{step}_failed', error=exc,
+                ) + '; reset_pending=true'
+            self.events.put({'kind': 'watcher_factory_reset', 'payload': {
+                'profile': completed, 'diagnostic': diagnostic,
+            }})
+
+        try:
+            self._watcher_reset_thread = threading.Thread(
+                target=publish, name='PHPGalleryWatcherFactoryReset', daemon=True,
+            )
+            self._watcher_reset_thread.start()
+        except RuntimeError as exc:
+            self._complete_watcher_reset(None, format_watch_recovery_diagnostic(
+                'factory_reset', 'publisher_start_failed', error=exc,
+            ))
+
+    def _complete_watcher_reset(
+        self, profile: WatcherProfile | None, diagnostic: str,
+    ) -> None:
+        """Publish the reset outcome and re-render Watcher-only controls.
+
+        Args:
+            profile (WatcherProfile | None): Verified defaults, or None on failure.
+            diagnostic (str): Safe stage, outcome and outcome-specific evidence.
+        Returns:
+            None: Applied settings or a visible retry with admission still fenced.
+        """
+        self._watcher_reset_running = False
+        self._watcher_reset_thread = None
+        self._watcher_reset_latest = diagnostic
+        self.write_log(diagnostic, 'success' if profile is not None else 'error')
+        if profile is None:
+            self.watch_queue_status_var.set(
+                'Watcher reset could not finish. Retry factory reset or see Support diagnostics.',
+            )
+            self.refresh_watcher_action()
+            return
+        self._watcher_profile = profile
+        self.worker = None
+        self._update_continuation = None
+        self._update_resume_preparing = False
+        self._update_resume_inspecting = False
+        self._ordinary_restart_prepared = False
+        self._ordinary_restart_closing = False
+        self._finish_resume_checked = None
+        self._finish_resume_inspecting = False
+        self._finish_resume_attempted_sessions.clear()
+        self._watcher_key_closing = False
+        self._contextual_watch_is_flight = False
+        for target in (self._contextual_watch_target, self._update_resume_context_target):
+            if isinstance(target, LinkedUploadTarget):
+                self.linking_manager.discard_photos_watcher_target(target)
+        self._contextual_watch_target = None
+        self._update_resume_context_target = None
+        self.flights.complete_watcher_reset()
+        settings = profile.preferences
+        self.watched_folder_var.set(settings['watched_folder'])
+        self.interval_var.set(str(settings['scan_interval_seconds']))
+        self.stable_var.set(str(settings['stable_seconds']))
+        self.watch_recursive_var.set(settings['watch_recursive'])
+        self.attach_sim_camera_metadata_var.set(settings['attach_sim_camera_metadata'])
+        self.delete_uploaded_files_var.set(settings['delete_uploaded_files'])
+        self.sync_utc_time_var.set(settings['sync_utc_time'])
+        self.watch_ignored_var.set('Ignored at startup: -')
+        self.watch_last_scan_var.set('Last scan: -')
+        self.watch_queue_status_var.set('')
+        self.watcher_activity_var.set('Watch: stopped')
+        self.status_var.set('Watcher reset complete. Choose a connection and folder to start.')
+        self.refresh_watch_delete_warning()
+        self.refresh_activity_monitor_state()
+        self.refresh_connection_controls()
+
     def current_watcher_config(self) -> WatcherConfig:
         """Read the watcher settings without selecting a connection.
 
@@ -11864,13 +12313,14 @@ class WatcherApp:
         except ValueError as exc:
             raise ValueError("Enter a valid scan interval and file stability time.") from exc
         return replace(
-            self.config,
+            WatcherApp._saved_watcher_config(self),
             watched_folder=self.watched_folder_var.get().strip(),
             scan_interval_seconds=interval,
             stable_seconds=stable,
             attach_sim_camera_metadata=bool(self.attach_sim_camera_metadata_var.get()),
             delete_uploaded_files=bool(self.delete_uploaded_files_var.get()),
             watch_recursive=bool(self.watch_recursive_var.get()),
+            sync_utc_time=bool(self.sync_utc_time_var.get()),
         )
 
     def current_config(self) -> WatcherConfig:
@@ -11883,7 +12333,9 @@ class WatcherApp:
         Raises:
             ValueError: Raised when numeric settings cannot be parsed.
         """
-        watcher = self.current_watcher_config()
+        # Reset-isolated Watcher settings never reenter the shared config.
+        isolated = isinstance(getattr(self, '_watcher_profile', None), WatcherProfile)
+        watcher = self.config if isolated else self.current_watcher_config()
         try:
             thumbnail_workers = parse_worker_choice(self.manual_thumbnail_workers_var.get())
             upload_workers = parse_worker_choice(self.manual_upload_workers_var.get())
@@ -11912,7 +12364,7 @@ class WatcherApp:
             api_key=self.api_key_var.get().strip(),
             create_thumbnails=bool(self.create_thumbnails_var.get()),
             simconnect_dll_path=self.simconnect_dll_path_var.get().strip(),
-            sync_utc_time=self.sync_utc_time_var.get(),
+            sync_utc_time=watcher.sync_utc_time if isolated else self.sync_utc_time_var.get(),
             manual_thumbnail_mode="local" if self.manual_local_thumbnails_var.get() else "server",
             manual_thumbnail_workers=thumbnail_workers,
             manual_upload_workers=upload_workers,
@@ -11969,7 +12421,8 @@ class WatcherApp:
             None: Updates the folder after a successful pick and any required
                 save. Cancel or a failed save leaves the existing folder.
         """
-        if getattr(self, "updates", None) is not None and self.updates.blocked():
+        if (WatcherApp.watcher_reset_blocked(self)
+                or getattr(self, "updates", None) is not None and self.updates.blocked()):
             return
         if self.worker is not None and self.worker.is_alive():
             messagebox.showinfo(
@@ -11985,8 +12438,9 @@ class WatcherApp:
             return
         if parent is None:
             try:
-                self.config = self._save_owned_config(
-                    replace(self.config, watched_folder=selected), first_setup=True,
+                saved = WatcherApp._saved_watcher_config(self)
+                WatcherApp._save_watcher_preferences(
+                    self, replace(saved, watched_folder=selected),
                 )
             except (OSError, ModeCoordinatorError) as exc:
                 messagebox.showerror("Watch folder", str(exc), parent=self.root)
@@ -12681,7 +13135,10 @@ class WatcherApp:
             bool: True only after local workspace admission and confirmed mode
                 publication and activation.
         """
-        if (expected is not None and self.mode_owner.view() is not expected):
+        if expected is not None and (
+            not WatcherApp._watcher_connection_selected(self)
+            or self.mode_owner.view() is not expected
+        ):
             return False
         if (not self.linked_workspace_ready()
                 or self.linked_target_change_refusal(target.binding()) is not None):
@@ -13048,7 +13505,8 @@ class WatcherApp:
             None: Queues a profile-bound continuation or a fixed safe reason;
                 an ordinary startup never resumes a stopped capture.
         """
-        if (self._update_resume_attempted or not self._gui_mode_ready
+        if (not WatcherApp._watcher_connection_selected(self)
+                or self._update_resume_attempted or not self._gui_mode_ready
                 or getattr(self, '_update_resume_cancelled', False)
                 or getattr(self, '_update_resume_inspecting', False)):
             return
@@ -13283,7 +13741,8 @@ class WatcherApp:
                 existing writers settle, or retains it with a safe diagnosis.
         """
         record = self._resume_continuation
-        if record is None or self.exiting or self._update_resume_preparing:
+        if (record is None or self.exiting or self._update_resume_preparing
+                or not WatcherApp._watcher_connection_selected(self)):
             return
         if getattr(self, '_update_resume_cancelled', False):
             return
@@ -13600,6 +14059,7 @@ class WatcherApp:
             )
             return False
         if (record is None or lease is None or self.exiting
+                or not WatcherApp._watcher_connection_selected(self)
                 or self.worker is not None and self.worker.is_alive()):
             return False
         try:
@@ -13646,8 +14106,11 @@ class WatcherApp:
                 claimed.save(lease, ordinary_restart=True)
             claimed.save(lease)
             self._resume_continuation = claimed
-            config = capture_worker_config(self.config)
-            port = self.config_store.mode_port(config)
+            shared = capture_worker_config(self.config)
+            config = (capture_worker_config(WatcherApp._saved_watcher_config(self))
+                      if isinstance(getattr(self, '_watcher_profile', None), WatcherProfile)
+                      else shared)
+            port = self.config_store.mode_port(shared)
         except (OSError, ValueError, RuntimeError):
             self._update_resume_failed('session_claim_unverified')
             return False
@@ -13771,10 +14234,15 @@ class WatcherApp:
             # The existing Watcher owner independently rechecks this ID, account
             # and scope. Ancestry is irrelevant to its exact-target verification.
             gallery = LinkedGallery(target.gallery_id, None, target.title)
+            generation = self._update_resume_generation
             self.linking_manager.start_photos_watcher(
                 target.session, gallery, self._prepare_update_resume,
                 lambda _message: self._update_resume_failed(
                     'saved_watcher_access_unavailable',
+                ),
+                still_requested=lambda: (
+                    not WatcherApp.watcher_reset_blocked(self)
+                    and self._update_resume_generation == generation
                 ),
             )
             return
@@ -14262,7 +14730,8 @@ class WatcherApp:
             None: Requests temporary Watcher authority without changing tabs;
                 retained captures open their recovery view with visible status.
         """
-        if self.updates.blocked() or getattr(self, "_watch_start_pending", False) is True:
+        if (WatcherApp.watcher_reset_blocked(self) or self.updates.blocked()
+                or getattr(self, "_watch_start_pending", False) is True):
             return
         self._set_watch_start_activity(True, "Checking the Watcher connection…")
         state = self.flights.session_state()
@@ -14304,9 +14773,23 @@ class WatcherApp:
                 self._set_watch_start_activity(False)
                 return
         self.status_var.set("Preparing the Watcher connection…")
+        generation = getattr(self, '_update_resume_generation', 0)
+
+        def allowed() -> bool:
+            """Identify the same capture request after asynchronous approval.
+
+            Returns:
+                bool: False if a reset or another capture action invalidated it.
+            """
+            return (
+                not WatcherApp.watcher_reset_blocked(self)
+                and getattr(self, '_update_resume_generation', 0) == generation
+            )
+
         self.linking_manager.start_photos_watcher(
             session, gallery, self._start_contextual_watcher,
-            self._watch_start_failed,
+            lambda message: self._watch_start_failed(message) if allowed() else None,
+            still_requested=allowed,
         )
 
     def _start_contextual_watcher(self, target: LinkedUploadTarget) -> bool:
@@ -14370,7 +14853,8 @@ class WatcherApp:
         Returns:
             None: Accepts startup once; REC waits for the initial folder boundary.
         """
-        if getattr(self, '_ordinary_restart_closing', False) is True:
+        if (WatcherApp.watcher_reset_blocked(self)
+                or getattr(self, '_ordinary_restart_closing', False) is True):
             return
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
@@ -14379,6 +14863,9 @@ class WatcherApp:
             return
         if self.worker is not None and self.worker.is_alive():
             self.write_log("Watcher is already running.")
+            return
+        if contextual_target is None and not WatcherApp._watcher_connection_selected(self):
+            self.connect_watcher()
             return
         self._set_watch_start_activity(True, "Checking the Watcher settings…")
         try:
@@ -14400,7 +14887,8 @@ class WatcherApp:
         Returns:
             None: Starts watching and admits UTC work only when selected.
         """
-        if getattr(self, '_ordinary_restart_closing', False) is True:
+        if (WatcherApp.watcher_reset_blocked(self)
+                or getattr(self, '_ordinary_restart_closing', False) is True):
             return
         if getattr(self, "updates", None) is not None and self.updates.blocked():
             return
@@ -14438,8 +14926,9 @@ class WatcherApp:
                             LinkedUploadTarget):
                 self.release_contextual_watcher()
                 return
-            config = (self.current_watcher_config() if linked_target is not None
-                      else self.current_config())
+            isolated = isinstance(getattr(self, '_watcher_profile', None), WatcherProfile)
+            config = (self.current_watcher_config()
+                      if linked_target is not None or isolated else self.current_config())
             if linked_target is not None and (
                 (self.manual_worker and self.manual_worker.is_alive())
                 or (self.preflight_worker and self.preflight_worker.is_alive())
@@ -14447,8 +14936,14 @@ class WatcherApp:
                 raise ValueError('Wait for the linked import or preflight to finish first.')
             if not self.connection_change_allowed(config):
                 return
-            config = self._save_owned_config(config)
-            self.config = config
+            if isolated:
+                WatcherApp._save_watcher_preferences(self, config)
+                if contextual_target is not None:
+                    WatcherApp._remember_watcher_connection(self, contextual_target.binding())
+                config = WatcherApp._saved_watcher_config(self)
+            else:
+                config = self._save_owned_config(config)
+                self.config = config
         except Exception as exc:  # noqa: BLE001
             messagebox.showerror("Configuration error", str(exc))
             return
@@ -14464,7 +14959,9 @@ class WatcherApp:
         self.utc_sync.stop()
         try:
             captured = capture_worker_config(config)
-            config_port = self.config_store.mode_port(captured)
+            config_port = self.config_store.mode_port(
+                capture_worker_config(self.config) if isolated else captured,
+            )
             self.worker = WatcherThread(
                 captured, self.events, linked_target,
                 gui_admission=(self.mode_owner, config_port),
@@ -14500,7 +14997,8 @@ class WatcherApp:
         Returns:
             None: Routes ordinary and contextual captures through shared drain.
         """
-        if getattr(self, '_ordinary_restart_closing', False) is True:
+        if (WatcherApp.watcher_reset_blocked(self)
+                or getattr(self, '_ordinary_restart_closing', False) is True):
             return
         self._cancel_ordinary_restart_for_action()
         self._resume_retry_available = False
@@ -14579,6 +15077,8 @@ class WatcherApp:
             WatchRecoveryError: A durable queue or its binding cannot be
                 interpreted safely.
         """
+        if not WatcherApp._watcher_connection_selected(self):
+            return None
         path = directory / "watch-drain.json"
         try:
             row = WatchQueueStore.read_journal(path)
@@ -14610,8 +15110,11 @@ class WatcherApp:
             )
         # A persisted Stop can precede the final scan while a new screenshot
         # is still being copied. Reconcile that cutoff even with no queued path.
-        config = capture_worker_config(self.config)
-        config_port = self.config_store.mode_port(config)
+        shared = capture_worker_config(self.config)
+        config = (capture_worker_config(WatcherApp._saved_watcher_config(self))
+                  if isinstance(getattr(self, '_watcher_profile', None), WatcherProfile)
+                  else shared)
+        config_port = self.config_store.mode_port(shared)
         folder, recursive = row.get("folder"), row.get("recursive")
         if not isinstance(folder, str) or not isinstance(recursive, bool):
             raise WatchRecoveryError(
@@ -14679,22 +15182,23 @@ class WatcherApp:
         Returns:
             None: Keeps unsaved connection/settings edits out of persistence.
         """
-        if self.exiting or self.updates.blocked():
-            self.sync_utc_time_var.set(self.config.sync_utc_time)
+        saved = WatcherApp._saved_watcher_config(self)
+        if self.exiting or self.updates.blocked() or WatcherApp.watcher_reset_blocked(self):
+            self.sync_utc_time_var.set(saved.sync_utc_time)
             return
         enabled = self.sync_utc_time_var.get()
         # Revoke writes immediately, before even attempting a disk save.
         if not enabled:
             self.utc_sync.stop()
-        config = replace(self.config, sync_utc_time=enabled)
         try:
-            config = self._save_owned_config(config)
+            WatcherApp._save_watcher_preferences(
+                self, replace(saved, sync_utc_time=enabled), first_setup=False,
+            )
         except (OSError, ModeCoordinatorError) as exc:
-            self.sync_utc_time_var.set(self.config.sync_utc_time)
+            self.sync_utc_time_var.set(saved.sync_utc_time)
             self.refresh_utc_sync()
             messagebox.showerror("UTC synchronization", str(exc))
             return
-        self.config = config
         self.refresh_utc_sync()
 
     def refresh_utc_sync(self) -> None:
@@ -14705,7 +15209,8 @@ class WatcherApp:
         """
         worker = self.worker
         if (
-            self.config.sync_utc_time and not self.exiting
+            WatcherApp._saved_watcher_config(self).sync_utc_time and not self.exiting
+            and not WatcherApp.watcher_reset_blocked(self)
             and worker is not None and worker.is_alive()
             and not worker.stop_event.is_set()
         ):
@@ -14980,7 +15485,11 @@ class WatcherApp:
         for attr in ("finish_flight_button", "import_revoke_button"):
             button = getattr(self, attr, None)
             if button is not None:
-                if show_action:
+                here = show_action and (
+                    attr != "finish_flight_button"
+                    or WatcherApp._watcher_connection_selected(self)
+                )
+                if here:
                     _publish_watcher_value(
                         self, attr + "_text", button, action_label,
                         lambda: button.configure(text=action_label),
@@ -14990,8 +15499,8 @@ class WatcherApp:
                         lambda: button.state(["!disabled"]),
                     )
                 _publish_watcher_value(
-                    self, attr + "_visible", button, show_action,
-                    button.grid if show_action else button.grid_remove,
+                        self, attr + "_visible", button, here,
+                        button.grid if here else button.grid_remove,
                 )
         legacy_cleanup = bool(
             saved_key and not self.linking_manager.linked_upload_mode_selected()
@@ -15000,7 +15509,11 @@ class WatcherApp:
         for attr in ("abandon_flight_button", "import_abandon_button"):
             button = getattr(self, attr, None)
             if button is not None:
-                if legacy_cleanup:
+                here = legacy_cleanup and (
+                    attr != "abandon_flight_button"
+                    or WatcherApp._watcher_connection_selected(self)
+                )
+                if here:
                     abandon_label = self.flights.text("abandon")
                     _publish_watcher_value(
                         self, attr + "_text", button, abandon_label,
@@ -15011,8 +15524,8 @@ class WatcherApp:
                         lambda: button.state(["!disabled"]),
                     )
                 _publish_watcher_value(
-                    self, attr + "_visible", button, legacy_cleanup,
-                    button.grid if legacy_cleanup else button.grid_remove,
+                        self, attr + "_visible", button, here,
+                        button.grid if here else button.grid_remove,
                 )
         flight_detected = self.simulator_presence.flight_detected
         for attr in (
@@ -15151,6 +15664,10 @@ class WatcherApp:
             None: Confirms the unchanged saved API-key binding or checks the
                 existing linked session and logs the exact verification phase.
         """
+        if not WatcherApp._watcher_connection_selected(self):
+            on_result(False)
+            return
+        generation = getattr(self, '_update_resume_generation', 0)
         selected = self.linking_manager.selected_upload_target()
         if selected is not None:
             matches = selected.binding() == binding
@@ -15227,7 +15744,9 @@ class WatcherApp:
                 # Do not nest that non-reentrant file lock. Mode publication
                 # separately compares the exact captured view under its mutex.
                 reason = 'local_target_admission_refused'
-                if not self.commit_linked_upload_target(target, expected=view):
+                if (getattr(self, '_update_resume_generation', 0) != generation
+                        or not WatcherApp._watcher_connection_selected(self)
+                        or not self.commit_linked_upload_target(target, expected=view)):
                     raise ValueError('Saved upload target changed during recovery.')
                 committed_record = self.mode_owner.view().record
             except Exception as exc:  # noqa: BLE001
@@ -15237,6 +15756,7 @@ class WatcherApp:
             self.events.put({'kind': 'capture_target_restored', 'payload': {
                 'target': target, 'record': committed_record, 'binding': binding,
                 'scope': scope, 'on_result': on_result, 'diagnostic': diagnostic,
+                'generation': generation,
             }})
 
         try:
@@ -15481,7 +16001,8 @@ class WatcherApp:
             None: Uses the shared offline stop/abandon/key-cleanup workflow
                 after confirmation; update ownership keeps its existing gate.
         """
-        if (self.updates.blocked() or not self.config.api_key.strip()
+        if (WatcherApp.watcher_reset_blocked(self)
+                or self.updates.blocked() or not self.config.api_key.strip()
                 or self.linking_manager.linked_upload_mode_selected()):
             return
         self.flights.abandon()
@@ -15609,6 +16130,8 @@ class WatcherApp:
             ValueError: The active session or mode cannot be verified.
             OSError: A durable checkpoint cannot be prepared.
         """
+        if WatcherApp.watcher_reset_blocked(self):
+            raise RuntimeError('The Watcher factory reset is pending.')
         if getattr(self, '_ordinary_restart_closing', False) is True:
             raise RuntimeError('The Watcher is already preparing to close.')
         if (self.flights.busy() or self.api_key_revoke_running
@@ -16291,7 +16814,8 @@ class WatcherApp:
             None: Checks unfinished Finish sessions once per binding, keeping
                 explicit interruptions paused until the user continues them.
         """
-        if (self.exiting or self.updates.blocked() or self.flights.busy()
+        if (not WatcherApp._watcher_connection_selected(self)
+                or self.exiting or self.updates.blocked() or self.flights.busy()
                 or self.worker is not None and self.worker.is_alive()
                 or getattr(self, '_finish_resume_inspecting', False)):
             return
@@ -16354,6 +16878,8 @@ class WatcherApp:
             None: Coalesces same-session scans, or shows passive saved recovery
                 when a restarted Watcher has no in-memory queue owner.
         """
+        if not WatcherApp._watcher_connection_selected(self):
+            return
         original = self.worker
         if original is None or original.drain_manifest is None:
             state = self.flights.session_state()
@@ -16392,8 +16918,11 @@ class WatcherApp:
             return
         self._queue_recovery_pending = True
         self.write_log('Queue refresh is checking the original session owner.', 'info')
-        config = capture_worker_config(self.config)
-        admission = (self.mode_owner, self.config_store.mode_port(config))
+        shared = capture_worker_config(self.config)
+        config = (capture_worker_config(WatcherApp._saved_watcher_config(self))
+                  if isinstance(getattr(self, '_watcher_profile', None), WatcherProfile)
+                  else shared)
+        admission = (self.mode_owner, self.config_store.mode_port(shared))
         target = original.linked_target
         if target is not None:
             selected = self.linking_manager.selected_upload_target()
@@ -16444,7 +16973,8 @@ class WatcherApp:
             None: Keeps files and receipts while closing the matching local
                 session and logs the phase of any refused or failed closure.
         """
-        if (self.exiting or self.updates.blocked() or self._queue_recovery_pending
+        if (WatcherApp.watcher_reset_blocked(self) or self.exiting
+                or self.updates.blocked() or self._queue_recovery_pending
                 or self.background_work_active() or self.flights.is_alive()
                 or (self.worker is not None and self.worker.is_alive())
                 or any(worker.is_alive() for worker in self.flights.resume_workers)):
@@ -16553,6 +17083,8 @@ class WatcherApp:
         Returns:
             None: Queues separate findings without changing Watcher state.
         """
+        if WatcherApp.watcher_reset_blocked(self):
+            return
         selected = self.watched_folder_var.get().strip()
         folder = Path(selected)
         if not selected or not folder.is_dir():
@@ -17968,6 +18500,8 @@ class WatcherApp:
                 + (getattr(self, '_watch_recovery_latest', '') or 'none')
                 + " | last_failure="
                 + (getattr(self, '_watch_recovery_last_failure', '') or 'none'),
+                "Watcher factory reset: "
+                + (getattr(self, '_watcher_reset_latest', '') or 'none'),
                 f"Watcher: {self.watcher_activity_var.get()}",
                 'Upload queue: ' + json.dumps(
                     self._watch_diagnostic_snapshot(), ensure_ascii=False,
@@ -18607,6 +19141,13 @@ class WatcherApp:
                                 )):
                             self._close_update_resume_context_key()
                     continue
+                if kind == 'watcher_factory_reset':
+                    profile = payload.get('profile')
+                    self._complete_watcher_reset(
+                        profile if isinstance(profile, WatcherProfile) else None,
+                        payload['diagnostic'],
+                    )
+                    continue
                 if kind == 'gui_mode_initialized':
                     self._gui_mode_ready = payload.get('verified') is True
                     if self._gui_mode_ready:
@@ -18615,6 +19156,10 @@ class WatcherApp:
                         self._update_resume_status = 'stage=resume; reason=mode_unverified'
                     continue
                 if kind == 'ordinary_restart_ready':
+                    if WatcherApp.watcher_reset_blocked(self):
+                        self._ordinary_restart_closing = False
+                        self._ordinary_restart_thread = None
+                        continue
                     self._ordinary_restart_prepared = True
                     self._ordinary_restart_closing = False
                     self.close()
@@ -18622,6 +19167,8 @@ class WatcherApp:
                 if kind == 'ordinary_restart_failed':
                     self._ordinary_restart_closing = False
                     self._ordinary_restart_thread = None
+                    if WatcherApp.watcher_reset_blocked(self):
+                        continue
                     self._cancel_ordinary_restart_intent()
                     self.cancel_update_checkpoint()
                     messagebox.showwarning(
@@ -18775,7 +19322,8 @@ class WatcherApp:
                 if kind == 'watch_queue_recovered':
                     self._queue_recovery_pending = False
                     replacement = payload['worker']
-                    if self.worker is not payload['original'] or self.exiting:
+                    if (self.worker is not payload['original'] or self.exiting
+                            or WatcherApp.watcher_reset_blocked(self)):
                         if replacement._linked_lease is not None:
                             replacement._linked_lease.release()
                         continue
@@ -19066,8 +19614,11 @@ class WatcherApp:
                 elif kind == 'capture_target_restored':
                     target = payload.get('target')
                     restored = False
+                    generation = getattr(self, '_update_resume_generation', 0)
                     try:
                         if (isinstance(target, LinkedUploadTarget)
+                                and payload.get('generation', generation) == generation
+                                and WatcherApp._watcher_connection_selected(self)
                                 and self.mode_owner.view().record == payload.get('record')
                                 and target.binding() == payload.get('binding')):
                             restored = self.linking_manager.activate_verified_resume_target(
@@ -19450,8 +20001,24 @@ def run_once(config: WatcherConfig, config_store: ConfigStore) -> int:
             config_store.mode_port(config), WindowsUploadModeStore(),
         )
         view = coordinator.refresh()
-        with coordinator.acquire_work(view, 'legacy') as work:
+        with coordinator.acquire_work(view, 'legacy') as work, ExitStack() as ownership:
             setup_logging()
+            once_lease = WorkspaceLease(CONFIG_DIR, lock_name=WATCHER_ONCE_LOCK)
+            ownership.callback(once_lease.release)
+            profile = WatcherProfile.load(CONFIG_DIR / 'flights')
+            if profile is not None:
+                if (profile.pending or not profile.binding
+                        or profile.binding != connection_binding(
+                            normalize_upload_url(config.gallery_url), config.api_key.strip(),
+                        )):
+                    logging.warning(
+                        '[watcher-recovery] stage=once; reason=watcher_connection_not_selected',
+                    )
+                    return 1
+                config = replace(config, **profile.preferences)
+                if not config.watched_folder:
+                    logging.warning('[watcher-recovery] stage=once; reason=watch_folder_unset')
+                    return 1
             events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
             worker = WatcherThread(config, events, once_work=work)
             folder = Path(config.watched_folder)

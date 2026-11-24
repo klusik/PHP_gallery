@@ -32,6 +32,7 @@ if str(WINAPP_DIR) not in sys.path:
     sys.path.insert(0, str(WINAPP_DIR))
 
 from uploader.flight_jobs import SessionPlan, WatcherContinuation, WorkspaceLease
+from uploader.watcher_profile import WatcherProfile
 from uploader.app_linking import (
     LinkingResponseError, LinkingSession, UPLOAD_OFFLINE_SCOPE, UPLOAD_SCOPE,
 )
@@ -2502,4 +2503,199 @@ class WatcherContinuationTests(unittest.TestCase):
         self.assertEqual('current head reason', snapshot['reason'])
         self.assertIn('historical discovery failure', snapshot['last_failure'])
         self.assertEqual(retry_at, snapshot['retry_at'])
+
+
+class WatcherFactoryResetTests(unittest.TestCase):
+    """Exercise the confirmed reset at the host and real profile boundaries."""
+
+    def setUp(self) -> None:
+        """Give the host real isolated persistence and controlled desktop I/O.
+
+        Returns:
+            None: Sets up an idle Watcher beside independent uploader state.
+        """
+        temporary = self.enterContext(tempfile.TemporaryDirectory())
+        self.profile_root = Path(temporary)
+        self.lease = WorkspaceLease(self.profile_root / 'flights')
+        self.addCleanup(self.lease.release)
+        self.enterContext(mock.patch.object(MAIN, 'CONFIG_DIR', self.profile_root))
+        self.app = MAIN.WatcherApp.__new__(MAIN.WatcherApp)
+        app = self.app
+        app.config = MAIN.WatcherConfig(watched_folder='old screenshots', watch_recursive=True)
+        app.worker = None
+        app._watcher_profile = None
+        app._watcher_profile_invalid = False
+        app._watcher_reset_running = False
+        app._watcher_reset_waiting = ''
+        app._watcher_reset_thread = None
+        app._force_finished_workers = set()
+        app._force_finished_operations = set()
+        app._force_finish_callbacks = {}
+        app._queue_recovery_pending = False
+        app._ordinary_restart_thread = None
+        app._finish_resume_attempted_sessions = set()
+        app._finish_resume_generation = app._update_resume_generation = 0
+        app._contextual_watch_target = app._update_resume_context_target = None
+        app.exiting = False
+        app.root = mock.Mock()
+        app.events = queue.Queue()
+        app.updates = mock.Mock()
+        app.updates.blocked.return_value = False
+        app.flights = mock.Mock()
+        app.flights.lease = self.lease
+        app.flights.resume_workers = []
+        app.flights.binding.return_value = 'a' * 64
+        app.flights.watcher_reset_writers_active.return_value = False
+        app.manual_worker = mock.Mock()
+        app.ai_worker = mock.Mock()
+        for name in (
+            'status_var', 'watch_queue_status_var', 'watcher_reset_button',
+            'write_log', '_set_watch_start_activity', '_set_watcher_recording',
+            'utc_sync', 'refresh_watcher_action', 'refresh_activity_monitor_state',
+            'refresh_connection_controls', 'watched_folder_var', 'interval_var',
+            'stable_var', 'watch_recursive_var', 'attach_sim_camera_metadata_var',
+            'delete_uploaded_files_var', 'sync_utc_time_var', 'watch_ignored_var',
+            'watch_last_scan_var', 'watcher_activity_var', 'refresh_watch_delete_warning',
+        ):
+            setattr(app, name, mock.Mock())
+
+    def settle_reset(self) -> str:
+        """Apply the posted production reset result as the GUI event owner.
+
+        Returns:
+            str: Fixed reset diagnostic received from the background publisher.
+        """
+        event = wait_for_event_kind(self.app.events, 'watcher_factory_reset')
+        payload = event['payload']
+        self.app._complete_watcher_reset(payload['profile'], payload['diagnostic'])
+        return payload['diagnostic']
+
+    def test_cancel_keeps_settings_and_does_not_stop_workers(self) -> None:
+        """Cancel the default-No confirmation without mutating profile state.
+
+        Returns:
+            None: Verifies the warning and the absence of reset effects.
+        """
+        with mock.patch.object(MAIN.messagebox, 'askyesno', return_value=False) as confirm:
+            self.app.request_watcher_reset()
+        self.assertEqual('no', confirm.call_args.kwargs['default'])
+        self.assertIn('logs', confirm.call_args.args[1])
+        self.assertIsNone(MAIN.WatcherProfile.load(self.lease.root))
+        self.app.utc_sync.stop.assert_not_called()
+        self.app.flights.stop_for_watcher_reset.assert_not_called()
+        self.app.write_log.assert_not_called()
+
+    def test_reset_waits_for_active_transport_and_only_retires_watcher(self) -> None:
+        """Confirm reset while Watcher owns a late upload and two saved targets.
+
+        Returns:
+            None: Verifies admission fencing, all-scope retirement, unchanged
+                unrelated bytes and logged default state after transport release.
+        """
+        app = self.app
+        retained = self.lease.root / 'capture-one'
+        another = self.lease.root / 'capture-two'
+        once = self.profile_root / 'once-queues' / 'legacy-target'
+        imported = self.profile_root / 'import-queues' / 'import-job'
+        for directory in (retained, another, once, imported):
+            directory.mkdir(parents=True)
+            (directory / 'watch-drain.json').write_bytes(b'old queue contents')
+        SessionPlan(retained, 'a' * 64, (), False).save()
+        (another / 'completion.json').write_bytes(b'incomplete checkpoint')
+        for name in ('watcher-restart.json', 'watcher-continuation.json'):
+            (self.lease.root / name).write_bytes(b'old automatic intent')
+        preserved = {
+            imported / 'watch-drain.json': b'old queue contents',
+            self.profile_root / 'watcher.log': b'previous diagnostic',
+            self.profile_root / 'upload_state.json': b'Activity and Import',
+            retained / 'flight.json': b'recorded data',
+            retained / 'photo.jpg': b'original photograph',
+            retained / 'report.pdf': b'local report',
+        }
+        for path, content in preserved.items():
+            path.write_bytes(content)
+        worker = MAIN.WatcherThread(app.config, app.events)
+        app.worker = worker
+        worker._transport_active.set()
+        with (
+            mock.patch.object(worker, 'is_alive', return_value=True) as is_alive,
+            mock.patch.object(MAIN.messagebox, 'askyesno', return_value=True),
+        ):
+            app.request_watcher_reset()
+            self.assertTrue(worker.stop_event.is_set())
+            self.assertTrue(worker._force_stop_requested.is_set())
+            self.assertTrue(worker._keep_sources_after_stop)
+            self.assertTrue(app.watcher_reset_blocked())
+            self.assertTrue(MAIN.WatcherProfile.load(self.lease.root).pending)
+            self.assertTrue((retained / 'watch-drain.json').exists())
+            self.assertIsNone(app._watcher_reset_thread)
+            is_alive.return_value = False
+            worker._transport_active.clear()
+            app._continue_watcher_reset()
+            outcome = self.settle_reset()
+        self.assertIn('reason=completed', outcome)
+        app.write_log.assert_called_with(outcome, 'success')
+        self.assertIn('connection=unset; folder=unset', outcome)
+        self.assertIn('journals_removed=2; once_journals_removed=1', outcome)
+        self.assertIn('utc_sync=false', outcome)
+        self.assertTrue(SessionPlan.load(retained).abandoned)
+        self.assertTrue(SessionPlan.load(another).abandoned)
+        self.assertEqual(
+            b'incomplete checkpoint',
+            (another / 'completion.before-watcher-reset.json').read_bytes(),
+        )
+        for directory in (retained, another, once):
+            self.assertFalse((directory / 'watch-drain.json').exists())
+        for name in ('watcher-restart.json', 'watcher-continuation.json'):
+            self.assertFalse((self.lease.root / name).exists())
+        for path, content in preserved.items():
+            self.assertEqual(content, path.read_bytes())
+        app.manual_worker.stop.assert_not_called()
+        app.ai_worker.stop.assert_not_called()
+        self.assertEqual('old screenshots', app.config.watched_folder)
+        self.assertEqual('', app._saved_watcher_config().watched_folder)
+        self.assertFalse(app._watcher_connection_selected())
+        app._remember_watcher_connection('a' * 64)
+        self.assertTrue(app._watcher_connection_selected())
+        app.flights.binding.return_value = 'b' * 64
+        self.assertFalse(app._watcher_connection_selected())
+
+    def test_failed_reset_is_retryable_after_persisted_intent(self) -> None:
+        """Keep the fence after a failure and log safe source-specific reasons.
+
+        Returns:
+            None: Reopens the same operation and verifies completion on retry.
+        """
+        queue_path = self.lease.root / 'old-capture' / 'watch-drain.json'
+        queue_path.parent.mkdir()
+        queue_path.write_bytes(b'retained queue')
+        save_profile = MAIN.WatcherProfile.save
+
+        def fail_terminal_write(profile: WatcherProfile, lease: WorkspaceLease) -> None:
+            """Allow the actual pending snapshot and fail the final publication.
+
+            Args:
+                profile (WatcherProfile): Pending or completed reset record.
+                lease (WorkspaceLease): Fixture owner of the flight workspace.
+            Returns:
+                None: Publishes pending intent. A terminal write raises OSError.
+            """
+            if not profile.pending:
+                raise OSError('private content')
+            save_profile(profile, lease)
+
+        with mock.patch.object(
+            MAIN.WatcherProfile, 'save', autospec=True, side_effect=fail_terminal_write,
+        ):
+            self.app._begin_watcher_reset()
+            failure = self.settle_reset()
+        self.assertIn('reason=default_profile_readback_failed', failure)
+        self.assertIn('error_type=OSError', failure)
+        self.assertNotIn('private content', failure)
+        self.assertFalse(queue_path.exists())
+        self.assertTrue(MAIN.WatcherProfile.load(self.lease.root).pending)
+        self.assertTrue(self.app.watcher_reset_blocked())
+        self.app._begin_watcher_reset()
+        self.assertIn('reason=completed', self.settle_reset())
+        self.assertFalse(MAIN.WatcherProfile.load(self.lease.root).pending)
 
